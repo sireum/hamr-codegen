@@ -1,3 +1,9 @@
 [submodule "hamr-codegen-test"]
 	path = jvm/src/test/scala
 	url = https://github.com/sireum/hamr-codegen-test.git
+[submodule "act"]
+	path = act
+	url = https://github.com/sireum/act.git
+[submodule "arsit"]
+	path = arsit
+	url = https://github.com/sireum/arsit.git
