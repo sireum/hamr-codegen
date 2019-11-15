@@ -174,7 +174,9 @@ object CodeGen {
       val t = if(m.level != org.sireum.message.Level.Info) s"${m.level.name}: " else ""
       val err = m.level == org.sireum.message.Level.Error
       val mText: String = m.posOpt match {
-        case Some(pos) => s"${m.kind} - ${t}[${pos.beginLine}, ${pos.beginColumn}] ${m.text}"
+        case Some(pos) =>
+          val uri: String = if(pos.uriOpt.nonEmpty) s" ${pos.uriOpt.get}" else "" 
+          s"${m.kind} - ${t}[${pos.beginLine}, ${pos.beginColumn}] ${m.text}. ${uri}"
         case _ => s"${m.kind} - ${t}${m.text}"
       }
       cprintln(err, mText)
