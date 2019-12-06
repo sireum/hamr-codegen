@@ -29,11 +29,11 @@ import org.sireum.mill.SireumModule._
 
 trait Module extends CrossSharedJsJitPack {
 
-  final override def description: String = "HAMR Codegen"
+  final override def description: String = "HAMR CodeGen"
   
-  final override def artifactName: String = "Codgen"
+  final override def artifactName: String = "hamr-codegen"
   
-  final override def subUrl: String = "codgen"
+  final override def subUrl: String = "hamr-codegen"
 
   final override def developers = Seq(Developers.jason)
 
