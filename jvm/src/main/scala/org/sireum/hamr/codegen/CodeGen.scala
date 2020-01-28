@@ -131,7 +131,7 @@ object CodeGen {
       } 
       
       val hamrStaticLib = if(hamrIntegration) {
-        val path = dropPrefix(outputSlang_C_Directory / "sel4-build" / "libmain.a", camkesOutputDir)
+        val path = camkesOutputDir.relativize(outputSlang_C_Directory / "sel4-build" / "libmain.a")
         val lib: String = s"$${CMAKE_CURRENT_LIST_DIR}/${path.value}"
         Some(lib) 
       } else { None[String]() }
@@ -204,7 +204,9 @@ object CodeGen {
       def processDir(dir: Os.Path): Unit = {
         dir.list.filter(p => p.ext == string"c" || p.ext == string"h").foreach((f : Os.Path) => {
           // make subdir paths relative to the root dir
-          val rel = dropPrefix(f, if(includeParentDir) rootDirPath.up else rootDirPath).value
+         val root = if(includeParentDir) rootDirPath.up else rootDirPath
+          val rel = root.relativize(f).value
+
           ret = ret + (rel ~> f.read)
         })
 
@@ -216,22 +218,11 @@ object CodeGen {
 
     return ret
   }
-  
-  def dropPrefix(path: Os.Path, prefix: Os.Path): Os.Path = {
-    val root = prefix.abs.value
-    
-    val res = path.abs.value
-    
-    var rel = StringOps(res).replaceAllLiterally(root, "")
-    if(StringOps(rel).startsWith(Os.fileSep)){
-      rel = StringOps(rel).substring(Os.fileSep.size, rel.size)
-    }
-    return Os.path(rel)
-  }
 
   def writeOutResources(resources: IS[Z, Resource], reporter: Reporter) = {
     for (r <- resources) {
-      val p = Os.path(r.path)
+      val _p = Os.path(r.path)
+      val p = _p.canon 
       assert(!p.exists || p.isFile)
       p.up.mkdirAll()
       if (r.overwrite || !p.exists) {
