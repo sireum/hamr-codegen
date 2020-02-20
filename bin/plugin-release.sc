@@ -36,9 +36,7 @@ val sireumCommitTip = runGit(ISZ("git", "log", "-n", "1", "--pretty=format:%h"))
 val sireumVersionArgs: ISZ[String] = ISZ(s"${(SIREUM_HOME / "bin/sireum").canon.value}")
 val sireumVersion = ops.StringOps(Os.proc(sireumVersionArgs).run.out).split(c => c =='\n')(2) // should be 3rd line
 
-var sireumTimestamp = runGit(ISZ("git", "show", "-s", "--format=%cd", "--date=format:%Y%m%d%H%M"))
-// drop first two digits of year
-sireumTimestamp = ops.StringOps(sireumTimestamp).substring(2, sireumTimestamp.size)
+val sireumTimestamp = runGit(ISZ("git", "show", "-s", "--format=%cd", "--date=format:%y%m%d%H%M"))
 
 println(s"sireumCommitTip: ${sireumCommitTip}")
 println(s"sireumVersion: ${sireumVersion}")
