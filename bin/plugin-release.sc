@@ -22,33 +22,68 @@ exit /B %errorlevel%
 import org.sireum._
 
 val SIREUM_HOME = Os.path(Os.env("SIREUM_HOME").get)
-//val gitDir = s"--git-dir=${SIREUM_HOME}/.git"
 
 // TODO get these from env or arguments
 val pluginDir = Os.home / "devel/sireum/osate-plugin"
 val updateSiteDir = Os.home / "devel/sireum/osate-plugin-update-site"
 val updateSiteHAMRDir = Os.home / "devel/sireum/hamr-plugin-update-site"
-val caseDir = Os.home / "devel/sel4/home/CASE-Loonwerks"
+val caseDir = Os.home / "devel/sel4/home/CASE-loonwerks"
 
-val sireumCommitTip = runGit(ISZ("git", "log", "-n", "1", "--pretty=format:%h"))
+def replaceLine(startsWith: String, replacement: String, lines: ISZ[String]): ISZ[String] = {
+  var found = F
+  val ret = lines.map(str => if(ops.StringOps(str).startsWith(startsWith)) { found = T; replacement } else str)
+  assert(found, s"Didn't find ${startsWith}")
+  return ret
+}
 
-// ISZ("git", "log", "-n", "1", "--date=format:%Y%m%d", "--pretty=format:%cd.%h")
-val sireumVersionArgs: ISZ[String] = ISZ(s"${(SIREUM_HOME / "bin/sireum").canon.value}")
-val sireumVersion = ops.StringOps(Os.proc(sireumVersionArgs).run.out).split(c => c =='\n')(2) // should be 3rd line
+def collapse(lines: ISZ[String]):  String = {
+  return ops.ISZOps(lines).foldRight((line: String, r: String) => s"${r}\n${line}", "")
+}
 
-val sireumTimestamp = runGit(ISZ("git", "show", "-s", "--format=%cd", "--date=format:%y%m%d%H%M"))
 
-println(s"sireumCommitTip: ${sireumCommitTip}")
+
+val buildsbt = SIREUM_HOME / "hamr/codegen/arsit/resources/util/buildSbt.properties"
+
+{
+  val sireum = SIREUM_HOME / "bin/sireum"
+  val f = SIREUM_HOME / "hamr/codegen/arsit/bin/updateBuildSbtVersions.sc"
+  f.chmod("700")
+  val p = Os.proc(ISZ(sireum.value, "slang", "run", f.value)).console.run()
+  if(!p.ok || p.exitCode != 0) {
+    println(s"${buildsbt} wasn't ready")
+    Os.exit(1)
+  }
+}
+
+
+val props = buildsbt.properties
+
+val sireumVersion = props.get("org.sireum.version").get
+val sireumBuildstamp = props.get("org.sireum.buildstamp").get
+val sireumTimestamp = props.get("org.sireum.timestamp").get
+
 println(s"sireumVersion: ${sireumVersion}")
+println(s"sireumBuildstamp: ${sireumBuildstamp}")
 println(s"sireumTimestamp: ${sireumTimestamp}")
+
+val buildcmd = SIREUM_HOME / "bin" / "build.cmd"
+
+{ // run tipe
+  Os.proc(ISZ(buildcmd.value, "tipe")).console.runCheck()
+}
+
+{ // build sireum.jar
+  println("Building sireum.jar")
+  Os.proc(ISZ(buildcmd.value)).at(SIREUM_HOME).console.runCheck()
+}
 
 { // COPY sireum.jar over to osate lib directory
   
   val sireumJar = SIREUM_HOME / "bin/sireum.jar"
   val osateLibJar = pluginDir / "org.sireum.aadl.osate/lib/sireum.jar"
-  
+
+  println(s"Copying ${sireumJar} to ${osateLibJar}")
   sireumJar.copyOverTo(osateLibJar)
-  println(s"Copied ${sireumJar} to ${osateLibJar}")
 }
 
 // TODO figure out how plugin.properties file work, for now just modify the files directly
@@ -127,10 +162,10 @@ println(s"sireumTimestamp: ${sireumTimestamp}")
 
 { // UPDATE SITE README's
   
-  val url = s"https://github.com/sireum/kekinian/tree/${sireumCommitTip}#installing"
+  val url = s"https://github.com/sireum/kekinian/tree/${sireumVersion}#installing"
   
   val a = "Built against"
-  val aMod = s"Built against Sireum Kekinian ${sireumVersion} - To install Kekinian see [$url]($url)"
+  val aMod = s"Built against Sireum Kekinian ${sireumBuildstamp} - To install Kekinian see [$url]($url)"
 
   {
     val readme = updateSiteDir / "readme.md"
@@ -150,26 +185,9 @@ println(s"sireumTimestamp: ${sireumTimestamp}")
 { // vagrant
   
   val a =    st""": "$${SIREUM_V:=""".render
-  val aMod = st""": "$${SIREUM_V:=${sireumCommitTip}}"""".render
+  val aMod = st""": "$${SIREUM_V:=${sireumVersion}}"""".render
   
   val caseEnv = caseDir / "TA5/case-env/case-setup.sh"
   caseEnv.writeOver(collapse(replaceLine(a, aMod, caseEnv.readLines)))
   println(s"Wrote: ${caseEnv}")
 }
-
-def replaceLine(startsWith: String, replacement: String, lines: ISZ[String]): ISZ[String] = {
-  var found = F
-  val ret = lines.map(str => if(ops.StringOps(str).startsWith(startsWith)) { found = T; replacement } else str)
-  assert(found, s"Didn't find ${startsWith}")
-  return ret
-}
-
-def collapse(lines: ISZ[String]):  String = {
-  return ops.ISZOps(lines).foldRight((line: String, r: String) => s"${r}\n${line}", "")
-}
-
-def runGit(args: ISZ[String]): String = {
-  val p = org.sireum.Os.proc(args).at(SIREUM_HOME).runCheck()
-  return ops.StringOps(p.out).trim
-}
-
