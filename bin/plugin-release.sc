@@ -22,12 +22,18 @@ exit /B %errorlevel%
 import org.sireum._
 
 val SIREUM_HOME = Os.path(Os.env("SIREUM_HOME").get)
+val sireum = SIREUM_HOME / "bin/sireum"
 
 // TODO get these from env or arguments
 val pluginDir = Os.home / "devel/sireum/osate-plugin"
 val updateSiteDir = Os.home / "devel/sireum/osate-plugin-update-site"
 val updateSiteHAMRDir = Os.home / "devel/sireum/hamr-plugin-update-site"
 val caseDir = Os.home / "devel/sel4/home/CASE-loonwerks"
+
+def runGit(args: ISZ[String], path: Os.Path): String = {
+  val p = org.sireum.Os.proc(args).at(path).runCheck()
+  return ops.StringOps(p.out).trim
+}
 
 def replaceLine(startsWith: String, replacement: String, lines: ISZ[String]): ISZ[String] = {
   var found = F
@@ -56,26 +62,29 @@ val buildsbt = SIREUM_HOME / "hamr/codegen/arsit/resources/util/buildSbt.propert
 }
 
 
+
+{ // build sireum.jar
+  val buildcmd = SIREUM_HOME / "bin" / "build.cmd"
+
+  println("Running tipe")
+  Os.proc(ISZ(buildcmd.value, "tipe")).console.runCheck()
+
+  println("Building sireum.jar")
+  Os.proc(ISZ(buildcmd.value)).at(SIREUM_HOME).console.runCheck()
+}
+
+
 val props = buildsbt.properties
 
-val sireumVersion = props.get("org.sireum.version").get
-val sireumBuildstamp = props.get("org.sireum.buildstamp").get
-val sireumTimestamp = props.get("org.sireum.timestamp").get
+val sireumVersion = runGit(ISZ("git", "log", "-n", "1", "--pretty=format:%h"), SIREUM_HOME)
+val sireumTimestamp = runGit(ISZ("git", "show", "-s", "--format=%cd", "--date=format:%y%m%d%H%M"), SIREUM_HOME)
+val sireumBuildstamp = ops.StringOps(Os.proc(ISZ(sireum.value)).run.out).split(c => c =='\n')(2) // should be 3rd line
 
 println(s"sireumVersion: ${sireumVersion}")
 println(s"sireumBuildstamp: ${sireumBuildstamp}")
 println(s"sireumTimestamp: ${sireumTimestamp}")
 
-val buildcmd = SIREUM_HOME / "bin" / "build.cmd"
 
-{ // run tipe
-  Os.proc(ISZ(buildcmd.value, "tipe")).console.runCheck()
-}
-
-{ // build sireum.jar
-  println("Building sireum.jar")
-  Os.proc(ISZ(buildcmd.value)).at(SIREUM_HOME).console.runCheck()
-}
 
 { // COPY sireum.jar over to osate lib directory
   
