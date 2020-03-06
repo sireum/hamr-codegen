@@ -23,7 +23,8 @@ import org.sireum._
 
 val SIREUM_HOME = Os.path(Os.env("SIREUM_HOME").get)
 val sireum = SIREUM_HOME / "bin/sireum"
-
+val currYear = java.time.Year.now.getValue 
+  
 // TODO get these from env or arguments
 val pluginDir = Os.home / "devel/sireum/osate-plugin"
 val updateSiteDir = Os.home / "devel/sireum/osate-plugin-update-site"
@@ -35,15 +36,20 @@ def runGit(args: ISZ[String], path: Os.Path): String = {
   return ops.StringOps(p.out).trim
 }
 
-def replaceLine(startsWith: String, replacement: String, lines: ISZ[String]): ISZ[String] = {
-  var found = F
-  val ret = lines.map(str => if(ops.StringOps(str).startsWith(startsWith)) { found = T; replacement } else str)
-  assert(found, s"Didn't find ${startsWith}")
-  return ret
-}
-
-def collapse(lines: ISZ[String]):  String = {
-  return ops.ISZOps(lines).foldRight((line: String, r: String) => s"${r}\n${line}", "")
+def replaceLines(replacements: ISZ[(String, String)], file: Os.Path): Unit = {
+  val lines = file.readLines
+  val found: MSZ[B] = MSZ.create(replacements.size, F)
+  val modLines: ISZ[String] = lines.map(line => {
+    var newLine = line  
+    for(i <- 0 until replacements.size if ops.StringOps(line).startsWith(replacements(i)._1)) {
+      found(i) = T
+      newLine = replacements(i)._2
+    }
+    newLine
+  })
+  for(i <- 0 until found.size) assert(found(i), s"Didn't find ${replacements(i)._1}")
+  file.writeOver(ops.ISZOps(modLines).foldRight((line: String, r: String) => s"${r}\n${line}", ""))
+  println(s"Wrote: ${file}")
 }
 
 
@@ -67,10 +73,10 @@ val buildsbt = SIREUM_HOME / "hamr/codegen/arsit/resources/util/buildSbt.propert
   val build_cmd = SIREUM_HOME / "bin" / "build.cmd"
 
   println("Running tipe")
-  Os.proc(ISZ(sireum.value, "slang", "run", build_cmd.value, "tipe")).console.runCheck()
+  //Os.proc(ISZ(sireum.value, "slang", "run", build_cmd.value, "tipe")).console.runCheck()
 
   println("Building sireum.jar")
-  Os.proc(ISZ(sireum.value, "slang", "run", build_cmd.value)).console.runCheck()
+  //Os.proc(ISZ(sireum.value, "slang", "run", build_cmd.value)).console.runCheck()
 }
 
 
@@ -103,9 +109,7 @@ println(s"sireumTimestamp: ${sireumTimestamp}")
   val aMod = s"Bundle-Version: 1.0.${sireumTimestamp}.qualifier"
   
   val baseManifest = pluginDir / "org.sireum.aadl.osate/META-INF/MANIFEST.MF"
-  val _baseManifest = collapse(replaceLine(a, aMod, baseManifest.readLines))
-  baseManifest.writeOver(_baseManifest)
-  println(s"Wrote: ${baseManifest}")
+  replaceLines(ISZ((a, aMod)), baseManifest)
 }
 
 { // HAMR MANIFEST
@@ -117,20 +121,19 @@ println(s"sireumTimestamp: ${sireumTimestamp}")
   val bMod = st""" org.sireum.aadl.osate;bundle-version="1.0.${sireumTimestamp}",""".render
 
   val hamrManifest = pluginDir / "org.sireum.aadl.osate.hamr/META-INF/MANIFEST.MF"
-  val _hamrManifest = collapse(replaceLine(a, aMod, replaceLine(b, bMod, hamrManifest.readLines)))
-  hamrManifest.writeOver(_hamrManifest)
-  println(s"Wrote: ${hamrManifest}")
+  replaceLines(ISZ((a, aMod), (b, bMod)), hamrManifest)
 }
 
 { // BASE FEATURE
   
   val a =        "      version="
   val aMod = st"""      version="1.0.${sireumTimestamp}.qualifier"""".render
+
+  val b =     "      Copyright (c)"
+  val bMod = s"      Copyright (c) ${currYear}, Kansas State University"
   
   val feature = pluginDir / "org.sireum.aadl.osate.feature/feature.xml"
-  val _feature = collapse(replaceLine(a, aMod, feature.readLines))
-  feature.writeOver(_feature)
-  println(s"Wrote: ${feature}")
+  replaceLines(ISZ((a, aMod), (b, bMod)), feature)
 }
 
 { // HAMR FEATURE
@@ -140,11 +143,12 @@ println(s"sireumTimestamp: ${sireumTimestamp}")
   
   val b =    st"""      <import plugin="org.sireum.aadl.osate""".render
   val bMod = st"""      <import plugin="org.sireum.aadl.osate" version="1.0.${sireumTimestamp}" match="greaterOrEqual"/>""".render
-  
+
+  val c =     "      Copyright (c)"
+  val cMod = s"      Copyright (c) ${currYear}, Kansas State University"
+
   val hamrFeature = pluginDir / "org.sireum.aadl.osate.hamr.feature/feature.xml"
-  val _hamrFeature = collapse(replaceLine(a, aMod, replaceLine(b, bMod, hamrFeature.readLines)))
-  hamrFeature.writeOver(_hamrFeature)
-  println(s"Wrote: ${hamrFeature}")
+  replaceLines(ISZ((a, aMod), (b, bMod), (c, cMod)), hamrFeature)
 }
 
 { // Base Update Site version update
@@ -153,9 +157,7 @@ println(s"sireumTimestamp: ${sireumTimestamp}")
   val aMod = st"""   <feature url="features/org.sireum.aadl.osate.feature_1.0.${sireumTimestamp}.qualifier.jar" id="org.sireum.aadl.osate.feature" version="1.0.${sireumTimestamp}.qualifier">""".render
 
   val update = updateSiteDir / "org.sireum.aadl.osate.update.site/site.xml"
-  val _update = collapse(replaceLine(a, aMod, update.readLines))
-  update.writeOver(_update)
-  println(s"Wrote: ${update}")
+  replaceLines(ISZ((a, aMod)), update)
 }
 
 { // HAMR Update Site version update
@@ -164,9 +166,7 @@ println(s"sireumTimestamp: ${sireumTimestamp}")
   val aMod = st"""   <feature url="features/org.sireum.aadl.osate.hamr.feature_1.0.${sireumTimestamp}.qualifier.jar" id="org.sireum.aadl.osate.hamr.feature" version="1.0.${sireumTimestamp}.qualifier">""".render
   
   val hamrUpdate = updateSiteHAMRDir / "org.sireum.aadl.osate.hamr.update.site/site.xml"
-  val _update = collapse(replaceLine(a, aMod, hamrUpdate.readLines))
-  hamrUpdate.writeOver(_update)
-  println(s"Wrote: ${hamrUpdate}")
+  replaceLines(ISZ((a, aMod)), hamrUpdate)
 }
 
 { // UPDATE SITE README's
@@ -178,16 +178,12 @@ println(s"sireumTimestamp: ${sireumTimestamp}")
 
   {
     val readme = updateSiteDir / "readme.md"
-    val r = collapse(replaceLine(a, aMod, readme.readLines))
-    readme.writeOver(r)
-    println(s"Wrote: ${readme}")
+    replaceLines(ISZ((a, aMod)), readme)
   }
 
   {
     val hamrReadme = updateSiteHAMRDir / "readme.md"
-    val r = collapse(replaceLine(a, aMod, hamrReadme.readLines))
-    hamrReadme.writeOver(r)
-    println(s"Wrote: ${hamrReadme}")
+    replaceLines(ISZ((a, aMod)), hamrReadme)
   }
 }
 
@@ -197,6 +193,5 @@ println(s"sireumTimestamp: ${sireumTimestamp}")
   val aMod = st""": "$${SIREUM_V:=${sireumVersion}}"""".render
   
   val caseEnv = caseDir / "TA5/case-env/case-setup.sh"
-  caseEnv.writeOver(collapse(replaceLine(a, aMod, caseEnv.readLines)))
-  println(s"Wrote: ${caseEnv}")
+  replaceLines(ISZ((a, aMod)), caseEnv)
 }
