@@ -73,10 +73,10 @@ val buildsbt = SIREUM_HOME / "hamr/codegen/arsit/resources/util/buildSbt.propert
   val build_cmd = SIREUM_HOME / "bin" / "build.cmd"
 
   println("Running tipe")
-  //Os.proc(ISZ(sireum.value, "slang", "run", build_cmd.value, "tipe")).console.runCheck()
+  Os.proc(ISZ(sireum.value, "slang", "run", build_cmd.value, "tipe")).console.runCheck()
 
   println("Building sireum.jar")
-  //Os.proc(ISZ(sireum.value, "slang", "run", build_cmd.value)).console.runCheck()
+  Os.proc(ISZ(sireum.value, "slang", "run", build_cmd.value)).console.runCheck()
 }
 
 
