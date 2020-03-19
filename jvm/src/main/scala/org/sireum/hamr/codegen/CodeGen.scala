@@ -91,32 +91,34 @@ object CodeGen {
       
       if(!reporter.hasError && shouldCallTranspile) {
         
-        transpilerConfig = results.transpilerOptions.map(t => TranspilerConfig(
-          t.sourcepath,
-          t.output,
-          t.verbose,
-          t.projectName,
-          t.apps,
-          t.unroll,
-          t.fingerprint,
-          t.bitWidth,
-          t.maxStringSize,
-          t.maxArraySize,
-          t.customArraySizes,
-          t.customConstants,
-          t.plugins,
-          t.exts,
-          t.forwarding,
-          t.stackSize,
-          t.excludeBuild,
-          t.libOnly,
-          t.stableTypeId,
-          t.save,
-          t.load
-        ))
-        
-        if(transpilerCallback(transpilerConfig.get) != 0){
-          reporter.error(None(), toolName, s"Transpiler did not complete successfully")
+        for(t <- results.transpilerOptions) {
+          val transpilerConfig = TranspilerConfig(
+            t.sourcepath,
+            t.output,
+            t.verbose,
+            t.projectName,
+            t.apps,
+            t.unroll,
+            t.fingerprint,
+            t.bitWidth,
+            t.maxStringSize,
+            t.maxArraySize,
+            t.customArraySizes,
+            t.customConstants,
+            t.plugins,
+            t.exts,
+            t.forwarding,
+            t.stackSize,
+            t.excludeBuild,
+            t.libOnly,
+            t.stableTypeId,
+            t.save,
+            t.load
+          )
+
+          if (transpilerCallback(transpilerConfig) != 0) {
+            reporter.error(None(), toolName, s"Transpiler did not complete successfully")
+          }
         }
       }
     }
