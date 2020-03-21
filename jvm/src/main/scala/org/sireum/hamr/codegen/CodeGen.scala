@@ -125,20 +125,27 @@ object CodeGen {
 
     if(!reporter.hasError && runACT) {
 
-      var hamrIncludeDirs: ISZ[String] = ISZ()
+      var hamrLibs: Map[String, act.HamrLib] = Map.empty
       if(hamrIntegration) {
-        val hamrDirsWithHeaders: Set[String] = Set.empty ++ getAuxFiles(ISZ(outputSlang_C_Directory.canon.value), T, reporter).keySet.elements
-          .filter(f =>  Os.path(f).ext == string"h").map(m => Os.path(m).up.value)
-        hamrIncludeDirs = hamrDirsWithHeaders.elements        
+        val root: Os.Path = outputSlang_C_Directory.canon
+        for(instanceDir <- root.list){
+          assert(instanceDir.isDir)
+          val instanceName = instanceDir.name
+          
+          val hamrDirsWithHeaders: Set[String] = Set.empty ++ getHeaderFiles(instanceDir)
+            .map(m => camkesOutputDir.relativize(m.up).value)
+
+          val instanceLib = instanceDir / "sel4-build" / "libmain.a"
+          val path = camkesOutputDir.relativize(instanceLib)
+          val staticLib: String = s"$${CMAKE_CURRENT_LIST_DIR}/${path.value}"
+          
+          val hamrLib = act.HamrLib(instanceName, hamrDirsWithHeaders.elements, staticLib)
+          hamrLibs = hamrLibs + (instanceName ~> hamrLib)
+        }
       } 
       
-      val hamrStaticLib = if(hamrIntegration) {
-        val path = camkesOutputDir.relativize(outputSlang_C_Directory / "sel4-build" / "libmain.a")
-        val lib: String = s"$${CMAKE_CURRENT_LIST_DIR}/${path.value}"
-        Some(lib) 
-      } else { None[String]() }
+      
       val platform = org.sireum.hamr.act.ActPlatform.byName(o.platform.name).get
-
       reporter.info(None(), toolName, "Generating CAmkES artifacts...")
 
       val actOptions = act.ActOptions(
@@ -146,8 +153,7 @@ object CodeGen {
         auxFiles = getAuxFiles(o.camkesAuxCodeDirs, F, reporter),
         aadlRootDirectory = o.aadlRootDir,
         platform = platform,
-        hamrIncludeDirs = hamrIncludeDirs,
-        hamrStaticLib = hamrStaticLib,
+        hamrLibs = hamrLibs,
         Some(packageName)
       )
       
@@ -194,8 +200,22 @@ object CodeGen {
     return s.native.replaceAll("[\\-|\\.]", "_")
   }
 
+  def getHeaderFiles(root: Os.Path): ISZ[Os.Path] = {
+    assert(root.isDir)
+        
+    var ret: ISZ[Os.Path] = ISZ()
+    def processDir(dir: Os.Path): Unit = {
+      ret = ret ++ dir.list.filter(p => p.ext == string"h")
+      
+      dir.list.foreach(d => if(d.isDir) processDir(d))
+    }
+    
+    processDir(root)
+    return ret
+  }
+  
   def getAuxFiles(directories: ISZ[String], includeParentDir: B, reporter: Reporter): Map[String, String] = {
-    var ret: Map[String,String] = Map.empty
+    var ret: Map[String, String] = Map.empty
     
     for (rootDir <- directories) {
       val rootDirPath = Os.path(rootDir)
