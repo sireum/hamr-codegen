@@ -29,7 +29,7 @@ val currYear = java.time.Year.now.getValue
 val pluginDir = Os.home / "devel/sireum/osate-plugin"
 val updateSiteDir = Os.home / "devel/sireum/osate-plugin-update-site"
 val updateSiteHAMRDir = Os.home / "devel/sireum/hamr-plugin-update-site"
-val caseDir = Os.home / "devel/sel4/home/CASE-loonwerks"
+val caseDir = Os.home / "devel/case/CASE-loonwerks"
 
 def runGit(args: ISZ[String], path: Os.Path): String = {
   val p = org.sireum.Os.proc(args).at(path).runCheck()
