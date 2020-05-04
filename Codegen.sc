@@ -29,10 +29,6 @@ import org.sireum.mill.SireumModule._
 
 trait Module extends CrossJvmJsJitPack {
 
-  final override def description: String = "HAMR CodeGen"
-  
-  final override def artifactName: String = "hamr-codegen"
-  
   final override def subUrl: String = "hamr-codegen"
 
   final override def developers = Seq(Developers.jason)
@@ -45,8 +41,7 @@ trait Module extends CrossJvmJsJitPack {
     ivy"org.sireum::scalac-plugin:$scalacPluginVersion"
   )
 
-  final override def testDeps =
-    if (isSourceDep) Seq(testObject.shared) else Seq()
+  final override def ivyDeps = Agg.empty
 
   final override def testIvyDeps =
     if (isSourceDep) Agg.empty
@@ -62,15 +57,33 @@ trait Module extends CrossJvmJsJitPack {
 
   final override def jsTestFrameworks = jvmTestFrameworks
 
-  final override def ivyDeps = Agg.empty
-  
-  final override def deps = Seq(airObject, actObject, arsitObject)
-  
-  def testObject: CrossJvmJsPublish
-
   def airObject: CrossJvmJsJitPack
+}
 
-  def actObject: CrossJvmJsJitPack
+object Module {
+  trait Common extends Module {
+    final override def description: String = "HAMR Codegen Common"
 
-  def arsitObject: CrossJvmJsJitPack
+    final override def artifactName = s"$subUrl-common"
+
+    final override def deps = Seq(airObject)
+  }
+
+  trait Codegen extends Module {
+
+    final override def description: String = "HAMR CodeGen"
+
+    final override def artifactName = s"$subUrl-base"
+
+    final override def testDeps =
+      if (isSourceDep) Seq(testObject.shared) else Seq()
+
+    final override def deps = Seq(airObject, actObject, arsitObject)
+
+    def actObject: CrossJvmJsJitPack
+
+    def arsitObject: CrossJvmJsJitPack
+
+    def testObject: CrossJvmJsPublish
+  }
 }
