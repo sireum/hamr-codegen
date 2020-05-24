@@ -1,231 +1,14 @@
 // #Sireum
 
-package org.sireum.hamr.codegen.common
+package org.sireum.hamr.codegen.common.symbols
 
 import org.sireum._
 import org.sireum.hamr.ir
 import org.sireum.hamr.ir.{Component, RangeProp}
 import org.sireum.message.Reporter
-
-
-@datatype class SymbolTable(rootSystem: AadlSystem,
-
-                            componentMap: HashSMap[String, AadlComponent],
-
-                            airComponentMap: HashSMap[String, ir.Component],
-                            airFeatureMap: HashSMap[String, ir.Feature],
-                            airClassifierMap: HashSMap[String, ir.Component],
-
-                            // all handled connections
-                            connections: ISZ[ir.ConnectionInstance],
-
-                            // feature name -> incoming connections
-                            inConnections: HashSMap[String, ISZ[ir.ConnectionInstance]],
-
-                            // feature name -> outgoing connections
-                            outConnections: HashSMap[String, ISZ[ir.ConnectionInstance]]
-                           ) {
-
-  def getInConnections(featurePath: String): ISZ[ir.ConnectionInstance] = {
-    return if(inConnections.contains(featurePath)) inConnections.get(featurePath).get
-    else ISZ()
-  }
-
-  def getMaxDomain(): Z = {
-    var max: Z = z"2" // threads start a domain 2
-    for(p <- getPeriodicThreads()) {
-      p.getDomain(this) match {
-        case Some(z) => if((z + z"1") > max) {
-          max = z + z"1"
-        }
-        case _ => 
-      }
-    }
-    return max
-  }
-
-  def hasPeriodicThreads(): B = {
-    return ops.ISZOps(getThreads()).exists(p => CommonUtil.isPeriodic(p.component))
-  }
-
-  def getThread(c: Component): AadlThread = { 
-    return componentMap.get(CommonUtil.getName(c.identifier)).get.asInstanceOf[AadlThread]
-  }
-
-  def getPeriodicThreads(): ISZ[AadlThread] = {
-    return ops.ISZOps(getThreads()).filter(p => CommonUtil.isPeriodic(p.component))
-  }
-
-  def getProcess(id: String): AadlProcess = { return componentMap.get(id).get.asInstanceOf[AadlProcess] }
-  
-  def getProcesses(): ISZ[AadlProcess] = {
-    val c = componentMap.values.filter(f => f.isInstanceOf[AadlProcess])
-    return c.map(m => m.asInstanceOf[AadlProcess])
-  }
-
-  
-  def getThreads(): ISZ[AadlThread] = {
-    val c = componentMap.values.filter(f => f.isInstanceOf[AadlThread])
-    return c.map(m => m.asInstanceOf[AadlThread])
-  }
-  
-  def getBoundProcesses(c: AadlProcessor): ISZ[AadlProcess] = {
-    val ret: ISZ[AadlComponent] = componentMap.values.filter((p: AadlComponent) => p match {
-      case process: AadlProcess =>
-        process.boundProcessor match {
-          case Some(processor) => processor == c.path
-          case _ => F
-        }
-      case _ => F
-    })
-    return ret.map(m => m.asInstanceOf[AadlProcess])
-  }
-  
-  def getBoundProcessor(c: AadlProcess): Option[AadlProcessor] = {
-    val ret: Option[AadlProcessor] = c.boundProcessor match {
-      case Some(p) => Some(componentMap.get(p).get.asInstanceOf[AadlProcessor])
-      case None() => None()
-    }
-    return ret
-  }
-
-  def getAllBoundProcessors(): ISZ[AadlProcessor] = {
-    var processors: Set[AadlProcessor] = Set.empty
-
-    for(process <- getProcesses()){
-      getBoundProcessor(process) match {
-        case Some(processor) => processors = processors + processor
-        case _ => halt(s"Unexpected: ${process.path} does not have a bound processor")
-      }
-    }
-    return processors.elements
-  }
-}
-
-
-@sig trait AadlObject
-
-@sig trait AadlComponent extends AadlObject {
-  def component: ir.Component
-  def parent: Option[String]
-
-  def path: String
-  def identifier: String
-}
-
-@datatype class AadlSystem(val component: ir.Component,
-                           val parent: Option[String],
-                           val path: String,
-                           val identifier: String,
-                          
-                           subComponents: ISZ[AadlComponent]) extends AadlComponent {
-
-  def rawConnections(): B = {
-    val ret: B = PropertyUtil.getDiscreetPropertyValue(component.properties, HamrProperties.HAMR__BIT_CODEC_RAW_CONNECTIONS) match {
-      case Some(ir.ValueProp("true")) => T
-      case Some(ir.ValueProp("false")) => F
-      case _ => F
-    }
-    return ret
-  }
-}
-
-@datatype class AadlProcessor(val component: ir.Component,
-                              val parent: Option[String],
-                              val path: String,
-                              val identifier: String) extends AadlComponent {
-  def getFramePeriod(): Option[Z] = {
-    val ret: Option[Z] = PropertyUtil.getDiscreetPropertyValue(component.properties, OsateProperties.TIMING_PROPERTIES__FRAME_PERIOD) match {
-      case Some(ir.UnitProp(value, unit)) => PropertyUtil.convertToMS(value, unit)
-      case _ => None()
-    }
-    return ret
-  }
-
-  def getClockPeriod(): Option[Z] = {
-    val ret: Option[Z] = PropertyUtil.getDiscreetPropertyValue(component.properties, OsateProperties.TIMING_PROPERTIES__CLOCK_PERIOD) match {
-      case Some(ir.UnitProp(value, unit)) => PropertyUtil.convertToMS(value, unit)
-      case _ => None()
-    }
-    return ret
-  }
-
-  def getScheduleSourceText(): Option[String] = {
-    val ret: Option[String] = PropertyUtil.getDiscreetPropertyValue(component.properties, CaseSchedulingProperties.SCHEDULE_SOURCE_TEXT) match {
-      case Some(ir.ValueProp(value)) => Some(value)
-      case _ => None()
-    }
-    return ret
-  }
-}
-
-
-@datatype class AadlProcess(val component: ir.Component,
-                            val parent: Option[String],
-                            val path: String,
-                            val identifier: String,
-
-                            boundProcessor: Option[String],
-
-                            subComponents: ISZ[AadlComponent],
-
-                           ) extends AadlComponent {
-  
-  def getDomain(): Option[Z] = {
-    return PropertyUtil.getUnitPropZ(component.properties, CaseSchedulingProperties.DOMAIN)
-  }
-}
-
-@datatype class AadlThread(val component: ir.Component,
-                           val parent: Option[String],
-                           val path: String,
-                           val identifier: String,
-
-                           dispatchProtocol: Dispatch_Protocol.Type,
-                           period: Option[Z],
-
-                           ports: ISZ[AadlFeature]
-                          ) extends AadlComponent {
-
-
-  def isPeriodic(): B = { return dispatchProtocol == Dispatch_Protocol.Periodic }
-  
-  def isSporadic(): B = { return dispatchProtocol == Dispatch_Protocol.Sporadic }
-
-  def getMaxComputeExecutionTime(): Z = {
-    val ret: Z = PropertyUtil.getDiscreetPropertyValue(component.properties, OsateProperties.TIMING_PROPERTIES__COMPUTE_EXECUTION_TIME) match {
-      case Some(RangeProp(low, high)) =>
-        PropertyUtil.convertToMS(high.value, high.unit) match {
-          case Some(z) => z
-          case _ => z"0"
-        }
-      case _ => z"0"
-    }
-    return ret
-  }
-
-  def getDomain(symbolTable: SymbolTable): Option[Z] = {
-    val p: AadlProcess = symbolTable.getProcess(parent.get)
-    return p.getDomain()
-  }
-
-  def getComputeEntrypointSourceText(): Option[String] = {
-    return PropertyUtil.getComputeEntrypointSourceText(component.properties)
-  }
-}
-
-@datatype class AadlTODOComponent(val component: ir.Component,
-                                  val parent: Option[String],
-                                  val path: String,
-                                  val identifier: String) extends  AadlComponent
-
-@sig trait AadlFeature
-
-@datatype class AadlFeaturePort(feature: ir.Feature) extends AadlFeature
-
-@datatype class AadlFeatureTODO(feature: ir.Feature) extends AadlFeature
-
-
+import org.sireum.hamr.codegen.common.CommonUtil
+import org.sireum.hamr.codegen.common.properties.PropertyUtil
+import org.sireum.hamr.codegen.common.symbols._
 
 object SymbolResolver {
   
@@ -344,10 +127,13 @@ object SymbolResolver {
           val subComponents: ISZ[AadlComponent] = for(sc <- c.subComponents) yield process(sc, Some(path))
 
           AadlSystem(component = c, parent = parent, path = path, identifier = identifier, subComponents = subComponents)
-          
+
         case ir.ComponentCategory.Processor =>
-          AadlProcessor(component = c, parent = None(), path = path, identifier = identifier)
-          
+          AadlProcessor(component = c, parent = None(), path = path, identifier = identifier, isVirtual = F)
+
+        case ir.ComponentCategory.VirtualProcessor =>
+          AadlProcessor(component = c, parent = None(), path = path, identifier = identifier, isVirtual = T)
+
         case ir.ComponentCategory.Process =>
           val subComponents: ISZ[AadlComponent] = for(sc <- c.subComponents) yield process(sc, Some(path))
           

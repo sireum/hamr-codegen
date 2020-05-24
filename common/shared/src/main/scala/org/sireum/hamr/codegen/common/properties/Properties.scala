@@ -1,6 +1,6 @@
 // #Sireum
 
-package org.sireum.hamr.codegen.common
+package org.sireum.hamr.codegen.common.properties
 
 import org.sireum._
 
@@ -11,6 +11,7 @@ object OsateProperties {
   val DATA_MODEL__ENUMERATORS: String = "Data_Model::Enumerators"
 
   val THREAD_PROPERTIES__DISPATCH_PROTOCOL: String = "Thread_Properties::Dispatch_Protocol"
+  val THREAD_PROPERTIES__DISPATCH_TRIGGER: String = "Thread_Properties::Dispatch_Trigger"
   val THREAD_PROPERTIES__PRIORITY: String =  "Thread_Properties::Priority"
   val THREAD_PROPERTIES__URGENCY: String =  "Thread_Properties::Urgency"
 
@@ -42,6 +43,8 @@ object HamrProperties {
   val HAMR__BIT_CODEC_ENCODED: String = "HAMR::Bit_Codec_Encoded"
   val HAMR__BIT_CODEC_MAX_SIZE: String = "HAMR::Bit_Codec_Max_Size"
   val HAMR__BIT_CODEC_RAW_CONNECTIONS: String = "HAMR::Bit_Codec_Raw_Connections"
+
+  val HAMR__COMPONENT_TYPE: String = "HAMR::Component_Type"
 
 }
 

@@ -1,8 +1,9 @@
 // #Sireum
 
-package org.sireum.hamr.codegen.common
+package org.sireum.hamr.codegen.common.types
 
 import org.sireum._
+import org.sireum.hamr.codegen.common.StringUtil
 import org.sireum.hamr.ir
 import org.sireum.message.Reporter
 

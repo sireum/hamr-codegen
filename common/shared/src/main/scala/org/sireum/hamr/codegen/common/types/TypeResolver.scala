@@ -1,10 +1,12 @@
 // #Sireum
 
-package org.sireum.hamr.codegen.common
+package org.sireum.hamr.codegen.common.types
 
 import org.sireum._
+import org.sireum.hamr.codegen.common._
 import org.sireum.hamr.ir
 import org.sireum.hamr.ir.Aadl
+import org.sireum.hamr.codegen.common.symbols._
 
 object TypeResolver {
 

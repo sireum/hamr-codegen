@@ -1,11 +1,17 @@
 // #Sireum
 
-package org.sireum.hamr.codegen.common
+package org.sireum.hamr.codegen.common.properties
 
 import org.sireum._
 import org.sireum.hamr.ir
+import org.sireum.hamr.codegen.common._
+import org.sireum.hamr.codegen.common.symbols.Dispatch_Protocol
 
 object PropertyUtil {
+
+  @pure def hasProperty(properties: ISZ[ir.Property], propertyName: String): B = {
+    return properties.filter(p => CommonUtil.getLastName(p.name) == propertyName).nonEmpty
+  }
 
   @pure def getProperty(properties: ISZ[ir.Property], propertyName: String): Option[ir.Property] = {
     val op = properties.filter(container => CommonUtil.getLastName(container.name) == propertyName)

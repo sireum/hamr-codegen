@@ -4,7 +4,9 @@ package org.sireum.hamr.codegen.common
 
 import org.sireum._
 import org.sireum.hamr.ir
-import org.sireum.hamr.ir.{Component, Direction, Feature, FeatureEnd}
+import org.sireum.hamr.ir.{Direction, Feature, FeatureEnd}
+import org.sireum.hamr.codegen.common.properties._
+import org.sireum.hamr.codegen.common.symbols.Dispatch_Protocol
 
 object CommonUtil {
 
@@ -93,11 +95,6 @@ object CommonUtil {
     assert(zs.nonEmpty)
     return ops.ISZOps(zs).foldLeft((a: Z, b: Z) => if(a > b) a else b, zs(0))
   }
-}
-
-@enum object Dispatch_Protocol {
-  'Periodic
-  'Sporadic
 }
 
 

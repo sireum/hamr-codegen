@@ -3,7 +3,8 @@
 package org.sireum.hamr.codegen.common
 
 import org.sireum._
-import org.sireum.ops.{COps, StringOps}
+import org.sireum.ops.COps
+import org.sireum.ops.StringOps
 
 object StringUtil {
 
@@ -24,4 +25,6 @@ object StringUtil {
   def sanitizeName(s: String): String = {
     return replaceAll(replaceAll(s, "-", "_"), ".", "_")
   }
+
+  def macroize(str: String): String = { return toUpperCase(sanitizeName(str)) }
 }
