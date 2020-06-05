@@ -75,6 +75,17 @@ object TypeUtil {
     return max
   }
 
+  @pure def getMaxBitsSize(types: AadlTypes): Option[Z] = {
+    var ret = z"-1"
+    for (t <- types.typeMap.values) {
+      TypeUtil.getBitCodecMaxSize(t) match {
+        case Some(z) => if(z > ret) { ret = z }
+        case _ =>
+      }
+    }
+    return if(ret == -1) None() else Some(ret)
+  }
+  
   @pure def getBitCodecMaxSize(a: AadlType): Option[Z] = {
     val ret: Option[Z] = a.container match {
       case Some(c) =>

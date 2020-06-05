@@ -106,7 +106,7 @@ object SymbolResolver {
           }
         }
       }
-      
+
       return !reporter.hasError
     }
 
@@ -180,7 +180,7 @@ object SymbolResolver {
     val aadlSystem = process(system, None()).asInstanceOf[AadlSystem]
     
     
-    return SymbolTable(rootSystem = aadlSystem,
+    val symbolTable = SymbolTable(rootSystem = aadlSystem,
 
       componentMap = componentMap,
 
@@ -191,6 +191,39 @@ object SymbolResolver {
       connections = connections,
       inConnections = inConnections,
       outConnections = outConnections)
+
+    { // sanity checks TODO: move elsewhere
+
+      { // makes sure there are no fan outs from native components to vm components
+        for (conns <- outConnections.entries) {
+          var vmConns = F
+          var nativeConns = F
+          for (conn <- conns._2) {
+            if (symbolTable.getThreadById(CommonUtil.getName(conn.dst.component)).toVirtualMachine(symbolTable)) {
+              vmConns = T
+            } else {
+              nativeConns = T
+            }
+          }
+          assert(!(vmConns && nativeConns),
+            s"Fan out from ${conns._1} involves both native and VM components which is not currently supported")
+        }
+      }
+
+      { // all periodic components have domain info, or don't.  No mixtures
+        val processes: ISZ[AadlProcess] = symbolTable.getProcesses()
+        var withDomain = 0
+        var withoutDomain = 0
+        for(p <- processes) {
+          if (p.getDomain().nonEmpty) { withDomain = withDomain + 1 }
+          else { withoutDomain = withoutDomain + 1 }
+        }
+        assert((withDomain == 0 && withoutDomain > 0) || (withDomain > 0 && withoutDomain == 0),
+          s"${withDomain} processes have domain info but ${withoutDomain} do not.  HAMR does not support such a model")
+      }
+    }
+
+    return symbolTable
   }
 
   def getPortConnectionNames(c: ir.ConnectionInstance, 
