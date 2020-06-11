@@ -1,3 +1,4 @@
+// #Sireum
 /*
  Copyright (c) 2019, Jason Belt, Kansas State University
  All rights reserved.
@@ -56,9 +57,6 @@ object hamrCodeGenCli {
           tpe = Type.Flag(F), description = "Treat AADL devices as threads")
       )),
       OptGroup(name = "Transpiler", opts = ISZ(
-        Opt(name = "ipc", longKey = "ipc-mechanism", shortKey = None(),
-          tpe = Type.Choice(name = "HamrIpcMechanism", sep = None(), elements = ISZ("SharedMemory", "MessageQueue")),
-          description = "IPC communication mechanism (requires 'trans' option)"),
         Opt(name = "slangAuxCodeDirs", longKey = "slang-aux-code-dirs", shortKey = None(),
           tpe = Type.Path(multiple = T, default = None()),
           description = "Auxiliary C source code directory"),

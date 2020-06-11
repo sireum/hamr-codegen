@@ -16,7 +16,6 @@ import org.sireum._
 
 @enum object CodeGenIpcMechanism {
   'SharedMemory
-  'MessageQueue
 }
 
 @datatype class CodeGenConfig(verbose: B,
