@@ -254,7 +254,7 @@ object CodeGen {
         p.writeOver(r.content.render)
         reporter.info(None(), toolName, s"Wrote: ${p}")
         if(r.makeExecutable) {
-          p.chmod("700")
+          p.chmodAll("700")
           reporter.info(None(), toolName, s"Made ${p} executable")
         }
       } else {
