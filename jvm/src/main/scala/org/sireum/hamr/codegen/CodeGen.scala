@@ -8,6 +8,7 @@ import org.sireum.hamr.act
 import org.sireum.hamr.arsit
 import org.sireum.hamr.ir.Aadl
 import org.sireum.hamr.codegen.CodeGenPlatform._
+import org.sireum.hamr.codegen.common.DirectoryUtil
 
 object CodeGen {
 
@@ -24,7 +25,7 @@ object CodeGen {
     val slangOutputDir: Path = Os.path(o.slangOutputDir.getOrElse("."))
 
     val outputSlang_C_Directory = if(targetingSel4) {
-      camkesOutputDir / "hamr"
+      camkesOutputDir / DirectoryUtil.DIR_SLANG_LIBRARIES
     }  else {
       slangOutputDir / "src" / "c" / "nix"
     }
@@ -128,26 +129,6 @@ object CodeGen {
 
     if(!reporter.hasError && runACT) {
 
-      var hamrLibs: Map[String, act.HamrLib] = Map.empty
-      if(hamrIntegration) {
-        val root: Os.Path = outputSlang_C_Directory.canon
-        for(instanceDir <- root.list){
-          assert(instanceDir.isDir)
-          val instanceName = instanceDir.name
-          
-          val hamrDirsWithHeaders: Set[String] = Set.empty ++ getHeaderFiles(instanceDir)
-            .map(m => camkesOutputDir.relativize(m.up).value)
-
-          val instanceLib = instanceDir / "sel4-build" / "libmain.a"
-          val path = camkesOutputDir.relativize(instanceLib)
-          val staticLib: String = s"$${CMAKE_CURRENT_LIST_DIR}/${path.value}"
-          
-          val hamrLib = act.HamrLib(instanceName, hamrDirsWithHeaders.elements, staticLib)
-          hamrLibs = hamrLibs + (instanceName ~> hamrLib)
-        }
-      } 
-      
-      
       val platform = org.sireum.hamr.act.ActPlatform.byName(o.platform.name).get
       reporter.info(None(), toolName, "Generating CAmkES artifacts...")
 
@@ -156,7 +137,6 @@ object CodeGen {
         auxFiles = getAuxFiles(o.camkesAuxCodeDirs, F, reporter),
         aadlRootDirectory = o.aadlRootDir,
         platform = platform,
-        hamrLibs = hamrLibs,
         Some(packageName)
       )
       
