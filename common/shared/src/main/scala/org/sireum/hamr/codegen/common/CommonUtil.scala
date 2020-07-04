@@ -105,11 +105,11 @@ object CommonUtil {
     ops.StringOps(san).split(char => char == ':')
   }
 
-  def component: String = { return StringUtil.sanitizeName(split(1)) }
+  def componentType: String = { return StringUtil.sanitizeName(split(1)) }
 
-  def componentImpl: String = { return s"${component}_Impl"  }
+  def componentImpl: String = { return s"${componentType}_Impl"  }
 
-  def bridge: String = { return s"${component}_Bridge" }
+  def bridge: String = { return s"${componentType}_Bridge" }
 
   def bridgeIdentifier: String = { return s"${identifier}Bridge" }
 
@@ -132,20 +132,22 @@ object CommonUtil {
 
   def cPackageName: String = { return st"${(path, "_")}".render }
 
-  def cEntryPointAdapterName: String = { return s"${component}_adapter" }
+  def cComponentImpl: String = { return s"${cPackageName}_${componentImpl}" }
+
+  def cEntryPointAdapterName: String = { return s"${componentType}_adapter" }
 
   def cEntryPointAdapterQualifiedName: String = { return s"${cPackageName}_${cEntryPointAdapterName}" }
 
-  def cComponentImplQualifiedName: String = { return st"${cPackageName}_${componentImpl}".render }
+  def cThisApi: String = { return s"${cComponentImpl}_api_" }
 
-  def cThisApi: String = { return st"${cComponentImplQualifiedName}_api_".render }
+  def cBridgeApi: String = { return s"${cPackageName}_${componentType}_Bridge_Api" }
 
-  def cBridgeApi: String = { return s"${cPackageName}_${component}_Bridge_Api" }
+  def cBridgeEntryPoints: String = { return s"${cPackageName}_${componentType}_Bridge_EntryPoints" }
 
 
   def sel4AppName: String = { return s"${componentImpl}_App" }
 
-  def sel4SlangExtensionName: String = { return s"${component}_seL4Nix" }
+  def sel4SlangExtensionName: String = { return s"${componentType}_seL4Nix" }
 
   def sel4SlangExtensionStubName: String = { return s"${sel4SlangExtensionName}_Ext" }
 

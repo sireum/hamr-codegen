@@ -36,7 +36,7 @@ object CodeGen {
       cleanupPackageName(slangOutputDir.name)
     }
 
-    val (runArsit, runACT, hamrIntegration, shouldCallTranspile) = o.platform match {
+    val (runArsit, runACT, hamrIntegration, isTranspilerProject) = o.platform match {
       case JVM => (T, F, F, F)
       case Linux | Cygwin | MacOS => (T, F, F, T)
       case SeL4 => (T, T, T, T)
@@ -90,7 +90,7 @@ object CodeGen {
 
       reporterIndex = printMessages(reporter.messages, reporterIndex)
       
-      if(!reporter.hasError && shouldCallTranspile) {
+      if(!reporter.hasError && o.runTranspiler && isTranspilerProject) {
         
         for(t <- results.transpilerOptions) {
           val transpilerConfig = TranspilerConfig(

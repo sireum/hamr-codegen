@@ -75,6 +75,9 @@ object hamrCodeGenCli {
         Opt(name = "maxArraySize", longKey = "max-array-size", shortKey = None(),
           tpe = Type.Num(None(), 100, None(), None()),
           description = "Default maximum sequence size"),
+        Opt(name = "runTranspiler", longKey = "run-transpiler", shortKey = None(),
+          tpe = Type.Flag(T),
+          description = "Run Transpiler during HAMR Codegen")
       )),
       OptGroup(name = "CAmkES", opts = ISZ(
         Opt(name = "camkesOutputDir", longKey = "camkes-output-dir", shortKey = Some('o'),
