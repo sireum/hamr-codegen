@@ -4,7 +4,7 @@ package org.sireum.hamr.codegen.common.symbols
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
-import org.sireum.hamr.codegen.common.properties.{CaseSchedulingProperties, HamrProperties, OsateProperties, PropertyUtil}
+import org.sireum.hamr.codegen.common.properties.{CasePropertiesProperties, CaseSchedulingProperties, HamrProperties, OsateProperties, PropertyUtil}
 import org.sireum.hamr.ir
 import org.sireum.hamr.ir.FeatureEnd
 
@@ -127,6 +127,10 @@ import org.sireum.hamr.ir.FeatureEnd
 
   def hasVM(): B = {
     return ops.ISZOps(getProcesses()).exists(p => p.toVirtualMachine())
+  }
+
+  def hasCakeMLComponents(): B = {
+    return ops.ISZOps(getThreads()).exists(t => t.isCakeMLComponent())
   }
 }
 
@@ -261,6 +265,15 @@ import org.sireum.hamr.ir.FeatureEnd
 
   def toVirtualMachine(symbolTable: SymbolTable): B = {
     return getParent(symbolTable).toVirtualMachine()
+  }
+
+  def isCakeMLComponent(): B = {
+    val ret: B = PropertyUtil.getDiscreetPropertyValue(component.properties, CasePropertiesProperties.PROP__CASE_PROPERTIES__COMPONENT_TYPE) match {
+      case Some(ir.ValueProp("MONITOR")) => T
+      case Some(ir.ValueProp("FILTER")) => T
+      case _ => F
+    }
+    return ret
   }
 }
 
