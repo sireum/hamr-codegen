@@ -137,7 +137,8 @@ object CodeGen {
         auxFiles = getAuxFiles(o.camkesAuxCodeDirs, F, reporter),
         aadlRootDirectory = o.aadlRootDir,
         platform = platform,
-        Some(packageName)
+        hamrBasePackageName = Some(packageName),
+        experimentalOptions = o.experimentalOptions
       )
       
       val results = org.sireum.hamr.act.Act.run(model, actOptions, reporter)
