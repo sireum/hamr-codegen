@@ -14,6 +14,7 @@ object SymbolResolver {
   
   def resolve(model: ir.Aadl,
               basePackageName: Option[String],
+              useCaseConnectors: B,
               reporter: Reporter): SymbolTable = {
     
     var airComponentMap: HashSMap[String, ir.Component] = HashSMap.empty
@@ -194,7 +195,7 @@ object SymbolResolver {
 
     { // sanity checks TODO: move elsewhere
 
-      { // makes sure there are no fan outs from native components to vm components
+      if(!useCaseConnectors) { // makes sure there are no fan outs from native components to vm components
         for (conns <- outConnections.entries) {
           var vmConns = F
           var nativeConns = F

@@ -56,21 +56,22 @@ object CodeGen {
       val fileSep = StringOps(org.sireum.Os.fileSep).first
 
       val opt = arsit.Cli.ArsitOption(
-        slangOutputDir.value,
-        packageName,
-        o.embedArt,
-        genBlessEntryPoints,
-        o.verbose,
-        o.devicesAsThreads,
-        ipc,
-        o.slangAuxCodeDirs,
-        toOption(outputSlang_C_Directory),
-        o.excludeComponentImpl,
-        platform,
-        o.bitWidth,
-        o.maxStringSize,
-        o.maxArraySize,
-        fileSep
+        outputDir = slangOutputDir.value,
+        packageName = packageName,
+        embedArt = o.embedArt,
+        bless = genBlessEntryPoints,
+        verbose = o.verbose,
+        devicesAsThreads = o.devicesAsThreads,
+        ipc = ipc,
+        auxCodeDir = o.slangAuxCodeDirs,
+        outputCDir = toOption(outputSlang_C_Directory),
+        excludeImpl = o.excludeComponentImpl,
+        platform = platform,
+        bitWidth = o.bitWidth,
+        maxStringSize = o.maxStringSize,
+        maxArraySize = o.maxArraySize,
+        pathSeparator = fileSep,
+        experimentalOptions = o.experimentalOptions
       )
 
       reporter.info(None(), toolName, "Generating Slang artifacts...")

@@ -38,7 +38,7 @@ import org.sireum.hamr.ir.FeatureEnd
 
   def getMaxDomain(): Z = {
     var max: Z = z"2" // threads start a domain 2
-    for(p <- getPeriodicThreads()) {
+    for(p <- getThreads()) {
       p.getDomain(this) match {
         case Some(z) => if((z + z"1") > max) {
           max = z + z"1"
