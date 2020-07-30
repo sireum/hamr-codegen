@@ -93,7 +93,7 @@ object hamrCodeGenCli {
           description = "Root directory containing the AADL project"
         )
       )),
-      OptGroup(name = "Experimental Options", opts = ISZ(
+      OptGroup(name = "Experimental", opts = ISZ(
         Opt(name = "experimentalOptions", longKey = "experimental-options", shortKey = None(),
           tpe = Type.Str(sep = Some(';'), default = None()),
           description = ""
