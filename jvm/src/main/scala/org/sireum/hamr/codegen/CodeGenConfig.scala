@@ -44,7 +44,9 @@ import org.sireum._
                               // act options
                               camkesOutputDir: Option[String],
                               camkesAuxCodeDirs: ISZ[String],
-                              aadlRootDir: Option[String])
+                              aadlRootDir: Option[String],
+
+                              experimentalOptions: ISZ[String])
                                    
 
 @datatype class Resource(path: String,
