@@ -4,17 +4,17 @@ package org.sireum.hamr.codegen.common.symbols
 
 import org.sireum._
 import org.sireum.hamr.ir
-import org.sireum.hamr.ir.{Component, RangeProp}
 import org.sireum.message.Reporter
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.properties.PropertyUtil
-import org.sireum.hamr.codegen.common.symbols._
+import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes}
 
 object SymbolResolver {
   
   def resolve(model: ir.Aadl,
               basePackageName: Option[String],
               useCaseConnectors: B,
+              aadlTypes: AadlTypes,
               reporter: Reporter): SymbolTable = {
     
     var airComponentMap: HashSMap[String, ir.Component] = HashSMap.empty
@@ -122,56 +122,151 @@ object SymbolResolver {
       if(componentMap.contains(path)) {
         return componentMap.get(path).get
       }  
-      
-      val aadlComponent: AadlComponent = c.category match {
-        case ir.ComponentCategory.System =>
-          val subComponents: ISZ[AadlComponent] = for(sc <- c.subComponents) yield process(sc, Some(path))
 
-          AadlSystem(component = c, parent = parent, path = path, identifier = identifier, subComponents = subComponents)
-
-        case ir.ComponentCategory.Processor =>
-          AadlProcessor(component = c, parent = None(), path = path, identifier = identifier, isVirtual = F)
-
-        case ir.ComponentCategory.VirtualProcessor =>
-          AadlProcessor(component = c, parent = None(), path = path, identifier = identifier, isVirtual = T)
-
-        case ir.ComponentCategory.Process =>
-          val subComponents: ISZ[AadlComponent] = for(sc <- c.subComponents) yield process(sc, Some(path))
-          
-          val processor: Option[String] = PropertyUtil.getActualProcessorBinding(c)
-          
-          AadlProcess(component = c, parent = parent, path = path, identifier = identifier, boundProcessor = processor, subComponents = subComponents)
-          
-        case ir.ComponentCategory.Thread =>
+      def handleDeviceOrThread(): AadlComponent = {
+        {
           assert(c.subComponents.isEmpty) // TODO handle subprograms etc
+
+          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield process(sc, Some(path))
           var aadlPorts: ISZ[AadlFeature] = ISZ()
-          for(feature <- c.features) {
+
+          def getFeatureEndType(f: ir.FeatureEnd): Option[AadlType] = {
+            val ret: Option[AadlType] = f.classifier match {
+              case Some(c) => Some(aadlTypes.typeMap.get(c.name).get)
+              case _ => None()
+            }
+            return ret
+          }
+
+          for (feature <- c.features) {
             val fname = CommonUtil.getName(feature.identifier)
-            val _feature = airFeatureMap.get(fname).get 
+            val _feature: ir.Feature = airFeatureMap.get(fname).get
             val port: AadlFeature = _feature.category match {
-              case ir.FeatureCategory.EventDataPort => AadlFeaturePort(_feature)
-              case ir.FeatureCategory.EventPort => AadlFeaturePort(_feature)
-              case ir.FeatureCategory.DataPort => AadlFeaturePort(_feature)
-              case _ => AadlFeatureTODO(_feature) 
+              case ir.FeatureCategory.EventPort => {
+                val fend = feature.asInstanceOf[ir.FeatureEnd]
+                AadlEventPort(feature = fend)
+              }
+              case ir.FeatureCategory.DataPort => {
+                val fend = feature.asInstanceOf[ir.FeatureEnd]
+                AadlDataPort(
+                  feature = fend,
+                  aadlType = getFeatureEndType(fend).get
+                )
+              }
+              case ir.FeatureCategory.EventDataPort => {
+                val fend = feature.asInstanceOf[ir.FeatureEnd]
+                AadlDataPort(
+                  feature = fend,
+                  aadlType = getFeatureEndType(fend).get)
+              }
+              case _ => AadlFeatureTODO(_feature)
             }
             aadlPorts = aadlPorts :+ port
           }
           val dispatchProtocol: Dispatch_Protocol.Type = PropertyUtil.getDispatchProtocol(c) match {
             case Some(x) => x
             case _ =>
-              // TODO should be handled by a rewriter  
+              // TODO should be handled by a rewriter
               reporter.warn(None(), CommonUtil.toolName, "Dispatch Protocol not specified, assuming Sporadic")
               Dispatch_Protocol.Sporadic
           }
-          
+
           val period = PropertyUtil.getPeriod(c)
-          
-          AadlThread(component = c, parent = parent,
-            path = path, identifier = identifier,
-            dispatchProtocol = dispatchProtocol, period = period,
-            ports = aadlPorts)
-          
-        case _ => AadlTODOComponent(component = c, parent = parent, path = path, identifier = identifier)
+
+          val ret: AadlThreadOrDevice =  if (c.category == ir.ComponentCategory.Device) {
+            AadlDevice(
+              component = c,
+              parent = parent,
+              path = path,
+              identifier = identifier,
+              dispatchProtocol = dispatchProtocol,
+              period = period,
+              ports = aadlPorts,
+              subComponents = subComponents,
+              connectionInstances = c.connectionInstances)
+
+          } else {
+            assert(c.category == ir.ComponentCategory.Thread)
+
+            AadlThread(
+              component = c,
+              parent = parent,
+              path = path,
+              identifier = identifier,
+              dispatchProtocol = dispatchProtocol,
+              period = period,
+              ports = aadlPorts,
+              subComponents = subComponents,
+              connectionInstances = c.connectionInstances)
+          }
+          return ret
+        }
+      }
+
+      val aadlComponent: AadlComponent = c.category match {
+        case ir.ComponentCategory.System => {
+          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield process(sc, Some(path))
+
+          AadlSystem(
+            component = c,
+            parent = parent,
+            path = path,
+            identifier = identifier,
+            subComponents = subComponents,
+            connectionInstances = c.connectionInstances)
+        }
+        case ir.ComponentCategory.Processor => {
+          assert(c.subComponents.isEmpty, s"Need to handle subcomponents of ${c.category}: ${identifier}")
+          AadlProcessor(
+            component = c,
+            parent = None(),
+            path = path,
+            identifier = identifier,
+            isVirtual = F,
+            subComponents = ISZ(),
+            connectionInstances = c.connectionInstances)
+        }
+        case ir.ComponentCategory.VirtualProcessor => {
+          assert(c.subComponents.isEmpty, s"Need to handle subcomponents of ${c.category}? ${identifier}")
+          AadlProcessor(
+            component = c,
+            parent = None(),
+            path = path,
+            identifier = identifier,
+            isVirtual = T,
+            subComponents = ISZ(),
+            connectionInstances = c.connectionInstances)
+        }
+        case ir.ComponentCategory.Process => {
+          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield process(sc, Some(path))
+
+          val processor: Option[String] = PropertyUtil.getActualProcessorBinding(c)
+
+          AadlProcess(
+            component = c,
+            parent = parent,
+            path = path,
+            identifier = identifier,
+            boundProcessor = processor,
+            subComponents = subComponents,
+            connectionInstances = c.connectionInstances)
+        }
+
+        case ir.ComponentCategory.Device => handleDeviceOrThread()
+
+        case ir.ComponentCategory.Thread => handleDeviceOrThread()
+
+        case _ => {
+          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield process(sc, Some(path))
+
+          AadlTODOComponent(
+            component = c,
+            parent = parent,
+            path = path,
+            identifier = identifier,
+            subComponents = subComponents,
+            connectionInstances = c.connectionInstances)
+        }
       }
       
       componentMap = componentMap + (path ~> aadlComponent)

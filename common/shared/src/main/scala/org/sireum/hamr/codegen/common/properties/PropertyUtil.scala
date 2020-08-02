@@ -15,7 +15,7 @@ object PropertyUtil {
 
   @pure def getProperty(properties: ISZ[ir.Property], propertyName: String): Option[ir.Property] = {
     val op = properties.filter(container => CommonUtil.getLastName(container.name) == propertyName)
-    val ret: Option[ir.Property] = if(op.nonEmpty) {
+    val ret: Option[ir.Property] = if (op.nonEmpty) {
       assert(op.size == 1) // sanity check, OSATE doesn't allow properties to be assigned to more than once
       Some(op(0))
     } else {
@@ -38,7 +38,7 @@ object PropertyUtil {
 
   def getUnitPropZ(props: ISZ[ir.Property], propName: String): Option[Z] = {
     val ret: Option[Z] = getDiscreetPropertyValue(props, propName) match {
-      case Some(v : ir.UnitProp) =>
+      case Some(v: ir.UnitProp) =>
         R(v.value) match {
           case Some(vv) => Some(conversions.R.toZ(vv))
           case _ => None[Z]()
@@ -70,7 +70,7 @@ object PropertyUtil {
           case Some(v) =>
             val _v = conversions.R.toZ(v)
             val _ret: Option[Z] = u match {
-              case Some("bits")  => Some(_v / z"8")
+              case Some("bits") => Some(_v / z"8")
               case Some("Bytes") => Some(_v)
               case Some("KByte") => Some(_v * z"1000")
               case Some("MByte") => Some(_v * z"1000" * z"1000")
@@ -116,7 +116,7 @@ object PropertyUtil {
 
     val ret: Option[String] =
       getDiscreetPropertyValue(c.properties, OsateProperties.DEPLOYMENT_PROPERTIES__ACTUAL_PROCESSOR_BINDING) match {
-        case Some(v : ir.ReferenceProp) => Some(CommonUtil.getName(v.value))
+        case Some(v: ir.ReferenceProp) => Some(CommonUtil.getName(v.value))
         case _ => return None[String]()
       }
 
@@ -141,6 +141,15 @@ object PropertyUtil {
 
   def getSourceText(properties: ISZ[ir.Property]): ISZ[String] = {
     return getPropertyValues(properties, OsateProperties.PROGRAMMING_PROPERTIES__SOURCE_TEXT).map(p => p.asInstanceOf[ir.ValueProp].value)
+  }
+
+  def getUseRawConnection(properties: ISZ[ir.Property]): B = {
+    val ret: B = PropertyUtil.getDiscreetPropertyValue(properties, HamrProperties.HAMR__BIT_CODEC_RAW_CONNECTIONS) match {
+      case Some(ir.ValueProp("true")) => T
+      case Some(ir.ValueProp("false")) => F
+      case _ => F
+    }
+    return ret
   }
 
   def convertToMS(value: String, unit: Option[String]): Option[Z] = {

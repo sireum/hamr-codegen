@@ -6,7 +6,7 @@ import org.sireum._
 import org.sireum.hamr.ir
 import org.sireum.hamr.ir.{Direction, Feature, FeatureEnd}
 import org.sireum.hamr.codegen.common.properties._
-import org.sireum.hamr.codegen.common.symbols.Dispatch_Protocol
+import org.sireum.hamr.codegen.common.symbols.{AadlThreadOrDevice, Dispatch_Protocol}
 
 object CommonUtil {
 
@@ -94,6 +94,14 @@ object CommonUtil {
   def findMaxZ(zs: ISZ[Z]): Z = {
     assert(zs.nonEmpty)
     return ops.ISZOps(zs).foldLeft((a: Z, b: Z) => if(a > b) a else b, zs(0))
+  }
+
+  def getPeriod(m: AadlThreadOrDevice): Z = {
+    val ret: Z = m.period match {
+      case Some(p) => p
+      case _ => z"1"
+    }
+    return ret
   }
 }
 

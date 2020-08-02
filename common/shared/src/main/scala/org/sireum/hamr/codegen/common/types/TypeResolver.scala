@@ -37,10 +37,8 @@ object TypeResolver {
   }
 
   def processDataTypes(model: Aadl,
-                       symbolTable: SymbolTable,
+                       rawConnections: B,
                        basePackage: String): AadlTypes = {
-
-    val root: AadlSystem = symbolTable.rootSystem
 
     var typeMap: Map[String, AadlType] = Map.empty
 
@@ -48,7 +46,7 @@ object TypeResolver {
       typeMap = typeMap + (v.classifier.get.name ~> processType(v, basePackage, typeMap))
     }
 
-    return AadlTypes(root.rawConnections(), typeMap)
+    return AadlTypes(rawConnections, typeMap)
   }
 
   def processType(c: ir.Component, basePackage: String, typeMap: Map[String, AadlType]): AadlType = {
@@ -60,22 +58,23 @@ object TypeResolver {
     if(TypeUtil.isEnumType(c)) {
 
       return EnumType(cname, container, TypeUtil.getEnumValues(c))
-
-    } else if(TypeUtil.isBaseType(c)) {
+    }
+    else if(TypeUtil.isBaseType(c)) {
 
       val aadlType = org.sireum.ops.StringOps(c.classifier.get.name).replaceAllLiterally("Base_Types::", "")
 
       val t: SlangType.Type = TypeResolver.getSlangType(aadlType)
 
       return BaseType(cname, container, t)
-
-    } else if(TypeUtil.isArrayType(c)) {
+    }
+    else if(TypeUtil.isArrayType(c)) {
 
       val baseTypeName = TypeUtil.getArrayBaseType(c)
       val baseType = typeMap.get(baseTypeName).get
 
       return ArrayType(cname, container, baseType)
-    } else if(TypeUtil.isRecordType(c)) {
+    }
+    else if(TypeUtil.isRecordType(c)) {
       var fields: Map[String, AadlType] = Map.empty
 
       for(sc <- c.subComponents){
@@ -84,8 +83,8 @@ object TypeResolver {
       }
 
       return RecordType(cname, container, fields)
-
-    } else {
+    }
+    else {
       return TODOType(cname, container)
     }
   }

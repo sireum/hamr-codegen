@@ -5,6 +5,7 @@ package org.sireum.hamr.codegen.common.symbols
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.properties.{CasePropertiesProperties, CaseSchedulingProperties, HamrProperties, OsateProperties, PropertyUtil}
+import org.sireum.hamr.codegen.common.types.AadlType
 import org.sireum.hamr.ir
 import org.sireum.hamr.ir.FeatureEnd
 
@@ -143,22 +144,21 @@ import org.sireum.hamr.ir.FeatureEnd
 
   def path: String
   def identifier: String
+
+  def subComponents: ISZ[AadlComponent]
+
+  def connectionInstances: ISZ[ir.ConnectionInstance]
 }
 
 @datatype class AadlSystem(val component: ir.Component,
                            val parent: Option[String],
                            val path: String,
                            val identifier: String,
-
-                           subComponents: ISZ[AadlComponent]) extends AadlComponent {
+                           val subComponents: ISZ[AadlComponent],
+                           val connectionInstances: ISZ[ir.ConnectionInstance]) extends AadlComponent {
 
   def rawConnections(): B = {
-    val ret: B = PropertyUtil.getDiscreetPropertyValue(component.properties, HamrProperties.HAMR__BIT_CODEC_RAW_CONNECTIONS) match {
-      case Some(ir.ValueProp("true")) => T
-      case Some(ir.ValueProp("false")) => F
-      case _ => F
-    }
-    return ret
+    return PropertyUtil.getUseRawConnection(component.properties)
   }
 }
 
@@ -166,8 +166,11 @@ import org.sireum.hamr.ir.FeatureEnd
                               val parent: Option[String],
                               val path: String,
                               val identifier: String,
+                              val subComponents: ISZ[AadlComponent],
+                              val connectionInstances: ISZ[ir.ConnectionInstance],
 
-                              val isVirtual: B) extends AadlComponent {
+                              isVirtual: B) extends AadlComponent {
+
   def getFramePeriod(): Option[Z] = {
     val ret: Option[Z] = PropertyUtil.getDiscreetPropertyValue(component.properties, OsateProperties.TIMING_PROPERTIES__FRAME_PERIOD) match {
       case Some(ir.UnitProp(value, unit)) => PropertyUtil.convertToMS(value, unit)
@@ -198,12 +201,10 @@ import org.sireum.hamr.ir.FeatureEnd
                             val parent: Option[String],
                             val path: String,
                             val identifier: String,
+                            val subComponents: ISZ[AadlComponent],
+                            val connectionInstances: ISZ[ir.ConnectionInstance],
 
-                            boundProcessor: Option[String],
-
-                            subComponents: ISZ[AadlComponent],
-
-                           ) extends AadlComponent {
+                            boundProcessor: Option[String]) extends AadlComponent {
 
   def getDomain(): Option[Z] = {
     return PropertyUtil.getUnitPropZ(component.properties, CaseSchedulingProperties.DOMAIN)
@@ -219,16 +220,20 @@ import org.sireum.hamr.ir.FeatureEnd
   }
 }
 
-@datatype class AadlThread(val component: ir.Component,
-                           val parent: Option[String],
-                           val path: String,
-                           val identifier: String,
+@datatype class AadlThreadGroup(val component: ir.Component,
+                                val parent: Option[String],
+                                val path: String,
+                                val identifier: String,
+                                val subComponents: ISZ[AadlComponent],
+                                val connectionInstances: ISZ[ir.ConnectionInstance]) extends AadlComponent
 
-                           dispatchProtocol: Dispatch_Protocol.Type,
-                           period: Option[Z],
+@sig trait AadlThreadOrDevice extends AadlComponent {
 
-                           ports: ISZ[AadlFeature]
-                          ) extends AadlComponent {
+  def dispatchProtocol: Dispatch_Protocol.Type
+
+  def period: Option[Z]
+
+  def ports: ISZ[AadlFeature]
 
   def isPeriodic(): B = { return dispatchProtocol == Dispatch_Protocol.Periodic }
 
@@ -277,16 +282,63 @@ import org.sireum.hamr.ir.FeatureEnd
   }
 }
 
+@datatype class AadlThread(val component: ir.Component,
+                           val parent: Option[String],
+                           val path: String,
+                           val identifier: String,
+                           val subComponents: ISZ[AadlComponent],
+                           val connectionInstances: ISZ[ir.ConnectionInstance],
+
+                           val dispatchProtocol: Dispatch_Protocol.Type,
+                           val period: Option[Z],
+
+                           val ports: ISZ[AadlFeature]) extends AadlThreadOrDevice
+
+@datatype class AadlDevice(val component: ir.Component,
+                           val parent: Option[String],
+                           val path: String,
+                           val identifier: String,
+                           val subComponents: ISZ[AadlComponent],
+                           val connectionInstances: ISZ[ir.ConnectionInstance],
+
+                           val dispatchProtocol: Dispatch_Protocol.Type,
+                           val period: Option[Z],
+
+                           val ports: ISZ[AadlFeature]) extends AadlThreadOrDevice
+
+@datatype class AadlSubprogram(val component: ir.Component,
+                               val parent: Option[String],
+                               val path: String,
+                               val identifier: String,
+                               val subComponents: ISZ[AadlComponent],
+                               val connectionInstances: ISZ[ir.ConnectionInstance]) extends AadlComponent
+
 @datatype class AadlTODOComponent(val component: ir.Component,
                                   val parent: Option[String],
                                   val path: String,
-                                  val identifier: String) extends  AadlComponent
+                                  val identifier: String,
+                                  val subComponents: ISZ[AadlComponent],
+                                  val connectionInstances: ISZ[ir.ConnectionInstance]) extends  AadlComponent
 
-@sig trait AadlFeature
+@sig trait AadlFeature {
+  def feature: ir.Feature
+}
 
-@datatype class AadlFeaturePort(feature: ir.Feature) extends AadlFeature
+@sig trait AadlFeatureEvent extends AadlFeature
 
-@datatype class AadlFeatureTODO(feature: ir.Feature) extends AadlFeature
+@sig trait AadlFeatureData extends AadlFeature {
+  def aadlType: AadlType
+}
+
+@datatype class AadlEventPort(val feature: ir.FeatureEnd) extends AadlFeatureEvent
+
+@datatype class AadlEventDataPort(val feature: ir.FeatureEnd,
+                                  val aadlType: AadlType) extends AadlFeatureData with AadlFeatureEvent
+
+@datatype class AadlDataPort(val feature: ir.FeatureEnd,
+                             val aadlType: AadlType) extends AadlFeatureData
+
+@datatype class AadlFeatureTODO(val feature: ir.Feature) extends AadlFeature
 
 
 
