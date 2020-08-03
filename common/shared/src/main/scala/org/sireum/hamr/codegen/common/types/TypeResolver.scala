@@ -6,7 +6,6 @@ import org.sireum._
 import org.sireum.hamr.codegen.common._
 import org.sireum.hamr.ir
 import org.sireum.hamr.ir.Aadl
-import org.sireum.hamr.codegen.common.symbols._
 
 object TypeResolver {
 
@@ -55,11 +54,11 @@ object TypeResolver {
 
     val container = Some(c)
 
-    if(TypeUtil.isEnumType(c)) {
+    if (TypeUtil.isEnumType(c)) {
 
       return EnumType(cname, container, TypeUtil.getEnumValues(c))
     }
-    else if(TypeUtil.isBaseType(c)) {
+    else if (TypeUtil.isBaseType(c)) {
 
       val aadlType = org.sireum.ops.StringOps(c.classifier.get.name).replaceAllLiterally("Base_Types::", "")
 
@@ -67,17 +66,17 @@ object TypeResolver {
 
       return BaseType(cname, container, t)
     }
-    else if(TypeUtil.isArrayType(c)) {
+    else if (TypeUtil.isArrayType(c)) {
 
       val baseTypeName = TypeUtil.getArrayBaseType(c)
       val baseType = typeMap.get(baseTypeName).get
 
       return ArrayType(cname, container, baseType)
     }
-    else if(TypeUtil.isRecordType(c)) {
+    else if (TypeUtil.isRecordType(c)) {
       var fields: Map[String, AadlType] = Map.empty
 
-      for(sc <- c.subComponents){
+      for (sc <- c.subComponents) {
         val fieldName = CommonUtil.getLastName(sc.identifier)
         fields = fields + (fieldName ~> processType(sc, basePackage, typeMap))
       }

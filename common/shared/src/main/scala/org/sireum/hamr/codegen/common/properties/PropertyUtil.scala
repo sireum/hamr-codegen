@@ -3,9 +3,9 @@
 package org.sireum.hamr.codegen.common.properties
 
 import org.sireum._
-import org.sireum.hamr.ir
 import org.sireum.hamr.codegen.common._
 import org.sireum.hamr.codegen.common.symbols.Dispatch_Protocol
+import org.sireum.hamr.ir
 
 object PropertyUtil {
 
@@ -102,7 +102,6 @@ object PropertyUtil {
     }
     return ret
   }
-
 
   def getPeriod(c: ir.Component): Option[Z] = {
     val ret: Option[Z] = getDiscreetPropertyValue(c.properties, OsateProperties.TIMING_PROPERTIES__PERIOD) match {

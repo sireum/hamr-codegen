@@ -3,24 +3,24 @@
 package org.sireum.hamr.codegen.common.symbols
 
 import org.sireum._
-import org.sireum.hamr.ir
-import org.sireum.message.Reporter
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.properties.PropertyUtil
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes}
+import org.sireum.hamr.ir
+import org.sireum.message.Reporter
 
 object SymbolResolver {
-  
+
   def resolve(model: ir.Aadl,
               basePackageName: Option[String],
               useCaseConnectors: B,
               aadlTypes: AadlTypes,
               reporter: Reporter): SymbolTable = {
-    
+
     var airComponentMap: HashSMap[String, ir.Component] = HashSMap.empty
     var airFeatureMap: HashSMap[String, ir.Feature] = HashSMap.empty
     var airClassifierMap: HashSMap[String, ir.Component] = HashSMap.empty
-    
+
     //var topLevelProcess: Option[ir.Component] = None[ir.Component]
     //var typeHeaderFileName: String = ""
 
@@ -69,6 +69,7 @@ object SymbolResolver {
         for (ci <- c.connectionInstances) {
           if (isHandledConnection(ci, airComponentMap, airFeatureMap)) {
             connections = connections :+ ci
+
             def add(portPath: String, isIn: B): Unit = {
               val map: HashSMap[String, ISZ[ir.ConnectionInstance]] = isIn match {
                 case T => inConnections
@@ -112,16 +113,16 @@ object SymbolResolver {
     }
 
     resolver(system)
-        
+
     var componentMap: HashSMap[String, AadlComponent] = HashSMap.empty
-    
+
     def process(c: ir.Component, parent: Option[String]): AadlComponent = {
       val path = CommonUtil.getName(c.identifier)
       val identifier = CommonUtil.getLastName(c.identifier)
-      
-      if(componentMap.contains(path)) {
+
+      if (componentMap.contains(path)) {
         return componentMap.get(path).get
-      }  
+      }
 
       def handleDeviceOrThread(): AadlComponent = {
         {
@@ -173,7 +174,7 @@ object SymbolResolver {
 
           val period = PropertyUtil.getPeriod(c)
 
-          val ret: AadlThreadOrDevice =  if (c.category == ir.ComponentCategory.Device) {
+          val ret: AadlThreadOrDevice = if (c.category == ir.ComponentCategory.Device) {
             AadlDevice(
               component = c,
               parent = parent,
@@ -268,14 +269,14 @@ object SymbolResolver {
             connectionInstances = c.connectionInstances)
         }
       }
-      
+
       componentMap = componentMap + (path ~> aadlComponent)
       return aadlComponent
     }
-    
+
     val aadlSystem = process(system, None()).asInstanceOf[AadlSystem]
-    
-    
+
+
     val symbolTable = SymbolTable(rootSystem = aadlSystem,
 
       componentMap = componentMap,
@@ -290,7 +291,7 @@ object SymbolResolver {
 
     { // sanity checks TODO: move elsewhere
 
-      if(!useCaseConnectors) { // makes sure there are no fan outs from native components to vm components
+      if (!useCaseConnectors) { // makes sure there are no fan outs from native components to vm components
         for (conns <- outConnections.entries) {
           var vmConns = F
           var nativeConns = F
@@ -310,9 +311,13 @@ object SymbolResolver {
         val processes: ISZ[AadlProcess] = symbolTable.getProcesses()
         var withDomain = 0
         var withoutDomain = 0
-        for(p <- processes) {
-          if (p.getDomain().nonEmpty) { withDomain = withDomain + 1 }
-          else { withoutDomain = withoutDomain + 1 }
+        for (p <- processes) {
+          if (p.getDomain().nonEmpty) {
+            withDomain = withDomain + 1
+          }
+          else {
+            withoutDomain = withoutDomain + 1
+          }
         }
         assert((withDomain == 0 && withoutDomain > 0) || (withDomain > 0 && withoutDomain == 0),
           s"${withDomain} processes have domain info but ${withoutDomain} do not.  HAMR does not support such a model")
@@ -322,7 +327,7 @@ object SymbolResolver {
     return symbolTable
   }
 
-  def getPortConnectionNames(c: ir.ConnectionInstance, 
+  def getPortConnectionNames(c: ir.ConnectionInstance,
                              componentMap: HashSMap[String, ir.Component]): (String, String) = {
     val src = componentMap.get(CommonUtil.getName(c.src.component)).get
     val dst = componentMap.get(CommonUtil.getName(c.dst.component)).get
@@ -337,58 +342,58 @@ object SymbolResolver {
     }
     return ret
   }
-  
-  def isHandledConnection(c: ir.ConnectionInstance, 
+
+  def isHandledConnection(c: ir.ConnectionInstance,
                           componentMap: HashSMap[String, ir.Component],
                           featureMap: HashSMap[String, ir.Feature]): B = {
 
-      def validFeature(f: ir.Feature): B = {
-        var ret: B = f match {
-          case fend: ir.FeatureEnd =>
-            fend.category match {
-              case ir.FeatureCategory.DataAccess => T
-              case ir.FeatureCategory.DataPort => T
-              case ir.FeatureCategory.EventPort => T
-              case ir.FeatureCategory.EventDataPort => T
-              case ir.FeatureCategory.SubprogramAccessGroup => T
+    def validFeature(f: ir.Feature): B = {
+      var ret: B = f match {
+        case fend: ir.FeatureEnd =>
+          fend.category match {
+            case ir.FeatureCategory.DataAccess => T
+            case ir.FeatureCategory.DataPort => T
+            case ir.FeatureCategory.EventPort => T
+            case ir.FeatureCategory.EventDataPort => T
+            case ir.FeatureCategory.SubprogramAccessGroup => T
 
-              case ir.FeatureCategory.AbstractFeature => F
-              case ir.FeatureCategory.BusAccess => F
-              case ir.FeatureCategory.FeatureGroup => F
-              case ir.FeatureCategory.Parameter => F
-              case ir.FeatureCategory.SubprogramAccess => F
-            }
-          case faccess: ir.FeatureAccess =>
-            faccess.accessCategory match {
-              case ir.AccessCategory.Data => T
-              case ir.AccessCategory.SubprogramGroup => T
-              case _ => F
-            }
-          case _ => F
-        }
-        return ret
+            case ir.FeatureCategory.AbstractFeature => F
+            case ir.FeatureCategory.BusAccess => F
+            case ir.FeatureCategory.FeatureGroup => F
+            case ir.FeatureCategory.Parameter => F
+            case ir.FeatureCategory.SubprogramAccess => F
+          }
+        case faccess: ir.FeatureAccess =>
+          faccess.accessCategory match {
+            case ir.AccessCategory.Data => T
+            case ir.AccessCategory.SubprogramGroup => T
+            case _ => F
+          }
+        case _ => F
       }
-
-      val src = componentMap.get(CommonUtil.getName(c.src.component)).get
-      val dst = componentMap.get(CommonUtil.getName(c.dst.component)).get
-
-      val ret: B = (src.category, dst.category) match {
-        case (ir.ComponentCategory.Thread, ir.ComponentCategory.Thread) =>
-
-          val srcFeature = featureMap.get(CommonUtil.getName(c.src.feature.get)).get
-          val dstFeature = featureMap.get(CommonUtil.getName(c.dst.feature.get)).get
-
-          validFeature(srcFeature) && validFeature(dstFeature)
-
-        case (ir.ComponentCategory.Data, ir.ComponentCategory.Thread) =>
-          val dstFeature = featureMap.get(CommonUtil.getName(c.dst.feature.get)).get
-          validFeature(dstFeature)
-
-        case _ =>
-          F
-      }
-
       return ret
     }
 
+    val src = componentMap.get(CommonUtil.getName(c.src.component)).get
+    val dst = componentMap.get(CommonUtil.getName(c.dst.component)).get
+
+    val ret: B = (src.category, dst.category) match {
+      case (ir.ComponentCategory.Thread, ir.ComponentCategory.Thread) =>
+
+        val srcFeature = featureMap.get(CommonUtil.getName(c.src.feature.get)).get
+        val dstFeature = featureMap.get(CommonUtil.getName(c.dst.feature.get)).get
+
+        validFeature(srcFeature) && validFeature(dstFeature)
+
+      case (ir.ComponentCategory.Data, ir.ComponentCategory.Thread) =>
+        val dstFeature = featureMap.get(CommonUtil.getName(c.dst.feature.get)).get
+        validFeature(dstFeature)
+
+      case _ =>
+        F
+    }
+
+    return ret
   }
+
+}

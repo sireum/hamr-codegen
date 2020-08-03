@@ -40,14 +40,14 @@ import org.sireum._
                               maxStringSize: Z,
                               maxArraySize: Z,
                               runTranspiler: B,
-                              
+
                               // act options
                               camkesOutputDir: Option[String],
                               camkesAuxCodeDirs: ISZ[String],
                               aadlRootDir: Option[String],
 
                               experimentalOptions: ISZ[String])
-                                   
+
 
 @datatype class Resource(path: String,
                          content: ST,

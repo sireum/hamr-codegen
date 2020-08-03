@@ -4,8 +4,8 @@ package org.sireum.hamr.codegen.common.types
 
 import org.sireum._
 import org.sireum.hamr.codegen.common._
-import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.properties.{HamrProperties, OsateProperties, PropertyUtil}
+import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.ir
 import org.sireum.message.Reporter
 
@@ -25,8 +25,8 @@ object TypeUtil {
 
   @pure def getEnumValues(v: ir.Component): ISZ[String] = {
     var ret: ISZ[String] = ISZ()
-    if(isEnum(v.properties)) {
-      for(p <- PropertyUtil.getPropertyValues(v.properties, OsateProperties.DATA_MODEL__ENUMERATORS)){
+    if (isEnum(v.properties)) {
+      for (p <- PropertyUtil.getPropertyValues(v.properties, OsateProperties.DATA_MODEL__ENUMERATORS)) {
         p match {
           case ir.ValueProp(v) => ret = ret :+ v
           case _ => halt(s"Unhandled ${p}")
@@ -55,12 +55,13 @@ object TypeUtil {
 
   @pure def findMaxAadlArraySize(types: AadlTypes): Z = {
     var max: Z = 0
-    def processType(t: AadlType):Unit = {
+
+    def processType(t: AadlType): Unit = {
       t match {
         case a: ArrayType =>
           val dims = TypeUtil.getArrayDimensions(a)
           assert(dims.size == 1)
-          if(dims(0) > max) {
+          if (dims(0) > max) {
             max = dims(0)
           }
           processType(a.baseType)
@@ -79,13 +80,15 @@ object TypeUtil {
     var ret = z"-1"
     for (t <- types.typeMap.values) {
       TypeUtil.getBitCodecMaxSize(t) match {
-        case Some(z) => if(z > ret) { ret = z }
+        case Some(z) => if (z > ret) {
+          ret = z
+        }
         case _ =>
       }
     }
-    return if(ret == -1) None() else Some(ret)
+    return if (ret == -1) None() else Some(ret)
   }
-  
+
   @pure def getBitCodecMaxSize(a: AadlType): Option[Z] = {
     val ret: Option[Z] = a.container match {
       case Some(c) =>
@@ -134,14 +137,14 @@ object TypeUtil {
                            symbolTable: SymbolTable,
                            reporter: Reporter): B = {
     var hasErrors: B = F
-    if(aadlTypes.rawConnections) {
+    if (aadlTypes.rawConnections) {
 
-      for(featureConnections <- symbolTable.outConnections.values;
-          conn <- featureConnections) {
+      for (featureConnections <- symbolTable.outConnections.values;
+           conn <- featureConnections) {
 
         val src = symbolTable.airFeatureMap.get(CommonUtil.getName(conn.src.feature.get)).get
 
-        if(CommonUtil.isDataPort(src)) {
+        if (CommonUtil.isDataPort(src)) {
           val fend = src.asInstanceOf[ir.FeatureEnd]
           val aadlType = aadlTypes.typeMap.get(fend.classifier.get.name).get
 
@@ -150,7 +153,7 @@ object TypeUtil {
 
           TypeUtil.getBitCodecMaxSize(aadlType) match {
             case Some(z) =>
-              if(z <= 0) {
+              if (z <= 0) {
                 hasErrors = T
                 reporter.error(None(), CommonUtil.toolName,
                   s"${HamrProperties.HAMR__BIT_CODEC_MAX_SIZE} must be greater than 0 for data type ${datatypeName}")
@@ -172,7 +175,6 @@ object TypeUtil {
   }
 
 
-
   @pure def stableTypeSig(t: String, width: Z): String = {
     val max: Z = if (0 < width && width <= 64) width else 64
     val bytes = ops.ISZOps(crypto.SHA3.sum512(conversions.String.toU8is(t))).take(max)
@@ -185,11 +187,11 @@ object TypeUtil {
     return st"$cs".render
   }
 
-  @pure def getTypeFingerprint(prefix: String, slangTypeName: String) : String = {
+  @pure def getTypeFingerprint(prefix: String, slangTypeName: String): String = {
     return s"${prefix}_${stableTypeSig(slangTypeName, FINGERPRINT_WIDTH)}"
   }
 
-  @pure def getOptionTypeFingerprints(slangTypeName: String) : (String, String, String) = {
+  @pure def getOptionTypeFingerprints(slangTypeName: String): (String, String, String) = {
     val optionType = s"Option[${slangTypeName}]"
     val someType = s"Some[${slangTypeName}]"
     val noneType = s"None[${slangTypeName}]"

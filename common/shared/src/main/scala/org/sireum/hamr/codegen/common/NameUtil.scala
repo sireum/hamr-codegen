@@ -6,7 +6,9 @@ import org.sireum._
 
 object SeL4NixNamesUtil {
 
-  def apiHelperFilename(names: Names): String = { return s"${names.componentImpl}_api" }
+  def apiHelperFilename(names: Names): String = {
+    return s"${names.componentImpl}_api"
+  }
 
   def apiHelperMethodName(portName: String, names: Names): String = {
     return s"api_${portName}__${names.cComponentImpl}"

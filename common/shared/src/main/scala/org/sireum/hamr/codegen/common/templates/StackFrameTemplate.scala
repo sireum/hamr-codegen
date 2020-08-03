@@ -46,7 +46,7 @@ object StackFrameTemplate {
   val CALLER_LAST_ST: ST = st"${CALLER_LAST}"
 
   def DeclNewStackFrame(caller: B, uri: String, owner: String, name: String, line: Z): ST = {
-    val _caller: String = if(caller) "caller" else "NULL"
+    val _caller: String = if (caller) "caller" else "NULL"
     val ret: ST = st"""DeclNewStackFrame(${_caller}, "${uri}", "${owner}", "${name}", ${line})"""
     return ret
   }

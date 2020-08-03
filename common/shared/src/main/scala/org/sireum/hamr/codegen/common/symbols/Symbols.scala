@@ -4,7 +4,7 @@ package org.sireum.hamr.codegen.common.symbols
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
-import org.sireum.hamr.codegen.common.properties.{CasePropertiesProperties, CaseSchedulingProperties, HamrProperties, OsateProperties, PropertyUtil}
+import org.sireum.hamr.codegen.common.properties._
 import org.sireum.hamr.codegen.common.types.AadlType
 import org.sireum.hamr.ir
 import org.sireum.hamr.ir.FeatureEnd
