@@ -23,8 +23,8 @@ import org.sireum._
 
 val SIREUM_HOME = Os.path(Os.env("SIREUM_HOME").get)
 val sireum = SIREUM_HOME / "bin/sireum"
-val currYear = java.time.Year.now.getValue 
-  
+val currYear = java.time.Year.now.getValue
+
 // TODO get these from env or arguments
 val pluginDir = Os.home / "devel/sireum/osate-plugin"
 val updateSiteDir = Os.home / "devel/sireum/osate-plugin-update-site"
@@ -40,7 +40,7 @@ def replaceLines(replacements: ISZ[(String, String)], file: Os.Path): Unit = {
   val lines = file.readLines
   val found: MSZ[B] = MSZ.create(replacements.size, F)
   val modLines: ISZ[String] = lines.map(line => {
-    var newLine = line  
+    var newLine = line
     for(i <- 0 until replacements.size if ops.StringOps(line).startsWith(replacements(i)._1)) {
       found(i) = T
       newLine = replacements(i)._2
@@ -93,7 +93,7 @@ println(s"sireumTimestamp: ${sireumTimestamp}")
 
 
 { // COPY sireum.jar over to osate lib directory
-  
+
   val sireumJar = SIREUM_HOME / "bin/sireum.jar"
   val osateLibJar = pluginDir / "org.sireum.aadl.osate/lib/sireum.jar"
 
@@ -104,19 +104,19 @@ println(s"sireumTimestamp: ${sireumTimestamp}")
 // TODO figure out how plugin.properties file work, for now just modify the files directly
 
 { // BASE MANIFEST
-  
+
   val a =     "Bundle-Version:"
   val aMod = s"Bundle-Version: 1.0.${sireumTimestamp}.qualifier"
-  
+
   val baseManifest = pluginDir / "org.sireum.aadl.osate/META-INF/MANIFEST.MF"
   replaceLines(ISZ((a, aMod)), baseManifest)
 }
 
 { // HAMR MANIFEST
-  
+
   val a =     "Bundle-Version:"
   val aMod = s"Bundle-Version: 1.0.${sireumTimestamp}.qualifier"
-  
+
   val b =        " org.sireum.aadl.osate;bundle-version="
   val bMod = st""" org.sireum.aadl.osate;bundle-version="1.0.${sireumTimestamp}",""".render
 
@@ -125,22 +125,22 @@ println(s"sireumTimestamp: ${sireumTimestamp}")
 }
 
 { // BASE FEATURE
-  
+
   val a =        "      version="
   val aMod = st"""      version="1.0.${sireumTimestamp}.qualifier"""".render
 
   val b =     "      Copyright (c)"
   val bMod = s"      Copyright (c) ${currYear}, Kansas State University"
-  
+
   val feature = pluginDir / "org.sireum.aadl.osate.feature/feature.xml"
   replaceLines(ISZ((a, aMod), (b, bMod)), feature)
 }
 
 { // HAMR FEATURE
-  
+
   val a =        "      version="
   val aMod = st"""      version="1.0.${sireumTimestamp}.qualifier"""".render
-  
+
   val b =    st"""      <import plugin="org.sireum.aadl.osate""".render
   val bMod = st"""      <import plugin="org.sireum.aadl.osate" version="1.0.${sireumTimestamp}" match="greaterOrEqual"/>""".render
 
@@ -152,7 +152,7 @@ println(s"sireumTimestamp: ${sireumTimestamp}")
 }
 
 { // Base Update Site version update
-  
+
   val a =    st"""   <feature url="features/org.sireum.aadl.osate""".render
   val aMod = st"""   <feature url="features/org.sireum.aadl.osate.feature_1.0.${sireumTimestamp}.qualifier.jar" id="org.sireum.aadl.osate.feature" version="1.0.${sireumTimestamp}.qualifier">""".render
 
@@ -164,15 +164,15 @@ println(s"sireumTimestamp: ${sireumTimestamp}")
 
   val a =    st"""   <feature url="features/org.sireum.aadl.osate""".render
   val aMod = st"""   <feature url="features/org.sireum.aadl.osate.hamr.feature_1.0.${sireumTimestamp}.qualifier.jar" id="org.sireum.aadl.osate.hamr.feature" version="1.0.${sireumTimestamp}.qualifier">""".render
-  
+
   val hamrUpdate = updateSiteHAMRDir / "org.sireum.aadl.osate.hamr.update.site/site.xml"
   replaceLines(ISZ((a, aMod)), hamrUpdate)
 }
 
 { // UPDATE SITE README's
-  
+
   val url = s"https://github.com/sireum/kekinian/tree/${sireumVersion}#installing"
-  
+
   val a = "Built against"
   val aMod = s"Built against Sireum Kekinian ${sireumBuildstamp} - To install Kekinian see [$url]($url)"
 
@@ -188,10 +188,10 @@ println(s"sireumTimestamp: ${sireumTimestamp}")
 }
 
 { // vagrant
-  
+
   val a =    st""": "$${SIREUM_V:=""".render
   val aMod = st""": "$${SIREUM_V:=${sireumVersion}}"""".render
-  
+
   val caseEnv = caseDir / "TA5/case-env/case-setup.sh"
   replaceLines(ISZ((a, aMod)), caseEnv)
 }

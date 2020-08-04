@@ -37,17 +37,11 @@ trait Module extends CrossJvmJsJitPack {
 
   final override def jsDeps = Seq()
 
-  final override def scalacPluginIvyDeps = Agg(
-    ivy"org.sireum::scalac-plugin:$scalacPluginVersion"
-  )
+  final override def scalacPluginIvyDeps = Agg(ivy"org.sireum::scalac-plugin:$scalacPluginVersion")
 
-  final override def ivyDeps = Agg.empty
+  final override def testIvyDeps = Agg(ivy"org.scalatest::scalatest::$scalaTestVersion")
 
-  final override def testIvyDeps =
-    if (isSourceDep) Agg.empty
-    else Agg(jpLatest(isCross = true, "sireum", "runtime", "test"))
-
-  final override def jvmTestIvyDeps = Agg.empty
+  final override def jvmTestIvyDeps = Agg(ivy"com.sksamuel.diff:diff:$diffVersion")
 
   final override def jsTestIvyDeps = Agg.empty
 
@@ -56,6 +50,8 @@ trait Module extends CrossJvmJsJitPack {
   final override def jvmTestFrameworks = Seq("org.scalatest.tools.Framework")
 
   final override def jsTestFrameworks = jvmTestFrameworks
+
+  final override def ivyDeps = Agg.empty
 
   def airObject: CrossJvmJsJitPack
 }
@@ -74,9 +70,6 @@ object Module {
     final override def description: String = "HAMR CodeGen"
 
     final override def artifactName = s"$subUrl-base"
-
-    final override def testDeps =
-      if (isSourceDep) Seq(testObject.shared) else Seq()
 
     final override def deps = Seq(airObject, actObject, arsitObject)
 

@@ -1,1 +1,24 @@
-/jvm/src/test/results
+# never check in results
+jvm/src/test/results
+
+# stuff from build.cmd
+out/
+target
+bin/mill.bat
+bin/platform.sh
+bin/prelude.sh
+bin/prelude.ps1
+bin/sireum
+bin/sireum.bat
+bin/sireum.jar
+bin/.sireum-win.jar
+bin/linux
+bin/mac
+bin/win
+bin/scala
+lib
+versions.properties
+*.cmd.jar
+*.cmd.com
+air/
+runtime/
