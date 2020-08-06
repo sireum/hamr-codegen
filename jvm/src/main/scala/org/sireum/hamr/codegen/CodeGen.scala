@@ -5,6 +5,7 @@ import org.sireum._
 import org.sireum.hamr.{act, arsit}
 import org.sireum.hamr.codegen.CodeGenPlatform._
 import org.sireum.hamr.codegen.common.DirectoryUtil
+import org.sireum.hamr.codegen.common.containers.{Resource, TranspilerConfig}
 import org.sireum.hamr.ir.Aadl
 import org.sireum.message._
 import org.sireum.ops.StringOps
@@ -45,7 +46,7 @@ object CodeGen {
     var reporterIndex = 0
 
     var resources: ISZ[Resource] = ISZ()
-    var transpilerConfig: Option[TranspilerConfig] = None()
+    var transpilerConfigs: ISZ[TranspilerConfig] = ISZ()
 
     if (runArsit) {
 
@@ -77,49 +78,14 @@ object CodeGen {
 
       val results = arsit.Arsit.run(model, opt, reporter)
 
-      reporterIndex = printMessages(reporter.messages, reporterIndex)
-
-      if (!reporter.hasError) {
-        val arsitResources = results.resources.map(r => Resource(r.path, r.content, r.overwrite, r.makeExecutable))
-        resources = resources ++ arsitResources
-
-        if (o.writeOutResources) {
-          writeOutResources(arsitResources, reporter)
-        }
-      }
+      resources = resources ++ results.resources
+      transpilerConfigs = transpilerConfigs ++ results.transpilerOptions
 
       reporterIndex = printMessages(reporter.messages, reporterIndex)
 
       if (!reporter.hasError && o.runTranspiler && isTranspilerProject) {
 
-        for (t <- results.transpilerOptions) {
-          val transpilerConfig = TranspilerConfig(
-            help = t.help,
-            args = t.args,
-            sourcepath = t.sourcepath,
-            output = t.output,
-            verbose = t.verbose,
-            apps = t.apps,
-            bitWidth = t.bitWidth,
-            projectName = t.projectName,
-            stackSize = t.stackSize,
-            customArraySizes = t.customArraySizes,
-            maxArraySize = t.maxArraySize,
-            maxStringSize = t.maxStringSize,
-            cmakeIncludes = t.cmakeIncludes,
-            exts = t.exts,
-            libOnly = t.libOnly,
-            excludeBuild = t.excludeBuild,
-            plugins = t.plugins,
-            fingerprint = t.fingerprint,
-            stableTypeId = t.stableTypeId,
-            unroll = t.unroll,
-            save = t.save,
-            load = t.load,
-            customConstants = t.customConstants,
-            forwarding = t.forwarding
-          )
-
+        for (transpilerConfig <- results.transpilerOptions) {
           if (transpilerCallback(transpilerConfig) != 0) {
             reporter.error(None(), toolName, s"Transpiler did not complete successfully")
           }
@@ -142,22 +108,18 @@ object CodeGen {
       )
 
       val results = org.sireum.hamr.act.Act.run(model, actOptions, reporter)
-
-      reporterIndex = printMessages(reporter.messages, reporterIndex)
-
-      if (!reporter.hasError) {
-        val actResources = results.resources.map(r => Resource(r.path, r.content, r.overwrite, r.makeExecutable))
-        resources = resources ++ actResources
-
-        if (o.writeOutResources) {
-          writeOutResources(actResources, reporter)
-        }
-      }
+      resources = resources ++ results.resources
 
       reporterIndex = printMessages(reporter.messages, reporterIndex)
     }
 
-    return CodeGenResults(resources, transpilerConfig)
+    if(!reporter.hasError && o.writeOutResources) {
+      writeOutResources(resources, reporter)
+    }
+
+    reporterIndex = printMessages(reporter.messages, reporterIndex)
+
+    return CodeGenResults(resources, transpilerConfigs)
   }
 
   def printMessages(messages: ISZ[Message], index: Int): Int = {
