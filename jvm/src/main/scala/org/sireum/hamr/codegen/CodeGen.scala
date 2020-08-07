@@ -51,11 +51,11 @@ object CodeGen {
     if (runArsit) {
 
       val genBlessEntryPoints = false
-      val ipc = arsit.Cli.IpcMechanism.byName(o.ipc.name).get
-      val platform = arsit.Cli.ArsitPlatform.byName(o.platform.name).get
+      val ipc = arsit.util.IpcMechanism.byName(o.ipc.name).get
+      val platform = arsit.util.ArsitPlatform.byName(o.platform.name).get
       val fileSep = StringOps(org.sireum.Os.fileSep).first
 
-      val opt = arsit.Cli.ArsitOption(
+      val opt = arsit.util.ArsitOptions(
         outputDir = slangOutputDir.value,
         packageName = packageName,
         embedArt = o.embedArt,
