@@ -53,6 +53,10 @@ def replaceLines(replacements: ISZ[(String, String)], file: Os.Path): Unit = {
 }
 
 
+// clean codegen projects
+ISZ("hamr/codegen", "hamr/codegen/act", "hamr/codegen/arsit").map(m => SIREUM_HOME / m).foreach(m =>
+  Os.proc(ISZ((m / "bin/build.cmd").value, "clean")).console.run())
+
 
 val buildsbt = SIREUM_HOME / "hamr/codegen/arsit/resources/util/buildSbt.properties"
 

@@ -51,7 +51,7 @@ import org.sireum._
 
 def usage(): Unit = {
   println("HAMR Codegen /build")
-  println("Usage: ( cleanup | compile | test )+")
+  println("Usage: ( clean | compile | test )+")
 }
 
 
@@ -87,6 +87,9 @@ def clone(repo: String): Unit = {
   println()
 }
 
+def cloneProjects(): Unit = {
+  ISZ[String]("air", "runtime").foreach((p: String) => clone(p))
+}
 
 def tipe(): Unit = {
   if (!didTipe) {
@@ -120,7 +123,7 @@ def test(): Unit = {
 }
 
 
-def cleanup(): Unit = {
+def clean(): Unit = {
   val dirsToDrop: ISZ[String] = ISZ("air", "lib", "out", "runtime")
   dirsToDrop.map((m: String) => homeBin.up / m).foreach((f: Os.Path) => {
     println(s"Deleting ${f}")
@@ -130,15 +133,15 @@ def cleanup(): Unit = {
 
 downloadMill()
 
-for (m <- ISZ("air", "runtime")) {
-  clone(m)
-}
-
 for (i <- 0 until Os.cliArgs.size) {
   Os.cliArgs(i) match {
-    case string"cleanup" => cleanup()
-    case string"compile" => compile()
-    case string"test" => test()
+    case string"clean" => clean()
+    case string"compile" =>
+      cloneProjects()
+      compile()
+    case string"test" =>
+      cloneProjects()
+      test()
     case cmd =>
       usage()
       eprintln(s"Unrecognized command: $cmd")
