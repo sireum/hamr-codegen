@@ -129,6 +129,11 @@ def clean(): Unit = {
     println(s"Deleting ${f}")
     f.removeAll()
   })
+  ISZ[String]("act", "arsit").foreach((subProj: String) => {
+    println(s"Cleaning ${subProj}")
+    val buildCmd = home / subProj / "bin" / "build.cmd"
+    Os.proc(ISZ(buildCmd.canon.value, "clean")).console.run()
+  })
 }
 
 downloadMill()
