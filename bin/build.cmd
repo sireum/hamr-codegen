@@ -124,13 +124,13 @@ def test(): Unit = {
 
 
 def clean(): Unit = {
+  println(s"Cleaning ${home}")
   val dirsToDrop: ISZ[String] = ISZ("air", "lib", "out", "runtime")
   dirsToDrop.map((m: String) => homeBin.up / m).foreach((f: Os.Path) => {
     println(s"Deleting ${f}")
     f.removeAll()
   })
   ISZ[String]("act", "arsit").foreach((subProj: String) => {
-    println(s"Cleaning ${subProj}")
     val buildCmd = home / subProj / "bin" / "build.cmd"
     Os.proc(ISZ(buildCmd.canon.value, "clean")).console.run()
   })
