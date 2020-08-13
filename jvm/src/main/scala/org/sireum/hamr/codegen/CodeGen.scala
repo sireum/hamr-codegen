@@ -85,6 +85,12 @@ object CodeGen {
 
       if (!reporter.hasError && o.runTranspiler && isTranspilerProject) {
 
+        // doesn't matter what 'o.writeOutResources' is, transpiler needs the
+        // resources to be written out
+        writeOutResources(resources, reporter)
+
+        reporterIndex = printMessages(reporter.messages, reporterIndex)
+
         for (transpilerConfig <- results.transpilerOptions) {
           if (transpilerCallback(transpilerConfig) != 0) {
             reporter.error(None(), toolName, s"Transpiler did not complete successfully")

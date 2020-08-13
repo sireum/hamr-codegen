@@ -93,11 +93,7 @@ import org.sireum.hamr.ir
   }
 
   def qualifiedReferencedTypeName: String = {
-    val ret: String = typ match {
-      case b: BaseType => b.slangType.string
-      case _ => s"${packageName}.${referencedTypeName}"
-    }
-    return ret
+    return s"${packageName}.${referencedTypeName}"
   }
 
   def payloadName: String = {

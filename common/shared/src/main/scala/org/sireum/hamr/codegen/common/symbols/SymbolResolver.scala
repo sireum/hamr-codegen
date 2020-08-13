@@ -309,18 +309,19 @@ object SymbolResolver {
 
       { // all periodic components have domain info, or don't.  No mixtures
         val processes: ISZ[AadlProcess] = symbolTable.getProcesses()
-        var withDomain = 0
-        var withoutDomain = 0
+        var withDomain: ISZ[AadlProcess] = ISZ()
+        var withoutDomain: ISZ[AadlProcess] = ISZ()
         for (p <- processes) {
           if (p.getDomain().nonEmpty) {
-            withDomain = withDomain + 1
+            withDomain = withDomain :+ p
           }
           else {
-            withoutDomain = withoutDomain + 1
+            withoutDomain = withoutDomain :+ p
           }
         }
-        assert((withDomain == 0 && withoutDomain > 0) || (withDomain > 0 && withoutDomain == 0),
-          s"${withDomain} processes have domain info but ${withoutDomain} do not.  HAMR does not support such a model")
+        val withoutDomains = st"Please fix the following: ${(withoutDomain.map(m => m.path), ", ")}".render
+        assert((withDomain.size == 0 && withoutDomain.size > 0) || (withDomain.size > 0 && withoutDomain.size == 0),
+          s"${withDomain.size} processes have domain info but ${withoutDomain.size} do not.  HAMR does not support such a model.  ${withoutDomains}")
       }
     }
 
