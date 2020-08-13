@@ -319,7 +319,7 @@ object SymbolResolver {
             withoutDomain = withoutDomain :+ p
           }
         }
-        val withoutDomains = st"Please fix the following: ${(withoutDomain.map(m => m.path), ", ")}".render
+        val withoutDomains = st"Please fix the following: ${(withoutDomain.map((m: AadlProcess) => m.path), ", ")}".render
         assert((withDomain.size == 0 && withoutDomain.size > 0) || (withDomain.size > 0 && withoutDomain.size == 0),
           s"${withDomain.size} processes have domain info but ${withoutDomain.size} do not.  HAMR does not support such a model.  ${withoutDomains}")
       }
