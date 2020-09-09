@@ -89,7 +89,7 @@ val props = buildsbt.properties
 val sireumVersion = runGit(ISZ("git", "log", "-n", "1", "--pretty=format:%h"), SIREUM_HOME)
 val sireumVersionFull = runGit(ISZ("git", "log", "-n", "1", "--pretty=format:%H"), SIREUM_HOME)
 val sireumTimestamp = runGit(ISZ("git", "show", "-s", "--format=%cd", "--date=format:%y%m%d%H%M"), SIREUM_HOME)
-val sireumBuildstamp = ops.StringOps(Os.proc(ISZ(sireum.value)).run.out).split(c => c =='\n')(2) // should be 3rd line
+val sireumBuildstamp = ops.StringOps(Os.proc(ISZ(sireum.value)).run().out).split(c => c =='\n')(2) // should be 3rd line
 
 println(s"sireumVersion: ${sireumVersion}")
 println(s"sireumBuildstamp: ${sireumBuildstamp}")
