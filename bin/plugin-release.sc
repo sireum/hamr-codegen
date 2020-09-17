@@ -22,14 +22,16 @@ exit /B %errorlevel%
 import org.sireum._
 
 val SIREUM_HOME = Os.path(Os.env("SIREUM_HOME").get)
-val sireum = SIREUM_HOME / "bin/sireum"
+val sireum = SIREUM_HOME / "bin" / "sireum"
 val currYear = java.time.Year.now.getValue
 
 // TODO get these from env or arguments
-val pluginDir = Os.home / "devel/sireum/osate-plugin"
-val updateSiteDir = Os.home / "devel/sireum/osate-plugin-update-site-2.13"
-val updateSiteHAMRDir = Os.home / "devel/sireum/hamr-plugin-update-site"
-val caseDir = Os.home / "devel/case/CASE-loonwerks"
+val pluginDir = Os.home / "devel" / "sireum" / "osate-plugin"
+val updateSiteDir = Os.home / "devel" / "sireum" / "osate-plugin-update-site-2.13"
+val updateSiteHAMRDir = Os.home / "devel" / "sireum" / "hamr-plugin-update-site"
+val caseDir = Os.home / "devel" / "case" / "CASE-loonwerks"
+
+assert(SIREUM_HOME.exists && sireum.exists && pluginDir.exists && updateSiteDir.exists && updateSiteHAMRDir.exists && caseDir.exists)
 
 def runGit(args: ISZ[String], path: Os.Path): String = {
   val p = org.sireum.Os.proc(args).at(path).runCheck()
@@ -58,15 +60,24 @@ val codeGenBuildCmd = SIREUM_HOME / "hamr" / "codegen" / "bin" / "build.cmd"
 Os.proc(ISZ(codeGenBuildCmd.canon.value, "clean")).console.run()
 
 
-val buildsbt = SIREUM_HOME / "hamr/codegen/arsit/resources/util/buildSbt.properties"
+val buildsbt = SIREUM_HOME / "hamr" / "codegen" / "arsit" / "resources" / "util" / "buildSbt.properties"
 
-{
-  val sireum = SIREUM_HOME / "bin/sireum"
-  val f = SIREUM_HOME / "hamr/codegen/arsit/bin/updateBuildSbtVersions.sc"
+{ // check if arsit build properties file needs to be updated
+  val f = SIREUM_HOME / "hamr" / "codegen" / "arsit" / "bin" / "updateBuildSbtVersions.sc"
   f.chmod("700")
   val p = Os.proc(ISZ(sireum.value, "slang", "run", f.value)).console.run()
   if(!p.ok || p.exitCode != 0) {
     println(s"${buildsbt} wasn't ready")
+    Os.exit(1)
+  }
+}
+
+{ // check if act's versions properties needs to be updated
+  val f = SIREUM_HOME / "hamr" / "codegen" / "act" / "bin" / "updateActVersionsProperties.sc"
+  f.chmod("700")
+  val p = Os.proc(ISZ(sireum.value, "slang", "run", f.value)).console.run()
+  if(!p.ok || p.exitCode != 0) {
+    println(s"ACT versions properties wasn't ready")
     Os.exit(1)
   }
 }
@@ -99,8 +110,8 @@ println(s"sireumTimestamp: ${sireumTimestamp}")
 
 { // COPY sireum.jar over to osate lib directory
 
-  val sireumJar = SIREUM_HOME / "bin/sireum.jar"
-  val osateLibJar = pluginDir / "org.sireum.aadl.osate/lib/sireum.jar"
+  val sireumJar = SIREUM_HOME / "bin" / "sireum.jar"
+  val osateLibJar = pluginDir / "org.sireum.aadl.osate "/ "lib" / "sireum.jar"
 
   println(s"Copying ${sireumJar} to ${osateLibJar}")
   sireumJar.copyOverTo(osateLibJar)
@@ -113,7 +124,7 @@ println(s"sireumTimestamp: ${sireumTimestamp}")
   val a =     "Bundle-Version:"
   val aMod = s"Bundle-Version: 1.0.${sireumTimestamp}.qualifier"
 
-  val baseManifest = pluginDir / "org.sireum.aadl.osate/META-INF/MANIFEST.MF"
+  val baseManifest = pluginDir / "org.sireum.aadl.osate" / "META-INF" / "MANIFEST.MF"
   replaceLines(ISZ((a, aMod)), baseManifest)
 }
 
@@ -125,7 +136,7 @@ println(s"sireumTimestamp: ${sireumTimestamp}")
   val b =        " org.sireum.aadl.osate;bundle-version="
   val bMod = st""" org.sireum.aadl.osate;bundle-version="1.0.${sireumTimestamp}",""".render
 
-  val hamrManifest = pluginDir / "org.sireum.aadl.osate.hamr/META-INF/MANIFEST.MF"
+  val hamrManifest = pluginDir / "org.sireum.aadl.osate.hamr" / "META-INF" / "MANIFEST.MF"
   replaceLines(ISZ((a, aMod), (b, bMod)), hamrManifest)
 }
 
@@ -137,7 +148,7 @@ println(s"sireumTimestamp: ${sireumTimestamp}")
   val b =     "      Copyright (c)"
   val bMod = s"      Copyright (c) ${currYear}, Kansas State University"
 
-  val feature = pluginDir / "org.sireum.aadl.osate.feature/feature.xml"
+  val feature = pluginDir / "org.sireum.aadl.osate.feature" / "feature.xml"
   replaceLines(ISZ((a, aMod), (b, bMod)), feature)
 }
 
@@ -152,7 +163,7 @@ println(s"sireumTimestamp: ${sireumTimestamp}")
   val c =     "      Copyright (c)"
   val cMod = s"      Copyright (c) ${currYear}, Kansas State University"
 
-  val hamrFeature = pluginDir / "org.sireum.aadl.osate.hamr.feature/feature.xml"
+  val hamrFeature = pluginDir / "org.sireum.aadl.osate.hamr.feature" / "feature.xml"
   replaceLines(ISZ((a, aMod), (b, bMod), (c, cMod)), hamrFeature)
 }
 
@@ -161,7 +172,7 @@ println(s"sireumTimestamp: ${sireumTimestamp}")
   val a =    st"""   <feature url="features/org.sireum.aadl.osate""".render
   val aMod = st"""   <feature url="features/org.sireum.aadl.osate.feature_1.0.${sireumTimestamp}.qualifier.jar" id="org.sireum.aadl.osate.feature" version="1.0.${sireumTimestamp}.qualifier">""".render
 
-  val update = updateSiteDir / "org.sireum.aadl.osate.update.site/site.xml"
+  val update = updateSiteDir / "org.sireum.aadl.osate.update.site" / "site.xml"
   replaceLines(ISZ((a, aMod)), update)
 }
 
@@ -170,7 +181,7 @@ println(s"sireumTimestamp: ${sireumTimestamp}")
   val a =    st"""   <feature url="features/org.sireum.aadl.osate""".render
   val aMod = st"""   <feature url="features/org.sireum.aadl.osate.hamr.feature_1.0.${sireumTimestamp}.qualifier.jar" id="org.sireum.aadl.osate.hamr.feature" version="1.0.${sireumTimestamp}.qualifier">""".render
 
-  val hamrUpdate = updateSiteHAMRDir / "org.sireum.aadl.osate.hamr.update.site/site.xml"
+  val hamrUpdate = updateSiteHAMRDir / "org.sireum.aadl.osate.hamr.update.site" / "site.xml"
   replaceLines(ISZ((a, aMod)), hamrUpdate)
 }
 
@@ -197,6 +208,6 @@ println(s"sireumTimestamp: ${sireumTimestamp}")
   val a =    st""": "$${SIREUM_V:=""".render
   val aMod = st""": "$${SIREUM_V:=${sireumVersionFull}}"""".render
 
-  val caseEnv = caseDir / "TA5/case-env/case-setup.sh"
+  val caseEnv = caseDir / "TA5" / "case-env" / "case-setup.sh"
   replaceLines(ISZ((a, aMod)), caseEnv)
 }
