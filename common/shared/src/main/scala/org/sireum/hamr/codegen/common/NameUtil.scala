@@ -7,11 +7,11 @@ import org.sireum._
 object SeL4NixNamesUtil {
 
   def apiHelperFilename(names: Names): String = {
-    return s"${names.componentImpl}_api"
+    return s"${names.componentSingletonType}_api"
   }
 
   def apiHelperMethodName(portName: String, names: Names): String = {
-    return s"api_${portName}__${names.cComponentImpl}"
+    return s"api_${portName}__${names.cComponentType}"
   }
 
   def apiHelperGetterMethodName(portName: String, names: Names): String = {
@@ -20,5 +20,9 @@ object SeL4NixNamesUtil {
 
   def apiHelperSetterMethodName(portName: String, names: Names): String = {
     return apiHelperMethodName(s"send_${portName}", names)
+  }
+
+  def apiHelperLoggerMethodName(loggerName: String, componentType: String): String = {
+    return s"api_${loggerName}__${componentType}"
   }
 }

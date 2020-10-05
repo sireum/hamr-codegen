@@ -20,6 +20,12 @@ object CommonUtil {
     return st"${(n.name, "_")}".render
   }
 
+  def getShortName(n: ir.Name): String = {
+    assert(ops.StringOps(n.name(0)).endsWith("Instance"))
+    val short = ops.ISZOps(n.name).tail
+    return st"${(short, "_")}".render
+  }
+
   def isSystem(f: ir.Component): B = {
     return f.category == ir.ComponentCategory.System
   }
@@ -139,12 +145,32 @@ object CommonUtil {
     return StringUtil.sanitizeName(split(1))
   }
 
-  def componentImpl: String = {
-    return s"${componentType}_Impl"
+  def componentSingletonType: String = {
+    return s"${componentType}_${instanceShortName}"
+  }
+
+  def api: String = {
+    return s"${componentType}_Api"
+  }
+
+  def apiInitialization: String = {
+    return s"${componentType}_Initialization_Api"
+  }
+
+  def apiOperational: String = {
+    return s"${componentType}_Operational_Api"
+  }
+
+  def apiInitialization_Id: String = {
+    return "c_initialization_api"
+  }
+
+  def apiOperational_Id: String = {
+    return "c_operational_api"
   }
 
   def bridge: String = {
-    return s"${componentType}_Bridge"
+    return s"${componentSingletonType}_Bridge"
   }
 
   def bridgeIdentifier: String = {
@@ -175,12 +201,16 @@ object CommonUtil {
     return CommonUtil.getLastName(c.identifier)
   }
 
+  def instanceShortName: String = {
+    return CommonUtil.getShortName(c.identifier)
+  }
+
   def instanceName: String = {
     return CommonUtil.getName(c.identifier)
   }
 
   def testName: String = {
-    return s"${instanceName}_Test"
+    return s"${componentSingletonType}_Test"
   }
 
 
@@ -188,37 +218,41 @@ object CommonUtil {
     return st"${(path, "_")}".render
   }
 
-  def cComponentImpl: String = {
-    return s"${cPackageName}_${componentImpl}"
+  def cComponentType: String = {
+    return s"${cPackageName}_${componentSingletonType}"
   }
 
   def cEntryPointAdapterName: String = {
-    return s"${componentType}_adapter"
+    return s"${componentSingletonType}_adapter"
   }
 
   def cEntryPointAdapterQualifiedName: String = {
     return s"${cPackageName}_${cEntryPointAdapterName}"
   }
 
-  def cThisApi: String = {
-    return s"${cComponentImpl}_api_"
+  def cInitializationApi: String = {
+    return s"${cPackageName}_${componentType}_Initialization_Api"
   }
 
-  def cBridgeApi: String = {
-    return s"${cPackageName}_${componentType}_Bridge_Api"
+  def cInitializationApi_Id: String = {
+    return s"${cPackageName}_${componentSingletonType}_Bridge_${apiInitialization_Id}"
+  }
+
+  def cOperationalApi: String = {
+    return s"${cPackageName}_${componentType}_Operational_Api"
+  }
+
+  def cOperationalApi_Id: String = {
+    return s"${cPackageName}_${componentSingletonType}_Bridge_${apiOperational_Id}"
   }
 
   def cBridgeEntryPoints: String = {
-    return s"${cPackageName}_${componentType}_Bridge_EntryPoints"
+    return s"${cPackageName}_${componentSingletonType}_Bridge_EntryPoints"
   }
 
-
-  def sel4AppName: String = {
-    return s"${componentImpl}_App"
-  }
 
   def sel4SlangExtensionName: String = {
-    return s"${componentType}_seL4Nix"
+    return s"${componentSingletonType}_seL4Nix"
   }
 
   def sel4SlangExtensionStubName: String = {
