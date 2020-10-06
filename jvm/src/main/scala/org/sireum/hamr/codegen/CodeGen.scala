@@ -101,10 +101,10 @@ object CodeGen {
 
     if (!reporter.hasError && runACT) {
 
-      val platform = org.sireum.hamr.act.ActPlatform.byName(o.platform.name).get
+      val platform = org.sireum.hamr.act.util.ActPlatform.byName(o.platform.name).get
       reporter.info(None(), toolName, "Generating CAmkES artifacts...")
 
-      val actOptions = act.ActOptions(
+      val actOptions = org.sireum.hamr.act.util.ActOptions(
         outputDir = camkesOutputDir.value,
         auxFiles = getAuxFiles(o.camkesAuxCodeDirs, F, reporter),
         aadlRootDirectory = o.aadlRootDir,
