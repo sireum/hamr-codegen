@@ -78,7 +78,9 @@ import org.sireum.hamr.ir.FeatureEnd
     return ops.ISZOps(getThreads()).filter(p => CommonUtil.isPeriodic(p.component))
   }
 
-  def getProcess(id: String): AadlProcess = { return componentMap.get(id).get.asInstanceOf[AadlProcess] }
+  def getProcess(id: String): AadlProcess = {
+    return componentMap.get(id).get.asInstanceOf[AadlProcess]
+  }
 
   def getProcesses(): ISZ[AadlProcess] = {
     val c = componentMap.values.filter(f => f.isInstanceOf[AadlProcess])
@@ -252,8 +254,14 @@ import org.sireum.hamr.ir.FeatureEnd
   }
 
   def getParent(symbolTable: SymbolTable): AadlProcess = {
-    // TODO: could also belong to a thread group
-    return symbolTable.getProcess(parent.get)
+    val _parent = symbolTable.componentMap.get(parent.get).get
+
+    val ret: AadlProcess = _parent match {
+      case a: AadlThreadGroup =>symbolTable.getProcess(a.parent.get)
+      case p: AadlProcess => symbolTable.getProcess(parent.get)
+      case _ => halt("Unexpected parent: _parent")
+    }
+    return ret
   }
 
   def getFeatureAccesses(): ISZ[ir.FeatureAccess] = { return component.features.filter(f => f.isInstanceOf[ir.FeatureAccess]).map(f => f.asInstanceOf[ir.FeatureAccess]) }

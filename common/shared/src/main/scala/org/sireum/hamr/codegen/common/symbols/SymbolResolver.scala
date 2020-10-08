@@ -21,8 +21,7 @@ object SymbolResolver {
     var airFeatureMap: HashSMap[String, ir.Feature] = HashSMap.empty
     var airClassifierMap: HashSMap[String, ir.Component] = HashSMap.empty
 
-    //var topLevelProcess: Option[ir.Component] = None[ir.Component]
-    //var typeHeaderFileName: String = ""
+    var featureGroupDisambiguator: Map[String, String] = Map.empty
 
     var connections: ISZ[ir.ConnectionInstance] = ISZ()
 
@@ -44,16 +43,40 @@ object SymbolResolver {
       if (c.classifier.nonEmpty) {
         airClassifierMap = airClassifierMap + (c.classifier.get.name ~> c)
       }
-      for (f <- c.features) {
-        airFeatureMap = airFeatureMap + (CommonUtil.getName(f.identifier) ~> f)
 
-        f match {
-          case fe: ir.FeatureEnd =>
-            if (CommonUtil.isDataPort(fe) && fe.classifier.isEmpty) {
-              reporter.warn(None(), CommonUtil.toolName, s"Data type missing for feature ${fe.category} ${CommonUtil.getName(fe.identifier)}")
-            }
-          case _ =>
+      for (f <- c.features) {
+
+        def resolveFeature(_f: ir.Feature, groupPrefix: String, path: ISZ[String]): Unit = {
+          val _path: String = st"${(path, "_")}_".render
+          _f match {
+            case fa: ir.FeatureAccess => {
+              val featurePath: String = s"${_path}${groupPrefix}${CommonUtil.getLastName(fa.identifier)}"
+
+              val fullFeaturePath: String = CommonUtil.getName(fa.identifier)
+              featureGroupDisambiguator = featureGroupDisambiguator + (fullFeaturePath ~> featurePath)
+
+              airFeatureMap = airFeatureMap + (featurePath ~> fa)
+              }
+            case fe: ir.FeatureEnd =>
+              val featurePath: String = s"${_path}${groupPrefix}${CommonUtil.getLastName(fe.identifier)}"
+
+              val fullFeaturePath: String = CommonUtil.getName(fe.identifier)
+              featureGroupDisambiguator = featureGroupDisambiguator + (fullFeaturePath ~> featurePath)
+
+              airFeatureMap = airFeatureMap + (featurePath ~> fe)
+
+              if (CommonUtil.isDataPort(fe) && fe.classifier.isEmpty) {
+                reporter.warn(None(), CommonUtil.toolName, s"Data type missing for feature ${fe.category} ${CommonUtil.getName(fe.identifier)}")
+              }
+            case fg: ir.FeatureGroup =>
+              for(_fge <- fg.features) {
+                val groupPrefix = s"${CommonUtil.getLastName(fg.identifier)}_"
+                resolveFeature(_fge, groupPrefix, path)
+              }
+          }
         }
+
+        resolveFeature(f, "", c.identifier.name)
       }
       for (sc <- c.subComponents) {
         buildComponentMap(sc)
@@ -139,30 +162,43 @@ object SymbolResolver {
             return ret
           }
 
-          for (feature <- c.features) {
-            val fname = CommonUtil.getName(feature.identifier)
-            val _feature: ir.Feature = airFeatureMap.get(fname).get
-            val port: AadlFeature = _feature.category match {
-              case ir.FeatureCategory.EventPort => {
-                val fend = feature.asInstanceOf[ir.FeatureEnd]
-                AadlEventPort(feature = fend)
-              }
-              case ir.FeatureCategory.DataPort => {
-                val fend = feature.asInstanceOf[ir.FeatureEnd]
-                AadlDataPort(
-                  feature = fend,
-                  aadlType = getFeatureEndType(fend).get
-                )
-              }
-              case ir.FeatureCategory.EventDataPort => {
-                val fend = feature.asInstanceOf[ir.FeatureEnd]
-                AadlDataPort(
-                  feature = fend,
-                  aadlType = getFeatureEndType(fend).get)
-              }
-              case _ => AadlFeatureTODO(_feature)
+          def resolveFeature2(feature: ir.Feature): Unit = {
+            feature match {
+              case fg: ir.FeatureGroup =>
+                for(_f <- fg.features) {
+                  resolveFeature2(_f)
+                }
+              case _ =>
+                val id = CommonUtil.getName(feature.identifier)
+                val fid = featureGroupDisambiguator.get(id).get
+                val airFeature = airFeatureMap.get(fid).get
+                assert(airFeature == feature)
+
+                val port: AadlFeature = feature.category match {
+                  case ir.FeatureCategory.EventPort => {
+                    val fend = feature.asInstanceOf[ir.FeatureEnd]
+                    AadlEventPort(feature = fend)
+                  }
+                  case ir.FeatureCategory.DataPort => {
+                    val fend = feature.asInstanceOf[ir.FeatureEnd]
+                    AadlDataPort(
+                      feature = fend,
+                      aadlType = getFeatureEndType(fend).get
+                    )
+                  }
+                  case ir.FeatureCategory.EventDataPort => {
+                    val fend = feature.asInstanceOf[ir.FeatureEnd]
+                    AadlDataPort(
+                      feature = fend,
+                      aadlType = getFeatureEndType(fend).get)
+                  }
+                  case _ => AadlFeatureTODO(feature)
+                }
+                aadlPorts = aadlPorts :+ port
             }
-            aadlPorts = aadlPorts :+ port
+          }
+          for (feature <- c.features) {
+            resolveFeature2(feature)
           }
           val dispatchProtocol: Dispatch_Protocol.Type = PropertyUtil.getDispatchProtocol(c) match {
             case Some(x) => x
@@ -257,9 +293,22 @@ object SymbolResolver {
 
         case ir.ComponentCategory.Thread => handleDeviceOrThread()
 
+        case ir.ComponentCategory.ThreadGroup =>
+          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield process(sc, Some(path))
+
+          println(c.category)
+          AadlThreadGroup(
+            component = c,
+            parent = parent,
+            path = path,
+            identifier = identifier,
+            subComponents = subComponents,
+            connectionInstances = c.connectionInstances)
+
         case _ => {
           val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield process(sc, Some(path))
 
+          println(c.category)
           AadlTODOComponent(
             component = c,
             parent = parent,
