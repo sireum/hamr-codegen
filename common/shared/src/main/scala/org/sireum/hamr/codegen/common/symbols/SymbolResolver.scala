@@ -70,8 +70,8 @@ object SymbolResolver {
               }
             case fg: ir.FeatureGroup =>
               for(_fge <- fg.features) {
-                val groupPrefix = s"${CommonUtil.getLastName(fg.identifier)}_"
-                resolveFeature(_fge, groupPrefix, path)
+                val _groupPrefix = s"${CommonUtil.getLastName(fg.identifier)}_"
+                resolveFeature(_fge, _groupPrefix, path)
               }
           }
         }
