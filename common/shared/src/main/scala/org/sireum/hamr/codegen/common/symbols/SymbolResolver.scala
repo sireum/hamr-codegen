@@ -296,6 +296,7 @@ object SymbolResolver {
         case ir.ComponentCategory.ThreadGroup =>
           val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield process(sc, Some(path))
 
+          println(c.category)
           AadlThreadGroup(
             component = c,
             parent = parent,
@@ -307,6 +308,7 @@ object SymbolResolver {
         case _ => {
           val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield process(sc, Some(path))
 
+          println(c.category)
           AadlTODOComponent(
             component = c,
             parent = parent,
