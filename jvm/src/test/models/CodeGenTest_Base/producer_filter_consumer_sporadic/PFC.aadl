@@ -1,0 +1,87 @@
+package PFC
+public
+	with Base_Types, Data_Model, HAMR, PFC_Property_Set;
+
+	data Coordinate
+	end Coordinate;
+
+	data implementation Coordinate.Impl
+		subcomponents
+			latitude: data Base_Types::Integer_32;
+			longitude: data Base_Types::Integer_32;
+			altitude: data Base_Types::Integer_32;
+	end Coordinate.Impl;
+
+	data Mission
+		properties
+			Data_Model::Data_Representation => Array;
+			Data_Model::Base_Type => (classifier (Coordinate.Impl));
+			Data_Model::Dimension => (3);
+
+			HAMR::Bit_Codec_Spec => "data/Mission.sc";
+			HAMR::Bit_Codec_Max_Size => 288 Bits;
+	end Mission;
+
+	system PFC_Sys
+	end PFC_Sys;
+
+	system implementation PFC_Sys.Impl
+		subcomponents
+			proc: process PFC_Proc.Impl;
+		properties
+			HAMR::Platform => (JVM, Cygwin, Linux, macOS, seL4);
+			HAMR::HW => (x86, amd64, QEMU);
+
+			HAMR::Default_Bit_Width => 32;
+			HAMR::Default_Max_Sequence_Size => 1;
+			HAMR::Max_String_Size => 256;
+
+			HAMR::Bit_Codec_Raw_Connections => true;
+	end PFC_Sys.Impl;
+
+	process PFC_Proc
+	end PFC_Proc;
+
+	process implementation PFC_Proc.Impl
+		subcomponents
+			producer: thread Producer;
+			filter: thread Filter;
+			consumer: thread Consumer;
+		connections
+			c1: port producer.to_filter -> filter.from_producer;
+			c2: port filter.to_consumer -> consumer.from_filter;
+	end PFC_Proc.Impl;
+
+	thread Producer
+		features
+			to_filter: out event data port Mission;
+		properties
+			Thread_Properties::Dispatch_Protocol => Periodic;
+			Timing_Properties::Period => 1000ms;
+
+			Stack_Size => PFC_Property_Set::Stack_Size;
+	end Producer;
+
+	thread Filter
+		features
+			from_producer: in event data port Mission {
+				Communication_Properties::Queue_Size => 1;
+			};
+			to_consumer: out event data port Mission;
+		properties
+			Dispatch_Protocol => Sporadic;
+
+			Stack_Size => PFC_Property_Set::Stack_Size;
+	end Filter;
+
+	thread Consumer
+		features
+			from_filter: in event data port Mission {
+				Communication_Properties::Queue_Size => 1;
+			};
+		properties
+			Dispatch_Protocol => Sporadic;
+
+			Stack_Size => PFC_Property_Set::Stack_Size;
+	end Consumer;
+end PFC;

@@ -1,0 +1,217 @@
+package PCA_Boss
+public
+with EMV2, PCA_Types, PCA_Properties, BLESS;
+
+--the boss thread executes Use Case 1:  Normal Operation
+--and ancillary events.  therefore, there really isn't any
+--formal specification, just validation that the ues/exception 
+--cases were done correctly
+--contained by PCA_Operation::Operation_Thread_Group
+thread Boss_Thread
+  features
+    POST_done: in event port;                   --power-on self-test completed
+    POST_fail: in event port;                   --power-on self-test failure
+    Display_Message: out event data port PCA_Types::Message;  --message to be displayed on control panel and ICE console
+    Sound_Type: out event data port PCA_Types::Sound;      --sound to be made by control panel and ICE console
+    Stop_Button_Pressed: in event port;         --stop button was pressed
+    Start_Button_Pressed: in event port;        --start button was pressed
+    Do_Scan: out event port;                    --tell scanner to scan
+    Scan_Done: in event port;                   --scan completed
+    Authenticate_Clinician: out event port;     --do clinican authentication
+    Authenticate_Patient: out event port;       --do patient authentication
+    Authenticate_Prescription: out event port;  --do prescription authentication
+    Authentication_fail: in event port;         --authentication failed
+    Authentication_pass: in event port;         --authentication passed
+    Check_Rx: out event port;                   --check drug
+    Drug_Not_In_Library: in event port;         --drug is not in library
+    Hard_Limit_Violated: in event port;         --hard limit was violated
+    Reject_Soft_Limit_Exception: in event port;                   --clinician did not accept soft limit violation
+    Confirm_Soft_Limit_Exception: in event port;                  --prescription confirmed
+    Rx_Okay: in event port 
+      {BLESS::Assertion => "<<Rx_APPROVED()>>";};  --the prescription approved for infusion
+    Door_Closed: in event port;                 --the drug door was closed
+    Begin_Priming: out event port;              --start priming
+    End_Priming: out event port;                --stop priming
+    Prime_Failure: out event port;              --priming not stopped in time
+    Begin_Infusion: out event port;             --start infusion
+    Halt_Infusion: out event port;              --stop infusion
+    Turn_Off: in event port;                    --the "off" switch was pressed
+  --log events
+    Log_Event: out event data port PCA_Types::Event_Record;   
+  properties
+    --Thread_Properties::Dispatch_Protocol=>Aperiodic;  
+    Thread_Properties::Dispatch_Protocol=>Sporadic;
+    Timing_Properties::Period => PCA_Properties::Sireum_Thread_Period;  --update outputs every 5ms    
+end Boss_Thread;
+
+thread implementation Boss_Thread.imp
+  annex BLESSX
+  {**
+  	invariant <<true>>
+  	states
+  	  UC1_1_press_power_switch: initial state;
+  	  EC4_POST: complete state;
+  	  EC4_POST_fail: complete state;
+  	  UC1_2_make_sound: complete state;
+  	  EC17_audio_fail: complete state;
+  	  UC1_3_display_scan_badge: state;
+  	  UC1_3_do_scan: complete state;
+  	  UC1_4_authenticate_clinician: complete state;
+  	  EC14_clinician_authentication_fail: complete state;
+  	  UC1_5_display_scan_wristband: complete state;
+  	  UC1_6_authenticate_patient: complete state;
+  	  EC15_patient_authentication_fail: complete state;
+  	  UC1_7_display_scan_Rx: complete state;
+  	  UC1_8_authenticate_Rx: complete state;
+  	  EC16_Rx_authentication_fail: complete state;
+  	  UC1_9_drug_check: complete state;
+  	  UC1_9_drug_not_in_library: complete state;
+  	  EC3_hard_limit_fail: complete state;
+  	  EC2_soft_limit_rejected: complete state;
+  	  UC1_10_display_insert_vial: complete state;
+  	  UC1_11_display_attach_tube: complete state;
+  	  UC1_12_display_prime_pump: complete state;
+  	  UC1_12_prime_start: complete state;
+  	  UC1_12_prime_stop: complete state;
+  	  EC6_display_priming_fail: complete state;
+  	  UC1_13_display_insert_needle: complete state;
+  	  UC1_14_display_press_start: complete state;
+  	  UC1_15_continue_basal: complete state;
+  	  UC2_1_patient_button_pressed: complete state;
+  	  UC2_2_check_last_bolus_time: complete state;
+  	  EC1_1_patient_button_too_soon: complete state;
+  	  EC1_2_3_announce_and_log: complete state;
+  	  UC2_3_infuse_vtbi: complete state;
+  	  UC2_4_infusion_done: complete state;
+  	  UC3_1_clinician_chooses_duration: complete state;
+  	  UC3_2_clinician_requests_bolus: complete state;
+  	  UC3_3_square_bolus_infusion: complete state;
+  	  UC3_4_square_bolus_done: complete state;
+  	  UC1_16_stop_button_pressed: complete state;
+  	  UC7_resume_infusion_after_stop: complete state;
+  	  UC1_17_dislay_remove_needle: complete state;
+  	  UC1_18_display_remove_vial: complete state;
+  	  UC1_19_display_turn_off_pump:complete state;
+   	  Initialization_fail: complete state;
+  	  Power_Down: final state;
+  	transitions
+  	--power-on, do POST
+  	  UC1_1: UC1_1_press_power_switch -[ ]-> EC4_POST 
+  	    {Display_Message!(No_Message) & Sound_Type!(Silence)};
+  	--POST fail
+  	  EC4: EC4_POST -[on dispatch POST_fail ]-> EC4_POST_fail 
+  	    {Display_Message!(POST_failure) & Sound_Type!(Beep)};
+  	--turn off
+  	  EC4a: EC4_POST_fail -[on dispatch timeout (POST_fail) 2 sec]-> UC1_19_display_turn_off_pump
+  	    {Sound_Type!(Silence)};
+  	--POST pass, do audio check
+  	  EC4b: EC4_POST -[on dispatch POST_done ]-> UC1_2_make_sound
+  	    {Display_Message!(If_Beep_Press_Stop_Button) & Sound_Type!(Beep)};
+  	--audio check
+  	  UC1_2: UC1_2_make_sound -[on dispatch Stop_Button_Pressed]->UC1_3_display_scan_badge{};
+  	--button not pressed in time, show "sound failure"
+  	  EC17:  UC1_2_make_sound -[on dispatch timeout (POST_done) 10 sec]-> EC17_audio_fail
+ 	    {Display_Message!(Sound_Failure) & Sound_Type!(Silence)};
+    --go to turn-off on stop button or timeout
+ 	  EC17a:  EC17_audio_fail -[on dispatch Stop_Button_Pressed or timeout (POST_done) 15 sec]-> UC1_19_display_turn_off_pump{};
+ 	--scan badge
+ 	  UC1_3: UC1_3_display_scan_badge -[ ]-> UC1_3_do_scan
+ 	    {Display_Message!(Scan_Badge) & Do_Scan!};
+ 	--badge scan done
+ 	  UC1_3a: UC1_3_do_scan -[on dispatch Scan_Done]-> UC1_4_authenticate_clinician
+ 	    {Authenticate_Clinician!};
+ 	--clinician authentication passed
+ 	  UC1_4: UC1_4_authenticate_clinician -[on dispatch Authentication_pass]-> UC1_5_display_scan_wristband
+ 	    {Display_Message!(Scan_Wristband) & Do_Scan!};
+ 	--clinician authentication failed
+ 	  EC14: UC1_4_authenticate_clinician -[on dispatch Authentication_fail]-> EC14_clinician_authentication_fail
+ 	    {Display_Message!(Clinician_Not_Authenticated)};
+    --go to turn-off on stop button or timeout  	
+ 	  EC14a: EC14_clinician_authentication_fail -[on dispatch Stop_Button_Pressed or timeout (Authenticate_Clinician) 90 sec]-> UC1_19_display_turn_off_pump{};  
+ 	--wristband scan 
+ 	  UC1_5: UC1_5_display_scan_wristband -[on dispatch Scan_Done]-> UC1_6_authenticate_patient
+ 	    {Authenticate_Patient!};
+ 	--patient authentication passed
+ 	  UC1_6: UC1_6_authenticate_patient -[on dispatch Authentication_pass]-> UC1_7_display_scan_Rx
+ 	    {Display_Message!(Scan_Rx)}; -- jab : why not Do_Scan!??
+	--patient authentication failed
+	  EC15: UC1_6_authenticate_patient -[on dispatch Authentication_fail]-> EC15_patient_authentication_fail
+ 	    {Display_Message!(Patient_Not_Authenticated)};
+    --go to turn-off on stop button or timeout  	
+ 	  EC15a: EC15_patient_authentication_fail -[on dispatch Stop_Button_Pressed or timeout (Authenticate_Patient) 90 sec]-> UC1_19_display_turn_off_pump{};  
+ 	--scan vial
+ 	  UC1_7: UC1_7_display_scan_Rx -[on dispatch Scan_Done]-> UC1_8_authenticate_Rx
+ 	    {Authenticate_Prescription!};
+ 	--prescription authentication passed
+ 	  UC1_8: UC1_8_authenticate_Rx  -[on dispatch Authentication_pass]-> UC1_9_drug_check
+ 	    {Check_Rx!};  --tell prescription checker to do its thing
+ 	--prescription authentication failed
+ 	  EC16: UC1_8_authenticate_Rx  -[on dispatch Authentication_fail]-> EC16_Rx_authentication_fail
+ 	    {Display_Message!(Prescription_Not_Authenticated)};
+    --go to turn-off on stop button or timeout  	
+ 	  EC16a: EC16_Rx_authentication_fail -[on dispatch Stop_Button_Pressed or timeout (Authenticate_Prescription) 90 sec]-> UC1_19_display_turn_off_pump{}; 
+ 	--drug not in library
+ 	  UC1_9a:  UC1_9_drug_check -[on dispatch Drug_Not_In_Library]-> UC1_9_drug_not_in_library
+ 	    {Display_Message!(Drug_Not_In_Library)};
+    --go to turn-off on stop button or timeout  	
+ 	  UC1_9b: UC1_9_drug_not_in_library -[on dispatch Stop_Button_Pressed or timeout (Check_Rx) 90 sec]-> UC1_19_display_turn_off_pump{}; 
+ 	--check hard limits
+ 	  EC3: UC1_9_drug_check -[on dispatch Hard_Limit_Violated]-> EC3_hard_limit_fail
+ 	    {Display_Message!(Hard_Limit_Violated)};
+    --go to turn-off on stop button or timeout  	
+ 	  EC3a: EC3_hard_limit_fail -[on dispatch Stop_Button_Pressed or timeout (Hard_Limit_Violated) 90 sec]-> UC1_19_display_turn_off_pump{}; 
+ 	--check soft limits
+ 	  EC2: UC1_9_drug_check -[on dispatch Reject_Soft_Limit_Exception]-> EC2_soft_limit_rejected
+ 	    {Display_Message!(Soft_Limit_Rejected)};
+    --go to turn-off on stop button or timeout  	
+ 	  EC2a: EC2_soft_limit_rejected -[on dispatch Stop_Button_Pressed or timeout (Reject_Soft_Limit_Exception) 90 sec]-> UC1_19_display_turn_off_pump{}; 
+ 	--hard and soft limits okay
+ 	  UC1_9c: UC1_9_drug_check -[on dispatch Confirm_Soft_Limit_Exception]-> UC1_10_display_insert_vial
+ 	     {Display_Message!(Insert_Vial_and_Close_Door)};
+ 	--insert vial and close door
+ 	  UC1_10: UC1_10_display_insert_vial -[on dispatch Door_Closed]-> UC1_11_display_attach_tube   	  
+ 	     {Display_Message!(Attach_Tube)};
+ 	--attach tube
+ 	  UC1_11: UC1_11_display_attach_tube  -[on dispatch timeout (Door_Closed) 20 sec]-> UC1_12_display_prime_pump
+ 	     {Display_Message!(Press_start_to_begin_priming)};
+ 	--start priming
+ 	  UC1_12: UC1_12_display_prime_pump -[on dispatch Start_Button_Pressed]-> UC1_12_prime_start
+ 	     {Display_Message!(Press_stop_to_end_priming) & Begin_Priming!};
+    --stop priming
+      UC1_13: UC1_12_prime_start -[on dispatch Stop_Button_Pressed]-> UC1_13_display_insert_needle
+         {Display_Message!(Insert_Needle_Then_Press_Start)};
+    --priming failure
+      EC6: UC1_12_prime_start -[on dispatch timeout (Begin_Priming) #PCA_Properties::Prime_Time sec]-> EC6_display_priming_fail
+        {Display_Message!(Priming_Failure) & End_Priming!};
+    --go to turn-off on stop button or timeout  	
+ 	  EC6a: EC6_display_priming_fail -[on dispatch Stop_Button_Pressed or timeout (Begin_Priming) 90 sec]-> UC1_19_display_turn_off_pump{}; 
+  	--start infusion
+  	  UC1_15: UC1_13_display_insert_needle -[on dispatch Start_Button_Pressed]-> UC1_15_continue_basal  
+  	    {Begin_Infusion!};
+  	--stop button
+  	  UC1_16: UC1_15_continue_basal-[on dispatch Stop_Button_Pressed]-> UC1_16_stop_button_pressed
+  	    {Halt_Infusion!};
+  	--resume after stop 
+  	  UC7: UC1_16_stop_button_pressed -[on dispatch Start_Button_Pressed]-> UC1_15_continue_basal
+  	    {Begin_Infusion!}; 
+  	--turn off
+  	  UC1_19: UC1_16_stop_button_pressed -[on dispatch Turn_Off]-> Power_Down{};    	  
+	--scan timeouts 
+ 	  scan_to: UC1_3_do_scan, UC1_5_display_scan_wristband, UC1_7_display_scan_Rx -[on dispatch timeout (Do_Scan) 1 min]-> UC1_19_display_turn_off_pump{};  	  
+  **};
+  annex EMV2 {**
+  use types ErrorLibrary, PCA_Error_Model;
+  use behavior PCA_Error_Model::FailStop; 	
+
+  properties
+    EMV2::OccurrenceDistribution => PCA_Properties::ThreadFailureRate 
+      applies to fail;	
+  **}; 
+  
+   --end of EMV2
+end Boss_Thread.imp;
+
+
+
+
+end PCA_Boss;

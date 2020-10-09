@@ -1,0 +1,209 @@
+--PCA_Power.aadl
+--Power Subsystem is section 9.2
+
+package PCA_Power
+  public
+  with BLESS, BLESS_Types, Base_Types, Physical_Types, EMV2, PCA_Properties, PCA_Pump;
+  
+
+system power
+  features
+  --power bus
+    p_bus: requires bus access PCA_Pump::Power_Bus;
+    Low_Battery_Warning: out event port
+         {BLESS::Assertion=>"<<BATTERY_VOLTAGE < #PCA_Properties::Low_Battery_Voltage>>";};
+      --5.1(5) The PCA pump shall detect battery failure.
+      --5.1(6) If the battery fails, the pump shall issue a defective-battery alarm.
+    Defective_Btty: out event port
+         {BLESS::Assertion=>"<<BATTERY_VOLTAGE < #PCA_Properties::Defective_Battery_Voltage>>";};
+    Voltage_OOR: out event port;   --power supply voltage is out of range
+      --5.1(2) The user interface must show that the PCA pump is working on battery backup, 
+      --and an estimate of the number of minutes of battery-powered infusion remain.
+    Using_Battery_Power: out data port Base_Types::Boolean
+      {BLESS::Assertion=>"<<BATTERY_CURRENT>0>>";};
+      --remaining battery time estimated by assuming linear voltage decline with stored energy
+    Remaining_Battery_Time: out data port BLESS_Types::Time
+      {BLESS::Assertion=>"<<:=REMAINING_BATTERY_TIME>>";};
+end power;
+
+system implementation power.imp
+  subcomponents
+    pwr: device power_control.imp;      --battery control
+    btty: device battery.imp;             --the physical battery
+    vcc: device power_supply.imp;
+  connections
+  --internal bus  
+    power_to_p_bus: bus access pwr.p_bus -> p_bus;  --unidirectional 
+  --warnings
+    dba: port pwr.Defective_Battery->Defective_Btty;
+    lbw: port pwr.Low_Battery_Warning->Low_Battery_Warning;  
+    rbt: port pwr.Remaining_Battery_Time->Remaining_Battery_Time;  
+    ubp: port pwr.Using_Battery_Power->Using_Battery_Power; 
+    vor: port pwr.Voltage_OOR -> Voltage_OOR;
+    --measure battery 
+    bv: port btty.Battery_Voltage->pwr.Battery_Voltage;
+    bc: port btty.Battery_Current->pwr.Battery_Current;
+    --measure power supply
+    psv: port vcc.Power_Voltage->pwr.Power_Voltage;
+  annex EMV2
+  {**
+  --the ui process is working when the ui thread is
+  use types ErrorLibrary, PCA_Error_Model;
+  --when the ui thread fails, it stops
+  use behavior PCA_Error_Model::CompositeFailStop; 
+  --same error propagations as ui thread
+  error propagations
+  end propagations;
+  composite error behavior
+    states 
+    --thread failed -> process failed
+     [pwr.failed or btty.failed]->failed;
+    --thread working -> process working
+     [pwr.working and btty.working]->working;
+  end composite;  
+  **};  --end of EMV2
+ 
+ end power.imp;
+ 
+
+--this represents the physical battery, it has voltage and current outputs that really are measured by
+--power_control, but they need to be modeled as coming from somewhere
+--R6.3.0(1) battery backup
+--Battery is subsection 9.2.1
+device battery
+  features
+    Battery_Voltage : out data port Physical_Types::Voltage.imp
+      {BLESS::Assertion=>"<<:=BATTERY_VOLTAGE>>";};  --actual battery voltage, measured by power_control
+    Battery_Current : out data port Physical_Types::Current.imp
+      {BLESS::Assertion=>"<<:=BATTERY_CURRENT>>";};   --actual battery current, measured by power_control
+end battery;
+
+device implementation battery.imp
+  annex EMV2
+  {**
+  use types ErrorLibrary, PCA_Error_Model;
+  use behavior PCA_Error_Model::FailStop; 
+  error propagations
+    --
+    Battery_Voltage: out propagation {EarlyServiceTermination};
+    Battery_Current: out propagation {EarlyServiceTermination};
+  flows
+  --
+    no_voltage: error source Battery_Voltage{EarlyServiceTermination} when failed;
+    no_current: error source Battery_Current{EarlyServiceTermination} when failed;
+  end propagations;
+  properties
+    EMV2::OccurrenceDistribution => PCA_Properties::BatteryFailureRate 
+      applies to fail;
+  
+  **};  --end of EMV2
+end battery.imp;
+
+--power_control represents the battery control logic
+--remaining battery time estimated by assuming linear voltage delcine with stored energy
+--this is, of course, wrong; Li-ion batteries hold flat output voltage until near end-of-life
+--but the point here is not to create sophisticated battery algorithms, but use them in safety decisions
+-- section 9.2.2
+--R5.4.1(3) power and battery failure 
+--R6.3.0(2) remaining battery minutes 
+--R6.3.0(3) remaining battery accuracy 
+--R6.3.0(4) low-battery warning 
+--R6.3.0(5) battery failure alarm
+--R6.3.0(6): voltage out-of-range warning
+device power_control
+	features
+    --power bus
+    p_bus: requires bus access PCA_Pump::Power_Bus;
+		
+    --the battery control is expected to measure battery voltage and current
+    --these are modeled as if the values come from the physical battery
+    Battery_Voltage : in data port Physical_Types::Voltage.imp
+        {BLESS::Assertion=>"<<:=BATTERY_VOLTAGE>>";};  --actual battery voltage, 
+    Battery_Current : in data port Physical_Types::Current.imp
+        {BLESS::Assertion=>"<<:=BATTERY_CURRENT>>";};   --actual battery current
+    Power_Voltage : in data port Physical_Types::Voltage.imp  --measure power supply voltage
+        {BLESS::Assertion=>"<<:=POWER_VOLTAGE>>";};
+
+    --R6.3.0(2)  If the estimated battery life remaining is less than DELTAlba = 3 minutes, the pump shall issue a low-battery warning.
+    Low_Battery_Warning: out event port
+        {BLESS::Assertion=>"<<BATTERY_VOLTAGE < #PCA_Properties::Low_Battery_Voltage>>";};
+    --R6.3.0(5) battery failure alarm: The PCA pump shall detect battery failure and issue a battery failure alarm.
+    Defective_Battery: out event port
+        {BLESS::Assertion=>"<<BATTERY_VOLTAGE < #PCA_Properties::Defective_Battery_Voltage>>";};
+    --R6.3.0(6) voltage out-of-range warning
+    Voltage_OOR: out event port   --power supply voltage is out of range
+        {BLESS::Assertion=>"<<(POWER_VOLTAGE < #PCA_Properties::Minimum_Power_Voltage) or 
+           (POWER_VOLTAGE > #PCA_Properties::Maximum_Power_Voltage) >>";};
+    --R6.3.0(2) remaining battery minutes The user interface must show that the PCA pump is working on battery backup, 
+    --and an estimate of the number of minutes of battery-powered infusion remain.
+    Using_Battery_Power: out data port Base_Types::Boolean
+        {BLESS::Assertion=>"<<BATTERY_CURRENT>0>>";};
+    --remaining battery time is a complex, implementation-dependent calculation
+    Remaining_Battery_Time: out data port BLESS_Types::Time
+        {BLESS::Assertion=>"<<:=REMAINING_BATTERY_TIME>>";};
+  properties
+    Timing_Properties::Period=>PCA_Properties::Battery_Measurement_Period;
+end power_control;
+
+device implementation power_control.imp  
+  annex EMV2
+  {**
+  use types ErrorLibrary, PCA_Error_Model;
+  use behavior PCA_Error_Model::FailStop; 
+  error propagations 
+    Battery_Voltage: in propagation {EarlyServiceTermination};
+    Battery_Current: in propagation {EarlyServiceTermination};
+  end propagations;
+  **};  --end of EMV2
+  
+  annex BLESS
+  {**
+  	assert
+  	  <<AXIOM_RBT: : 
+  	    remaining_btty_time=REMAINING_BATTERY_TIME>>
+  invariant <<true>>
+  variables remaining_btty_time : time; --stand-in for implementation dependent calculation
+    
+  states
+    start : initial state;
+    run : complete state;
+    done : final state;  --never used
+  transitions
+    bbc0: start-[ ]->run {}; --{filtered_voltage:=Battery_Voltage?};
+    bbc1: run-[on dispatch]->run
+    {  --determine all warnings concurrently
+    if (Battery_Voltage?<#PCA_Properties::Defective_Battery_Voltage)~>Defective_Battery!
+    [] (Battery_Voltage?>=#PCA_Properties::Defective_Battery_Voltage)~>skip
+    fi
+    &
+    if (Battery_Voltage?<#PCA_Properties::Low_Battery_Voltage)~>Low_Battery_Warning!
+    [] (Battery_Voltage?>=#PCA_Properties::Low_Battery_Voltage)~>skip
+    fi
+    &
+    if ((Power_Voltage? < #PCA_Properties::Minimum_Power_Voltage) or 
+           (Power_Voltage? > #PCA_Properties::Maximum_Power_Voltage))~>Voltage_OOR!
+    [] ((Power_Voltage? >= #PCA_Properties::Minimum_Power_Voltage) and 
+           (Power_Voltage? <= #PCA_Properties::Maximum_Power_Voltage))~>skip
+    fi
+    &
+     if (Battery_Current? > 0)~>Using_Battery_Power!
+    [] (Battery_Current? <= 0)~>skip
+    fi
+    &
+    <<AXIOM_RBT()>>  --fudge calculation of remaining battery time
+    Remaining_Battery_Time!(remaining_btty_time)
+    };
+**};
+end power_control.imp;  
+
+device power_supply
+  features
+    Power_Voltage : out data port Physical_Types::Voltage.imp  --monitor power supply voltage
+           {BLESS::Assertion=>"<<:=POWER_VOLTAGE>>";};
+end power_supply;
+  
+device implementation power_supply.imp
+end power_supply.imp; 
+
+  
+end PCA_Power;  

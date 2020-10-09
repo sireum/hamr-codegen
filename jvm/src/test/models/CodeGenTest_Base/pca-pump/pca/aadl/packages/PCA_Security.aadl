@@ -1,0 +1,335 @@
+--PCA_Security.aadl
+
+--holds security-related components
+
+package PCA_Security
+  public
+  with Base_Types, --Data_Model, EMV2, PCA_Properties, 
+  PCA_Types, PCA_Pump, PCA_System;
+
+system security
+	features
+    Provisioning: feature group PCA_Security::Provisioning_Signals;  --provisioning
+    ICE_Security: feature group PCA_Pump::PCA_Security;   --security channel on ICE
+        
+    Authenticate_Clinician: in event port;                --do clinician authentication
+    Authenticate_Patient: in event port;                  --do patient authentication
+    Authenticate_Prescription: in event port;             --do prescription authentication
+    Scan_Data: in event data port PCA_Types::Scan_Data_Type;    --data from scanner
+    
+    Authentication_fail: out event port;                  --authentication failed
+    Authentication_pass: out event port;                  --authentication passed    
+    Clinician_Name: out data port Base_Types::String;     --clinician name extracted from scan data    
+    Patient_Name: out data port Base_Types::String;       --patient name extracted from scan data
+    Prescription: out data port PCA_Types::Prescription.imp;  --extracted prescription from scan data
+    Security_Fault: out event port;                       --error during security operation
+     
+  --internal bus
+    i_bus: requires bus access PCA_Pump::Internal_Bus;
+  --to ICE adaptor
+    to_adaptor: requires bus access PCA_System::adaptor_bus;
+  --physical connection to maintenance processor
+    To_Maintenance: requires bus access PCA_System::internal_maintenance_bus;
+end security;
+ 
+system implementation security.imp
+	subcomponents
+		security_process: process Security_Process.imp;
+	connections
+    in0: port Authenticate_Clinician -> security_process.Authenticate_Clinician;
+    in1: port Authenticate_Patient -> security_process.Authenticate_Patient;
+    in2: port Authenticate_Prescription -> security_process.Authenticate_Prescription;
+    in3: port Scan_Data -> security_process.Scan_Data;
+        
+    out1: port security_process.Authentication_fail -> Authentication_fail;
+    out2: port security_process.Authentication_pass -> Authentication_pass;
+    out3: port security_process.Clinician_Name -> Clinician_Name;
+    out4: port security_process.Patient_Name -> Patient_Name;
+    out5: port security_process.Prescription -> Prescription;
+    out6: port security_process.Security_Fault -> Security_Fault;
+end security.imp;
+  
+  
+-- JAB -- added  
+process Security_Process
+  features
+    Authenticate_Clinician: in event port;                --do clinician authentication
+    Authenticate_Patient: in event port;                  --do patient authentication
+    Authenticate_Prescription: in event port;             --do prescription authentication
+    Scan_Data: in event data port PCA_Types::Scan_Data_Type;    --data from scanner
+    
+    Authentication_fail: out event port;                  --authentication failed
+    Authentication_pass: out event port;                  --authentication passed    
+    Clinician_Name: out data port Base_Types::String;     --clinician name extracted from scan data    
+    Patient_Name: out data port Base_Types::String;       --patient name extracted from scan data
+    Prescription: out data port PCA_Types::Prescription.imp;  --extracted prescription from scan data
+    Security_Fault: out event port;                       --error during security operation
+end Security_Process;
+
+-- JAB -- added  
+process implementation Security_Process.imp
+	subcomponents
+		security_thread: thread Security_Thread.imp;
+	connections
+    in0: port Authenticate_Clinician -> security_thread.Authenticate_Clinician;
+    in1: port Authenticate_Patient -> security_thread.Authenticate_Patient;
+    in2: port Authenticate_Prescription -> security_thread.Authenticate_Prescription;
+    in3: port Scan_Data -> security_thread.Scan_Data;
+        
+    out1: port security_thread.Authentication_fail -> Authentication_fail;
+    out2: port security_thread.Authentication_pass -> Authentication_pass;
+    out3: port security_thread.Clinician_Name -> Clinician_Name;
+    out4: port security_thread.Patient_Name -> Patient_Name;
+    out5: port security_thread.Prescription -> Prescription;
+    out6: port security_thread.Security_Fault -> Security_Fault;
+end Security_Process.imp;
+
+-- JAB -- added  
+thread Security_Thread
+  features
+    Authenticate_Clinician: in event port;                --do clinician authentication
+    Authenticate_Patient: in event port;                  --do patient authentication
+    Authenticate_Prescription: in event port;             --do prescription authentication
+    Scan_Data: in event data port PCA_Types::Scan_Data_Type;    --data from scanner
+    
+    Authentication_fail: out event port;                  --authentication failed
+    Authentication_pass: out event port;                  --authentication passed    
+    Clinician_Name: out data port Base_Types::String;     --clinician name extracted from scan data    
+    Patient_Name: out data port Base_Types::String;       --patient name extracted from scan data
+    Prescription: out data port PCA_Types::Prescription.imp;  --extracted prescription from scan data
+    Security_Fault: out event port;                       --error during security operation
+  properties
+    Thread_Properties::Dispatch_Protocol => Sporadic;
+    Timing_Properties::Period => PCA_Properties::Service_Thread_Period;  --update outputs every 1s
+end Security_Thread;
+
+-- JAB -- added  
+thread implementation Security_Thread.imp
+end Security_Thread.imp;
+
+
+feature group Provisioning_Signals
+end Provisioning_Signals;
+
+  
+--feature group tpm_signals 
+--  features
+--  --see Atmel AT97SC3204 table 1.1 for TPM signal definitions
+--    lpc : in out event data port;  --33MHz Low Pin Count bus
+--end tpm_signals; 
+--
+--system security
+--  features
+--    encrypt : in event data port text_key_pair;
+--    decrypt: in event data port text_key_pair;
+--    sign: in event data port text_key_pair;
+--    verify : in event data port text_signature_key;
+--    verified : out event port;
+--    result :out event data port Base_Types::String;
+--    Security_Fault: out event port;
+--	--provisioning channel
+--	Security_Provisioning : in event data port;  --type T.B.D.
+--    --key management T.B.D.
+--    Stand_Alone: in event port;
+--end security;
+--
+--system implementation security.imp
+--  subcomponents
+--    tp: device tpm.imp;
+--    cp: process crypto_process.imp;
+--    pp: device personal_presence.imp; 
+--  connections
+--  --connection to TPM chip
+--    tpmt: feature group cp.tpm_control_inv<->tp.tpm_control; 
+--  --personal presence
+--    ppb: port pp.present->tp.present;
+--  --from operations
+--    ens: port encrypt->cp.encrypt;
+--    des: port decrypt->cp.decrypt;
+--    sis: port sign->cp.sign;
+--    ves: port verify->cp.verify;
+--    ieds: port cp.verified->verified;
+--    re: port cp.verified->verified; 
+--  --fault
+--    sf: port cp.Security_Fault->Security_Fault;   
+--  --provisioning
+--    pro: port Security_Provisioning->cp.Security_Provisioning;  
+--  annex EMV2 
+--  {**
+--  use types ErrorLibrary, PCA_Error_Model;
+--  use behavior PCA_Error_Model::CompositeFailStop; 	
+--  error propagations
+--    encrypt : in propagation {ItemOmission,ValueError}; 
+--    decrypt: in propagation {ItemOmission,ValueError}; 
+--    sign: in propagation {ItemOmission,ValueError}; 
+--    verify : in propagation {ItemOmission,ValueError}; 
+--    verified : out propagation {ItemOmission};
+--    result : out propagation {ItemOmission,ValueError}; 
+--    --feature groups send errors both ways
+--    Security_Fault : out propagation {ItemOmission}; 
+--    --security provisioning must not introduce errors, need confirmation process
+--    Security_Provisioning : not in propagation {CommonErrors};    
+--  end propagations;
+--  composite error behavior
+--    states 
+--     [tp.failed or cp.failed]->failed;
+--     [tp.working and cp.working]->working;
+--  end composite;  	
+--  **};  --end of EMV2
+--end security.imp;
+--
+--device tpm
+--  features
+--    tpm_control: feature group tpm_signals;
+--    present: in data port Base_Types::Boolean;
+--end tpm;
+--
+--device implementation tpm.imp
+--  annex EMV2 
+--  {**
+--  use types ErrorLibrary, PCA_Error_Model;
+--  use behavior PCA_Error_Model::FailStop; 	
+--  error propagations
+--      --feature groups send errors both ways
+--    tpm_control : out propagation {EarlyServiceTermination,ValueError}; 
+--    tpm_control : in propagation {EarlyServiceTermination,ValueError}; 
+--      --must never get false personal presence
+--    present: not in propagation{ItemCommission};
+--  end propagations;
+-- 
+--  properties
+--    EMV2::OccurrenceDistribution => #PCA_Properties::TPMFailureRate 
+--      applies to fail;	
+--  **};  --end of EMV2
+--end tpm.imp;
+--
+--device personal_presence
+--  features
+--    present: out data port Base_Types::Boolean;
+--end personal_presence;
+--
+--device implementation personal_presence.imp
+--  annex EMV2 
+--  {**
+--  use types ErrorLibrary;
+--  error propagations
+--    --no false positives; never fails
+--    present: not out propagation {ItemCommission};
+--  end propagations;
+--  **};  --end of EMV2
+--end personal_presence.imp;
+--
+--data text_key_pair
+--  properties
+--    Data_Model::Data_Representation => struct;
+--    Data_Model::Element_Names => ("text","key_index");
+--    Data_Model::Base_Type => (classifier(Base_Types::String),classifier(Base_Types::Integer));
+--end text_key_pair; 
+--
+--data text_signature_key
+--  properties
+--    Data_Model::Data_Representation => struct;
+--    Data_Model::Element_Names => ("text","signature","key_index");
+--    Data_Model::Base_Type => (classifier(Base_Types::String),classifier(Base_Types::String),classifier(Base_Types::Integer));
+--end text_signature_key; 
+--
+--process crypto_process
+--  features
+--    encrypt : in event data port text_key_pair;
+--    decrypt: in event data port text_key_pair;
+--    sign: in event data port text_key_pair;
+--    verify : in event data port text_signature_key;
+--    verified : out event port;
+--    result :out event data port Base_Types::String;
+--    tpm_control_inv: feature group inverse of tpm_signals;
+--    Security_Fault: out event port;
+--	--provisioning channel
+--	  Security_Provisioning : in event data port;  --type T.B.D.
+--end crypto_process;
+--
+--process implementation crypto_process.imp
+--  subcomponents
+--    ct: thread crypto_thread.imp;
+--  connections
+--    en: port encrypt->ct.encrypt;
+--    de: port decrypt->ct.decrypt;
+--    si: port sign->ct.sign;
+--    ve: port verify->ct.verify;
+--    ied: port ct.verified->verified;
+--    re: port ct.verified->verified;
+--    tpmt: feature group tpm_control_inv<->ct.tpm_control_inv;
+--  --fault
+--    sf: port ct.Security_Fault->Security_Fault; 
+--  --provisioning
+--    pro: port Security_Provisioning->ct.Security_Provisioning;  
+--  annex EMV2 
+--  {**
+--  use types ErrorLibrary, PCA_Error_Model;
+--  use behavior PCA_Error_Model::CompositeFailStop; 	
+--  error propagations
+--    encrypt : in propagation {ItemOmission,ValueError}; 
+--    decrypt: in propagation {ItemOmission,ValueError}; 
+--    sign: in propagation {ItemOmission,ValueError}; 
+--    verify : in propagation {ItemOmission,ValueError}; 
+--    verified : out propagation {ItemOmission};
+--    result : out propagation {ItemOmission,ValueError}; 
+--    --feature groups send errors both ways
+--    tpm_control_inv : out propagation {EarlyServiceTermination,ValueError}; 
+--    tpm_control_inv : in propagation {EarlyServiceTermination,ValueError}; 
+--    Security_Fault : out propagation {ItemOmission}; 
+--    --security provisioning must not introduce errors, need confirmation process
+--    Security_Provisioning : not in propagation {CommonErrors};
+--  end propagations;
+--  composite error behavior
+--    states 
+--     [ct.failed]->failed;
+--     [ct.working]->working;
+--  end composite;  	
+--  **};  --end of EMV2
+--end crypto_process.imp;
+--
+--
+--thread crypto_thread
+--  features
+--    encrypt : in event data port text_key_pair;
+--    decrypt: in event data port text_key_pair;
+--    sign: in event data port text_key_pair;
+--    verify : in event data port text_signature_key;
+--    verified : out event port;
+--    result :out event data port Base_Types::String;
+--    tpm_control_inv: feature group inverse of tpm_signals;
+--    Security_Fault: out event port;
+--	--provisioning channel
+--	Security_Provisioning : in event data port;  --type T.B.D.
+--end crypto_thread;
+--
+--thread implementation crypto_thread.imp
+--  annex EMV2 
+--  {**
+--  use types ErrorLibrary, PCA_Error_Model;
+--  use behavior PCA_Error_Model::FailStop; 	
+--  error propagations
+--    encrypt : in propagation {ItemOmission,ValueError}; 
+--    decrypt: in propagation {ItemOmission,ValueError}; 
+--    sign: in propagation {ItemOmission,ValueError}; 
+--    verify : in propagation {ItemOmission,ValueError}; 
+--    verified : out propagation {EarlyServiceTermination};
+--    result : out propagation {EarlyServiceTermination,ValueError}; 
+--    --feature groups send errors both ways
+--    tpm_control_inv : out propagation {EarlyServiceTermination,ValueError}; 
+--    Security_Fault : out propagation {EarlyServiceTermination}; 
+--    --security provisioning must not introduce errors, need confirmation process
+--    Security_Provisioning : not in propagation {CommonErrors};
+--  flows
+--    dead1: error source verified{EarlyServiceTermination} when failed;
+--    dead2: error source tpm_control_inv{EarlyServiceTermination} when failed;
+--    dead3: error source Security_Fault{EarlyServiceTermination} when failed;
+--    dead4: error source result{EarlyServiceTermination} when failed;
+--  end propagations;
+--  properties
+--    EMV2::OccurrenceDistribution => #PCA_Properties::ThreadFailureRate 
+--      applies to fail;	
+--  **};  --end of EMV2
+--end crypto_thread.imp;
+
+end PCA_Security;

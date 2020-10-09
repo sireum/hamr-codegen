@@ -1,0 +1,2914 @@
+{
+  "type" : "Aadl",
+  "components" : [
+    {
+      "type" : "Component",
+      "identifier" : {
+        "type" : "Name",
+        "name" : ["top_impl_Instance"],
+        "pos" : {
+          "type" : "Some",
+          "value" : {
+            "type" : "Position",
+            "uriOpt" : {
+              "type" : "Some",
+              "value" : "\/testshare\/testshare.aadl"
+            },
+            "beginLine" : 69,
+            "beginColumn" : 2,
+            "endLine" : 79,
+            "endColumn" : 15,
+            "offset" : 1662,
+            "length" : 299
+          }
+        }
+      },
+      "category" : {
+        "type" : "ComponentCategory",
+        "value" : "System"
+      },
+      "classifier" : {
+        "type" : "None"
+      },
+      "features" : [
+      ],
+      "subComponents" : [
+        {
+          "type" : "Component",
+          "identifier" : {
+            "type" : "Name",
+            "name" : ["top_impl_Instance", "testshare"],
+            "pos" : {
+              "type" : "Some",
+              "value" : {
+                "type" : "Position",
+                "uriOpt" : {
+                  "type" : "Some",
+                  "value" : "\/testshare\/testshare.aadl"
+                },
+                "beginLine" : 72,
+                "beginColumn" : 4,
+                "endLine" : 72,
+                "endColumn" : 40,
+                "offset" : 1742,
+                "length" : 36
+              }
+            }
+          },
+          "category" : {
+            "type" : "ComponentCategory",
+            "value" : "Process"
+          },
+          "classifier" : {
+            "type" : "Some",
+            "value" : {
+              "type" : "Classifier",
+              "name" : "testshare::top_process.impl"
+            }
+          },
+          "features" : [
+          ],
+          "subComponents" : [
+            {
+              "type" : "Component",
+              "identifier" : {
+                "type" : "Name",
+                "name" : ["top_impl_Instance", "testshare", "shared"],
+                "pos" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Position",
+                    "uriOpt" : {
+                      "type" : "Some",
+                      "value" : "\/testshare\/testshare.aadl"
+                    },
+                    "beginLine" : 56,
+                    "beginColumn" : 4,
+                    "endLine" : 58,
+                    "endColumn" : 6,
+                    "offset" : 1396,
+                    "length" : 97
+                  }
+                }
+              },
+              "category" : {
+                "type" : "ComponentCategory",
+                "value" : "Data"
+              },
+              "classifier" : {
+                "type" : "Some",
+                "value" : {
+                  "type" : "Classifier",
+                  "name" : "testshare::Thing_t.impl"
+                }
+              },
+              "features" : [
+              ],
+              "subComponents" : [
+                {
+                  "type" : "Component",
+                  "identifier" : {
+                    "type" : "Name",
+                    "name" : ["top_impl_Instance", "testshare", "shared", "lepht"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/testshare\/testshare.aadl"
+                        },
+                        "beginLine" : 12,
+                        "beginColumn" : 4,
+                        "endLine" : 12,
+                        "endColumn" : 38,
+                        "offset" : 153,
+                        "length" : 34
+                      }
+                    }
+                  },
+                  "category" : {
+                    "type" : "ComponentCategory",
+                    "value" : "Data"
+                  },
+                  "classifier" : {
+                    "type" : "Some",
+                    "value" : {
+                      "type" : "Classifier",
+                      "name" : "Base_Types::Integer_8"
+                    }
+                  },
+                  "features" : [
+                  ],
+                  "subComponents" : [
+                  ],
+                  "connections" : [
+                  ],
+                  "connectionInstances" : [
+                  ],
+                  "properties" : [
+                    {
+                      "type" : "Property",
+                      "name" : {
+                        "type" : "Name",
+                        "name" : ["top_impl_Instance", "testshare", "shared", "lepht", "Data_Model::Number_Representation"],
+                        "pos" : {
+                          "type" : "Some",
+                          "value" : {
+                            "type" : "Position",
+                            "uriOpt" : {
+                              "type" : "Some",
+                              "value" : "\/org.osate.contribution.sei\/resources\/properties\/Data_Model.aadl"
+                            },
+                            "beginLine" : 78,
+                            "beginColumn" : 4,
+                            "endLine" : 78,
+                            "endColumn" : 88,
+                            "offset" : 3653,
+                            "length" : 84
+                          }
+                        }
+                      },
+                      "propertyValues" : [
+                        {
+                          "type" : "ValueProp",
+                          "value" : "Signed"
+                        }
+                      ],
+                      "appliesTo" : [
+                      ]
+                    },
+                    {
+                      "type" : "Property",
+                      "name" : {
+                        "type" : "Name",
+                        "name" : ["top_impl_Instance", "testshare", "shared", "lepht", "Memory_Properties::Data_Size"],
+                        "pos" : {
+                          "type" : "Some",
+                          "value" : {
+                            "type" : "Position",
+                            "uriOpt" : {
+                              "type" : "Some",
+                              "value" : "\/org.osate.workspace\/resources\/properties\/Predeclared_Property_Sets\/Memory_Properties.aadl"
+                            },
+                            "beginLine" : 91,
+                            "beginColumn" : 2,
+                            "endLine" : 92,
+                            "endColumn" : 137,
+                            "offset" : 4757,
+                            "length" : 152
+                          }
+                        }
+                      },
+                      "propertyValues" : [
+                        {
+                          "type" : "UnitProp",
+                          "value" : "8.0",
+                          "unit" : {
+                            "type" : "Some",
+                            "value" : "bits"
+                          }
+                        }
+                      ],
+                      "appliesTo" : [
+                      ]
+                    },
+                    {
+                      "type" : "Property",
+                      "name" : {
+                        "type" : "Name",
+                        "name" : ["top_impl_Instance", "testshare", "shared", "lepht", "Data_Model::Data_Representation"],
+                        "pos" : {
+                          "type" : "Some",
+                          "value" : {
+                            "type" : "Position",
+                            "uriOpt" : {
+                              "type" : "Some",
+                              "value" : "\/org.osate.contribution.sei\/resources\/properties\/Data_Model.aadl"
+                            },
+                            "beginLine" : 26,
+                            "beginColumn" : 4,
+                            "endLine" : 29,
+                            "endColumn" : 36,
+                            "offset" : 1108,
+                            "length" : 162
+                          }
+                        }
+                      },
+                      "propertyValues" : [
+                        {
+                          "type" : "ValueProp",
+                          "value" : "Integer"
+                        }
+                      ],
+                      "appliesTo" : [
+                      ]
+                    }
+                  ],
+                  "flows" : [
+                  ],
+                  "modes" : [
+                  ],
+                  "annexes" : [
+                    {
+                      "type" : "Annex",
+                      "name" : "Emv2",
+                      "clause" : {
+                        "type" : "Emv2Clause",
+                        "libraries" : [
+                        ],
+                        "propagations" : [
+                        ],
+                        "flows" : [
+                        ],
+                        "componentBehavior" : {
+                          "type" : "Some",
+                          "value" : {
+                            "type" : "Emv2BehaviorSection",
+                            "events" : [
+                            ],
+                            "transitions" : [
+                            ],
+                            "propagations" : [
+                            ]
+                          }
+                        },
+                        "properties" : [
+                        ]
+                      }
+                    },
+                    {
+                      "type" : "Annex",
+                      "name" : "smf",
+                      "clause" : {
+                        "type" : "SmfClause",
+                        "classification" : [
+                        ],
+                        "declass" : [
+                        ]
+                      }
+                    }
+                  ],
+                  "uriFrag" : "testshare\/instances\/testshare_top_impl_Instance.aaxl2#\/\/@componentInstance.0\/@componentInstance.0\/@componentInstance.0"
+                },
+                {
+                  "type" : "Component",
+                  "identifier" : {
+                    "type" : "Name",
+                    "name" : ["top_impl_Instance", "testshare", "shared", "right"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/testshare\/testshare.aadl"
+                        },
+                        "beginLine" : 13,
+                        "beginColumn" : 4,
+                        "endLine" : 13,
+                        "endColumn" : 38,
+                        "offset" : 191,
+                        "length" : 34
+                      }
+                    }
+                  },
+                  "category" : {
+                    "type" : "ComponentCategory",
+                    "value" : "Data"
+                  },
+                  "classifier" : {
+                    "type" : "Some",
+                    "value" : {
+                      "type" : "Classifier",
+                      "name" : "Base_Types::Integer_8"
+                    }
+                  },
+                  "features" : [
+                  ],
+                  "subComponents" : [
+                  ],
+                  "connections" : [
+                  ],
+                  "connectionInstances" : [
+                  ],
+                  "properties" : [
+                    {
+                      "type" : "Property",
+                      "name" : {
+                        "type" : "Name",
+                        "name" : ["top_impl_Instance", "testshare", "shared", "right", "Data_Model::Number_Representation"],
+                        "pos" : {
+                          "type" : "Some",
+                          "value" : {
+                            "type" : "Position",
+                            "uriOpt" : {
+                              "type" : "Some",
+                              "value" : "\/org.osate.contribution.sei\/resources\/properties\/Data_Model.aadl"
+                            },
+                            "beginLine" : 78,
+                            "beginColumn" : 4,
+                            "endLine" : 78,
+                            "endColumn" : 88,
+                            "offset" : 3653,
+                            "length" : 84
+                          }
+                        }
+                      },
+                      "propertyValues" : [
+                        {
+                          "type" : "ValueProp",
+                          "value" : "Signed"
+                        }
+                      ],
+                      "appliesTo" : [
+                      ]
+                    },
+                    {
+                      "type" : "Property",
+                      "name" : {
+                        "type" : "Name",
+                        "name" : ["top_impl_Instance", "testshare", "shared", "right", "Memory_Properties::Data_Size"],
+                        "pos" : {
+                          "type" : "Some",
+                          "value" : {
+                            "type" : "Position",
+                            "uriOpt" : {
+                              "type" : "Some",
+                              "value" : "\/org.osate.workspace\/resources\/properties\/Predeclared_Property_Sets\/Memory_Properties.aadl"
+                            },
+                            "beginLine" : 91,
+                            "beginColumn" : 2,
+                            "endLine" : 92,
+                            "endColumn" : 137,
+                            "offset" : 4757,
+                            "length" : 152
+                          }
+                        }
+                      },
+                      "propertyValues" : [
+                        {
+                          "type" : "UnitProp",
+                          "value" : "8.0",
+                          "unit" : {
+                            "type" : "Some",
+                            "value" : "bits"
+                          }
+                        }
+                      ],
+                      "appliesTo" : [
+                      ]
+                    },
+                    {
+                      "type" : "Property",
+                      "name" : {
+                        "type" : "Name",
+                        "name" : ["top_impl_Instance", "testshare", "shared", "right", "Data_Model::Data_Representation"],
+                        "pos" : {
+                          "type" : "Some",
+                          "value" : {
+                            "type" : "Position",
+                            "uriOpt" : {
+                              "type" : "Some",
+                              "value" : "\/org.osate.contribution.sei\/resources\/properties\/Data_Model.aadl"
+                            },
+                            "beginLine" : 26,
+                            "beginColumn" : 4,
+                            "endLine" : 29,
+                            "endColumn" : 36,
+                            "offset" : 1108,
+                            "length" : 162
+                          }
+                        }
+                      },
+                      "propertyValues" : [
+                        {
+                          "type" : "ValueProp",
+                          "value" : "Integer"
+                        }
+                      ],
+                      "appliesTo" : [
+                      ]
+                    }
+                  ],
+                  "flows" : [
+                  ],
+                  "modes" : [
+                  ],
+                  "annexes" : [
+                    {
+                      "type" : "Annex",
+                      "name" : "Emv2",
+                      "clause" : {
+                        "type" : "Emv2Clause",
+                        "libraries" : [
+                        ],
+                        "propagations" : [
+                        ],
+                        "flows" : [
+                        ],
+                        "componentBehavior" : {
+                          "type" : "Some",
+                          "value" : {
+                            "type" : "Emv2BehaviorSection",
+                            "events" : [
+                            ],
+                            "transitions" : [
+                            ],
+                            "propagations" : [
+                            ]
+                          }
+                        },
+                        "properties" : [
+                        ]
+                      }
+                    },
+                    {
+                      "type" : "Annex",
+                      "name" : "smf",
+                      "clause" : {
+                        "type" : "SmfClause",
+                        "classification" : [
+                        ],
+                        "declass" : [
+                        ]
+                      }
+                    }
+                  ],
+                  "uriFrag" : "testshare\/instances\/testshare_top_impl_Instance.aaxl2#\/\/@componentInstance.0\/@componentInstance.0\/@componentInstance.1"
+                },
+                {
+                  "type" : "Component",
+                  "identifier" : {
+                    "type" : "Name",
+                    "name" : ["top_impl_Instance", "testshare", "shared", "top"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/testshare\/testshare.aadl"
+                        },
+                        "beginLine" : 14,
+                        "beginColumn" : 4,
+                        "endLine" : 14,
+                        "endColumn" : 36,
+                        "offset" : 229,
+                        "length" : 32
+                      }
+                    }
+                  },
+                  "category" : {
+                    "type" : "ComponentCategory",
+                    "value" : "Data"
+                  },
+                  "classifier" : {
+                    "type" : "Some",
+                    "value" : {
+                      "type" : "Classifier",
+                      "name" : "Base_Types::Integer_8"
+                    }
+                  },
+                  "features" : [
+                  ],
+                  "subComponents" : [
+                  ],
+                  "connections" : [
+                  ],
+                  "connectionInstances" : [
+                  ],
+                  "properties" : [
+                    {
+                      "type" : "Property",
+                      "name" : {
+                        "type" : "Name",
+                        "name" : ["top_impl_Instance", "testshare", "shared", "top", "Data_Model::Number_Representation"],
+                        "pos" : {
+                          "type" : "Some",
+                          "value" : {
+                            "type" : "Position",
+                            "uriOpt" : {
+                              "type" : "Some",
+                              "value" : "\/org.osate.contribution.sei\/resources\/properties\/Data_Model.aadl"
+                            },
+                            "beginLine" : 78,
+                            "beginColumn" : 4,
+                            "endLine" : 78,
+                            "endColumn" : 88,
+                            "offset" : 3653,
+                            "length" : 84
+                          }
+                        }
+                      },
+                      "propertyValues" : [
+                        {
+                          "type" : "ValueProp",
+                          "value" : "Signed"
+                        }
+                      ],
+                      "appliesTo" : [
+                      ]
+                    },
+                    {
+                      "type" : "Property",
+                      "name" : {
+                        "type" : "Name",
+                        "name" : ["top_impl_Instance", "testshare", "shared", "top", "Memory_Properties::Data_Size"],
+                        "pos" : {
+                          "type" : "Some",
+                          "value" : {
+                            "type" : "Position",
+                            "uriOpt" : {
+                              "type" : "Some",
+                              "value" : "\/org.osate.workspace\/resources\/properties\/Predeclared_Property_Sets\/Memory_Properties.aadl"
+                            },
+                            "beginLine" : 91,
+                            "beginColumn" : 2,
+                            "endLine" : 92,
+                            "endColumn" : 137,
+                            "offset" : 4757,
+                            "length" : 152
+                          }
+                        }
+                      },
+                      "propertyValues" : [
+                        {
+                          "type" : "UnitProp",
+                          "value" : "8.0",
+                          "unit" : {
+                            "type" : "Some",
+                            "value" : "bits"
+                          }
+                        }
+                      ],
+                      "appliesTo" : [
+                      ]
+                    },
+                    {
+                      "type" : "Property",
+                      "name" : {
+                        "type" : "Name",
+                        "name" : ["top_impl_Instance", "testshare", "shared", "top", "Data_Model::Data_Representation"],
+                        "pos" : {
+                          "type" : "Some",
+                          "value" : {
+                            "type" : "Position",
+                            "uriOpt" : {
+                              "type" : "Some",
+                              "value" : "\/org.osate.contribution.sei\/resources\/properties\/Data_Model.aadl"
+                            },
+                            "beginLine" : 26,
+                            "beginColumn" : 4,
+                            "endLine" : 29,
+                            "endColumn" : 36,
+                            "offset" : 1108,
+                            "length" : 162
+                          }
+                        }
+                      },
+                      "propertyValues" : [
+                        {
+                          "type" : "ValueProp",
+                          "value" : "Integer"
+                        }
+                      ],
+                      "appliesTo" : [
+                      ]
+                    }
+                  ],
+                  "flows" : [
+                  ],
+                  "modes" : [
+                  ],
+                  "annexes" : [
+                    {
+                      "type" : "Annex",
+                      "name" : "Emv2",
+                      "clause" : {
+                        "type" : "Emv2Clause",
+                        "libraries" : [
+                        ],
+                        "propagations" : [
+                        ],
+                        "flows" : [
+                        ],
+                        "componentBehavior" : {
+                          "type" : "Some",
+                          "value" : {
+                            "type" : "Emv2BehaviorSection",
+                            "events" : [
+                            ],
+                            "transitions" : [
+                            ],
+                            "propagations" : [
+                            ]
+                          }
+                        },
+                        "properties" : [
+                        ]
+                      }
+                    },
+                    {
+                      "type" : "Annex",
+                      "name" : "smf",
+                      "clause" : {
+                        "type" : "SmfClause",
+                        "classification" : [
+                        ],
+                        "declass" : [
+                        ]
+                      }
+                    }
+                  ],
+                  "uriFrag" : "testshare\/instances\/testshare_top_impl_Instance.aaxl2#\/\/@componentInstance.0\/@componentInstance.0\/@componentInstance.2"
+                },
+                {
+                  "type" : "Component",
+                  "identifier" : {
+                    "type" : "Name",
+                    "name" : ["top_impl_Instance", "testshare", "shared", "bottom"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/testshare\/testshare.aadl"
+                        },
+                        "beginLine" : 15,
+                        "beginColumn" : 4,
+                        "endLine" : 15,
+                        "endColumn" : 39,
+                        "offset" : 265,
+                        "length" : 35
+                      }
+                    }
+                  },
+                  "category" : {
+                    "type" : "ComponentCategory",
+                    "value" : "Data"
+                  },
+                  "classifier" : {
+                    "type" : "Some",
+                    "value" : {
+                      "type" : "Classifier",
+                      "name" : "Base_Types::Integer_8"
+                    }
+                  },
+                  "features" : [
+                  ],
+                  "subComponents" : [
+                  ],
+                  "connections" : [
+                  ],
+                  "connectionInstances" : [
+                  ],
+                  "properties" : [
+                    {
+                      "type" : "Property",
+                      "name" : {
+                        "type" : "Name",
+                        "name" : ["top_impl_Instance", "testshare", "shared", "bottom", "Data_Model::Number_Representation"],
+                        "pos" : {
+                          "type" : "Some",
+                          "value" : {
+                            "type" : "Position",
+                            "uriOpt" : {
+                              "type" : "Some",
+                              "value" : "\/org.osate.contribution.sei\/resources\/properties\/Data_Model.aadl"
+                            },
+                            "beginLine" : 78,
+                            "beginColumn" : 4,
+                            "endLine" : 78,
+                            "endColumn" : 88,
+                            "offset" : 3653,
+                            "length" : 84
+                          }
+                        }
+                      },
+                      "propertyValues" : [
+                        {
+                          "type" : "ValueProp",
+                          "value" : "Signed"
+                        }
+                      ],
+                      "appliesTo" : [
+                      ]
+                    },
+                    {
+                      "type" : "Property",
+                      "name" : {
+                        "type" : "Name",
+                        "name" : ["top_impl_Instance", "testshare", "shared", "bottom", "Memory_Properties::Data_Size"],
+                        "pos" : {
+                          "type" : "Some",
+                          "value" : {
+                            "type" : "Position",
+                            "uriOpt" : {
+                              "type" : "Some",
+                              "value" : "\/org.osate.workspace\/resources\/properties\/Predeclared_Property_Sets\/Memory_Properties.aadl"
+                            },
+                            "beginLine" : 91,
+                            "beginColumn" : 2,
+                            "endLine" : 92,
+                            "endColumn" : 137,
+                            "offset" : 4757,
+                            "length" : 152
+                          }
+                        }
+                      },
+                      "propertyValues" : [
+                        {
+                          "type" : "UnitProp",
+                          "value" : "8.0",
+                          "unit" : {
+                            "type" : "Some",
+                            "value" : "bits"
+                          }
+                        }
+                      ],
+                      "appliesTo" : [
+                      ]
+                    },
+                    {
+                      "type" : "Property",
+                      "name" : {
+                        "type" : "Name",
+                        "name" : ["top_impl_Instance", "testshare", "shared", "bottom", "Data_Model::Data_Representation"],
+                        "pos" : {
+                          "type" : "Some",
+                          "value" : {
+                            "type" : "Position",
+                            "uriOpt" : {
+                              "type" : "Some",
+                              "value" : "\/org.osate.contribution.sei\/resources\/properties\/Data_Model.aadl"
+                            },
+                            "beginLine" : 26,
+                            "beginColumn" : 4,
+                            "endLine" : 29,
+                            "endColumn" : 36,
+                            "offset" : 1108,
+                            "length" : 162
+                          }
+                        }
+                      },
+                      "propertyValues" : [
+                        {
+                          "type" : "ValueProp",
+                          "value" : "Integer"
+                        }
+                      ],
+                      "appliesTo" : [
+                      ]
+                    }
+                  ],
+                  "flows" : [
+                  ],
+                  "modes" : [
+                  ],
+                  "annexes" : [
+                    {
+                      "type" : "Annex",
+                      "name" : "Emv2",
+                      "clause" : {
+                        "type" : "Emv2Clause",
+                        "libraries" : [
+                        ],
+                        "propagations" : [
+                        ],
+                        "flows" : [
+                        ],
+                        "componentBehavior" : {
+                          "type" : "Some",
+                          "value" : {
+                            "type" : "Emv2BehaviorSection",
+                            "events" : [
+                            ],
+                            "transitions" : [
+                            ],
+                            "propagations" : [
+                            ]
+                          }
+                        },
+                        "properties" : [
+                        ]
+                      }
+                    },
+                    {
+                      "type" : "Annex",
+                      "name" : "smf",
+                      "clause" : {
+                        "type" : "SmfClause",
+                        "classification" : [
+                        ],
+                        "declass" : [
+                        ]
+                      }
+                    }
+                  ],
+                  "uriFrag" : "testshare\/instances\/testshare_top_impl_Instance.aaxl2#\/\/@componentInstance.0\/@componentInstance.0\/@componentInstance.3"
+                }
+              ],
+              "connections" : [
+              ],
+              "connectionInstances" : [
+              ],
+              "properties" : [
+                {
+                  "type" : "Property",
+                  "name" : {
+                    "type" : "Name",
+                    "name" : ["top_impl_Instance", "testshare", "shared", "SB_SYS::CAmkES_Owner_Thread"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/org.sireum.aadl.osate.hamr\/resources\/SB_SYS.aadl"
+                        },
+                        "beginLine" : 5,
+                        "beginColumn" : 5,
+                        "endLine" : 5,
+                        "endColumn" : 58,
+                        "offset" : 173,
+                        "length" : 53
+                      }
+                    }
+                  },
+                  "propertyValues" : [
+                    {
+                      "type" : "ValueProp",
+                      "value" : "testshare::publisher.impl"
+                    }
+                  ],
+                  "appliesTo" : [
+                  ]
+                }
+              ],
+              "flows" : [
+              ],
+              "modes" : [
+              ],
+              "annexes" : [
+                {
+                  "type" : "Annex",
+                  "name" : "Emv2",
+                  "clause" : {
+                    "type" : "Emv2Clause",
+                    "libraries" : [
+                    ],
+                    "propagations" : [
+                    ],
+                    "flows" : [
+                    ],
+                    "componentBehavior" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Emv2BehaviorSection",
+                        "events" : [
+                        ],
+                        "transitions" : [
+                        ],
+                        "propagations" : [
+                        ]
+                      }
+                    },
+                    "properties" : [
+                    ]
+                  }
+                },
+                {
+                  "type" : "Annex",
+                  "name" : "smf",
+                  "clause" : {
+                    "type" : "SmfClause",
+                    "classification" : [
+                    ],
+                    "declass" : [
+                    ]
+                  }
+                }
+              ],
+              "uriFrag" : "testshare\/instances\/testshare_top_impl_Instance.aaxl2#\/\/@componentInstance.0\/@componentInstance.0"
+            },
+            {
+              "type" : "Component",
+              "identifier" : {
+                "type" : "Name",
+                "name" : ["top_impl_Instance", "testshare", "publisher_inst"],
+                "pos" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Position",
+                    "uriOpt" : {
+                      "type" : "Some",
+                      "value" : "\/testshare\/testshare.aadl"
+                    },
+                    "beginLine" : 53,
+                    "beginColumn" : 4,
+                    "endLine" : 53,
+                    "endColumn" : 42,
+                    "offset" : 1306,
+                    "length" : 38
+                  }
+                }
+              },
+              "category" : {
+                "type" : "ComponentCategory",
+                "value" : "Thread"
+              },
+              "classifier" : {
+                "type" : "Some",
+                "value" : {
+                  "type" : "Classifier",
+                  "name" : "testshare::publisher.impl"
+                }
+              },
+              "features" : [
+                {
+                  "type" : "FeatureAccess",
+                  "identifier" : {
+                    "type" : "Name",
+                    "name" : ["top_impl_Instance", "testshare", "publisher_inst", "b1"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/testshare\/testshare.aadl"
+                        },
+                        "beginLine" : 20,
+                        "beginColumn" : 4,
+                        "endLine" : 20,
+                        "endColumn" : 42,
+                        "offset" : 354,
+                        "length" : 38
+                      }
+                    }
+                  },
+                  "category" : {
+                    "type" : "FeatureCategory",
+                    "value" : "DataAccess"
+                  },
+                  "classifier" : {
+                    "type" : "Some",
+                    "value" : {
+                      "type" : "Classifier",
+                      "name" : "testshare::Thing_t.impl"
+                    }
+                  },
+                  "accessType" : {
+                    "type" : "AccessType",
+                    "value" : "Requires"
+                  },
+                  "accessCategory" : {
+                    "type" : "AccessCategory",
+                    "value" : "Data"
+                  },
+                  "properties" : [
+                  ],
+                  "uriFrag" : "testshare\/instances\/testshare_top_impl_Instance.aaxl2#\/\/@componentInstance.0\/@componentInstance.1\/@featureInstance.0"
+                }
+              ],
+              "subComponents" : [
+              ],
+              "connections" : [
+              ],
+              "connectionInstances" : [
+              ],
+              "properties" : [
+                {
+                  "type" : "Property",
+                  "name" : {
+                    "type" : "Name",
+                    "name" : ["top_impl_Instance", "testshare", "publisher_inst", "Deployment_Properties::Actual_Processor_Binding"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/org.osate.workspace\/resources\/properties\/Predeclared_Property_Sets\/Deployment_Properties.aadl"
+                        },
+                        "beginLine" : 46,
+                        "beginColumn" : 2,
+                        "endLine" : 47,
+                        "endColumn" : 81,
+                        "offset" : 3075,
+                        "length" : 189
+                      }
+                    }
+                  },
+                  "propertyValues" : [
+                    {
+                      "type" : "ReferenceProp",
+                      "value" : {
+                        "type" : "Name",
+                        "name" : ["top_impl_Instance", "proc"],
+                        "pos" : {
+                          "type" : "None"
+                        }
+                      }
+                    }
+                  ],
+                  "appliesTo" : [
+                  ]
+                },
+                {
+                  "type" : "Property",
+                  "name" : {
+                    "type" : "Name",
+                    "name" : ["top_impl_Instance", "testshare", "publisher_inst", "Programming_Properties::Initialize_Entrypoint_Source_Text"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/org.osate.workspace\/resources\/properties\/Predeclared_Property_Sets\/Programming_Properties.aadl"
+                        },
+                        "beginLine" : 159,
+                        "beginColumn" : 2,
+                        "endLine" : 160,
+                        "endColumn" : 31,
+                        "offset" : 11570,
+                        "length" : 76
+                      }
+                    }
+                  },
+                  "propertyValues" : [
+                    {
+                      "type" : "ValueProp",
+                      "value" : "testshare_publisher_component_init"
+                    }
+                  ],
+                  "appliesTo" : [
+                  ]
+                },
+                {
+                  "type" : "Property",
+                  "name" : {
+                    "type" : "Name",
+                    "name" : ["top_impl_Instance", "testshare", "publisher_inst", "Programming_Properties::Source_Text"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/org.osate.workspace\/resources\/properties\/Predeclared_Property_Sets\/Programming_Properties.aadl"
+                        },
+                        "beginLine" : 234,
+                        "beginColumn" : 2,
+                        "endLine" : 236,
+                        "endColumn" : 76,
+                        "offset" : 17037,
+                        "length" : 224
+                      }
+                    }
+                  },
+                  "propertyValues" : [
+                    {
+                      "type" : "ValueProp",
+                      "value" : "behavior_code\/components\/publisher\/src\/publisher.c"
+                    }
+                  ],
+                  "appliesTo" : [
+                  ]
+                },
+                {
+                  "type" : "Property",
+                  "name" : {
+                    "type" : "Name",
+                    "name" : ["top_impl_Instance", "testshare", "publisher_inst", "Programming_Properties::Compute_Entrypoint_Source_Text"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/org.osate.workspace\/resources\/properties\/Predeclared_Property_Sets\/Programming_Properties.aadl"
+                        },
+                        "beginLine" : 71,
+                        "beginColumn" : 2,
+                        "endLine" : 72,
+                        "endColumn" : 79,
+                        "offset" : 5356,
+                        "length" : 121
+                      }
+                    }
+                  },
+                  "propertyValues" : [
+                    {
+                      "type" : "ValueProp",
+                      "value" : "run_publisher"
+                    }
+                  ],
+                  "appliesTo" : [
+                  ]
+                }
+              ],
+              "flows" : [
+              ],
+              "modes" : [
+              ],
+              "annexes" : [
+                {
+                  "type" : "Annex",
+                  "name" : "Emv2",
+                  "clause" : {
+                    "type" : "Emv2Clause",
+                    "libraries" : [
+                    ],
+                    "propagations" : [
+                    ],
+                    "flows" : [
+                    ],
+                    "componentBehavior" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Emv2BehaviorSection",
+                        "events" : [
+                        ],
+                        "transitions" : [
+                        ],
+                        "propagations" : [
+                        ]
+                      }
+                    },
+                    "properties" : [
+                    ]
+                  }
+                },
+                {
+                  "type" : "Annex",
+                  "name" : "smf",
+                  "clause" : {
+                    "type" : "SmfClause",
+                    "classification" : [
+                    ],
+                    "declass" : [
+                    ]
+                  }
+                }
+              ],
+              "uriFrag" : "testshare\/instances\/testshare_top_impl_Instance.aaxl2#\/\/@componentInstance.0\/@componentInstance.1"
+            },
+            {
+              "type" : "Component",
+              "identifier" : {
+                "type" : "Name",
+                "name" : ["top_impl_Instance", "testshare", "subscriber_inst"],
+                "pos" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Position",
+                    "uriOpt" : {
+                      "type" : "Some",
+                      "value" : "\/testshare\/testshare.aadl"
+                    },
+                    "beginLine" : 54,
+                    "beginColumn" : 4,
+                    "endLine" : 54,
+                    "endColumn" : 44,
+                    "offset" : 1348,
+                    "length" : 40
+                  }
+                }
+              },
+              "category" : {
+                "type" : "ComponentCategory",
+                "value" : "Thread"
+              },
+              "classifier" : {
+                "type" : "Some",
+                "value" : {
+                  "type" : "Classifier",
+                  "name" : "testshare::subscriber.impl"
+                }
+              },
+              "features" : [
+                {
+                  "type" : "FeatureAccess",
+                  "identifier" : {
+                    "type" : "Name",
+                    "name" : ["top_impl_Instance", "testshare", "subscriber_inst", "b2"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/testshare\/testshare.aadl"
+                        },
+                        "beginLine" : 32,
+                        "beginColumn" : 4,
+                        "endLine" : 32,
+                        "endColumn" : 42,
+                        "offset" : 753,
+                        "length" : 38
+                      }
+                    }
+                  },
+                  "category" : {
+                    "type" : "FeatureCategory",
+                    "value" : "DataAccess"
+                  },
+                  "classifier" : {
+                    "type" : "Some",
+                    "value" : {
+                      "type" : "Classifier",
+                      "name" : "testshare::Thing_t.impl"
+                    }
+                  },
+                  "accessType" : {
+                    "type" : "AccessType",
+                    "value" : "Requires"
+                  },
+                  "accessCategory" : {
+                    "type" : "AccessCategory",
+                    "value" : "Data"
+                  },
+                  "properties" : [
+                  ],
+                  "uriFrag" : "testshare\/instances\/testshare_top_impl_Instance.aaxl2#\/\/@componentInstance.0\/@componentInstance.2\/@featureInstance.0"
+                }
+              ],
+              "subComponents" : [
+              ],
+              "connections" : [
+              ],
+              "connectionInstances" : [
+              ],
+              "properties" : [
+                {
+                  "type" : "Property",
+                  "name" : {
+                    "type" : "Name",
+                    "name" : ["top_impl_Instance", "testshare", "subscriber_inst", "Deployment_Properties::Actual_Processor_Binding"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/org.osate.workspace\/resources\/properties\/Predeclared_Property_Sets\/Deployment_Properties.aadl"
+                        },
+                        "beginLine" : 46,
+                        "beginColumn" : 2,
+                        "endLine" : 47,
+                        "endColumn" : 81,
+                        "offset" : 3075,
+                        "length" : 189
+                      }
+                    }
+                  },
+                  "propertyValues" : [
+                    {
+                      "type" : "ReferenceProp",
+                      "value" : {
+                        "type" : "Name",
+                        "name" : ["top_impl_Instance", "proc"],
+                        "pos" : {
+                          "type" : "None"
+                        }
+                      }
+                    }
+                  ],
+                  "appliesTo" : [
+                  ]
+                },
+                {
+                  "type" : "Property",
+                  "name" : {
+                    "type" : "Name",
+                    "name" : ["top_impl_Instance", "testshare", "subscriber_inst", "Programming_Properties::Initialize_Entrypoint_Source_Text"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/org.osate.workspace\/resources\/properties\/Predeclared_Property_Sets\/Programming_Properties.aadl"
+                        },
+                        "beginLine" : 159,
+                        "beginColumn" : 2,
+                        "endLine" : 160,
+                        "endColumn" : 31,
+                        "offset" : 11570,
+                        "length" : 76
+                      }
+                    }
+                  },
+                  "propertyValues" : [
+                    {
+                      "type" : "ValueProp",
+                      "value" : "testshare_subscriber_component_init"
+                    }
+                  ],
+                  "appliesTo" : [
+                  ]
+                },
+                {
+                  "type" : "Property",
+                  "name" : {
+                    "type" : "Name",
+                    "name" : ["top_impl_Instance", "testshare", "subscriber_inst", "Programming_Properties::Source_Text"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/org.osate.workspace\/resources\/properties\/Predeclared_Property_Sets\/Programming_Properties.aadl"
+                        },
+                        "beginLine" : 234,
+                        "beginColumn" : 2,
+                        "endLine" : 236,
+                        "endColumn" : 76,
+                        "offset" : 17037,
+                        "length" : 224
+                      }
+                    }
+                  },
+                  "propertyValues" : [
+                    {
+                      "type" : "ValueProp",
+                      "value" : "behavior_code\/components\/subscriber\/src\/subscriber.c"
+                    }
+                  ],
+                  "appliesTo" : [
+                  ]
+                },
+                {
+                  "type" : "Property",
+                  "name" : {
+                    "type" : "Name",
+                    "name" : ["top_impl_Instance", "testshare", "subscriber_inst", "Programming_Properties::Compute_Entrypoint_Source_Text"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/org.osate.workspace\/resources\/properties\/Predeclared_Property_Sets\/Programming_Properties.aadl"
+                        },
+                        "beginLine" : 71,
+                        "beginColumn" : 2,
+                        "endLine" : 72,
+                        "endColumn" : 79,
+                        "offset" : 5356,
+                        "length" : 121
+                      }
+                    }
+                  },
+                  "propertyValues" : [
+                    {
+                      "type" : "ValueProp",
+                      "value" : "run_subscriber"
+                    }
+                  ],
+                  "appliesTo" : [
+                  ]
+                }
+              ],
+              "flows" : [
+              ],
+              "modes" : [
+              ],
+              "annexes" : [
+                {
+                  "type" : "Annex",
+                  "name" : "Emv2",
+                  "clause" : {
+                    "type" : "Emv2Clause",
+                    "libraries" : [
+                    ],
+                    "propagations" : [
+                    ],
+                    "flows" : [
+                    ],
+                    "componentBehavior" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Emv2BehaviorSection",
+                        "events" : [
+                        ],
+                        "transitions" : [
+                        ],
+                        "propagations" : [
+                        ]
+                      }
+                    },
+                    "properties" : [
+                    ]
+                  }
+                },
+                {
+                  "type" : "Annex",
+                  "name" : "smf",
+                  "clause" : {
+                    "type" : "SmfClause",
+                    "classification" : [
+                    ],
+                    "declass" : [
+                    ]
+                  }
+                }
+              ],
+              "uriFrag" : "testshare\/instances\/testshare_top_impl_Instance.aaxl2#\/\/@componentInstance.0\/@componentInstance.2"
+            }
+          ],
+          "connections" : [
+            {
+              "type" : "Connection",
+              "name" : {
+                "type" : "Name",
+                "name" : ["top_impl_Instance", "testshare", "conn2"],
+                "pos" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Position",
+                    "uriOpt" : {
+                      "type" : "Some",
+                      "value" : "\/testshare\/testshare.aadl"
+                    },
+                    "beginLine" : 61,
+                    "beginColumn" : 4,
+                    "endLine" : 61,
+                    "endColumn" : 52,
+                    "offset" : 1512,
+                    "length" : 48
+                  }
+                }
+              },
+              "src" : [
+                {
+                  "type" : "EndPoint",
+                  "component" : {
+                    "type" : "Name",
+                    "name" : ["top_impl_Instance", "testshare"],
+                    "pos" : {
+                      "type" : "None"
+                    }
+                  },
+                  "feature" : {
+                    "type" : "Some",
+                    "value" : {
+                      "type" : "Name",
+                      "name" : ["top_impl_Instance", "testshare", "shared"],
+                      "pos" : {
+                        "type" : "Some",
+                        "value" : {
+                          "type" : "Position",
+                          "uriOpt" : {
+                            "type" : "Some",
+                            "value" : "\/testshare\/testshare.aadl"
+                          },
+                          "beginLine" : 56,
+                          "beginColumn" : 4,
+                          "endLine" : 58,
+                          "endColumn" : 6,
+                          "offset" : 1396,
+                          "length" : 97
+                        }
+                      }
+                    }
+                  },
+                  "direction" : {
+                    "type" : "None"
+                  }
+                }
+              ],
+              "dst" : [
+                {
+                  "type" : "EndPoint",
+                  "component" : {
+                    "type" : "Name",
+                    "name" : ["top_impl_Instance", "testshare", "subscriber_inst"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/testshare\/testshare.aadl"
+                        },
+                        "beginLine" : 54,
+                        "beginColumn" : 4,
+                        "endLine" : 54,
+                        "endColumn" : 44,
+                        "offset" : 1348,
+                        "length" : 40
+                      }
+                    }
+                  },
+                  "feature" : {
+                    "type" : "Some",
+                    "value" : {
+                      "type" : "Name",
+                      "name" : ["top_impl_Instance", "testshare", "subscriber_inst", "b2"],
+                      "pos" : {
+                        "type" : "Some",
+                        "value" : {
+                          "type" : "Position",
+                          "uriOpt" : {
+                            "type" : "Some",
+                            "value" : "\/testshare\/testshare.aadl"
+                          },
+                          "beginLine" : 32,
+                          "beginColumn" : 4,
+                          "endLine" : 32,
+                          "endColumn" : 42,
+                          "offset" : 753,
+                          "length" : 38
+                        }
+                      }
+                    }
+                  },
+                  "direction" : {
+                    "type" : "None"
+                  }
+                }
+              ],
+              "kind" : {
+                "type" : "ConnectionKind",
+                "value" : "Access"
+              },
+              "isBiDirectional" : false,
+              "connectionInstances" : [
+                {
+                  "type" : "Name",
+                  "name" : ["top_impl_Instance", "testshare", "shared -> subscriber_inst", "b2"],
+                  "pos" : {
+                    "type" : "None"
+                  }
+                }
+              ],
+              "properties" : [
+              ],
+              "uriFrag" : "testshare\/instances\/testshare_top_impl_Instance.aaxl2#\/\/@componentInstance.0\/@connectionInstance.0\/@connectionReference.0"
+            },
+            {
+              "type" : "Connection",
+              "name" : {
+                "type" : "Name",
+                "name" : ["top_impl_Instance", "testshare", "conn1"],
+                "pos" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Position",
+                    "uriOpt" : {
+                      "type" : "Some",
+                      "value" : "\/testshare\/testshare.aadl"
+                    },
+                    "beginLine" : 62,
+                    "beginColumn" : 4,
+                    "endLine" : 62,
+                    "endColumn" : 51,
+                    "offset" : 1564,
+                    "length" : 47
+                  }
+                }
+              },
+              "src" : [
+                {
+                  "type" : "EndPoint",
+                  "component" : {
+                    "type" : "Name",
+                    "name" : ["top_impl_Instance", "testshare"],
+                    "pos" : {
+                      "type" : "None"
+                    }
+                  },
+                  "feature" : {
+                    "type" : "Some",
+                    "value" : {
+                      "type" : "Name",
+                      "name" : ["top_impl_Instance", "testshare", "shared"],
+                      "pos" : {
+                        "type" : "Some",
+                        "value" : {
+                          "type" : "Position",
+                          "uriOpt" : {
+                            "type" : "Some",
+                            "value" : "\/testshare\/testshare.aadl"
+                          },
+                          "beginLine" : 56,
+                          "beginColumn" : 4,
+                          "endLine" : 58,
+                          "endColumn" : 6,
+                          "offset" : 1396,
+                          "length" : 97
+                        }
+                      }
+                    }
+                  },
+                  "direction" : {
+                    "type" : "None"
+                  }
+                }
+              ],
+              "dst" : [
+                {
+                  "type" : "EndPoint",
+                  "component" : {
+                    "type" : "Name",
+                    "name" : ["top_impl_Instance", "testshare", "publisher_inst"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/testshare\/testshare.aadl"
+                        },
+                        "beginLine" : 53,
+                        "beginColumn" : 4,
+                        "endLine" : 53,
+                        "endColumn" : 42,
+                        "offset" : 1306,
+                        "length" : 38
+                      }
+                    }
+                  },
+                  "feature" : {
+                    "type" : "Some",
+                    "value" : {
+                      "type" : "Name",
+                      "name" : ["top_impl_Instance", "testshare", "publisher_inst", "b1"],
+                      "pos" : {
+                        "type" : "Some",
+                        "value" : {
+                          "type" : "Position",
+                          "uriOpt" : {
+                            "type" : "Some",
+                            "value" : "\/testshare\/testshare.aadl"
+                          },
+                          "beginLine" : 20,
+                          "beginColumn" : 4,
+                          "endLine" : 20,
+                          "endColumn" : 42,
+                          "offset" : 354,
+                          "length" : 38
+                        }
+                      }
+                    }
+                  },
+                  "direction" : {
+                    "type" : "None"
+                  }
+                }
+              ],
+              "kind" : {
+                "type" : "ConnectionKind",
+                "value" : "Access"
+              },
+              "isBiDirectional" : false,
+              "connectionInstances" : [
+                {
+                  "type" : "Name",
+                  "name" : ["top_impl_Instance", "testshare", "shared -> publisher_inst", "b1"],
+                  "pos" : {
+                    "type" : "None"
+                  }
+                }
+              ],
+              "properties" : [
+              ],
+              "uriFrag" : "testshare\/instances\/testshare_top_impl_Instance.aaxl2#\/\/@componentInstance.0\/@connectionInstance.1\/@connectionReference.0"
+            }
+          ],
+          "connectionInstances" : [
+            {
+              "type" : "ConnectionInstance",
+              "name" : {
+                "type" : "Name",
+                "name" : ["top_impl_Instance", "testshare", "shared -> subscriber_inst.b2"],
+                "pos" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Position",
+                    "uriOpt" : {
+                      "type" : "Some",
+                      "value" : "\/testshare\/testshare.aadl"
+                    },
+                    "beginLine" : 61,
+                    "beginColumn" : 4,
+                    "endLine" : 61,
+                    "endColumn" : 52,
+                    "offset" : 1512,
+                    "length" : 48
+                  }
+                }
+              },
+              "src" : {
+                "type" : "EndPoint",
+                "component" : {
+                  "type" : "Name",
+                  "name" : ["top_impl_Instance", "testshare", "shared"],
+                  "pos" : {
+                    "type" : "Some",
+                    "value" : {
+                      "type" : "Position",
+                      "uriOpt" : {
+                        "type" : "Some",
+                        "value" : "\/testshare\/testshare.aadl"
+                      },
+                      "beginLine" : 56,
+                      "beginColumn" : 4,
+                      "endLine" : 58,
+                      "endColumn" : 6,
+                      "offset" : 1396,
+                      "length" : 97
+                    }
+                  }
+                },
+                "feature" : {
+                  "type" : "None"
+                },
+                "direction" : {
+                  "type" : "None"
+                }
+              },
+              "dst" : {
+                "type" : "EndPoint",
+                "component" : {
+                  "type" : "Name",
+                  "name" : ["top_impl_Instance", "testshare", "subscriber_inst"],
+                  "pos" : {
+                    "type" : "Some",
+                    "value" : {
+                      "type" : "Position",
+                      "uriOpt" : {
+                        "type" : "Some",
+                        "value" : "\/testshare\/testshare.aadl"
+                      },
+                      "beginLine" : 54,
+                      "beginColumn" : 4,
+                      "endLine" : 54,
+                      "endColumn" : 44,
+                      "offset" : 1348,
+                      "length" : 40
+                    }
+                  }
+                },
+                "feature" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Name",
+                    "name" : ["top_impl_Instance", "testshare", "subscriber_inst", "b2"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/testshare\/testshare.aadl"
+                        },
+                        "beginLine" : 32,
+                        "beginColumn" : 4,
+                        "endLine" : 32,
+                        "endColumn" : 42,
+                        "offset" : 753,
+                        "length" : 38
+                      }
+                    }
+                  }
+                },
+                "direction" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Direction",
+                    "value" : "In"
+                  }
+                }
+              },
+              "kind" : {
+                "type" : "ConnectionKind",
+                "value" : "Access"
+              },
+              "connectionRefs" : [
+                {
+                  "type" : "ConnectionReference",
+                  "name" : {
+                    "type" : "Name",
+                    "name" : ["top_impl_Instance", "testshare", "conn2"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/testshare\/testshare.aadl"
+                        },
+                        "beginLine" : 61,
+                        "beginColumn" : 4,
+                        "endLine" : 61,
+                        "endColumn" : 52,
+                        "offset" : 1512,
+                        "length" : 48
+                      }
+                    }
+                  },
+                  "context" : {
+                    "type" : "Name",
+                    "name" : ["top_impl_Instance", "testshare"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/testshare\/testshare.aadl"
+                        },
+                        "beginLine" : 72,
+                        "beginColumn" : 4,
+                        "endLine" : 72,
+                        "endColumn" : 40,
+                        "offset" : 1742,
+                        "length" : 36
+                      }
+                    }
+                  },
+                  "isParent" : true
+                }
+              ],
+              "properties" : [
+              ]
+            },
+            {
+              "type" : "ConnectionInstance",
+              "name" : {
+                "type" : "Name",
+                "name" : ["top_impl_Instance", "testshare", "shared -> publisher_inst.b1"],
+                "pos" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Position",
+                    "uriOpt" : {
+                      "type" : "Some",
+                      "value" : "\/testshare\/testshare.aadl"
+                    },
+                    "beginLine" : 62,
+                    "beginColumn" : 4,
+                    "endLine" : 62,
+                    "endColumn" : 51,
+                    "offset" : 1564,
+                    "length" : 47
+                  }
+                }
+              },
+              "src" : {
+                "type" : "EndPoint",
+                "component" : {
+                  "type" : "Name",
+                  "name" : ["top_impl_Instance", "testshare", "shared"],
+                  "pos" : {
+                    "type" : "Some",
+                    "value" : {
+                      "type" : "Position",
+                      "uriOpt" : {
+                        "type" : "Some",
+                        "value" : "\/testshare\/testshare.aadl"
+                      },
+                      "beginLine" : 56,
+                      "beginColumn" : 4,
+                      "endLine" : 58,
+                      "endColumn" : 6,
+                      "offset" : 1396,
+                      "length" : 97
+                    }
+                  }
+                },
+                "feature" : {
+                  "type" : "None"
+                },
+                "direction" : {
+                  "type" : "None"
+                }
+              },
+              "dst" : {
+                "type" : "EndPoint",
+                "component" : {
+                  "type" : "Name",
+                  "name" : ["top_impl_Instance", "testshare", "publisher_inst"],
+                  "pos" : {
+                    "type" : "Some",
+                    "value" : {
+                      "type" : "Position",
+                      "uriOpt" : {
+                        "type" : "Some",
+                        "value" : "\/testshare\/testshare.aadl"
+                      },
+                      "beginLine" : 53,
+                      "beginColumn" : 4,
+                      "endLine" : 53,
+                      "endColumn" : 42,
+                      "offset" : 1306,
+                      "length" : 38
+                    }
+                  }
+                },
+                "feature" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Name",
+                    "name" : ["top_impl_Instance", "testshare", "publisher_inst", "b1"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/testshare\/testshare.aadl"
+                        },
+                        "beginLine" : 20,
+                        "beginColumn" : 4,
+                        "endLine" : 20,
+                        "endColumn" : 42,
+                        "offset" : 354,
+                        "length" : 38
+                      }
+                    }
+                  }
+                },
+                "direction" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Direction",
+                    "value" : "In"
+                  }
+                }
+              },
+              "kind" : {
+                "type" : "ConnectionKind",
+                "value" : "Access"
+              },
+              "connectionRefs" : [
+                {
+                  "type" : "ConnectionReference",
+                  "name" : {
+                    "type" : "Name",
+                    "name" : ["top_impl_Instance", "testshare", "conn1"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/testshare\/testshare.aadl"
+                        },
+                        "beginLine" : 62,
+                        "beginColumn" : 4,
+                        "endLine" : 62,
+                        "endColumn" : 51,
+                        "offset" : 1564,
+                        "length" : 47
+                      }
+                    }
+                  },
+                  "context" : {
+                    "type" : "Name",
+                    "name" : ["top_impl_Instance", "testshare"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/testshare\/testshare.aadl"
+                        },
+                        "beginLine" : 72,
+                        "beginColumn" : 4,
+                        "endLine" : 72,
+                        "endColumn" : 40,
+                        "offset" : 1742,
+                        "length" : 36
+                      }
+                    }
+                  },
+                  "isParent" : true
+                }
+              ],
+              "properties" : [
+              ]
+            }
+          ],
+          "properties" : [
+            {
+              "type" : "Property",
+              "name" : {
+                "type" : "Name",
+                "name" : ["top_impl_Instance", "testshare", "Deployment_Properties::Actual_Processor_Binding"],
+                "pos" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Position",
+                    "uriOpt" : {
+                      "type" : "Some",
+                      "value" : "\/org.osate.workspace\/resources\/properties\/Predeclared_Property_Sets\/Deployment_Properties.aadl"
+                    },
+                    "beginLine" : 46,
+                    "beginColumn" : 2,
+                    "endLine" : 47,
+                    "endColumn" : 81,
+                    "offset" : 3075,
+                    "length" : 189
+                  }
+                }
+              },
+              "propertyValues" : [
+                {
+                  "type" : "ReferenceProp",
+                  "value" : {
+                    "type" : "Name",
+                    "name" : ["top_impl_Instance", "proc"],
+                    "pos" : {
+                      "type" : "None"
+                    }
+                  }
+                }
+              ],
+              "appliesTo" : [
+              ]
+            }
+          ],
+          "flows" : [
+          ],
+          "modes" : [
+          ],
+          "annexes" : [
+            {
+              "type" : "Annex",
+              "name" : "Emv2",
+              "clause" : {
+                "type" : "Emv2Clause",
+                "libraries" : [
+                ],
+                "propagations" : [
+                ],
+                "flows" : [
+                ],
+                "componentBehavior" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Emv2BehaviorSection",
+                    "events" : [
+                    ],
+                    "transitions" : [
+                    ],
+                    "propagations" : [
+                    ]
+                  }
+                },
+                "properties" : [
+                ]
+              }
+            },
+            {
+              "type" : "Annex",
+              "name" : "smf",
+              "clause" : {
+                "type" : "SmfClause",
+                "classification" : [
+                ],
+                "declass" : [
+                ]
+              }
+            }
+          ],
+          "uriFrag" : "testshare\/instances\/testshare_top_impl_Instance.aaxl2#\/\/@componentInstance.0"
+        },
+        {
+          "type" : "Component",
+          "identifier" : {
+            "type" : "Name",
+            "name" : ["top_impl_Instance", "proc"],
+            "pos" : {
+              "type" : "Some",
+              "value" : {
+                "type" : "Position",
+                "uriOpt" : {
+                  "type" : "Some",
+                  "value" : "\/testshare\/testshare.aadl"
+                },
+                "beginLine" : 71,
+                "beginColumn" : 4,
+                "endLine" : 71,
+                "endColumn" : 30,
+                "offset" : 1712,
+                "length" : 26
+              }
+            }
+          },
+          "category" : {
+            "type" : "ComponentCategory",
+            "value" : "Processor"
+          },
+          "classifier" : {
+            "type" : "Some",
+            "value" : {
+              "type" : "Classifier",
+              "name" : "testshare::proc.impl"
+            }
+          },
+          "features" : [
+          ],
+          "subComponents" : [
+          ],
+          "connections" : [
+          ],
+          "connectionInstances" : [
+          ],
+          "properties" : [
+          ],
+          "flows" : [
+          ],
+          "modes" : [
+          ],
+          "annexes" : [
+            {
+              "type" : "Annex",
+              "name" : "Emv2",
+              "clause" : {
+                "type" : "Emv2Clause",
+                "libraries" : [
+                ],
+                "propagations" : [
+                ],
+                "flows" : [
+                ],
+                "componentBehavior" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Emv2BehaviorSection",
+                    "events" : [
+                    ],
+                    "transitions" : [
+                    ],
+                    "propagations" : [
+                    ]
+                  }
+                },
+                "properties" : [
+                ]
+              }
+            },
+            {
+              "type" : "Annex",
+              "name" : "smf",
+              "clause" : {
+                "type" : "SmfClause",
+                "classification" : [
+                ],
+                "declass" : [
+                ]
+              }
+            }
+          ],
+          "uriFrag" : "testshare\/instances\/testshare_top_impl_Instance.aaxl2#\/\/@componentInstance.1"
+        }
+      ],
+      "connections" : [
+      ],
+      "connectionInstances" : [
+      ],
+      "properties" : [
+        {
+          "type" : "Property",
+          "name" : {
+            "type" : "Name",
+            "name" : ["top_impl_Instance", "HAMR::Platform"],
+            "pos" : {
+              "type" : "Some",
+              "value" : {
+                "type" : "Position",
+                "uriOpt" : {
+                  "type" : "Some",
+                  "value" : "\/org.sireum.aadl.osate.hamr\/resources\/HAMR.aadl"
+                },
+                "beginLine" : 28,
+                "beginColumn" : 3,
+                "endLine" : 28,
+                "endColumn" : 153,
+                "offset" : 1125,
+                "length" : 150
+              }
+            }
+          },
+          "propertyValues" : [
+            {
+              "type" : "ValueProp",
+              "value" : "seL4_TB"
+            }
+          ],
+          "appliesTo" : [
+          ]
+        }
+      ],
+      "flows" : [
+      ],
+      "modes" : [
+      ],
+      "annexes" : [
+        {
+          "type" : "Annex",
+          "name" : "Emv2",
+          "clause" : {
+            "type" : "Emv2Clause",
+            "libraries" : [
+            ],
+            "propagations" : [
+            ],
+            "flows" : [
+            ],
+            "componentBehavior" : {
+              "type" : "Some",
+              "value" : {
+                "type" : "Emv2BehaviorSection",
+                "events" : [
+                ],
+                "transitions" : [
+                ],
+                "propagations" : [
+                ]
+              }
+            },
+            "properties" : [
+            ]
+          }
+        },
+        {
+          "type" : "Annex",
+          "name" : "smf",
+          "clause" : {
+            "type" : "SmfClause",
+            "classification" : [
+            ],
+            "declass" : [
+            ]
+          }
+        }
+      ],
+      "uriFrag" : "testshare\/instances\/testshare_top_impl_Instance.aaxl2#\/"
+    }
+  ],
+  "annexLib" : [
+  ],
+  "dataComponents" : [
+    {
+      "type" : "Component",
+      "identifier" : {
+        "type" : "Name",
+        "name" : [],
+        "pos" : {
+          "type" : "None"
+        }
+      },
+      "category" : {
+        "type" : "ComponentCategory",
+        "value" : "Data"
+      },
+      "classifier" : {
+        "type" : "Some",
+        "value" : {
+          "type" : "Classifier",
+          "name" : "Base_Types::Integer_8"
+        }
+      },
+      "features" : [
+      ],
+      "subComponents" : [
+      ],
+      "connections" : [
+      ],
+      "connectionInstances" : [
+      ],
+      "properties" : [
+        {
+          "type" : "Property",
+          "name" : {
+            "type" : "Name",
+            "name" : ["Data_Model::Number_Representation"],
+            "pos" : {
+              "type" : "Some",
+              "value" : {
+                "type" : "Position",
+                "uriOpt" : {
+                  "type" : "Some",
+                  "value" : "\/org.osate.contribution.sei\/resources\/properties\/Data_Model.aadl"
+                },
+                "beginLine" : 78,
+                "beginColumn" : 4,
+                "endLine" : 78,
+                "endColumn" : 88,
+                "offset" : 3653,
+                "length" : 84
+              }
+            }
+          },
+          "propertyValues" : [
+            {
+              "type" : "ValueProp",
+              "value" : "Signed"
+            }
+          ],
+          "appliesTo" : [
+          ]
+        },
+        {
+          "type" : "Property",
+          "name" : {
+            "type" : "Name",
+            "name" : ["Memory_Properties::Data_Size"],
+            "pos" : {
+              "type" : "Some",
+              "value" : {
+                "type" : "Position",
+                "uriOpt" : {
+                  "type" : "Some",
+                  "value" : "\/org.osate.workspace\/resources\/properties\/Predeclared_Property_Sets\/Memory_Properties.aadl"
+                },
+                "beginLine" : 91,
+                "beginColumn" : 2,
+                "endLine" : 92,
+                "endColumn" : 137,
+                "offset" : 4757,
+                "length" : 152
+              }
+            }
+          },
+          "propertyValues" : [
+            {
+              "type" : "UnitProp",
+              "value" : "8.0",
+              "unit" : {
+                "type" : "Some",
+                "value" : "bits"
+              }
+            }
+          ],
+          "appliesTo" : [
+          ]
+        }
+      ],
+      "flows" : [
+      ],
+      "modes" : [
+      ],
+      "annexes" : [
+      ],
+      "uriFrag" : ""
+    },
+    {
+      "type" : "Component",
+      "identifier" : {
+        "type" : "Name",
+        "name" : [],
+        "pos" : {
+          "type" : "None"
+        }
+      },
+      "category" : {
+        "type" : "ComponentCategory",
+        "value" : "Data"
+      },
+      "classifier" : {
+        "type" : "Some",
+        "value" : {
+          "type" : "Classifier",
+          "name" : "testshare::Thing_t.impl"
+        }
+      },
+      "features" : [
+      ],
+      "subComponents" : [
+        {
+          "type" : "Component",
+          "identifier" : {
+            "type" : "Name",
+            "name" : ["lepht"],
+            "pos" : {
+              "type" : "Some",
+              "value" : {
+                "type" : "Position",
+                "uriOpt" : {
+                  "type" : "Some",
+                  "value" : "\/testshare\/testshare.aadl"
+                },
+                "beginLine" : 12,
+                "beginColumn" : 4,
+                "endLine" : 12,
+                "endColumn" : 38,
+                "offset" : 153,
+                "length" : 34
+              }
+            }
+          },
+          "category" : {
+            "type" : "ComponentCategory",
+            "value" : "Data"
+          },
+          "classifier" : {
+            "type" : "Some",
+            "value" : {
+              "type" : "Classifier",
+              "name" : "Base_Types::Integer_8"
+            }
+          },
+          "features" : [
+          ],
+          "subComponents" : [
+          ],
+          "connections" : [
+          ],
+          "connectionInstances" : [
+          ],
+          "properties" : [
+            {
+              "type" : "Property",
+              "name" : {
+                "type" : "Name",
+                "name" : ["Data_Model::Number_Representation"],
+                "pos" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Position",
+                    "uriOpt" : {
+                      "type" : "Some",
+                      "value" : "\/org.osate.contribution.sei\/resources\/properties\/Data_Model.aadl"
+                    },
+                    "beginLine" : 78,
+                    "beginColumn" : 4,
+                    "endLine" : 78,
+                    "endColumn" : 88,
+                    "offset" : 3653,
+                    "length" : 84
+                  }
+                }
+              },
+              "propertyValues" : [
+                {
+                  "type" : "ValueProp",
+                  "value" : "Signed"
+                }
+              ],
+              "appliesTo" : [
+              ]
+            },
+            {
+              "type" : "Property",
+              "name" : {
+                "type" : "Name",
+                "name" : ["Memory_Properties::Data_Size"],
+                "pos" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Position",
+                    "uriOpt" : {
+                      "type" : "Some",
+                      "value" : "\/org.osate.workspace\/resources\/properties\/Predeclared_Property_Sets\/Memory_Properties.aadl"
+                    },
+                    "beginLine" : 91,
+                    "beginColumn" : 2,
+                    "endLine" : 92,
+                    "endColumn" : 137,
+                    "offset" : 4757,
+                    "length" : 152
+                  }
+                }
+              },
+              "propertyValues" : [
+                {
+                  "type" : "UnitProp",
+                  "value" : "8.0",
+                  "unit" : {
+                    "type" : "Some",
+                    "value" : "bits"
+                  }
+                }
+              ],
+              "appliesTo" : [
+              ]
+            }
+          ],
+          "flows" : [
+          ],
+          "modes" : [
+          ],
+          "annexes" : [
+          ],
+          "uriFrag" : "platform:\/plugin\/org.osate.contribution.sei\/resources\/packages\/Base_Types.aadl#Base_Types.Integer_8"
+        },
+        {
+          "type" : "Component",
+          "identifier" : {
+            "type" : "Name",
+            "name" : ["right"],
+            "pos" : {
+              "type" : "Some",
+              "value" : {
+                "type" : "Position",
+                "uriOpt" : {
+                  "type" : "Some",
+                  "value" : "\/testshare\/testshare.aadl"
+                },
+                "beginLine" : 13,
+                "beginColumn" : 4,
+                "endLine" : 13,
+                "endColumn" : 38,
+                "offset" : 191,
+                "length" : 34
+              }
+            }
+          },
+          "category" : {
+            "type" : "ComponentCategory",
+            "value" : "Data"
+          },
+          "classifier" : {
+            "type" : "Some",
+            "value" : {
+              "type" : "Classifier",
+              "name" : "Base_Types::Integer_8"
+            }
+          },
+          "features" : [
+          ],
+          "subComponents" : [
+          ],
+          "connections" : [
+          ],
+          "connectionInstances" : [
+          ],
+          "properties" : [
+            {
+              "type" : "Property",
+              "name" : {
+                "type" : "Name",
+                "name" : ["Data_Model::Number_Representation"],
+                "pos" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Position",
+                    "uriOpt" : {
+                      "type" : "Some",
+                      "value" : "\/org.osate.contribution.sei\/resources\/properties\/Data_Model.aadl"
+                    },
+                    "beginLine" : 78,
+                    "beginColumn" : 4,
+                    "endLine" : 78,
+                    "endColumn" : 88,
+                    "offset" : 3653,
+                    "length" : 84
+                  }
+                }
+              },
+              "propertyValues" : [
+                {
+                  "type" : "ValueProp",
+                  "value" : "Signed"
+                }
+              ],
+              "appliesTo" : [
+              ]
+            },
+            {
+              "type" : "Property",
+              "name" : {
+                "type" : "Name",
+                "name" : ["Memory_Properties::Data_Size"],
+                "pos" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Position",
+                    "uriOpt" : {
+                      "type" : "Some",
+                      "value" : "\/org.osate.workspace\/resources\/properties\/Predeclared_Property_Sets\/Memory_Properties.aadl"
+                    },
+                    "beginLine" : 91,
+                    "beginColumn" : 2,
+                    "endLine" : 92,
+                    "endColumn" : 137,
+                    "offset" : 4757,
+                    "length" : 152
+                  }
+                }
+              },
+              "propertyValues" : [
+                {
+                  "type" : "UnitProp",
+                  "value" : "8.0",
+                  "unit" : {
+                    "type" : "Some",
+                    "value" : "bits"
+                  }
+                }
+              ],
+              "appliesTo" : [
+              ]
+            }
+          ],
+          "flows" : [
+          ],
+          "modes" : [
+          ],
+          "annexes" : [
+          ],
+          "uriFrag" : "platform:\/plugin\/org.osate.contribution.sei\/resources\/packages\/Base_Types.aadl#Base_Types.Integer_8"
+        },
+        {
+          "type" : "Component",
+          "identifier" : {
+            "type" : "Name",
+            "name" : ["top"],
+            "pos" : {
+              "type" : "Some",
+              "value" : {
+                "type" : "Position",
+                "uriOpt" : {
+                  "type" : "Some",
+                  "value" : "\/testshare\/testshare.aadl"
+                },
+                "beginLine" : 14,
+                "beginColumn" : 4,
+                "endLine" : 14,
+                "endColumn" : 36,
+                "offset" : 229,
+                "length" : 32
+              }
+            }
+          },
+          "category" : {
+            "type" : "ComponentCategory",
+            "value" : "Data"
+          },
+          "classifier" : {
+            "type" : "Some",
+            "value" : {
+              "type" : "Classifier",
+              "name" : "Base_Types::Integer_8"
+            }
+          },
+          "features" : [
+          ],
+          "subComponents" : [
+          ],
+          "connections" : [
+          ],
+          "connectionInstances" : [
+          ],
+          "properties" : [
+            {
+              "type" : "Property",
+              "name" : {
+                "type" : "Name",
+                "name" : ["Data_Model::Number_Representation"],
+                "pos" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Position",
+                    "uriOpt" : {
+                      "type" : "Some",
+                      "value" : "\/org.osate.contribution.sei\/resources\/properties\/Data_Model.aadl"
+                    },
+                    "beginLine" : 78,
+                    "beginColumn" : 4,
+                    "endLine" : 78,
+                    "endColumn" : 88,
+                    "offset" : 3653,
+                    "length" : 84
+                  }
+                }
+              },
+              "propertyValues" : [
+                {
+                  "type" : "ValueProp",
+                  "value" : "Signed"
+                }
+              ],
+              "appliesTo" : [
+              ]
+            },
+            {
+              "type" : "Property",
+              "name" : {
+                "type" : "Name",
+                "name" : ["Memory_Properties::Data_Size"],
+                "pos" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Position",
+                    "uriOpt" : {
+                      "type" : "Some",
+                      "value" : "\/org.osate.workspace\/resources\/properties\/Predeclared_Property_Sets\/Memory_Properties.aadl"
+                    },
+                    "beginLine" : 91,
+                    "beginColumn" : 2,
+                    "endLine" : 92,
+                    "endColumn" : 137,
+                    "offset" : 4757,
+                    "length" : 152
+                  }
+                }
+              },
+              "propertyValues" : [
+                {
+                  "type" : "UnitProp",
+                  "value" : "8.0",
+                  "unit" : {
+                    "type" : "Some",
+                    "value" : "bits"
+                  }
+                }
+              ],
+              "appliesTo" : [
+              ]
+            }
+          ],
+          "flows" : [
+          ],
+          "modes" : [
+          ],
+          "annexes" : [
+          ],
+          "uriFrag" : "platform:\/plugin\/org.osate.contribution.sei\/resources\/packages\/Base_Types.aadl#Base_Types.Integer_8"
+        },
+        {
+          "type" : "Component",
+          "identifier" : {
+            "type" : "Name",
+            "name" : ["bottom"],
+            "pos" : {
+              "type" : "Some",
+              "value" : {
+                "type" : "Position",
+                "uriOpt" : {
+                  "type" : "Some",
+                  "value" : "\/testshare\/testshare.aadl"
+                },
+                "beginLine" : 15,
+                "beginColumn" : 4,
+                "endLine" : 15,
+                "endColumn" : 39,
+                "offset" : 265,
+                "length" : 35
+              }
+            }
+          },
+          "category" : {
+            "type" : "ComponentCategory",
+            "value" : "Data"
+          },
+          "classifier" : {
+            "type" : "Some",
+            "value" : {
+              "type" : "Classifier",
+              "name" : "Base_Types::Integer_8"
+            }
+          },
+          "features" : [
+          ],
+          "subComponents" : [
+          ],
+          "connections" : [
+          ],
+          "connectionInstances" : [
+          ],
+          "properties" : [
+            {
+              "type" : "Property",
+              "name" : {
+                "type" : "Name",
+                "name" : ["Data_Model::Number_Representation"],
+                "pos" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Position",
+                    "uriOpt" : {
+                      "type" : "Some",
+                      "value" : "\/org.osate.contribution.sei\/resources\/properties\/Data_Model.aadl"
+                    },
+                    "beginLine" : 78,
+                    "beginColumn" : 4,
+                    "endLine" : 78,
+                    "endColumn" : 88,
+                    "offset" : 3653,
+                    "length" : 84
+                  }
+                }
+              },
+              "propertyValues" : [
+                {
+                  "type" : "ValueProp",
+                  "value" : "Signed"
+                }
+              ],
+              "appliesTo" : [
+              ]
+            },
+            {
+              "type" : "Property",
+              "name" : {
+                "type" : "Name",
+                "name" : ["Memory_Properties::Data_Size"],
+                "pos" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Position",
+                    "uriOpt" : {
+                      "type" : "Some",
+                      "value" : "\/org.osate.workspace\/resources\/properties\/Predeclared_Property_Sets\/Memory_Properties.aadl"
+                    },
+                    "beginLine" : 91,
+                    "beginColumn" : 2,
+                    "endLine" : 92,
+                    "endColumn" : 137,
+                    "offset" : 4757,
+                    "length" : 152
+                  }
+                }
+              },
+              "propertyValues" : [
+                {
+                  "type" : "UnitProp",
+                  "value" : "8.0",
+                  "unit" : {
+                    "type" : "Some",
+                    "value" : "bits"
+                  }
+                }
+              ],
+              "appliesTo" : [
+              ]
+            }
+          ],
+          "flows" : [
+          ],
+          "modes" : [
+          ],
+          "annexes" : [
+          ],
+          "uriFrag" : "platform:\/plugin\/org.osate.contribution.sei\/resources\/packages\/Base_Types.aadl#Base_Types.Integer_8"
+        }
+      ],
+      "connections" : [
+      ],
+      "connectionInstances" : [
+      ],
+      "properties" : [
+      ],
+      "flows" : [
+      ],
+      "modes" : [
+      ],
+      "annexes" : [
+      ],
+      "uriFrag" : ""
+    }
+  ]
+}

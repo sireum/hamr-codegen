@@ -1,0 +1,346 @@
+--PCA_Pump.aadl
+
+--this models a patient-controlled analgesia pump that also provides an ICE interface
+--the purpose of the PCA pump is to infuse liquid pain-killer to patients at a constant
+--"basal" rate, augmented by a "bolus" upon patient request by pressing a button, or clinician command on the pump's
+--control panel
+
+--14AUG2012 put through BLESS parser invoked by OSATE as an Eclipse extension
+--24OCT2013 moved Assertion annex library to PCA_Assertions.aadl
+
+--top-level component = system pca
+ 
+package PCA_Pump
+public
+  with 
+    PCA_Properties,
+    --Base_Types,       --AADL Data Modeling Annex
+    --Timing_Properties,   --predeclared AADL property sets
+    ICE, ICE_Types, --PCA_Display, --packages (types) and property sets common to all ICE apps and devices
+    --Physical_Properties, 
+    Physical_Types, --types and properties to mimic physical entities as data
+    BLESS,				 --package defining Assertion
+    --BLESS_Types,         --package holding equivalents to BLESS built-in types express using Data Modeling Annex
+    --PCA_Alarm,		--package holing process and thread for PCA alarm behavior
+    --PCA_Assertions,  --package holding Assertion annex library
+    PCA_Fluid,   --package holding fluid-handling subsystem
+    PCA_Safety,					--package holding safety architecture
+    PCA_Security,				--package holding security architecture
+    --PCA_Drug_Library,   --package holding drug library
+    --PCA_Mechanical,			--package holding mechanical components: pump, flow monitor, reservoir
+    PCA_Power,          --package holding battery and power supply
+    --PCA_Control_Panel,  --package holding control panel
+    PCA_Operation,      --package holding normal operation logic
+--    PCA_Network,        --package holding ICE network adaptor
+    PCA_System,
+    PCA_Types,           --package holding types used only by this PCA pump model
+    Base_Types;
+--  PFT renames data PCA_Types::Pump_Fault_Type; 
+
+
+--this extends the ICE_Alarms feature group for pca-specific alarms
+feature group PCA_Alarms extends ICE::ICE_Alarms
+  features
+    alarm_type: refined to out data port PCA_Types::Alarm_Type;  --internal alarms
+    warning_type: refined to out data port PCA_Types::Warning_Type;  --internal warnings
+end PCA_Alarms;
+
+--this extends the ICE_Status feature group for pca-specific status indications
+feature group PCA_Status extends ICE::ICE_Status
+  features
+    status : out data port PCA_Types::Status_Type;  --bolus, basal, KVO, stopped, square bolus
+end PCA_Status;
+
+--this extends the ICE_Parameters feature group for pca-specific parameters
+feature group PCA_Parameters extends ICE::ICE_Parameters
+  features
+    current_flow_rate: out data port ICE_Types::Milliliter_Per_Hour;      --current infusion rate
+    basal_flow_rate: out data port ICE_Types::Milliliter_Per_Hour;        --programmed basal infusion rate
+    bolus_flow_rate: out data port ICE_Types::Milliliter_Per_Hour;        --programmed bolus infusion rate
+    KVO_Flow_Rate: out data port ICE_Types::Milliliter_Per_Hour;          --programmed KVO rate
+    volume_to_be_infused: out data port ICE_Types::Milliliter;            --programmed bolus volume
+    clinican_requested_bolus_duration: out data port ICE_Types::Minute.imp;  --programmed duration of square bolus
+    square_flow_rate: out data port ICE_Types::Milliliter_Per_Hour;       --VTBI/Clinican_Requested_Bolus_Duration
+end PCA_Parameters;
+
+--this extends the ICE_Commands feature group for pca-specific commands
+feature group PCA_Commands extends ICE::ICE_Commands
+  features
+    request_bolus : in event port;  --clinician requests bolus dose from SUI
+    pause_infusion: in event port;  --temporarily pause infusion (KVO rate)
+    resume_infusion: in event port;  --resume infusion (at basal rate, or continuing bolus)
+load_drug_library: in event data port PCA_Types::Drug_Library;  --write drug library into device
+    set_clinican_requested_bolus_duration: in event data port ICE_Types::Minute.imp;
+	end PCA_Commands;
+
+feature group PCA_Security extends ICE::ICE_Security
+end PCA_Security;
+
+--feature group of feature groups specialized for PCA pump
+feature group PCA5 extends ICE::ICE5
+  (alarm_type=>feature group PCA_Alarms,         --alarm
+  status_type=>feature group PCA_Status,         --status
+  param_type=>feature group PCA_Parameters,      --param
+  command_type=>feature group PCA_Commands,      --command
+  security_type=>feature group PCA_Security                --pki
+  )
+end PCA5;
+
+
+ 
+--this is the type of a patient-controlled analgesic pump
+--it uses the "system" component rather than "device" because it needs to have sub-components 
+system pca extends ICE::ICE_Interface
+  --specification of prototype features
+  (alarm_type=>feature group PCA_Alarms,         --alarm
+  status_type=>feature group PCA_Status,         --status
+  param_type=>feature group PCA_Parameters,      --param
+  command_type=>feature group PCA_Commands,      --command
+  security_type=>feature group PCA_Security                --pki
+  )
+  features
+--EXTERNAL EFFECT
+  --drug infused into patient
+    out_infused_drug : out data port Physical_Types::Fluid_Flow.imp
+      {BLESS::Assertion=>"<<:=INFUSION_RATE>>";};  --infusion rate into patient is value of Infused_Drug port
+--EXTERNAL PHENOMENON
+    LightToEye: out data port Base_Types::Boolean;  --image seen by clinician
+--EXTERNAL PHENOMENON    
+    Sound: out data port PCA_Types::Sound;  --noise made by speaker, heard by clinician
+    
+  --hospital technician features
+  --fault log
+    Patient_Button_Press: in event port;  --physically depressing the patient button
+--EXTERNAL EFFECT
+    in_get_fault_log : in event port  --put out fault log next period
+      {BLESS::Assertion=>"<<The_Fault_Log'=FAULT_LOG>>";};
+    in_get_event_log : in event port  --put out event log next period
+      {BLESS::Assertion=>"<<The_Event_Log'=EVENT_LOG>>";};
+    Finger_Press: in event data port Base_Types::Boolean;  --clinician touches screen
+--EXTERNAL EFFECT
+    out_the_fault_log : out event data port PCA_Types::Fault_Log  --output fault log
+      {BLESS::Assertion=>"<<:=FAULT_LOG>>";};
+  --event log
+    out_the_event_log : out event data port PCA_Types::Event_Log  --output event log
+      {BLESS::Assertion=>"<<:=EVENT_LOG>>";};
+  --download drug library
+    in_load_drug_library : in event data port PCA_Types::Drug_Library
+      {BLESS::Assertion=>"<<DRUG_LIBRARY'=Load_Drug_Library>>";};  --next period the library will be stored or updated
+	--provisioning channel
+	security_provisioning : feature group PCA_Security::Provisioning_Signals;  --type T.B.D.
+  --physical connection to maintenance processor
+    To_Maintenance: requires bus access PCA_System::internal_maintenance_bus;	
+  --physical connection to bus adaptor
+    To_Adaptor: requires bus access PCA_System::adaptor_bus;
+  flows
+--    Drug_To_Patient : flow sink Infused_Drug;
+    Drug_Through_PCA : flow source out_infused_drug;
+  properties
+    Timing_Properties::Period => PCA_Properties::PCA_Period;
+    BLESS::Assertion => "<<ALI: :=IMMEDIATE_ALARM()>>" applies to alarm.Immediate;  --high priority
+    BLESS::Assertion => "<<ALP: :=PROMPT_ALARM()>>" applies to alarm.Prompt;        --medium priority
+    BLESS::Assertion => "<<ALD: :=DELAYED_ALARM()>>" applies to alarm.Delayed;      --low priority
+    BLESS::Assertion => "<<ALF: :=HW_FAIL()>>" applies to alarm.Malfunction;        --hardware failure, threads may not be running
+    BLESS::Assertion => "<<ALAS: :=ALARM_INACTIVATION()>>" applies to alarm.Alarm_Signal;  --on, alarm off, alarm paused, audio off, or audio paused
+    BLESS::Assertion => "<<ALAT: :=ALARM_TYPE()>>" applies to alarm.Alarm_Type;          --indicate what alarm (high&medium) was raised
+    BLESS::Assertion => "<<ALW: :=WARNING_TYPE()>>" applies to alarm.Warning_Type;      --indicate what caused warning
+                             --reset alarm from ICE
+    BLESS::Assertion => "<<((ALARM_TYPE()=PCA_Types::Alarm_Type#none) and (WARNING_TYPE()=PCA_Types::Warning_Type#none))^(-1)>>" 
+      applies to alarm.Reset_Alarm;
+    BLESS::Assertion => "<<true>>" applies to status.On;                      --"on" signal to ICE only sent if pwered-up and intitalized
+    BLESS::Assertion => "<<not HW_FAIL()>>" applies to status.Okay;           --no hardware failures
+    BLESS::Assertion => "<<APP_CONNECTED>>" applies to status.AppConnected;   --ICE app is controlling this PCA pump
+    BLESS::Assertion => "<<STS: :=INFUSION_CLASS()>>" applies to status.status;      --tell ICE current kind of infusion: "Stopped","Bolus","Basal","KVO","Square_Bolus"
+    BLESS::Assertion => "<<PMC: :=MEASURED_FLOW_RATE()>>" applies to parameters.current_flow_rate; --tell ICE current infusion rate measured by downstream monitor
+    BLESS::Assertion => "<<PMBO: :=PRESCRIBED_BASAL_RATE>>" applies to parameters.basal_flow_rate;  --prescribed rates
+    BLESS::Assertion => "<<PMBA: :=PRESCRIBED_BOLUS_RATE>>" applies to parameters.bolus_flow_rate;
+    BLESS::Assertion => "<<PMK: :=PRESCRIBED_KVO_RATE>>" applies to parameters.KVO_Flow_Rate;
+    BLESS::Assertion => "<<PMV: :=PRESCRIBED_VTBI>>" applies to parameters.volume_to_be_infused;  --prescribed volume to be infused
+    BLESS::Assertion => "<<PMD: :=SQUARE_BOLUS_DURATION>>" applies to parameters.clinican_requested_bolus_duration;  --time for clinician-requested infusion
+    BLESS::Assertion => "<<PMS: :=PRESCRIBED_VTBI/SQUARE_BOLUS_DURATION>>" applies to parameters.square_flow_rate;  --rate for clinician-requested infusion
+ --     	("command.Start",""),  --start infusion
+ --     	("command.Suspend",""),  --suspend infusion
+ --     	("command.Request_Bolus",""),  --start clinician requested bolus
+ --     	("command.Load_Drug_Library","DRUG_LIBRARY'=command.Load_Drug_Library"),  --load drug library
+ --     	("command.Set_Clinican_Requested_Bolus_Duration","SQUARE_BOLUS_DURATION=command.Set_Clinican_Requested_Bolus_Duration"),
+ --     	("command.Pause_Infusion",""),  --pause infusion
+ --     	("command.Resume_Infusion","")  --resume infusion
+ --     );
+end pca;
+
+--this is the implementation of a patient-controlled analgesia pump
+system implementation pca.imp
+  subcomponents
+    safety: system PCA_Safety::safety.imp;	        --safety subsystem
+    power: system PCA_Power::power.imp;           --power subsystem
+    operation: system PCA_Operation::operation.imp;    --operation subsystem
+    fluid: system PCA_Fluid::fluid.imp;		 --liquid subsystem
+    cpu: processor PCA_Processor;
+    mem: memory PCA_Memory;
+    i_bus: bus Internal_Bus;
+    p_bus: bus Power_Bus;
+  connections
+  --internal bus access
+    cpu_to_i_bus: bus access i_bus -> cpu.i_bus;
+    mem_to_i_bus: bus access i_bus -> mem.i_bus;
+    safety_to_i_bus: bus access i_bus -> safety.i_bus;
+    operation_to_i_bus: bus access i_bus -> operation.i_bus;
+    fluid_to_i_bus: bus access i_bus -> fluid.i_bus;
+  --power bus
+    power_to_p_bus: bus access power.p_bus -> p_bus;  --unidirectional
+    p_bus_to_cpu: bus access p_bus -> cpu.p_bus;  --unidirectional
+    p_bus_to_safety: bus access p_bus -> safety.p_bus;  --unidirectional
+  --physical connection to maintenance processor
+    safety_to_maintenance: bus access To_Maintenance <-> operation.To_Maintenance; 
+  --physical connection to bus adaptor
+    operation_to_adaptor: bus access To_Adaptor <-> operation.To_Adaptor; 
+    safety_to_adaptor: bus access To_Adaptor <-> safety.To_Adaptor;
+  --patient button
+    pb: port Patient_Button_Press -> operation.Patient_Button_Press;
+  --control panel
+    fp: port Finger_Press -> operation.Finger_Press;
+    lte: port operation.LightToEye -> LightToEye;
+    snd: port operation.Sound -> Sound;
+  --connections to safety subsystem
+    al: feature group alarm <-> safety.alrm;    --alarm to ICE interface      
+    alm: port safety.Alarm -> operation.Alarm  --alarm to control panel
+      ;--{Actual_Connection_Binding=>(reference(i_bus));};
+    war: port safety.Warning -> operation.Warning  --warning to control panel
+      ;--{Actual_Connection_Binding=>(reference(i_bus));};
+    hdf: port safety.HW_Detected_Failure -> operation.HW_Detected_Failure
+      ;--{Actual_Connection_Binding=>(reference(i_bus));};
+    cpra: port operation.CP_Reset_Alarm -> safety.CP_Reset_Alarm
+      ;--{Actual_Connection_Binding=>(reference(i_bus));};
+  --infusion rate changes due to faults
+    spco: port safety.Stop_Pump_Completely -> operation.Stop_Pump_Completely
+      ;--{Actual_Connection_Binding=>(reference(i_bus));};
+    spcf: port safety.Stop_Pump_Completely -> fluid.Halt
+      ;--{Actual_Connection_Binding=>(reference(i_bus));};
+    pak: port safety.Pump_At_KVO_Rate -> operation.Pump_At_KVO_Rate
+      ;--{Actual_Connection_Binding=>(reference(i_bus));};
+  --problems from operation to safety
+    omdph: port operation.Over_Max_Drug_Per_Hour -> safety.Over_Max_Drug_Per_Hour
+      ;--{Actual_Connection_Binding=>(reference(i_bus));};
+--    nmdph: port operation.Near_Max_Drug_Per_Hour -> safety.Near_Max_Drug_Per_Hour
+--      {Actual_Connection_Binding=>(reference(i_bus));};
+    hlv: port operation.Hard_Limit_Violated -> safety.Hard_Limit_Violated
+      ;--{Actual_Connection_Binding=>(reference(i_bus));};
+    nil: port operation.Drug_Not_In_Library -> safety.Drug_Not_In_Library
+      ;--{Actual_Connection_Binding=>(reference(i_bus));};
+  --signals from safety to operation
+    psd: port safety.POST_Done -> operation.POST_Done
+      ;--{Actual_Connection_Binding=>(reference(i_bus));};
+    psf: port safety.POST_Fail -> operation.POST_Fail
+      ;--{Actual_Connection_Binding=>(reference(i_bus));};
+  --drug reservoir problems
+    er: port fluid.Empty_Reservoir -> safety.Empty_Reservoir
+      ;--{Actual_Connection_Binding=>(reference(i_bus));};    
+    lr: port fluid.Low_Reservoir -> safety.Low_Reservoir
+      ;--{Actual_Connection_Binding=>(reference(i_bus));};    
+  --power problems
+    db: port power.Defective_Btty -> safety.Defective_Battery
+      ;--{Actual_Connection_Binding=>(reference(i_bus));};
+    lbws: port power.Low_Battery_Warning -> safety.Low_Battery_Warning
+      ;--{Actual_Connection_Binding=>(reference(i_bus));};
+    lbwo: port power.Low_Battery_Warning -> operation.Low_Battery_Warning
+      ;--{Actual_Connection_Binding=>(reference(i_bus));};
+--    lbo: port power.Low_Battery_Warning -> operation.Low_Battery_Warning;
+    vo: port power.Voltage_OOR -> safety.Voltage_OOR
+      ;--{Actual_Connection_Binding=>(reference(i_bus));};
+    rbt: port power.Remaining_Battery_Time -> operation.Remaining_Battery_Time
+      ;--{Actual_Connection_Binding=>(reference(i_bus));};
+    ubp: port power.Using_Battery_Power -> operation.Using_Battery_Power
+      ;--{Actual_Connection_Binding=>(reference(i_bus));};
+  --pump problems
+    bu: port fluid.Bubble -> safety.Bubble
+      ;--{Actual_Connection_Binding=>(reference(i_bus));};
+    pth: port fluid.Pump_Too_Hot -> safety.Pump_Too_Hot
+      ;--{Actual_Connection_Binding=>(reference(i_bus));};
+    pf: port operation.Prime_Failure -> safety.Prime_Failure
+      ;--{Actual_Connection_Binding=>(reference(i_bus));};
+    uoc: port fluid.Upstream_Occlusion -> safety.Upstream_Occlusion
+      ;--{Actual_Connection_Binding=>(reference(i_bus));};
+    doc: port fluid.Downstream_Occlusion -> safety.Downstream_Occlusion
+      ;--{Actual_Connection_Binding=>(reference(i_bus));};
+      
+  --jab: added so flow rate checker can know what the current pumping mode is
+    jabss: port operation.System_Status -> safety.System_Status;
+        
+    pfr: port operation.Infusion_Flow_Rate -> safety.Infusion_Flow_Rate
+      ;--{Actual_Connection_Binding=>(reference(i_bus));};
+    ufr: port fluid.Upstream_Flow_Rate -> safety.Upstream_Flow_Rate
+      ;--{Actual_Connection_Binding=>(reference(i_bus));};
+    dfr: port fluid.Downstream_Flow_Rate -> safety.Downstream_Flow_Rate
+      ;--{Actual_Connection_Binding=>(reference(i_bus));};
+      
+    -- simulation connections  
+    simulation_dfr: port operation.Downstream_Flow_Rate -> safety.Downstream_Flow_Rate;
+    -- end of simulation connections
+    
+  --fault log
+    gfl: port in_get_fault_log -> safety.get_fault_log;
+    tfl: port safety.The_Fault_Log -> out_the_fault_log;
+  --connections to operation
+  --ICE interface
+    com: feature group command <-> operation.command;
+    par: feature group parameters <-> operation.parameters;
+    sta: feature group status <-> operation.status;
+    sec: feature group security <-> operation.security;
+  --pump contol
+    rat: port operation.Infusion_Flow_Rate -> fluid.Rate_To_Pump;
+ --     {Actual_Connection_Binding=>(reference(i_bus));};
+    do: port fluid.Door_Open -> operation.Door_Open
+      ;--{Actual_Connection_Binding=>(reference(i_bus));}; 
+    dc: port fluid.Door_Closed -> operation.Door_Closed
+      ;--{Actual_Connection_Binding=>(reference(i_bus));}; 
+  --security
+    sf: port operation.Security_Fault -> safety.Security_Fault
+      ;--{Actual_Connection_Binding=>(reference(i_bus));};  --security violation
+    sp: feature group security_provisioning <-> operation.security_provisioning;
+  --event log
+    gel: port in_get_event_log -> operation.get_event_log;
+    tel: port operation.the_event_log -> out_the_event_log;
+  --drug library
+    ldl: port in_load_drug_library -> operation.load_drug_library;              
+	--drug outlet
+	drg: port fluid.drug_outlet -> out_infused_drug;
+  flp: bus access fluid.Power -> p_bus;
+		properties
+			Actual_Processor_Binding   => (reference (cpu)) applies to operation.operation_process.event_logger;
+   Actual_Processor_Binding   => (reference (cpu)) applies to operation.operation_process.drug_library;
+   Actual_Processor_Binding   => (reference (cpu)) applies to operation.operation_process.operation_threads;
+   Actual_Memory_Binding   => (reference (mem)) applies to operation.operation_process;
+--   Actual_Connection_Binding=>(reference(i_bus)) applies to rat;
+--  annex EMV2X
+--  {**
+--  use types ErrorLibrary, PCA_Error_Model;
+--  use behavior PCA_Error_Model::CompositeFailStop; 	
+--  error propagations
+--  end propagations;
+--  composite error behavior
+--    states 
+--     [safety.failed or power.failed or operation.failed or fluid.failed]->failed;
+--     [safety.working and power.working and operation.working and fluid.working]->working;
+--  end composite;  	
+--  **};  --end of EMV2
+end pca.imp;
+
+bus Internal_Bus
+end Internal_Bus;
+
+bus Power_Bus
+end Power_Bus;
+
+processor PCA_processor
+  features
+    i_bus: requires bus access Internal_Bus;
+  --power bus
+    p_bus: requires bus access PCA_Pump::Power_Bus;
+end PCA_processor;
+
+memory PCA_memory
+  features
+    i_bus: requires bus access Internal_Bus;
+end PCA_memory;
+
+end PCA_Pump;

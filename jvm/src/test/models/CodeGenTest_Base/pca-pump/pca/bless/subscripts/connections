@@ -1,0 +1,127 @@
+# connections
+#[serial 1113] Composition of Subcomponents via Directional Connection PCA_Context::Context.imp.drug_to_patient:
+axioms
+#[serial 1114] Composition of Subcomponents via Directional Connection PCA_Alarm::alarm_process.imp.baso:
+axioms
+#[serial 1115] Composition of Subcomponents via Directional Connection PCA_Alarm::alarm_process.imp.bolo:
+axioms
+#[serial 1116] Composition of Subcomponents via Directional Connection PCA_Alarm::alarm_process.imp.sbo:
+axioms
+#[serial 1117] Composition of Subcomponents via Directional Connection PCA_Alarm::alarm_process.imp.basu:
+axioms
+#[serial 1118] Composition of Subcomponents via Directional Connection PCA_Alarm::alarm_process.imp.bolu:
+axioms
+#[serial 1119] Composition of Subcomponents via Directional Connection PCA_Alarm::alarm_process.imp.sbu:
+axioms
+#[serial 1120] Composition of Subcomponents via Directional Connection PCA_Power::power.imp.dba:
+axioms
+#[serial 1121] Composition of Subcomponents via Directional Connection PCA_Power::power.imp.lbw:
+axioms
+#[serial 1122] Composition of Subcomponents via Directional Connection PCA_Power::power.imp.rbt:
+axioms
+#[serial 1123] Composition of Subcomponents via Directional Connection PCA_Power::power.imp.ubp:
+axioms
+#[serial 1124] Composition of Subcomponents via Directional Connection PCA_Power::power.imp.bv:
+axioms
+#[serial 1125] Composition of Subcomponents via Directional Connection PCA_Power::power.imp.bc:
+axioms
+#[serial 1126] Composition of Subcomponents via Directional Connection PCA_Power::power.imp.psv:
+axioms
+#[serial 1127] Composition of Subcomponents via Directional Connection PCA_Operation::operation.imp.prnts:
+axioms
+#[serial 1128] Composition of Subcomponents via Directional Connection PCA_Operation::operation.imp.prts:
+axioms
+#[serial 1129] Composition of Subcomponents via Directional Connection PCA_Operation::operation_process.imp.ndf:
+axioms
+#[serial 1130] Composition of Subcomponents via Directional Connection PCA_Operation::operation_process.imp.prnts:
+axioms
+#[serial 1131] Composition of Subcomponents via Directional Connection PCA_Operation::operation_process.imp.prts:
+axioms
+#[serial 1132] Composition of Subcomponents via Directional Connection PCA_Operation::Operation_Thread_Group.imp.rcprnts:
+axioms
+#[serial 1133] Composition of Subcomponents via Directional Connection PCA_Operation::Operation_Thread_Group.imp.prnts:
+axioms
+#[serial 1134] Composition of Subcomponents via Directional Connection PCA_Operation::Operation_Thread_Group.imp.prts:
+axioms
+#[serial 1135] Composition of Subcomponents via Directional Connection PCA_Operation::Operation_Thread_Group.imp.pnm:
+axioms
+#[serial 1136] Composition of Subcomponents via Directional Connection PCA_Operation::Operation_Thread_Group.imp.pom:
+axioms
+#[serial 1137] Composition of Subcomponents via Directional Connection PCA_Operation::Operation_Thread_Group.imp.ifl:
+axioms
+#[serial 1138] Composition of Subcomponents via Directional Connection PCA_Operation::Operation_Thread_Group.imp.mdh:
+axioms
+#[serial 1139] Composition of Subcomponents via Directional Connection PCA_Operation::Operation_Thread_Group.imp.pbr:
+axioms
+#[serial 1140] Composition of Subcomponents via Directional Connection PCA_Operation::Operation_Thread_Group.imp.sbr:
+axioms
+#[serial 1141] Composition of Subcomponents via Directional Connection PCA_Operation::Operation_Thread_Group.imp.bar:
+axioms
+#[serial 1142] Composition of Subcomponents via Directional Connection PCA_Operation::Operation_Thread_Group.imp.vtb:
+axioms
+#[serial 1143] Composition of Subcomponents via Directional Connection PCA_Operation::Operation_Thread_Group.imp.mtbb:
+axioms
+#[serial 1144] Composition of Subcomponents via Directional Connection PCA_Operation::Operation_Thread_Group.imp.pcnd:
+axioms
+#[serial 1145] Composition of Subcomponents via Directional Connection PCA_Operation::Operation_Thread_Group.imp.rxok:
+axioms
+#[serial 1146] Composition of Subcomponents via Directional Connection PCA_Operation::Operation_Thread_Group.imp.icprnts:
+axioms
+#[serial 1147] Composition of Subcomponents via Directional Connection PCA_Operation::Operation_Thread_Group.imp.icprts:
+axioms
+#[serial 1148] Composition of Subcomponents via Directional Connection PCA_Operation::Operation_Thread_Group.imp.srxok:
+axioms
+#[serial 1149] Composition of Subcomponents via Directional Connection PCA_Operation::Operation_Thread_Group.imp.ssbr:
+axioms
+#[serial 1150] Composition of Subcomponents via Directional Connection PCA_Operation::Operation_Thread_Group.imp.spbr:
+axioms
+#[serial 1151] Composition of Subcomponents via Directional Connection PCA_Operation::Operation_Thread_Group.imp.scbr:
+axioms
+#[serial 1152] Composition of Subcomponents via Directional Connection PCA_Operation::Operation_Thread_Group.imp.sifr:
+axioms
+#[serial 1153] Composition of Subcomponents via Directional Connection PCA_Operation::Operation_Thread_Group.imp.snmax:
+axioms
+#[serial 1154] Composition of Subcomponents via Directional Connection PCA_Operation::Operation_Thread_Group.imp.somax:
+axioms
+#[serial 1155] Composition of Subcomponents via Directional Connection PCA_Pump::pca.imp.gfl:
+axioms
+#[serial 1156] Composition of Subcomponents via Directional Connection PCA_Pump::pca.imp.tfl:
+axioms
+#[serial 1157] Composition of Subcomponents via Directional Connection PCA_Pump::pca.imp.drg:
+axioms
+#[serial 1158] Composition of Subcomponents via Directional Connection PCA_System::wrap_pca.imp.id:
+axioms
+#[serial 1159] Composition of Subcomponents via Directional Connection PCA_System::wrap_pca.imp.gf:
+axioms
+#[serial 1160] Composition of Subcomponents via Directional Connection PCA_System::wrap_pca.imp.tf:
+axioms
+#[serial 1161] Composition of Subcomponents via Directional Connection PCA_System::wrap_pca.imp.ge:
+axioms
+#[serial 1162] Composition of Subcomponents via Directional Connection PCA_System::wrap_pca.imp.te:
+axioms
+#[serial 1163] Composition of Subcomponents via Directional Connection PCA_System::wrap_pca.imp.dl:
+axioms
+#[serial 1164] Composition of Subcomponents via Directional Connection PCA_Fluid::fluid.imp.hlt:
+axioms
+#[serial 1165] Composition of Subcomponents via Directional Connection PCA_Fluid::fluid.imp.rat:
+axioms
+#[serial 1166] Composition of Subcomponents via Directional Connection PCA_Drug_Library::drug_library_process.imp.ldl:
+axioms
+#[serial 1167] Composition of Subcomponents via Directional Connection PCA_Drug_Library::drug_library_process.imp.gdr:
+axioms
+#[serial 1168] Composition of Subcomponents via Directional Connection PCA_Drug_Library::drug_library_process.imp.dr:
+axioms
+#[serial 1169] Composition of Subcomponents via Directional Connection PCA_Drug_Library::drug_library_process.imp.ndf:
+axioms
+#[serial 1170] Composition of Subcomponents via Directional Connection PCA_Safety::safety.imp.hdf:
+axioms
+#[serial 1171] Composition of Subcomponents via Directional Connection PCA_Safety::safety.imp.tfl:
+axioms
+#[serial 1172] Composition of Subcomponents via Directional Connection PCA_Control_Panel::ui_process.imp.prnts:
+axioms
+#[serial 1173] Composition of Subcomponents via Directional Connection PCA_Control_Panel::ui_process.imp.prts:
+axioms
+#[serial 1174] Composition of Subcomponents via Directional Connection PCA_Control_Panel::control_panel.imp.prnts:
+axioms
+#[serial 1175] Composition of Subcomponents via Directional Connection PCA_Control_Panel::control_panel.imp.prts:
+axioms

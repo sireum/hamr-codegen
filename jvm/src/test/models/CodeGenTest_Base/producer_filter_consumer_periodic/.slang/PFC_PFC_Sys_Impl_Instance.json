@@ -1,0 +1,2943 @@
+{
+  "type" : "Aadl",
+  "components" : [
+    {
+      "type" : "Component",
+      "identifier" : {
+        "type" : "Name",
+        "name" : ["PFC_Sys_Impl_Instance"],
+        "pos" : {
+          "type" : "Some",
+          "value" : {
+            "type" : "Position",
+            "uriOpt" : {
+              "type" : "Some",
+              "value" : "\/Producer-Filter-Consumer-periodic\/PFC.aadl"
+            },
+            "beginLine" : 28,
+            "beginColumn" : 2,
+            "endLine" : 40,
+            "endColumn" : 19,
+            "offset" : 612,
+            "length" : 359
+          }
+        }
+      },
+      "category" : {
+        "type" : "ComponentCategory",
+        "value" : "System"
+      },
+      "classifier" : {
+        "type" : "None"
+      },
+      "features" : [
+      ],
+      "subComponents" : [
+        {
+          "type" : "Component",
+          "identifier" : {
+            "type" : "Name",
+            "name" : ["PFC_Sys_Impl_Instance", "proc"],
+            "pos" : {
+              "type" : "Some",
+              "value" : {
+                "type" : "Position",
+                "uriOpt" : {
+                  "type" : "Some",
+                  "value" : "\/Producer-Filter-Consumer-periodic\/PFC.aadl"
+                },
+                "beginLine" : 30,
+                "beginColumn" : 4,
+                "endLine" : 30,
+                "endColumn" : 32,
+                "offset" : 666,
+                "length" : 28
+              }
+            }
+          },
+          "category" : {
+            "type" : "ComponentCategory",
+            "value" : "Process"
+          },
+          "classifier" : {
+            "type" : "Some",
+            "value" : {
+              "type" : "Classifier",
+              "name" : "PFC::PFC_Proc.Impl"
+            }
+          },
+          "features" : [
+          ],
+          "subComponents" : [
+            {
+              "type" : "Component",
+              "identifier" : {
+                "type" : "Name",
+                "name" : ["PFC_Sys_Impl_Instance", "proc", "producer"],
+                "pos" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Position",
+                    "uriOpt" : {
+                      "type" : "Some",
+                      "value" : "\/Producer-Filter-Consumer-periodic\/PFC.aadl"
+                    },
+                    "beginLine" : 47,
+                    "beginColumn" : 4,
+                    "endLine" : 47,
+                    "endColumn" : 30,
+                    "offset" : 1064,
+                    "length" : 26
+                  }
+                }
+              },
+              "category" : {
+                "type" : "ComponentCategory",
+                "value" : "Thread"
+              },
+              "classifier" : {
+                "type" : "Some",
+                "value" : {
+                  "type" : "Classifier",
+                  "name" : "PFC::Producer"
+                }
+              },
+              "features" : [
+                {
+                  "type" : "FeatureEnd",
+                  "identifier" : {
+                    "type" : "Name",
+                    "name" : ["PFC_Sys_Impl_Instance", "proc", "producer", "to_filter"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/Producer-Filter-Consumer-periodic\/PFC.aadl"
+                        },
+                        "beginLine" : 57,
+                        "beginColumn" : 4,
+                        "endLine" : 57,
+                        "endColumn" : 43,
+                        "offset" : 1325,
+                        "length" : 39
+                      }
+                    }
+                  },
+                  "direction" : {
+                    "type" : "Direction",
+                    "value" : "Out"
+                  },
+                  "category" : {
+                    "type" : "FeatureCategory",
+                    "value" : "EventDataPort"
+                  },
+                  "classifier" : {
+                    "type" : "Some",
+                    "value" : {
+                      "type" : "Classifier",
+                      "name" : "PFC::Mission"
+                    }
+                  },
+                  "properties" : [
+                    {
+                      "type" : "Property",
+                      "name" : {
+                        "type" : "Name",
+                        "name" : ["PFC_Sys_Impl_Instance", "proc", "producer", "to_filter", "Data_Model::Data_Representation"],
+                        "pos" : {
+                          "type" : "Some",
+                          "value" : {
+                            "type" : "Position",
+                            "uriOpt" : {
+                              "type" : "Some",
+                              "value" : "\/org.osate.contribution.sei\/resources\/properties\/Data_Model.aadl"
+                            },
+                            "beginLine" : 26,
+                            "beginColumn" : 4,
+                            "endLine" : 29,
+                            "endColumn" : 36,
+                            "offset" : 1108,
+                            "length" : 162
+                          }
+                        }
+                      },
+                      "propertyValues" : [
+                        {
+                          "type" : "ValueProp",
+                          "value" : "Array"
+                        }
+                      ],
+                      "appliesTo" : [
+                      ]
+                    },
+                    {
+                      "type" : "Property",
+                      "name" : {
+                        "type" : "Name",
+                        "name" : ["PFC_Sys_Impl_Instance", "proc", "producer", "to_filter", "Data_Model::Base_Type"],
+                        "pos" : {
+                          "type" : "Some",
+                          "value" : {
+                            "type" : "Position",
+                            "uriOpt" : {
+                              "type" : "Some",
+                              "value" : "\/org.osate.contribution.sei\/resources\/properties\/Data_Model.aadl"
+                            },
+                            "beginLine" : 5,
+                            "beginColumn" : 4,
+                            "endLine" : 5,
+                            "endColumn" : 73,
+                            "offset" : 106,
+                            "length" : 69
+                          }
+                        }
+                      },
+                      "propertyValues" : [
+                        {
+                          "type" : "ClassifierProp",
+                          "name" : "PFC::Coordinate.Impl"
+                        }
+                      ],
+                      "appliesTo" : [
+                      ]
+                    },
+                    {
+                      "type" : "Property",
+                      "name" : {
+                        "type" : "Name",
+                        "name" : ["PFC_Sys_Impl_Instance", "proc", "producer", "to_filter", "Data_Model::Dimension"],
+                        "pos" : {
+                          "type" : "Some",
+                          "value" : {
+                            "type" : "Position",
+                            "uriOpt" : {
+                              "type" : "Some",
+                              "value" : "\/org.osate.contribution.sei\/resources\/properties\/Data_Model.aadl"
+                            },
+                            "beginLine" : 38,
+                            "beginColumn" : 4,
+                            "endLine" : 38,
+                            "endColumn" : 97,
+                            "offset" : 1611,
+                            "length" : 93
+                          }
+                        }
+                      },
+                      "propertyValues" : [
+                        {
+                          "type" : "UnitProp",
+                          "value" : "3.0",
+                          "unit" : {
+                            "type" : "None"
+                          }
+                        }
+                      ],
+                      "appliesTo" : [
+                      ]
+                    }
+                  ],
+                  "uriFrag" : "Producer-Filter-Consumer-periodic\/instances\/PFC_PFC_Sys_Impl_Instance.aaxl2#\/\/@componentInstance.0\/@componentInstance.0\/@featureInstance.0"
+                }
+              ],
+              "subComponents" : [
+              ],
+              "connections" : [
+              ],
+              "connectionInstances" : [
+              ],
+              "properties" : [
+                {
+                  "type" : "Property",
+                  "name" : {
+                    "type" : "Name",
+                    "name" : ["PFC_Sys_Impl_Instance", "proc", "producer", "Thread_Properties::Dispatch_Protocol"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/org.osate.workspace\/resources\/properties\/Predeclared_Property_Sets\/Thread_Properties.aadl"
+                        },
+                        "beginLine" : 12,
+                        "beginColumn" : 2,
+                        "endLine" : 13,
+                        "endColumn" : 50,
+                        "offset" : 476,
+                        "length" : 97
+                      }
+                    }
+                  },
+                  "propertyValues" : [
+                    {
+                      "type" : "ValueProp",
+                      "value" : "Periodic"
+                    }
+                  ],
+                  "appliesTo" : [
+                  ]
+                },
+                {
+                  "type" : "Property",
+                  "name" : {
+                    "type" : "Name",
+                    "name" : ["PFC_Sys_Impl_Instance", "proc", "producer", "Timing_Properties::Period"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/org.osate.workspace\/resources\/properties\/Predeclared_Property_Sets\/Timing_Properties.aadl"
+                        },
+                        "beginLine" : 191,
+                        "beginColumn" : 2,
+                        "endLine" : 192,
+                        "endColumn" : 99,
+                        "offset" : 11575,
+                        "length" : 119
+                      }
+                    }
+                  },
+                  "propertyValues" : [
+                    {
+                      "type" : "UnitProp",
+                      "value" : "1.0E12",
+                      "unit" : {
+                        "type" : "Some",
+                        "value" : "ps"
+                      }
+                    }
+                  ],
+                  "appliesTo" : [
+                  ]
+                },
+                {
+                  "type" : "Property",
+                  "name" : {
+                    "type" : "Name",
+                    "name" : ["PFC_Sys_Impl_Instance", "proc", "producer", "Memory_Properties::Stack_Size"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/org.osate.workspace\/resources\/properties\/Predeclared_Property_Sets\/Memory_Properties.aadl"
+                        },
+                        "beginLine" : 106,
+                        "beginColumn" : 2,
+                        "endLine" : 107,
+                        "endColumn" : 73,
+                        "offset" : 5618,
+                        "length" : 89
+                      }
+                    }
+                  },
+                  "propertyValues" : [
+                    {
+                      "type" : "UnitProp",
+                      "value" : "491520.0",
+                      "unit" : {
+                        "type" : "Some",
+                        "value" : "bits"
+                      }
+                    }
+                  ],
+                  "appliesTo" : [
+                  ]
+                }
+              ],
+              "flows" : [
+              ],
+              "modes" : [
+              ],
+              "annexes" : [
+                {
+                  "type" : "Annex",
+                  "name" : "Emv2",
+                  "clause" : {
+                    "type" : "Emv2Clause",
+                    "libraries" : [
+                    ],
+                    "propagations" : [
+                    ],
+                    "flows" : [
+                    ],
+                    "componentBehavior" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Emv2BehaviorSection",
+                        "events" : [
+                        ],
+                        "transitions" : [
+                        ],
+                        "propagations" : [
+                        ]
+                      }
+                    },
+                    "properties" : [
+                    ]
+                  }
+                },
+                {
+                  "type" : "Annex",
+                  "name" : "smf",
+                  "clause" : {
+                    "type" : "SmfClause",
+                    "classification" : [
+                    ],
+                    "declass" : [
+                    ]
+                  }
+                }
+              ],
+              "uriFrag" : "Producer-Filter-Consumer-periodic\/instances\/PFC_PFC_Sys_Impl_Instance.aaxl2#\/\/@componentInstance.0\/@componentInstance.0"
+            },
+            {
+              "type" : "Component",
+              "identifier" : {
+                "type" : "Name",
+                "name" : ["PFC_Sys_Impl_Instance", "proc", "filter"],
+                "pos" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Position",
+                    "uriOpt" : {
+                      "type" : "Some",
+                      "value" : "\/Producer-Filter-Consumer-periodic\/PFC.aadl"
+                    },
+                    "beginLine" : 48,
+                    "beginColumn" : 4,
+                    "endLine" : 48,
+                    "endColumn" : 26,
+                    "offset" : 1094,
+                    "length" : 22
+                  }
+                }
+              },
+              "category" : {
+                "type" : "ComponentCategory",
+                "value" : "Thread"
+              },
+              "classifier" : {
+                "type" : "Some",
+                "value" : {
+                  "type" : "Classifier",
+                  "name" : "PFC::Filter"
+                }
+              },
+              "features" : [
+                {
+                  "type" : "FeatureEnd",
+                  "identifier" : {
+                    "type" : "Name",
+                    "name" : ["PFC_Sys_Impl_Instance", "proc", "filter", "from_producer"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/Producer-Filter-Consumer-periodic\/PFC.aadl"
+                        },
+                        "beginLine" : 67,
+                        "beginColumn" : 4,
+                        "endLine" : 69,
+                        "endColumn" : 6,
+                        "offset" : 1564,
+                        "length" : 96
+                      }
+                    }
+                  },
+                  "direction" : {
+                    "type" : "Direction",
+                    "value" : "In"
+                  },
+                  "category" : {
+                    "type" : "FeatureCategory",
+                    "value" : "EventDataPort"
+                  },
+                  "classifier" : {
+                    "type" : "Some",
+                    "value" : {
+                      "type" : "Classifier",
+                      "name" : "PFC::Mission"
+                    }
+                  },
+                  "properties" : [
+                    {
+                      "type" : "Property",
+                      "name" : {
+                        "type" : "Name",
+                        "name" : ["PFC_Sys_Impl_Instance", "proc", "filter", "from_producer", "Data_Model::Data_Representation"],
+                        "pos" : {
+                          "type" : "Some",
+                          "value" : {
+                            "type" : "Position",
+                            "uriOpt" : {
+                              "type" : "Some",
+                              "value" : "\/org.osate.contribution.sei\/resources\/properties\/Data_Model.aadl"
+                            },
+                            "beginLine" : 26,
+                            "beginColumn" : 4,
+                            "endLine" : 29,
+                            "endColumn" : 36,
+                            "offset" : 1108,
+                            "length" : 162
+                          }
+                        }
+                      },
+                      "propertyValues" : [
+                        {
+                          "type" : "ValueProp",
+                          "value" : "Array"
+                        }
+                      ],
+                      "appliesTo" : [
+                      ]
+                    },
+                    {
+                      "type" : "Property",
+                      "name" : {
+                        "type" : "Name",
+                        "name" : ["PFC_Sys_Impl_Instance", "proc", "filter", "from_producer", "Data_Model::Base_Type"],
+                        "pos" : {
+                          "type" : "Some",
+                          "value" : {
+                            "type" : "Position",
+                            "uriOpt" : {
+                              "type" : "Some",
+                              "value" : "\/org.osate.contribution.sei\/resources\/properties\/Data_Model.aadl"
+                            },
+                            "beginLine" : 5,
+                            "beginColumn" : 4,
+                            "endLine" : 5,
+                            "endColumn" : 73,
+                            "offset" : 106,
+                            "length" : 69
+                          }
+                        }
+                      },
+                      "propertyValues" : [
+                        {
+                          "type" : "ClassifierProp",
+                          "name" : "PFC::Coordinate.Impl"
+                        }
+                      ],
+                      "appliesTo" : [
+                      ]
+                    },
+                    {
+                      "type" : "Property",
+                      "name" : {
+                        "type" : "Name",
+                        "name" : ["PFC_Sys_Impl_Instance", "proc", "filter", "from_producer", "Data_Model::Dimension"],
+                        "pos" : {
+                          "type" : "Some",
+                          "value" : {
+                            "type" : "Position",
+                            "uriOpt" : {
+                              "type" : "Some",
+                              "value" : "\/org.osate.contribution.sei\/resources\/properties\/Data_Model.aadl"
+                            },
+                            "beginLine" : 38,
+                            "beginColumn" : 4,
+                            "endLine" : 38,
+                            "endColumn" : 97,
+                            "offset" : 1611,
+                            "length" : 93
+                          }
+                        }
+                      },
+                      "propertyValues" : [
+                        {
+                          "type" : "UnitProp",
+                          "value" : "3.0",
+                          "unit" : {
+                            "type" : "None"
+                          }
+                        }
+                      ],
+                      "appliesTo" : [
+                      ]
+                    },
+                    {
+                      "type" : "Property",
+                      "name" : {
+                        "type" : "Name",
+                        "name" : ["PFC_Sys_Impl_Instance", "proc", "filter", "from_producer", "Communication_Properties::Queue_Size"],
+                        "pos" : {
+                          "type" : "Some",
+                          "value" : {
+                            "type" : "Position",
+                            "uriOpt" : {
+                              "type" : "Some",
+                              "value" : "\/org.osate.workspace\/resources\/properties\/Predeclared_Property_Sets\/Communication_Properties.aadl"
+                            },
+                            "beginLine" : 50,
+                            "beginColumn" : 2,
+                            "endLine" : 51,
+                            "endColumn" : 63,
+                            "offset" : 2571,
+                            "length" : 111
+                          }
+                        }
+                      },
+                      "propertyValues" : [
+                        {
+                          "type" : "UnitProp",
+                          "value" : "1.0",
+                          "unit" : {
+                            "type" : "None"
+                          }
+                        }
+                      ],
+                      "appliesTo" : [
+                      ]
+                    }
+                  ],
+                  "uriFrag" : "Producer-Filter-Consumer-periodic\/instances\/PFC_PFC_Sys_Impl_Instance.aaxl2#\/\/@componentInstance.0\/@componentInstance.1\/@featureInstance.0"
+                },
+                {
+                  "type" : "FeatureEnd",
+                  "identifier" : {
+                    "type" : "Name",
+                    "name" : ["PFC_Sys_Impl_Instance", "proc", "filter", "to_consumer"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/Producer-Filter-Consumer-periodic\/PFC.aadl"
+                        },
+                        "beginLine" : 70,
+                        "beginColumn" : 4,
+                        "endLine" : 70,
+                        "endColumn" : 45,
+                        "offset" : 1664,
+                        "length" : 41
+                      }
+                    }
+                  },
+                  "direction" : {
+                    "type" : "Direction",
+                    "value" : "Out"
+                  },
+                  "category" : {
+                    "type" : "FeatureCategory",
+                    "value" : "EventDataPort"
+                  },
+                  "classifier" : {
+                    "type" : "Some",
+                    "value" : {
+                      "type" : "Classifier",
+                      "name" : "PFC::Mission"
+                    }
+                  },
+                  "properties" : [
+                    {
+                      "type" : "Property",
+                      "name" : {
+                        "type" : "Name",
+                        "name" : ["PFC_Sys_Impl_Instance", "proc", "filter", "to_consumer", "Data_Model::Data_Representation"],
+                        "pos" : {
+                          "type" : "Some",
+                          "value" : {
+                            "type" : "Position",
+                            "uriOpt" : {
+                              "type" : "Some",
+                              "value" : "\/org.osate.contribution.sei\/resources\/properties\/Data_Model.aadl"
+                            },
+                            "beginLine" : 26,
+                            "beginColumn" : 4,
+                            "endLine" : 29,
+                            "endColumn" : 36,
+                            "offset" : 1108,
+                            "length" : 162
+                          }
+                        }
+                      },
+                      "propertyValues" : [
+                        {
+                          "type" : "ValueProp",
+                          "value" : "Array"
+                        }
+                      ],
+                      "appliesTo" : [
+                      ]
+                    },
+                    {
+                      "type" : "Property",
+                      "name" : {
+                        "type" : "Name",
+                        "name" : ["PFC_Sys_Impl_Instance", "proc", "filter", "to_consumer", "Data_Model::Base_Type"],
+                        "pos" : {
+                          "type" : "Some",
+                          "value" : {
+                            "type" : "Position",
+                            "uriOpt" : {
+                              "type" : "Some",
+                              "value" : "\/org.osate.contribution.sei\/resources\/properties\/Data_Model.aadl"
+                            },
+                            "beginLine" : 5,
+                            "beginColumn" : 4,
+                            "endLine" : 5,
+                            "endColumn" : 73,
+                            "offset" : 106,
+                            "length" : 69
+                          }
+                        }
+                      },
+                      "propertyValues" : [
+                        {
+                          "type" : "ClassifierProp",
+                          "name" : "PFC::Coordinate.Impl"
+                        }
+                      ],
+                      "appliesTo" : [
+                      ]
+                    },
+                    {
+                      "type" : "Property",
+                      "name" : {
+                        "type" : "Name",
+                        "name" : ["PFC_Sys_Impl_Instance", "proc", "filter", "to_consumer", "Data_Model::Dimension"],
+                        "pos" : {
+                          "type" : "Some",
+                          "value" : {
+                            "type" : "Position",
+                            "uriOpt" : {
+                              "type" : "Some",
+                              "value" : "\/org.osate.contribution.sei\/resources\/properties\/Data_Model.aadl"
+                            },
+                            "beginLine" : 38,
+                            "beginColumn" : 4,
+                            "endLine" : 38,
+                            "endColumn" : 97,
+                            "offset" : 1611,
+                            "length" : 93
+                          }
+                        }
+                      },
+                      "propertyValues" : [
+                        {
+                          "type" : "UnitProp",
+                          "value" : "3.0",
+                          "unit" : {
+                            "type" : "None"
+                          }
+                        }
+                      ],
+                      "appliesTo" : [
+                      ]
+                    }
+                  ],
+                  "uriFrag" : "Producer-Filter-Consumer-periodic\/instances\/PFC_PFC_Sys_Impl_Instance.aaxl2#\/\/@componentInstance.0\/@componentInstance.1\/@featureInstance.1"
+                }
+              ],
+              "subComponents" : [
+              ],
+              "connections" : [
+              ],
+              "connectionInstances" : [
+              ],
+              "properties" : [
+                {
+                  "type" : "Property",
+                  "name" : {
+                    "type" : "Name",
+                    "name" : ["PFC_Sys_Impl_Instance", "proc", "filter", "Thread_Properties::Dispatch_Protocol"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/org.osate.workspace\/resources\/properties\/Predeclared_Property_Sets\/Thread_Properties.aadl"
+                        },
+                        "beginLine" : 12,
+                        "beginColumn" : 2,
+                        "endLine" : 13,
+                        "endColumn" : 50,
+                        "offset" : 476,
+                        "length" : 97
+                      }
+                    }
+                  },
+                  "propertyValues" : [
+                    {
+                      "type" : "ValueProp",
+                      "value" : "Periodic"
+                    }
+                  ],
+                  "appliesTo" : [
+                  ]
+                },
+                {
+                  "type" : "Property",
+                  "name" : {
+                    "type" : "Name",
+                    "name" : ["PFC_Sys_Impl_Instance", "proc", "filter", "Timing_Properties::Period"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/org.osate.workspace\/resources\/properties\/Predeclared_Property_Sets\/Timing_Properties.aadl"
+                        },
+                        "beginLine" : 191,
+                        "beginColumn" : 2,
+                        "endLine" : 192,
+                        "endColumn" : 99,
+                        "offset" : 11575,
+                        "length" : 119
+                      }
+                    }
+                  },
+                  "propertyValues" : [
+                    {
+                      "type" : "UnitProp",
+                      "value" : "1.0E12",
+                      "unit" : {
+                        "type" : "Some",
+                        "value" : "ps"
+                      }
+                    }
+                  ],
+                  "appliesTo" : [
+                  ]
+                },
+                {
+                  "type" : "Property",
+                  "name" : {
+                    "type" : "Name",
+                    "name" : ["PFC_Sys_Impl_Instance", "proc", "filter", "Memory_Properties::Stack_Size"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/org.osate.workspace\/resources\/properties\/Predeclared_Property_Sets\/Memory_Properties.aadl"
+                        },
+                        "beginLine" : 106,
+                        "beginColumn" : 2,
+                        "endLine" : 107,
+                        "endColumn" : 73,
+                        "offset" : 5618,
+                        "length" : 89
+                      }
+                    }
+                  },
+                  "propertyValues" : [
+                    {
+                      "type" : "UnitProp",
+                      "value" : "491520.0",
+                      "unit" : {
+                        "type" : "Some",
+                        "value" : "bits"
+                      }
+                    }
+                  ],
+                  "appliesTo" : [
+                  ]
+                }
+              ],
+              "flows" : [
+              ],
+              "modes" : [
+              ],
+              "annexes" : [
+                {
+                  "type" : "Annex",
+                  "name" : "Emv2",
+                  "clause" : {
+                    "type" : "Emv2Clause",
+                    "libraries" : [
+                    ],
+                    "propagations" : [
+                    ],
+                    "flows" : [
+                    ],
+                    "componentBehavior" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Emv2BehaviorSection",
+                        "events" : [
+                        ],
+                        "transitions" : [
+                        ],
+                        "propagations" : [
+                        ]
+                      }
+                    },
+                    "properties" : [
+                    ]
+                  }
+                },
+                {
+                  "type" : "Annex",
+                  "name" : "smf",
+                  "clause" : {
+                    "type" : "SmfClause",
+                    "classification" : [
+                    ],
+                    "declass" : [
+                    ]
+                  }
+                }
+              ],
+              "uriFrag" : "Producer-Filter-Consumer-periodic\/instances\/PFC_PFC_Sys_Impl_Instance.aaxl2#\/\/@componentInstance.0\/@componentInstance.1"
+            },
+            {
+              "type" : "Component",
+              "identifier" : {
+                "type" : "Name",
+                "name" : ["PFC_Sys_Impl_Instance", "proc", "consumer"],
+                "pos" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Position",
+                    "uriOpt" : {
+                      "type" : "Some",
+                      "value" : "\/Producer-Filter-Consumer-periodic\/PFC.aadl"
+                    },
+                    "beginLine" : 49,
+                    "beginColumn" : 4,
+                    "endLine" : 49,
+                    "endColumn" : 30,
+                    "offset" : 1120,
+                    "length" : 26
+                  }
+                }
+              },
+              "category" : {
+                "type" : "ComponentCategory",
+                "value" : "Thread"
+              },
+              "classifier" : {
+                "type" : "Some",
+                "value" : {
+                  "type" : "Classifier",
+                  "name" : "PFC::Consumer"
+                }
+              },
+              "features" : [
+                {
+                  "type" : "FeatureEnd",
+                  "identifier" : {
+                    "type" : "Name",
+                    "name" : ["PFC_Sys_Impl_Instance", "proc", "consumer", "from_filter"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/Producer-Filter-Consumer-periodic\/PFC.aadl"
+                        },
+                        "beginLine" : 80,
+                        "beginColumn" : 4,
+                        "endLine" : 82,
+                        "endColumn" : 6,
+                        "offset" : 1867,
+                        "length" : 94
+                      }
+                    }
+                  },
+                  "direction" : {
+                    "type" : "Direction",
+                    "value" : "In"
+                  },
+                  "category" : {
+                    "type" : "FeatureCategory",
+                    "value" : "EventDataPort"
+                  },
+                  "classifier" : {
+                    "type" : "Some",
+                    "value" : {
+                      "type" : "Classifier",
+                      "name" : "PFC::Mission"
+                    }
+                  },
+                  "properties" : [
+                    {
+                      "type" : "Property",
+                      "name" : {
+                        "type" : "Name",
+                        "name" : ["PFC_Sys_Impl_Instance", "proc", "consumer", "from_filter", "Data_Model::Data_Representation"],
+                        "pos" : {
+                          "type" : "Some",
+                          "value" : {
+                            "type" : "Position",
+                            "uriOpt" : {
+                              "type" : "Some",
+                              "value" : "\/org.osate.contribution.sei\/resources\/properties\/Data_Model.aadl"
+                            },
+                            "beginLine" : 26,
+                            "beginColumn" : 4,
+                            "endLine" : 29,
+                            "endColumn" : 36,
+                            "offset" : 1108,
+                            "length" : 162
+                          }
+                        }
+                      },
+                      "propertyValues" : [
+                        {
+                          "type" : "ValueProp",
+                          "value" : "Array"
+                        }
+                      ],
+                      "appliesTo" : [
+                      ]
+                    },
+                    {
+                      "type" : "Property",
+                      "name" : {
+                        "type" : "Name",
+                        "name" : ["PFC_Sys_Impl_Instance", "proc", "consumer", "from_filter", "Data_Model::Base_Type"],
+                        "pos" : {
+                          "type" : "Some",
+                          "value" : {
+                            "type" : "Position",
+                            "uriOpt" : {
+                              "type" : "Some",
+                              "value" : "\/org.osate.contribution.sei\/resources\/properties\/Data_Model.aadl"
+                            },
+                            "beginLine" : 5,
+                            "beginColumn" : 4,
+                            "endLine" : 5,
+                            "endColumn" : 73,
+                            "offset" : 106,
+                            "length" : 69
+                          }
+                        }
+                      },
+                      "propertyValues" : [
+                        {
+                          "type" : "ClassifierProp",
+                          "name" : "PFC::Coordinate.Impl"
+                        }
+                      ],
+                      "appliesTo" : [
+                      ]
+                    },
+                    {
+                      "type" : "Property",
+                      "name" : {
+                        "type" : "Name",
+                        "name" : ["PFC_Sys_Impl_Instance", "proc", "consumer", "from_filter", "Data_Model::Dimension"],
+                        "pos" : {
+                          "type" : "Some",
+                          "value" : {
+                            "type" : "Position",
+                            "uriOpt" : {
+                              "type" : "Some",
+                              "value" : "\/org.osate.contribution.sei\/resources\/properties\/Data_Model.aadl"
+                            },
+                            "beginLine" : 38,
+                            "beginColumn" : 4,
+                            "endLine" : 38,
+                            "endColumn" : 97,
+                            "offset" : 1611,
+                            "length" : 93
+                          }
+                        }
+                      },
+                      "propertyValues" : [
+                        {
+                          "type" : "UnitProp",
+                          "value" : "3.0",
+                          "unit" : {
+                            "type" : "None"
+                          }
+                        }
+                      ],
+                      "appliesTo" : [
+                      ]
+                    },
+                    {
+                      "type" : "Property",
+                      "name" : {
+                        "type" : "Name",
+                        "name" : ["PFC_Sys_Impl_Instance", "proc", "consumer", "from_filter", "Communication_Properties::Queue_Size"],
+                        "pos" : {
+                          "type" : "Some",
+                          "value" : {
+                            "type" : "Position",
+                            "uriOpt" : {
+                              "type" : "Some",
+                              "value" : "\/org.osate.workspace\/resources\/properties\/Predeclared_Property_Sets\/Communication_Properties.aadl"
+                            },
+                            "beginLine" : 50,
+                            "beginColumn" : 2,
+                            "endLine" : 51,
+                            "endColumn" : 63,
+                            "offset" : 2571,
+                            "length" : 111
+                          }
+                        }
+                      },
+                      "propertyValues" : [
+                        {
+                          "type" : "UnitProp",
+                          "value" : "1.0",
+                          "unit" : {
+                            "type" : "None"
+                          }
+                        }
+                      ],
+                      "appliesTo" : [
+                      ]
+                    }
+                  ],
+                  "uriFrag" : "Producer-Filter-Consumer-periodic\/instances\/PFC_PFC_Sys_Impl_Instance.aaxl2#\/\/@componentInstance.0\/@componentInstance.2\/@featureInstance.0"
+                }
+              ],
+              "subComponents" : [
+              ],
+              "connections" : [
+              ],
+              "connectionInstances" : [
+              ],
+              "properties" : [
+                {
+                  "type" : "Property",
+                  "name" : {
+                    "type" : "Name",
+                    "name" : ["PFC_Sys_Impl_Instance", "proc", "consumer", "Thread_Properties::Dispatch_Protocol"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/org.osate.workspace\/resources\/properties\/Predeclared_Property_Sets\/Thread_Properties.aadl"
+                        },
+                        "beginLine" : 12,
+                        "beginColumn" : 2,
+                        "endLine" : 13,
+                        "endColumn" : 50,
+                        "offset" : 476,
+                        "length" : 97
+                      }
+                    }
+                  },
+                  "propertyValues" : [
+                    {
+                      "type" : "ValueProp",
+                      "value" : "Periodic"
+                    }
+                  ],
+                  "appliesTo" : [
+                  ]
+                },
+                {
+                  "type" : "Property",
+                  "name" : {
+                    "type" : "Name",
+                    "name" : ["PFC_Sys_Impl_Instance", "proc", "consumer", "Timing_Properties::Period"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/org.osate.workspace\/resources\/properties\/Predeclared_Property_Sets\/Timing_Properties.aadl"
+                        },
+                        "beginLine" : 191,
+                        "beginColumn" : 2,
+                        "endLine" : 192,
+                        "endColumn" : 99,
+                        "offset" : 11575,
+                        "length" : 119
+                      }
+                    }
+                  },
+                  "propertyValues" : [
+                    {
+                      "type" : "UnitProp",
+                      "value" : "1.0E12",
+                      "unit" : {
+                        "type" : "Some",
+                        "value" : "ps"
+                      }
+                    }
+                  ],
+                  "appliesTo" : [
+                  ]
+                },
+                {
+                  "type" : "Property",
+                  "name" : {
+                    "type" : "Name",
+                    "name" : ["PFC_Sys_Impl_Instance", "proc", "consumer", "Memory_Properties::Stack_Size"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/org.osate.workspace\/resources\/properties\/Predeclared_Property_Sets\/Memory_Properties.aadl"
+                        },
+                        "beginLine" : 106,
+                        "beginColumn" : 2,
+                        "endLine" : 107,
+                        "endColumn" : 73,
+                        "offset" : 5618,
+                        "length" : 89
+                      }
+                    }
+                  },
+                  "propertyValues" : [
+                    {
+                      "type" : "UnitProp",
+                      "value" : "491520.0",
+                      "unit" : {
+                        "type" : "Some",
+                        "value" : "bits"
+                      }
+                    }
+                  ],
+                  "appliesTo" : [
+                  ]
+                }
+              ],
+              "flows" : [
+              ],
+              "modes" : [
+              ],
+              "annexes" : [
+                {
+                  "type" : "Annex",
+                  "name" : "Emv2",
+                  "clause" : {
+                    "type" : "Emv2Clause",
+                    "libraries" : [
+                    ],
+                    "propagations" : [
+                    ],
+                    "flows" : [
+                    ],
+                    "componentBehavior" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Emv2BehaviorSection",
+                        "events" : [
+                        ],
+                        "transitions" : [
+                        ],
+                        "propagations" : [
+                        ]
+                      }
+                    },
+                    "properties" : [
+                    ]
+                  }
+                },
+                {
+                  "type" : "Annex",
+                  "name" : "smf",
+                  "clause" : {
+                    "type" : "SmfClause",
+                    "classification" : [
+                    ],
+                    "declass" : [
+                    ]
+                  }
+                }
+              ],
+              "uriFrag" : "Producer-Filter-Consumer-periodic\/instances\/PFC_PFC_Sys_Impl_Instance.aaxl2#\/\/@componentInstance.0\/@componentInstance.2"
+            }
+          ],
+          "connections" : [
+            {
+              "type" : "Connection",
+              "name" : {
+                "type" : "Name",
+                "name" : ["PFC_Sys_Impl_Instance", "proc", "c1"],
+                "pos" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Position",
+                    "uriOpt" : {
+                      "type" : "Some",
+                      "value" : "\/Producer-Filter-Consumer-periodic\/PFC.aadl"
+                    },
+                    "beginLine" : 51,
+                    "beginColumn" : 4,
+                    "endLine" : 51,
+                    "endColumn" : 56,
+                    "offset" : 1164,
+                    "length" : 52
+                  }
+                }
+              },
+              "src" : [
+                {
+                  "type" : "EndPoint",
+                  "component" : {
+                    "type" : "Name",
+                    "name" : ["PFC_Sys_Impl_Instance", "proc", "producer"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/Producer-Filter-Consumer-periodic\/PFC.aadl"
+                        },
+                        "beginLine" : 47,
+                        "beginColumn" : 4,
+                        "endLine" : 47,
+                        "endColumn" : 30,
+                        "offset" : 1064,
+                        "length" : 26
+                      }
+                    }
+                  },
+                  "feature" : {
+                    "type" : "Some",
+                    "value" : {
+                      "type" : "Name",
+                      "name" : ["PFC_Sys_Impl_Instance", "proc", "producer", "to_filter"],
+                      "pos" : {
+                        "type" : "Some",
+                        "value" : {
+                          "type" : "Position",
+                          "uriOpt" : {
+                            "type" : "Some",
+                            "value" : "\/Producer-Filter-Consumer-periodic\/PFC.aadl"
+                          },
+                          "beginLine" : 57,
+                          "beginColumn" : 4,
+                          "endLine" : 57,
+                          "endColumn" : 43,
+                          "offset" : 1325,
+                          "length" : 39
+                        }
+                      }
+                    }
+                  },
+                  "direction" : {
+                    "type" : "Some",
+                    "value" : {
+                      "type" : "Direction",
+                      "value" : "Out"
+                    }
+                  }
+                }
+              ],
+              "dst" : [
+                {
+                  "type" : "EndPoint",
+                  "component" : {
+                    "type" : "Name",
+                    "name" : ["PFC_Sys_Impl_Instance", "proc", "filter"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/Producer-Filter-Consumer-periodic\/PFC.aadl"
+                        },
+                        "beginLine" : 48,
+                        "beginColumn" : 4,
+                        "endLine" : 48,
+                        "endColumn" : 26,
+                        "offset" : 1094,
+                        "length" : 22
+                      }
+                    }
+                  },
+                  "feature" : {
+                    "type" : "Some",
+                    "value" : {
+                      "type" : "Name",
+                      "name" : ["PFC_Sys_Impl_Instance", "proc", "filter", "from_producer"],
+                      "pos" : {
+                        "type" : "Some",
+                        "value" : {
+                          "type" : "Position",
+                          "uriOpt" : {
+                            "type" : "Some",
+                            "value" : "\/Producer-Filter-Consumer-periodic\/PFC.aadl"
+                          },
+                          "beginLine" : 67,
+                          "beginColumn" : 4,
+                          "endLine" : 69,
+                          "endColumn" : 6,
+                          "offset" : 1564,
+                          "length" : 96
+                        }
+                      }
+                    }
+                  },
+                  "direction" : {
+                    "type" : "Some",
+                    "value" : {
+                      "type" : "Direction",
+                      "value" : "In"
+                    }
+                  }
+                }
+              ],
+              "kind" : {
+                "type" : "ConnectionKind",
+                "value" : "Port"
+              },
+              "isBiDirectional" : false,
+              "connectionInstances" : [
+                {
+                  "type" : "Name",
+                  "name" : ["PFC_Sys_Impl_Instance", "proc", "producer", "to_filter -> filter", "from_producer"],
+                  "pos" : {
+                    "type" : "None"
+                  }
+                }
+              ],
+              "properties" : [
+              ],
+              "uriFrag" : "Producer-Filter-Consumer-periodic\/instances\/PFC_PFC_Sys_Impl_Instance.aaxl2#\/\/@componentInstance.0\/@connectionInstance.0\/@connectionReference.0"
+            },
+            {
+              "type" : "Connection",
+              "name" : {
+                "type" : "Name",
+                "name" : ["PFC_Sys_Impl_Instance", "proc", "c2"],
+                "pos" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Position",
+                    "uriOpt" : {
+                      "type" : "Some",
+                      "value" : "\/Producer-Filter-Consumer-periodic\/PFC.aadl"
+                    },
+                    "beginLine" : 52,
+                    "beginColumn" : 4,
+                    "endLine" : 52,
+                    "endColumn" : 56,
+                    "offset" : 1220,
+                    "length" : 52
+                  }
+                }
+              },
+              "src" : [
+                {
+                  "type" : "EndPoint",
+                  "component" : {
+                    "type" : "Name",
+                    "name" : ["PFC_Sys_Impl_Instance", "proc", "filter"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/Producer-Filter-Consumer-periodic\/PFC.aadl"
+                        },
+                        "beginLine" : 48,
+                        "beginColumn" : 4,
+                        "endLine" : 48,
+                        "endColumn" : 26,
+                        "offset" : 1094,
+                        "length" : 22
+                      }
+                    }
+                  },
+                  "feature" : {
+                    "type" : "Some",
+                    "value" : {
+                      "type" : "Name",
+                      "name" : ["PFC_Sys_Impl_Instance", "proc", "filter", "to_consumer"],
+                      "pos" : {
+                        "type" : "Some",
+                        "value" : {
+                          "type" : "Position",
+                          "uriOpt" : {
+                            "type" : "Some",
+                            "value" : "\/Producer-Filter-Consumer-periodic\/PFC.aadl"
+                          },
+                          "beginLine" : 70,
+                          "beginColumn" : 4,
+                          "endLine" : 70,
+                          "endColumn" : 45,
+                          "offset" : 1664,
+                          "length" : 41
+                        }
+                      }
+                    }
+                  },
+                  "direction" : {
+                    "type" : "Some",
+                    "value" : {
+                      "type" : "Direction",
+                      "value" : "Out"
+                    }
+                  }
+                }
+              ],
+              "dst" : [
+                {
+                  "type" : "EndPoint",
+                  "component" : {
+                    "type" : "Name",
+                    "name" : ["PFC_Sys_Impl_Instance", "proc", "consumer"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/Producer-Filter-Consumer-periodic\/PFC.aadl"
+                        },
+                        "beginLine" : 49,
+                        "beginColumn" : 4,
+                        "endLine" : 49,
+                        "endColumn" : 30,
+                        "offset" : 1120,
+                        "length" : 26
+                      }
+                    }
+                  },
+                  "feature" : {
+                    "type" : "Some",
+                    "value" : {
+                      "type" : "Name",
+                      "name" : ["PFC_Sys_Impl_Instance", "proc", "consumer", "from_filter"],
+                      "pos" : {
+                        "type" : "Some",
+                        "value" : {
+                          "type" : "Position",
+                          "uriOpt" : {
+                            "type" : "Some",
+                            "value" : "\/Producer-Filter-Consumer-periodic\/PFC.aadl"
+                          },
+                          "beginLine" : 80,
+                          "beginColumn" : 4,
+                          "endLine" : 82,
+                          "endColumn" : 6,
+                          "offset" : 1867,
+                          "length" : 94
+                        }
+                      }
+                    }
+                  },
+                  "direction" : {
+                    "type" : "Some",
+                    "value" : {
+                      "type" : "Direction",
+                      "value" : "In"
+                    }
+                  }
+                }
+              ],
+              "kind" : {
+                "type" : "ConnectionKind",
+                "value" : "Port"
+              },
+              "isBiDirectional" : false,
+              "connectionInstances" : [
+                {
+                  "type" : "Name",
+                  "name" : ["PFC_Sys_Impl_Instance", "proc", "filter", "to_consumer -> consumer", "from_filter"],
+                  "pos" : {
+                    "type" : "None"
+                  }
+                }
+              ],
+              "properties" : [
+              ],
+              "uriFrag" : "Producer-Filter-Consumer-periodic\/instances\/PFC_PFC_Sys_Impl_Instance.aaxl2#\/\/@componentInstance.0\/@connectionInstance.1\/@connectionReference.0"
+            }
+          ],
+          "connectionInstances" : [
+            {
+              "type" : "ConnectionInstance",
+              "name" : {
+                "type" : "Name",
+                "name" : ["PFC_Sys_Impl_Instance", "proc", "producer.to_filter -> filter.from_producer"],
+                "pos" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Position",
+                    "uriOpt" : {
+                      "type" : "Some",
+                      "value" : "\/Producer-Filter-Consumer-periodic\/PFC.aadl"
+                    },
+                    "beginLine" : 51,
+                    "beginColumn" : 4,
+                    "endLine" : 51,
+                    "endColumn" : 56,
+                    "offset" : 1164,
+                    "length" : 52
+                  }
+                }
+              },
+              "src" : {
+                "type" : "EndPoint",
+                "component" : {
+                  "type" : "Name",
+                  "name" : ["PFC_Sys_Impl_Instance", "proc", "producer"],
+                  "pos" : {
+                    "type" : "Some",
+                    "value" : {
+                      "type" : "Position",
+                      "uriOpt" : {
+                        "type" : "Some",
+                        "value" : "\/Producer-Filter-Consumer-periodic\/PFC.aadl"
+                      },
+                      "beginLine" : 47,
+                      "beginColumn" : 4,
+                      "endLine" : 47,
+                      "endColumn" : 30,
+                      "offset" : 1064,
+                      "length" : 26
+                    }
+                  }
+                },
+                "feature" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Name",
+                    "name" : ["PFC_Sys_Impl_Instance", "proc", "producer", "to_filter"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/Producer-Filter-Consumer-periodic\/PFC.aadl"
+                        },
+                        "beginLine" : 57,
+                        "beginColumn" : 4,
+                        "endLine" : 57,
+                        "endColumn" : 43,
+                        "offset" : 1325,
+                        "length" : 39
+                      }
+                    }
+                  }
+                },
+                "direction" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Direction",
+                    "value" : "Out"
+                  }
+                }
+              },
+              "dst" : {
+                "type" : "EndPoint",
+                "component" : {
+                  "type" : "Name",
+                  "name" : ["PFC_Sys_Impl_Instance", "proc", "filter"],
+                  "pos" : {
+                    "type" : "Some",
+                    "value" : {
+                      "type" : "Position",
+                      "uriOpt" : {
+                        "type" : "Some",
+                        "value" : "\/Producer-Filter-Consumer-periodic\/PFC.aadl"
+                      },
+                      "beginLine" : 48,
+                      "beginColumn" : 4,
+                      "endLine" : 48,
+                      "endColumn" : 26,
+                      "offset" : 1094,
+                      "length" : 22
+                    }
+                  }
+                },
+                "feature" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Name",
+                    "name" : ["PFC_Sys_Impl_Instance", "proc", "filter", "from_producer"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/Producer-Filter-Consumer-periodic\/PFC.aadl"
+                        },
+                        "beginLine" : 67,
+                        "beginColumn" : 4,
+                        "endLine" : 69,
+                        "endColumn" : 6,
+                        "offset" : 1564,
+                        "length" : 96
+                      }
+                    }
+                  }
+                },
+                "direction" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Direction",
+                    "value" : "In"
+                  }
+                }
+              },
+              "kind" : {
+                "type" : "ConnectionKind",
+                "value" : "Port"
+              },
+              "connectionRefs" : [
+                {
+                  "type" : "ConnectionReference",
+                  "name" : {
+                    "type" : "Name",
+                    "name" : ["PFC_Sys_Impl_Instance", "proc", "c1"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/Producer-Filter-Consumer-periodic\/PFC.aadl"
+                        },
+                        "beginLine" : 51,
+                        "beginColumn" : 4,
+                        "endLine" : 51,
+                        "endColumn" : 56,
+                        "offset" : 1164,
+                        "length" : 52
+                      }
+                    }
+                  },
+                  "context" : {
+                    "type" : "Name",
+                    "name" : ["PFC_Sys_Impl_Instance", "proc"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/Producer-Filter-Consumer-periodic\/PFC.aadl"
+                        },
+                        "beginLine" : 30,
+                        "beginColumn" : 4,
+                        "endLine" : 30,
+                        "endColumn" : 32,
+                        "offset" : 666,
+                        "length" : 28
+                      }
+                    }
+                  },
+                  "isParent" : true
+                }
+              ],
+              "properties" : [
+              ]
+            },
+            {
+              "type" : "ConnectionInstance",
+              "name" : {
+                "type" : "Name",
+                "name" : ["PFC_Sys_Impl_Instance", "proc", "filter.to_consumer -> consumer.from_filter"],
+                "pos" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Position",
+                    "uriOpt" : {
+                      "type" : "Some",
+                      "value" : "\/Producer-Filter-Consumer-periodic\/PFC.aadl"
+                    },
+                    "beginLine" : 52,
+                    "beginColumn" : 4,
+                    "endLine" : 52,
+                    "endColumn" : 56,
+                    "offset" : 1220,
+                    "length" : 52
+                  }
+                }
+              },
+              "src" : {
+                "type" : "EndPoint",
+                "component" : {
+                  "type" : "Name",
+                  "name" : ["PFC_Sys_Impl_Instance", "proc", "filter"],
+                  "pos" : {
+                    "type" : "Some",
+                    "value" : {
+                      "type" : "Position",
+                      "uriOpt" : {
+                        "type" : "Some",
+                        "value" : "\/Producer-Filter-Consumer-periodic\/PFC.aadl"
+                      },
+                      "beginLine" : 48,
+                      "beginColumn" : 4,
+                      "endLine" : 48,
+                      "endColumn" : 26,
+                      "offset" : 1094,
+                      "length" : 22
+                    }
+                  }
+                },
+                "feature" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Name",
+                    "name" : ["PFC_Sys_Impl_Instance", "proc", "filter", "to_consumer"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/Producer-Filter-Consumer-periodic\/PFC.aadl"
+                        },
+                        "beginLine" : 70,
+                        "beginColumn" : 4,
+                        "endLine" : 70,
+                        "endColumn" : 45,
+                        "offset" : 1664,
+                        "length" : 41
+                      }
+                    }
+                  }
+                },
+                "direction" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Direction",
+                    "value" : "Out"
+                  }
+                }
+              },
+              "dst" : {
+                "type" : "EndPoint",
+                "component" : {
+                  "type" : "Name",
+                  "name" : ["PFC_Sys_Impl_Instance", "proc", "consumer"],
+                  "pos" : {
+                    "type" : "Some",
+                    "value" : {
+                      "type" : "Position",
+                      "uriOpt" : {
+                        "type" : "Some",
+                        "value" : "\/Producer-Filter-Consumer-periodic\/PFC.aadl"
+                      },
+                      "beginLine" : 49,
+                      "beginColumn" : 4,
+                      "endLine" : 49,
+                      "endColumn" : 30,
+                      "offset" : 1120,
+                      "length" : 26
+                    }
+                  }
+                },
+                "feature" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Name",
+                    "name" : ["PFC_Sys_Impl_Instance", "proc", "consumer", "from_filter"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/Producer-Filter-Consumer-periodic\/PFC.aadl"
+                        },
+                        "beginLine" : 80,
+                        "beginColumn" : 4,
+                        "endLine" : 82,
+                        "endColumn" : 6,
+                        "offset" : 1867,
+                        "length" : 94
+                      }
+                    }
+                  }
+                },
+                "direction" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Direction",
+                    "value" : "In"
+                  }
+                }
+              },
+              "kind" : {
+                "type" : "ConnectionKind",
+                "value" : "Port"
+              },
+              "connectionRefs" : [
+                {
+                  "type" : "ConnectionReference",
+                  "name" : {
+                    "type" : "Name",
+                    "name" : ["PFC_Sys_Impl_Instance", "proc", "c2"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/Producer-Filter-Consumer-periodic\/PFC.aadl"
+                        },
+                        "beginLine" : 52,
+                        "beginColumn" : 4,
+                        "endLine" : 52,
+                        "endColumn" : 56,
+                        "offset" : 1220,
+                        "length" : 52
+                      }
+                    }
+                  },
+                  "context" : {
+                    "type" : "Name",
+                    "name" : ["PFC_Sys_Impl_Instance", "proc"],
+                    "pos" : {
+                      "type" : "Some",
+                      "value" : {
+                        "type" : "Position",
+                        "uriOpt" : {
+                          "type" : "Some",
+                          "value" : "\/Producer-Filter-Consumer-periodic\/PFC.aadl"
+                        },
+                        "beginLine" : 30,
+                        "beginColumn" : 4,
+                        "endLine" : 30,
+                        "endColumn" : 32,
+                        "offset" : 666,
+                        "length" : 28
+                      }
+                    }
+                  },
+                  "isParent" : true
+                }
+              ],
+              "properties" : [
+              ]
+            }
+          ],
+          "properties" : [
+          ],
+          "flows" : [
+          ],
+          "modes" : [
+          ],
+          "annexes" : [
+            {
+              "type" : "Annex",
+              "name" : "Emv2",
+              "clause" : {
+                "type" : "Emv2Clause",
+                "libraries" : [
+                ],
+                "propagations" : [
+                ],
+                "flows" : [
+                ],
+                "componentBehavior" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Emv2BehaviorSection",
+                    "events" : [
+                    ],
+                    "transitions" : [
+                    ],
+                    "propagations" : [
+                    ]
+                  }
+                },
+                "properties" : [
+                ]
+              }
+            },
+            {
+              "type" : "Annex",
+              "name" : "smf",
+              "clause" : {
+                "type" : "SmfClause",
+                "classification" : [
+                ],
+                "declass" : [
+                ]
+              }
+            }
+          ],
+          "uriFrag" : "Producer-Filter-Consumer-periodic\/instances\/PFC_PFC_Sys_Impl_Instance.aaxl2#\/\/@componentInstance.0"
+        }
+      ],
+      "connections" : [
+      ],
+      "connectionInstances" : [
+      ],
+      "properties" : [
+        {
+          "type" : "Property",
+          "name" : {
+            "type" : "Name",
+            "name" : ["PFC_Sys_Impl_Instance", "HAMR::Platform"],
+            "pos" : {
+              "type" : "Some",
+              "value" : {
+                "type" : "Position",
+                "uriOpt" : {
+                  "type" : "Some",
+                  "value" : "\/org.sireum.aadl.osate.hamr\/resources\/HAMR.aadl"
+                },
+                "beginLine" : 28,
+                "beginColumn" : 3,
+                "endLine" : 28,
+                "endColumn" : 153,
+                "offset" : 1125,
+                "length" : 150
+              }
+            }
+          },
+          "propertyValues" : [
+            {
+              "type" : "ValueProp",
+              "value" : "JVM"
+            },
+            {
+              "type" : "ValueProp",
+              "value" : "Cygwin"
+            },
+            {
+              "type" : "ValueProp",
+              "value" : "Linux"
+            },
+            {
+              "type" : "ValueProp",
+              "value" : "macOS"
+            },
+            {
+              "type" : "ValueProp",
+              "value" : "seL4"
+            }
+          ],
+          "appliesTo" : [
+          ]
+        },
+        {
+          "type" : "Property",
+          "name" : {
+            "type" : "Name",
+            "name" : ["PFC_Sys_Impl_Instance", "HAMR::HW"],
+            "pos" : {
+              "type" : "Some",
+              "value" : {
+                "type" : "Position",
+                "uriOpt" : {
+                  "type" : "Some",
+                  "value" : "\/org.sireum.aadl.osate.hamr\/resources\/HAMR.aadl"
+                },
+                "beginLine" : 53,
+                "beginColumn" : 3,
+                "endLine" : 53,
+                "endColumn" : 124,
+                "offset" : 2136,
+                "length" : 121
+              }
+            }
+          },
+          "propertyValues" : [
+            {
+              "type" : "ValueProp",
+              "value" : "x86"
+            },
+            {
+              "type" : "ValueProp",
+              "value" : "amd64"
+            },
+            {
+              "type" : "ValueProp",
+              "value" : "QEMU"
+            }
+          ],
+          "appliesTo" : [
+          ]
+        },
+        {
+          "type" : "Property",
+          "name" : {
+            "type" : "Name",
+            "name" : ["PFC_Sys_Impl_Instance", "HAMR::Default_Bit_Width"],
+            "pos" : {
+              "type" : "Some",
+              "value" : {
+                "type" : "Position",
+                "uriOpt" : {
+                  "type" : "Some",
+                  "value" : "\/org.sireum.aadl.osate.hamr\/resources\/HAMR.aadl"
+                },
+                "beginLine" : 34,
+                "beginColumn" : 3,
+                "endLine" : 34,
+                "endColumn" : 101,
+                "offset" : 1431,
+                "length" : 98
+              }
+            }
+          },
+          "propertyValues" : [
+            {
+              "type" : "UnitProp",
+              "value" : "32.0",
+              "unit" : {
+                "type" : "None"
+              }
+            }
+          ],
+          "appliesTo" : [
+          ]
+        },
+        {
+          "type" : "Property",
+          "name" : {
+            "type" : "Name",
+            "name" : ["PFC_Sys_Impl_Instance", "HAMR::Default_Max_Sequence_Size"],
+            "pos" : {
+              "type" : "Some",
+              "value" : {
+                "type" : "Position",
+                "uriOpt" : {
+                  "type" : "Some",
+                  "value" : "\/org.sireum.aadl.osate.hamr\/resources\/HAMR.aadl"
+                },
+                "beginLine" : 40,
+                "beginColumn" : 3,
+                "endLine" : 40,
+                "endColumn" : 108,
+                "offset" : 1690,
+                "length" : 105
+              }
+            }
+          },
+          "propertyValues" : [
+            {
+              "type" : "UnitProp",
+              "value" : "1.0",
+              "unit" : {
+                "type" : "None"
+              }
+            }
+          ],
+          "appliesTo" : [
+          ]
+        },
+        {
+          "type" : "Property",
+          "name" : {
+            "type" : "Name",
+            "name" : ["PFC_Sys_Impl_Instance", "HAMR::Max_String_Size"],
+            "pos" : {
+              "type" : "Some",
+              "value" : {
+                "type" : "Position",
+                "uriOpt" : {
+                  "type" : "Some",
+                  "value" : "\/org.sireum.aadl.osate.hamr\/resources\/HAMR.aadl"
+                },
+                "beginLine" : 46,
+                "beginColumn" : 3,
+                "endLine" : 46,
+                "endColumn" : 98,
+                "offset" : 1921,
+                "length" : 95
+              }
+            }
+          },
+          "propertyValues" : [
+            {
+              "type" : "UnitProp",
+              "value" : "256.0",
+              "unit" : {
+                "type" : "None"
+              }
+            }
+          ],
+          "appliesTo" : [
+          ]
+        },
+        {
+          "type" : "Property",
+          "name" : {
+            "type" : "Name",
+            "name" : ["PFC_Sys_Impl_Instance", "HAMR::Bit_Codec_Raw_Connections"],
+            "pos" : {
+              "type" : "Some",
+              "value" : {
+                "type" : "Position",
+                "uriOpt" : {
+                  "type" : "Some",
+                  "value" : "\/org.sireum.aadl.osate.hamr\/resources\/HAMR.aadl"
+                },
+                "beginLine" : 64,
+                "beginColumn" : 3,
+                "endLine" : 64,
+                "endColumn" : 65,
+                "offset" : 2907,
+                "length" : 62
+              }
+            }
+          },
+          "propertyValues" : [
+            {
+              "type" : "ValueProp",
+              "value" : "true"
+            }
+          ],
+          "appliesTo" : [
+          ]
+        }
+      ],
+      "flows" : [
+      ],
+      "modes" : [
+      ],
+      "annexes" : [
+        {
+          "type" : "Annex",
+          "name" : "Emv2",
+          "clause" : {
+            "type" : "Emv2Clause",
+            "libraries" : [
+            ],
+            "propagations" : [
+            ],
+            "flows" : [
+            ],
+            "componentBehavior" : {
+              "type" : "Some",
+              "value" : {
+                "type" : "Emv2BehaviorSection",
+                "events" : [
+                ],
+                "transitions" : [
+                ],
+                "propagations" : [
+                ]
+              }
+            },
+            "properties" : [
+            ]
+          }
+        },
+        {
+          "type" : "Annex",
+          "name" : "smf",
+          "clause" : {
+            "type" : "SmfClause",
+            "classification" : [
+            ],
+            "declass" : [
+            ]
+          }
+        }
+      ],
+      "uriFrag" : "Producer-Filter-Consumer-periodic\/instances\/PFC_PFC_Sys_Impl_Instance.aaxl2#\/"
+    }
+  ],
+  "annexLib" : [
+  ],
+  "dataComponents" : [
+    {
+      "type" : "Component",
+      "identifier" : {
+        "type" : "Name",
+        "name" : [],
+        "pos" : {
+          "type" : "None"
+        }
+      },
+      "category" : {
+        "type" : "ComponentCategory",
+        "value" : "Data"
+      },
+      "classifier" : {
+        "type" : "Some",
+        "value" : {
+          "type" : "Classifier",
+          "name" : "Base_Types::Integer_32"
+        }
+      },
+      "features" : [
+      ],
+      "subComponents" : [
+      ],
+      "connections" : [
+      ],
+      "connectionInstances" : [
+      ],
+      "properties" : [
+        {
+          "type" : "Property",
+          "name" : {
+            "type" : "Name",
+            "name" : ["Data_Model::Number_Representation"],
+            "pos" : {
+              "type" : "Some",
+              "value" : {
+                "type" : "Position",
+                "uriOpt" : {
+                  "type" : "Some",
+                  "value" : "\/org.osate.contribution.sei\/resources\/properties\/Data_Model.aadl"
+                },
+                "beginLine" : 78,
+                "beginColumn" : 4,
+                "endLine" : 78,
+                "endColumn" : 88,
+                "offset" : 3653,
+                "length" : 84
+              }
+            }
+          },
+          "propertyValues" : [
+            {
+              "type" : "ValueProp",
+              "value" : "Signed"
+            }
+          ],
+          "appliesTo" : [
+          ]
+        },
+        {
+          "type" : "Property",
+          "name" : {
+            "type" : "Name",
+            "name" : ["Memory_Properties::Data_Size"],
+            "pos" : {
+              "type" : "Some",
+              "value" : {
+                "type" : "Position",
+                "uriOpt" : {
+                  "type" : "Some",
+                  "value" : "\/org.osate.workspace\/resources\/properties\/Predeclared_Property_Sets\/Memory_Properties.aadl"
+                },
+                "beginLine" : 91,
+                "beginColumn" : 2,
+                "endLine" : 92,
+                "endColumn" : 137,
+                "offset" : 4757,
+                "length" : 152
+              }
+            }
+          },
+          "propertyValues" : [
+            {
+              "type" : "UnitProp",
+              "value" : "32.0",
+              "unit" : {
+                "type" : "Some",
+                "value" : "bits"
+              }
+            }
+          ],
+          "appliesTo" : [
+          ]
+        }
+      ],
+      "flows" : [
+      ],
+      "modes" : [
+      ],
+      "annexes" : [
+      ],
+      "uriFrag" : ""
+    },
+    {
+      "type" : "Component",
+      "identifier" : {
+        "type" : "Name",
+        "name" : [],
+        "pos" : {
+          "type" : "None"
+        }
+      },
+      "category" : {
+        "type" : "ComponentCategory",
+        "value" : "Data"
+      },
+      "classifier" : {
+        "type" : "Some",
+        "value" : {
+          "type" : "Classifier",
+          "name" : "PFC::Coordinate.Impl"
+        }
+      },
+      "features" : [
+      ],
+      "subComponents" : [
+        {
+          "type" : "Component",
+          "identifier" : {
+            "type" : "Name",
+            "name" : ["latitude"],
+            "pos" : {
+              "type" : "Some",
+              "value" : {
+                "type" : "Position",
+                "uriOpt" : {
+                  "type" : "Some",
+                  "value" : "\/Producer-Filter-Consumer-periodic\/PFC.aadl"
+                },
+                "beginLine" : 10,
+                "beginColumn" : 4,
+                "endLine" : 10,
+                "endColumn" : 42,
+                "offset" : 165,
+                "length" : 38
+              }
+            }
+          },
+          "category" : {
+            "type" : "ComponentCategory",
+            "value" : "Data"
+          },
+          "classifier" : {
+            "type" : "Some",
+            "value" : {
+              "type" : "Classifier",
+              "name" : "Base_Types::Integer_32"
+            }
+          },
+          "features" : [
+          ],
+          "subComponents" : [
+          ],
+          "connections" : [
+          ],
+          "connectionInstances" : [
+          ],
+          "properties" : [
+            {
+              "type" : "Property",
+              "name" : {
+                "type" : "Name",
+                "name" : ["Data_Model::Number_Representation"],
+                "pos" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Position",
+                    "uriOpt" : {
+                      "type" : "Some",
+                      "value" : "\/org.osate.contribution.sei\/resources\/properties\/Data_Model.aadl"
+                    },
+                    "beginLine" : 78,
+                    "beginColumn" : 4,
+                    "endLine" : 78,
+                    "endColumn" : 88,
+                    "offset" : 3653,
+                    "length" : 84
+                  }
+                }
+              },
+              "propertyValues" : [
+                {
+                  "type" : "ValueProp",
+                  "value" : "Signed"
+                }
+              ],
+              "appliesTo" : [
+              ]
+            },
+            {
+              "type" : "Property",
+              "name" : {
+                "type" : "Name",
+                "name" : ["Memory_Properties::Data_Size"],
+                "pos" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Position",
+                    "uriOpt" : {
+                      "type" : "Some",
+                      "value" : "\/org.osate.workspace\/resources\/properties\/Predeclared_Property_Sets\/Memory_Properties.aadl"
+                    },
+                    "beginLine" : 91,
+                    "beginColumn" : 2,
+                    "endLine" : 92,
+                    "endColumn" : 137,
+                    "offset" : 4757,
+                    "length" : 152
+                  }
+                }
+              },
+              "propertyValues" : [
+                {
+                  "type" : "UnitProp",
+                  "value" : "32.0",
+                  "unit" : {
+                    "type" : "Some",
+                    "value" : "bits"
+                  }
+                }
+              ],
+              "appliesTo" : [
+              ]
+            }
+          ],
+          "flows" : [
+          ],
+          "modes" : [
+          ],
+          "annexes" : [
+          ],
+          "uriFrag" : "platform:\/plugin\/org.osate.contribution.sei\/resources\/packages\/Base_Types.aadl#Base_Types.Integer_32"
+        },
+        {
+          "type" : "Component",
+          "identifier" : {
+            "type" : "Name",
+            "name" : ["longitude"],
+            "pos" : {
+              "type" : "Some",
+              "value" : {
+                "type" : "Position",
+                "uriOpt" : {
+                  "type" : "Some",
+                  "value" : "\/Producer-Filter-Consumer-periodic\/PFC.aadl"
+                },
+                "beginLine" : 11,
+                "beginColumn" : 4,
+                "endLine" : 11,
+                "endColumn" : 43,
+                "offset" : 207,
+                "length" : 39
+              }
+            }
+          },
+          "category" : {
+            "type" : "ComponentCategory",
+            "value" : "Data"
+          },
+          "classifier" : {
+            "type" : "Some",
+            "value" : {
+              "type" : "Classifier",
+              "name" : "Base_Types::Integer_32"
+            }
+          },
+          "features" : [
+          ],
+          "subComponents" : [
+          ],
+          "connections" : [
+          ],
+          "connectionInstances" : [
+          ],
+          "properties" : [
+            {
+              "type" : "Property",
+              "name" : {
+                "type" : "Name",
+                "name" : ["Data_Model::Number_Representation"],
+                "pos" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Position",
+                    "uriOpt" : {
+                      "type" : "Some",
+                      "value" : "\/org.osate.contribution.sei\/resources\/properties\/Data_Model.aadl"
+                    },
+                    "beginLine" : 78,
+                    "beginColumn" : 4,
+                    "endLine" : 78,
+                    "endColumn" : 88,
+                    "offset" : 3653,
+                    "length" : 84
+                  }
+                }
+              },
+              "propertyValues" : [
+                {
+                  "type" : "ValueProp",
+                  "value" : "Signed"
+                }
+              ],
+              "appliesTo" : [
+              ]
+            },
+            {
+              "type" : "Property",
+              "name" : {
+                "type" : "Name",
+                "name" : ["Memory_Properties::Data_Size"],
+                "pos" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Position",
+                    "uriOpt" : {
+                      "type" : "Some",
+                      "value" : "\/org.osate.workspace\/resources\/properties\/Predeclared_Property_Sets\/Memory_Properties.aadl"
+                    },
+                    "beginLine" : 91,
+                    "beginColumn" : 2,
+                    "endLine" : 92,
+                    "endColumn" : 137,
+                    "offset" : 4757,
+                    "length" : 152
+                  }
+                }
+              },
+              "propertyValues" : [
+                {
+                  "type" : "UnitProp",
+                  "value" : "32.0",
+                  "unit" : {
+                    "type" : "Some",
+                    "value" : "bits"
+                  }
+                }
+              ],
+              "appliesTo" : [
+              ]
+            }
+          ],
+          "flows" : [
+          ],
+          "modes" : [
+          ],
+          "annexes" : [
+          ],
+          "uriFrag" : "platform:\/plugin\/org.osate.contribution.sei\/resources\/packages\/Base_Types.aadl#Base_Types.Integer_32"
+        },
+        {
+          "type" : "Component",
+          "identifier" : {
+            "type" : "Name",
+            "name" : ["altitude"],
+            "pos" : {
+              "type" : "Some",
+              "value" : {
+                "type" : "Position",
+                "uriOpt" : {
+                  "type" : "Some",
+                  "value" : "\/Producer-Filter-Consumer-periodic\/PFC.aadl"
+                },
+                "beginLine" : 12,
+                "beginColumn" : 4,
+                "endLine" : 12,
+                "endColumn" : 42,
+                "offset" : 250,
+                "length" : 38
+              }
+            }
+          },
+          "category" : {
+            "type" : "ComponentCategory",
+            "value" : "Data"
+          },
+          "classifier" : {
+            "type" : "Some",
+            "value" : {
+              "type" : "Classifier",
+              "name" : "Base_Types::Integer_32"
+            }
+          },
+          "features" : [
+          ],
+          "subComponents" : [
+          ],
+          "connections" : [
+          ],
+          "connectionInstances" : [
+          ],
+          "properties" : [
+            {
+              "type" : "Property",
+              "name" : {
+                "type" : "Name",
+                "name" : ["Data_Model::Number_Representation"],
+                "pos" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Position",
+                    "uriOpt" : {
+                      "type" : "Some",
+                      "value" : "\/org.osate.contribution.sei\/resources\/properties\/Data_Model.aadl"
+                    },
+                    "beginLine" : 78,
+                    "beginColumn" : 4,
+                    "endLine" : 78,
+                    "endColumn" : 88,
+                    "offset" : 3653,
+                    "length" : 84
+                  }
+                }
+              },
+              "propertyValues" : [
+                {
+                  "type" : "ValueProp",
+                  "value" : "Signed"
+                }
+              ],
+              "appliesTo" : [
+              ]
+            },
+            {
+              "type" : "Property",
+              "name" : {
+                "type" : "Name",
+                "name" : ["Memory_Properties::Data_Size"],
+                "pos" : {
+                  "type" : "Some",
+                  "value" : {
+                    "type" : "Position",
+                    "uriOpt" : {
+                      "type" : "Some",
+                      "value" : "\/org.osate.workspace\/resources\/properties\/Predeclared_Property_Sets\/Memory_Properties.aadl"
+                    },
+                    "beginLine" : 91,
+                    "beginColumn" : 2,
+                    "endLine" : 92,
+                    "endColumn" : 137,
+                    "offset" : 4757,
+                    "length" : 152
+                  }
+                }
+              },
+              "propertyValues" : [
+                {
+                  "type" : "UnitProp",
+                  "value" : "32.0",
+                  "unit" : {
+                    "type" : "Some",
+                    "value" : "bits"
+                  }
+                }
+              ],
+              "appliesTo" : [
+              ]
+            }
+          ],
+          "flows" : [
+          ],
+          "modes" : [
+          ],
+          "annexes" : [
+          ],
+          "uriFrag" : "platform:\/plugin\/org.osate.contribution.sei\/resources\/packages\/Base_Types.aadl#Base_Types.Integer_32"
+        }
+      ],
+      "connections" : [
+      ],
+      "connectionInstances" : [
+      ],
+      "properties" : [
+      ],
+      "flows" : [
+      ],
+      "modes" : [
+      ],
+      "annexes" : [
+      ],
+      "uriFrag" : ""
+    },
+    {
+      "type" : "Component",
+      "identifier" : {
+        "type" : "Name",
+        "name" : [],
+        "pos" : {
+          "type" : "None"
+        }
+      },
+      "category" : {
+        "type" : "ComponentCategory",
+        "value" : "Data"
+      },
+      "classifier" : {
+        "type" : "Some",
+        "value" : {
+          "type" : "Classifier",
+          "name" : "PFC::Mission"
+        }
+      },
+      "features" : [
+      ],
+      "subComponents" : [
+      ],
+      "connections" : [
+      ],
+      "connectionInstances" : [
+      ],
+      "properties" : [
+        {
+          "type" : "Property",
+          "name" : {
+            "type" : "Name",
+            "name" : ["Data_Model::Data_Representation"],
+            "pos" : {
+              "type" : "Some",
+              "value" : {
+                "type" : "Position",
+                "uriOpt" : {
+                  "type" : "Some",
+                  "value" : "\/org.osate.contribution.sei\/resources\/properties\/Data_Model.aadl"
+                },
+                "beginLine" : 26,
+                "beginColumn" : 4,
+                "endLine" : 29,
+                "endColumn" : 36,
+                "offset" : 1108,
+                "length" : 162
+              }
+            }
+          },
+          "propertyValues" : [
+            {
+              "type" : "ValueProp",
+              "value" : "Array"
+            }
+          ],
+          "appliesTo" : [
+          ]
+        },
+        {
+          "type" : "Property",
+          "name" : {
+            "type" : "Name",
+            "name" : ["Data_Model::Base_Type"],
+            "pos" : {
+              "type" : "Some",
+              "value" : {
+                "type" : "Position",
+                "uriOpt" : {
+                  "type" : "Some",
+                  "value" : "\/org.osate.contribution.sei\/resources\/properties\/Data_Model.aadl"
+                },
+                "beginLine" : 5,
+                "beginColumn" : 4,
+                "endLine" : 5,
+                "endColumn" : 73,
+                "offset" : 106,
+                "length" : 69
+              }
+            }
+          },
+          "propertyValues" : [
+            {
+              "type" : "ClassifierProp",
+              "name" : "PFC::Coordinate.Impl"
+            }
+          ],
+          "appliesTo" : [
+          ]
+        },
+        {
+          "type" : "Property",
+          "name" : {
+            "type" : "Name",
+            "name" : ["Data_Model::Dimension"],
+            "pos" : {
+              "type" : "Some",
+              "value" : {
+                "type" : "Position",
+                "uriOpt" : {
+                  "type" : "Some",
+                  "value" : "\/org.osate.contribution.sei\/resources\/properties\/Data_Model.aadl"
+                },
+                "beginLine" : 38,
+                "beginColumn" : 4,
+                "endLine" : 38,
+                "endColumn" : 97,
+                "offset" : 1611,
+                "length" : 93
+              }
+            }
+          },
+          "propertyValues" : [
+            {
+              "type" : "UnitProp",
+              "value" : "3.0",
+              "unit" : {
+                "type" : "None"
+              }
+            }
+          ],
+          "appliesTo" : [
+          ]
+        },
+        {
+          "type" : "Property",
+          "name" : {
+            "type" : "Name",
+            "name" : ["HAMR::Bit_Codec_Spec"],
+            "pos" : {
+              "type" : "Some",
+              "value" : {
+                "type" : "Position",
+                "uriOpt" : {
+                  "type" : "Some",
+                  "value" : "\/org.sireum.aadl.osate.hamr\/resources\/HAMR.aadl"
+                },
+                "beginLine" : 76,
+                "beginColumn" : 3,
+                "endLine" : 76,
+                "endColumn" : 63,
+                "offset" : 3338,
+                "length" : 60
+              }
+            }
+          },
+          "propertyValues" : [
+            {
+              "type" : "ValueProp",
+              "value" : "data\/Mission.sc"
+            }
+          ],
+          "appliesTo" : [
+          ]
+        },
+        {
+          "type" : "Property",
+          "name" : {
+            "type" : "Name",
+            "name" : ["HAMR::Bit_Codec_Max_Size"],
+            "pos" : {
+              "type" : "Some",
+              "value" : {
+                "type" : "Position",
+                "uriOpt" : {
+                  "type" : "Some",
+                  "value" : "\/org.sireum.aadl.osate.hamr\/resources\/HAMR.aadl"
+                },
+                "beginLine" : 69,
+                "beginColumn" : 3,
+                "endLine" : 69,
+                "endColumn" : 61,
+                "offset" : 3098,
+                "length" : 58
+              }
+            }
+          },
+          "propertyValues" : [
+            {
+              "type" : "UnitProp",
+              "value" : "288.0",
+              "unit" : {
+                "type" : "Some",
+                "value" : "bits"
+              }
+            }
+          ],
+          "appliesTo" : [
+          ]
+        }
+      ],
+      "flows" : [
+      ],
+      "modes" : [
+      ],
+      "annexes" : [
+      ],
+      "uriFrag" : ""
+    }
+  ]
+}

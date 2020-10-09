@@ -1,0 +1,272 @@
+property set PCA_Properties is
+  with EMV2,
+    PCA_Types,
+--    Timing_Properties, --PCA_Pump,
+    PCA_Mechanical,PCA_Power, Physical_Properties,
+      PCA_Operation_Threads;
+  
+  --period for PCA component that are periodic or hybrid
+  --PCA_Period : --Timing_Properties::
+  --  Time => 5 ms applies to --(all)
+  --  (thread, thread group, process, system, device, virtual processor);
+      
+  -- jab: changed to constants
+  PCA_Period: constant Time => 5ms;
+  Sireum_Thread_Period : constant Time => 5 ms;
+  Drug_Library_Size : constant aadlinteger => 500;
+  Fault_Log_Size : constant aadlinteger => 150;
+  Event_Log_Size : constant aadlinteger => 1500;
+  -- end jab:      
+    
+  --maximum number of drug library entries
+  --Drug_Library_Size : aadlinteger => 500 applies to (PCA_Types::Drug_Library);
+  --maximum number of fault log records 
+  --Fault_Log_Size : aadlinteger => 150 applies to (PCA_Types::Fault_Log);
+  --maximum number of event log records 
+  --Event_Log_Size : aadlinteger => 1500 applies to (PCA_Types::Fault_Log);
+  
+  -- jab: changed to constant
+  Battery_Measurement_Period : constant Time => 1 min;
+  -- end jab:
+    
+  --6.3 Power Supply
+  --Battery_Measurement_Period : --Timing_Properties::
+  --  Time => 1 min applies to (PCA_Power::power_control);
+  --R6.3.0(1) The PCA pump shall continue to infuse for 10 minutes during interruption of 
+  --  mains electricity supply, either continuously or spread over an hour.
+  Battery_Power_Duration : --Timing_Properties::
+    Time => 10 min applies to (PCA_Power::power_control);
+  --fully-charged battery voltage chosen arbitrarily
+  Full_Battery_Voltage : Physical_Properties::Voltage => 5 V applies to (PCA_Power::power_control);
+  --R6.3.0(4) If the estimated battery life remaining is less than ∆lba = 3 minutes, 
+  --  the pump shall issue a low-battery warning.
+  --  (3 min/10 min) * 5V = 1.5V or 1500 mV
+  Low_Battery_Voltage : Physical_Properties::Voltage => 1500 mV applies to (PCA_Power::power_control);
+  --R6.3.0(5) battery failure alarm
+  Defective_Battery_Voltage : Physical_Properties::Voltage => 500 mV applies to (PCA_Power::power_control);
+  --R6.3.0(6) voltage out-of-range warning
+  Maximum_Power_Voltage : Physical_Properties::Voltage => 6 V applies to (PCA_Power::power_control);
+  Minimum_Power_Voltage : Physical_Properties::Voltage => 4 V applies to (PCA_Power::power_control);
+  
+  
+  --drug flow
+  --the pump must move fluid within this tolerance
+  Commanded_Drug_Flow_Rate_Tolerance : Physical_Properties::Fluid_Flow_Rate=> 1 mlPerHour  
+     applies to (PCA_Mechanical::pump);
+  --the flow sensors must be accurate to within this tolerance
+  Measured_Drug_Flow_Rate_Tolerance : Physical_Properties::Fluid_Flow_Rate=> 1 mlPerHour  
+     applies to (PCA_Mechanical::upstream_monitor,PCA_Mechanical::downstream_monitor);
+  --buffer volume for max drug per hour to drop to KVO rate before exceeding
+  Maximum_Drug_Per_Hour_Tolerance : Physical_Properties::Fluid_Volume=> 3 ml  
+     applies to (PCA_Operation_Threads::Max_Drug_Per_Hour_Watcher);
+    
+    
+    
+  --jab: should these be defined in the AADL model?
+  
+  -- Requirements bug:
+  -- 1) EC7 and EC8 mention tolerances for patient and clinician
+  --    bolus but never defines their values 
+  
+  -- see 4.1.3
+  Basal_Infusion_Flow_Tolerance : constant aadlreal => 0.5; -- ml/hr
+  Patient_Bolus_Infusion_Flow_Tolerance : constant aadlreal => 0.5; -- ml/hr
+  Clinician_Bolus_Infusion_Flow_Tolerance : constant aadlreal => 0.5; -- ml/hr
+  
+  --jab: durations to use before issuing over/under infusion alarms.
+  
+  -- see EC7 1 a), 5.4.2
+  Basal_Over_Infusion_Duration : constant Time => 5 min;
+  -- see EC8 1 a), 5.4.3
+  Basal_Under_Infusion_Duration : constant Time => 5 min;
+  
+
+  -- Requirements bug: 
+  -- 1) 5.4.4 and 5.4.5 states patient duration is '1 minutes' but 
+  --    EC7 and EC8 states it should be 10 seconds
+
+  -- see EC7 1 c), 5.4.4
+  Patient_Bolus_Over_Infusion_Duration : constant Time => 1 min;
+  -- see EC8 1 b), 5.4.5  
+  Patient_Bolus_Under_Infusion_Duration : constant Time => 1 min;
+  
+  -- Requirements bug: 
+  -- 1) EC7 1 e) states the following
+  --    "clinician-requested bolus flow rate exceeds the prescribed **patient-requested bolus** rate"
+  -- 2) 5.4.6 and 5.4.7 states square bolus duration is '5 min' but
+  --    EC7 and EC8 states it should be '1 min'
+  
+  -- see EC7	 1 e), 5.4.6
+  Clinician_Bolus_Over_Infusion_Duration : constant Time => 5 min;
+  -- see EC8 c), 5.4.7
+  Clinician_Bolus_Over_Under_Infusion_Duration : constant Time => 5 min;
+  -- jab end 
+    
+    
+    
+  --keep-vein-open rate
+  KVO_Rate_Constant : constant  Physical_Properties::Fluid_Flow_Rate=> 1 mlPerHour; -- 0.017 ml/min
+  KVO_Rate : Physical_Properties::Fluid_Flow_Rate=> PCA_Properties::KVO_Rate_Constant applies to (all);
+  --max rate of infusion, note unit change from KVO/Max
+  Max_Rate : constant  Physical_Properties::Fluid_Flow_Rate=> 10 mlPerMinute; -- 600 ml/hr
+  --rate of infusion during pump priming
+  Prime_Rate : Physical_Properties::Fluid_Flow_Rate=>PCA_Properties::Max_Rate applies to (all);
+--  Prime_Rate : constant Physical_Properties::Fluid_Flow_Rate=>PCA_Properties::Max_Rate;
+  --duration of priming  
+  Prime_Time_Constant : constant --Timing_Properties::
+    Time=> 6 sec;
+  Prime_Time : --Timing_Properties::
+    Time=>PCA_Properties::Prime_Time_Constant applies to (all);
+  --volume pumped to prime (=rate*time)
+  Priming_Volume_Constant : constant Physical_Properties::Fluid_Volume => 1 ml;
+  Priming_Volume :  Physical_Properties::Fluid_Volume=>PCA_Properties::Priming_Volume_Constant applies to (all);
+
+  --patient button rate, effectively max rate
+  Patient_Button_Rate_Constant : constant  Physical_Properties::Fluid_Flow_Rate=> 10 mlPerMinute; -- 600 ml/hr
+  Patient_Button_Rate :  Physical_Properties::Fluid_Flow_Rate=>PCA_Properties::Patient_Button_Rate_Constant applies to (all);
+
+  --background thread dispatch period
+  Service_Thread_Period : constant --Timing_Properties::
+    Time=> 1 sec;
+  
+---------- RISK-ASSESSMENT PROPERTIES----------------------
+-- these properties define failure rates for error sources
+-- and the likelihood that this failure will be undetected
+-- ProbabilityValue are chosen arbitrarily, feel free to change
+-----------------------------------------------------------
+
+--rate at which POST fails
+  POSTfailureRate : constant EMV2::DistributionSpecification => 
+    [ProbabilityValue => 1.2E-7; Distribution => Fixed;];
+--error rate of detection of POST failure   
+  POSTfailureToDetectRate : constant EMV2::DistributionSpecification => 
+    [ProbabilityValue => 1.3E-10; Distribution => Fixed;];
+  
+--rate at which RAM fails
+  RAMfailureRate : constant EMV2::DistributionSpecification => 
+    [ProbabilityValue => 1.4E-7; Distribution => Fixed;];
+--error rate of detection of RAM failure   
+  RAMfailureToDetectRate : constant EMV2::DistributionSpecification => 
+    [ProbabilityValue => 1.5E-10; Distribution => Fixed;];
+  
+--rate at which ROM fails
+  ROMfailureRate : constant EMV2::DistributionSpecification => 
+    [ProbabilityValue => 1.4E-7; Distribution => Fixed;];
+--error rate of detection of ROM failure   
+  ROMfailureToDetectRate : constant EMV2::DistributionSpecification => 
+    [ProbabilityValue => 1.5E-10; Distribution => Fixed;];
+  
+--rate at which CPU fails
+  CPUfailureRate : constant EMV2::DistributionSpecification => 
+    [ProbabilityValue => 1.4E-7; Distribution => Fixed;];
+--error rate of detection of CPU failure   
+  CPUfailureToDetectRate : constant EMV2::DistributionSpecification => 
+    [ProbabilityValue => 1.5E-10; Distribution => Fixed;];
+
+--rate at which Thread fails
+  ThreadfailureRate : constant EMV2::DistributionSpecification => 
+    [ProbabilityValue => 1.4E-7; Distribution => Fixed;];
+--error rate of detection of Thread failure   
+  ThreadfailureToDetectRate : constant EMV2::DistributionSpecification => 
+    [ProbabilityValue => 1.5E-10; Distribution => Fixed;];
+  
+--rate at which HW fails
+  HWfailureRate : constant EMV2::DistributionSpecification => 
+    [ProbabilityValue => 1.6E-7; Distribution => Fixed;];
+--error rate of detection of HW failure   
+  HWfailureToDetectRate : constant EMV2::DistributionSpecification => 
+    [ProbabilityValue => 1.7E-10; Distribution => Fixed;];
+  
+--rate at which LED fails
+  LEDfailureRate : constant EMV2::DistributionSpecification => 
+    [ProbabilityValue => 1.8E-7; Distribution => Fixed;];
+  
+--rate at which fault log fails
+  FaultLogFailureRate : constant EMV2::DistributionSpecification => 
+    [ProbabilityValue => 1.9E-7; Distribution => Fixed;];
+  
+--rate at which alarm thread fails
+  AlarmThreadFailureRate : constant EMV2::DistributionSpecification => 
+    [ProbabilityValue => 2.0E-8; Distribution => Fixed;];
+  
+--rate at which control panel touch screen fails
+  TouchScreenFailureRate : constant EMV2::DistributionSpecification => 
+    [ProbabilityValue => 2.0E-9; Distribution => Fixed;];
+  
+--rate at which control panel speaker fails
+  SpeakerFailureRate : constant EMV2::DistributionSpecification => 
+    [ProbabilityValue => 2.0E-10; Distribution => Fixed;];
+  
+--rate at which drug library fails
+  DrugLibraryFailureRate : constant EMV2::DistributionSpecification => 
+    [ProbabilityValue => 2.1E-10; Distribution => Fixed;];
+  
+--rate at which third-parties press the patient button
+  ThirdPartyButtonRate : constant EMV2::DistributionSpecification => 
+    [ProbabilityValue => 2.3E-1; Distribution => Fixed;];
+  
+--rate that clinicians make operator errors
+  OperatorErrorRate : constant EMV2::DistributionSpecification => 
+    [ProbabilityValue => 2.4E-3; Distribution => Fixed;];
+  
+--rate that patient's button fails
+  PatientButtonFailureRate : constant EMV2::DistributionSpecification => 
+    [ProbabilityValue => 2.5E-8; Distribution => Fixed;];
+  
+--rate of reservoir occlusion
+  ReservoirOcclusionRate : constant EMV2::DistributionSpecification => 
+    [ProbabilityValue => 2.6E-6; Distribution => Fixed;];
+--rate at which drug reservoir fails
+  ReservoirFailureRate : constant EMV2::DistributionSpecification => 
+    [ProbabilityValue => 2.6E-9; Distribution => Fixed;];
+--rate at which drug reservoir falsely indicates low or empty reservoir, or door open
+  ReservoirFalsePositiveRate : constant EMV2::DistributionSpecification => 
+    [ProbabilityValue => 2.7E-10; Distribution => Fixed;];
+
+--rate faults are mistakenly detected
+  FalsePositiveRate : constant EMV2::DistributionSpecification => 
+    [ProbabilityValue => 2.8E-8; Distribution => Fixed;];
+  
+--rate of mechanical pump failure
+  PumpFailureRate : constant EMV2::DistributionSpecification => 
+    [ProbabilityValue => 2.9E-8; Distribution => Fixed;];
+  
+--rate of upstream monitor failure
+  UpstreamMonitorFailureRate : constant EMV2::DistributionSpecification => 
+    [ProbabilityValue => 3.0E-8; Distribution => Fixed;];
+  
+--rate of downstream monitor failure
+  DownstreamMonitorFailureRate : constant EMV2::DistributionSpecification => 
+    [ProbabilityValue => 3.1E-8; Distribution => Fixed;];
+  
+--rate of scanner failure
+  ScannerFailureRate : constant EMV2::DistributionSpecification => 
+    [ProbabilityValue => 3.2E-8; Distribution => Fixed;];
+  
+--rate of ice bus adapter failure
+  BusAdapterFailureRate : constant EMV2::DistributionSpecification => 
+    [ProbabilityValue => 3.3E-8; Distribution => Fixed;];
+  
+--rate of maintenance controller failure
+  MaintenanceControllerFailureRate : constant EMV2::DistributionSpecification => 
+    [ProbabilityValue => 3.4E-8; Distribution => Fixed;];
+  
+--rate of thread failure
+  ThreadControllerFailureRate : constant EMV2::DistributionSpecification => 
+    [ProbabilityValue => 0.0; Distribution => Fixed;];
+  
+--rate of TPM failure
+  TPMFailureRate : constant EMV2::DistributionSpecification => 
+    [ProbabilityValue => 3.5E-9; Distribution => Fixed;];
+  
+--rate of battery failure
+  BatteryFailureRate : constant EMV2::DistributionSpecification => 
+    [ProbabilityValue => 3.6E-6; Distribution => Fixed;];
+  
+--rate of fault manager failure
+  FaultManagerFailureRate : constant EMV2::DistributionSpecification => 
+    [ProbabilityValue => 3.6E-6; Distribution => Fixed;];
+  
+ 
+     
+end PCA_Properties;

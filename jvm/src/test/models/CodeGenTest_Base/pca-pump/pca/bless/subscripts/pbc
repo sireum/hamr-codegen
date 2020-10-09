@@ -1,0 +1,52 @@
+#PCA_Operation_Threads::Patient_Bolus_Checker.imp
+push
+sort-by-component[PCA_Operation_Threads::Patient_Bolus_Checker.imp]
+#PCA_Operation_Threads::Patient_Bolus_Checker.imp
+#[serial 1041] <<M(run)>> -> <<I>> from invariant I when complete state run has Assertion <<M(run)>> in its definition
+make-an
+axioms
+#[serial 1042] Serban's Theorem:  disjunction of execute conditions leaving execution state start, <<M(start)>> -> <<e1 or e2 or . . . en>>
+axioms
+#[serial 1043] Serban's Theorem:  disjunction of execute conditions leaving execution state check_last_bolus_time, <<M(check_last_bolus_time)>> -> <<e1 or e2 or . . . en>>
+normalize
+replace<=
+laws
+axioms
+#[serial 1044]  <<M(start)>> -> <<M(run)>> for go:start-[ ]->run{};
+axioms
+#[serial 1045]  <<M(run) and x>> -> <<M(check_last_bolus_time)>> for button:run-[x]->check_last_bolus_time{};
+normalize
+axioms
+#[serial 1046]  <<M(check_last_bolus_time) and x>> A <<M(run)>> for nottoosoon:check_last_bolus_time-[x]->run{A};
+reduce
+atomic
+laws
+normalize
+axioms
+substitute-both
+laws
+normalize
+guided-sub-equals[last_patient_bolus]
+laws
+normalize
+laws
+normalize
+axioms
+split-post
+axioms
+now
+extend-eqr
+axioms
+#[serial 1047]  <<M(check_last_bolus_time) and x>> A <<M(run)>> for toosoon:check_last_bolus_time-[x]->run{A};
+atomic
+laws
+axioms
+substitute-both
+normalize
+laws
+split-post
+axioms
+now
+axioms
+#[serial 1048]  <<M(run) and x>> -> <<M(done)>> for quit:run-[x]->done{};
+axioms

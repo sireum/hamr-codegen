@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<projectDescription>
+	<name>PCA</name>
+	<comment></comment>
+	<projects>
+		<project>BLESS_Resources</project>
+		<project>ice-device</project>
+		<project>physical</project>
+		<project>Plugin_Resources</project>
+	</projects>
+	<buildSpec>
+		<buildCommand>
+			<name>org.eclipse.xtext.ui.shared.xtextBuilder</name>
+			<arguments>
+			</arguments>
+		</buildCommand>
+		<buildCommand>
+			<name>fr.openpeople.rdal.ide.rdalBuilder</name>
+			<arguments>
+			</arguments>
+		</buildCommand>
+	</buildSpec>
+	<natures>
+		<nature>org.eclipse.xtext.ui.shared.xtextNature</nature>
+		<nature>org.osate.core.aadlnature</nature>
+		<nature>fr.openpeople.rdal.ide.rdalNature</nature>
+	</natures>
+</projectDescription>

@@ -1,0 +1,560 @@
+--PCA_Control_Panel.aadl
+
+--the control panel is a 
+--  system control_panel containing
+--    a process ui_process which has a thread ui_thread
+--    and two devices pca_screen and pca_speaker
+
+--the control panel lets operator errors into the system, 
+--and may not show/sound alarms or warnings
+--internal errors fail-stop
+
+package PCA_Control_Panel
+  public
+  with Base_Types, PCA_Types, ICE_Types, BLESS, BLESS_Types, EMV2, PCA_Properties, PCA_Pump;
+
+
+--this is the touch screen used as the PCA pump's control panel
+--Image created by, and Touch used by ui_thread
+device pca_screen
+  features
+--CONTROLLED VARIABLE
+    Image: in data port PCA_Types::Image;   --image to be displayed 
+--MOITORED VARIABLE
+    Touch: out event data port PCA_Types::Touch;  --location of center of finger touch
+--EXTERNAL EFFECT
+    LightToEye: out data port Base_Types::Boolean;  --image seen by clinician
+--EXTERNAL PHENOMENON    
+    Finger_Press: in event data port Base_Types::Boolean;  --clinician touches screen
+  --internal bus
+    i_bus: requires bus access PCA_Pump::Internal_Bus;
+  properties
+    Dispatch_Protocol=>Periodic;
+    Timing_Properties::Period => 1 ms;
+end pca_screen;
+
+device implementation pca_screen.imp
+  annex EMV2
+  {**
+  use types ErrorLibrary, PCA_Error_Model;
+  use behavior PCA_Error_Model::FailStop; 	
+  error propagations
+    --errors in the image to be displayed
+    Image: in propagation {EarlyServiceTermination,AlarmError,ValueError};
+    --errors in the touch sensed
+    Touch: out propagation {EarlyServiceTermination,OperatorError};
+    --errors seen by clinician
+    LightToEye: out propagation {EarlyServiceTermination,AlarmError,ValueError};
+    --errors caused by clinician
+    Finger_Press: in propagation {OperatorError};
+  flows
+    --no output when touch screen fails (completely)
+    touch_fail_silent: error source Touch{EarlyServiceTermination} when failed;
+    lte_fail_silent: error source LightToEye{EarlyServiceTermination} when failed;
+    --errors from digital image to eye
+    image_to_eye: error path Image->LightToEye;	
+    --error from finger-press to touch-sense
+    finger_to_touch: error path Finger_Press->Touch;
+  end propagations;
+  properties
+    EMV2::OccurrenceDistribution => PCA_Properties::TouchScreenFailureRate 
+      applies to fail;	
+  **};  --end of EMV2
+end pca_screen.imp;
+
+--this is the speaker that sounds alarms, warnings, and confirmations
+--Sound created by ui_thread
+--continues to emit sound until next sound received, so must be explicitly silenced
+device pca_speaker
+  features
+--CONTROLLED VARIABLE
+    AudioSignal: in data port PCA_Types::Sound;  --sound signal indicating alarm, warning, or confirmation
+--EXTERNAL EFFECT
+    Sound: out data port PCA_Types::Sound;  --noise made by speaker, heard by clinician
+  --internal bus
+    i_bus: requires bus access PCA_Pump::Internal_Bus;
+end pca_speaker;
+
+device implementation pca_speaker.imp
+  annex EMV2
+  {**
+  use types ErrorLibrary, PCA_Error_Model;
+  use behavior PCA_Error_Model::FailStop; 	
+  error propagations
+    --no sound, wrong/false alarm, wrong sound
+    AudioSignal: in propagation {EarlyServiceTermination,AlarmError,ValueError};
+    Sound: out propagation {EarlyServiceTermination,AlarmError,ValueError}; 
+  flows
+    --no output when speaker fails (completely)
+    fail_silent: error source Sound{EarlyServiceTermination} when failed;
+    --flow through errors
+    signal_to_sound:  error path AudioSignal->Sound;
+  end propagations;
+  properties
+    EMV2::OccurrenceDistribution => PCA_Properties::SpeakerFailureRate 
+      applies to fail;	
+  **};  --end of EMV2
+end pca_speaker.imp;
+
+--this is the thread type for the control panel
+thread ui_thread
+  --thread that controls user interface
+  features
+  --touch screen and speaker
+    Image : out data port PCA_Types::Image;  --image to be shown on control panel
+    Touch : in event data port PCA_Types::Touch;  --location of finger touch on control panel
+    AudioSignal : out data port PCA_Types::Sound;  --audible alarm signal to control panel
+  --alarms
+    Alarm : in event data port PCA_Types::Alarm_Type;  --alarm indication and type to be displayed on the control panel
+    Warning : in event data port PCA_Types::Warning_Type;  --warning indication and type to be displayed on the control panel
+	Alarm_Inactivation : out data port ICE_Types::Alarm_Signal;  --"On","Alarm_Off","Alarm_Paused","Audio_Off","Audio_Paused"
+    CP_Reset_Alarm: out event port;  --reset alarm(s)
+  --status
+    System_Status: in event data port PCA_Types::Status_Type;  --infusing, basal, KVO, stopped
+  --power
+    Remaining_Battery_Time: in data port BLESS_Types::Time;
+    Using_Battery_Power: in data port Base_Types::Boolean;
+    Low_Battery_Warning: in event port;
+  --drug library limits from prescription checker
+    Hard_Limit_Violated: in event port;
+    Soft_Limit_Warning: in event port;
+  --parameters     
+    Prescription: in data port PCA_Types::Prescription.imp;  --prescription to be confirmed
+    Infusion_Flow_Rate: in data port PCA_Types::Flow_Rate.imp; -- jab added
+        
+    Confirm_Soft_Limit_Exception: out event port;  --clinician confirmed prescription
+    Reject_Soft_Limit_Exception: out event port;  --clinician rejected prescription
+    
+  --message and tone
+    Display_Message: in event data port PCA_Types::Message;  --message to be displayed on control panel and ICE console
+    Sound_Type: in event data port PCA_Types::Sound;      --sound to be made by control panel and ICE console
+  --actions
+    Stop_Button_Pressed: out event port;  --clinician pressed "stop" button
+    Start_Button_Pressed: out event port;  --clinician pressed "start" button 
+    Clinician_Request_Bolus: out event port;  --clinician requests square bolus  
+    Bolus_Duration: out event data port ICE_Types::Minute.imp; --set square bolus time
+    Pause_Infusion: out event port;  --temporarily pause infusion (KVO rate)
+    Resume_Infusion: out event port;  --resume infusion (at basal rate, or continuing bolus)
+    Turn_Off: out event port;                    --the "off" switch was pressed
+    Patient_Request_Not_Too_Soon: in event port
+      {BLESS::Assertion => "<<PATIENT_REQUEST_NOT_TOO_SOON(now)>>";};
+    Patient_Request_Too_Soon: in event port
+      {BLESS::Assertion => "<<PATIENT_REQUEST_TOO_SOON(now)>>";};
+  --from security
+    Clinician_Name: in data port Base_Types::String;     --clinician name extracted from scan data
+    Patient_Name: in data port Base_Types::String;       --patient name extracted from scan data  
+  properties
+    --Dispatch_Protocol=>Aperiodic;
+    Dispatch_Protocol=>Sporadic;
+    Timing_Properties::Period => 5 ms;
+end ui_thread;
+
+--this is the thread implementation for the control panel
+thread implementation ui_thread.imp
+annex EMV2 
+{**
+  use types ErrorLibrary, PCA_Error_Model;
+  --when the ui thread fails, it stops
+  use behavior PCA_Error_Model::FailStop; 	
+  error propagations
+    --no image, false alarm, or wrong data
+    Image: out propagation {EarlyServiceTermination,AlarmError,ValueError};
+    --may miss touch signals, but never false or value errors
+    Touch: in propagation {EarlyServiceTermination,OperatorError};
+    --no sound, false alarm, or wrong data
+    AudioSignal: out propagation {EarlyServiceTermination,AlarmError,ValueError};
+    --no alarm, false alarm to control panel
+    Alarm: in propagation {EarlyServiceTermination,ItemCommission};
+    --same thing for warnings
+    Warning: in propagation {EarlyServiceTermination,ItemCommission};
+    --bad alarm inactivation
+    Alarm_Inactivation: out propagation {EarlyServiceTermination,OperatorError};
+    --no system status or wrong system status
+    System_Status: in propagation {EarlyServiceTermination,ValueError};
+    --wrong prescription
+    Prescription: in propagation {ValueError};
+    --wrong confirm/reject Prescription
+    Confirm_Soft_Limit_Exception: out propagation {OperatorError};
+    Reject_Soft_Limit_Exception: out propagation {OperatorError};
+    --incorrect commands
+    Stop_Button_Pressed: out propagation {EarlyServiceTermination,OperatorError};
+    Start_Button_Pressed: out propagation {EarlyServiceTermination,OperatorError};
+    Clinician_Request_Bolus: out propagation {EarlyServiceTermination,OperatorError};
+    Bolus_Duration: out propagation {EarlyServiceTermination,ValueError,OperatorError};
+    Pause_Infusion: out propagation {EarlyServiceTermination,OperatorError};
+    Resume_Infusion: out propagation {EarlyServiceTermination,OperatorError};
+  flows
+    --ui thread fails-silent
+    image_fail_silent: error source Image{EarlyServiceTermination} when failed;	
+    sound_fail_silent: error source AudioSignal{EarlyServiceTermination} when failed;	
+    alarm_inactivation_fail_silent: error source Alarm_Inactivation{EarlyServiceTermination} when failed;	
+--    confrim_rx_fail_silent: error source Confirm_Soft_Limit_Exception{EarlyServiceTermination} when failed;	
+    stop_button_silent: error source Stop_Button_Pressed{EarlyServiceTermination} when failed;	
+    start_button_silent: error source Start_Button_Pressed{EarlyServiceTermination} when failed;	
+    crb_silent: error source Clinician_Request_Bolus{EarlyServiceTermination} when failed;	
+    bd_silent: error source Bolus_Duration{EarlyServiceTermination} when failed;	
+    pi_silent: error source Pause_Infusion{EarlyServiceTermination} when failed;	
+    ri_silent: error source Resume_Infusion{EarlyServiceTermination} when failed;	
+    --system status, bad image or sound
+    ss_image: error path System_Status->Image;
+    ss_sound: error path System_Status->AudioSignal;
+    --prescription to image
+    rx_image: error path Prescription->Image;
+    --alarm and warning to sound and image
+    --missing alarm -> missing sound
+    alarm_sound_io: error path Alarm{EarlyServiceTermination}->AudioSignal; --(ItemOmission);
+    --false alarm -> alarm error
+    alarm_sound_ic: error path Alarm{ItemCommission}->AudioSignal{AlarmError};
+    --missing alarm -> missing image
+    alarm_image_io: error path Alarm{EarlyServiceTermination}->Image; --(ItemOmission);
+    --false alarm -> alarm error
+    alarm_image_ic: error path Alarm{ItemCommission}->Image{AlarmError};
+    --missing warning -> missing sound
+    warning_sound_io: error path Warning{EarlyServiceTermination}->AudioSignal; --(ItemOmission);
+    --false warning -> warning error
+    warning_sound_ic: error path Warning{ItemCommission}->AudioSignal{AlarmError};
+    --missing warning -> missing image
+    warning_image_io: error path Warning{EarlyServiceTermination}->Image; --(ItemOmission);
+    --false warning -> alarm error
+    warning_image_ic: error path Warning{ItemCommission}->Image{AlarmError};
+    --touch to all user actions
+    touch_ai: error path Touch->Alarm_Inactivation;
+    touch_confirm: error path Touch{OperatorError}->Confirm_Soft_Limit_Exception;
+    touch_reject: error path Touch{OperatorError}->Reject_Soft_Limit_Exception;
+    touch_stop: error path Touch->Stop_Button_Pressed;
+    touch_start: error path Touch->Start_Button_Pressed;
+    touch_crb: error path Touch->Clinician_Request_Bolus;
+    touch_bd: error path Touch->Bolus_Duration;
+    touch_pi: error path Touch->Pause_Infusion;
+    touch_ri: error path Touch->Resume_Infusion;
+  end propagations;
+  properties
+    EMV2::OccurrenceDistribution => PCA_Properties::AlarmThreadFailureRate 
+      applies to fail;
+**};  --end of EMV2
+end ui_thread.imp;
+
+
+--this holds a thread that controls user interface (a.k.a. control panel)
+process ui_process
+  features
+  --touch screen and speaker
+    Image : out data port PCA_Types::Image;  --image to be shown on screen
+    Touch : in event data port PCA_Types::Touch;  --location of finger touch on screen
+    AudioSignal : out data port PCA_Types::Sound;  --audible alarm signal to speaker
+  --alarms
+    Alarm : in event data port PCA_Types::Alarm_Type;  --alarm indication and type to be displayed on the control panel
+    Warning : in event data port PCA_Types::Warning_Type;  --warning indication and type to be displayed on the control panel
+	Alarm_Inactivation : out data port ICE_Types::Alarm_Signal;  --"On","Alarm_Off","Alarm_Paused","Audio_Off","Audio_Paused"
+    CP_Reset_Alarm: out event port;  --reset alarm(s)
+  --status
+    System_Status: in event data port PCA_Types::Status_Type;  --infusing, basal, KVO, stopped
+  --power
+    Remaining_Battery_Time: in data port BLESS_Types::Time;
+    Using_Battery_Power: in data port Base_Types::Boolean;
+    Low_Battery_Warning: in event port;
+  --drug library limits from prescription checker
+    Hard_Limit_Violated: in event port;
+    Soft_Limit_Warning: in event port;
+  --parameters 
+    Prescription: in data port PCA_Types::Prescription.imp;  --prescription to be confirmed
+    
+    Infusion_Flow_Rate: in data port PCA_Types::Flow_Rate.imp; -- jab added
+    
+    Confirm_Soft_Limit_Exception: out event port;  --clinician confirmed prescription
+    Reject_Soft_Limit_Exception: out event port;  --clinician rejected prescription
+  --message and tone
+    Display_Message: in event data port PCA_Types::Message;  --message to be displayed on control panel and ICE console
+    Sound_Type: in event data port PCA_Types::Sound;      --sound to be made by control panel and ICE console
+  --actions
+    Stop_Button_Pressed: out event port;  --clinician pressed "stop" button
+    Start_Button_Pressed: out event port;  --clinician pressed "start" button 
+    Clinician_Request_Bolus: out event port;  --clinician requests square bolus  
+    Bolus_Duration: out event data port ICE_Types::Minute.imp; --set square bolus time
+    Pause_Infusion: out event port;  --temporarily pause infusion (KVO rate)
+    Resume_Infusion: out event port;  --resume infusion (at basal rate, or continuing bolus)
+    Turn_Off: out event port;                    --the "off" switch was pressed
+    Patient_Request_Not_Too_Soon: in event port
+      {BLESS::Assertion => "<<PATIENT_REQUEST_NOT_TOO_SOON(now)>>";};
+    Patient_Request_Too_Soon: in event port
+      {BLESS::Assertion => "<<PATIENT_REQUEST_TOO_SOON(now)>>";};
+  --from security
+    Clinician_Name: in data port Base_Types::String;     --clinician name extracted from scan data
+    Patient_Name: in data port Base_Types::String;       --patient name extracted from scan data  
+end ui_process;
+
+--this is the implementation that actually has the thread subcomponent for the control panel
+process implementation ui_process.imp
+  subcomponents
+    ui_thread: thread ui_thread.imp;
+  connections
+  --touch screen and speaker
+    ui_image: port ui_thread.Image->Image;
+    ui_touch: port Touch->ui_thread.Touch;
+    ui_sound: port ui_thread.AudioSignal->AudioSignal;
+  --alarms
+    ui_alarm: port Alarm->ui_thread.Alarm;
+    ui_warn: port Warning->ui_thread.Warning;
+    ui_inac: port ui_thread.Alarm_Inactivation->Alarm_Inactivation;
+    ui_ra: port ui_thread.CP_Reset_Alarm->CP_Reset_Alarm;
+  --status
+    ui_status: port System_Status->ui_thread.System_Status;
+    ui_hlv: port Hard_Limit_Violated-> ui_thread.Hard_Limit_Violated;
+    ui_slw: port Soft_Limit_Warning-> ui_thread.Soft_Limit_Warning;
+  --power
+    rbt: port Remaining_Battery_Time -> ui_thread.Remaining_Battery_Time;
+    ubp: port Using_Battery_Power -> ui_thread.Using_Battery_Power;
+    lbw: port Low_Battery_Warning -> ui_thread.Low_Battery_Warning;  
+  --parameters     
+    rx_uit: port Prescription->ui_thread.Prescription;
+    
+    jab_ifr: port Infusion_Flow_Rate->ui_thread.Infusion_Flow_Rate; -- jab added
+    
+    conf_rx: port ui_thread.Confirm_Soft_Limit_Exception->Confirm_Soft_Limit_Exception;
+    rejct_rx: port ui_thread.Reject_Soft_Limit_Exception->Reject_Soft_Limit_Exception;
+  --actions
+    stop_fl: port ui_thread.Stop_Button_Pressed->Stop_Button_Pressed;
+    start_fl: port ui_thread.Start_Button_Pressed->Start_Button_Pressed;
+    crb: port ui_thread.Clinician_Request_Bolus->Clinician_Request_Bolus;
+    sdb: port ui_thread.Bolus_Duration->Bolus_Duration;
+    pause: port ui_thread.Pause_Infusion->Pause_Infusion;
+    resume: port ui_thread.Resume_Infusion->Resume_Infusion;
+    off: port ui_thread.Turn_Off -> Turn_Off;
+    prnts: port Patient_Request_Not_Too_Soon -> ui_thread.Patient_Request_Not_Too_Soon;
+    prts: port Patient_Request_Too_Soon -> ui_thread.Patient_Request_Too_Soon;
+  --message and tone
+    msg: port Display_Message -> ui_thread.Display_Message;
+    ton: port Sound_Type -> ui_thread.Sound_Type;
+  --names
+    pm: port Patient_Name-> ui_thread.Patient_Name;
+    cn: port Clinician_Name-> ui_thread.Clinician_Name;
+  annex EMV2
+  {**
+  --the ui process is working when the ui thread is
+  use types ErrorLibrary, PCA_Error_Model;
+  --when the ui thread fails, it stops
+  use behavior PCA_Error_Model::CompositeFailStop; 	
+  --same error propagations as ui thread
+  error propagations
+    --no image, false alarm, or wrong data
+    Image: out propagation {EarlyServiceTermination,AlarmError,ValueError};
+    --may miss touch signals, but never false or value errors
+    Touch: in propagation {EarlyServiceTermination,OperatorError};
+    --no sound, false alarm, or wrong data
+    AudioSignal: out propagation {EarlyServiceTermination,AlarmError,ValueError};
+    --no alarm, false alarm to control panel
+    Alarm: in propagation {EarlyServiceTermination,ItemCommission};
+    --same thing for warnings
+    Warning: in propagation {EarlyServiceTermination,ItemCommission};
+    --bad alarm inactivation
+    Alarm_Inactivation: out propagation {EarlyServiceTermination,OperatorError};
+    --no system status or wrong system status
+    System_Status: in propagation {EarlyServiceTermination,ValueError};
+    --wrong prescription
+    Prescription: in propagation {ValueError};
+    --wrong confirm/reject Rx
+    Confirm_Soft_Limit_Exception: out propagation {OperatorError};
+    Reject_Soft_Limit_Exception: out propagation {OperatorError};
+    --incorrect commands
+    Stop_Button_Pressed: out propagation {EarlyServiceTermination,OperatorError};
+    Start_Button_Pressed: out propagation {EarlyServiceTermination,OperatorError};
+    Clinician_Request_Bolus: out propagation {EarlyServiceTermination,OperatorError};
+    Bolus_Duration: out propagation {EarlyServiceTermination,ValueError,OperatorError};
+    Pause_Infusion: out propagation {EarlyServiceTermination,OperatorError};
+    Resume_Infusion: out propagation {EarlyServiceTermination,OperatorError};
+  end propagations;
+  composite error behavior
+    states 
+    --thread failed -> process failed
+     [ui_thread.failed]->failed;
+    --thread working -> process working
+     [ui_thread.working]->working;
+  end composite;  	
+  **};  --end of EMV2
+end ui_process.imp;
+
+--this holds the touch screen and speaker devices, and a process which holds the ui control thread
+--R5.4.0(1) issue alarms and warnings R5.4.2(1) visual alarm signal R5.4.2(2) alarm indicator appearance R5.4.2(3) see alarm signal
+--R5.4.2(4) alarm symbols
+--R5.4.3(1) audible alarms signals
+--R5.4.3(2) auditory volume
+--R5.4.3(3) alarm melody
+--R5.4.3(4) harmonic components
+--R5.5.0(1) control panel
+--R5.5.0(2) start button
+--R5.5.0(5) stop button
+--R5.5.0(7) clinician bolus request
+--R5.5.0(8) prescription confirmation
+--R5.5.0(9) soft limit confirmation
+--R5.5.0(11) show alarm
+--R5.5.0(12) sound alarm
+--R5.5.0(13) stop silences alarms
+--R5.5.0(14) inactivate audible alarms indefinitely 
+--R5.5.0(15) inactivate audible alarms temporarily 
+--R5.5.0(16) cancel alarm signal inactivation 
+--R5.5.0(17) inactive auditory alarm symbol 
+--R5.5.0(18) alert-stop-start sequence
+--R5.5.0(19) sound of audible alarm
+--R5.5.0(20) display of visual information 
+--R5.5.0(21) tactile response
+--R5.8.0(6) prescription confirmation
+--R5.9.0(5) hard limit
+--R5.9.0(6) soft limit
+system control_panel
+  features
+  --physical
+--EXTERNAL EFFECT
+    Sound: out data port PCA_Types::Sound;  --noise made by speaker, heard by clinician
+--EXTERNAL EFFECT
+    LightToEye: out data port Base_Types::Boolean;  --image seen by clinician
+--EXTERNAL PHENOMENON    
+    Finger_Press: in event data port Base_Types::Boolean;  --clinician touches screen    
+  --alarms
+    Alarm : in event data port PCA_Types::Alarm_Type;  --alarm indication and type to be displayed on the control panel
+    Warning : in event data port PCA_Types::Warning_Type;  --warning indication and type to be displayed on the control panel
+    Alarm_Inactivation: out data port ICE_Types::Alarm_Signal;  --"On","Alarm_Off","Alarm_Paused","Audio_Off","Audio_Paused"
+    CP_Reset_Alarm: out event port;  --reset alarm(s)
+--    Over_Max_Drug_Per_Hour: in event port;  --too much juice
+  --drug library limits
+    Hard_Limit_Violated: in event port;
+    Soft_Limit_Warning: in event port;
+  --status
+    System_Status: in event data port PCA_Types::Status_Type;  --bolus, basal, KVO, stopped, square bolus
+  --power
+    Remaining_Battery_Time: in data port BLESS_Types::Time;
+    Using_Battery_Power: in data port Base_Types::Boolean;
+    Low_Battery_Warning: in event port;
+  --parameters 
+    Prescription: in data port PCA_Types::Prescription.imp;  --prescription to be confirmed
+    
+    Infusion_Flow_Rate: in data port PCA_Types::Flow_Rate.imp; -- jab added
+    
+    Confirm_Soft_Limit_Exception: out event port;  --clinician confirmed prescription
+    Reject_Soft_Limit_Exception: out event port;  --clinician rejected prescription
+  --message and tone
+    Display_Message: in event data port PCA_Types::Message;  --message to be displayed on control panel and ICE console
+    Sound_Type: in event data port PCA_Types::Sound;      --sound to be made by control panel and ICE console
+  --actions
+    Stop_Button_Pressed: out event port;  --clinician pressed "stop" button
+    Start_Button_Pressed: out event port;  --clinician pressed "start" button   
+    Turn_Off: out event port;                    --the "off" switch was pressed
+    Clinician_Request_Bolus: out event port;  --clinician requests square bolus  
+    Bolus_Duration: out event data port ICE_Types::Minute.imp; --set square bolus time
+    Pause_Infusion: out event port;  --temporarily pause infusion (KVO rate)
+    Resume_Infusion: out event port;  --resume infusion (at basal rate, or continuing bolus)
+    Patient_Request_Not_Too_Soon: in event port
+      {BLESS::Assertion => "<<PATIENT_REQUEST_NOT_TOO_SOON(now)>>";};
+    Patient_Request_Too_Soon: in event port
+      {BLESS::Assertion => "<<PATIENT_REQUEST_TOO_SOON(now)>>";};
+  --from security
+    Clinician_Name: in data port Base_Types::String;     --clinician name extracted from scan data
+    Patient_Name: in data port Base_Types::String;       --patient name extracted from scan data  
+  --internal bus
+    i_bus: requires bus access PCA_Pump::Internal_Bus;
+end control_panel;
+
+system implementation control_panel.imp
+  subcomponents
+    ui_process:process ui_process.imp;
+    display: device pca_screen.imp;                --touch-screen display on PCA pump
+    audible: device pca_speaker.imp;               --sound maker for alarms, confirmation
+  connections
+  --internal bus
+    display_to_i_bus: bus access i_bus <-> display.i_bus;
+    audible_to_i_bus: bus access i_bus -> audible.i_bus;  --unidirectional
+  --physical
+    hear: port audible.Sound->Sound;
+    see: port display.LightToEye->LightToEye;
+    touch: port Finger_Press->display.Finger_Press;
+  --control panel process to physical devices
+    img: port ui_process.Image->display.Image;
+    tch: port display.Touch->ui_process.Touch;
+    snd: port ui_process.AudioSignal->audible.AudioSignal;
+  --alarms
+    alm: port Alarm->ui_process.Alarm;
+    wrn: port Warning->ui_process.Warning;
+    cpra: port ui_process.CP_Reset_Alarm->CP_Reset_Alarm;
+  --status
+    sts: port System_Status->ui_process.System_Status;
+    jabifs: port Infusion_Flow_Rate->ui_process.Infusion_Flow_Rate; -- jab added
+    
+  --power
+    rbt: port Remaining_Battery_Time -> ui_process.Remaining_Battery_Time;
+    ubp: port Using_Battery_Power -> ui_process.Using_Battery_Power;
+    lbw: port Low_Battery_Warning -> ui_process.Low_Battery_Warning;  
+  --drug library limits
+    hlv: port Hard_Limit_Violated->ui_process.Hard_Limit_Violated;
+    slv: port Soft_Limit_Warning->ui_process.Soft_Limit_Warning;
+  --parameters 
+    pcn: port Prescription->ui_process.Prescription;
+    crx: port ui_process.Confirm_Soft_Limit_Exception->Confirm_Soft_Limit_Exception;
+    rrx: port ui_process.Reject_Soft_Limit_Exception->Reject_Soft_Limit_Exception;    
+  --actions
+    spf: port ui_process.Stop_Button_Pressed->Stop_Button_Pressed;
+    stf: port ui_process.Start_Button_Pressed->Start_Button_Pressed;
+    crb: port ui_process.Clinician_Request_Bolus->Clinician_Request_Bolus;
+    sdb: port ui_process.Bolus_Duration->Bolus_Duration;
+    pause: port ui_process.Pause_Infusion->Pause_Infusion;
+    resume: port ui_process.Resume_Infusion->Resume_Infusion;
+    ai: port ui_process.Alarm_Inactivation -> Alarm_Inactivation;
+    off: port ui_process.Turn_Off -> Turn_Off;
+    prnts: port Patient_Request_Not_Too_Soon -> ui_process.Patient_Request_Not_Too_Soon;
+    prts: port Patient_Request_Too_Soon -> ui_process.Patient_Request_Too_Soon;
+  --message and tone
+    msg: port Display_Message -> ui_process.Display_Message;
+    ton: port Sound_Type -> ui_process.Sound_Type;
+  --names
+    pm: port Patient_Name-> ui_process.Patient_Name;
+    cn: port Clinician_Name-> ui_process.Clinician_Name;
+--the control panel is working if the ui process, touch screen, and speaker are working, otherwise failed
+  annex EMV2
+  {**
+  --the ui process is working when the ui thread is
+  use types ErrorLibrary, PCA_Error_Model;
+  --when the ui thread fails, it stops
+  use behavior PCA_Error_Model::CompositeFailStop; 	
+  --same error propagations as ui thread
+  error propagations
+    --sound errors
+    Sound: out propagation {EarlyServiceTermination,AlarmError,ValueError}; 
+    --errors seen by clinician
+    LightToEye: out propagation {EarlyServiceTermination,AlarmError,ValueError};
+    --errors caused by clinician
+    Finger_Press: in propagation {OperatorError};    
+    --no alarm, false alarm to control panel
+    Alarm: in propagation {EarlyServiceTermination,ItemCommission};
+    --same thing for warnings
+    Warning: in propagation {EarlyServiceTermination,ItemCommission};
+    --bad alarm inactivation
+    Alarm_Inactivation: out propagation {EarlyServiceTermination,OperatorError};
+    --missed hard limit violation
+    Hard_Limit_Violated:  in propagation {ItemOmission,ItemCommission};
+    --missed soft limit violation
+    Soft_Limit_Warning:  in propagation {ItemOmission,ItemCommission};
+    --no system status or wrong system status
+    System_Status: in propagation {EarlyServiceTermination,ValueError};
+    --wrong prescription
+    Prescription: in propagation {ValueError};
+    --wrong confirm/reject Rx
+    Confirm_Soft_Limit_Exception: out propagation {OperatorError};
+    Reject_Soft_Limit_Exception: out propagation {OperatorError};
+    --incorrect commands
+    Stop_Button_Pressed: out propagation {EarlyServiceTermination,OperatorError};
+    Start_Button_Pressed: out propagation {EarlyServiceTermination,OperatorError};
+    Clinician_Request_Bolus: out propagation {EarlyServiceTermination,OperatorError};
+    Bolus_Duration: out propagation {EarlyServiceTermination,ValueError,OperatorError};
+    Pause_Infusion: out propagation {EarlyServiceTermination,OperatorError};
+    Resume_Infusion: out propagation {EarlyServiceTermination,OperatorError};
+  end propagations;
+  composite error behavior
+    states 
+    --thread failed -> process failed
+     [ui_process.failed or display.failed or audible.failed]->failed;
+    --thread working -> process working
+     [ui_process.working and display.working and audible.working]->working;
+  end composite;  	
+  **};  --end of EMV2
+
+end control_panel.imp;
+
+end PCA_Control_Panel;

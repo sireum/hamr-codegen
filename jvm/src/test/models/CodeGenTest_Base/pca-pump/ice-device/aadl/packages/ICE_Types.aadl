@@ -1,0 +1,85 @@
+--ICE_Types.aadl
+--holds data components defining types used in ICE components
+package ICE_Types
+public
+	with Data_Model, Base_Types, BLESS;
+	with IEEE11073_Nomenclature;
+
+	data Milliliter
+		properties
+			BLESS::Typed => "integer 0..1000 units ml";
+			Data_Model::Data_Representation => Integer;
+			Data_Model::Base_Type => (classifier (Base_Types::Unsigned_16)); --two bytes for 0-1000 ml
+			Data_Model::Integer_Range => 0 .. 1000;
+			Data_Model::Measurement_Unit => "ml";
+	end Milliliter;
+
+	data Milliliter_Per_Hour
+		properties
+			BLESS::Typed => "integer 0..1000 units ml_per_hr";
+			Data_Model::Data_Representation => Integer;
+			Data_Model::Base_Type => (classifier (Base_Types::Unsigned_16)); --two bytes for 0-1000 ml/hr
+			Data_Model::Integer_Range => 0 .. 1000;
+			Data_Model::Measurement_Unit => "ml_per_hr";
+	end Milliliter_Per_Hour;
+
+	data Microliter_Per_Hour
+		properties
+			BLESS::Typed => "integer 0..1000 units ul_per_hr";
+			Data_Model::Data_Representation => Integer;
+			Data_Model::Base_Type => (classifier (Base_Types::Unsigned_16)); --two bytes for 0-1000 ul/hr
+			Data_Model::Integer_Range => 0 .. 1000;
+			Data_Model::Measurement_Unit => "ul_per_hr";
+	end Microliter_Per_Hour;
+
+	data Minute
+		properties
+			BLESS::Typed => "integer 0..1000 units min";
+			Data_Model::Data_Representation => Integer;
+			Data_Model::Base_Type => (classifier (Base_Types::Unsigned_16)); --two bytes for 0-1000 minutes
+			Data_Model::Integer_Range => 0 .. 1000;
+			Data_Model::Measurement_Unit => "min";
+	end Minute;
+
+	data implementation Minute.imp
+		subcomponents
+			value: data Base_Types::Unsigned_16;
+	end Minute.imp;
+
+	data Pulse_Rate
+		properties
+			BLESS::Typed => "integer 0..1000 units ppm";
+			Data_Model::Data_Representation => Integer;
+			Data_Model::Base_Type => (classifier (Base_Types::Unsigned_16)); --two bytes for 0-1000 ppm
+			Data_Model::Integer_Range => 0 .. 1000;
+			Data_Model::Measurement_Unit => "ppm";
+	end Pulse_Rate;
+
+	data Alarm_Signal --according to IEC 60601-1-8/FDIS AAA.201.8 ALARM SIGNAL inactivation states
+		properties
+			Data_Model::Data_Representation => Enum;
+			Data_Model::Enumerators => ("On", "Alarm_Off", "Alarm_Paused", "Audio_Off", "Audio_Paused");
+	end Alarm_Signal;
+
+	data Percent
+		properties
+			BLESS::Typed => "integer 0..100 units percent";
+			Data_Model::Data_Representation => Integer;
+			Data_Model::Base_Type => (classifier (Base_Types::Unsigned_8)); --one byte for 0-100 percent
+			Data_Model::Integer_Range => 0 .. 100;
+			IEEE11073_Nomenclature::OID => IEEE11073_Nomenclature::MDC_DIM_PERCENT;
+	end Percent;
+
+	data Minute_Count extends Base_Types::Integer
+	end Minute_Count;
+
+	data Second_Count extends Base_Types::Integer
+	end Second_Count;
+
+	data PKI_name --name presented to public-key infrastructure
+	end PKI_name;
+
+	data PKI_key --key matching name from public-key infrastructure
+	end PKI_key;
+
+end ICE_Types;

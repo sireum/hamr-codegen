@@ -1,0 +1,352 @@
+--PCA_Mechanical.aadl
+
+--holds mechanical components
+
+package PCA_Mechanical
+  public
+  with 
+    Base_Types, EMV2,
+    Physical_Types,
+    BLESS,
+    PCA_Types, PCA_Properties,
+    --PCA_Constants,
+    PCA_Pump;
+
+
+--this is the button provided to patients to request more painkiller
+device patient_button
+  features
+--EXTERNAL PHENOMENON
+    Button_Press: in event port;  --physically depressing the button
+    
+--MONITORED VARIABLE
+    Request_Bolus: out event port;  --patient has pressed the button requesting a bolus
+    
+  -- jab: added since the device has 'in event' ports      
+  properties
+    Thread_Properties::Dispatch_Protocol=>Sporadic;
+    Timing_Properties::Period => PCA_Properties::Sireum_Thread_Period;  --update outputs every 5ms    
+end patient_button;
+
+device implementation patient_button.imp
+--button passes along third-party presses
+--  annex EMV2X
+--  {**
+--  use types ErrorLibrary, PCA_Error_Model;
+--  use behavior PCA_Error_Model::FailStop; 	
+--  error propagations
+--    --button passes along third-party presses
+--    Button_Press: in propagation {ThirdPartyPress};
+--    --button may also be broken
+--    Request_Bolus: out propagation {EarlyServiceTermination,ThirdPartyPress}; 
+--  flows
+--    --no output when button fails (completely)
+--    fail_silent: error source Request_Bolus{EarlyServiceTermination} when failed;
+--    --flow through errors
+--    third_party:  error path Button_Press{ThirdPartyPress}->Request_Bolus(ThirdPartyPress);
+--  end propagations;
+--  properties
+--    EMV2::OccurrenceDistribution => #PCA_Properties::PatientButtonFailureRate 
+--      applies to fail;	
+--  **}; --end of EMV2
+end patient_button.imp;
+
+--switch to stand alone mode 
+device stand_alone_switch
+  features
+--EXTERNAL PHENOMENON
+    Switch_Position: in data port;  --physical position of the switch
+
+--MONITORED VARIABLE
+    Stand_Alone: out data port;  --clinician disables ICE interface
+end stand_alone_switch;
+
+device implementation stand_alone_switch.imp
+--stand-alone switch is error free
+  annex EMV2
+  {**
+  use types ErrorLibrary;
+  error propagations
+    Switch_Position: not in propagation {CommonErrors};
+    Stand_Alone: not out propagation {CommonErrors};
+  end propagations;
+  **}; --end of EMV2
+end stand_alone_switch.imp;
+ 
+device drug_reservoir
+  features
+  --internal bus
+    i_bus: requires bus access PCA_Pump::Internal_Bus;
+
+    Fill_Reservoir : in data port Physical_Types::Fluid_Volume.imp;  --put drug in reservoir
+    
+  --drug flows out, but rate comes in
+    Drug_Outlet : out data port Physical_Types::Fluid_Flow.imp;  --drug from reservoir
+    Door_Open: out data port Base_Types::Boolean;  --reservoir door is open
+    Door_Closed: out event port;  --door was closed
+    Low_Reservoir: out event port;  --warning: little drug left
+    Empty_Reservoir: out event port;  --alarm: (almost) no drug left
+  flows
+    Flow_dns_out : flow source Drug_Outlet;  --consumer of rate information
+end drug_reservoir;
+
+device implementation drug_reservoir.imp
+--  annex Hybrid 
+--  {**
+--  	assert << true >>  << a<b >>  << OKAY : x : x>0 >>
+--  	invariant << INV: :PCA_Constants::Reservoir_Empty_Limit < PCA_Constants::Reservoir_Low_Limit >>
+--  	variables
+--  	  drug_volume : Physical_Types::Fluid_Volume
+--  	behavior
+--  	Reservoir ::= 
+--  	  Fill_Reservoir?(drug_volume) &  --fill reservoir with drug volume
+--  	  ([drug_volume < PCA_Constants::Reservoir_Empty_Limit]) -> Empty
+--  	  [] ([drug_volume < PCA_Constants::Reservoir_Low_Limit]) -> Low 
+--  	Empty ::= Empty_Reservoir!()  
+--  	Low ::=  Low_Reservoir!()
+--  **};
+--consider adding upstream occlusion as error type on Drug_Outlet
+--for now, just possible source of bad indications
+  annex EMV2
+  {**
+  use types ErrorLibrary, PCA_Error_Model;
+  use behavior PCA_Error_Model::FailStop; 	
+  error propagations
+    --occlusion in resevoir -> drug flow error
+    Drug_Outlet: out propagation {DrugFlowError};
+    --sensed values
+    Low_Reservoir: out propagation {EarlyServiceTermination};
+    Empty_Reservoir: out propagation {EarlyServiceTermination};
+    Door_Open: out propagation {EarlyServiceTermination};
+  flows
+    --occlusion in resevoir -> drug flow error
+    occlusion: error source Drug_Outlet{DrugFlowError};
+    --no signals when reservoir fails completely
+    fail_silent_lr: error source Low_Reservoir{EarlyServiceTermination} when failed;
+    fail_silent_er: error source Empty_Reservoir{EarlyServiceTermination} when failed;
+    fail_silent_do: error source Door_Open{EarlyServiceTermination} when failed;
+    --random false positives
+    false_lr: error source Low_Reservoir{EarlyServiceTermination};
+    false_er: error source Empty_Reservoir{EarlyServiceTermination};
+    false_do: error source Door_Open{EarlyServiceTermination};
+  end propagations;
+  properties
+    EMV2::OccurrenceDistribution => PCA_Properties::ReservoirOcclusionRate 
+      applies to occlusion;	
+    EMV2::OccurrenceDistribution => PCA_Properties::ReservoirFailureRate 
+      applies to fail;	
+    EMV2::OccurrenceDistribution => PCA_Properties::ReservoirFalsePositiveRate 
+      applies to false_lr,false_er,false_do;	
+  **}; --end of EMV2
+end drug_reservoir.imp; 
+
+--this is the type for the physical pump that move the drug
+device pump
+  features
+  --internal bus
+    i_bus: requires bus access PCA_Pump::Internal_Bus;
+    
+    Drug_Intake : in data port Physical_Types::Fluid_Flow.imp;   --drug from upstream monitor       
+    Halt: in event port 
+      {BLESS::Assertion => "<<INFUSION_RATE=0>>";};  --stop pumping
+    Rate: in data port PCA_Types::Flow_Rate.imp   --rate to pump
+      {BLESS::Assertion => "<<:=INFUSION_RATE>>";};
+      
+    Drug_Outlet : out data port Physical_Types::Fluid_Flow.imp;  --drug to downstream monitor
+    Pump_Too_Hot: out event port;        --pump hot alarm    
+  flows
+    Flow_pump_in : flow sink Drug_Intake;
+    Flow_pump_out : flow source Drug_Outlet;
+    Flow_pump_path : flow path Drug_Intake->Drug_Outlet;
+    
+  -- jab: added since the device has 'in event' ports      
+  properties
+    Thread_Properties::Dispatch_Protocol=>Sporadic;
+    Timing_Properties::Period => PCA_Properties::Sireum_Thread_Period;  --update outputs every 5ms    
+end pump;
+
+--this is the implementation of the physical pump
+--note that the actual fluid flow is not modeled; only its electrical/control aspects
+device implementation pump.imp
+--drug outlet of mechanical pump may be drug-flow error
+--  annex EMV2X
+--  {**
+--  use types ErrorLibrary, PCA_Error_Model;
+--  use behavior PCA_Error_Model::FailStop; 	
+--  error propagations
+--    --either incoming or caused drug flow error
+--    Drug_Outlet: out propagation {DrugFlowError};
+--    --drug flow error from reservoir
+--    Drug_Intake: in propagation {DrugFlowError};
+--    --error in halt command
+--    Halt: in propagation {EarlyServiceTermination};
+--    --error in pump rate
+--    Rate: in propagation {ValueError};
+--    --error reporting hot pump
+--    Pump_Too_Hot: out propagation {EarlyServiceTermination};
+--  flows
+--    --drug flow error from reservoir through pump
+--    dfe: error path Drug_Intake{DrugFlowError}->Drug_Outlet; --(DrugFlowError); 
+--    --pump stops when failed
+--    pump_stop: error source Drug_Outlet{DrugStopped} when failed;
+--    --no hot report when failed
+--    no_too_hot: error source Pump_Too_Hot{EarlyServiceTermination} when failed;
+--    --no prime report when failed
+--    halt_dfe: error path Halt{EarlyServiceTermination}->Drug_Outlet; --(DrugRateError);
+--    rate_dfe: error path Rate{ValueError}->Drug_Outlet; --(DrugRateError);
+--    --random false positives
+--    false_pth: error source Pump_Too_Hot{ItemCommission};
+--  end propagations;
+--  properties
+--    --pump failure rate
+--    EMV2::OccurrenceDistribution => #PCA_Properties::PumpFailureRate 
+--      applies to fail;	
+--    --false positive rate
+--    EMV2::OccurrenceDistribution => #PCA_Properties::FalsePositiveRate 
+--      applies to false_pth;	
+--  **}; --end of EMV2
+end pump.imp;
+
+--this is the device type for the fluid monitor between the reservoir and the pump
+device upstream_monitor
+  features
+  --internal bus
+    i_bus: requires bus access PCA_Pump::Internal_Bus;
+
+    Drug_Intake : in data port Physical_Types::Fluid_Flow.imp;   --drug from reservoir
+        
+    Drug_Outlet : out data port Physical_Types::Fluid_Flow.imp;  --drug to physical pump
+    Upstream_Flow_Rate: out data port PCA_Types::Flow_Rate.imp;  --measured drug flow rate
+    Occlusion: out event port;  --upstream occlusion detected
+  flows
+    Flow_ups_in : flow sink Drug_Intake;
+    Flow_ups_out : flow source Drug_Outlet;
+    Flow_ups_path : flow path Drug_Intake->Drug_Outlet;
+end upstream_monitor;
+
+--this is the implementation of the fluid monitor between the reservoir and the pump
+device implementation upstream_monitor.imp
+--  annex EMV2X
+--  {**
+--  use types ErrorLibrary, PCA_Error_Model;
+--  use behavior PCA_Error_Model::FailStop; 	
+--  error propagations
+--    --occlusion in resevoir -> drug flow error
+--    Drug_Outlet: out propagation {DrugFlowError};
+--    Drug_Intake: in propagation {DrugFlowError};
+--    --sensed values
+--    Upstream_Flow_Rate: out propagation {ValueError,EarlyServiceTermination};
+--    Occlusion: out propagation {EarlyServiceTermination};
+--  flows
+--    --drug flow errors flow through
+--    flo_thru: error path Drug_Intake{DrugFlowError}->Drug_Outlet(DrugFlowError);
+--    --no signals when monitor fails completely
+--    fail_silent_ufr: error source Upstream_Flow_Rate{EarlyServiceTermination} when failed;
+--    fail_silent_o: error source Occlusion{EarlyServiceTermination} when failed;
+--    --random false positives
+--    false_o: error source Occlusion{ItemCommission};
+--    --bad sensing
+--    bad_ufr: error source Upstream_Flow_Rate{ValueError};
+--  end propagations;
+--  properties
+--    EMV2::OccurrenceDistribution => #PCA_Properties::UpstreamMonitorFailureRate 
+--      applies to fail;	
+--    EMV2::OccurrenceDistribution => #PCA_Properties::ReservoirFalsePositiveRate 
+--      applies to false_o,bad_ufr;	
+--  **}; --end of EMV2
+end upstream_monitor.imp;
+
+--this is the device type for the fluid monitor between the pump and the patient
+device downstream_monitor
+  features
+  --internal bus
+    i_bus: requires bus access PCA_Pump::Internal_Bus;
+    
+    Drug_Intake : in data port Physical_Types::Fluid_Flow.imp;   --drug from physical pump
+        
+    Drug_Outlet : out data port Physical_Types::Fluid_Flow.imp;  --drug to patient
+    Downstream_Flow_Rate: out data port PCA_Types::Flow_Rate.imp  --measured drug flow rate
+       {BLESS::Assertion=>"<<MEASURED_FLOW_RATE: :=Downstream_Flow_Rate>>";};
+    Occlusion: out event port;		--downstream blockage detected
+    Bubble: out event port;	    --bubble detected in line
+  flows
+    Flow_dns_in : flow sink Drug_Intake;
+    Flow_dns_out : flow source Drug_Outlet;
+    Flow_dns_path : flow path Drug_Intake->Drug_Outlet;
+end downstream_monitor;
+
+--this is the implementation of the fluid monitor between the pump and the patient
+device implementation downstream_monitor.imp
+--  annex EMV2X
+--  {**
+--  use types ErrorLibrary, PCA_Error_Model;
+--  use behavior PCA_Error_Model::FailStop; 	
+--  error propagations
+--    --occlusion in resevoir -> drug flow error
+--    Drug_Outlet: out propagation {DrugFlowError};
+--    Drug_Intake: in propagation {DrugFlowError};
+--    --sensed values
+--    Downstream_Flow_Rate: out propagation {ValueError,EarlyServiceTermination};
+--    Occlusion: out propagation {EarlyServiceTermination};
+--  flows
+--    --drug flow errors flow through
+--    flo_thru: error path Drug_Intake{DrugFlowError}->Drug_Outlet(DrugFlowError);
+--    --no signals when monitor fails completely
+--    fail_silent_ufr: error source Downstream_Flow_Rate{EarlyServiceTermination} when failed;
+--    fail_silent_o: error source Occlusion{EarlyServiceTermination} when failed;
+--    --random false positives
+--    false_o: error source Occlusion{ItemCommission};
+--    --bad sensing
+--    bad_dfr: error source Downstream_Flow_Rate{ValueError};
+--  end propagations;
+--  properties
+--    EMV2::OccurrenceDistribution => #PCA_Properties::DownstreamMonitorFailureRate 
+--      applies to fail;	
+--    EMV2::OccurrenceDistribution => #PCA_Properties::FalsePositiveRate 
+--      applies to false_o,bad_dfr;	
+--  **}; --end of EMV2
+end downstream_monitor.imp;
+
+
+--this represents an optical or RFID scanner to read
+--drug labels, patient wristbands, and clinician badges
+device scanner
+	features
+  --internal bus
+    i_bus: requires bus access PCA_Pump::Internal_Bus;
+		
+    Do_Scan: in event port;                    --tell scanner to scan
+    
+    Scan_Done: out event port;                   --scan completed
+    Scan_Data: out event data port PCA_Types::Scan_Data_Type;  --data from scanner
+
+  -- jab: added since the device has 'in event' ports      
+  properties
+    Thread_Properties::Dispatch_Protocol=>Sporadic;
+    Timing_Properties::Period => PCA_Properties::Sireum_Thread_Period;  --update outputs every 5ms
+end scanner;
+
+device implementation scanner.imp
+  annex EMV2
+  {**
+  use types ErrorLibrary, PCA_Error_Model;
+  use behavior PCA_Error_Model::FailStop; 	
+  error propagations
+    --errors in scanner data
+    Scan_Data: out propagation {CommonErrors};
+  flows
+    --no signals when scanner fails completely
+    fail_blind: error source Scan_Data{EarlyServiceTermination} when failed;
+    --bad scanning
+    bad_scan: error source Scan_Data{ValueError};
+  end propagations;
+  properties
+    EMV2::OccurrenceDistribution => PCA_Properties::ScannerFailureRate 
+      applies to fail;	
+    EMV2::OccurrenceDistribution => PCA_Properties::FalsePositiveRate 
+      applies to bad_scan;	
+  **}; --end of EMV2
+end scanner.imp;
+
+
+end PCA_Mechanical;

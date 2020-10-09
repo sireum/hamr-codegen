@@ -1,0 +1,3 @@
+property set UAV_Property_Set is
+	Stack_Size: constant Size => 8388608 Bytes;
+end UAV_Property_Set;

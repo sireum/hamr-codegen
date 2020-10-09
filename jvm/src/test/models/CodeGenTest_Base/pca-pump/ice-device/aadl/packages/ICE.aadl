@@ -1,0 +1,90 @@
+--ICE.aadl
+--defines architecture for ICE-compatible medical devices using AADL's prototype mechanism.
+package ICE
+public
+  with Base_Types, ICE_Types;
+
+system ICE_Interface
+  prototypes
+    alarm_type : feature group ICE_Alarms;
+    status_type : feature group ICE_Status;
+    param_type : feature group ICE_Parameters;
+    command_type : feature group ICE_Commands;
+    security_type : feature group ICE_Security;
+  features
+    alarm: feature group alarm_type;
+    status: feature group status_type;
+    parameters: feature group param_type;
+    command: feature group command_type;
+    security: feature group security_type;		--public key infrastructure interface
+end ICE_Interface;
+
+--this is the mate to the ICE device interface, extended for ICE apps
+abstract ICE_App_Interface
+  prototypes
+    alarm_type : feature group ICE_Alarms;
+    status_type : feature group ICE_Status;
+    param_type : feature group ICE_Parameters;
+    command_type : feature group ICE_Commands;
+    security_type : feature group ICE_Security;
+  features
+    alarm: feature group inverse of alarm_type;
+    status: feature group inverse of status_type;
+    parameters: feature group inverse of param_type;
+    command: feature group inverse of command_type;
+    security: feature group inverse of security_type;		--public key infrastructure interface
+end ICE_App_Interface;
+
+feature group ICE_Alarms
+  features
+	Alarm_Type: out data port;     --internal alarms, prompt or immediate, enumeration type defined by specific device
+    Warning_Type: out data port;
+	Immediate: out event port;    --likely to cause PATIENT injury or death within seconds to several minutes if uncorrected.
+    Prompt: out event port;       --"alarm": do not cause PATIENT injury or death until at least several to many minutes have elapsed
+    Delayed: out event port;       --"warning": cause PATIENT injury only after many minutes to hours have passed
+    Malfunction: out event port;
+	Reset_Alarm: in event port;
+	Alarm_Signal: in out event data port ICE_Types::Alarm_Signal;
+end ICE_Alarms;
+
+feature group ICE_Status
+  features
+    On: out data port Base_Types::Boolean;    --powered-up and initialized
+    Okay: out data port Base_Types::Boolean;  --device functioning normally
+    AppConnected: in data port Base_Types::Boolean;  --ICE app is connected to device
+end ICE_Status;
+
+feature group ICE_Parameters
+end ICE_Parameters;
+
+feature group ICE_Commands
+  features
+    Start: in event port;    --begin or resume operation
+    Suspend: in event port;  --stop operation 
+end ICE_Commands;
+
+feature group ICE_Security
+end ICE_Security;
+
+feature group ICE5
+  prototypes
+    alarm_type : feature group ICE_Alarms;
+    status_type : feature group ICE_Status;
+    param_type : feature group ICE_Parameters;
+    command_type : feature group ICE_Commands;
+    security_type : feature group ICE_Security;
+  features
+    alarm: feature group alarm_type;
+    status: feature group status_type;
+    parameters: feature group param_type;
+    command: feature group command_type;
+    security: feature group security_type;		--public key infrastructure interface
+end ICE5;
+
+bus ICE_Network  --network connecting ICE devices to ICE supervisor
+end ICE_network;
+
+bus implementation ICE_Network.imp  --network connecting ICE devices to ICE supervisor
+end ICE_network.imp;
+
+end ICE;

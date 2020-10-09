@@ -1,0 +1,22 @@
+#This file, script.txt, was produced the BLESS Compiler v0.20
+#  at Thu Sep 29 11:08:41 CDT 2016 by brl
+#  You chose proof script: /Users/brl/git/isosceles/reference_models/pca/bless/proof-script (PCA_Pump)
+load
+#event logger
+subscript[subscripts/elt]
+#alarm thread
+subscript[subscripts/at]
+#prescription checker
+subscript[subscripts/pc]
+#rate controller
+subscript[subscripts/rc]
+#drug library
+subscript[subscripts/dlt]
+#patient bolus checker
+subscript[subscripts/pbc]
+#failure led
+subscript[subscripts/fl]
+#power control
+subscript[subscripts/power]
+#connections
+subscript[subscripts/connections]

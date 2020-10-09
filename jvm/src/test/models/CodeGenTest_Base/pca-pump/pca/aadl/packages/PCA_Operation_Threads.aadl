@@ -1,0 +1,664 @@
+--PCA_Operation_Threads.aadl
+--holds threads for PCA_Operation::Operation_Thread_Group.imp
+
+
+package PCA_Operation_Threads
+public
+with --AADL_Project,
+  EMV2,BLESS, PCA_Pump, PCA_Types, Base_Types, ICE_Types, --PCA_Security, 
+  PCA_Properties;
+
+--detects when the maximum drug allowed per hour is reached
+--contained by PCA_Operation::Operation_Thread_Group
+thread Max_Drug_Per_Hour_Watcher
+features
+    Near_Max_Drug_Per_Hour: out event port --near maximum drug infused in any hour
+      {BLESS::Assertion => "<<PATIENT_NEAR_MAX_DRUG_PER_HOUR()>>";};  
+    Over_Max_Drug_Per_Hour: out event port --over maximum drug infused in any hour
+      {BLESS::Assertion => "<<PATIENT_OVER_MAX_DRUG_PER_HOUR()>>";};  
+    Infusion_Flow_Rate: in data port PCA_Types::Flow_Rate.imp  --rate to pump
+      {BLESS::Assertion => "<<:=PUMP_RATE()>>";};
+    Max_Drug_Per_Hour: in data port PCA_Types::Drug_Volume.imp  --prescribed maximum hourly limit on drug infusion
+      {BLESS::Assertion => "<<:=MAX_DRUG_PER_HOUR>>";};  --maximum drug infused in any hour
+  properties
+    --Thread_Properties::Dispatch_Protocol => Hybrid;  --both event and period dispatches
+    Thread_Properties::Dispatch_Protocol => Periodic;
+    Timing_Properties::Period => 1000 ms; -- PCA_Properties::Service_Thread_Period;  --update outputs every 1s    
+end Max_Drug_Per_Hour_Watcher;
+
+thread implementation Max_Drug_Per_Hour_Watcher.imp
+  annex EMV2x 
+  {**
+  use types ErrorLibrary, PCA_Error_Model;
+  use behavior PCA_Error_Model::FailStop; 	
+  --same error propagations as alarm thread
+  error propagations
+    --
+    Near_Max_Drug_Per_Hour : out propagation {EarlyServiceTermination};
+    Over_Max_Drug_Per_Hour : out propagation {EarlyServiceTermination};
+    Infusion_Flow_Rate : in propagation {ItemOmission,ItemCommission,ValueError};
+    Max_Drug_Per_Hour : in propagation {ItemOmission,ItemCommission,ValueError};
+  flows
+      --
+    near_source: error source Near_Max_Drug_Per_Hour{EarlyServiceTermination} when failed;
+    over_source: error source Over_Max_Drug_Per_Hour{EarlyServiceTermination} when failed;
+      --value error becomes item comission
+    flow_near:  error path Infusion_Flow_Rate{ItemCommission,ValueError}->Near_Max_Drug_Per_Hour(ItemCommission);
+    flow_near2:  error path Infusion_Flow_Rate{ItemOmission}->Near_Max_Drug_Per_Hour(ItemOmission);
+    flow_over:  error path Infusion_Flow_Rate{ItemCommission,ValueError}->Over_Max_Drug_Per_Hour(ItemCommission);
+    flow_over2:  error path Infusion_Flow_Rate{ItemOmission}->Over_Max_Drug_Per_Hour(ItemOmission);
+    max_near:  error path Max_Drug_Per_Hour{ItemCommission,ValueError}->Near_Max_Drug_Per_Hour(ItemCommission);
+    max_near2:  error path Max_Drug_Per_Hour{ItemOmission}->Near_Max_Drug_Per_Hour(ItemOmission);
+    max_over:  error path Max_Drug_Per_Hour{ItemCommission,ValueError}->Over_Max_Drug_Per_Hour(ItemCommission);
+    max_over2:  error path Max_Drug_Per_Hour{ItemOmission}->Over_Max_Drug_Per_Hour(ItemOmission);
+  end propagations;
+  properties
+    EMV2::OccurrenceDistribution => #PCA_Properties::ThreadFailureRate 
+      applies to fail;	
+  **};  --end of EMV2
+end Max_Drug_Per_Hour_Watcher.imp;
+
+--rate control is the most important function, and the trickiest to specify
+--contained by PCA_Operation::Operation_Thread_Group
+thread Rate_Controller
+features
+  --pump control
+    Infusion_Flow_Rate: out data port PCA_Types::Flow_Rate.imp  --rate to pump
+      {BLESS::Assertion => "<<:=PUMP_RATE()>>";};   
+  --status (what rate being pumped)
+    System_Status: out event data port PCA_Types::Status_Type;
+  --from boss thread
+    Begin_Infusion: in event port  --the prescription approved for infusion
+      {BLESS::Assertion => "<<Rx_APPROVED()>>";};  
+    Begin_Priming: in event port;       --clinician pressed "prime" button 
+    End_Priming: in event port;         --clinician pressed "off" button  
+    Halt_Infusion: in event port;   --clinician pressed "stop" button
+  --from prescription checker
+    Square_Bolus_Rate: in data port PCA_Types::Flow_Rate.imp 
+      {BLESS::Assertion => "<<:=SQUARE_BOLUS_RATE>>";};
+    Patient_Bolus_Rate: in data port PCA_Types::Flow_Rate.imp 
+      {BLESS::Assertion => "<<:=PATIENT_BOLUS_RATE>>";};
+    Basal_Rate: in data port PCA_Types::Flow_Rate.imp 
+      {BLESS::Assertion => "<<:=BASAL_RATE>>";};
+    VTBI: in data port PCA_Types::Drug_Volume.imp 
+      {BLESS::Assertion => "<<:=VTBI>>";};
+  --from safety
+    HW_Detected_Failure: in event port;
+    Stop_Pump_Completely: in event port;  --stop the pump
+    Pump_At_KVO_Rate: in event port;  --keep vein open    
+    Alarm : in event data port PCA_Types::Alarm_Type;  --alarm indication
+    Warning : in event data port PCA_Types::Warning_Type;  --warning indication
+  --actions
+    Patient_Request_Not_Too_Soon: in event port  --patient pressed bolus button not too soon
+      {BLESS::Assertion => "<<PATIENT_REQUEST_NOT_TOO_SOON(now)>>";};  
+  --reservoir
+    Door_Open: in data port Base_Types::Boolean;
+  --control panel
+    Pause_Infusion: in event port;
+    Resume_Infusion: in event port;
+    CP_Clinician_Request_Bolus: in event port;   --square bolus request from control panel
+    CP_Bolus_Duration: in event data port ICE_Types::Minute.imp; --set square bolus time from control panel
+  --from Max_Drug_Per_Hour_Watcher
+    Near_Max_Drug_Per_Hour: in event port  --near maximum drug infused in any hour
+      {BLESS::Assertion => "<<PATIENT_NEAR_MAX_DRUG_PER_HOUR()>>";};  
+    Over_Max_Drug_Per_Hour: in event port  --over maximum drug infused in any hour
+      {BLESS::Assertion => "<<PATIENT_OVER_MAX_DRUG_PER_HOUR()>>";};  
+  --from ICE:  danger detected-stop pumping
+    ICE_Stop_Pump: in event port;
+  properties
+    --Thread_Properties::Dispatch_Protocol => Aperiodic;
+    Thread_Properties::Dispatch_Protocol => Sporadic;
+    Timing_Properties::Period => PCA_Properties::Sireum_Thread_Period;  --update outputs every 5ms		
+end Rate_Controller;
+
+thread implementation Rate_Controller.imp
+  annex EMV2 
+  {**
+  use types ErrorLibrary, PCA_Error_Model;
+  use behavior PCA_Error_Model::FailStop; 	
+  --same error propagations as alarm thread
+  error propagations
+      --calculated flow rate for the pump
+    Infusion_Flow_Rate : out propagation {ItemOmission,ItemCommission,ValueError};
+      --parameters from which flow rate is calculated
+    Begin_Infusion : in propagation {EarlyServiceTermination,ItemCommission};
+    Patient_Bolus_Rate: in propagation {ItemOmission,ItemCommission,ValueError};
+    Square_Bolus_Rate: in propagation {ItemOmission,ItemCommission,ValueError};
+    Basal_Rate: in propagation {ItemOmission,ItemCommission,ValueError};
+    VTBI: in propagation {ItemOmission,ItemCommission,ValueError};
+    HW_Detected_Failure: in propagation {ItemOmission,ItemCommission};
+    Stop_Pump_Completely: in propagation {ItemOmission,ItemCommission};
+    Pump_At_KVO_Rate: in propagation {ItemOmission,ItemCommission};
+    Alarm: in propagation {ItemOmission,ItemCommission,ValueError};
+    Warning: in propagation {ItemOmission,ItemCommission,ValueError};
+    Patient_Request_Not_Too_Soon: in propagation {ItemOmission,ItemCommission};
+    Door_Open: in propagation {ItemOmission,ItemCommission};
+    Pause_Infusion: in propagation {ItemOmission,ItemCommission};
+    Resume_Infusion: in propagation {ItemOmission,ItemCommission};
+    CP_Clinician_Request_Bolus: in propagation {ItemOmission,ItemCommission};
+    CP_Bolus_Duration: in propagation {ItemOmission,ItemCommission};
+    Halt_Infusion: in propagation {ItemOmission,ItemCommission};
+--    Begin_Infusion: in propagation {ItemOmission,ItemCommission};
+    Begin_Priming: in propagation {ItemOmission,ItemCommission};
+    End_Priming : in propagation {ItemOmission,ItemCommission};
+    Near_Max_Drug_Per_Hour : in propagation {EarlyServiceTermination};
+    Over_Max_Drug_Per_Hour : in propagation {EarlyServiceTermination};
+--  flows
+--      --bad flow rate calculation
+--    value_error: error source Infusion_Flow_Rate{ItemOmission,ItemCommission,ValueError};
+--      --data sources used to calculate flow rate
+--    rxo_ifr:  error path Rx_Okay->Infusion_Flow_Rate;
+--    sb_ifr:  error path Square_Bolus_Rate->Infusion_Flow_Rate;
+--    br_ifr:  error path Basal_Rate->Infusion_Flow_Rate;
+--    hw_ifr:  error path HW_Detected_Failure->Infusion_Flow_Rate;
+--    spc_ifr:  error path Stop_Pump_Completely->Infusion_Flow_Rate;
+--    pak_ifr:  error path Pump_At_KVO_Rate->Infusion_Flow_Rate;
+--    a_ift:  error path Alarm->Infusion_Flow_Rate;
+--    w_ifr:  error path Warning->Infusion_Flow_Rate;
+--    prb_ifr:  error path Patient_Button_Request->Infusion_Flow_Rate;
+--    do_ifr:  error path Door_Open->Infusion_Flow_Rate;
+--    pi_ifr:  error path Pause_Infusion->Infusion_Flow_Rate;
+--    ri_ifr:  error path Resume_Infusion->Infusion_Flow_Rate;
+--    crb_ifr:  error path CP_Clinician_Request_Bolus->Infusion_Flow_Rate;
+--    bd_ifr:  error path CP_Bolus_Duration->Infusion_Flow_Rate;
+--    stop_ifr:  error path Halt_Infusion->Infusion_Flow_Rate;
+--    start_ifr:  error path Begin_Infusion->Infusion_Flow_Rate;
+--    p_ifr:  error path Begin_Priming->Infusion_Flow_Rate;
+--    off_ifr:  error path End_Priming->Infusion_Flow_Rate;
+--    near_ifr:  error path Near_Max_Drug_Per_Hour->Infusion_Flow_Rate;
+--    over_ifr:  error path Over_Max_Drug_Per_Hour->Infusion_Flow_Rate;
+  end propagations;
+  properties
+    EMV2::OccurrenceDistribution => PCA_Properties::ThreadFailureRate 
+      applies to fail;	
+  **};  --end of EMV2
+annex BLESS
+{**
+assert
+--the infusion flow rate shall be:
+--  =0, after stop pump completely (from safety architecture), 
+--      clinician pressed stop button
+--  =KVO rate, after KVO rate command, or
+--      exceeded max drug per hour
+--      some alarms,
+--  =max rate, during patient-requested infusion
+--  =square bolus rate, during clinician-commanded infusion	
+--  =priming rate during pump priming
+--  =basal rate, otherwise
+<<HALT : :(la=SafetyPumpStop) or (la=StopButton) or (la=EndPriming)>>  --pump at 0 if stop button, or safety architecture says, or done priming
+<<KVO_RATE : :(la=KVOcommand) or (la=KVOalarm) or (la=TooMuchJuice)>>  --pump at KVO rate when commanded, some alarms, or excedded hourly limit
+<<PB_RATE : :la=PatientButton>>  --patient button pressed, and allowed
+<<CCB_RATE : :(la=StartSquareBolus) or (la=ResumeSquareBolus)>>  --clinician-commanded bolus start or resumption after patient bolus
+<<PRIME_RATE : :la=StartPriming>>  --priming pump
+<<BASAL_RATE : :(la=StartButton) or (la=ResumeBasal) or (la=SquareBolusDone)>>  --regular infusion
+<<PUMP_RATE : := (
+  (HALT()) -> 0,                                 			--no flow
+  (KVO_RATE()) -> #PCA_Properties::KVO_Rate,      			--KVO rate
+  (PB_RATE()) -> Patient_Bolus_Rate,	--maximum infusion upon patient request
+  (CCB_RATE()) -> Square_Bolus_Rate,             			--square bolus rate=VTBI/duration, from data port
+  (PRIME_RATE()) -> #PCA_Properties::Prime_Rate,  			--pump priming
+  (BASAL_RATE()) -> Basal_Rate )                  			--basal rate, from data port
+>>
+invariant <<true>>
+variables
+  --time of last action
+  tla :time := 0;
+  la :   --last action
+    enumeration (	
+    	SafetyStopPump,		--safety architecture found a problem
+    	StopButton,				--clinician pressed stop button
+    	KVOcommand,				--from control panel (clinician) or ICE (app) to pump Keep-vein-open rate
+    	KVOalarm,					--some alarms should pump at KVO rate
+    	TooMuchJuice,     --exceeded max drug per hour, pump at KVO until prescription and patient are re-authenticated
+    	PatientButton,		--patient requested drug
+      ResumeSquareBolus,--infusion of VTBI finished, resume clinician-commanded bolus
+      ResumeBasal,			--infusion of VTBI finished, resume basal-rate
+      StartSquareBolus,	--begin clinician-commanded bolus
+      SquareBolusDone,  --infusion of VTBI finished
+      StartPriming,			--begin pump/line priming, pressed "prime" button
+      EndPriming,    		--end priming, pressed "prime" button again, or time-out 
+      StartButton				--start pumping at basal rate
+    );
+--CONSIDER ELIMINATING DIVISION BY ONLY PUTTING OUT PB_DURATION    
+  pb_duration : time  --patient button duration = VTBI/Patient_Bolus_Rate
+    <<PB_DURATION : :pb_duration=(VTBI/Patient_Bolus_Rate)>>;
+states
+  PowerOn : initial state;				--power-on
+  WaitForRx : complete state;		--wait for valid prescription
+  CheckPBR : state  --check Patient_Bolus_Rate is positive
+    <<Rx_APPROVED()>>;
+  RxApproved : complete state   --prescription verified
+    <<Rx_APPROVED() and PB_DURATION()>>;
+  Priming : complete state			--priming the pump, 1 ml in 6 sec
+    <<(la=StartPriming) and (Infusion_Flow_Rate@now = #PCA_Properties::Prime_Rate) and PB_DURATION()>>;
+  WaitForStart : complete state   --wait for clinician to press 'start' button
+    <<HALT() and (Infusion_Flow_Rate@now=0) and PB_DURATION()>>;
+  PumpBasalRate : complete state  --pumping at basal rate
+    <<((la=StartButton) or (la=ResumeBasal)) and (Infusion_Flow_Rate@now=Basal_Rate@now) and PB_DURATION()>>;
+  PumpPatientButtonVTBI : complete state  --pumping patient-requested bolus
+    <<(la=PatientButton) and PB_DURATION()
+      and (Infusion_Flow_Rate@now=Patient_Bolus_Rate)>>;
+  PumpCCBRate : complete state    --pumping at clinician-commanded bolus rate
+    <<((la=StartSquareBolus) or (la=ResumeSquareBolus)) and (Infusion_Flow_Rate@now=Square_Bolus_Rate@now) and PB_DURATION()>>;
+  PumpKVORate : complete state    --pumping at keep-vein-open rate
+    <<((la=KVOcommand) or (la=KVOalarm) or (la=TooMuchJuice))  and PB_DURATION()
+      and (Infusion_Flow_Rate@now=#PCA_Properties::KVO_Rate)>>;
+  PumpingSuspended : complete state  --clinician pressed 'stop' button
+    <<((la=StopButton) or (la=SafetyStopPump)) and (Infusion_Flow_Rate@now=0)>>;
+  Crash : final state;		--abnormal termination
+  Done : final state    --normal termination
+    <<Infusion_Flow_Rate@now=0>>;
+transitions
+--wait for valid prescription
+  go : PowerOn-[ true ]->WaitForRx{};  
+--prescription validated
+  rxo : WaitForRx-[ on dispatch Begin_Infusion ]-> CheckPBR{};
+  pbr0 : CheckPBR-[ Patient_Bolus_Rate<=0 ]->Crash{};	--bad Patient_Bolus_Rate
+  pbrok : CheckPBR-[ Patient_Bolus_Rate>0 ]->RxApproved
+    {<<Rx_APPROVED() and (Patient_Bolus_Rate>0)>>  --likely will change from logic variable to predicate Rx_APPROVED()
+    pb_duration := VTBI/Patient_Bolus_Rate  --calculate patient bolus duration
+    	--note division without knowing divsor is non-zero; should generate additional proof obligations for assignment using division
+    <<Rx_APPROVED() and PB_DURATION()>>
+    };  --end of pbrok
+--clinician press 'prime' button
+  rxpri : RxApproved-[ on dispatch Begin_Priming ]-> Priming  
+    {
+    la :=StartPriming
+    	  <<Begin_Priming@now and Rx_APPROVED() and (la = StartPriming) and PB_DURATION()>>
+    ;	
+    Infusion_Flow_Rate!(#PCA_Properties::Prime_Rate)  --infuse at prime rate
+    	  <<(la = StartPriming) and Rx_APPROVED() and PB_DURATION() and
+    	    (Infusion_Flow_Rate@now=#PCA_Properties::Prime_Rate)>>   
+    };
+--priming done, wait for start
+  prd: Priming-[ on dispatch End_Priming or timeout (Begin_Priming) #PCA_Properties::Prime_Time sec]-> WaitForStart  
+    {
+    la:=EndPriming
+      <<HALT() and PB_DURATION()>>  --and Begin_Priming timed out
+    ;
+    Infusion_Flow_Rate!(0)   --stop priming flow
+      <<HALT() and (Infusion_Flow_Rate@now=0) and PB_DURATION()>>
+    };
+--prime again
+  pri: WaitForStart-[ on dispatch Begin_Priming ]-> Priming  
+    {
+    la:=StartPriming
+    	  <<Begin_Priming@now and PB_DURATION() and PRIME_RATE()>>
+    ;	
+    Infusion_Flow_Rate!(#PCA_Properties::Prime_Rate)  --infuse at prime rate
+    	  <<PRIME_RATE() and PB_DURATION() and
+    	    (Infusion_Flow_Rate@now=#PCA_Properties::Prime_Rate)>>   
+   };
+--clinician press 'start' button without priming    
+--  swp: RxApproved-[ on dispatch Begin_Infusion ]-> PumpBasalRate  
+--    {
+--    la:=StartButton
+--      <<(la=StartButton) and Begin_Infusion@now>>    
+--    ;
+--    Infusion_Flow_Rate!(Basal_Rate)   --infuse at basal rate
+--      <<(la=StartButton) and (Infusion_Flow_Rate@now=Basal_Rate@now)>>
+--    };
+--clinician press 'start' button after priming    
+  sap: WaitForStart-[ on dispatch Begin_Infusion ]-> PumpBasalRate  --start after priming
+    {
+    la:=StartButton
+      <<(la=StartButton) and (Rx_APPROVED())@now  and PB_DURATION()>>    
+    ;
+    Infusion_Flow_Rate!(Basal_Rate)   --infuse at basal rate
+      <<(la=StartButton) and (Infusion_Flow_Rate@now=Basal_Rate@now) and PB_DURATION()>>
+    };
+--Patient_Button_Request during basal rate infusion
+  pump_basal_rate: 
+  PumpBasalRate-[ on dispatch Patient_Request_Not_Too_Soon]-> PumpPatientButtonVTBI
+    {
+    la := PatientButton 
+      <<(la=PatientButton) and Patient_Button_Request@now and PB_DURATION()>>    
+    ;
+    Infusion_Flow_Rate!(Patient_Bolus_Rate)   --infuse at patient button rate
+      <<(la=PatientButton) and PB_DURATION()
+        and (Infusion_Flow_Rate@now=Patient_Bolus_Rate)>>    	
+    };  --end of pump_basal_rate
+--VTBI delivered
+  vtbi_delivered: 
+  PumpPatientButtonVTBI -[ on dispatch timeout (Infusion_Flow_Rate) pb_duration ms ]-> PumpBasalRate
+    {
+    la:=ResumeBasal
+    ;
+    <<(la=ResumeBasal) and PB_DURATION()>>  --and timeout of patient button duration
+    Infusion_Flow_Rate!(Basal_Rate)   --infuse at basal rate
+      <<(la=ResumeBasal) and (Infusion_Flow_Rate@now=Basal_Rate@now) and PB_DURATION()>>   
+    };  --end of vtbi_delivered
+**};
+end Rate_Controller.imp;
+
+
+--checks prescriptions for hard and soft limits
+--contained by PCA_Operation::Operation_Thread_Group
+thread Prescription_Checker
+  features
+    Check_Rx: in event port;  --from boss thread
+    Prescription: in data port PCA_Types::Prescription.imp;  --prescription read from bar code or RFID
+    Rx_Okay: out event port 
+      {BLESS::Assertion => "<<Rx_APPROVED()>>";};  --the prescription approved for infusion
+  --to rate controller
+    VTBI: out data port PCA_Types::Drug_Volume.imp  --volume to be infused
+      {BLESS::Assertion => "<<:=VTBI>>";};
+    Square_Bolus_Rate: out data port PCA_Types::Flow_Rate.imp 
+      {BLESS::Assertion => "<<:=SQUARE_BOLUS_RATE>>";};  --clinician-commanded bolus rate
+    Patient_Bolus_Rate: out data port PCA_Types::Flow_Rate.imp 
+      {BLESS::Assertion => "<<:=PATIENT_BOLUS_RATE>>";};  --patient-requested bolus rate
+    Basal_Rate: out data port PCA_Types::Flow_Rate.imp   --basal flow rate
+      {BLESS::Assertion => "<<:=BASAL_RATE>>";};
+  --to patient bolus checker
+    Minimum_Time_Between_Bolus: out data port ICE_Types::Minute.imp
+      {BLESS::Assertion => "<<:=MINIMUM_TIME_BETWEEN_BOLUS>>";};
+  --to max drug per hour checker
+    Max_Drug_Per_Hour: out data port PCA_Types::Drug_Volume.imp 
+      {BLESS::Assertion => "<<:=MAX_DRUG_PER_HOUR>>";};  --maximum drug infused in any hour
+--    CP_Max_Drug_Per_Hour_Exceeded: in event port;   --display that maximum drug per hour would be exceeded by more drug 
+  --drug library
+    Get_Drug_Record: out event data port PCA_Types::Drug_Code.imp 
+      {BLESS::Assertion => "<<:=myRx.code >>";};  --request drug record from library
+    The_Drug_Record: in event data port PCA_Types::Drug_Record.imp 
+      {BLESS::Assertion => "<<:=DRUG_LIBRARY[myRx.code] >>";}; --returned drug record, may be null value if drug code not in library
+    Drug_Not_In_Library : in event port  --no drug found having the given drug code
+      {BLESS::Assertion=>"<<NDF(#PCA_Properties::Drug_Library_Size)>>";};  
+  --control panel
+--    Rx_Mismatch: out event port  --mismatch between prescription and drug library
+--      {BLESS::Assertion => "<<not Rx_VALID()>>";};  
+    Confirm_Soft_Limit_Exception: in event port  --clinician approved soft limit
+      {BLESS::Assertion => "<<CLINICIAN_APPROVED_SOFT_LIMIT>>";};  --clinician confirmed prescription
+    Reject_Soft_Limit_Exception: in event port  --clinician disapprove soft limit
+      {BLESS::Assertion => "<<not CLINICIAN_APPROVED_SOFT_LIMIT>>";};   --clinician rejected prescription
+    Soft_Limit_Warning: out event port   --prescription exceeds soft limit in drug library
+      {BLESS::Assertion => "<<SOFT_LIMIT_VIOLATED()>>";};  
+--    Rx_Confirmed: out event port;  --prescription matches, limits acceptable
+  --to safety
+    Hard_Limit_Violated: out event port  --prescription exceeds hard limit in drug library
+      {BLESS::Assertion => "<<HARD_LIMIT_VIOLATED()>>";};  
+--    Hard_Limit_Okay: out event port  --prescription exceeds hard limit in drug library
+--      {BLESS::Assertion => "<<not HARD_LIMIT_VIOLATED()>>";};  
+  properties
+    --Thread_Properties::Dispatch_Protocol=>Aperiodic;  
+    Thread_Properties::Dispatch_Protocol=>Sporadic;
+    Timing_Properties::Period => PCA_Properties::Sireum_Thread_Period;  --update outputs every 5ms		
+end Prescription_Checker;
+
+thread implementation Prescription_Checker.imp
+  annex EMV2 
+  {**
+  use types ErrorLibrary, PCA_Error_Model;
+  use behavior PCA_Error_Model::FailStop; 	
+  error propagations
+    Prescription: in propagation {ItemOmission,ItemCommission,ValueError};
+    Rx_Okay : out propagation {EarlyServiceTermination,ItemCommission};
+    VTBI: out propagation {ItemOmission,ItemCommission,ValueError};
+    Square_Bolus_Rate: out propagation {ValueError};
+    Max_Drug_Per_Hour: out propagation {ValueError};
+    Basal_Rate: out propagation {ValueError};
+--    CP_Max_Drug_Per_Hour_Exceeded : in propagation {ItemOmission,ItemCommission};
+    Get_Drug_Record : out propagation {ItemOmission,ItemCommission};
+    The_Drug_Record: in propagation {ValueError};
+    Confirm_Soft_Limit_Exception : in propagation {ItemOmission,ItemCommission};
+    Reject_Soft_Limit_Exception : in propagation {ItemOmission,ItemCommission};
+    Soft_Limit_Warning : out propagation {ItemOmission,ItemCommission};
+    Hard_Limit_Violated : out propagation {ItemOmission,ItemCommission};
+
+  flows
+      --fail stop
+    fail_stop: error source Rx_Okay{EarlyServiceTermination} when failed;
+ end propagations;
+  properties
+    EMV2::OccurrenceDistribution => PCA_Properties::ThreadFailureRate 
+      applies to fail;	
+  **};  --end of EMV2
+annex BLESS 
+{**
+  assert
+    <<Rx_APPROVED: :Rx_VALID() and   --valid prescritption
+      not HARD_LIMIT_VIOLATED() and  --no hard limit violations
+      (CLINICIAN_APPROVED_SOFT_LIMIT or not SOFT_LIMIT_VIOLATED())>>  --either no soft limits, or clinician approved
+    <<Rx_VALID: :  (myRx.code=myDrugRecord.code) and  --drug code matches
+    	(myRx.drug_name=myDrugRecord.name) and  --same name of drug
+    	(myRx.concentration=myDrugRecord.concentration) >>  --same concentration   	
+    <<HARD_LIMIT_VIOLATED: : not
+    	((myRx.vtbi >= myDrugRecord.vtbi_lower_hard) and --VTBI above lower hard limit
+    	(myRx.vtbi <= myDrugRecord.vtbi_upper_hard) and --VTBI below lower hard limit
+    	(myRx.basal_flow_rate >= myDrugRecord.basal_rate_lower_hard) and --basal rate above lower hard limit
+    	(myRx.basal_flow_rate <= myDrugRecord.basal_rate_upper_hard))>> --basal rate below upper hard limit	
+    <<SOFT_LIMIT_VIOLATED: : not
+    	((myRx.vtbi >= myDrugRecord.vtbi_lower_soft) and --VTBI above lower soft limit
+    	(myRx.vtbi <= myDrugRecord.vtbi_upper_soft) and --VTBI below lower soft limit
+    	(myRx.basal_flow_rate >= myDrugRecord.basal_rate_lower_soft) and --basal rate above lower soft limit
+    	(myRx.basal_flow_rate <= myDrugRecord.basal_rate_upper_soft))>> --basal rate below upper soft limit	
+    <<AXIOM_Rx_IS_INTENDED_PRESCRIPTION: :
+      (VTBI=myRx.vtbi) and
+      (SQUARE_BOLUS_RATE=myDrugRecord.square_bolus_rate_typical) and
+      (PATIENT_BOLUS_RATE=myRx.patient_bolus_rate) and
+      (MAX_DRUG_PER_HOUR=myRx.max_drug_per_hour) and
+      (BASAL_RATE=myRx.basal_rate)
+      >>
+  invariant <<true>>
+  variables
+    myRx : PCA_Types::Prescription;  --holds prescription
+    myDrugRecord :  PCA_Types::Drug_Record;  --holds drug record
+  states
+	Start: initial state;  --power on
+	WaitForRx : complete state;  --waiting for prescription
+	GettingDrugRecord : complete state;  --ask drug library for drug record
+	CheckRx : state;  --check prescription
+	RxValid : state   --the prescription matches library, now check limits
+	  <<Rx_VALID()>>;  
+	HardLimitsMet : state   --the prescription satisfies hard limits
+	  <<Rx_VALID() and not HARD_LIMIT_VIOLATED() and AXIOM_Rx_IS_INTENDED_PRESCRIPTION()>>;
+	OutputRx : complete state   --putting out good prescription
+	  <<Rx_APPROVED()>>;
+	SoftLimit : complete state  --soft limit exceeded, get clinician confirmations
+	  <<SOFT_LIMIT_VIOLATED() and Rx_VALID() and 
+	    not HARD_LIMIT_VIOLATED() and AXIOM_Rx_IS_INTENDED_PRESCRIPTION()>>;
+	BadRx : complete state  --bad Rx waiting for power down (stop)
+	  <<NDF(#PCA_Properties::Drug_Library_Size) or --no drug found
+	    not Rx_VALID() or HARD_LIMIT_VIOLATED() or (SOFT_LIMIT_VIOLATED() and 
+	  	not CLINICIAN_APPROVED_SOFT_LIMIT)>>;
+	Done: final state;
+  transitions
+    go: Start -[ ]-> WaitForRx{};
+    getrx : WaitForRx -[ on dispatch Check_Rx ]-> GettingDrugRecord
+      {
+      Prescription?(myRx) ; --get prescription from port
+      Get_Drug_Record!(myRx.code)  --ask drug library for drug record
+      };  --end of getrx
+    getdr: GettingDrugRecord -[ on dispatch The_Drug_Record ]-> CheckRx
+      {
+      The_Drug_Record?(myDrugRecord)
+        <<myDrugRecord = DRUG_LIBRARY[myRx.code]>>
+      };
+    dnil: GettingDrugRecord -[ on dispatch Drug_Not_In_Library ]-> BadRx{};
+    check: CheckRx -[  --check prescription against library
+    	(myRx.code=myDrugRecord.code) and  --drug code matches
+    	(myRx.drug_name=myDrugRecord.name) and  --same name of drug
+    	(myRx.concentration=myDrugRecord.concentration)  --same concentration   	
+      ]-> RxValid{};
+    badrx: CheckRx -[ not --Rx/library mismatch
+    	((myRx.code=myDrugRecord.code) and  --drug code matches
+    	(myRx.drug_name=myDrugRecord.name) and  --same name of drug
+    	(myRx.concentration=myDrugRecord.concentration))  --same concentration   	
+      ]-> BadRx{};
+--      ]-> BadRx{Rx_Mismatch!};
+    okhard : RxValid -[
+    	(myRx.vtbi >= myDrugRecord.vtbi_lower_hard) and --VTBI above lower hard limit
+    	(myRx.vtbi <= myDrugRecord.vtbi_upper_hard) and --VTBI below lower hard limit
+    	(myRx.basal_flow_rate >= myDrugRecord.basal_rate_lower_hard) and --basal rate above lower hard limit
+    	(myRx.basal_flow_rate <= myDrugRecord.basal_rate_upper_hard) --basal rate below lower hard limit	
+      ]-> HardLimitsMet{};
+--      ]-> HardLimitsMet{Hard_Limit_Okay!};
+    badhard : RxValid -[ not
+    	((myRx.vtbi >= myDrugRecord.vtbi_lower_hard) and --VTBI above lower hard limit
+    	(myRx.vtbi <= myDrugRecord.vtbi_upper_hard) and --VTBI below lower hard limit
+    	(myRx.basal_flow_rate >= myDrugRecord.basal_rate_lower_hard) and --basal rate above lower hard limit
+    	(myRx.basal_flow_rate <= myDrugRecord.basal_rate_upper_hard)) --basal rate below lower hard limit	
+      ]-> BadRx{Hard_Limit_Violated!};
+    oksoft: HardLimitsMet-[
+    	(myRx.vtbi >= myDrugRecord.vtbi_lower_soft) and --VTBI above lower soft limit
+    	(myRx.vtbi <= myDrugRecord.vtbi_upper_soft) and --VTBI below lower soft limit
+    	(myRx.basal_flow_rate >= myDrugRecord.basal_rate_lower_soft) and --basal rate above lower soft limit
+    	(myRx.basal_flow_rate <= myDrugRecord.basal_rate_upper_soft) --basal rate below lower soft limit	
+      ]->OutputRx{  --prescription okay, may begin infusion, put out Rx parameters
+      	Rx_Okay! &
+      	VTBI!(myRx.vtbi) &
+      	Square_Bolus_Rate!(myDrugRecord.square_bolus_rate_typical) &
+      	Max_Drug_Per_Hour!(myRx.max_drug_per_hour) &
+      	Patient_Bolus_Rate!(myRx.patient_bolus_rate) &
+      	Basal_Rate!(myRx.basal_rate)
+        };  --end of oksoft
+    badsoft: HardLimitsMet-[ not
+    	((myRx.vtbi >= myDrugRecord.vtbi_lower_soft) and --VTBI above lower soft limit
+    	(myRx.vtbi <= myDrugRecord.vtbi_upper_soft) and --VTBI below lower soft limit
+    	(myRx.basal_flow_rate >= myDrugRecord.basal_rate_lower_soft) and --basal rate above lower soft limit
+    	(myRx.basal_flow_rate <= myDrugRecord.basal_rate_upper_soft)) --basal rate below lower soft limit	   	
+      ]->SoftLimit{Soft_Limit_Warning!};
+    yessoft: SoftLimit -[on dispatch Confirm_Soft_Limit_Exception]->OutputRx{  --soft limit violation approved, may begin infusion, put out Rx parameters
+      	Rx_Okay! &
+      	VTBI!(myRx.vtbi) &
+      	Square_Bolus_Rate!(myDrugRecord.square_bolus_rate_typical) &
+      	Max_Drug_Per_Hour!(myRx.max_drug_per_hour) &
+      	Patient_Bolus_Rate!(myRx.patient_bolus_rate) &
+      	Basal_Rate!(myRx.basal_rate)
+        };
+    nosoft: SoftLimit -[on dispatch Reject_Soft_Limit_Exception]->WaitForRx{};  --rejected, wait for new Rx
+    quit: WaitForRx,GettingDrugRecord,OutputRx,SoftLimit,BadRx
+      -[ on dispatch stop ]-> Done{}; --cancel Rx when stopped
+**};  
+end Prescription_Checker.imp;
+
+
+
+--handle ICE interface
+--contained by PCA_Operation::Operation_Thread_Group
+thread ICE_Thread
+  features
+  --from ICE:  danger detected-stop pumping
+    ICE_Stop_Pump: out event port;
+  --ICE interface
+    command: feature group PCA_Pump::PCA_Commands;
+    parameters: feature group PCA_Pump::PCA_Parameters;
+    status: feature group PCA_Pump::PCA_Status;
+--    security: feature group PCA_Pump::PCA_Security;  
+  --signals received by rate controller, or control panel
+  --pump control
+    Infusion_Flow_Rate: in data port PCA_Types::Flow_Rate.imp  --rate to pump
+      {BLESS::Assertion => "<<:=PUMP_RATE()>>";};   
+  --from prescription checker
+    Rx_Okay: in event port  --the prescription approved for infusion
+      {BLESS::Assertion => "<<Rx_APPROVED()>>";};  
+    Patient_Bolus_Rate: in data port PCA_Types::Flow_Rate.imp 
+      {BLESS::Assertion => "<<:=PATIENT_BOLUS_RATE>>";};
+    Square_Bolus_Rate: in data port PCA_Types::Flow_Rate.imp 
+      {BLESS::Assertion => "<<:=SQUARE_BOLUS_RATE>>";};
+    Basal_Rate: in data port PCA_Types::Flow_Rate.imp 
+      {BLESS::Assertion => "<<:=BASAL_RATE>>";};
+    VTBI: in data port PCA_Types::Drug_Volume.imp;
+  --from patient bolus checker
+    Patient_Request_Not_Too_Soon: in event port
+      {BLESS::Assertion => "<<PATIENT_REQUEST_NOT_TOO_SOON(now)>>";};
+    Patient_Request_Too_Soon: in event port
+      {BLESS::Assertion => "<<PATIENT_REQUEST_TOO_SOON(now)>>";};
+  --from safety
+    HW_Detected_Failure: in event port;
+    Stop_Pump_Completely: in event port;  --stop the pump
+    Pump_At_KVO_Rate: in event port;  --keep vein open    
+    Alarm : in event data port PCA_Types::Alarm_Type;  --alarm indication
+    Warning : in event data port PCA_Types::Warning_Type;  --warning indication
+  --reservoir
+    Door_Open: in data port Base_Types::Boolean;
+  --control panel
+--    Pause_Infusion: in event port;
+--    Resume_Infusion: in event port;
+    CP_Clinician_Request_Bolus: in event port;   --square bolus request from control panel
+    CP_Bolus_Duration: in event data port ICE_Types::Minute.imp; --set square bolus time from control panel
+    Halt_Infusion: in event port;   --clinician pressed "stop" button
+    Begin_Infusion: in event port;  --clinician pressed "start" button   
+--    Begin_Priming: in event port;       --clinician pressed "prime" button 
+--    End_Priming: in event port;         --clinician pressed "off" button  
+	Alarm_Inactivation : in data port ICE_Types::Alarm_Signal;  --"On","Alarm_Off","Alarm_Paused","Audio_Off","Audio_Paused"
+  --from Max_Drug_Per_Hour_Watcher
+    Near_Max_Drug_Per_Hour: in event port  --near maximum drug infused in any hour
+      {BLESS::Assertion => "<<PATIENT_NEAR_MAX_DRUG_PER_HOUR()>>";};  
+    Over_Max_Drug_Per_Hour: in event port  --over maximum drug infused in any hour
+      {BLESS::Assertion => "<<PATIENT_OVER_MAX_DRUG_PER_HOUR()>>";};  
+  properties
+    --Thread_Properties::Dispatch_Protocol=>Aperiodic;  
+    Thread_Properties::Dispatch_Protocol=>Sporadic;  
+    Timing_Properties::Period => PCA_Properties::Sireum_Thread_Period;  --update outputs every 5ms		    
+end ICE_Thread;
+
+thread implementation ICE_Thread.imp
+--for now, model that no errors on ICE
+  annex EMV2 
+  {**
+  use types ErrorLibrary, PCA_Error_Model;
+  use behavior PCA_Error_Model::FailStop; 	
+  error propagations
+    --ICE tells pump to stop
+    ICE_Stop_Pump: out propagation {EarlyServiceTermination};
+  flows
+      --does nothing when failed
+    isp: error source ICE_Stop_Pump{EarlyServiceTermination} when failed;
+      --there are 4*22 possible error flows to ICE
+      --exercise left to student
+  end propagations;
+  properties
+    EMV2::OccurrenceDistribution => PCA_Properties::ThreadFailureRate 
+      applies to fail;	
+  **};  --end of EMV2
+end ICE_Thread.imp;
+
+thread Patient_Bolus_Checker
+  features
+    Minimum_Time_Between_Bolus: in data port ICE_Types::Minute.imp
+      {BLESS::Assertion => "<<:=MINIMUM_TIME_BETWEEN_BOLUS>>";};
+    Patient_Button_Request: in event port;
+    Patient_Request_Not_Too_Soon: out event port
+      {BLESS::Assertion => "<<PATIENT_REQUEST_NOT_TOO_SOON(now)>>";};
+    Patient_Request_Too_Soon: out event port
+      {BLESS::Assertion => "<<PATIENT_REQUEST_TOO_SOON(now)>>";};
+  properties
+    Thread_Properties::Dispatch_Protocol=>Sporadic;   
+    Timing_Properties::Period => PCA_Properties::Sireum_Thread_Period;  --update outputs every 5ms
+end Patient_Bolus_Checker;
+
+thread implementation Patient_Bolus_Checker.imp
+  annex BLESS
+  {**
+  invariant <<LPB()>>
+  variables
+    last_patient_bolus: time:=0
+      <<LPB: :Patient_Request_Not_Too_Soon@last_patient_bolus and 
+        not (exists t:time in last_patient_bolus,,now that Patient_Request_Not_Too_Soon@t)>>;
+  states
+    start: initial state
+      <<last_patient_bolus=0 and now=0 and LPB()>>;	
+    run: complete state
+      <<LPB()>>;
+    check_last_bolus_time: state
+      <<LPB() and Patient_Button_Request@now>>;
+  	done: final state;
+ transitions
+   go: start-[ ]-> run{};
+   button: run -[on dispatch Patient_Button_Request]-> check_last_bolus_time{};
+   nottoosoon: check_last_bolus_time -[(now-Minimum_Time_Between_Bolus?) > last_patient_bolus]-> run
+     {  <<LPB() and Patient_Button_Request@now and
+     	  (now-MINIMUM_TIME_BETWEEN_BOLUS@now) > last_patient_bolus>>
+     Patient_Request_Not_Too_Soon! 
+      ; <<Patient_Request_Not_Too_Soon@now>>
+      last_patient_bolus:=now
+     <<Patient_Request_Not_Too_Soon@now and last_patient_bolus=now>>};
+   toosoon: check_last_bolus_time -[(now-Minimum_Time_Between_Bolus?) <= last_patient_bolus]-> run
+     {Patient_Request_Too_Soon!};
+   quit: run-[on dispatch stop]->done{};  
+  **}; 
+end Patient_Bolus_Checker.imp;
+
+
+
+end PCA_Operation_Threads;

@@ -1,0 +1,513 @@
+--PCA_Alarm.aadl
+
+package PCA_Alarm
+  public
+  with
+    EMV2,		--error model properties
+    PCA_Error_Model,
+--    Base_Types,	--predeclared AADL data types
+    BLESS,		--BLESS property types
+    ICE_Types,  --defines alarm feature group signals
+    PCA_Properties,  --pca pump properties
+    PCA_Types,		--package holding types used only by this PCA pump model
+    PCA_Pump;            --main architecture package
+--  PFT renames data PCA_Types::Pump_Fault_Type; 
+    
+ 
+process alarm_process
+  features
+  --alarms
+    alrm: feature group PCA_Pump::PCA_Alarms;  --alarm to ICE interface
+    Alarm: out event data port PCA_Types::Alarm_Type;  --alarm to control panel
+    Warning: out event data port PCA_Types::Warning_Type;  --warning to control panel
+  --directives to operation
+    Stop_Pump_Completely: out event port;  --tell infusion thread to stop the pump
+    Pump_At_KVO_Rate: out event port;  --tell infusion thread to keep vein open 
+  --warning from operation 
+    Over_Max_Drug_Per_Hour: in event port;  --maximum drug allowed (over time) during bolus infusion
+    Hard_Limit_Violated: in event port;  --prescription exceeds hard limit in drug library
+    Prime_Failure: in event port;  --priming failure indication
+  --errors from fluid
+    Bubble: in event port;  --air-in-line embolism
+    Upstream_Occlusion: in event port;  --stoppage before pump
+    Downstream_Occlusion: in event port;  --stoppage after pump
+    Empty_Reservoir: in event port;  --no drug left
+    Low_Reservoir: in event port; --little drug left
+    Pump_Hot:  in event port;  --pump over temperature
+    Drug_Not_In_Library: in event port;  --null drug record returned from drug library
+    
+    -- simulation ports
+    -- added so that flow rate checker can know what the current pumping mode is
+    System_Status: in data port PCA_Types::Status_Type;
+    -- end of simulation ports
+    
+  --flow information
+    Infusion_Flow_Rate: in data port PCA_Types::Flow_Rate.imp;  --intended
+    Upstream_Flow_Rate: in data port PCA_Types::Flow_Rate.imp;  --measured
+    Downstream_Flow_Rate: in data port PCA_Types::Flow_Rate.imp;  --measured    
+  --battery
+    Defective_Battery: in event port;  --dead battery
+    Low_Battery_Warning: in event port;
+    Voltage_OOR: in event port;   --power supply voltage out-of-range
+  --control panel
+    CP_Reset_Alarm: in event port;  --control panel reset alarm
+  --security
+    Security_Fault: in event port;  --security fault
+  --log faults
+    Log_Fault: out event data port PCA_Types::Fault_Record.imp;   
+end alarm_process;
+
+process implementation alarm_process.imp
+  subcomponents
+    alarm_thr: thread PCA_Alarm::alarm_thread.imp;
+    flow_rate: thread PCA_Alarm::Flow_Rate_Checker.imp;
+  connections
+  --alarms
+    alr: port alarm_thr.Alarm->Alarm;  
+    war: port alarm_thr.Warning->Warning;  
+ --ICE alarm feature group
+    al_fg: port alarm_thr.Alarm -> alrm.alarm_type;  --connection to port within feature group alrm
+    war_fg: port alarm_thr.Warning -> alrm.warning_type;  --connection to port within feature group alrm
+	im_fg: port alarm_thr.ICE_Immediate -> alrm.Immediate;    --likely to cause PATIENT injury or death within seconds to several minutes if uncorrected.
+    pr_fg: port alarm_thr.ICE_Prompt -> alrm.Prompt;       --"alarm": do not cause PATIENT injury or death until alarm_thr least several to many minutes have elapsed
+    de_fg: port alarm_thr.ICE_Delayed -> alrm.Delayed;       --"warning": cause PATIENT injury only after many minutes to hours have passed
+    ma_fg: port alarm_thr.ICE_Malfunction -> alrm.Malfunction;
+	ra_fg: port alrm.Reset_Alarm -> alarm_thr.ICE_Reset_Alarm;
+	as_fg: port alrm.Alarm_Signal -> alarm_thr.ICE_Alarm_Signal; -- jab: changed from <->
+  --directives to operation
+    spc: port alarm_thr.Stop_Pump_Completely->Stop_Pump_Completely;
+    pkvo: port alarm_thr.Pump_At_KVO_Rate->Pump_At_KVO_Rate;
+  --warning from operation 
+    mdw: port Over_Max_Drug_Per_Hour->alarm_thr.Max_Dose_Warning;
+    hlv: port Hard_Limit_Violated->alarm_thr.Hard_Limit_Violation;
+  --errors
+    er: port Empty_Reservoir->alarm_thr.Empty_Res;
+    lr: port Low_Reservoir->alarm_thr.Low_Res;
+    pf: port Prime_Failure->alarm_thr.Prime_Failure;
+    ph: port Pump_Hot->alarm_thr.Pump_Hot;
+    dnl: port Drug_Not_In_Library->alarm_thr.Drug_Not_In_Library;
+    uso: port Upstream_Occlusion->alarm_thr.Upstream_Occlusion;
+    dso: port Downstream_Occlusion->alarm_thr.Downstream_Occlusion;
+    bub: port Bubble->alarm_thr.Bubble;
+  --electrical
+    db: port Defective_Battery->alarm_thr.Defective_Btty;
+    lb: port Low_Battery_Warning->alarm_thr.Low_Battery_Warning;
+    voo: port Voltage_OOR->alarm_thr.Voltage_OOR;
+  --log faults
+    lf: port alarm_thr.Log_Fault->Log_Fault;
+    
+  --jab: added so flow rate checker can know what the current pumping mode is
+    jabss: port System_Status->flow_rate.System_Status;
+         
+  --flow rate check
+    ifr: port Infusion_Flow_Rate->flow_rate.Infusion_Flow_Rate;
+    ufr: port Upstream_Flow_Rate->flow_rate.Upstream_Flow_Rate;
+    dfr: port Downstream_Flow_Rate->flow_rate.Downstream_Flow_Rate;
+    baso: port flow_rate.Basal_Overinfusion->alarm_thr.Basal_Overinfusion;
+    bolo: port flow_rate.Bolus_Overinfusion->alarm_thr.Bolus_Overinfusion;
+    sbo: port flow_rate.Square_Bolus_Overinfusion->alarm_thr.Square_Bolus_Overinfusion; 
+    basu: port flow_rate.Basal_Underinfusion->alarm_thr.Basal_Underinfusion;
+    bolu: port flow_rate.Bolus_Underinfusion->alarm_thr.Bolus_Underinfusion;
+    sbu: port flow_rate.Square_Bolus_Underinfusion->alarm_thr.Square_Bolus_Underinfusion; 
+  --control panel
+    cpra: port CP_Reset_Alarm->alarm_thr.CP_Reset_Alarm;
+  --security
+    secf: port Security_Fault->alarm_thr.Security_Fault; 
+--the alarm process is working if the alarm thread is working
+--annex EMV2
+--  {**
+--  --the alarm process is working when the alarm thread is
+--  use types ErrorLibrary, PCA_Error_Model;
+--  --when the alarm thread fails, it stops
+--  use behavior PCA_Error_Model::CompositeFailStop; 	
+--  --same error propagations as alarm thread
+--  error propagations
+--    --no alarm, false alarm to ICE
+--    alrm: out propagation {EarlyServiceTermination};
+--    --no alarm, false alarm to control panel
+--    Alarm: out propagation {EarlyServiceTermination};
+--    --same thing for warnings
+--    Warning: out propagation {EarlyServiceTermination};
+--    --bad stop-pump decision, missed-alarm/false-alarm
+--    Stop_Pump_Completely: out propagation {EarlyServiceTermination};
+--    --bad KVO decision, missed-alarm/false-alarm
+--    Pump_At_KVO_Rate: out propagation {EarlyServiceTermination};
+--    --incorrect warnings from alarm thread
+--    Over_Max_Drug_Per_Hour: in propagation {EarlyServiceTermination};
+--    Hard_Limit_Violated: in propagation {EarlyServiceTermination};
+--    --incorrect reservoir warnings
+--    Empty_Reservoir: in propagation {EarlyServiceTermination};
+--    Low_Reservoir: in propagation {EarlyServiceTermination};
+--    --incorrect pump fault indication
+--    Prime_Failure: in propagation {EarlyServiceTermination};
+--    Pump_Hot: in propagation {EarlyServiceTermination};
+--    --incorrect drug in library indication
+--    Drug_Not_In_Library: in propagation {EarlyServiceTermination};
+--    --incorrect battery fault indication    
+--    Defective_Battery: in propagation {EarlyServiceTermination};
+--    Low_Battery_Warning: in propagation {EarlyServiceTermination};
+--    --may send (or miss) bad error log reports
+--    Log_Fault: out propagation {EarlyServiceTermination};
+--  end propagations;
+--  composite error behavior
+--    states 
+--     [alarm_thr.failed]->failed;
+--     [alarm_thr.working]->working;
+--  end composite;  	
+--  **};  --end of EMV2
+end alarm_process.imp;
+
+--R5.4.0(1) issue alarms and warnings
+--R5.4.0(8) pump overheated alarm
+--R5.4.1(1) priority
+--R5.4.1(2) alarm pump rate
+--R6.2.0(3) air-in-line alarm
+--R6.2.0(4) upstream occlusion alarm 
+--R6.2.0(5) downstream occlusion alarm 
+--R6.2.0(6) occlusion alarm
+--R6.2.0(7) empty-reservoir alarm 
+--R6.4.0(6) unmasked faults
+thread alarm_thread
+  features
+  --alarms to control panel and ICE
+    Alarm: out event data port PCA_Types::Alarm_Type  --alarm to control panel
+      {BLESS::Assertion=>"<<:=ALARM_TYPE()>>";};  --reference Assertion enumeration
+    Warning: out event data port PCA_Types::Warning_Type  --warning to control panel
+      {BLESS::Assertion=>"<<:=WARNING_TYPE()>>";};  --reference Assertion enumeration
+	ICE_Immediate: out event port;    --likely to cause PATIENT injury or death within seconds to several minutes if uncorrected.
+    ICE_Prompt: out event port;       --"alarm": do not cause PATIENT injury or death until at least several to many minutes have elapsed
+    ICE_Delayed: out event port;       --"warning": cause PATIENT injury only after many minutes to hours have passed
+    ICE_Malfunction: out event port;
+	ICE_Reset_Alarm: in event port;
+	ICE_Alarm_Signal: in event data port ICE_Types::Alarm_Signal; -- jab: changed from 'in out'
+  --directives to Rate_Controller
+    Stop_Pump_Completely: out event port  --tell infusion thread to stop the pump
+      {BLESS::Assertion=>"<<STOP_PUMP()>>";};  --conditions to stop pumping
+    Pump_At_KVO_Rate: out event port  --tell infusion thread to keep vein open 
+      {BLESS::Assertion=>"<<PUMP_KVO()>>";};  --conditions to pump at KVO rate
+  --from Max_Drug_Per_Hour_Watcher
+    Max_Dose_Warning: in event port  --maximum drug allowed (over time) during bolus infusion
+       {BLESS::Assertion=>"<<MAX_DOSE_WARNING>>";};
+  --from Prescription_Checker
+    Hard_Limit_Violation: in event port  --prescription exceeds hard limit in drug library
+       {BLESS::Assertion=>"<<HARD_LIMIT_VIOLATED>>";};
+  --from Fluid
+    Empty_Res: in event port  --no drug left
+       {BLESS::Assertion=>"<<EMPTY_RESERVOIR>>";};
+    Low_Res: in event port --little drug left
+       {BLESS::Assertion=>"<<LOW_RESERVOIR>>";};
+    Pump_Hot:  in event port  --pump over temperature
+       {BLESS::Assertion=>"<<PUMP_OVERHEATED>>";};
+    Upstream_Occlusion:  in event port  
+       {BLESS::Assertion=>"<<UPSTREAM_OCCLUSION>>";};
+    Downstream_Occlusion:  in event port  --pump over temperature
+       {BLESS::Assertion=>"<<DOWNSTREAM_OCCLUSION>>";};     
+    Bubble: in event port; 
+  --from Boss
+    Prime_Failure: in event port  --priming failure indication
+       {BLESS::Assertion=>"<<PRIME_FAIL>>";};
+    CP_Reset_Alarm: in event port  --control panel reset alarm(s)
+       {BLESS::Assertion=>"<<NO_ALARM and NO_WARNING>>";};
+  --from Drug_Library
+    Drug_Not_In_Library: in event port  --null drug record returned from drug library
+        {BLESS::Assertion=>"<<DRUG_NOT_IN_LIBRARY>>";};
+  --from power_control
+    Defective_Btty: in event port  --dead battery
+       {BLESS::Assertion=>"<<DEFECTIVE_BATTERY>>";};
+    Low_Battery_Warning: in event port --little battery energy left
+       {BLESS::Assertion=>"<<LOW_BATTERY>>";};
+    Voltage_OOR: in event port  --power supply voltage out-of-range
+       {BLESS::Assertion=>"<<VOLTAGE_OOR>>";};
+  --from flow rate checker
+    Basal_Overinfusion: in event port  
+       {BLESS::Assertion=>"<<BASAL_OVERINFUSION>>";}; 
+    Bolus_Overinfusion: in event port  
+       {BLESS::Assertion=>"<<BOLUS_OVERINFUSION>>";}; 
+    Square_Bolus_Overinfusion: in event port  
+       {BLESS::Assertion=>"<<SQUARE_OVERINFUSION>>";};
+    Basal_Underinfusion: in event port  
+       {BLESS::Assertion=>"<<BASAL_UNDERINFUSION>>";};
+    Bolus_Underinfusion: in event port  
+       {BLESS::Assertion=>"<<BOLUS_UNDERINFUSION>>";};
+    Square_Bolus_Underinfusion: in event port  
+       {BLESS::Assertion=>"<<SQUARE_UNDERINFUSION>>";};
+  --from security
+    Security_Fault: in event port;
+  --from control_panel
+--    Input_Needed: in event port  
+--       {BLESS::Assertion=>"<<INPUT_NEEDED>>";};
+--    Long_Pause: in event port  
+--       {BLESS::Assertion=>"<<LONG_PAUSE>>";}; 
+  --log faults
+    Log_Fault: out event data port PCA_Types::Fault_Record.imp
+       {BLESS::Assertion=>"<<:=(alarm=>currentAlarm;warning=>currentWarning;occurrence_time=>now;)>>";};   
+  properties
+    --Thread_Properties::Dispatch_Protocol=>Aperiodic;  
+    Thread_Properties::Dispatch_Protocol=>Sporadic;
+    Timing_Properties::Period => PCA_Properties::Sireum_Thread_Period;  --update outputs every 5ms    
+end alarm_thread;
+
+thread implementation alarm_thread.imp
+annex BLESS
+{**
+  invariant <<true>>	
+  variables
+    currentAlarm : PCA_Types::Alarm_Type := No_Alarm;
+    currentWarning : PCA_Types::Warning_Type := No_Warning; 
+    faultRecord : PCA_Types::Fault_Record;
+  states
+    start: initial state <<(currentAlarm=No_Alarm) and (currentWarning=No_Warning)
+       and NO_ALARM and NO_WARNING>>;
+    normal: complete state <<(currentAlarm=No_Alarm) and (currentWarning=No_Warning)>>;
+    max_dose: complete state <<currentWarning=Over_Max_Drug_Per_Hour>>;
+    hard_limit: complete state <<currentWarning=Hard_Limit_Violated>>;
+    empty: complete state <<currentAlarm=Empty_Reservoir>>;
+    low: complete state <<currentWarning=Low_Reservoir>>;
+    prime_fail: complete state <<currentWarning=Priming_Failure>>;
+    pump_hot: complete state <<currentAlarm=Pump_Overheated>>;
+    btty: complete state <<(currentAlarm=Defective_Battery) or (currentAlarm=Low_Battery)>>;
+    done : final state;
+  transitions
+  go:   --initial transition
+    start -[ ]-> normal{Alarm!(No_Alarm) & Warning!(No_Warning)};
+  md:   --maximum dose warning; stop infusion
+    normal -[on dispatch Max_Dose_Warning ]-> max_dose
+    {  currentWarning:=Over_Max_Drug_Per_Hour 
+    	<<currentWarning=Over_Max_Drug_Per_Hour>>
+    &	Warning!(Over_Max_Drug_Per_Hour) 
+        <<true>> 
+--commented out to avoid a sticky issue with generated proof obligations for port output of records    
+--    &	Log_Fault!((alarm=>currentAlarm; warning=>Over_Max_Drug_Per_Hour; occurrence_time=>now;))	
+    &  Pump_At_KVO_Rate!  --stop infusion->keep vein open rate
+        <<true>>
+    };
+  hlv:   --hard limit violated; prevent infusion
+    normal -[on dispatch Hard_Limit_Violation ]-> hard_limit
+    {  currentWarning:=Hard_Limit_Violated 
+    	<<currentWarning=Hard_Limit_Violated>>
+    &	Warning!(Hard_Limit_Violated)  
+        <<true>> 
+ --   &	Log_Fault!((alarm=>currentAlarm; warning=>Hard_Limit_Violated; occurrence_time=>now;))
+    };
+  er:   --empty reservoir; stop infusion
+    normal -[on dispatch Empty_Res ]-> empty
+    {  currentAlarm:=Empty_Reservoir
+    	<<currentAlarm=Empty_Reservoir>> 
+    &	Alarm!(Empty_Reservoir)  
+        <<true>> 
+--    &	Log_Fault!((alarm=>Empty_Reservoir; warning=>currentWarning; occurrence_time=>now;))
+    &  Stop_Pump_Completely!  --stop infusion
+        <<true>> 
+    };
+  lr:   --low reservoir; just warning
+    normal -[on dispatch Low_Res ]-> low
+    {  currentWarning:=Low_Reservoir 
+    	<<currentWarning=Low_Reservoir>>
+    &	Warning!(Low_Reservoir)    
+        <<true>> 
+--    &	Log_Fault!((alarm=>currentAlarm; warning=>Low_Reservoir; occurrence_time=>now;))
+    };
+  pf:   --priming failure
+    normal -[on dispatch Prime_Failure ]-> prime_fail
+    {  currentWarning:=Priming_Failure 
+    	<<currentWarning=Priming_Failure>>
+    &	Warning!(Priming_Failure)  
+        <<true>> 
+--    &	Log_Fault!((alarm=>currentAlarm; warning=>Priming_Failure; occurrence_time=>now;))
+    };
+  ph:   --pump too hot
+    normal -[on dispatch Pump_Hot ]-> pump_hot
+    {  currentAlarm:=Pump_Overheated 
+    	<<currentAlarm=Pump_Overheated>>
+    &	Alarm!(Pump_Overheated)  
+        <<true>> 
+--    &	Log_Fault!((alarm=>Pump_Overheated; warning=>currentWarning; occurrence_time=>now;))
+    &  Stop_Pump_Completely!  --stop infusion
+        <<true>> 
+    };
+  d:   --battery problem
+    normal -[on dispatch Defective_Btty ]-> btty
+    {  currentAlarm:=Defective_Battery 
+    	<<currentAlarm=Defective_Battery>>
+    &	Alarm!(Defective_Battery)  
+        <<true>> 
+--    &	Log_Fault!((alarm=>Battery_Depleted; warning=>currentWarning; occurrence_time=>now;))
+    &  Stop_Pump_Completely!  --stop infusion
+        <<true>> 
+    };
+  btlo:   --battery low
+    normal -[on dispatch Low_Battery_Warning ]-> btty
+    {  currentAlarm:=Low_Battery 
+    	<<currentAlarm=Low_Battery>>
+    &	Alarm!(Low_Battery)  
+        <<true>> 
+--    &	Log_Fault!((alarm=>Battery_Depleted; warning=>currentWarning; occurrence_time=>now;))
+    &  Pump_At_KVO_Rate!  --stop infusion->keep vein open rate
+        <<true>> 
+    };
+    
+  reset:  --clear alarm and warning
+    max_dose,hard_limit,empty,low,prime_fail,pump_hot,btty
+       -[on dispatch CP_Reset_Alarm]-> normal
+    {  currentWarning:=No_Warning
+    	<<currentWarning=No_Warning>>
+    &  Warning!(No_Warning)
+        <<true>> 
+    &  currentAlarm:=No_Alarm
+        <<currentAlarm=No_Alarm>>
+    &  Alarm!(No_Alarm)
+        <<true>> 
+--    &	Log_Fault!((alarm=>currentAlarm; warning=>No_Warning; occurrence_time=>now;))
+    };
+  quit: normal -[ on dispatch stop ]-> done{};
+**};
+
+annex EMV2 
+{**
+  use types ErrorLibrary, PCA_Error_Model;
+  --when the alarm thread fails, it stops
+  use behavior PCA_Error_Model::FailStop; 	
+  error propagations
+    --no alarm, false alarm to control panel
+    Alarm: out propagation {EarlyServiceTermination};
+    --same thing for warnings
+    Warning: out propagation {EarlyServiceTermination};
+    --bad stop-pump decision, missed-alarm/false-alarm
+    Stop_Pump_Completely: out propagation {EarlyServiceTermination};
+    --bad KVO decision, missed-alarm/false-alarm
+    Pump_At_KVO_Rate: out propagation {EarlyServiceTermination};
+    --incorrect warnings from alarm thread
+    Max_Dose_Warning: in propagation {EarlyServiceTermination};
+    Hard_Limit_Violation: in propagation {EarlyServiceTermination};
+    --incorrect reservoir warnings
+    Empty_Res: in propagation {EarlyServiceTermination};
+    Low_Res: in propagation {EarlyServiceTermination};
+    --incorrect pump fault indication
+    Prime_Failure: in propagation {EarlyServiceTermination};
+    Pump_Hot: in propagation {EarlyServiceTermination};
+    --incorrect drug in library indication
+    Drug_Not_In_Library: in propagation {EarlyServiceTermination};
+    --incorrect battery fault indication    
+    Defective_Btty: in propagation {EarlyServiceTermination};
+    Low_Battery_Warning: in propagation {EarlyServiceTermination};
+    --may send (or miss) bad error log reports
+    Log_Fault: out propagation {EarlyServiceTermination};
+  flows
+    --alarm thread fails-silent
+--    ice_alarm_fail_silent: error source alrm{EarlyServiceTermination} when failed;	
+    panel_alarm_fail_silent: error source Alarm{EarlyServiceTermination} when failed;	
+    panel_warning_fail_silent: error source Warning{EarlyServiceTermination} when failed;	
+    log_fault_fail_silent: error source Log_Fault{EarlyServiceTermination} when failed;	
+    stop_pump_fail_silent: error source Stop_Pump_Completely{EarlyServiceTermination} when failed;	
+    kvo_fail_silent: error source Pump_At_KVO_Rate{EarlyServiceTermination} when failed;	
+    --max dose warning
+--    mdw_ice: error path Over_Max_Drug_Per_Hour->alrm;
+    mdw_cpa: error path Max_Dose_Warning->Alarm;
+    mdw_cpw: error path Max_Dose_Warning->Warning;
+    mdw_spc: error path Max_Dose_Warning->Stop_Pump_Completely;
+    mdw_kvo: error path Max_Dose_Warning->Pump_At_KVO_Rate;
+    mdw_lf: error path Max_Dose_Warning->Log_Fault;
+    --hard limit violated
+--    hlv_ice: error path Hard_Limit_Violated->alrm;
+    hlv_cpa: error path Hard_Limit_Violation->Alarm;
+    hlv_cpw: error path Hard_Limit_Violation->Warning;
+    hlv_spc: error path Hard_Limit_Violation->Stop_Pump_Completely;
+    hlv_kvo: error path Hard_Limit_Violation->Pump_At_KVO_Rate;
+    hlv_lf: error path Hard_Limit_Violation->Log_Fault;
+    --empty reservoir
+--    er_ice: error path Empty_Res->alrm;
+    er_cpa: error path Empty_Res->Alarm;
+    er_cpw: error path Empty_Res->Warning;
+    er_spc: error path Empty_Res->Stop_Pump_Completely;
+    er_kvo: error path Empty_Res->Pump_At_KVO_Rate;
+    er_lf: error path Empty_Res->Log_Fault;
+    --low reservoir
+--    lr_ice: error path Low_Res->alrm;
+    lr_cpa: error path Low_Res->Alarm;
+    lr_cpw: error path Low_Res->Warning;
+    lr_spc: error path Low_Res->Stop_Pump_Completely;
+    lr_kvo: error path Low_Res->Pump_At_KVO_Rate;
+    lr_lf: error path Low_Res->Log_Fault;
+    --priming failure
+--    pf_ice: error path Prime_Failure->alrm;
+    pf_cpa: error path Prime_Failure->Alarm;
+    pf_cpw: error path Prime_Failure->Warning;
+    pf_spc: error path Prime_Failure->Stop_Pump_Completely;
+    pf_kvo: error path Prime_Failure->Pump_At_KVO_Rate;
+    pf_lf: error path Prime_Failure->Log_Fault;
+    --pump too hot
+--    pf_ice: error path Pump_Hot->alrm;
+    ph_cpa: error path Pump_Hot->Alarm;
+    ph_cpw: error path Pump_Hot->Warning;
+    ph_spc: error path Pump_Hot->Stop_Pump_Completely;
+    ph_kvo: error path Pump_Hot->Pump_At_KVO_Rate;
+    ph_lf: error path Pump_Hot->Log_Fault;
+    --drug library
+--    dl_ice: error path Drug_Not_In_Library->alrm;
+    dl_cpa: error path Drug_Not_In_Library->Alarm;
+    dl_cpw: error path Drug_Not_In_Library->Warning;
+    dl_spc: error path Drug_Not_In_Library->Stop_Pump_Completely;
+    dl_kvo: error path Drug_Not_In_Library->Pump_At_KVO_Rate;
+    dl_lf: error path Drug_Not_In_Library->Log_Fault;
+    --defective battery
+--    db_ice: error path Defective_Battery->alrm;
+    db_cpa: error path Defective_Btty->Alarm;
+    db_cpw: error path Defective_Btty->Warning;
+    db_spc: error path Defective_Btty->Stop_Pump_Completely;
+    db_kvo: error path Defective_Btty->Pump_At_KVO_Rate;
+    db_lf: error path Defective_Btty->Log_Fault;
+    --low battery
+--    lb_ice: error path Low_Battery->alrm;
+    lb_cpa: error path Low_Battery_Warning->Alarm;
+    lb_cpw: error path Low_Battery_Warning->Warning;
+    lb_spc: error path Low_Battery_Warning->Stop_Pump_Completely;
+    lb_kvo: error path Low_Battery_Warning->Pump_At_KVO_Rate;
+    lb_lf: error path Low_Battery_Warning->Log_Fault;
+  end propagations;
+  properties
+    EMV2::OccurrenceDistribution => PCA_Properties::AlarmThreadFailureRate 
+      applies to fail;
+**};  --end of EMV2
+end alarm_thread.imp;
+
+--R5.4.0(2) basal over-infusion alarm
+--R5.4.0(3) basal under-infusion warning 
+--R5.4.0(4) bolus over-infusion alarm
+--R5.4.0(5) bolus under-infusion warning 
+--R5.4.0(6) square bolus over-infusion alarm 
+--R5.4.0(7) square bolus under-infusion warning 
+--check for flow rate errors
+thread Flow_Rate_Checker
+  features
+		
+  --jab: added so flow rate checker can know what the current pumping mode is
+    System_Status: in data port PCA_Types::Status_Type;
+    
+  --flow information
+    Infusion_Flow_Rate: in data port PCA_Types::Flow_Rate.imp;  --intended
+    Upstream_Flow_Rate: in data port PCA_Types::Flow_Rate.imp;  --measured
+    Downstream_Flow_Rate: in data port PCA_Types::Flow_Rate.imp;  --measured    
+  --errors detected
+    Basal_Overinfusion: out event port  
+       {BLESS::Assertion=>"<<BASAL_OVERINFUSION>>";}; 
+    Bolus_Overinfusion: out event port  
+       {BLESS::Assertion=>"<<BOLUS_OVERINFUSION>>";}; 
+    Square_Bolus_Overinfusion: out event port  
+       {BLESS::Assertion=>"<<SQUARE_OVERINFUSION>>";};
+    Basal_Underinfusion: out event port  
+       {BLESS::Assertion=>"<<BASAL_UNDERINFUSION>>";};
+    Bolus_Underinfusion: out event port  
+       {BLESS::Assertion=>"<<BOLUS_UNDERINFUSION>>";};
+    Square_Bolus_Underinfusion: out event port  
+       {BLESS::Assertion=>"<<SQUARE_UNDERINFUSION>>";};
+  properties
+    Dispatch_Protocol => Periodic;
+    --Period => PCA_Properties::PCA_Period;
+    Timing_Properties::Period => PCA_Properties::Sireum_Thread_Period;  --update outputs every 5ms    
+end Flow_Rate_Checker;
+
+thread implementation Flow_Rate_Checker.imp
+end Flow_Rate_Checker.imp;
+
+
+end PCA_Alarm;

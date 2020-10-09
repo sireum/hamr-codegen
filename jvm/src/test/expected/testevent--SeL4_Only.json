@@ -1,0 +1,143 @@
+{
+  "type" : "TestResult",
+  "map" : {
+    "type" : "Map",
+    "entries" : [
+      [
+        "testevent--SeL4_Only\/components\/emitter_impl_testevent_src\/emitter_impl_testevent_src.camkes",
+        {
+          "type" : "TestResource",
+          "content" : "component emitter_impl_testevent_src {\n  include <sb_types.h>;\n  include <sb_event_counter.h>;\n  control;\n  emits ReceiveEvent sb_e;\n  dataport sb_event_counter_t sb_e_counter;\n  has semaphore sb_dispatch_sem;\n}\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testevent--SeL4_Only\/components\/consumer_impl_testevent_snk\/consumer_impl_testevent_snk.camkes",
+        {
+          "type" : "TestResource",
+          "content" : "component consumer_impl_testevent_snk {\n  include <sb_types.h>;\n  include <sb_event_counter.h>;\n  control;\n  consumes ReceiveEvent sb_s;\n  dataport sb_event_counter_t sb_s_counter;\n  has semaphore sb_dispatch_sem;\n}\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testevent--SeL4_Only\/top_impl_Instance.camkes",
+        {
+          "type" : "TestResource",
+          "content" : "\/\/ This file will be regenerated, do not edit\n\nimport <std_connector.camkes>;\nimport \"components\/emitter_impl_testevent_src\/emitter_impl_testevent_src.camkes\";\nimport \"components\/consumer_impl_testevent_snk\/consumer_impl_testevent_snk.camkes\";\n\nassembly {\n  composition {\n    component emitter_impl_testevent_src testevent_src;\n    component consumer_impl_testevent_snk testevent_snk;\n\n    connection seL4Notification conn1(from testevent_src.sb_e, to testevent_snk.sb_s);\n    connection seL4SharedData conn2(from testevent_src.sb_e_counter, to testevent_snk.sb_s_counter);\n  }\n\n  configuration {\n    testevent_src.sb_e_counter_access = \"W\";\n    testevent_snk.sb_s_counter_access = \"R\";\n\n  }\n}\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testevent--SeL4_Only\/components\/emitter_impl_testevent_src\/src\/emitter.c",
+        {
+          "type" : "TestResource",
+          "content" : "\/* testevent\/components\/emitter\/src\/emitter.c *\/\n\n#include <camkes.h>\n#include <stdio.h>\n#include <sb_types.h>\n#include <sb_emitter_impl.h>\n\nvoid testevent_emitter_component_init(const int64_t *in_arg)\n{\n    printf(\"testevent_emitter_component_init called\\n\");\n}\n\n\/* control thread: keep calling enqueue for thing\n *\/\nvoid run_emitter(const int64_t *in_arg)\n{\n    sb_e_enqueue();\n    printf(\"[Emitter] Sent event.\\n\");\n}\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testevent--SeL4_Only\/components\/consumer_impl_testevent_snk\/src\/consumer.c",
+        {
+          "type" : "TestResource",
+          "content" : "\/* apps\/testevent\/components\/Consumer\/src\/main.c *\/\n\n\/* Similar to the \"helloevent\" example in CAmkES doc,\n * tidied up a bit.\n *\/\n\n#include <camkes.h>\n#include <stdio.h>\n#include <sb_consumer_impl.h>\n\nstatic int8_t _value;\n\nvoid testevent_consumer_component_init(const int64_t *in_arg) {\n  printf(\"testevent_consumer_component_init called\\n\");\n  _value = 0;\n}\n\nvoid testevent_consumer_s_event_handler() {\n\n  printf(\"[Consumer] Callback %d fired.\\n\", _value);\n  _value = (_value + 1) % 500;\n}\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testevent--SeL4_Only\/CMakeLists.txt",
+        {
+          "type" : "TestResource",
+          "content" : "# This file will be regenerated, do not edit\n\ncmake_minimum_required(VERSION 3.8.2)\n\nproject (top_impl_Instance C)\n\nadd_definitions(-DCAMKES)\n\nif (\"${CMAKE_CXX_COMPILER_ID}\" MATCHES \"(C|c?)lang\")\n  add_compile_options(\"$<$<CONFIG:Release>:-Oz>\")\nelseif (\"${CMAKE_CXX_COMPILER_ID}\" STREQUAL \"GNU\")\n  add_compile_options(-fstack-usage)\n  add_compile_options(\"$<$<CONFIG:Release>:-Os>\")\nendif()\n\nadd_subdirectory(${CMAKE_CURRENT_LIST_DIR}\/types)\n\nDeclareCAmkESComponent(emitter_impl_testevent_src\n  SOURCES components\/emitter_impl_testevent_src\/\/src\/emitter.c components\/emitter_impl_testevent_src\/src\/sb_emitter_impl.c\n  INCLUDES components\/emitter_impl_testevent_src\/includes\/ types\/includes\n)\n\nDeclareCAmkESComponent(consumer_impl_testevent_snk\n  SOURCES components\/consumer_impl_testevent_snk\/\/src\/consumer.c components\/consumer_impl_testevent_snk\/src\/sb_consumer_impl.c\n  INCLUDES components\/consumer_impl_testevent_snk\/includes\/ types\/includes\n)\n\nDeclareCAmkESRootserver(top_impl_Instance.camkes)\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testevent--SeL4_Only\/bin\/run-camkes.sh",
+        {
+          "type" : "TestResource",
+          "content" : "#!\/usr\/bin\/env bash\n\nset -o errexit -o pipefail -o noclobber -o nounset\n\nexport SCRIPT_HOME=$( cd \"$( dirname \"$0\" )\" &> \/dev\/null && pwd )\nexport PROJECT_HOME=$( cd \"$( dirname \"$0\" )\/..\" &> \/dev\/null && pwd )\ncd ${PROJECT_HOME}\n\n! getopt --test > \/dev\/null\nif [[ ${PIPESTATUS[0]} -ne 4 ]]; then\n  echo '`getopt --test` failed in this environment.'\n  exit 1\nfi\n\nNON_INTERACTIVE=false\nCAMKES_DIR=\"\"\nSIMULATE=false\nCAMKES_OPTIONS=\"\"\n\nOPTIONS=c:no:s\nLONGOPTS=camkes-dir:,non-interactive,camkes-options:,simulate\n\nfunction usage {\n  echo \"\"\n  echo \"Usage: <option>*\"\n  echo \"\"\n  echo \"Available Options:\"\n  echo \"  -c, --camkes-dir      Location of CAmkES project\"\n  echo \"  -n, --non-interactive Non-interactive mode.  Will not prompt before deleting apps and build directories\"\n  echo \"  -o, --camkes-options  CAmkES options (e.g -o \\\"-DWITH_LOC=ON -DCapDLLoaderMaxObjects=40000\\\")\"\n  echo \"  -s, --simulate        Simulate via QEMU\"\n  exit 2\n}\n\n! PARSED=$(getopt --options=$OPTIONS --longoptions=$LONGOPTS --name \"$0\" -- \"$@\")\nif [[ ${PIPESTATUS[0]} -ne 0 ]]; then\n    usage\nfi\n\neval set -- \"$PARSED\"\n\nwhile true; do\n  case \"$1\" in\n    -c|--camkes-dir) CAMKES_DIR=\"$2\"; shift 2 ;;\n    -n|--non-interactive) NON_INTERACTIVE=true; shift ;;\n    -o|--camkes-options) CAMKES_OPTIONS=\"$2\"; shift 2 ;;\n    -s|--simulate) SIMULATE=true; shift ;;\n    --) shift; break ;;\n  esac\ndone\n\n# handle non-option arguments\nif [[ $# -ne 0 ]]; then\n  echo \"$0: Unexpected non-option arguments\"\n  usage\nfi\n\n# if CAMKES_DIR option not set then look in some common locations\nif [[ -z \"${CAMKES_DIR}\" && -d \"\/host\/camkes-project\" ]]; then\n  # docker location\n  CAMKES_DIR=\"\/host\/camkes-project\"\nelif [[ -z \"$CAMKES_DIR\" && -d \"${HOME}\/CASE\/camkes\" ]]; then\n  # CASE Vagrant VM location\n  CAMKES_DIR=\"${HOME}\/CASE\/camkes\"\nfi\n\nif [[ -z \"${CAMKES_DIR}\" || ! -d \"${CAMKES_DIR}\" ]]; then\n  echo \"Directory '${CAMKES_DIR}' does not exist.  Please specify the location of your camkes project directory.\"\n  echo \"See https:\/\/docs.sel4.systems\/projects\/camkes\"\n  exit -1\nfi\n\n\n# use the directory name for the CAmkES apps directory name\nHAMR_CAMKES_PROJ=${PWD##*\/}\n\n\nCAMKES_APPS_DIR=${CAMKES_DIR}\/projects\/camkes\/apps\/$HAMR_CAMKES_PROJ\n\n# create a sym-link to the project in the CAmkES app directory\nif [ -e \"${CAMKES_APPS_DIR}\" ]; then\n  if [ \"${NON_INTERACTIVE}\" = true ]; then\n    rm -rf ${CAMKES_APPS_DIR}\n  else\n    read -p \"The following app directory already exists, replace ${CAMKES_APPS_DIR} [Y|y]? \" -n 1 -r; echo\n    if [[ $REPLY =~ ^[Yy]$ ]]; then\n      rm -rf ${CAMKES_APPS_DIR}\n    else\n      exit -1\n    fi\n  fi\nfi\n\nln -sv $PROJECT_HOME $CAMKES_APPS_DIR\n\n########################\n# run CAmkES\/seL4 build\n########################\n\nBUILD_DIR=${CAMKES_DIR}\/build_$HAMR_CAMKES_PROJ\n\nif [ -e \"${BUILD_DIR}\" ]; then\n  if [ \"${NON_INTERACTIVE}\" = true ];then\n    rm -rf ${BUILD_DIR}\n    mkdir ${BUILD_DIR}\n  else\n    read -p \"The following build directory already exists, replace ${BUILD_DIR} [Y|y]? \" -n 1 -r; echo\n    if [[ $REPLY =~ ^[Yy]$ ]]; then\n      rm -rf ${BUILD_DIR}\n      mkdir ${BUILD_DIR}\n    fi\n  fi\nelse\n  mkdir ${BUILD_DIR}\nfi\n\ncd ${BUILD_DIR}\n\n..\/init-build.sh ${CAMKES_OPTIONS} -DCAMKES_APP=$HAMR_CAMKES_PROJ\n\nninja\n\n########################\n# simulate via QEMU\n########################\n\nif [ \"${SIMULATE}\" = true ]; then\n  .\/simulate\nfi\n",
+          "overwrite" : true,
+          "makeExecutable" : true
+        }
+      ],
+      [
+        "testevent--SeL4_Only\/components\/emitter_impl_testevent_src\/src\/sb_emitter_impl.c",
+        {
+          "type" : "TestResource",
+          "content" : "\/\/ This file will be regenerated, do not edit\n\n#include <sb_emitter_impl.h>\n#include <sb_event_counter.h>\n#include <string.h>\n#include <camkes.h>\n\n\/************************************************************************\n * sb_e_enqueue\n * Invoked from user code in the local thread.\n *\n * This is the function invoked by the local thread to make a\n * call to send to a remote event port.\n *\n ************************************************************************\/\nbool sb_e_enqueue(void) {\n  \/\/ sb_e_counter is a dataport (shared memory) that is written by the sender\n  \/\/ and read by the receiver(s). This counter is monotonicly increasing,\n  \/\/ but can wrap.\n  (*sb_e_counter)++;\n\n  \/\/ Release memory fence - ensure subsequent write occurs after any preceeding read or write\n  sb_e_counter_release();\n\n  sb_e_emit();\n\n  return true;\n}\n\n\n\/************************************************************************\n *  sb_entrypoint_emitter_impl_testevent_src_initializer:\n *\n * This is the function invoked by an active thread dispatcher to\n * call to a user-defined entrypoint function.  It sets up the dispatch\n * context for the user-defined entrypoint, then calls it.\n *\n ************************************************************************\/\nvoid sb_entrypoint_emitter_impl_testevent_src_initializer(const int64_t * in_arg) {\n  testevent_emitter_component_init((int64_t *) in_arg);\n}\n\nvoid pre_init(void) {\n  \/\/ initialise shared counter for event port e\n  *sb_e_counter = 0;\n}\n\n\/************************************************************************\n * int run(void)\n * Main active thread function.\n ************************************************************************\/\nint run(void) {\n\n  {\n    int64_t sb_dummy;\n    sb_entrypoint_emitter_impl_testevent_src_initializer(&sb_dummy);\n  }\n  MUTEXOP(sb_dispatch_sem_wait())\n  for(;;) {\n    MUTEXOP(sb_dispatch_sem_wait())\n\n  }\n  return 0;\n}\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testevent--SeL4_Only\/components\/emitter_impl_testevent_src\/includes\/sb_emitter_impl.h",
+        {
+          "type" : "TestResource",
+          "content" : "\/\/ This file will be regenerated, do not edit\n\n#ifndef SB_EMITTER_IMPL_H\n#define SB_EMITTER_IMPL_H\n\n#include <sb_types.h>\n\nbool sb_e_enqueue(void);\n\nvoid testevent_emitter_component_init(const int64_t *arg);\n\n#endif \/\/ SB_EMITTER_IMPL_H\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testevent--SeL4_Only\/components\/consumer_impl_testevent_snk\/src\/sb_consumer_impl.c",
+        {
+          "type" : "TestResource",
+          "content" : "\/\/ This file will be regenerated, do not edit\n\n#include <sb_consumer_impl.h>\n#include <sb_event_counter.h>\n#include <string.h>\n#include <camkes.h>\n\n\/************************************************************************\n *\n * Static variables and queue management functions for event port:\n *     s\n *\n ************************************************************************\/\nstatic sb_event_counter_t sb_s_received_events = 0;\nstatic sb_event_counter_t sb_s_last_counter = 0;\n\n\/************************************************************************\n * sb_s_dequeue:\n * Invoked from local active thread.\n *\n * This is the function invoked by the active thread to decrement the\n * input event index.\n *\n ************************************************************************\/\nbool sb_s_dequeue() {\n  if(sb_s_received_events > 0) {\n    sb_s_received_events--;\n    return true;\n  } else {\n    return false;\n  }\n}\n\n\/************************************************************************\n * sb_s_is_empty;\n *\n * Helper method to determine if infrastructure port has received\n * new events\n *\n ************************************************************************\/\nbool sb_s_is_empty() {\n  return *sb_s_counter == sb_s_last_counter;\n}\n\nvoid sb_freeze_event_port_s() {\n  sb_event_counter_t current_sb_s_counter;\n\n  sb_s_received_events = 0; \/\/ drop any events not handled during last dispatch\n\n  \/\/ get current shared counter value\n  current_sb_s_counter = *sb_s_counter;\n\n  \/\/ Acquire memory fence - ensure preceding read occurs before any subsequent read or write\n  sb_s_counter_acquire();\n\n  \/\/ NOTE: Counters can wrap, so we must use != below instead of >\n  while(current_sb_s_counter != sb_s_last_counter){\n    sb_s_last_counter++;\n    sb_s_received_events++;\n  }\n\n  if(sb_s_received_events > 0) {\n\n    \/\/ s's queue size is 1\n    if(sb_s_received_events > 1) {\n      \/\/printf(\"consumer_impl: dropping %i event(s) from incoming event port s\\n\", (sb_s_received_events - 1));\n\n      \/\/ drop events\n      sb_s_received_events = 1;\n    }\n  }\n}\n\n\/************************************************************************\n * sb_s_handler:\n * Invoked by: seL4 notification callback\n *\n * This is the function invoked by an seL4 notification callback to \n * dispatch the component due to the arrival of an event on port\n * s\n *\n ************************************************************************\/\nstatic void sb_s_handler(void * unused) {\n  MUTEXOP(sb_dispatch_sem_post())\n  CALLBACKOP(sb_s_reg_callback(sb_s_handler, NULL));\n}\n\n\n\/************************************************************************\n *  sb_entrypoint_consumer_impl_s\n *\n * This is the function invoked by an active thread dispatcher to\n * call to a user-defined entrypoint function.  It sets up the dispatch\n * context for the user-defined entrypoint, then calls it.\n *\n ************************************************************************\/\nvoid sb_entrypoint_consumer_impl_s(void){\n  testevent_consumer_s_event_handler();\n}\n\n\/************************************************************************\n *  sb_entrypoint_consumer_impl_testevent_snk_initializer:\n *\n * This is the function invoked by an active thread dispatcher to\n * call to a user-defined entrypoint function.  It sets up the dispatch\n * context for the user-defined entrypoint, then calls it.\n *\n ************************************************************************\/\nvoid sb_entrypoint_consumer_impl_testevent_snk_initializer(const int64_t * in_arg) {\n  testevent_consumer_component_init((int64_t *) in_arg);\n}\n\nvoid post_init(void) {\n  \/\/ register callback for EventPort port s\n  CALLBACKOP(sb_s_reg_callback(sb_s_handler, NULL));\n}\n\n\/************************************************************************\n * int run(void)\n * Main active thread function.\n ************************************************************************\/\nint run(void) {\n\n  {\n    int64_t sb_dummy;\n    sb_entrypoint_consumer_impl_testevent_snk_initializer(&sb_dummy);\n  }\n  MUTEXOP(sb_dispatch_sem_wait())\n  for(;;) {\n    MUTEXOP(sb_dispatch_sem_wait())\n    sb_freeze_event_port_s();\n\n    {\n      if(sb_s_received_events > 0) {\n        \/\/ dequeue one event and call the event handler\n        sb_s_dequeue();\n        sb_entrypoint_consumer_impl_s();\n      }\n    }\n  }\n  return 0;\n}\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testevent--SeL4_Only\/components\/consumer_impl_testevent_snk\/includes\/sb_consumer_impl.h",
+        {
+          "type" : "TestResource",
+          "content" : "\/\/ This file will be regenerated, do not edit\n\n#ifndef SB_CONSUMER_IMPL_H\n#define SB_CONSUMER_IMPL_H\n\n#include <sb_types.h>\n\nbool sb_s_dequeue(void);\n\nvoid testevent_consumer_s_event_handler(void);\n\nvoid testevent_consumer_component_init(const int64_t *arg);\n\n#endif \/\/ SB_CONSUMER_IMPL_H\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testevent--SeL4_Only\/types\/includes\/sb_types.h",
+        {
+          "type" : "TestResource",
+          "content" : "#ifndef SB_TYPES_H\n#define SB_TYPES_H\n\n#include <stdio.h>\n#include <stdbool.h>\n#include <stdint.h>\n\n#ifndef SB_VERIFY\n#include <stddef.h>\n#endif \/\/ SB_VERIFY\n\n#define __SB_OS_CAMKES__\n\n#ifndef SB_VERIFY\n#define MUTEXOP(OP)\\\nif((OP) != 0) {\\\n  fprintf(stderr,\"Operation \" #OP \" failed in %s at %d.\\n\",__FILE__,__LINE__);\\\n  *((int*)0)=0xdeadbeef;\\\n}\n#else\n#define MUTEXOP(OP) OP\n#endif \/\/ SB_VERIFY\n#ifndef SB_VERIFY\n#define CALLBACKOP(OP)\\\nif((OP) != 0) {\\\n  fprintf(stderr,\"Operation \" #OP \" failed in %s at %d.\\n\",__FILE__,__LINE__);\\\n  *((int*)0)=0xdeadbeef;\\\n}\n#else\n#define CALLBACKOP(OP) OP\n#endif \/\/ SB_VERIFY\n\n\n#endif \/\/ SB_TYPES_H\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testevent--SeL4_Only\/types\/includes\/sb_event_counter.h",
+        {
+          "type" : "TestResource",
+          "content" : "#pragma once\n\n#include <stdint.h>\n\ntypedef _Atomic uintmax_t sb_event_counter_t;\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testevent--SeL4_Only\/settings.cmake",
+        {
+          "type" : "TestResource",
+          "content" : "# This file will not be overwritten so is safe to edit\n\ncmake_minimum_required(VERSION 3.8.2)\n\n",
+          "overwrite" : false,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testevent--SeL4_Only\/types\/CMakeLists.txt",
+        {
+          "type" : "TestResource",
+          "content" : "# This file will be regenerated, do not edit\n\ncmake_minimum_required(VERSION 3.8.2)\n\nproject(SB_Type_Library)\n\nset(CMAKE_C_STANDARD 99)\n\nadd_compile_options(-Werror)\n\nif (\"${CMAKE_CXX_COMPILER_ID}\" MATCHES \"(C|c?)lang\")\n  add_compile_options(\"$<$<CONFIG:Release>:-Oz>\")\nelseif (\"${CMAKE_CXX_COMPILER_ID}\" STREQUAL \"GNU\")\n  add_compile_options(-fstack-usage)\n  add_compile_options(\"$<$<CONFIG:Release>:-Os>\")\nendif()\n\nadd_library(SB_Type_Library\n            INTERFACE\n            )\n\n# Assume that if the muslc target exists then this project is in an seL4 native\n# component build environment, otherwise it is in a linux userlevel environment.\n# In the linux userlevel environment, the C library will be linked automatically.\nif(TARGET muslc)\n  target_link_libraries(SB_Type_Library\n                        INTERFACE\n                        muslc)\nendif()\n\nadd_definitions(-DCAMKES)\n\nif(TARGET SlangTypeLibrary)\n  target_link_libraries(SB_Type_Library\n                        INTERFACE\n                        SlangTypeLibrary)\nendif()\n\ntarget_include_directories(SB_Type_Library\n                           INTERFACE\n                           includes)\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ]
+    ]
+  }
+}

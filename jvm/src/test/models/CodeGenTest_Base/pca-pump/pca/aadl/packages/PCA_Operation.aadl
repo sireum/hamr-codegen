@@ -1,0 +1,819 @@
+--PCA_Operation.aadl
+
+package PCA_Operation
+  public
+  with EMV2,
+    PCA_Pump,
+    PCA_Mechanical,
+    PCA_Security,
+    PCA_Control_Panel,
+    PCA_Drug_Library,
+    PCA_Properties,
+    PCA_Operation_Threads,
+    PCA_System,
+    PCA_Boss,
+    Base_Types,
+--    Physical_Types,
+    BLESS,
+    BLESS_Types,
+    ICE_Types,
+    PCA_Types;
+
+
+system operation
+  features
+  --internal bus
+    i_bus: requires bus access PCA_Pump::Internal_Bus;
+  --power bus
+--    p_bus: requires bus access PCA_Pump::Power_Bus;
+  --physical connection to maintenance processor
+    To_Maintenance: requires bus access PCA_System::internal_maintenance_bus;	
+  --physical connection to bus adaptor
+    To_Adaptor: requires bus access PCA_System::adaptor_bus;
+  --patient button
+    Patient_Button_Press: in event port;  --physically depressing the patient button
+  --control panel
+    Finger_Press: in event data port Base_Types::Boolean;  --clinician touches screen
+    LightToEye: out data port Base_Types::Boolean;  --image seen by clinician
+    Sound: out data port PCA_Types::Sound;  --noise made by speaker, heard by clinician
+    CP_Reset_Alarm: out event port;  --reset alarms from control panel
+  --ICE interface
+    command: feature group PCA_Pump::PCA_Commands;
+    parameters: feature group PCA_Pump::PCA_Parameters;
+    status: feature group PCA_Pump::PCA_Status;
+    security: feature group PCA_Pump::PCA_Security;
+  
+  --pump contol
+    Infusion_Flow_Rate: out data port PCA_Types::Flow_Rate.imp;
+--    Upstream_Flow_Rate: in data port PCA_Types::Flow_Rate.imp;
+--    Downstream_Flow_Rate: in data port PCA_Types::Flow_Rate.imp;
+
+  --infusion rate changes due to faults
+    Stop_Pump_Completely: in event port;
+    Pump_At_KVO_Rate: in event port;
+  --reservoir 
+    Door_Open: in data port Base_Types::Boolean;  --steady state
+    Door_Closed: in event port;  --event when closed
+  --max infusion limit reached
+--    Near_Max_Drug_Per_Hour: out event port;
+    Over_Max_Drug_Per_Hour: out event port;
+  --hardware fault
+    HW_Detected_Failure: in event port;
+  --security fault
+    Security_Fault: out event port;
+  --alarm and warning indications from safety
+    Alarm: in event data port PCA_Types::Alarm_Type;
+    Warning: in event data port PCA_Types::Warning_Type;
+  --power indications
+    Low_Battery_Warning: in event port;
+    Remaining_Battery_Time: in data port BLESS_Types::Time;
+    Using_Battery_Power: in data port Base_Types::Boolean;
+    POST_Done: in event port;
+    POST_Fail: in event port;
+  --event log
+    Get_Event_Log: in event port;
+    The_Event_Log: out event data port PCA_Types::Event_Log; 
+  --drug library
+    Drug_Not_In_Library: out event port;
+    Hard_Limit_Violated: out event port;
+    Load_Drug_Library: in event data port PCA_Types::Drug_Library;
+  --provisioning channel
+    Security_Provisioning: feature group PCA_Security::Provisioning_Signals;  --provisioning
+  --fault indication to safety
+    Prime_Failure: out event port;
+    
+
+  --jab: added System_Status so the flow rate checker can know what the
+  --     current pumping mode is  
+    System_Status: out event data port PCA_Types::Status_Type;
+ 
+    -- simulation ports
+    -- had to add this to allow the controller to simulate the downstream
+    -- monitor
+    Downstream_Flow_Rate: out data port PCA_Types::Flow_Rate.imp;  --measured drug flow rate
+    -- end of simulation ports            
+end operation;
+
+system implementation operation.imp
+  subcomponents
+    patient_button: device PCA_Mechanical::patient_button.imp;      --patient button to request bolus
+    operation_process: process operation_process.imp;	    --process holding thread that controls pump action
+    scanner: device PCA_Mechanical::scanner.imp;		        --optical or RFID scanner
+    security_subsystem: system PCA_Security::security.imp;					--security subsystem
+    control_panel: system PCA_Control_Panel::control_panel.imp;			--control panel
+  connections
+        	 
+  --internal bus
+    scanner_to_i_bus : bus access i_bus <-> scanner.i_bus;
+    cp_to_i_bus : bus access i_bus <-> control_panel.i_bus;
+    ss_to_i_bus : bus access i_bus <-> security_subsystem.i_bus;
+  --to ICE adaptor
+    ss_to_adapt: bus access To_Adaptor <-> security_subsystem.To_Adaptor;
+  --maintenence bus 
+    ss_to_mb: bus access To_Maintenance <-> security_subsystem.To_Maintenance;
+  --patient button
+    bpm: port Patient_Button_Press -> patient_button.Button_Press;
+  --control panel to world
+    fp:port Finger_Press -> control_panel.Finger_Press;
+    lte: port control_panel.LightToEye -> LightToEye;
+    snd: port control_panel.Sound -> Sound;
+  --names
+    pn: port security_subsystem.Patient_Name -> control_panel.Patient_Name;
+    cn: port security_subsystem.Clinician_Name -> control_panel.Clinician_Name;
+  --ICE interface to network adaptor
+    cmd: feature group command <-> operation_process.command;
+    par: feature group parameters <-> operation_process.parameters;
+    st: feature group status <-> operation_process.status;
+    se: feature group security <-> security_subsystem.ICE_security;
+  --patient button
+    pb: port patient_button.Request_Bolus -> operation_process.Patient_Button_Request;
+  --pump control
+    pfr: port operation_process.Infusion_Flow_Rate -> Infusion_Flow_Rate;
+--    ufr: port Upstream_Flow_Rate -> operation_process.Upstream_Flow_Rate;
+--    dfr: port Downstream_Flow_Rate -> operation_process.Downstream_Flow_Rate;
+  --reservoir
+    do: port Door_Open -> operation_process.Door_Open;
+    dc: port Door_Closed -> operation_process.Door_Closed;
+
+  --jab: added so flow rate checker can know what the current pumping mode is
+    jabss: port operation_Process.System_Status -> System_Status;
+      
+    jabifr: port operation_Process.Infusion_Flow_Rate -> control_panel.Infusion_Flow_Rate;
+    
+  --operation to control panel
+    stat: port operation_process.System_Status -> control_panel.System_Status;
+    hlv: port operation_process.Hard_Limit_Violated -> Hard_Limit_Violated;  --connection out of operation.imp
+    hlvcp: port operation_process.Hard_Limit_Violated -> control_panel.Hard_Limit_Violated;  --connection to control panel
+    pi: port control_panel.Pause_Infusion -> operation_process.Pause_Infusion;
+    ri: port control_panel.Resume_Infusion -> operation_process.Resume_Infusion;
+--    ss: port operation_process.System_Status -> control_panel.System_Status;
+--    crb: port operation_process.Clinician_Request_Bolus -> control_panel.Clinician_Request_Bolus;
+    bd: port control_panel.Bolus_Duration -> operation_process.Bolus_Duration;
+--    rx: port operation_process.Rx -> control_panel.Rx;
+    crx: port control_panel.Confirm_Soft_Limit_Exception -> operation_process.Confirm_Soft_Limit_Exception;
+    rrx: port control_panel.Reject_Soft_Limit_Exception -> operation_process.Reject_Soft_Limit_Exception;
+    slv: port operation_process.Soft_Limit_Warning -> control_panel.Soft_Limit_Warning;
+    start: port control_panel.Start_Button_Pressed -> operation_process.Start_Button_Pressed;
+    stop: port control_panel.Stop_Button_Pressed -> operation_process.Stop_Button_Pressed;
+    toff: port control_panel.Turn_Off -> operation_process.Turn_Off;
+    ai: port control_panel.Alarm_Inactivation -> operation_process.Alarm_Inactivation;
+    cpar: port control_panel.CP_Reset_Alarm -> CP_Reset_Alarm;
+    crb: port control_panel.Clinician_Request_Bolus -> operation_process.Clinician_Request_Bolus;
+    msg: port operation_process.Display_Message -> control_panel.Display_Message;
+    soun: port operation_process.Sound_Type -> control_panel.Sound_Type;
+    prnts: port operation_process.Patient_Request_Not_Too_Soon -> control_panel.Patient_Request_Not_Too_Soon;
+    prts: port operation_process.Patient_Request_Too_Soon -> control_panel.Patient_Request_Too_Soon;
+--    cpmdph: port operation_process.Over_Max_Drug_Per_Hour -> control_panel.Over_Max_Drug_Per_Hour;
+  --warning and alarms from safety
+    al: port Alarm -> operation_process.Alarm;
+    wa: port Warning -> operation_process.Warning;
+    alcp: port Alarm -> control_panel.Alarm;
+    wacp: port Warning -> control_panel.Warning;
+  --scanner input
+    sd: port scanner.Scan_Data -> security_subsystem.Scan_Data;
+    dos: port operation_process.Do_Scan -> scanner.Do_Scan;
+    sdo: port scanner.Scan_Done -> operation_process.Scan_Done;
+  --security
+    rx: port security_subsystem.Prescription -> control_panel.Prescription;
+    sac: port operation_process.Authenticate_Clinician -> security_subsystem.Authenticate_Clinician;
+    scn: port security_subsystem.Clinician_Name -> control_panel.Clinician_Name;
+    sap: port operation_process.Authenticate_Patient -> security_subsystem.Authenticate_Patient;
+    spn: port security_subsystem.Patient_Name -> control_panel.Patient_Name;
+    sarx: port operation_process.Authenticate_Prescription -> security_subsystem.Authenticate_Prescription;
+    srx: port security_subsystem.Prescription -> operation_process.Prescription;
+    saf: port security_subsystem.Authentication_fail -> operation_process.Authentication_fail;
+    spa: port security_subsystem.Authentication_pass -> operation_process.Authentication_pass;
+    pro: feature group Security_Provisioning <-> security_subsystem.Provisioning;
+    secf: port security_subsystem.Security_Fault -> Security_Fault;
+  --hardware detected failure
+    hdf: port HW_Detected_Failure -> operation_process.HW_Detected_Failure;
+    stp: port Stop_Pump_Completely -> operation_process.Stop_Pump_Completely;
+    pkr: port Pump_At_KVO_Rate -> operation_process.Pump_At_KVO_Rate;
+  --power
+    rbt: port Remaining_Battery_Time -> control_panel.Remaining_Battery_Time;
+    ubp: port Using_Battery_Power -> control_panel.Using_Battery_Power;
+    lbw: port Low_Battery_Warning -> control_panel.Low_Battery_Warning;
+  --safety
+--    sf: port security_subsystem.Security_Fault -> operation_process.Security_Fault;  
+    pod: port POST_Done -> operation_process.POST_Done;
+    pof: port POST_Fail -> operation_process.POST_Fail;
+    prf: port operation_process.Prime_Failure -> Prime_Failure;
+    mdw: port operation_process.Over_Max_Drug_Per_Hour -> Over_Max_Drug_Per_Hour;
+  --event log
+    gel: port Get_Event_Log -> operation_process.Get_Event_Log;
+    tel: port operation_process.The_Event_Log -> The_Event_Log;
+  --drug library
+    ldl: port Load_Drug_Library -> operation_process.Load_Drug_Library;
+    dnil: port operation_process.Drug_Not_In_Library -> Drug_Not_In_Library;
+  annex EMV2
+  {**
+  use types ErrorLibrary, PCA_Error_Model;
+  use behavior PCA_Error_Model::CompositeFailStop; 	
+  error propagations
+    Alarm: in propagation {EarlyServiceTermination,ItemCommission};
+    HW_Detected_Failure: in propagation {EarlyServiceTermination};
+    Pump_At_KVO_Rate: in propagation {EarlyServiceTermination};
+    Stop_Pump_Completely: in propagation {EarlyServiceTermination};
+    Warning: in propagation {EarlyServiceTermination,ItemCommission};
+  end propagations;  	
+  **};
+end operation.imp;
+
+
+process operation_process
+  features
+  --ICE interface
+    command: feature group PCA_Pump::PCA_Commands;
+    parameters: feature group PCA_Pump::PCA_Parameters;
+    status: feature group PCA_Pump::PCA_Status;
+  --patient button
+    Patient_Button_Request: in event port;  --patient pressed bolus button
+  --battery
+--    Low_Battery_Warning: in event port;
+--    Using_Battery_Power: in data port Base_Types::Boolean
+--      {BLESS::Assertion=>"<<Battery_Current>0.0>>";};
+--      --remaining battery time estimated by assuming linear voltage delcine with stored energy
+--    Remaining_Battery_Time: in data port BLESS_Types::Time
+--      {BLESS::Assertion=>"<<RBT: :=(filtered_voltage/#PCA_Properties::Full_Battery_Voltage)
+--          *#PCA_Properties::Battery_Power_Duration>>";};
+  --drug library
+    Drug_Not_In_Library: out event port;
+    Load_Drug_Library : in event data port PCA_Types::Drug_Library;
+--      {BLESS::Assertion=>"dl=Load_Drug_Library^0";};
+  --from safety
+    Stop_Pump_Completely: in event port;
+    Pump_At_KVO_Rate: in event port;
+    HW_Detected_Failure: in event port;
+    Alarm : in event data port PCA_Types::Alarm_Type;  --alarm indication
+    Warning : in event data port PCA_Types::Warning_Type;  --warning indication
+  --problems
+--    Near_Max_Drug_Per_Hour: out event port;
+    Hard_Limit_Violated: out event port;
+    Soft_Limit_Warning: out event port;
+--    Security_Fault: in event port;
+  --event log
+    Get_Event_Log : in event port;
+    The_Event_Log : out event data port PCA_Types::Event_Log; 
+  --pump control
+    Infusion_Flow_Rate: out data port PCA_Types::Flow_Rate.imp;   --rate to pump
+--    Upstream_Flow_Rate: in data port PCA_Types::Flow_Rate.imp;
+--    Downstream_Flow_Rate: in data port PCA_Types::Flow_Rate.imp;
+  --reservoir
+    Door_Open: in data port Base_Types::Boolean;
+  --control panel
+    Pause_Infusion: in event port;
+    Resume_Infusion: in event port;
+    System_Status: out event data port PCA_Types::Status_Type;
+    Clinician_Request_Bolus: in event port;   --square bolus request from control panel
+    Bolus_Duration: in event data port ICE_Types::Minute.imp; --set square bolus time from control panel
+--    Rx: out event data port PCA_Types::Prescription;  --prescription to control panel
+    Confirm_Soft_Limit_Exception: in event port;  --clinician confirmed prescription
+    Reject_Soft_Limit_Exception: in event port;   --clinician rejected prescription
+    Stop_Button_Pressed: in event port;  --clinician pressed "stop" button
+    Start_Button_Pressed: in event port;  --clinician pressed "start" button   
+    Alarm_Inactivation: in data port ICE_Types::Alarm_Signal;  --"On","Alarm_Off","Alarm_Paused","Audio_Off","Audio_Paused"
+    Display_Message: out event data port PCA_Types::Message;  --message to be displayed on control panel and ICE console
+    Sound_Type: out event data port PCA_Types::Sound;      --sound to be made by control panel and ICE console
+    Over_Max_Drug_Per_Hour: out event port;  --too much juice
+    Patient_Request_Not_Too_Soon: out event port
+      {BLESS::Assertion => "<<PATIENT_REQUEST_NOT_TOO_SOON(now)>>";};
+    Patient_Request_Too_Soon: out event port
+      {BLESS::Assertion => "<<PATIENT_REQUEST_TOO_SOON(now)>>";};
+  --security
+    Authenticate_Clinician: out event port;     --do clinican authentication
+    Authenticate_Patient: out event port;       --do patient authentication
+    Authenticate_Prescription: out event port;  --do prescription authentication
+    Prescription: in data port PCA_Types::Prescription.imp;  --extracted prescription from scan data
+    Authentication_fail: in event port;         --authentication failed
+    Authentication_pass: in event port;         --authentication passed
+  --boss thread
+    Do_Scan: out event port;                    --tell scanner to scan
+    Scan_Done: in event port;                   --scan completed
+    POST_done: in event port;                   --power-on self-test completed
+    POST_fail: in event port;                   --power-on self-test failure  
+    Door_Closed: in event port;                 --the drug door was closed
+    Turn_Off: in event port;                    --the "off" switch was pressed    
+    Prime_Failure: out event port;              --priming time-out
+end operation_process;
+
+process implementation operation_process.imp
+  subcomponents
+    operation_threads: thread group Operation_Thread_Group.imp;
+    drug_library: thread PCA_Drug_Library::drug_library_thread.imp;
+    event_logger: thread event_logger_thread.imp;
+  connections
+  --drug library thread
+    ldl: port Load_Drug_Library -> drug_library.Load_Drug_Library;
+    gdr: port operation_threads.Get_Drug_Record -> drug_library.Get_Drug_Record;
+    tdr: port drug_library.The_Drug_Record -> operation_threads.The_Drug_Record;
+    ndf: port drug_library.No_Drug_Found -> operation_threads.No_Drug_Found;
+    dnil: port drug_library.No_Drug_Found -> Drug_Not_In_Library;
+--    dnil: port operation_threads.Drug_Not_In_Library -> Drug_Not_In_Library;
+  --event logger thread
+    gel: port Get_Event_Log -> event_logger.Get_Event_Log;
+    tel: port event_logger.The_Event_Log -> The_Event_Log;
+    le: port operation_threads.Log_Event -> event_logger.Log_Event;
+  --ICE interface to network adaptor
+    cmd: feature group command <-> operation_threads.command;
+    par: feature group parameters <-> operation_threads.parameters;
+    st: feature group status <-> operation_threads.status;
+  --patient button
+    pb: port Patient_Button_Request -> operation_threads.Patient_Button_Request;
+  --pump control
+--    ufr: port Upstream_Flow_Rate -> operation_threads.Upstream_Flow_Rate;
+--    dfr: port Downstream_Flow_Rate -> operation_threads.Downstream_Flow_Rate;
+    do: port Door_Open -> operation_threads.Door_Open;
+    pfr: port operation_threads.Infusion_Flow_Rate -> Infusion_Flow_Rate;
+  --control panel
+    hlv: port operation_threads.Hard_Limit_Violated -> Hard_Limit_Violated; 
+    pi: port Pause_Infusion -> operation_threads.Pause_Infusion;
+    ri: port Resume_Infusion -> operation_threads.Resume_Infusion;
+--    ss: port operation_threads.System_Status -> System_Status;
+    crb: port Clinician_Request_Bolus -> operation_threads.CP_Clinician_Request_Bolus;
+    bd: port Bolus_Duration -> operation_threads.CP_Bolus_Duration;
+--    rxo: port operation_threads.Rx -> Rx;
+    crx: port Confirm_Soft_Limit_Exception -> operation_threads.Confirm_Soft_Limit_Exception;
+    rrx: port Reject_Soft_Limit_Exception -> operation_threads.Reject_Soft_Limit_Exception;
+    slv: port operation_threads.Soft_Limit_Warning -> Soft_Limit_Warning;
+    start: port Start_Button_Pressed -> operation_threads.Start_Button_Pressed;
+    stop: port Stop_Button_Pressed -> operation_threads.Stop_Button_Pressed;
+    ai: port Alarm_Inactivation -> operation_threads.Alarm_Inactivation;
+    toff: port Turn_Off -> operation_threads.Turn_Off;
+    disp: port operation_threads.Display_Message -> Display_Message;
+    soun: port operation_threads.Sound_Type -> Sound_Type;
+    mdph: port operation_threads.Over_Max_Drug_Per_Hour -> Over_Max_Drug_Per_Hour;
+    syst: port operation_threads.System_Status -> System_Status;   
+    prnts: port operation_threads.Patient_Request_Not_Too_Soon -> Patient_Request_Not_Too_Soon;
+    prts: port operation_threads.Patient_Request_Too_Soon -> Patient_Request_Too_Soon;
+  --electrical
+--    lbw: port Low_Battery_Warning -> operation_threads.Low_Battery_Warning;
+--    ubp: port Using_Battery_Power -> operation_threads.Using_Battery_Power;
+--    rbt: port Remaining_Battery_Time -> operation_threads.Remaining_Battery_Time;
+  --fluid
+    dc: port Door_Closed -> operation_threads.Door_Closed;
+  --power-on selft test
+    pod: port POST_done -> operation_threads.POST_done;
+    pof: port POST_fail -> operation_threads.POST_fail;
+  --warning and alarms from safety
+    al: port Alarm -> operation_threads.Alarm;
+    wa: port Warning -> operation_threads.Warning;
+  --priming failure
+    pf: port operation_threads.Prime_Failure -> Prime_Failure;
+  --max dose
+--    mdw: port operation_threads.Near_Max_Drug_Per_Hour -> Near_Max_Drug_Per_Hour;
+  --security
+    acl: port operation_threads.Authenticate_Clinician -> Authenticate_Clinician;
+    apa: port operation_threads.Authenticate_Patient -> Authenticate_Patient;
+    apr: port operation_threads.Authenticate_Prescription -> Authenticate_Prescription; 
+    afl: port Authentication_fail -> operation_threads.Authentication_fail;
+    aps: port Authentication_pass -> operation_threads.Authentication_pass;
+    presc: port Prescription -> operation_threads.Prescription;
+  --hardware detected failure
+    hdf: port HW_Detected_Failure -> operation_threads.HW_Detected_Failure;
+    stp: port Stop_Pump_Completely -> operation_threads.Stop_Pump_Completely;
+    pkr: port Pump_At_KVO_Rate -> operation_threads.Pump_At_KVO_Rate;
+  --scanner
+    dos: port operation_threads.Do_Scan -> Do_Scan;
+    sdo: port Scan_Done -> operation_threads.Scan_Done;
+ annex EMV2X
+  {**
+  --the ui process is working when the ui thread is
+  use types ErrorLibrary, PCA_Error_Model;
+  --when the ui thread fails, it stops
+  use behavior PCA_Error_Model::CompositeFailStop; 	
+  --same error propagations as ui thread
+  error propagations
+    HW_Detected_Failure: in propagation {ItemOmission,ItemCommission};
+    Stop_Pump_Completely: in propagation {ItemOmission,ItemCommission};
+    Pump_At_KVO_Rate: in propagation {ItemOmission,ItemCommission};
+    Alarm: in propagation {ItemOmission,ItemCommission,ValueError};
+    Warning: in propagation {ItemOmission,ItemCommission,ValueError};
+  --to safety
+--    Near_Max_Drug_Per_Hour: out propagation {ItemOmission,ItemCommission};  --maximum drug allowed (over time) during bolus infusion
+    Hard_Limit_Violated: out propagation {ItemOmission,ItemCommission};  --prescription exceeds hard limit in drug library
+--    Drug_Not_In_Library: out propagation {ItemOmission,ItemCommission};  --tell alarm thread null drug record returned
+  --actions
+    Patient_Button_Request: in propagation {EarlyServiceTermination,ThirdPartyPress};  --patient pressed bolus button
+  --control panel
+    Pause_Infusion: in propagation {ItemOmission,OperatorError};
+    Resume_Infusion: in propagation {ItemOmission,OperatorError};
+    Clinician_Request_Bolus: in propagation {ItemOmission,OperatorError};   --square bolus request from control panel
+    Bolus_Duration: in propagation {ItemOmission,OperatorError};  --set square bolus time from control panel
+--    Rx: out propagation {ItemOmission,ValueError};   --prescription read from bar code or RFID
+    Stop_Button_Pressed: in propagation {ItemOmission,OperatorError};  --clinician pressed "stop" button
+    Start_Button_Pressed: in propagation {ItemOmission,OperatorError};  --clinician pressed "start" button   
+--    Prime: in propagation {ItemOmission,ItemCommission};  --clinician pressed "prime" button   
+    Confirm_Soft_Limit_Exception: in propagation {ItemOmission,OperatorError};  --clinician confirmed prescription
+    Reject_Soft_Limit_Exception: in propagation {ItemOmission,OperatorError};   --clinician rejected prescription
+--    Alarm_Inactivation: in propagation {ItemOmission,OperatorError};  --"On","Alarm_Off","Alarm_Paused","Audio_Off","Audio_Paused"
+    Soft_Limit_Warning: out propagation {ItemOmission,ItemCommission};  --prescription exceeds soft limit in drug library
+--    System_Status: out propagation {ItemOmission,ValueError}; 
+--    Max_Drug_Per_Hour_Exceeded: out propagation {ItemOmission,ItemCommission};  --too much juice
+  --pump control
+    Infusion_Flow_Rate:  out propagation {ItemOmission,ItemCommission,ValueError};    --rate to pump
+--    Upstream_Flow_Rate: in data port PCA_Types::Flow_Rate.imp;
+--    Downstream_Flow_Rate: in data port PCA_Types::Flow_Rate.imp;
+  --drug library
+--    Get_Drug_Record: out propagation {ItemOmission,ItemCommission};  --request drug record from library
+--    The_Drug_Record: in propagation {ItemOmission,ItemCommission,ValueError}; --retruned drug record, may be null value if drug code not in library
+  --battery
+--    Using_Battery_Power: in propagation {ItemOmission,ItemCommission};
+      --remaining battery time estimated by assuming linear voltage delcine with stored energy
+--    Remaining_Battery_Time:  in propagation {ItemOmission,ItemCommission,ValueError};
+--    Low_Battery_Warning: in propagation {ItemOmission,ItemCommission};
+  --log events
+--    Log_Event: out propagation {ItemOmission,ItemCommission,ValueError}; 
+  --reservoir
+    Door_Open: in propagation {ItemOmission,ItemCommission};
+  --security
+--    encrypt : out propagation {ItemOmission,ValueError}; 
+--    decrypt: out propagation {ItemOmission,ValueError}; 
+--    sign: out propagation {ItemOmission,ValueError}; 
+--    verify : out propagation {ItemOmission,ValueError}; 
+--    verified : in propagation {ItemOmission,ItemCommission};
+--    result :in propagation {ItemOmission,ValueError}; 
+  end propagations;
+  composite error behavior
+    states 
+    --any thread failed -> thread group failed
+     [operation_threads.failed or drug_library.failed or event_logger.failed]-> failed;
+    --all threads working ->  thread group working
+     [operation_threads.working and drug_library.working and event_logger.working]-> working;
+  end composite;  	
+  **};  --end of EMV2
+end operation_process.imp;
+
+thread group Operation_Thread_Group
+  features
+  --ICE interface
+    command: feature group PCA_Pump::PCA_Commands;
+    parameters: feature group PCA_Pump::PCA_Parameters;
+    status: feature group PCA_Pump::PCA_Status;
+--    security: feature group PCA_Pump::PCA_Security;  
+  --from safety
+    HW_Detected_Failure: in event port;
+    Stop_Pump_Completely: in event port;  --stop the pump
+    Pump_At_KVO_Rate: in event port;  --keep vein open    
+    Alarm : in event data port PCA_Types::Alarm_Type;  --alarm indication
+    Warning : in event data port PCA_Types::Warning_Type;  --warning indication
+  --to safety
+    Near_Max_Drug_Per_Hour: out event port;  --maximum drug allowed (over time) during bolus infusion
+    Hard_Limit_Violated: out event port;  --prescription exceeds hard limit in drug library
+--    Drug_Not_In_Library: out event port;  --tell alarm thread null drug record returned
+  --patient bolus
+    Patient_Button_Request: in event port;  --patient pressed bolus button
+    Patient_Request_Not_Too_Soon: out event port
+      {BLESS::Assertion => "<<PATIENT_REQUEST_NOT_TOO_SOON(now)>>";};
+    Patient_Request_Too_Soon: out event port
+      {BLESS::Assertion => "<<PATIENT_REQUEST_TOO_SOON(now)>>";};
+  --control panel
+    Pause_Infusion: in event port;
+    Resume_Infusion: in event port;
+    CP_Clinician_Request_Bolus: in event port;   --square bolus request from control panel
+    CP_Bolus_Duration: in event data port ICE_Types::Minute.imp; --set square bolus time from control panel
+--    Rx: out event data port PCA_Types::Prescription;  --prescription read from bar code or RFID
+    Stop_Button_Pressed: in event port;  --clinician pressed "stop" button
+    Start_Button_Pressed: in event port;  --clinician pressed "start" button   
+    Confirm_Soft_Limit_Exception: in event port;  --clinician confirmed prescription
+    Reject_Soft_Limit_Exception: in event port;   --clinician rejected prescription
+    Alarm_Inactivation: in data port ICE_Types::Alarm_Signal;  --"On","Alarm_Off","Alarm_Paused","Audio_Off","Audio_Paused"
+    Soft_Limit_Warning: out event port;  --prescription exceeds soft limit in drug library
+    System_Status: out event data port PCA_Types::Status_Type;
+    Over_Max_Drug_Per_Hour: out event port;  --too much juice
+    Display_Message: out event data port PCA_Types::Message;  --message to be displayed on control panel and ICE console
+    Sound_Type: out event data port PCA_Types::Sound;      --sound to be made by control panel and ICE console
+  --pump control
+    Infusion_Flow_Rate: out data port PCA_Types::Flow_Rate.imp;   --rate to pump
+--    Upstream_Flow_Rate: in data port PCA_Types::Flow_Rate.imp;
+--    Downstream_Flow_Rate: in data port PCA_Types::Flow_Rate.imp;
+  --drug library
+    Get_Drug_Record: out event data port PCA_Types::Drug_Code.imp;  --request drug record from library
+    The_Drug_Record: in event data port PCA_Types::Drug_Record.imp; --returned drug record, may be null value if drug code not in library
+    --no library entry for given drug code
+    No_Drug_Found : in event port  --no drug found having the given drug code
+      {BLESS::Assertion=>"<<NDF(#PCA_Properties::Drug_Library_Size)>>";};  
+  --battery
+--    Using_Battery_Power: in data port Base_Types::Boolean
+--      {BLESS::Assertion=>"<<Battery_Current>0.0>>";};
+      --remaining battery time estimated by assuming linear voltage delcine with stored energy
+--    Remaining_Battery_Time: in data port BLESS_Types::Time
+--      {BLESS::Assertion=>"<<RBT()>>";};
+--    Low_Battery_Warning: in event port;
+  --log events
+    Log_Event: out event data port PCA_Types::Event_Record;   
+  --scanner   
+--    Scan_Data: in event data port PCA_Types::Scan_Data_Type;  --data from scanner
+    Do_Scan: out event port;                    --tell scanner to scan
+    Scan_Done: in event port;                   --scan completed
+   --reservoir
+    Door_Open: in data port Base_Types::Boolean;
+  --security
+    Authenticate_Clinician: out event port;     --do clinican authentication
+    Authenticate_Patient: out event port;       --do patient authentication
+    Authenticate_Prescription: out event port;  --do prescription authentication
+    Authentication_fail: in event port;         --authentication failed
+    Authentication_pass: in event port;         --authentication passed
+    Prescription: in data port PCA_Types::Prescription.imp;  --extracted prescription from scan data
+  --boss thread
+    POST_done: in event port;                   --power-on self-test completed
+    POST_fail: in event port;                   --power-on self-test failure  
+    Door_Closed: in event port;                 --the drug door was closed
+    Turn_Off: in event port;                    --the "off" switch was pressed    
+    Prime_Failure: out event port;              --priming time-out
+end Operation_Thread_Group;
+
+thread group implementation Operation_Thread_Group.imp
+  subcomponents
+  --boss thread decides use case 1
+    boss: thread PCA_Boss::Boss_Thread.imp;
+  --rate controller calculated pump rate
+    rate_controller: thread PCA_Operation_Threads::Rate_Controller.imp;
+  --prescription checker
+    prescription_checker: thread PCA_Operation_Threads::Prescription_Checker.imp;
+  --talks to ice_bus_adaptor in PCA_System.aadl
+    ice_thread: thread PCA_Operation_Threads::ICE_Thread.imp;
+  --overdose watcher
+    max_drug_watcher: thread PCA_Operation_Threads::Max_Drug_Per_Hour_Watcher.imp;
+  --checks whether last bolus was before Minimum_Time_Between_Bolus
+    patient_bolus_checker: thread PCA_Operation_Threads::Patient_Bolus_Checker.imp;
+  connections
+  --status
+    stat: port rate_controller.System_Status -> System_Status;
+  --boss thread inputs
+    pod: port POST_done -> boss.POST_done;
+    pof: port POST_fail -> boss.POST_fail;
+    stb: port Start_Button_Pressed -> boss.Start_Button_Pressed;
+    sop: port Stop_Button_Pressed -> boss.Stop_Button_Pressed;
+    scd: port Scan_Done -> boss.Scan_Done;
+    baf: port Authentication_fail -> boss.Authentication_fail;
+    baps: port Authentication_pass -> boss.Authentication_pass;
+    bnd: port No_Drug_Found -> boss.Drug_Not_In_Library;
+    bthlv: port prescription_checker.Hard_Limit_Violated -> boss.Hard_Limit_Violated;
+    btcrx: port Confirm_Soft_Limit_Exception -> boss.Confirm_Soft_Limit_Exception;
+    btrrx: port Reject_Soft_Limit_Exception -> boss.Reject_Soft_Limit_Exception;
+    dc: port Door_Closed -> boss.Door_Closed;
+    off: port Turn_Off -> boss.Turn_Off;
+  --boss thread outputs
+    ble: port boss.Log_Event -> Log_Event;
+    btd: port boss.Display_Message -> Display_Message;
+    bts: port boss.Sound_Type -> Sound_Type;
+    bds: port boss.Do_Scan -> Do_Scan;
+    bac: port boss.Authenticate_Clinician -> Authenticate_Clinician;
+    bap: port boss.Authenticate_Patient -> Authenticate_Patient;
+    barx: port boss.Authenticate_Prescription -> Authenticate_Prescription;
+    bpr: port boss.Begin_Priming -> rate_controller.Begin_Priming;
+    epr: port boss.End_Priming -> rate_controller.End_Priming;
+    pf: port boss.Prime_Failure -> Prime_Failure;
+    bi: port boss.Begin_Infusion -> rate_controller.Begin_Infusion;
+    hi: port boss.Halt_Infusion -> rate_controller.Halt_Infusion;
+    crx: port boss.Check_Rx -> prescription_checker.Check_Rx;
+  --rate controller output
+    pfr: port rate_controller.Infusion_Flow_Rate -> Infusion_Flow_Rate;
+  --patient bolus checker
+    prb: port Patient_Button_Request -> patient_bolus_checker.Patient_Button_Request;
+    rcprnts: port patient_bolus_checker.Patient_Request_Not_Too_Soon -> rate_controller.Patient_Request_Not_Too_Soon;
+    prnts: port patient_bolus_checker.Patient_Request_Not_Too_Soon -> Patient_Request_Not_Too_Soon;
+    prts: port patient_bolus_checker.Patient_Request_Too_Soon -> Patient_Request_Too_Soon;
+  --rate controller inputs
+    spc: port Stop_Pump_Completely -> rate_controller.Stop_Pump_Completely;
+    kvo: port Pump_At_KVO_Rate -> rate_controller.Pump_At_KVO_Rate;
+    alm: port Alarm -> rate_controller.Alarm;
+    war: port Warning -> rate_controller.Warning;
+    dor: port Door_Open -> rate_controller.Door_Open;
+    pin: port Pause_Infusion -> rate_controller.Pause_Infusion;
+    rin: port Resume_Infusion -> rate_controller.Resume_Infusion;
+    isp: port ice_thread.ICE_Stop_Pump -> rate_controller.ICE_Stop_Pump;
+  --from control panel to rate controller
+    crb: port CP_Clinician_Request_Bolus -> rate_controller.CP_Clinician_Request_Bolus;
+    bdr: port CP_Bolus_Duration -> rate_controller.CP_Bolus_Duration;
+  --from boss thread to rate controller  
+--    spf: port CP_Stop_Flow -> rate.CP_Stop_Flow;
+--    stf: port CP_Start_Flow -> rate.CP_Start_Flow;
+--    pri: port CP_Prime -> rate.CP_Prime;
+  --to max drug per hour watcher 
+    pnm: port max_drug_watcher.Near_Max_Drug_Per_Hour -> rate_controller.Near_Max_Drug_Per_Hour;
+    mdw: port max_drug_watcher.Near_Max_Drug_Per_Hour -> Near_Max_Drug_Per_Hour;
+    pom: port max_drug_watcher.Over_Max_Drug_Per_Hour -> rate_controller.Over_Max_Drug_Per_Hour;
+    poc: port max_drug_watcher.Over_Max_Drug_Per_Hour -> Over_Max_Drug_Per_Hour;
+    ifl: port rate_controller.Infusion_Flow_Rate -> max_drug_watcher.Infusion_Flow_Rate;
+    mdh: port prescription_checker.Max_Drug_Per_Hour -> max_drug_watcher.Max_Drug_Per_Hour;
+  --from prescription checker to rate_controller 
+--    rok: port prescription_checker.Rx_Okay -> rate_controller.Rx_Okay;
+    pbr: port prescription_checker.Patient_Bolus_Rate -> rate_controller.Patient_Bolus_Rate;
+    sbr: port prescription_checker.Square_Bolus_Rate -> rate_controller.Square_Bolus_Rate;
+    bar: port prescription_checker.Basal_Rate -> rate_controller.Basal_Rate;
+    vtb: port prescription_checker.VTBI -> rate_controller.VTBI;
+  --from prescription checker to patient bolus checker
+    mtbb: port prescription_checker.Minimum_Time_Between_Bolus -> patient_bolus_checker.Minimum_Time_Between_Bolus;
+  --prescription checker inputs
+    pcnd: port No_Drug_Found -> prescription_checker.Drug_Not_In_Library;
+    tdr: port The_Drug_Record -> prescription_checker.The_Drug_Record;
+    cfrx: port Confirm_Soft_Limit_Exception -> prescription_checker.Confirm_Soft_Limit_Exception;
+    rrx: port Reject_Soft_Limit_Exception -> prescription_checker.Reject_Soft_Limit_Exception;
+    pcrx: port Prescription -> prescription_checker.Prescription;
+  --prescription checker outputs
+    slw: port prescription_checker.Soft_Limit_Warning -> Soft_Limit_Warning;
+    hlv: port prescription_checker.Hard_Limit_Violated -> Hard_Limit_Violated;
+    gdr: port prescription_checker.Get_Drug_Record -> Get_Drug_Record;
+    rxok: port prescription_checker.Rx_Okay -> boss.Rx_Okay;
+  --ice thread feature group connections
+    cmd: feature group command <-> ice_thread.command;
+    prm: feature group parameters <-> ice_thread.parameters;
+    sta: feature group status <-> ice_thread.status;
+  --control panel to ice thread
+    ai: port Alarm_Inactivation -> ice_thread.Alarm_Inactivation;
+    icpbd: port CP_Bolus_Duration ->  ice_thread.CP_Bolus_Duration;
+    icrb: port CP_Clinician_Request_Bolus -> ice_thread.CP_Clinician_Request_Bolus;
+  --patient bolus checker to ice thread
+    icprnts: port patient_bolus_checker.Patient_Request_Not_Too_Soon -> ice_thread.Patient_Request_Not_Too_Soon;
+    icprts: port patient_bolus_checker.Patient_Request_Too_Soon -> ice_thread.Patient_Request_Too_Soon;
+  --prescription checker to ice thread
+    srxok: port prescription_checker.Rx_Okay -> ice_thread.Rx_Okay;
+    ssbr: port prescription_checker.Square_Bolus_Rate -> ice_thread.Square_Bolus_Rate; 
+    spbr: port prescription_checker.Patient_Bolus_Rate -> ice_thread.Patient_Bolus_Rate; 
+    scbr: port prescription_checker.Basal_Rate -> ice_thread.Basal_Rate; 
+    svtbi: port prescription_checker.VTBI -> ice_thread.VTBI; 
+  --rate controller to ice thread
+    sifr: port rate_controller.Infusion_Flow_Rate -> ice_thread.Infusion_Flow_Rate;
+  --max drug watcher to ice thread
+    snmax: port max_drug_watcher.Near_Max_Drug_Per_Hour -> ice_thread.Near_Max_Drug_Per_Hour;
+    somax: port max_drug_watcher.Over_Max_Drug_Per_Hour -> ice_thread.Over_Max_Drug_Per_Hour;
+  --safety to ice thread
+    ialrm: port Alarm -> ice_thread.Alarm;
+    iwarn: port Warning -> ice_thread.Warning;
+  --boss to ice thread
+    ibi: port boss.Begin_Infusion -> ice_thread.Begin_Infusion;
+    ihi: port boss.Halt_Infusion -> ice_thread.Halt_Infusion;
+  --fluid to ice thread
+    ido: port Door_Open -> ice_thread.Door_Open;
+  --hardware detected failure
+    hdf: port HW_Detected_Failure -> rate_controller.HW_Detected_Failure;
+    stp: port Stop_Pump_Completely -> rate_controller.Stop_Pump_Completely;
+    pkr: port Pump_At_KVO_Rate -> rate_controller.Pump_At_KVO_Rate;
+    ikvo: port Pump_At_KVO_Rate -> ice_thread.Pump_At_KVO_Rate;
+    ispc: port Stop_Pump_Completely -> ice_thread.Stop_Pump_Completely;
+    ihwdf: port HW_Detected_Failure -> ice_thread.HW_Detected_Failure;
+  annex EMV2X
+  {**
+  --the ui process is working when the ui thread is
+  use types ErrorLibrary, PCA_Error_Model;
+  --when the ui thread fails, it stops
+  use behavior PCA_Error_Model::CompositeFailStop; 	
+  --same error propagations as ui thread
+  error propagations
+    HW_Detected_Failure: in propagation {ItemOmission,ItemCommission};
+    Stop_Pump_Completely: in propagation {ItemOmission,ItemCommission};
+    Pump_At_KVO_Rate: in propagation {ItemOmission,ItemCommission};
+    Alarm: in propagation {ItemOmission,ItemCommission,ValueError};
+    Warning: in propagation {ItemOmission,ItemCommission,ValueError};
+  --to safety
+    Near_Max_Drug_Per_Hour: out propagation {ItemOmission,ItemCommission};  --maximum drug allowed (over time) during bolus infusion
+    Hard_Limit_Violated: out propagation {ItemOmission,ItemCommission};  --prescription exceeds hard limit in drug library
+--    Drug_Not_In_Library: out propagation {ItemOmission,ItemCommission};  --tell alarm thread null drug record returned
+  --actions
+    Patient_Button_Request: in propagation {ItemOmission,ItemCommission};  --patient pressed bolus button
+  --control panel
+    Pause_Infusion: in propagation {ItemOmission,ItemCommission};
+    Resume_Infusion: in propagation {ItemOmission,ItemCommission};
+    CP_Clinician_Request_Bolus: in propagation {ItemOmission,ItemCommission};   --square bolus request from control panel
+    CP_Bolus_Duration: in propagation {ItemOmission,ItemCommission,ValueError};  --set square bolus time from control panel
+--    Rx: out propagation {ItemOmission,ItemCommission,ValueError};   --prescription read from bar code or RFID
+    Stop_Button_Pressed: in propagation {ItemOmission,ItemCommission};  --clinician pressed "stop" button
+    Start_Button_Pressed: in propagation {ItemOmission,ItemCommission};  --clinician pressed "start" button   
+--    CP_Prime: in propagation {ItemOmission,ItemCommission};  --clinician pressed "prime" button   
+    Confirm_Soft_Limit_Exception: in propagation {ItemOmission,ItemCommission};  --clinician confirmed prescription
+    Reject_Soft_Limit_Exception: in propagation {ItemOmission,ItemCommission};   --clinician rejected prescription
+--    Alarm_Inactivation: in propagation {ItemOmission,ItemCommission,ValueError};  --"On","Alarm_Off","Alarm_Paused","Audio_Off","Audio_Paused"
+    Soft_Limit_Warning: out propagation {ItemOmission,ItemCommission};  --prescription exceeds soft limit in drug library
+    System_Status: out propagation {ItemOmission,ItemCommission,ValueError}; 
+    Over_Max_Drug_Per_Hour: out propagation {ItemOmission,ItemCommission};  --too much juice
+  --pump control
+    Infusion_Flow_Rate:  out propagation {ItemOmission,ItemCommission,ValueError};    --rate to pump
+--    Upstream_Flow_Rate: in data port PCA_Types::Flow_Rate.imp;
+--    Downstream_Flow_Rate: in data port PCA_Types::Flow_Rate.imp;
+  --drug library
+    Get_Drug_Record: not out propagation {CommonErrors};  --request drug record from library
+    The_Drug_Record: in propagation {EarlyServiceTermination,ValueError}; --retruned drug record, may be null value if drug code not in library
+    No_Drug_Found: in propagation {ItemOmission};
+  --battery
+--    Using_Battery_Power: in propagation {ItemOmission,ItemCommission};
+--      --remaining battery time estimated by assuming linear voltage delcine with stored energy
+--    Remaining_Battery_Time:  in propagation {ItemOmission,ItemCommission,ValueError};
+--    Low_Battery_Warning: in propagation {ItemOmission,ItemCommission};
+  --log events
+    Log_Event: out propagation {ItemOmission,ItemCommission,ValueError}; 
+  --scanner   
+--    Scan_Data: in propagation {ItemOmission,ItemCommission,ValueError}; --data from scanner
+  --reservoir
+    Door_Open: in propagation {ItemOmission,ItemCommission};
+  --security
+--    encrypt : out propagation {ItemOmission,ItemCommission,ValueError}; 
+--    decrypt: out propagation {ItemOmission,ItemCommission,ValueError}; 
+--    sign: out propagation {ItemOmission,ItemCommission,ValueError}; 
+--    verify : out propagation {ItemOmission,ItemCommission,ValueError}; 
+--    verified : in propagation {ItemOmission,ItemCommission};
+--    result :in propagation {ItemOmission,ItemCommission,ValueError}; 
+  end propagations;
+  composite error behavior
+    states 
+    --any thread failed -> thread group failed
+     [boss.failed or rate_controller.failed or prescription_checker.failed or ice_thread.failed or max_drug_watcher.failed]->failed;
+    --all threads working ->  thread group working
+     [boss.working and rate_controller.working and prescription_checker.working and ice_thread.working and max_drug_watcher.working]->working;
+  end composite;  	
+  **};  --end of EMV2
+end Operation_Thread_Group.imp;
+
+
+-- stores events
+thread event_logger_thread
+  features
+    --record an event in the log
+    Log_Event : in event data port PCA_Types::Event_Record
+      {BLESS::Assertion=>"<<:=EVENT_RECORD>>";};
+    --ask for the whole event log
+    Get_Event_Log : in event port;  --put out event log next period
+--      {BLESS::Assertion=>"<<The_Event_Log=EVENT_LOG>>";};
+    --log output
+    The_Event_Log : out event data port PCA_Types::Event_Log  --output event log
+      {BLESS::Assertion=>"<<:=EVENT_LOG>>";}; 
+  properties
+    --Thread_Properties::Dispatch_Protocol=>Aperiodic;  
+    Thread_Properties::Dispatch_Protocol=>Sporadic;  
+    Timing_Properties::Period => PCA_Properties::Sireum_Thread_Period;  --update outputs every 5ms
+end event_logger_thread;
+
+--this represents the device implementation that stores & retrieves fault indications
+--must add hardware faults
+thread implementation event_logger_thread.imp
+  annex BLESS
+  {**
+  assert
+    <<AXIOM_LOG: :log=EVENT_LOG>>
+    <<ELT:c:all k:integer in 1 ..c are log[k]=EVENT_RECORD>>
+  invariant <<ELT(event_count)>>
+  variables
+    log : PCA_Types::Event_Log;  --data structure holding fault log
+    event_count :  integer:=0;    --count of logged faults
+    an_event : PCA_Types::Event_Record;  --event record received
+  states
+    start : initial state <<ELT(event_count)>>;
+    run : complete state <<ELT(event_count)>>;
+    done : final state;  
+  transitions
+    elt0: start-[ ]->run{};
+    elt1: run-[on dispatch Log_Event]->run --put event record into array, increment count
+      {  <<ELT(event_count)>>
+      	Log_Event?(an_event)
+      	; <<ELT(event_count) and (an_event=EVENT_RECORD)>>
+      	event_count:=event_count+1
+      	; <<ELT(event_count-1) and (an_event=EVENT_RECORD)>>
+      	log[event_count]:=an_event
+      	<<(log[event_count]=EVENT_RECORD) and (all k:integer in 1 ..event_count-1 are log[k]=EVENT_RECORD)>>
+      };
+    elt2: run-[on dispatch Get_Event_Log]->run  --output the log
+      {<<AXIOM_LOG() and ELT(event_count)>>
+      The_Event_Log!(log)
+      <<AXIOM_LOG() and ELT(event_count)>>};
+  **};
+annex EMV2 
+  {** 
+  use types PCA_Error_Model,ErrorLibrary;
+  --use common behavior fail-subtle, one corrupted log entry doesn't mean the logging stops
+  use behavior PCA_Error_Model::FailCorruptedTruncated;
+  error propagations
+  --this may not get the right value to log, or may have service issues
+    Log_Event: in propagation {ValueError,EarlyServiceTermination};
+  -- *not* expecting any errors in the command to read the log
+    Get_Event_Log: not in propagation {CommonErrors};
+  -- errors in the value of the log retreived 
+    The_Event_Log: out propagation {LogError};
+  flows  --three different log fault behaviors:  complete failure, corruption, and truncation
+  --nothing returned from log when failed
+    died: error source The_Event_Log{DeadLog} when failed;
+  --corrupted log
+    mucked: error source The_Event_Log{CorruptedLog} when corrupted;
+  --truncated log
+    trunc: error source The_Event_Log{TruncatedLog} when truncated;
+  end propagations;
+  component error behavior
+    events  
+      --event representing failure of the log outright
+--      ve: error event Log_Fault;
+--      erroneous_hardwired_failure_indication_put_in_log: 
+      corrupt: error event
+--        when POST_Failure{ItemCommission} or RAM_Failure{ItemCommission}
+        ;
+--    transitions  
+      --log dies -> failed
+--      hwcrpt: working -[erroneous_hardwired_failure_indication_put_in_log]-> failed;  
+
+  end component;
+  properties
+--  use thread failure rate for event log
+    EMV2::occurrencedistribution => PCA_Properties::ThreadFailureRate 
+      applies to corrupt;
+  **};  --end of EMV2
+end event_logger_thread.imp;
+
+end PCA_Operation;

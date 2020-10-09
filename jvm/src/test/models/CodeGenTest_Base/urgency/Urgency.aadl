@@ -1,0 +1,78 @@
+package Urgency
+public
+	system Sys
+	end Sys;
+
+	system implementation Sys.impl
+		subcomponents
+			p: process Proc.impl;
+	end Sys.impl;
+
+	process Proc
+	end Proc;
+
+	process implementation Proc.impl
+		subcomponents
+			producer: thread Producer.impl;
+
+			consumer_default: thread Consumer.impl;
+			
+			consumer_dispatch_trigger_1_2x: thread Consumer.impl { 
+				Dispatch_Trigger => (reference (in1_urgencyMin), 
+					                 reference (in2));
+			};
+			consumer_dispatch_trigger_2_3x: thread Consumer.impl {
+			    Dispatch_Trigger => (reference (in2), 
+			    	                 reference (in3_urgencyMax));
+			};
+ 			consumer_dispatch_trigger_1_3x: thread Consumer.impl {
+			    Dispatch_Trigger => (reference (in1_urgencyMin), 
+			    	                 reference (in3_urgencyMax));
+			};
+		connections
+			c0: port producer.o1 -> consumer_default.in1_urgencyMin;
+			c1: port producer.o2 -> consumer_default.in2;
+			c2: port producer.o3 -> consumer_default.in3_urgencyMax;
+			
+			c3: port producer.o1 -> consumer_dispatch_trigger_1_2x.in1_urgencyMin;
+			c4: port producer.o2 -> consumer_dispatch_trigger_1_2x.in2;
+			c5: port producer.o3 -> consumer_dispatch_trigger_1_2x.in3_urgencyMax;
+			
+			c6: port producer.o1 -> consumer_dispatch_trigger_2_3x.in1_urgencyMin;
+			c7: port producer.o2 -> consumer_dispatch_trigger_2_3x.in2;
+			c8: port producer.o3 -> consumer_dispatch_trigger_2_3x.in3_urgencyMax;
+			
+			c9: port producer.o1 -> consumer_dispatch_trigger_1_3x.in1_urgencyMin;
+			c10: port producer.o2 -> consumer_dispatch_trigger_1_3x.in2;
+			c11: port producer.o3 -> consumer_dispatch_trigger_1_3x.in3_urgencyMax;			
+	end Proc.impl;
+
+	thread Producer
+		features
+			o1: out event port;
+			o2: out event port;
+			o3: out event port;
+		properties
+			Dispatch_Protocol => Periodic;
+			Period => 5 sec;
+	end Producer;
+
+	thread implementation Producer.impl
+	end Producer.impl;
+
+	thread Consumer
+		features
+			in1_urgencyMin: in event port { Urgency => 0; };
+			in2: in event port;
+			in3_urgencyMax: in event port { Urgency => AADL_Project::Max_Urgency; }; -- 12 
+			
+			out1 : out event port;
+			out2 : out event port;
+			out3 : out event port;
+		properties
+			Dispatch_Protocol => Sporadic;
+	end Consumer;
+
+	thread implementation Consumer.impl
+	end Consumer.impl;
+end Urgency;

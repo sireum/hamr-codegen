@@ -1,0 +1,140 @@
+# PCA_Operation_Threads::Prescription_Checker.imp
+push
+sort-by-component[PCA_Operation_Threads::Prescription_Checker.imp]
+#PCA_Operation_Threads::Prescription_Checker.imp
+#[serial 1050] <<M(SoftLimit)>> -> <<I>> from invariant I when complete state SoftLimit has Assertion <<M(SoftLimit)>> in its definition
+make-an
+axioms
+#[serial 1051] <<M(BadRx)>> -> <<I>> from invariant I when complete state BadRx has Assertion <<M(BadRx)>> in its definition.
+axioms
+#[serial 1052] <<M(WaitForRx)>> -> <<I>> from invariant I when complete state WaitForRx has Assertion <<M(WaitForRx)>> in its definition.
+axioms
+#[serial 1053] <<M(GettingDrugRecord)>> -> <<I>> from invariant I when complete state GettingDrugRecord has Assertion <<M(GettingDrugRecord)>> in its definition.
+axioms
+#[serial 1054] <<M(OutputRx)>> -> <<I>> from invariant I when complete state OutputRx has Assertion <<M(OutputRx)>> in its definition.
+axioms
+#[serial 1055] Serban's Theorem:  disjunction of execute conditions leaving execution state HardLimitsMet, <<M(HardLimitsMet)>> -> <<e1 or e2 or . . . en>>
+laws
+axioms
+#[serial 1056] Serban's Theorem:  disjunction of execute conditions leaving execution state Start, <<M(Start)>> -> <<e1 or e2 or . . . en>>
+axioms
+#[serial 1057] Serban's Theorem:  disjunction of execute conditions leaving execution state RxValid, <<M(RxValid)>> -> <<e1 or e2 or . . . en>>
+normalize
+replace<=
+normalize
+laws
+axioms
+#[serial 1058] Serban's Theorem:  disjunction of execute conditions leaving execution state CheckRx, <<M(CheckRx)>> -> <<e1 or e2 or . . . en>>
+laws
+axioms
+#[serial 1059]  <<M(Start)>> -> <<M(WaitForRx)>> for go:Start-[ ]->WaitForRx{};
+axioms
+#[serial 1060]  <<M(WaitForRx) and x>> A <<M(GettingDrugRecord)>> for getrx:WaitForRx-[x]->GettingDrugRecord{A};
+reduce
+atomic
+axioms
+#[serial 1061]  <<M(GettingDrugRecord) and x>> A <<M(CheckRx)>> for getdr:GettingDrugRecord-[x]->CheckRx{A};
+reduce
+atomic
+axioms
+#[serial 1062]  <<M(GettingDrugRecord) and x>> -> <<M(BadRx)>> for dnil:GettingDrugRecord-[x]->BadRx{};
+now
+laws
+axioms
+#[serial 1063]  <<M(CheckRx) and x>> -> <<M(RxValid)>> for check:CheckRx-[x]->RxValid{};
+substitute-post
+normalize
+axioms
+#[serial 1064]  <<M(CheckRx) and x>> -> <<M(BadRx)>> for badrx:CheckRx-[x]->BadRx{};
+substitute-post
+normalize
+axioms
+#[serial 1065]  <<M(RxValid) and x>> -> <<M(HardLimitsMet)>> for okhard:RxValid-[x]->HardLimitsMet{};
+remove-axioms-post
+normalize
+laws
+split-post
+axioms
+substitute-post
+normalize
+axioms
+#[serial 1066]  <<M(RxValid) and x>> A <<M(BadRx)>> for badhard:RxValid-[x]->BadRx{A};
+reduce
+atomic
+normalize
+laws
+normalize
+substitute-post
+normalize
+axioms
+#[serial 1067]  <<M(HardLimitsMet) and x>> A <<M(OutputRx)>> for oksoft:HardLimitsMet-[x]->OutputRx{A};
+reduce
+atomic
+normalize
+substitute-both
+now
+normalize
+laws
+axioms
+guided-sub-equals[BASAL_RATE]
+normalize
+axioms
+guided-sub-equals[PATIENT_BOLUS_RATE]
+normalize
+axioms
+guided-sub-equals[MAX_DRUG_PER_HOUR]
+normalize
+axioms
+guided-sub-equals[SQUARE_BOLUS_RATE]
+normalize
+axioms
+substitute-post
+normalize
+laws
+split-post
+axioms
+normalize
+axioms
+#[serial 1068]  <<M(HardLimitsMet) and x>> A <<M(SoftLimit)>> for badsoft:HardLimitsMet-[x]->SoftLimit{A};
+reduce
+atomic
+split-post
+laws
+axioms
+substitute-post
+normalize
+axioms
+#[serial 1069]  <<M(SoftLimit) and x>> A <<M(OutputRx)>> for yessoft:SoftLimit-[x]->OutputRx{A};
+reduce
+atomic
+now
+laws
+axioms
+substitute-pre
+normalize
+laws
+normalize
+laws
+sub-all-eq
+laws
+axioms
+substitute-post
+normalize
+split-post
+normalize
+axioms
+substitute-post
+normalize
+axioms
+#[serial 1070]  <<M(SoftLimit) and x>> -> <<M(WaitForRx)>> for nosoft:SoftLimit-[x]->WaitForRx{};
+axioms
+#[serial 1071]  <<M(WaitForRx) and x>> -> <<M(Done)>> for quit:WaitForRx-[x]->Done{};
+axioms
+#[serial 1072]  <<M(GettingDrugRecord) and x>> -> <<M(Done)>> for quit:GettingDrugRecord-[x]->Done{};
+axioms
+#[serial 1073]  <<M(OutputRx) and x>> -> <<M(Done)>> for quit:OutputRx-[x]->Done{};
+axioms
+#[serial 1074]  <<M(SoftLimit) and x>> -> <<M(Done)>> for quit:SoftLimit-[x]->Done{};
+axioms
+#[serial 1075]  <<M(BadRx) and x>> -> <<M(Done)>> for quit:BadRx-[x]->Done{};
+axioms

@@ -1,0 +1,244 @@
+--PCA_Context.aadl
+
+--PCA pump hooked up to abstract components representing actors, patient, clinician, ICE etc.
+
+package PCA_Context
+public
+  with Base_Types,       --AADL Data Modeling Annex
+    EMV2,  --AADL error model annex, version 2
+    --Timing_Properties,   --predeclared AADL property sets
+    ICE, --ICE_Types, --ICE_Display, --packages (types) and property sets common to all ICE apps and devices
+   -- Physical_Properties, 
+    Physical_Types, --types and properties to mimic physical entities as data
+    BLESS,				 --package defining Assertion
+    --BLESS_Types,         --package holding equivalents to BLESS built-in types express using Data Modeling Annex
+    --PCA_Alarm,		--package holing process and thread for PCA alarm behavior
+    --PCA_Assertions,  --package holding Assertion annex library
+    --PCA_Safety,					--package holding safety architecture
+    --PCA_Security,				--package holding security architecture
+    --PCA_Drug_Library,   --package holding drug library
+    --PCA_Mechanical,			--package holding mechanical components: pump, flow monitor, reservoir
+    --PCA_Power,          --package holding battery and power supply
+    PCA_Properties,   --property set holding most numerical values used in the model
+    PCA_Pump,  --package holding PCA pump system implementation
+    --PCA_Control_Panel,  --package holding control panel
+    --PCA_Operation,      --package holding normal operation logic
+    PCA_System,        --package holding PCA pump system
+    PCA_Types;           --package holding types used only by this PCA pump model
+
+  -- connect the pump with the actors in its environment, patient, clinician, technician, and ICE manager
+system Context
+end Context;
+
+  --instantiate this to get everything
+system implementation Context.imp
+  subcomponents
+  --the PCA pump
+    pca_pump: system PCA_System::wrap_pca.imp;
+  --our patient
+    patient: abstract Patient.imp;
+  --attending nurse
+    nurse: abstract Clinician.imp;
+  --hospital technician software
+    tech_sw: process Tech_Software.imp;
+  --ICE app process--holds thread with app functionality
+    ice_app: process PCA_Ice_App.imp;
+  --ICE network
+     network: bus ICE::ICE_Network.imp;
+  --ICE supervisor
+    supervisor: processor ICE_Supervisor;
+  --maintenance interface, USB dongle connected to a laptop
+    dongle: processor Maintenance_Processor;
+  --cable to jack
+    cable: bus Maintenance_Bus;
+  --other ICE devices
+    dev1: system Other_ICE_Device.imp;
+    dev2: system Other_ICE_Device.imp;
+    dev3: system Other_ICE_Device.imp;
+  connections
+  --drug to patient
+    drug_to_patient: port pca_pump.Infused_Drug->patient.Infused_Drug;
+  --patient button
+    patient_button: port patient.Button_Press->pca_pump.Button_Press;
+  --nurse hears sound
+    noise: port pca_pump.Sound->nurse.Sound;
+  --nurse sees image
+    visual: port pca_pump.LightToEye->nurse.LightToEye;
+  --nurse touches control panel
+    touch: port nurse.Finger_Press->pca_pump.Finger_Press;
+  --connect supervisor to ICE network
+    sbus: bus access network <-> supervisor.to_devices;  
+  --connect pump to ICE network
+    pbus: bus access network <-> pca_pump.to_ice;
+  --connect pump to maintenance cable
+    pcbl: bus access cable <-> pca_pump.maintenance_jack;
+  --connect maintenance processor to cable 
+    mcbl: bus access cable <-> dongle.jack;
+  --connect ICE app signals to PCA pump
+    sgnl: feature group ice_app.pca_signals <-> pca_pump.app_signals
+      ;--{Actual_Connection_Binding=>(reference(network));};  --flow through network
+  --connect tech software to pca pump
+    tech: feature group tech_sw.to_pca <-> pca_pump.to_tech
+      ;--{Actual_Connection_Binding=>(reference(cable));};  --flow through cable to jack
+  --connect other devices to ICE network
+    d1bus: bus access network <-> dev1.to_ice;
+    d2bus: bus access network <-> dev2.to_ice;
+    d3bus: bus access network <-> dev3.to_ice;
+  properties
+  --tech software runs on dongle
+    Actual_Processor_Binding=>(reference(dongle)) applies to tech_sw;
+  --ice app runs on supervisor
+    Actual_Processor_Binding=>(reference(supervisor)) applies to ice_app;
+end Context.imp;
+
+
+abstract Patient
+  features
+  --drug infused into patient
+    Infused_Drug : in data port Physical_Types::Fluid_Flow.imp
+      {BLESS::Assertion=>"<<:=INFUSION_RATE>>";};  --infusion rate into patient is value of Infused_Drug port
+    Button_Press: out event port;  --physically depressing the button
+end Patient;
+
+abstract implementation Patient.imp
+--drug flow errors may impair function or harm patient
+--third-parties may press the button for the patient
+  annex EMV2
+  {**
+  use types PCA_Error_Model,ErrorLibrary;
+  error propagations
+  --incorrect drug flow, may harm patient
+    Infused_Drug: in propagation {DrugFlowError};
+  --patient button pressed by someone other than patient
+    Button_Press: out propagation {ThirdPartyPress};
+  --must prevent third-party press from becoming drug flow error
+  flows
+  --drug flow error affects patient
+    dfe: error sink Infused_Drug{DrugFlowError};
+  --third party presses patient button
+    tpp: error source Button_Press{ThirdPartyPress};
+  end propagations;
+   properties
+  --how often does a third-party press the button for the patient?
+    EMV2::OccurrenceDistribution => PCA_Properties::ThirdPartyButtonRate 
+      applies to tpp;
+  **};  --end of EMV2
+end Patient.imp;
+
+abstract Clinician
+  features
+--EXTERNAL EFFECT
+    Sound: in data port PCA_Types::Sound;  --noise made by speaker, heard by clinician
+--EXTERNAL EFFECT
+    LightToEye: in data port Base_Types::Boolean;  --image seen by clinician
+--EXTERNAL PHENOMENON    
+    Finger_Press: out event data port Base_Types::Boolean;  --clinician touches screen
+end Clinician;
+
+abstract implementation Clinician.imp
+--clinicians may cause operator errors, or receive erroneous image or sound
+  annex EMV2
+  {**
+  use types PCA_Error_Model,ErrorLibrary;
+  error propagations
+  --incorrect sound, may not alert alarm or warning
+    Sound: in propagation {ItemOmission,AlarmError,ValueError}; 
+  --incorrect visual, wrong data or no alarm symbol
+    LightToEye: in propagation {ItemOmission,AlarmError,ValueError}; 
+  --operator error
+    Finger_Press: out propagation {OperatorError};
+  flows
+  --incorrect sound
+    hear: error sink Sound{ItemOmission,AlarmError,ValueError};
+  --incorrect visual,  
+    see: error sink LightToEye{ItemOmission,AlarmError,ValueError};
+  --operator error
+    oops: error source Finger_Press{OperatorError};
+  end propagations;
+   properties
+  --how often does a clinician make an error?
+    EMV2::OccurrenceDistribution => PCA_Properties::OperatorErrorRate 
+      applies to oops;
+  **};  --end of EMV2
+end Clinician.imp;
+
+--hospital service worker that reads logs, loads drug library, and provisions security
+process Tech_Software
+  features
+    to_pca: feature group inverse of PCA_System::Maintenance_Signals;
+end Tech_Software;
+
+process implementation Tech_Software.imp
+--technician may get bad logs, but never provides faulty data/signals
+  annex EMV2
+  {**
+  use types PCA_Error_Model,ErrorLibrary;
+  error propagations
+  --fault log
+    to_pca.get_fault_log: not in propagation {CommonErrors}; --no error on request
+    to_pca.the_fault_log: out propagation {LogError};  --log may be dead, corrupted of truncated
+  --event log
+    to_pca.get_event_log: not in propagation {CommonErrors}; --no error on request
+    to_pca.the_event_log: out propagation {LogError};  --log may be dead, corrupted of truncated
+  --drug library
+    to_pca.load_drug_library: not in propagation {CommonErrors}; --no error on loading drug library
+  --provisioning
+    to_pca.security_provisioning: not out propagation {CommonErrors}; --no error when provisioning
+  flows
+  --get bad fault log
+    bad_fault_log: error source to_pca.the_fault_log{LogError};
+  --get bad event log 
+    bad_event_log: error source to_pca.the_event_log{LogError};
+  end propagations;
+  **};  --end of EMV2
+end Tech_Software.imp;
+
+--make ICE app, specialized for PCA
+process PCA_Ice_App
+  features
+    pca_signals : feature group inverse of PCA_Pump::PCA5;  --aggregated feature groups
+  --specification of prototype features
+--  (alarm_type=>feature group PCA_Pump::PCA_Alarms,         --alarm
+--  status_type=>feature group PCA_Pump::PCA_Status,         --status
+--  param_type=>feature group PCA_Pump::PCA_Parameters,      --param
+--  command_type=>feature group PCA_Pump::PCA_Commands,      --command
+--  security_type=>feature group PCA_Pump::PCA_Security                --pki
+--  )
+end PCA_Ice_App; 
+
+process implementation PCA_Ice_App.imp
+  --thread providing app functionality will be subcomponent of this process
+end PCA_Ice_App.imp;
+
+--ICE Supervisor hardware
+processor ICE_Supervisor
+  features
+    to_devices: requires bus access ICE::ICE_Network;  --network connection to ICE devices
+    to_console: requires bus access;  --nurses station (not further specified here)
+    to_hospital: requires bus access;  --to hospital information network  (not further specified here)
+end ICE_Supervisor;    
+
+--connects to PCA pump to read logs, load drug library, provision security
+processor Maintenance_Processor
+  features
+    jack : requires bus access Maintenance_Bus;  --connects to jack on PCA pump
+end Maintenance_Processor;
+
+
+bus Maintenance_Bus  --connection to maintenance jack for reading logs
+end Maintenance_Bus;
+
+--models other ICE devices implementing the ICE_Interface
+--connected to the ICE network
+system Other_ICE_Device features
+  --bus access to ICE network   
+	to_ice: requires bus access ICE::Ice_Network;  
+  --5 ICE feature groups together (must have prototypes extended)
+	to_app: feature group ICE::ICE5;  
+end Other_ICE_Device;
+
+system implementation Other_ICE_Device.imp
+end Other_ICE_Device.imp;
+
+
+end PCA_Context;

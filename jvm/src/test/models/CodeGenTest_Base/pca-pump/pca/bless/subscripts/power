@@ -1,0 +1,33 @@
+#power control
+push
+sort-by-component[PCA_Power::power_control.imp]
+#PCA_Power::power_control.imp
+#[serial 1030] <<M(run)>> -> <<I>> from invariant I when complete state run has Assertion <<M(run)>> in its definition
+make-an
+axioms
+#[serial 1031] Serban's Theorem:  disjunction of execute conditions leaving execution state start, <<M(start)>> -> <<e1 or e2 or . . . en>>
+axioms
+#[serial 1032]  <<M(start)>> -> <<M(run)>> for bbc0:start-[ ]->run{};
+axioms
+#[serial 1033]  <<M(run) and x>> A <<M(run)>> for bbc1:run-[x]->run{A};
+reduce
+reduce
+atomic
+remove-axioms-post
+axioms
+laws
+normalize
+replace<=
+normalize
+laws
+axioms
+now
+axioms
+cnf
+laws
+normalize
+axioms
+substitute-pre
+normalize
+guided-sub-equals[Remaining_Battery_Time]
+axioms

@@ -1,0 +1,170 @@
+{
+  "type" : "TestResult",
+  "map" : {
+    "type" : "Map",
+    "entries" : [
+      [
+        "testepmon--SeL4_TB\/components\/emitter_t_impl_testepmon_src\/emitter_t_impl_testepmon_src.camkes",
+        {
+          "type" : "TestResource",
+          "content" : "import \"..\/..\/interfaces\/sb_Monitor_int8_t_1.idl4\";\ncomponent emitter_t_impl_testepmon_src {\n  include <sb_types.h>;\n  control;\n  uses sb_Monitor_int8_t_1 sb_enq0;\n  has semaphore sb_dispatch_sem;\n}\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testepmon--SeL4_TB\/components\/consumer_t_impl_testepmon_dest\/consumer_t_impl_testepmon_dest.camkes",
+        {
+          "type" : "TestResource",
+          "content" : "import \"..\/..\/interfaces\/sb_Monitor_int8_t_1.idl4\";\ncomponent consumer_t_impl_testepmon_dest {\n  include <sb_types.h>;\n  control;\n  uses sb_Monitor_int8_t_1 sb_deq;\n  consumes QueuedData sb_deq_notification;\n  has semaphore sb_dispatch_sem;\n}\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testepmon--SeL4_TB\/components\/sb_Monitors\/sb_dest_deq_Monitor\/sb_dest_deq_Monitor.camkes",
+        {
+          "type" : "TestResource",
+          "content" : "import \"..\/..\/..\/interfaces\/sb_Monitor_int8_t_1.idl4\";\ncomponent sb_dest_deq_Monitor {\n\n  provides sb_Monitor_int8_t_1 mon;\n  emits QueuedData monsig;\n}\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testepmon--SeL4_TB\/top_impl_Instance.camkes",
+        {
+          "type" : "TestResource",
+          "content" : "\/\/ This file will be regenerated, do not edit\n\nimport <std_connector.camkes>;\nimport \"components\/emitter_t_impl_testepmon_src\/emitter_t_impl_testepmon_src.camkes\";\nimport \"components\/consumer_t_impl_testepmon_dest\/consumer_t_impl_testepmon_dest.camkes\";\nimport \"components\/sb_Monitors\/sb_dest_deq_Monitor\/sb_dest_deq_Monitor.camkes\";\n\nassembly {\n  composition {\n    component emitter_t_impl_testepmon_src testepmon_src;\n    component consumer_t_impl_testepmon_dest testepmon_dest;\n    component sb_dest_deq_Monitor sb_dest_deq_monitor;\n\n    connection seL4RPCCall conn1(from testepmon_src.sb_enq0, to sb_dest_deq_monitor.mon);\n    connection seL4RPCCall conn2(from testepmon_dest.sb_deq, to sb_dest_deq_monitor.mon);\n    connection seL4Notification conn3(from sb_dest_deq_monitor.monsig, to testepmon_dest.sb_deq_notification);\n  }\n\n  configuration {\n\n  }\n}\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testepmon--SeL4_TB\/components\/emitter_t_impl_testepmon_src\/src\/emitter.c",
+        {
+          "type" : "TestResource",
+          "content" : "\/* testepmon\/components\/emitter\/src\/emitter.c *\/\n\n#include <camkes.h>\n#include <stdio.h>\n#include <sb_types.h>\n#include <sb_emitter_t_impl.h>\n\nstatic int8_t _value;\n\nvoid testepmon_emitter_component_init(const int64_t *in_arg)\n{\n    printf(\"testepmon_emitter_component_init called\\n\");\n    _value = 0;\n}\n\n\/* control thread: keep calling enqueue for thing\n *\/\nvoid run_emitter(const int64_t *in_arg)\n{\n    if (sb_enq_enqueue( &_value ) ) {\n        printf(\"[source] Sent %d\\n\", _value);\n        _value = (_value + 1) % 500;\n    } else {\n        printf(\"[source] Unable to send\\n\");\n    }\n}\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testepmon--SeL4_TB\/components\/consumer_t_impl_testepmon_dest\/src\/consumer.c",
+        {
+          "type" : "TestResource",
+          "content" : "\/* testepmon\/components\/consumer\/src\/consumer *\/\n\n#include <camkes.h>\n#include <stdio.h>\n#include <sb_types.h>\n#include <sb_consumer_t_impl.h>\n\nvoid testepmon_consumer_component_init(const int64_t *in_arg)\n{\n    printf(\"testepmon_consumer_component_init called\\n\");\n}\n\n\n\/* Handle monsig notification: there is QueuedData\n *\/\nvoid testepmon_consumer_s_event_handler(const int8_t * in_arg)\n{\n    \/* keep dequeuing until no more things can be had\n     *\/\n    int8_t value;\n\n    if (sb_deq_dequeue(&value)) {\n        printf(\"[destination] value {%d}\\n\", value);\n    } else {\n        printf(\"[destination] no value consumed.\\n\");\n    }\n}\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testepmon--SeL4_TB\/interfaces\/sb_Monitor_int8_t_1.idl4",
+        {
+          "type" : "TestResource",
+          "content" : "procedure sb_Monitor_int8_t_1 {\n  include <sb_types.h>;\n  bool is_empty();\n  bool enqueue(refin int8_t m);\n  bool dequeue(out int8_t m);\n};",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testepmon--SeL4_TB\/components\/sb_Monitors\/sb_dest_deq_Monitor\/src\/sb_dest_deq_Monitor.c",
+        {
+          "type" : "TestResource",
+          "content" : "#ifndef SB_VERIFY\n#include <stdio.h>\n#endif \/\/ SB_VERIFY\n\n#include <sb_types.h>\n#include <sb_dest_deq_Monitor.h>\n\nint mon_get_sender_id(void);\nint monsig_emit(void);\n\nint8_t contents[1];\nstatic uint32_t front = 0;\nstatic uint32_t length = 0;\n\nstatic bool is_full(void) {\n  return length == 1;\n}\n\nbool mon_is_empty(void) {\n  return length == 0;\n}\n\nbool mon_dequeue(int8_t * m) {\n  if (mon_is_empty()) {\n    return false;\n  } else {\n    *m = contents[front];\n    front = (front + 1) % 1;\n    length--;\n    return true;\n  }\n}\n\nbool mon_enqueue(const int8_t * m) {\n  if (is_full()) {\n    return false;\n  } else {\n    contents[(front + length) % 1] = *m;\n    length++;\n    monsig_emit();\n    return true;\n  }\n}\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testepmon--SeL4_TB\/components\/sb_Monitors\/sb_dest_deq_Monitor\/includes\/sb_dest_deq_Monitor.h",
+        {
+          "type" : "TestResource",
+          "content" : "\/\/ This file will be regenerated, do not edit\n\n#ifndef SB_DEST_DEQ_MONITOR_H\n#define SB_DEST_DEQ_MONITOR_H\n\n\n#endif \/\/ SB_DEST_DEQ_MONITOR_H\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testepmon--SeL4_TB\/CMakeLists.txt",
+        {
+          "type" : "TestResource",
+          "content" : "# This file will be regenerated, do not edit\n\ncmake_minimum_required(VERSION 3.8.2)\n\nproject (top_impl_Instance C)\n\nadd_definitions(-DCAMKES)\n\nif (\"${CMAKE_CXX_COMPILER_ID}\" MATCHES \"(C|c?)lang\")\n  add_compile_options(\"$<$<CONFIG:Release>:-Oz>\")\nelseif (\"${CMAKE_CXX_COMPILER_ID}\" STREQUAL \"GNU\")\n  add_compile_options(-fstack-usage)\n  add_compile_options(\"$<$<CONFIG:Release>:-Os>\")\nendif()\n\nadd_subdirectory(${CMAKE_CURRENT_LIST_DIR}\/types)\n\nDeclareCAmkESComponent(emitter_t_impl_testepmon_src\n  SOURCES components\/emitter_t_impl_testepmon_src\/\/src\/emitter.c components\/emitter_t_impl_testepmon_src\/src\/sb_emitter_t_impl.c\n  INCLUDES components\/emitter_t_impl_testepmon_src\/includes\/ types\/includes\n)\n\nDeclareCAmkESComponent(consumer_t_impl_testepmon_dest\n  SOURCES components\/consumer_t_impl_testepmon_dest\/\/src\/consumer.c components\/consumer_t_impl_testepmon_dest\/src\/sb_consumer_t_impl.c\n  INCLUDES components\/consumer_t_impl_testepmon_dest\/includes\/ types\/includes\n)\n\nDeclareCAmkESComponent(sb_dest_deq_Monitor\n  SOURCES components\/sb_Monitors\/sb_dest_deq_Monitor\/src\/sb_dest_deq_Monitor.c\n  INCLUDES components\/sb_Monitors\/sb_dest_deq_Monitor\/includes\/ types\/includes\n)\n\nDeclareCAmkESRootserver(top_impl_Instance.camkes)\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testepmon--SeL4_TB\/bin\/run-camkes.sh",
+        {
+          "type" : "TestResource",
+          "content" : "#!\/usr\/bin\/env bash\n\nset -o errexit -o pipefail -o noclobber -o nounset\n\nexport SCRIPT_HOME=$( cd \"$( dirname \"$0\" )\" &> \/dev\/null && pwd )\nexport PROJECT_HOME=$( cd \"$( dirname \"$0\" )\/..\" &> \/dev\/null && pwd )\ncd ${PROJECT_HOME}\n\n! getopt --test > \/dev\/null\nif [[ ${PIPESTATUS[0]} -ne 4 ]]; then\n  echo '`getopt --test` failed in this environment.'\n  exit 1\nfi\n\nNON_INTERACTIVE=false\nCAMKES_DIR=\"\"\nSIMULATE=false\nCAMKES_OPTIONS=\"\"\n\nOPTIONS=c:no:s\nLONGOPTS=camkes-dir:,non-interactive,camkes-options:,simulate\n\nfunction usage {\n  echo \"\"\n  echo \"Usage: <option>*\"\n  echo \"\"\n  echo \"Available Options:\"\n  echo \"  -c, --camkes-dir      Location of CAmkES project\"\n  echo \"  -n, --non-interactive Non-interactive mode.  Will not prompt before deleting apps and build directories\"\n  echo \"  -o, --camkes-options  CAmkES options (e.g -o \\\"-DWITH_LOC=ON -DCapDLLoaderMaxObjects=40000\\\")\"\n  echo \"  -s, --simulate        Simulate via QEMU\"\n  exit 2\n}\n\n! PARSED=$(getopt --options=$OPTIONS --longoptions=$LONGOPTS --name \"$0\" -- \"$@\")\nif [[ ${PIPESTATUS[0]} -ne 0 ]]; then\n    usage\nfi\n\neval set -- \"$PARSED\"\n\nwhile true; do\n  case \"$1\" in\n    -c|--camkes-dir) CAMKES_DIR=\"$2\"; shift 2 ;;\n    -n|--non-interactive) NON_INTERACTIVE=true; shift ;;\n    -o|--camkes-options) CAMKES_OPTIONS=\"$2\"; shift 2 ;;\n    -s|--simulate) SIMULATE=true; shift ;;\n    --) shift; break ;;\n  esac\ndone\n\n# handle non-option arguments\nif [[ $# -ne 0 ]]; then\n  echo \"$0: Unexpected non-option arguments\"\n  usage\nfi\n\n# if CAMKES_DIR option not set then look in some common locations\nif [[ -z \"${CAMKES_DIR}\" && -d \"\/host\/camkes-project\" ]]; then\n  # docker location\n  CAMKES_DIR=\"\/host\/camkes-project\"\nelif [[ -z \"$CAMKES_DIR\" && -d \"${HOME}\/CASE\/camkes\" ]]; then\n  # CASE Vagrant VM location\n  CAMKES_DIR=\"${HOME}\/CASE\/camkes\"\nfi\n\nif [[ -z \"${CAMKES_DIR}\" || ! -d \"${CAMKES_DIR}\" ]]; then\n  echo \"Directory '${CAMKES_DIR}' does not exist.  Please specify the location of your camkes project directory.\"\n  echo \"See https:\/\/docs.sel4.systems\/projects\/camkes\"\n  exit -1\nfi\n\n\n# use the directory name for the CAmkES apps directory name\nHAMR_CAMKES_PROJ=${PWD##*\/}\n\n\nCAMKES_APPS_DIR=${CAMKES_DIR}\/projects\/camkes\/apps\/$HAMR_CAMKES_PROJ\n\n# create a sym-link to the project in the CAmkES app directory\nif [ -e \"${CAMKES_APPS_DIR}\" ]; then\n  if [ \"${NON_INTERACTIVE}\" = true ]; then\n    rm -rf ${CAMKES_APPS_DIR}\n  else\n    read -p \"The following app directory already exists, replace ${CAMKES_APPS_DIR} [Y|y]? \" -n 1 -r; echo\n    if [[ $REPLY =~ ^[Yy]$ ]]; then\n      rm -rf ${CAMKES_APPS_DIR}\n    else\n      exit -1\n    fi\n  fi\nfi\n\nln -sv $PROJECT_HOME $CAMKES_APPS_DIR\n\n########################\n# run CAmkES\/seL4 build\n########################\n\nBUILD_DIR=${CAMKES_DIR}\/build_$HAMR_CAMKES_PROJ\n\nif [ -e \"${BUILD_DIR}\" ]; then\n  if [ \"${NON_INTERACTIVE}\" = true ];then\n    rm -rf ${BUILD_DIR}\n    mkdir ${BUILD_DIR}\n  else\n    read -p \"The following build directory already exists, replace ${BUILD_DIR} [Y|y]? \" -n 1 -r; echo\n    if [[ $REPLY =~ ^[Yy]$ ]]; then\n      rm -rf ${BUILD_DIR}\n      mkdir ${BUILD_DIR}\n    fi\n  fi\nelse\n  mkdir ${BUILD_DIR}\nfi\n\ncd ${BUILD_DIR}\n\n..\/init-build.sh ${CAMKES_OPTIONS} -DCAMKES_APP=$HAMR_CAMKES_PROJ\n\nninja\n\n########################\n# simulate via QEMU\n########################\n\nif [ \"${SIMULATE}\" = true ]; then\n  .\/simulate\nfi\n",
+          "overwrite" : true,
+          "makeExecutable" : true
+        }
+      ],
+      [
+        "testepmon--SeL4_TB\/components\/emitter_t_impl_testepmon_src\/src\/sb_emitter_t_impl.c",
+        {
+          "type" : "TestResource",
+          "content" : "\/\/ This file will be regenerated, do not edit\n\n#include <sb_emitter_t_impl.h>\n#include <string.h>\n#include <camkes.h>\n\n\/************************************************************************\n * sb_enq_enqueue:\n * Invoked from user code in the local thread.\n *\n * This is the function invoked by the local thread to make a\n * call to write to a remote event data port.\n *\n * XXX: When simulating fan out, the caller of this function will only\n * receive a positive response when all enqueues are successful. When a\n * negative response is received it only indicates that at least one\n * enqueue attempt failed.\n *\n ************************************************************************\/\nbool sb_enq_enqueue(const int8_t * sb_enq){\n  bool sb_result = true;\n  sb_result &= sb_enq0_enqueue((int8_t *) sb_enq);\n  return sb_result;\n}\n\n\/************************************************************************\n *  sb_entrypoint_emitter_t_impl_testepmon_src_initializer:\n *\n * This is the function invoked by an active thread dispatcher to\n * call to a user-defined entrypoint function.  It sets up the dispatch\n * context for the user-defined entrypoint, then calls it.\n *\n ************************************************************************\/\nvoid sb_entrypoint_emitter_t_impl_testepmon_src_initializer(const int64_t * in_arg) {\n  testepmon_emitter_component_init((int64_t *) in_arg);\n}\n\n\/************************************************************************\n * int run(void)\n * Main active thread function.\n ************************************************************************\/\nint run(void) {\n  {\n    int64_t sb_dummy;\n    sb_entrypoint_emitter_t_impl_testepmon_src_initializer(&sb_dummy);\n  }\n  MUTEXOP(sb_dispatch_sem_wait())\n  for(;;) {\n    MUTEXOP(sb_dispatch_sem_wait())\n  }\n  return 0;\n}\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testepmon--SeL4_TB\/components\/emitter_t_impl_testepmon_src\/includes\/sb_emitter_t_impl.h",
+        {
+          "type" : "TestResource",
+          "content" : "\/\/ This file will be regenerated, do not edit\n\n#ifndef SB_EMITTER_T_IMPL_H\n#define SB_EMITTER_T_IMPL_H\n\n#include <sb_types.h>\n\nbool sb_enq_enqueue(const int8_t * sb_enq);\n\nvoid testepmon_emitter_component_init(const int64_t *arg);\n\n#endif \/\/ SB_EMITTER_T_IMPL_H\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testepmon--SeL4_TB\/components\/consumer_t_impl_testepmon_dest\/src\/sb_consumer_t_impl.c",
+        {
+          "type" : "TestResource",
+          "content" : "\/\/ This file will be regenerated, do not edit\n\n#include <sb_consumer_t_impl.h>\n#include <string.h>\n#include <camkes.h>\n\n\/************************************************************************\n * sb_deq_notification_handler:\n * Invoked by: seL4 notification callback\n *\n * This is the function invoked by an seL4 notification callback to \n * dispatch the component due to the arrival of an event on port\n * deq\n *\n ************************************************************************\/\nstatic void sb_deq_notification_handler(void * unused) {\n  MUTEXOP(sb_dispatch_sem_post())\n  CALLBACKOP(sb_deq_notification_reg_callback(sb_deq_notification_handler, NULL));\n}\n\n\/************************************************************************\n * sb_entrypoint_consumer_t_impl_deq:\n *\n * This is the function invoked by an active thread dispatcher to\n * call to a user-defined entrypoint function.  It sets up the dispatch\n * context for the user-defined entrypoint, then calls it.\n *\n ************************************************************************\/\nvoid sb_entrypoint_consumer_t_impl_deq(const int8_t * in_arg) {\n  testepmon_consumer_s_event_handler((int8_t *) in_arg);\n}\n\n\/************************************************************************\n *  sb_entrypoint_consumer_t_impl_testepmon_dest_initializer:\n *\n * This is the function invoked by an active thread dispatcher to\n * call to a user-defined entrypoint function.  It sets up the dispatch\n * context for the user-defined entrypoint, then calls it.\n *\n ************************************************************************\/\nvoid sb_entrypoint_consumer_t_impl_testepmon_dest_initializer(const int64_t * in_arg) {\n  testepmon_consumer_component_init((int64_t *) in_arg);\n}\n\nvoid post_init(void) {\n  \/\/ register callback for EventDataPort port deq\n  CALLBACKOP(sb_deq_notification_reg_callback(sb_deq_notification_handler, NULL));\n}\n\n\/************************************************************************\n * int run(void)\n * Main active thread function.\n ************************************************************************\/\nint run(void) {\n  int8_t sb_deq;\n  {\n    int64_t sb_dummy;\n    sb_entrypoint_consumer_t_impl_testepmon_dest_initializer(&sb_dummy);\n  }\n  MUTEXOP(sb_dispatch_sem_wait())\n  for(;;) {\n    MUTEXOP(sb_dispatch_sem_wait())\n    while (sb_deq_dequeue((int8_t *) &sb_deq)) {\n      sb_entrypoint_consumer_t_impl_deq(&sb_deq);\n    }\n  }\n  return 0;\n}\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testepmon--SeL4_TB\/components\/consumer_t_impl_testepmon_dest\/includes\/sb_consumer_t_impl.h",
+        {
+          "type" : "TestResource",
+          "content" : "\/\/ This file will be regenerated, do not edit\n\n#ifndef SB_CONSUMER_T_IMPL_H\n#define SB_CONSUMER_T_IMPL_H\n\n#include <sb_types.h>\n\nbool sb_deq_dequeue(int8_t * sb_deq);\n\nvoid testepmon_consumer_s_event_handler(const int8_t * in_arg);\n\nvoid testepmon_consumer_component_init(const int64_t *arg);\n\n#endif \/\/ SB_CONSUMER_T_IMPL_H\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testepmon--SeL4_TB\/types\/includes\/sb_types.h",
+        {
+          "type" : "TestResource",
+          "content" : "#ifndef SB_TYPES_H\n#define SB_TYPES_H\n\n#include <stdio.h>\n#include <stdbool.h>\n#include <stdint.h>\n\n#ifndef SB_VERIFY\n#include <stddef.h>\n#endif \/\/ SB_VERIFY\n\n#define __SB_OS_CAMKES__\n\n#ifndef SB_VERIFY\n#define MUTEXOP(OP)\\\nif((OP) != 0) {\\\n  fprintf(stderr,\"Operation \" #OP \" failed in %s at %d.\\n\",__FILE__,__LINE__);\\\n  *((int*)0)=0xdeadbeef;\\\n}\n#else\n#define MUTEXOP(OP) OP\n#endif \/\/ SB_VERIFY\n#ifndef SB_VERIFY\n#define CALLBACKOP(OP)\\\nif((OP) != 0) {\\\n  fprintf(stderr,\"Operation \" #OP \" failed in %s at %d.\\n\",__FILE__,__LINE__);\\\n  *((int*)0)=0xdeadbeef;\\\n}\n#else\n#define CALLBACKOP(OP) OP\n#endif \/\/ SB_VERIFY\n\n\n#endif \/\/ SB_TYPES_H\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testepmon--SeL4_TB\/settings.cmake",
+        {
+          "type" : "TestResource",
+          "content" : "# This file will not be overwritten so is safe to edit\n\ncmake_minimum_required(VERSION 3.8.2)\n\n",
+          "overwrite" : false,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testepmon--SeL4_TB\/types\/CMakeLists.txt",
+        {
+          "type" : "TestResource",
+          "content" : "# This file will be regenerated, do not edit\n\ncmake_minimum_required(VERSION 3.8.2)\n\nproject(SB_Type_Library)\n\nset(CMAKE_C_STANDARD 99)\n\nadd_compile_options(-Werror)\n\nif (\"${CMAKE_CXX_COMPILER_ID}\" MATCHES \"(C|c?)lang\")\n  add_compile_options(\"$<$<CONFIG:Release>:-Oz>\")\nelseif (\"${CMAKE_CXX_COMPILER_ID}\" STREQUAL \"GNU\")\n  add_compile_options(-fstack-usage)\n  add_compile_options(\"$<$<CONFIG:Release>:-Os>\")\nendif()\n\nadd_library(SB_Type_Library\n            INTERFACE\n            )\n\n# Assume that if the muslc target exists then this project is in an seL4 native\n# component build environment, otherwise it is in a linux userlevel environment.\n# In the linux userlevel environment, the C library will be linked automatically.\nif(TARGET muslc)\n  target_link_libraries(SB_Type_Library\n                        INTERFACE\n                        muslc)\nendif()\n\nadd_definitions(-DCAMKES)\n\nif(TARGET SlangTypeLibrary)\n  target_link_libraries(SB_Type_Library\n                        INTERFACE\n                        SlangTypeLibrary)\nendif()\n\ntarget_include_directories(SB_Type_Library\n                           INTERFACE\n                           includes)\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ]
+    ]
+  }
+}

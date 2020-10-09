@@ -1,0 +1,583 @@
+--PCA_Safety.aadl
+
+--safety architecture for PCA pump
+
+package PCA_Safety
+  public
+  with 
+    Base_Types, EMV2, 
+    -- ErrorLibrary,
+--    ICE_Types,
+    PCA_Types, PCA_System,
+    BLESS,
+    PCA_Alarm,PCA_System,
+    PCA_Pump;
+
+--R6.1.0(1) safety architecture
+--the safety subsystem contains components that detect, react, log and report faults
+system safety
+  features
+  --internal bus
+    i_bus: requires bus access PCA_Pump::Internal_Bus;
+  --power bus
+    p_bus: requires bus access PCA_Pump::Power_Bus;
+  --physical connection to bus adaptor
+    To_Adaptor: requires bus access PCA_System::adaptor_bus;
+  --alarms
+    alrm: feature group PCA_Pump::PCA_Alarms;  --alarm to ICE interface
+    Alarm: out event data port PCA_Types::Alarm_Type;  --alarm to control panel
+    Warning: out event data port PCA_Types::Warning_Type;  --warning to control panel
+  --directives to operation
+    Stop_Pump_Completely: out event port;  --tell infusion thread to stop the pump
+    Pump_At_KVO_Rate: out event port;  --tell infusion thread to keep vein open 
+  --signals to operation
+    POST_Done: out event port;  --power-on self test passed
+    POST_Fail: out event port;  --power-on self test failed
+        
+    -- jab: changed this to 'out event' to match the port types it is connected
+    -- to (e.g. see operation.HW_Detected_Failure which is 'out event') 
+    --HW_Detected_Failure: out data port Base_Types::Boolean;
+    HW_Detected_Failure: out event port;
+    
+  --problems from operation
+    Over_Max_Drug_Per_Hour: in event port;  --at or over maximum drug allowed (over time) during bolus infusion
+--    Near_Max_Drug_Per_Hour: in event port;  --near maximum drug allowed (over time) during bolus infusion
+    Hard_Limit_Violated: in event port;  --prescription exceeds hard limit in drug library
+    Drug_Not_In_Library: in event port;  --null drug record returned from drug library
+    Security_Fault: in event port;  --security violation
+    
+  --jab: added so flow rate checker can know what the current pumping mode is
+    System_Status: in data port PCA_Types::Status_Type;
+      
+    Infusion_Flow_Rate: in data port PCA_Types::Flow_Rate.imp;  --intended
+  --drug reservoir problems
+    Empty_Reservoir: in event port;  --no drug left
+    Low_Reservoir: in event port; --little drug left
+  --power problems
+    Defective_Battery: in event port;  --dead battery
+    Low_Battery_Warning: in event port;
+    Voltage_OOR: in event port;  --voltage out-of-range
+  --pump problems
+    Bubble: in event port;
+    Pump_Too_Hot: in event port;
+    Prime_Failure: in event port;
+    Upstream_Occlusion: in event port;
+    Downstream_Occlusion: in event port;
+    Upstream_Flow_Rate: in data port PCA_Types::Flow_Rate.imp;  --measured
+    Downstream_Flow_Rate: in data port PCA_Types::Flow_Rate.imp;  --measured
+  --control panel
+    CP_Reset_Alarm: in event port;	--control panel resets alarm(s)
+  --fault log
+    Get_Fault_Log : in event port  --put out fault log next period
+      {BLESS::Assertion=>"<<The_Fault_Log'=FAULT_LOG>>";};
+    The_Fault_Log : out event data port PCA_Types::Fault_Log  --output fault log
+      {BLESS::Assertion=>"<<:=FAULT_LOG>>";};   
+end safety;
+
+system implementation safety.imp
+  subcomponents
+    error_detect: device error_detector.imp;						--internal error detection
+    fault_log: device fault_logger.imp;				        --device holding fault log
+    led: device failure_led.imp;		                --hardware detected failure
+    alarm_process: process PCA_Alarm::alarm_process.imp;				--holds thread handling alarms
+    s_bus: bus Safety_Bus;  --internal to safety architecture
+    safety_core: processor Safety_Core;  --dedicated safety processor
+  connections
+  --bus accesses
+    i_bus_to_fault_log: bus access i_bus <-> fault_log.i_bus;
+    p_bus_to_fault_log: bus access p_bus <-> fault_log.p_bus;
+    error_detect_to_s_bus: bus access error_detect.s_bus -> s_bus;
+    s_bus_to_fault_log: bus access s_bus <-> fault_log.s_bus;
+    s_bus_to_led: bus access s_bus <-> led.s_bus;
+    i_bus_to_safety_core: bus access i_bus <-> safety_core.i_bus;
+    s_bus_to_safety_core: bus access s_bus <-> safety_core.s_bus;
+    safety_core_to_ice: bus access safety_core.to_adaptor <-> To_Adaptor;
+  --alarms
+    iceal: feature group alrm<->alarm_process.alrm;
+    uialr: port  alarm_process.Alarm->Alarm;
+    uiwar: port alarm_process.Warning->Warning;
+    hwdf: port error_detect.HW_Detected_Failure->HW_Detected_Failure;
+  --directives to operation
+    spc: port error_detect.Stop_Pump_Completely->Stop_Pump_Completely;  
+    sws: port alarm_process.Stop_Pump_Completely->error_detect.Software_Stop_Pump; 
+    kvo: port alarm_process.Pump_At_KVO_Rate->Pump_At_KVO_Rate;
+  --problems from operation
+    omdph: port Over_Max_Drug_Per_Hour->alarm_process.Over_Max_Drug_Per_Hour; 
+--    nmdph: port Near_Max_Drug_Per_Hour->alarm_process.Near_Max_Drug_Per_Hour; 
+    hlv: port Hard_Limit_Violated->alarm_process.Hard_Limit_Violated;
+    dnil: port Drug_Not_In_Library->alarm_process.Drug_Not_In_Library;
+    sf: port Security_Fault->alarm_process.Security_Fault;  
+  --drug reservoir problems
+    er: port Empty_Reservoir->alarm_process.Empty_Reservoir;
+    lr: port Low_Reservoir->alarm_process.Low_Reservoir; 
+  --power problems
+    db: port Defective_Battery->alarm_process.Defective_Battery;
+    lb: port Low_Battery_Warning->alarm_process.Low_Battery_Warning;
+    voor: port Voltage_OOR->fault_log.Voltage_OOR;
+    voo: port Voltage_OOR->alarm_Process.Voltage_OOR;
+  --pump problems
+    bbl: port Bubble->alarm_process.Bubble;
+    pth: port Pump_Too_Hot->alarm_process.Pump_Hot;
+    prf: port Prime_Failure->alarm_process.Prime_Failure;
+    uso: port Upstream_Occlusion->alarm_process.Upstream_Occlusion;
+    dso: port Downstream_Occlusion->alarm_process.Downstream_Occlusion;
+    
+  --jab: added so flow rate checker can know what the current pumping mode is
+    jabss: port System_Status->alarm_process.System_Status;
+      
+    pfr: port Infusion_Flow_Rate->alarm_process.Infusion_Flow_Rate;
+    usfr: port Upstream_Flow_Rate->alarm_process.Upstream_Flow_Rate;
+    dsfr: port Downstream_Flow_Rate->alarm_process.Downstream_Flow_Rate;
+  --alarm process to fault logger
+    lf: port alarm_process.Log_Fault->fault_log.Log_Fault; 
+  --hardware detected failures
+    postf: port error_detect.POST_Failure->fault_log.POST_Failure;
+    postfa: port error_detect.POST_Failure->POST_Fail;
+    postd: port error_detect.POST_Done->POST_Done;
+    ramf: port error_detect.RAM_Failure->fault_log.RAM_Failure;
+    romf: port error_detect.ROM_Failure->fault_log.ROM_Failure;
+    cpuf: port error_detect.CPU_Failure->fault_log.CPU_Failure;
+    tmf: port error_detect.Thread_Monitor_Failure->fault_log.Thread_Monitor_Failure;
+ --control panel
+    cpra: port CP_Reset_Alarm->alarm_process.CP_Reset_Alarm;
+ --turn on LED upon hardware-detected failure
+    hdf: port error_detect.HW_Detected_Failure->led.Illuminate;
+ --fault log
+    gfl: port Get_Fault_Log -> fault_log.Get_Log;
+    tfl: port fault_log.The_Log -> The_Fault_Log;
+  properties
+   Actual_Processor_Binding => (reference (safety_core)) applies to alarm_process;
+   Actual_Processor_Binding => (reference (safety_core)) applies to alarm_process.alarm_thr;
+   Actual_Processor_Binding => (reference (safety_core)) applies to alarm_process.flow_rate;
+--   Actual_Connection_Binding=>(reference(s_bus)) applies to postf;
+--   Actual_Connection_Binding=>(reference(s_bus)) applies to ramf;
+--   Actual_Connection_Binding=>(reference(s_bus)) applies to romf;
+--   Actual_Connection_Binding=>(reference(s_bus)) applies to cpuf;
+--   Actual_Connection_Binding=>(reference(s_bus)) applies to tmf;
+--   Actual_Connection_Binding=>(reference(s_bus)) applies to lf;   
+-- annex EMV2X
+--  {**
+--  use types ErrorLibrary, PCA_Error_Model;
+--  use behavior PCA_Error_Model::CompositeFailStop; 	
+--  error propagations
+--  --alarms
+----    alrm: feature group PCA_Pump::PCA_Alarms;  --alarm to ICE interface
+--    Alarm: out propagation {EarlyServiceTermination};  
+--    Warning: out propagation {EarlyServiceTermination};
+--    HW_Detected_Failure: out propagation {EarlyServiceTermination};
+--  --directives to operation
+--    Stop_Pump_Completely: out propagation {EarlyServiceTermination};
+--    Pump_At_KVO_Rate: out propagation {EarlyServiceTermination}; 
+--  --problems from operation
+--    Over_Max_Drug_Per_Hour: in propagation {EarlyServiceTermination};
+--    Hard_Limit_Violated: in propagation {EarlyServiceTermination};
+--    Drug_Not_In_Library: in propagation {EarlyServiceTermination};
+--    Security_Fault: in propagation {EarlyServiceTermination};
+--  --drug reservoir problems
+--    Empty_Reservoir: in propagation {EarlyServiceTermination};
+--    Low_Reservoir: in propagation {EarlyServiceTermination};
+--  --power problems
+--    Defective_Battery: in propagation {EarlyServiceTermination};
+--    Low_Battery_Warning: in propagation {EarlyServiceTermination};
+--    Voltage_OOR: in propagation {EarlyServiceTermination};
+--  --pump problems
+--    Bubble: in propagation {EarlyServiceTermination};
+--    Pump_Too_Hot: in propagation {EarlyServiceTermination};
+--    Prime_Failure: in propagation {EarlyServiceTermination};
+--    Upstream_Occlusion: in propagation {EarlyServiceTermination};
+--    Downstream_Occlusion: in propagation {EarlyServiceTermination};
+--    Infusion_Flow_Rate: in propagation {ValueError};
+--    Upstream_Flow_Rate: in propagation {ValueError};
+--    Downstream_Flow_Rate: in propagation {ValueError};
+--  --fault log
+--    Get_Fault_Log : not in propagation {CommonErrors};
+--    The_Fault_Log : out propagation {LogError};  
+--  end propagations;
+--  composite error behavior
+--    states 
+--     [error_detect.failed or fault_log.failed or alarm_process.failed]->failed;
+--     [error_detect.working and fault_log.working and alarm_process.working]->working;
+--  end composite;  	
+--  **};  --end of EMV2
+end safety.imp;
+
+
+--error_detector represents the internal error detection of the PCA hardware
+--R6.4.0(3) continuous fault-detection 
+--R6.4.0(4) single-event upsets
+
+device error_detector
+  features
+	Software_Stop_Pump: in event port;  --from safety process
+	  
+	Stop_Pump_Completely: out event port;  --hard stop
+    POST_Failure: out event port;  --power-on self test failed;  POST run automatically at power-on
+    POST_Done: out event port;  --power-on self test passed
+    RAM_Failure: out event port;   --RAM test failed
+    ROM_failure: out event port;   --ROM test failed
+    CPU_Failure: out event port;   --CPU failed
+    Thread_Monitor_Failure: out event port;  --some thread failed its heartbeat
+
+    -- jab: changed this to 'out event' to match the port types it is connected
+    -- to (e.g. see operation.HW_Detected_Failure which is 'out event') 
+    --HW_Detected_Failure: out data port Base_Types::Boolean  --disjunction of hardware-detected failures, lights LED
+    HW_Detected_Failure: out event port  --disjunction of hardware-detected failures, lights LED
+      {BLESS::Assertion=>"<<exists t:BLESS_Types::Time in t<=now
+         that (POST_Failure or RAM_Failure or ROM_failure or CPU_Failure or Thread_Monitor_Failure)@t>>";};
+         
+  --safety bus
+    s_bus: requires bus access Safety_Bus;
+    
+  -- jab: added since the device has 'in event' ports      
+  properties
+    Thread_Properties::Dispatch_Protocol=>Sporadic;
+    Timing_Properties::Period => PCA_Properties::Sireum_Thread_Period;  --update outputs every 5ms     
+end error_detector;
+
+device implementation error_detector.imp
+--annex EMV2X 
+--  {** 
+--  use types ErrorLibrary;
+--  use behavior PCA_Error_Model::ErrorDetector;  --error state machine
+--  error propagations
+--    POST_Failure: out propagation {EarlyServiceTermination};
+--    RAM_Failure: out propagation {EarlyServiceTermination};
+--    ROM_failure: out propagation {EarlyServiceTermination};
+--    CPU_Failure: out propagation {EarlyServiceTermination};
+--    Thread_Monitor_Failure: out propagation {EarlyServiceTermination};
+--    HW_Detected_Failure: out propagation {EarlyServiceTermination};
+--  flows  --model error in detection and reporting
+--    pofes: error source POST_Failure{ItemOmission};
+--    rafes: error source RAM_Failure{ItemOmission};
+--    rofes: error source ROM_Failure{ItemOmission};
+--    cpfes: error source CPU_Failure{ItemOmission};
+--    tmfes: error source Thread_Monitor_Failure{ItemOmission};
+--    hwfes: error source HW_Detected_Failure{ItemOmission};
+--  end propagations;
+--  component error behavior
+--    events  --detection of faults occuring
+--      post: error event {PCA_Error_Model::POSTdetectedFault};
+--      ram: error event {PCA_Error_Model::RAMdetectedFault};
+--      rom: error event {PCA_Error_Model::ROMdetectedFault};
+--      cpu: error event {PCA_Error_Model::CPUdetectedFault};
+--      tm: error event {PCA_Error_Model::ThreadFault};
+--      hw: error event {PCA_Error_Model::HWdetectedFault};
+--    transitions  --what error state (and error type)
+--      posttr: working -[post]-> failed(PCA_Error_Model::POSTdetectedFault);
+--      ramtr: working -[ram]-> failed(PCA_Error_Model::RAMdetectedFault);
+--      romtr: working -[rom]-> failed(PCA_Error_Model::ROMdetectedFault);
+--      cputr: working -[cpu]-> failed(PCA_Error_Model::CPUdetectedFault);
+--      tmtr: working -[tm]-> failed(PCA_Error_Model::ThreadFault);
+--      hwtr: working -[hw]-> failed(PCA_Error_Model::HWdetectedFault);
+--    detections  --in "failed" state put value on port according to error type
+--      failed{PCA_Error_Model::POSTdetectedFault} -[ ]-> POST_Failure!;
+--      failed{PCA_Error_Model::RAMdetectedFault} -[ ]-> RAM_Failure!;
+--      failed{PCA_Error_Model::ROMdetectedFault} -[ ]-> ROM_Failure!;
+--      failed{PCA_Error_Model::CPUdetectedFault} -[ ]-> CPU_Failure!;
+--      failed{PCA_Error_Model::ThreadFault} -[ ]-> Thread_Monitor_Failure!;
+--      failed{PCA_Error_Model::HWdetectedFault} -[ ]-> HW_Detected_Failure!;
+--  end component;
+--  properties  
+--    --set occurrence of POST detection failure
+--    EMV2::OccurrenceDistribution => #PCA_Properties::POSTfailureToDetectRate 
+--      applies to pofes;      
+--    --set failure rate for detected by POST
+--    EMV2::OccurrenceDistribution => #PCA_Properties::POSTfailureRate 
+--      applies to post; 
+----setting only  OccurrenceDistribution for now    
+----    EMV2::hazards => 
+----	   ( [	crossreference => "R6.4.0 power-on-self-test";
+----		  failure => "POST failure not detected";
+----		  phases => ("initialize");
+----		  description => "POST failed, but not detected/reported";
+----		  comment => "effect unknown";
+----			]) applies to pofes;
+----	EMV2::Severity => ARP4761::Minor applies to pofes;
+----	EMV2::Likelihood => ARP4761::ExtremelyRemote applies to pofes;  
+----    EMV2::hazards => 
+----	   ( [	crossreference => "R6.4.0 power-on-self-test";
+----		  failure => "POST found failure";
+----		  phases => ("initialize");
+----		  description => "POST found failure detected/reported";
+----		  comment => "effect unknown";
+----			]) applies to post;
+--    --set occurrence of RAM detection failure
+--    EMV2::OccurrenceDistribution => #PCA_Properties::RAMfailureToDetectRate 
+--      applies to rafes;      
+--    --set failure rate for detected by RAM
+--    EMV2::OccurrenceDistribution => #PCA_Properties::RAMfailureRate 
+--      applies to ram; 
+--    --set occurrence of ROM detection failure
+--    EMV2::OccurrenceDistribution => #PCA_Properties::ROMfailureToDetectRate 
+--      applies to rofes;      
+--    --set failure rate for detected by ROM
+--    EMV2::OccurrenceDistribution => #PCA_Properties::ROMfailureRate 
+--      applies to rom; 
+--    --set occurrence of CPU detection failure
+--    EMV2::OccurrenceDistribution => #PCA_Properties::CPUfailureToDetectRate 
+--      applies to cpfes;      
+--    --set failure rate for detected by CPU
+--    EMV2::OccurrenceDistribution => #PCA_Properties::CPUfailureRate 
+--      applies to cpu; 
+--    --set occurrence of Thread detection failure
+--    EMV2::OccurrenceDistribution => #PCA_Properties::ThreadfailureToDetectRate 
+--      applies to tmfes;      
+--    --set failure rate for detected by Thread
+--    EMV2::OccurrenceDistribution => #PCA_Properties::ThreadfailureRate 
+--      applies to tm; 
+--    --set occurrence of HW detection failure
+--    EMV2::OccurrenceDistribution => #PCA_Properties::HWfailureToDetectRate 
+--      applies to pofes;      
+--    --set failure rate for detected by HW
+--    EMV2::OccurrenceDistribution => #PCA_Properties::HWfailureRate 
+--      applies to post; 
+--  **};  --end of EMV2
+end error_detector.imp;
+
+--R6.4.0(7) hardware fault indicator
+device failure_led	--illuminated LED when hardware-failure detected
+  features
+	
+    -- jab: changed this to 'in event' to match the port types it is connected
+    -- to (e.g. see safety.HW_Detected_Failure which is 'out event') 
+    --Illuminate: in data port Base_Types::Boolean  --turn-on led
+    Illuminate: in event port  --turn-on led    
+		{BLESS::Assertion=>"<<exists t:BLESS_Types::Time in t<=now
+         that (POST_Failure or RAM_Failure or ROM_failure or CPU_Failure or Thread_Monitor_Failure)@t>>";};  
+           
+    Light: out data port Base_Types::Boolean  --light emitted by LED 
+		{BLESS::Assertion=>"<<Light iff( exists t:BLESS_Types::Time in t<=now
+         that (POST_Failure or RAM_Failure or ROM_failure or CPU_Failure or Thread_Monitor_Failure)@t)>>";};
+
+  --safety bus
+    s_bus: requires bus access Safety_Bus;
+    
+  -- jab: added since the device has 'in event' ports      
+  properties
+    Thread_Properties::Dispatch_Protocol=>Sporadic;
+    Timing_Properties::Period => PCA_Properties::Sireum_Thread_Period;  --update outputs every 5ms        
+end failure_led;
+
+device implementation failure_led.imp
+annex BLESS
+{**
+invariant <<true>>
+states
+	start: initial state;
+	run: complete state;
+	done: final state;
+transitions
+  led0: start -[ ]-> run{};
+  led1: run -[on dispatch Illuminate]-> run {Light!(true)};
+  led2: run -[on dispatch stop]-> done{};		
+**};
+--annex EMV2X 
+--  {** 
+--  --tell where to find other stuff, must include ownself if referencing other things in this package	
+--  use types PCA_Error_Model,ErrorLibrary;
+--  --use common behavior fail-stop, LEDs burn-out and they don't come back
+--  use behavior PCA_Error_Model::FailStop;
+--  error propagations
+--  --this may not get the right signal to illuminate
+--    Illuminate: in propagation {EarlyServiceTermination};
+--  --say this causes early service termination errors of its light 
+--    Light: out propagation {EarlyServiceTermination};
+--  flows  
+--  --may be burned-out (in failed state) and itself cause early service termination 
+--    pofes: error source Light{EarlyServiceTermination} when failed;
+--  --otherwise passes through all incoming service errors
+--    thru: error path Illuminate{EarlyServiceTermination} -> Light(EarlyServiceTermination);
+--  --two source for errors making Light, burn-out and pass-through
+--  --EarlyServiceTermination is error subtype of EarlyServiceTermination
+--  end propagations;
+--  component error behavior
+--    events  
+--      --event representing onset of the failure
+--      burnout: error event {EarlyServiceTermination};
+--    transitions  
+--      --what error state does burn-out cause?  => failed, with error type early service termination
+--      burn: working -[burnout]-> failed;  
+--  end component;
+--  properties
+--  --how often does the LED burn out?
+--    EMV2::OccurrenceDistribution => #PCA_Properties::LEDfailureRate 
+--      applies to burnout;
+--  **};  --end of EMV2
+end failure_led.imp;
+
+--fault_logger represents the device that holds the store of fault indications
+--R5.6.0(2) fault log 
+--R5.6.0(3) time stamp 
+--R5.6.0(5) log retention 
+--R6.4.0(5) masked faults 
+--R5.6.0(8) real-time clock
+
+device fault_logger
+  features
+  --internal bus
+    i_bus: requires bus access PCA_Pump::Internal_Bus;
+  --power bus
+    p_bus: requires bus access PCA_Pump::Power_Bus;
+  --safety bus
+    s_bus: requires bus access Safety_Bus;
+    
+    --record a fault in the log
+    Log_Fault : in event data port PCA_Types::Fault_Record.imp;
+       --{BLESS::Assertion=>"<< : :=CURRENT_FAULT_RECORD>>";};
+    --ask for the whole fault log
+    Get_Log : in event port;
+    --hardware faults directly recorded by 
+    POST_Failure: in event port  --power-on self test failed;  POST run automatically at power-on
+      {BLESS::Assertion=>"<<exists j:integer in 0 ..(#PCA_Properties::Fault_Log_Size-1) 
+         that log[j].alarm=POST_Failure and log[j].occurrence_time=now>>";};
+    RAM_Failure: in event port   --RAM test failed
+      {BLESS::Assertion=>"<<exists j:integer in 0 ..(#PCA_Properties::Fault_Log_Size-1) 
+         that log[j].alarm=RAM_Failure and log[j].occurrence_time=now>>";};
+    ROM_Failure: in event port   --ROM test failed
+      {BLESS::Assertion=>"<<exists j:integer in 0 ..(#PCA_Properties::Fault_Log_Size-1) 
+         that log[j].alarm=ROM_failure and log[j].occurrence_time=now>>";};
+    CPU_Failure: in event port   --CPU failed
+      {BLESS::Assertion=>"<<exists j:integer in 0 ..(#PCA_Properties::Fault_Log_Size-1) 
+         that log[j].alarm=CPU_Failure and log[j].occurrence_time=now>>";};
+    Thread_Monitor_Failure: in event port  --some thread failed its heartbeat
+      {BLESS::Assertion=>"<<exists j:integer in 0 ..(#PCA_Properties::Fault_Log_Size-1) 
+         that log[j].alarm=Thread_Monitor_Failure and log[j].occurrence_time=now>>";};
+    Voltage_OOR: in event port;   --power supply voltage is out of range
+        
+    --log output
+    The_Log : out event data port PCA_Types::Fault_Log 
+      {BLESS::Assertion=>"<<:=FAULT_LOG>>";};
+      
+  -- jab: added since the device has 'in event' ports      
+  properties
+    Thread_Properties::Dispatch_Protocol=>Sporadic;
+    Timing_Properties::Period => PCA_Properties::Sireum_Thread_Period;  --update outputs every 5ms      
+end fault_logger;
+
+--this represents the device implementation that stores & retrieves fault indications
+device implementation fault_logger.imp
+annex EMV2 
+  {** 
+  use types PCA_Error_Model,ErrorLibrary;
+  --use common behavior fail-subtle, one corrupted log entry doesn't mean the logging stops
+  use behavior PCA_Error_Model::FailCorruptedTruncated;
+  error propagations
+  --this may not get the right value to log, or may have service issues
+    Log_Fault: in propagation {ValueError,EarlyServiceTermination};
+  -- *not* expecting any errors in the command to read the log
+    Get_Log: not in propagation {CommonErrors};
+  -- errors in the value of the log retreived 
+    The_Log: out propagation {LogError};
+  -- errors in signalling hard-ware errors
+    POST_Failure: in propagation {EarlyServiceTermination};  
+    RAM_Failure: in propagation {EarlyServiceTermination};  
+    ROM_Failure: in propagation {EarlyServiceTermination};  
+    CPU_Failure: in propagation {EarlyServiceTermination};  
+    Thread_Monitor_Failure: in propagation {EarlyServiceTermination};  
+    Voltage_OOR: in propagation {EarlyServiceTermination};  
+  flows  --three different log fault behaviors:  complete failure, corruption, and truncation
+  --nothing returned from log when failed
+    died: error source The_Log{DeadLog} when failed;
+  --corrupted log
+    mucked: error source The_Log{CorruptedLog} when corrupted;
+  --truncated log
+    trunc: error source The_Log{TruncatedLog} when truncated;
+  end propagations;
+  component error behavior
+    events  
+      --event representing failure of the log outright
+--      ve: error event Log_Fault;
+--      erroneous_hardwired_failure_indication_put_in_log: 
+      corrupt: error event
+--        when POST_Failure{ItemCommission} or RAM_Failure{ItemCommission}
+        ;
+--    transitions  
+      --log dies -> failed
+--      hwcrpt: working -[erroneous_hardwired_failure_indication_put_in_log]-> failed;  
+  end component;
+  properties
+  --how often does the log fail completely?
+    EMV2::OccurrenceDistribution => PCA_Properties::FaultLogFailureRate 
+      applies to hardfail;
+  **};  --end of EMV2
+
+--suggestion for BLESS behavior and proof of correctness
+annex BLESSX
+  {**
+  invariant <<FL: : all f:integer in 0 .. fault_count-1 are 
+    exists t:BLESS_Types::Time in t<=now that log[f]=Log_Fault@t>>
+  variables
+    log :  PCA_Types::Fault_Log;  --data structure holding fault log
+    fault_count :  integer:=0;    --count of logged faults
+  states
+    start : initial state <<FL()>>;
+    run : complete state <<FL()>>;
+    done : final state;  
+  transitions
+    fl0: start-[ ]->run{};
+    fl1: run-[on dispatch Log_Fault]->run --put fault record into array, increment count
+      {<<FL()>> Log_Fault?(log[fault_count]) 
+      	<<FL() and (log[fault_count]=Log_Fault)>>
+      	; fault_count:=fault_count+1
+      	<<FL()>>
+      };
+    fl2: run-[on dispatch get_log]->run  --output the log
+      {The_Log!(log)};
+    fl3: run-[on dispatch POST_Failure]->run  --power-on self test failure
+      {<<FL()>>
+      	log[fault_count]:=(alarm=>POST_Failure;warning=>null;time=>now;) 
+      	<<FL() and (log[fault_count]=(alarm=>POST_Failure;warning=>null;time=>now;))>>
+      	; fault_count:=fault_count+1  
+      	<<FL()>>
+      };
+    fl4: run-[on dispatch RAM_Failure]->run  --RAM failure
+      {  <<FL()>>
+      	log[fault_count]:=(alarm=>RAM_Failure;warning=>null;time=>now;) 
+      	<<FL() and (log[fault_count]=(alarm=>RAM_Failure;warning=>null;time=>now;))>>      	
+      	; fault_count:=fault_count+1
+       	<<FL()>>
+      };
+    fl5: run-[on dispatch ROM_Failure]->run  --ROM failure
+      {   <<FL()>>
+      log[fault_count]:=(alarm=>ROM_Failure;warning=>null;time=>now;) 
+      	<<FL() and (log[fault_count]=(alarm=>RAM_Failure;warning=>null;time=>now;))>>      	
+      ; fault_count:=fault_count+1
+       	<<FL()>>
+      };
+    fl6: run-[on dispatch CPU_Failure]->run  --processor failure
+      {  <<FL()>>
+      log[fault_count]:=(alarm=>CPU_Failure;warning=>null;time=>now;) 
+       	<<FL() and (log[fault_count]=(alarm=>CPU_Failure;warning=>null;time=>now;))>>      	
+      ; fault_count:=fault_count+1
+       	<<FL()>>
+      };
+    fl7: run-[on dispatch Thread_Monitor_Failure]->run  --thread monitor detected missing thread heartbeat
+      {  <<FL()>>
+      log[fault_count]:=(alarm=>Thread_Monitor_Failure;warning=>null;time=>now;) 
+      	<<FL() and (log[fault_count]=(alarm=>Thread_Monitor_Failure;warning=>null;time=>now;))>>      	
+      ; fault_count:=fault_count+1
+       	<<FL()>>
+      };
+    fl8: run-[on dispatch Voltage_OOR]->run  --power supply voltage out-of-range
+      {  <<FL()>>
+      log[fault_count]:=(alarm=>null;warning=>Voltage_OOR;time=>now;) 
+       	<<FL() and (log[fault_count]=(alarm=>null;warning=>Voltage_OOR;time=>now;))>>      	
+      ; fault_count:=fault_count+1
+        <<FL()>>
+      };
+    
+    fldome: run-[on dispatch stop]->done{};
+  **};
+end fault_logger.imp;
+
+bus Safety_Bus
+end Safety_Bus;
+
+processor Safety_Core
+  features
+    i_bus: requires bus access PCA_Pump::Internal_Bus;
+    s_bus: requires bus access Safety_Bus;
+    to_adaptor: requires bus access PCA_System::adaptor_bus;
+end Safety_Core;
+
+end PCA_Safety;

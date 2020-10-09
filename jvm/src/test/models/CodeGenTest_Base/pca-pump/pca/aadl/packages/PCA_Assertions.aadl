@@ -1,0 +1,132 @@
+--PCA_Assertions.aadl
+
+package PCA_Assertions
+  public
+--  with BLESS;
+  
+annex Assertion 
+{**
+<<VALUES: : --these are labels for values used in Assertions
+    def INFUSION_RATE         --actual rate of drug infusion into patient, must be within tolerance of commanded and measured rates
+and def FAULT_LOG             --contents of fault log held by fault_logger
+and def EVENT_LOG             --contents of event log held by event_logger
+and def DRUG_LIBRARY          --contents of drug library held by drug_library_thread
+and def POST_FAIL             --power-on self test failure detected
+and def RAM_FAIL              --random-access memory failure detected
+and def ROM_FAIL              --read-only memory failure detected
+and def CPU_FAIL              --processor failure detected
+and def TM_FAIL               --thread monitor failure detected
+and def BTTY_FAIL             --battery failure
+and def PS_FAIL               --power supply failure
+and def VOOR                  --voltage out-of-range
+and def BASAL_OVER_INFUSION   --infusion greater than basal rate+tolerance detected during basal infusion
+and def BOLUS_OVER_INFUSION   --infusion greater than bolus rate+tolerance detected during bolus infusion
+and def SQUARE_OVER_INFUSION  --infusion greater than square bolus rate+tolerance detected during square bolus infusion
+and def AIR_IN_LINE           --bubble detected
+and def EMPTY_RESERVOIR       --reservoir contents less than minimum
+and def PUMP_OVERHEATED       --pump is above allowed temperature
+and def DOWNSTREAM_OCCLUSION  --blockage between pump and patient detected
+and def UPSTREAM_OCCLUSION    --blockage between reservoir and pump detected
+and def MAX_DOSE_INFUSED      --maximum dose reached
+and def BASAL_UNDER_INFUSION  --infusion less than basal rate detected-tolerance during basal infusion
+and def BOLUS_UNDER_INFUSION  --infusion less than bolus rate detected-tolerance during bolus infusion
+and def SQUARE_UNDER_INFUSION --infusion less than square bolus rate-tolerance detected during square bolus infusion
+and def BTTY_BACKUP           --operating on battery
+and def LOW_RESERVOIR         --reservoir contents less than warning threshold
+and def LOW_BATTERY           --battery energy less than warning threshold
+and def LONG_PAUSE            --long pause in user input
+and def ALARM_INACTIVATION    --value held within control panel about whether alarm are inactivated
+and def APP_CONNECTED         --ICE app is controlling this PCA pump
+and def PRESCRIBED_BASAL_RATE --intended rate for basal infusion
+and def PRESCRIBED_BOLUS_RATE --intended rate for bolus infusion
+and def PRESCRIBED_KVO_RATE   --intended rate for keep-vein-open infusion
+and def PRESCRIBED_VTBI       --intended volume to be infused
+and def SQUARE_BOLUS_DURATION --time for infusion of clinician-requested bolus
+and def Rx_APPROVED           --placeholder for predicate declaring acceptable formulas
+and def XXXX                  --dummy placeholder
+and def BATTERY_VOLTAGE		  --battery voltage from the battery to the power system
+and def BATTERY_CURRENT		  --battery current from the battery to the power system
+and def REMAINING_BATTERY_TIME  --time left to run on battery backup
+>>	
+<<ALERT_STOP_START: : TBD>>  --R5.5.0(18) alert-stop-start sequence
+  --alarm requiring immediate clinician attention
+<<IMMEDIATE_ALARM: : (BASAL_OVER_INFUSION or BOLUS_OVER_INFUSION or SQUARE_OVER_INFUSION)^(-1) >>
+  --alarm requiring prompt clinician attention
+<<PROMPT_ALARM: : (ALERT_STOP_START() or AIR_IN_LINE or EMPTY_RESERVOIR or PUMP_OVERHEATED
+	or DOWNSTREAM_OCCLUSION or UPSTREAM_OCCLUSION)^(-1) >>
+  --warning requiring clinician attention, sometime
+<<DELAYED_ALARM: : (BTTY_BACKUP or LOW_RESERVOIR or LOW_BATTERY or LONG_PAUSE
+    or VOOR or MAX_DOSE_INFUSED or BASAL_UNDER_INFUSION or BOLUS_UNDER_INFUSION or SQUARE_UNDER_INFUSION)^(-1) >>
+  --hardware-detected failure, processor and threads may not be functioning
+<<HW_FAIL: : POST_FAIL or RAM_FAIL or ROM_FAIL or CPU_FAIL or TM_FAIL or BTTY_FAIL or PS_FAIL or VOOR >>
+  --alarm type sent to ICE manager
+<<INFUSION_CLASS: enum +=>  
+  Stopped->INFUSION_RATE=0,
+  Bolus->XXXX,  --INFUSION_RATE in 
+  Basal->XXXX,
+  KVO->XXXX,
+  Square_Bolus->XXXX>>
+  --specifies meaning of each alarm type
+<<ALARM_TYPE: x +=> --has enumeration value of first element when predicate in 2nd element is true
+  Pump_Overheated->PUMP_OVERHEATED,  
+  Defective_Battery->DEFECTIVE_BATTERY,
+  Low_Battery->LOW_BATTERY,
+  POST_Failure->POST_FAIL, 
+  RAM_Failure->RAM_FAIL, 
+  ROM_failure->ROM_FAIL, 
+  CPU_Failure->CPU_FAIL,
+  Thread_Monitor_Failure->THREAD_MONITOR_FAIL,
+  Air_In_Line->AIR_IN_LINE, 
+  Upstream_Occlusion->UPSTREAM_OCCLUSION, 
+  Downstream_Occlusion->DOWNSTREAM_OCCLUSION,
+  Empty_Reservoir->EMPTY_RESERVOIR, 
+  Basal_Overinfusion->BASAL_OVERINFUSION, 
+  Bolus_Overinfusion->BOLUS_OVERINFUSION, 
+  Square_Bolus_Overinfusion->SQUARE_OVERINFUSION,
+  No_Alarm->NO_ALARM >>    
+
+--specifies meaning of each warning type
+<<WARNING_TYPE: x +=>
+  Over_Max_Drug_Per_Hour->MAX_DOSE_WARNING,
+--  Below_VTBI_Soft_Limit->BELOW_VTBI_SOFT,
+--  Above_VTBI_Soft_Limit->ABOVE_VTBI_SOFT,
+--  Below_Basal_Rate_Soft_Limit->BELOW_BASAL_SOFT,
+--  Above_Basal_Rate_Soft_Limit->ABOVE_BASAL_SOFT,
+  Soft_Limit->SOFT_LIMIT,
+  Low_Reservoir->LOW_RESERVOIR,
+  Basal_Underinfusion->BASAL_UNDERINFUSION,
+  Bolus_Underinfusion->BOLUS_UNDERINFUSION,
+  Square_Bolus_Underinfusion->SQUARE_UNDERINFUSION,
+  Input_Needed->INPUT_NEEDED,
+  Long_Pause->LONG_PAUSE,
+  Drug_Not_In_Library->DRUG_NOT_IN_LIBRARY,
+  Hard_Limit_Violated->HARD_LIMIT_VIOLATED,
+  Voltage_OOR->VOLTAGE_OOR,
+  Priming_Failure->PRIME_FAIL,
+  No_Warning->NO_WARNING >> 
+
+--conditions for stopping the pump  
+<<STOP_PUMP: :
+  PUMP_OVERHEATED or DEFECTIVE_BATTERY or THREAD_MONITOR_FAIL or AIR_IN_LINE
+  or UPSTREAM_OCCLUSION or DOWNSTREAM_OCCLUSION or EMPTY_RESERVOIR >>  
+
+--conditions for pumping at KVO rate
+<<PUMP_KVO: :
+  BASAL_OVERINFUSION or BOLUS_OVERINFUSION or SQUARE_OVERINFUSION or MAX_DOSE_WARNING
+  or LOW_BATTERY
+>>  
+
+<<PATIENT_REQUEST_NOT_TOO_SOON:x:
+  Patient_Button_Request@x and not (exists t:time in x-MINIMUM_TIME_BETWEEN_BOLUS,,x
+    that Patient_Request_Not_Too_Soon@t)
+>>
+
+<<PATIENT_REQUEST_TOO_SOON:x:
+  Patient_Button_Request@x and Patient_Request_Not_Too_Soon@last_patient_bolus
+  and (x-MINIMUM_TIME_BETWEEN_BOLUS) <= last_patient_bolus
+>>
+  
+**};
+
+
+end PCA_Assertions;

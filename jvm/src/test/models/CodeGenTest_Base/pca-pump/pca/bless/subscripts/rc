@@ -1,0 +1,141 @@
+#PCA_Operation_Threads::Rate_Controller.imp
+push
+sort-by-component[PCA_Operation_Threads::Rate_Controller.imp]
+#PCA_Operation_Threads::Rate_Controller.imp
+#[serial 1077] <<M(WaitForStart)>> -> <<I>> from invariant I when complete state WaitForStart has Assertion <<M(WaitForStart)>> in its definition
+make-an
+axioms
+#[serial 1078] <<M(PumpBasalRate)>> -> <<I>> from invariant I when complete state PumpBasalRate has Assertion <<M(PumpBasalRate)>> in its definition.
+axioms
+#[serial 1079] <<M(PumpCCBRate)>> -> <<I>> from invariant I when complete state PumpCCBRate has Assertion <<M(PumpCCBRate)>> in its definition.
+axioms
+#[serial 1080] <<M(PumpingSuspended)>> -> <<I>> from invariant I when complete state PumpingSuspended has Assertion <<M(PumpingSuspended)>> in its definition.
+axioms
+#[serial 1081] <<M(RxApproved)>> -> <<I>> from invariant I when complete state RxApproved has Assertion <<M(RxApproved)>> in its definition.
+axioms
+#[serial 1082] <<M(WaitForRx)>> -> <<I>> from invariant I when complete state WaitForRx has Assertion <<M(WaitForRx)>> in its definition.
+axioms
+#[serial 1083] <<M(Priming)>> -> <<I>> from invariant I when complete state Priming has Assertion <<M(Priming)>> in its definition.
+axioms
+#[serial 1084] <<M(PumpPatientButtonVTBI)>> -> <<I>> from invariant I when complete state PumpPatientButtonVTBI has Assertion <<M(PumpPatientButtonVTBI)>> in its definition.
+axioms
+#[serial 1085] <<M(PumpKVORate)>> -> <<I>> from invariant I when complete state PumpKVORate has Assertion <<M(PumpKVORate)>> in its definition.
+axioms
+#[serial 1086] Serban's Theorem:  disjunction of execute conditions leaving execution state PowerOn, <<M(PowerOn)>> -> <<e1 or e2 or . . . en>>
+axioms
+#[serial 1087] Serban's Theorem:  disjunction of execute conditions leaving execution state CheckPBR, <<M(CheckPBR)>> -> <<e1 or e2 or . . . en>>
+normalize
+replace<=
+normalize
+laws
+axioms
+#[serial 1088]  <<M(PowerOn) and x>> -> <<M(WaitForRx)>> for go:PowerOn-[x]->WaitForRx{};
+axioms
+#[serial 1089]  <<M(WaitForRx) and x>> -> <<M(CheckPBR)>> for rxo:WaitForRx-[x]->CheckPBR{};
+now
+axioms
+#[serial 1090]  <<M(CheckPBR) and x>> -> <<M(Crash)>> for pbr0:CheckPBR-[x]->Crash{};
+axioms
+#[serial 1091]  <<M(CheckPBR) and x>> A <<M(RxApproved)>> for pbrok:CheckPBR-[x]->RxApproved{A};
+reduce
+normalize
+axioms
+substitute-both
+atomic
+normalize
+laws
+replaceNEwithLTorGT
+normalize
+axioms
+#[serial 1092]  <<M(RxApproved) and x>> A <<M(Priming)>> for rxpri:RxApproved-[x]->Priming{A};
+reduce
+substitute-both
+normalize
+laws
+atomic
+axioms
+laws
+normalize
+axioms
+substitute-both
+normalize
+axioms
+dist^
+normalize
+axioms
+#[serial 1093]  <<M(Priming) and x>> A <<M(WaitForStart)>> for prd:Priming-[x]->WaitForStart{A};
+reduce
+substitute-both
+normalize
+atomic
+substitute-both
+normalize
+axioms
+dist^
+normalize
+laws
+normalize
+laws
+normalize
+now
+axioms
+#[serial 1094]  <<M(WaitForStart) and x>> A <<M(Priming)>> for pri:WaitForStart-[x]->Priming{A};
+reduce
+substitute-post
+normalize
+laws
+atomic
+normalize
+laws
+normalize
+axioms
+substitute-both
+normalize
+axioms
+dist^
+normalize
+axioms
+#[serial 1095]  <<M(WaitForStart) and x>> A <<M(PumpBasalRate)>> for sap:WaitForStart-[x]->PumpBasalRate{A};
+reduce
+atomic
+laws
+substitute-both
+normalize
+axioms
+dist^
+normalize
+laws
+axioms
+split-post
+normalize
+axioms
+#[serial 1096]  <<M(PumpBasalRate) and x>> A <<M(PumpPatientButtonVTBI)>> for pump_basal_rate:PumpBasalRate-[x]->PumpPatientButtonVTBI{A};
+reduce
+atomic
+substitute-both
+normalize
+laws
+normalize
+axioms
+now
+laws
+axioms
+#[serial 1097]  <<M(PumpPatientButtonVTBI) and x>> A <<M(PumpBasalRate)>> for vtbi_delivered:PumpPatientButtonVTBI-[x]->PumpBasalRate{A};
+reduce
+substitute-both
+normalize
+laws
+atomic
+laws
+normalize
+axioms
+substitute-both
+normalize
+axioms
+dist^
+normalize
+axioms
+split-post
+axioms
+normalize
+axioms

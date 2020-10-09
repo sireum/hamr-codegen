@@ -1,0 +1,516 @@
+package PCA_Types
+public
+	with Base_Types, Data_Model, PCA_Properties, ICE_Types, BLESS_Types, BLESS;
+
+	data PCA_Input
+		properties
+			Data_Model::Data_Representation => Enum;
+	end PCA_Input;
+
+	data Alarm_Type
+		properties
+			BLESS::Typed => "enumeration (Pump_Overheated,Defective_Battery,Low_Battery,
+      POST_Failure,RAM_Failure,ROM_failure,CPU_Failure,Thread_Monitor_Failure,
+      Air_In_Line,Upstream_Occlusion,Downstream_Occlusion,Empty_Reservoir,
+      Basal_Overinfusion,Bolus_Overinfusion,Square_Bolus_Overinfusion,No_Alarm)";
+			Data_Model::Data_Representation => Enum;
+			Data_Model::Enumerators => (
+				-- KEY at(alarm_thread), dl(drug_library, dm(downstream_mon), ed(error_detector), fl(fault_logger),
+				--     fr(flow_rate_checker), it(ice_thread), mdw(max_drug_watcher), mp(mech_pump),
+				--     pc(prescription_checker), r(reservoir),
+				--     rc(rate_controller), um(upstream_mon), ut(ui_thread)
+				-----------------------------------------------------------------------------------------------------------------------
+				-- PCA_Types.Alarm_Type          | Table 4 entry                       | SENDER                         | RECEIVERS
+				-------------------------------- | ----------------------------------- | ------------------------------ | -------------
+				"Basal_Overinfusion", -- | basal over-infusion alarm           | fr.Basal_Overinfusion          | at.Basal_Overinfusion
+				"Bolus_Overinfusion", -- | bolus over-infusion alarm           | fr.Bolus_Overinfusion          | at.Bolus_Overinfusion
+				"Square_Bolus_Overinfusion", -- | square bolus over-infusion alarm    | fr.Square_Bolus_Overinfusion   | fr.Square_Bolus_Overinfusion
+				-- _MISSING_                  -- | alert-stop-start sequence           | ??                             | ??
+				"Air_In_Line", -- | air-in-line alarm                   | dm.Bubble                      | at.Bubble
+				"Empty_Reservoir", -- | empty-reservoir alarm               | r.Empty_Reservoir              | at.Empty_Res
+				"Pump_Overheated", -- | pump overheated alarm               | mp.pump_hot                    | at.Pump_Hot
+				"Downstream_Occlusion", -- | downstream occlusion alarm          | dm.Occlusion                   | at.Downstream_Occlusion
+				"Upstream_Occlusion", -- | upstream occlusion alarm            | um.Occlusion                   | at.Upstream_Occlusion
+				"POST_Failure", -- | POST failure alarm                  | ed.POST_Failure                | boss.POST_fail, fl.POST_Failure
+				"RAM_Failure", -- | RAM failure alarm                   | ed.RAM_Failure                 | fl.RAM_Failure
+				"ROM_Failure", -- | ROM failure alarm                   | ed.ROM_Failure                 | fl.ROM_Failure
+				"CPU_Failure", -- | CPU failure alarm                   | ed.CPU_Failure                 | fl.CPU_Failure
+				"Thread_Monitor_Failure", -- | thread monitor alarm                | ed.Thread_Monitor_Failure      | fl.Thread_Monitor_Failure
+				"Defective_Battery", -- | battery failure alarm               | pwr.Defective_Battery          | at.Defective_Btty
+				-- _In Warning_Type_          -- | voltage out-of-range alarm          | pwr.Voltage_OOR                | at.Voltage_OOR, fl.Voltage_OOR
+				-- _MISSING_                  -- | power supply failure alarm          | ??                             | ??
+				-- _In Warning_Type_          -- | max dose warning                    | mdw.Over_Max_Drug_Per_Hour     | at.Max_Dose_Warning, rc.Over_Max_Drug_Per_Hour, ic.Over_Max_Drug_Per_Hour
+				-- _In Warning_Type_          -- | basal under-infusion warning        | fr.Basal_Underinfusion         | at.Basal_Underinfusion
+				-- _In Warning_Type_          -- | bolus under-infusion warning        | fr.Bolus_Underinfusion         | at.Bolus_Underinfusion
+				-- _In Warning_Type_          -- | square bolus under-infusion warning | fr.Square_Bolus_Underinfusion  | at.Square_Bolus_Underinfusion
+				-- _MISSING_                  -- | battery-backup warning              | ??                             | ??
+				"Low_Battery", -- | low-battery warning                 | pwr.Low_Battery_Warning        | at.Low_Battery_Warning, ut.Low_Battery_Warning
+				-- _In Warning_Type_          -- | low-reservoir warning               | r.Low_Reservoir                | at.Low_Res
+				-- _In Warning_Type_          -- | long pause warning                  | ??                             | at.Long_Pause **COMMENTED OUT**
+				------------------------------------------------------------------------------------------------------------------
+				"No_Alarm",
+				-- FIXME: EC6 states a *priming failure alarm* is sounded, but
+				-- PrimingFailure was only found in Warning_Type.  Moved it to
+				-- from Warning_Type to Alarm_Type
+				"Priming_Failure"
+			);
+	end Alarm_Type;
+
+	data Warning_Type
+		properties
+			BLESS::Typed => "enumeration (Over_Max_Drug_Per_Hour,Soft_Limit,
+ --     Below_VTBI_Soft_Limit,Above_VTBI_Soft_Limit,       
+ --     Below_Basal_Rate_Soft_Limit,Above_Basal_Rate_Soft_Limit,
+      Low_Reservoir,Priming_Failure,
+      Basal_Underinfusion,Bolus_Underinfusion,Square_Bolus_Underinfusion,
+      Input_Needed,Long_Pause,Drug_Not_In_Library,Hard_Limit_Violated,Voltage_OOR,
+      Priming_Failure,No_Warning)";
+			Data_Model::Data_Representation => Enum;
+			Data_Model::Enumerators => (
+				----------------------------------------------------------
+				--                            | TABLE 4 entry
+				----------------------------------------------------------
+				"Voltage_OOR", -- voltage out-of-range alarm
+				"Over_Max_Drug_Per_Hour", -- max dose warning
+				"Basal_Underinfusion", -- basal under-infusion
+				"Bolus_Underinfusion", -- bolus under-infusion warning
+				"Square_Bolus_Underinfusion", -- square bolus under-infusion warning
+				"Low_Reservoir", -- low-reservoir warning
+				"Long_Pause", -- long pause warning
+				----------------------------------------------------------
+				------------------------------------------------------------------------------------------------------------------
+				-- Not in Table 4        | SENDER                 | RECEIVERS
+				------------------------------------------------------------------------------------------------------------------
+				"Drug_Not_In_Library", -- dl.No_Drug_Found         at.Drug_Not_In_Library, boss.Drug_Not_In_Library
+				"Soft_Limit", -- pc.Soft_Limit_Warning    ut.Soft_Limit_Warning
+				"Hard_Limit_Violated", -- pc.Hard_Limit_Violated   at.Hard_Limit_Violation, ut.Hard_Limit_Violated
+				"Priming_Failure", -- boss.Prime_Failure       at.Prime_Failure
+				------------------------------------------------------------------------------------------------------------------
+				"Input_Needed", -- ????????????
+				--"Below_VTBI_Soft_Limit","Above_VTBI_Soft_Limit","Below_Basal_Rate_Soft_Limit","Above_Basal_Rate_Soft_Limit",
+				"No_Warning",
+				"Low_Battery" -- jab: Table 4 indicates LowBattery is an warning {@link https://www.smarturl.it/IPCA#page=53}
+			);
+		annex Assertion {**  --specifies meaning of each warning type
+<<WARNING_TYPE: x +=>
+  Over_Max_Drug_Per_Hour->MAX_DOSE_WARNING,
+--  Below_VTBI_Soft_Limit->BELOW_VTBI_SOFT,
+--  Above_VTBI_Soft_Limit->ABOVE_VTBI_SOFT,
+--  Below_Basal_Rate_Soft_Limit->BELOW_BASAL_SOFT,
+--  Above_Basal_Rate_Soft_Limit->ABOVE_BASAL_SOFT,
+  Soft_Limit->SOFT_LIMIT,
+  Low_Reservoir->LOW_RESERVOIR,
+  Basal_Underinfusion->BASAL_UNDERINFUSION,
+  Bolus_Underinfusion->BOLUS_UNDERINFUSION,
+  Square_Bolus_Underinfusion->SQUARE_UNDERINFUSION,
+  Input_Needed->INPUT_NEEDED,
+  Long_Pause->LONG_PAUSE,
+  Drug_Not_In_Library->DRUG_NOT_IN_LIBRARY,
+  Hard_Limit_Violated->HARD_LIMIT_VIOLATED,
+  Voltage_OOR->VOLTAGE_OOR,
+  Priming_Failure->PRIME_FAIL,
+  No_Warning->NO_WARNING >>     
+  **};
+	end Warning_Type;
+
+	data Status_Type
+		properties
+			BLESS::Typed => "enumeration (Stopped,Priming,Paused,Bolus,Basal,KVO,Square_Bolus)"; -- jab: added Priming, Paused
+			Data_Model::Data_Representation => Enum;
+			Data_Model::Enumerators => ("Stopped", "Priming", "Paused", "Bolus", "Basal", "KVO", "Square_Bolus"); -- jab: added Priming, Paused
+	end Status_Type;
+
+	data Drug_Code --string representing what drug, conectration, and volume is in the reservoir
+		properties
+			BLESS::Typed => "string";
+			Data_Model::Data_Representation => String;
+	end Drug_Code;
+
+	data implementation Drug_Code.imp
+		subcomponents
+			code: data Base_Types::String;
+	end Drug_Code.imp;
+
+	data Dose_Rate_Unit --unit of dose rates specified buy the pharmacy
+		properties
+			BLESS::Typed => "string";
+			Data_Model::Data_Representation => String;
+	end Dose_Rate_Unit;
+
+	data implementation Dose_Rate_Unit.imp
+		subcomponents
+			value: data Base_Types::String;
+	end Dose_Rate_Unit.imp;
+
+	data Flow_Rate --dose rate
+		properties
+			BLESS::Typed => "integer";
+			Data_Model::Base_Type => (classifier (Base_Types::Integer_16));
+			Data_Model::Measurement_Unit => "ml/hr";
+	end Flow_Rate;
+
+	data implementation Flow_Rate.imp
+		subcomponents
+			value: data Base_Types::Integer_16;
+	end Flow_Rate.imp;
+
+	data Infusion_Unit --unit of VTBI
+		properties
+			BLESS::Typed => "string";
+			Data_Model::Data_Representation => String;
+	end Infusion_Unit;
+
+	data implementation Infusion_Unit.imp
+		subcomponents
+			value: data Base_Types::String;
+	end Infusion_Unit.imp;
+
+	data Drug_Volume --volume of VTBI
+		properties
+			BLESS::Typed => "integer";
+			Data_Model::Base_Type => (classifier (Base_Types::Integer_16));
+			Data_Model::Measurement_Unit => "ml";
+	end Drug_Volume;
+
+	data implementation Drug_Volume.imp
+		subcomponents
+			value: data Base_Types::Integer_16;
+	end Drug_Volume.imp;
+
+	data Drug_Weight --string representing what drug, conectration, and volume is in the reservoir
+		properties
+			BLESS::Typed => "integer";
+			Data_Model::Base_Type => (classifier (Base_Types::Integer_16));
+			Data_Model::Measurement_Unit => "mg";
+	end Drug_Weight;
+
+	data implementation Drug_Weight.imp
+		subcomponents
+			value: data Base_Types::Integer_16;
+	end Drug_Weight.imp;
+
+	data Drug_Concentration --string representing what drug, concentration, and volume is in the reservoir
+		properties
+			BLESS::Typed => "integer";
+			Data_Model::Base_Type => (classifier (Base_Types::Float));
+			Data_Model::Measurement_Unit => "mg/l";
+	end Drug_Concentration;
+
+	data implementation Drug_Concentration.imp
+		subcomponents
+			value: data Base_Types::Float_32;
+	end Drug_Concentration.imp;
+
+	data Drug_Record --holds pharmacy data for a drug that may be used with the pump
+		properties
+			BLESS::Typed => "record (
+  code : PCA_Types::Drug_Code;                   --unique identifier for this drug/concentration
+  name : string;                                 --generic drug name
+--  location : string;                             --Context of drug application
+  dose_rate_unit : PCA_Types::Dose_Rate_Unit;    --The unit of drug dose (for example milliliters/hour)
+  vtbi_unit : PCA_Types::Infusion_Unit;          --The unit of VTBI (for example milliliter)
+  amount : PCA_Types::Drug_Weight;               --The weight of the drug dissolved in the diluent (mg)
+  concentration : PCA_Types::Drug_Concentration; --Drug concentration; as prescribed
+  vtbi_lower_soft : PCA_Types::Drug_Volume;      --Lower soft limit of drug volume to be infused
+  vtbi_lower_hard : PCA_Types::Drug_Volume;      --Lower hard limit of drug volume to be infused
+  vtbi_typical : PCA_Types::Drug_Volume;         --Typical drug volume to be infused
+  vtbi_upper_soft : PCA_Types::Drug_Volume;      --Upper soft limit of drug volume to be infused
+  vtbi_upper_hard : PCA_Types::Drug_Volume;      --Upper hard limit of drug volume to be infused
+  basal_rate_lower_soft : PCA_Types::Flow_Rate;  --Lower soft limit of basal drug dose rate
+  basal_rate_lower_hard : PCA_Types::Flow_Rate;  --Lower hard limit of basal drug dose rate
+  basal_rate_typical : PCA_Types::Flow_Rate;     --Typical basal drug dose rate
+  basal_rate_upper_soft : PCA_Types::Flow_Rate;  --Upper soft limit of basal drug dose rate
+  basal_rate_upper_hard : PCA_Types::Flow_Rate;  --Upper hard limit of basal drug dose rate
+  bolus_typical : PCA_Types::Drug_Volume;        --Typical Value of Bolus Volume
+  square_bolus_rate_typical : PCA_Types::Flow_Rate;        --Typical duration of clinician commanded bolus
+  )";
+			Data_Model::Data_Representation => Struct;
+			Data_Model::Element_Names => ("code", --unique identifier for this drug/concentration
+				"name", --generic drug name
+				--     "location",               --Context of drug application
+				"dose_rate_unit", --The unit of drug dose (for example milliliters/hour)
+				"vtbi_unit", --The unit of VTBI (for example milliliter)
+				"amount", --The weight of the drug dissolved in the diluent (mg)
+				"concentration", --Drug concentration; as prescribed
+				"vtbi_lower_soft", --Lower soft limit of drug volume to be infused
+				"vtbi_lower_hard", --Lower hard limit of drug volume to be infused
+				"vtbi_typical", --Typical drug volume to be infused
+				"vtbi_upper_soft", --Upper soft limit of drug volume to be infused
+				"vtbi_upper_hard", --Upper hard limit of drug volume to be infused
+				"basal_rate_lower_soft", --Lower soft limit of basal drug dose rate
+				"basal_rate_lower_hard", --Lower hard limit of basal drug dose rate
+				"basal_rate_typical", --Typical basal drug dose rate
+				"basal_rate_upper_soft", --Upper soft limit of basal drug dose rate
+				"basal_rate_upper_hard", --Upper hard limit of basal drug dose rate
+				"bolus_typical", --Typical Value of Bolus Volume
+				"square_bolus_rate_typical" --Typical rate of clinician commanded bolus
+			);
+			Data_Model::Base_Type => (classifier (Drug_Code.imp), --code
+				classifier (Base_Types::String), --name
+--        classifier(Base_Types::String),  --location
+				classifier (Dose_Rate_Unit.imp), --dose_rate_unit
+				classifier (Infusion_Unit.imp), --vtbi_unit
+				classifier (Drug_Weight.imp), --amount
+				classifier (Drug_Concentration.imp), --concentration
+				classifier (Drug_Volume.imp), --vtbi_lower_soft
+				classifier (Drug_Volume.imp), --vtbi_lower_hard
+				classifier (Drug_Volume.imp), --vtbi_typical
+				classifier (Drug_Volume.imp), --vtbi_upper_soft
+				classifier (Drug_Volume.imp), --vtbi_upper_hard
+				classifier (Flow_Rate.imp), --basal_rate_lower_soft
+				classifier (Flow_Rate.imp), --basal_rate_lower_hard
+				classifier (Flow_Rate.imp), --basal_rate_typical
+				classifier (Flow_Rate.imp), --basal_rate_upper_soft
+				classifier (Flow_Rate.imp), --basal_rate_upper_hard
+				classifier (Drug_Volume.imp), --bolus_typical
+				classifier (PCA_Types::Flow_Rate.imp) --ssquare_bolus_rate_typical
+			);
+	end Drug_Record;
+
+	data implementation Drug_Record.imp
+		subcomponents
+			code: data PCA_Types::Drug_Code.imp; -- unique identifier for this drug/concentration
+			name: data Base_Types::String; --                                    //generic drug name
+			location: data Base_Types::String; --,                                //Context of drug application
+			dose_rate_unit: data PCA_Types::Dose_Rate_Unit.imp; --,        //The unit of drug dose (for example milliliters/hour)
+			vtbi_unit: data PCA_Types::Infusion_Unit.imp; --,              //The unit of VTBI (for example milliliter)
+			amount: data PCA_Types::Drug_Weight.imp; --,                   //The weight of the drug dissolved in the diluent (mg)
+			concentration: data PCA_Types::Drug_Concentration.imp; --,      //Drug concentration; as prescribed
+			vtbiLowerSoft: data PCA_Types::Drug_Volume.imp; --,             //Lower soft limit of drug volume to be infused
+			vtbiLowerHard: data PCA_Types::Drug_Volume.imp; --,             //Lower hard limit of drug volume to be infused
+			vtbiTypical: data PCA_Types::Drug_Volume.imp; --,               //Typical drug volume to be infused
+			vtbiUpperSoft: data PCA_Types::Drug_Volume.imp; --,             //Upper soft limit of drug volume to be infused
+			vtbiUpperHard: data PCA_Types::Drug_Volume.imp; --,             //Upper hard limit of drug volume to be infused
+			basalRateLowerSoft: data PCA_Types::Flow_Rate.imp; --,          //Lower soft limit of basal drug dose rate
+			basalRateLowerHard: data PCA_Types::Flow_Rate.imp; --,          //Lower hard limit of basal drug dose rate
+			basalRateTypical: data PCA_Types::Flow_Rate.imp; --,            //Typical basal drug dose rate
+			basalRateUpperSoft: data PCA_Types::Flow_Rate.imp; --,          //Upper soft limit of basal drug dose rate
+			basalRateUpperHard: data PCA_Types::Flow_Rate.imp; --,          //Upper hard limit of basal drug dose rate
+			bolusTypical: data PCA_Types::Drug_Volume.imp; --,              //Typical Value of Bolus Volume
+			squareBolusRateTypical: data PCA_Types::Flow_Rate.imp; --      //Typical duration of clinician commanded bolus
+			--// FIXME: requirements indicate there should be a "Bolus Time Typical" which is likely preferable
+			--// over squareBolusRateTypical as rate is at least VTBI / duration.  VTBI is set in the
+			--// prescription so it could be different from vtbiTypical
+	end Drug_Record.imp;
+
+	data Drug_Library --holds drug records for all drugs approved by the hospital pharmacy
+		properties
+			BLESS::Typed => "array [#PCA_Properties::Drug_Library_Size] of PCA_Types::Drug_Record";
+			Data_Model::Data_Representation => Array;
+			Data_Model::Base_Type => (classifier (Drug_Record.imp));
+			Data_Model::Dimension => (PCA_Properties::Drug_Library_Size);
+	end Drug_Library;
+
+	data Prescription
+		properties
+			BLESS::Typed => "record (
+patient:string;
+drug_name:string;
+code: PCA_Types::Drug_Code;
+concentration: PCA_Types::Drug_Concentration;
+initial_volume: PCA_Types::Drug_Volume;
+basal_flow_rate: PCA_Types::Flow_Rate;
+vtbi: PCA_Types::Drug_Volume;
+max_drug_per_hour: PCA_Types::Drug_Volume;
+minimum_time_between_bolus:ICE_Types::Minute;
+date_Rx_filled:string;
+prescriber:string;
+pharmacist:string;
+)";
+			Data_Model::Data_Representation => Struct;
+			Data_Model::Element_Names => ("patient",
+				"drug_name",
+				"code",
+				"concentration",
+				"initial_volume",
+				"basal_flow_rate",
+				"vtbi",
+				"max_drug_per_hour",
+				"minimum_time_between_bolus",
+				"date_Rx_filled",
+				"prescriber",
+				"pharmacist"
+			);
+			Data_Model::Base_Type => (classifier (Base_Types::String), --patient
+				classifier (Base_Types::String), --drug name
+				classifier (PCA_Types::Drug_Code.imp), --code
+				classifier (PCA_Types::Drug_Concentration.imp), --concentration
+				classifier (PCA_Types::Drug_Volume.imp), --initial volume
+				classifier (PCA_Types::Flow_Rate.imp), --basal flow rate
+				classifier (PCA_Types::Drug_Volume.imp), --VTBI
+				classifier (PCA_Types::Drug_Volume.imp), --maximum drug allowed per hour
+				classifier (ICE_Types::Minute.imp), --min time between bolus doses
+				classifier (Base_Types::String), --date filled; may change to a date type
+				classifier (Base_Types::String), --prescribing physician
+				classifier (Base_Types::String) --pharmacist        
+			);
+	end Prescription;
+
+	data implementation Prescription.imp
+		subcomponents
+			patient: data Base_Types::String; --,                     // patient
+			drugName: data Base_Types::String; --,                     // drug name
+			code: data PCA_Types::Drug_Code.imp; --,          // code
+			concentration: data PCA_Types::Drug_Concentration.imp; --, // concentration
+			initialVolume: data PCA_Types::Drug_Volume.imp; --,        // initial volume
+			basalFlowRate: data PCA_Types::Flow_Rate.imp; --,          // basal flow rate
+			--  // FIXME - patient_bolus_rate is not listed in item (4) of IPCA Drug Reservoir
+			--  // (ref {@link https://www.smarturl.it/opca#subsec_drugreservoir}).
+			--  // It's also not listed in the aadl datatype implementation PCA_Types::Prescription.
+			--  // However subsequent uses of the datatype do refer to the field (see bless code in
+			--  // PCA_Operation_Threads::Prescription_Checker.imp) and it's referred to as F_bolus
+			--  // in item (2) of IPCA Patient-Requested Bolus
+			--  // (ref {@link https://www.smarturl.it/opca#subsec_prbolus}).
+			patientBolusRate: data PCA_Types::Flow_Rate.imp; --,
+			vtbi: data PCA_Types::Drug_Volume.imp; --,        // VTBI
+			maxDrugPerHour: data PCA_Types::Drug_Volume.imp; --        // maximum drug allowed per hour
+			minimumTimeBetweenBolus: data ICE_Types::Minute.imp; --,            // min time between bolus doses
+			dateRxFilled: data Base_Types::String; --,                     // date filled; may change to a date type
+			prescriber: data Base_Types::String; --,                     // prescribing physician
+			pharmacist: data Base_Types::String; --                      // pharmacist
+	end Prescription.imp;
+
+	data Fault_Record --record of fault for log
+		properties
+			BLESS::Typed => "record (alarm:Alarm_Type; warning:Warning_Type; occurrence_time:BLESS_Types::Time;)";
+			Data_Model::Data_Representation => Struct;
+			Data_Model::Element_Names => ("alarm", "warning", "occurrence_time");
+			Data_Model::Base_Type => (classifier (Alarm_Type), classifier (Warning_Type),
+				classifier (BLESS_Types::Time));
+	end Fault_Record;
+
+	data implementation Fault_Record.imp
+		subcomponents
+			alarm: data PCA_Types::Alarm_Type;
+			warning: data PCA_Types::Warning_Type;
+			occurrence_time: data Base_Types::Integer; -- FIXME: was BLESS_Types::Time
+	end Fault_Record.imp;
+
+	data Fault_Log --holds records of faults
+		properties
+			BLESS::Typed => "array [#PCA_Properties::Fault_Log_Size] of PCA_Types::Fault_Record";
+			Data_Model::Data_Representation => Array;
+			Data_Model::Base_Type => (classifier (Fault_Record.imp));
+			Data_Model::Dimension => (PCA_Properties::Fault_Log_Size);
+	end Fault_Log;
+
+	data Event_Record --record of event for log
+		properties
+			BLESS::Typed => "variant (start_patient_bolus:Start_Patient_Bolus_Event;
+      stop_patient_bolus:Stop_Patient_Bolus_Event;)";
+			Data_Model::Data_Representation => Union;
+			Data_Model::Base_Type => (classifier (Start_Patient_Bolus_Event),
+				classifier (Stop_Patient_Bolus_Event));
+			Data_Model::Element_Names => ("start_patient_bolus", "stop_patient_bolus");
+	end Event_Record;
+
+
+	data Start_Patient_Bolus_Event
+	end Start_Patient_Bolus_Event;
+
+	data Stop_Patient_Bolus_Event
+	end Stop_Patient_Bolus_Event;
+
+	data Event_Log --holds records of events
+		properties
+			BLESS::Typed => "array [#PCA_Properties::Event_Log_Size] of PCA_Types::Event_Record";
+			Data_Model::Data_Representation => Array;
+			Data_Model::Base_Type => (classifier (Event_Record));
+			Data_Model::Dimension => (PCA_Properties::Event_Log_Size);
+	end Event_Log;
+
+	data Infusion_Type --used for over- and under-infusion alarms
+		properties
+			BLESS::Typed => "enumeration(Bolus_Infusion,Square_Infusion,Basal_Infusion,KVO_Infusion)";
+			Data_Model::Data_Representation => Enum;
+			Data_Model::Enumerators => ("Bolus_Infusion", "Square_Infusion", "Basal_Infusion", "KVO_Infusion");
+	end Infusion_Type;
+
+	data Scan_Data_Type --used for data from scanner
+		--TBD
+	end Scan_Data_Type;
+
+	data Pump_Fault_Type
+		properties
+			BLESS::Typed => "enumeration(Prime_Failure,Pump_Hot,Bubble,Upstream_Occlusion,
+    Downstream_Occlusion,Overinfusion,Underinfusion)";
+			Data_Model::Data_Representation => Enum;
+			Data_Model::Enumerators => ("Prime_Failure", "Pump_Hot", "Bubble", "Upstream_Occlusion",
+				"Downstream_Occlusion", "Overinfusion", "Underinfusion");
+	end Pump_Fault_Type;
+
+	data Message --messages displayed on control panel and ice console
+		properties
+			BLESS::Typed => "enumeration(No_Message,POST_fail,Turn_Off,If_Beep_Press_Stop_Button,Scan_Badge,Scan_Wristband,Scan_Rx,
+       Clinician_Not_Authenticated,Patient_Not_Authenticated,Prescription_Not_Authenticated,Hard_Limit_Violated,
+       Soft_Limit_Rejected,Insert_Vial_and_Close_Door,Press_start_to_begin_priming,Press_stop_to_end_priming,
+       Priming_Failure,Insert_Needle_Then_Press_Start,Press_Stop_Again_To_End_Infusion_Press_Start_To_Resume_Infusion)";
+			Data_Model::Data_Representation => Enum;
+			Data_Model::Enumerators => (
+				"No_Message",
+				"POST_fail",
+				"Turn_Off",
+				"If_Beep_Press_Stop_Button",
+				"Scan_Badge",
+				"Scan_Wristband",
+				"Scan_Rx",
+				"Clinician_Not_Authenticated",
+				"Patient_Not_Authenticated",
+				"Prescription_Not_Authenticated",
+				"Hard_Limit_Violated",
+				"Soft_Limit_Rejected",
+				"Insert_Vial_and_Close_Door",
+				"Press_start_to_begin_priming",
+				"Press_stop_to_end_priming",
+				"Priming_Failure",
+				"Insert_Needle_Then_Press_Start",
+				"Press_Stop_Again_To_End_Infusion_Press_Start_To_Resume_Infusion",
+				
+				"Drug_Not_In_Library",
+				"Sound_Failure");
+	end Message;
+
+	data Sound --sounds made by control panel and ice console
+		properties
+			BLESS::Typed => "enumeration(Silence,Beep)";
+			Data_Model::Data_Representation => Enum;
+			Data_Model::Enumerators => ("Silence", "Beep");
+	end Sound;
+
+	data Image
+		--properties
+		--  Data_Model::Data_Representation => Struct;
+		--  Data_Model::Element_Names => ( "alarm",         
+		--                                 "system_status", 
+		--                                 "message" );    
+		--  Data_Model::Base_Type     => ( classifier(Base_Types::String),  -- Option[String] 
+		--                                 classifier(Base_Types::String),  -- Option[String]
+		--                                 classifier(Base_Types::String)); -- Option[String]  
+	end Image;
+
+	data Touch
+		--properties
+		--  Data_Model::Data_Representation => Struct;
+		--  Data_Model::Element_Names => ( "location", -- could be a Point, (x,y) coord, ... 
+		--                                 "alarm_inactivation",
+		--                                 "bolus_duration" );
+		--  Data_Model::Base_Type     => ( classifier(Button_Id), 
+		--                                 classifier(Base_Types::String),      -- Option[Z]
+		--                                 classifier(Base_Types::Integer_16)); -- Option[Z]
+	end Touch;
+
+	data Button_Id
+		properties
+			Data_Model::Data_Representation => Enum;
+			Data_Model::Enumerators => ("CP_Reset_Alarm",
+				"Confirm_Soft_Limit_Exception",
+				"Reject_Soft_Limit_Exception",
+				"Stop_Button_Pressed",
+				"Start_Button_Pressed",
+				"Clinician_Request_Bolus",
+				"Pause_Infusion",
+				"Resume_Infusion",
+				"Turn_Off");
+	end Button_Id;
+
+end PCA_Types;

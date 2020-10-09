@@ -1,0 +1,9 @@
+property set PCA_Constants is
+with Physical_Properties; --,PCA_Mechanical;
+
+  Reservoir_Empty_Limit : Physical_Properties::Fluid_Volume=> 100 pl
+     applies to (all);  -- (PCA_Mechanical::drug_reservoir.imp);
+  Reservoir_Low_Limit : Physical_Properties::Fluid_Volume=> 2 ml
+     applies to (all);  --(PCA_Mechanical::drug_reservoir.imp);
+ 
+end PCA_Constants;

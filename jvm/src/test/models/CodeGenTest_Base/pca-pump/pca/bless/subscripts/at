@@ -1,0 +1,146 @@
+#PCA_Alarm::alarm_thread.imp
+push
+sort-by-component[PCA_Alarm::alarm_thread.imp]
+#PCA_Alarm::alarm_thread.imp
+#[serial 1003] <<M(normal)>> -> <<I>> from invariant I when complete state normal has Assertion <<M(normal)>> in its definition
+make-an
+axioms
+#[serial 1004] <<M(max_dose)>> -> <<I>> from invariant I when complete state max_dose has Assertion <<M(max_dose)>> in its definition.
+axioms
+#[serial 1005] <<M(low)>> -> <<I>> from invariant I when complete state low has Assertion <<M(low)>> in its definition.
+axioms
+#[serial 1006] <<M(pump_hot)>> -> <<I>> from invariant I when complete state pump_hot has Assertion <<M(pump_hot)>> in its definition.
+axioms
+#[serial 1007] <<M(btty)>> -> <<I>> from invariant I when complete state btty has Assertion <<M(btty)>> in its definition.
+axioms
+#[serial 1008] <<M(hard_limit)>> -> <<I>> from invariant I when complete state hard_limit has Assertion <<M(hard_limit)>> in its definition.
+axioms
+#[serial 1009] <<M(empty)>> -> <<I>> from invariant I when complete state empty has Assertion <<M(empty)>> in its definition.
+axioms
+#[serial 1010] <<M(prime_fail)>> -> <<I>> from invariant I when complete state prime_fail has Assertion <<M(prime_fail)>> in its definition.
+axioms
+#[serial 1011] Serban's Theorem:  disjunction of execute conditions leaving execution state start, <<M(start)>> -> <<e1 or e2 or . . . en>>
+axioms
+#[serial 1012]  <<M(start)>> A <<M(normal)>> for go:start-[ ]->normal{A};
+reduce
+atomic
+laws
+axioms
+#[serial 1013]  <<M(normal) and x>> A <<M(max_dose)>> for md:normal-[x]->max_dose{A};
+reduce
+axioms
+atomic
+laws
+axioms
+substitute-post
+normalize
+now
+axioms
+#[serial 1014]  <<M(normal) and x>> A <<M(hard_limit)>> for hlv:normal-[x]->hard_limit{A};
+reduce
+atomic
+axioms
+now
+laws
+axioms
+#[serial 1015]  <<M(normal) and x>> A <<M(empty)>> for er:normal-[x]->empty{A};
+reduce
+atomic
+axioms
+substitute-both
+now
+laws
+axioms
+#[serial 1016]  <<M(normal) and x>> A <<M(low)>> for lr:normal-[x]->low{A};
+reduce
+atomic
+axioms
+now
+laws
+axioms
+#[serial 1017]  <<M(normal) and x>> A <<M(prime_fail)>> for pf:normal-[x]->prime_fail{A};
+reduce
+atomic
+now
+laws
+normalize
+axioms
+#[serial 1018]  <<M(normal) and x>> A <<M(pump_hot)>> for ph:normal-[x]->pump_hot{A};
+reduce
+atomic
+axioms
+normalize
+substitute-both
+laws
+now
+axioms
+#[serial 1019]  <<M(normal) and x>> A <<M(btty)>> for d:normal-[x]->btty{A};
+reduce
+atomic
+axioms
+normalize
+substitute-both
+laws
+now
+axioms
+#[serial 1020]  <<M(normal) and x>> A <<M(btty)>> for btlo:normal-[x]->btty{A};
+reduce
+atomic
+axioms
+normalize
+substitute-both
+laws
+now
+axioms
+#[serial 1021]  <<M(max_dose) and x>> A <<M(normal)>> for reset:max_dose-[x]->normal{A};
+reduce
+atomic
+axioms
+normalize
+now
+laws
+axioms
+#[serial 1022]  <<M(hard_limit) and x>> A <<M(normal)>> for reset:hard_limit-[x]->normal{A};
+reduce
+atomic
+now
+normalize
+laws
+axioms
+#[serial 1023]  <<M(empty) and x>> A <<M(normal)>> for reset:empty-[x]->normal{A};
+reduce
+atomic
+now
+normalize
+laws
+axioms
+#[serial 1024]  <<M(low) and x>> A <<M(normal)>> for reset:low-[x]->normal{A};
+reduce
+atomic
+now
+normalize
+laws
+axioms
+#[serial 1025]  <<M(prime_fail) and x>> A <<M(normal)>> for reset:prime_fail-[x]->normal{A};
+reduce
+atomic
+now
+normalize
+laws
+axioms
+#[serial 1026]  <<M(pump_hot) and x>> A <<M(normal)>> for reset:pump_hot-[x]->normal{A};
+reduce
+atomic
+now
+normalize
+laws
+axioms
+#[serial 1027]  <<M(btty) and x>> A <<M(normal)>> for reset:btty-[x]->normal{A};
+reduce
+atomic
+now
+normalize
+laws
+axioms
+#[serial 1028]  <<M(normal) and x>> -> <<M(done)>> for quit:normal-[x]->done{};
+axioms

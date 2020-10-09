@@ -1,0 +1,38 @@
+#PCA_Operation::event_logger_thread.imp
+push
+sort-by-component[PCA_Operation::event_logger_thread.imp]
+#PCA_Operation::event_logger_thread.imp
+#[serial 1035] <<M(run)>> -> <<I>> from invariant I when complete state run has Assertion <<M(run)>> in its definition
+make-an
+axioms
+#[serial 1036] Serban's Theorem:  disjunction of execute conditions leaving execution state start, <<M(start)>> -> <<e1 or e2 or . . . en>>
+axioms
+#[serial 1037]  <<M(start)>> -> <<M(run)>> for elt0:start-[ ]->run{};
+axioms
+#[serial 1038]  <<M(run) and x>> A <<M(run)>> for elt1:run-[x]->run{A};
+reduce
+normalize
+atomic
+normalize
+axioms
+substitute-both
+normalize
+axioms
+qtiming
+axioms
+#[serial 1039]  <<M(run) and x>> A <<M(run)>> for elt2:run-[x]->run{A};
+reduce
+remove-axioms-post
+normalize
+laws
+normalize
+axioms
+substitute-both
+normalize
+atomic
+normalize
+laws
+axioms
+sub-all-equals
+normalize
+axioms

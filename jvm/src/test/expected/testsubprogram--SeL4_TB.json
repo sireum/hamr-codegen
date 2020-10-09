@@ -1,0 +1,161 @@
+{
+  "type" : "TestResult",
+  "map" : {
+    "type" : "Map",
+    "entries" : [
+      [
+        "testsubprogram--SeL4_TB\/components\/sender_impl_testsubprogram_source_inst\/sender_impl_testsubprogram_source_inst.camkes",
+        {
+          "type" : "TestResource",
+          "content" : "import \"..\/..\/interfaces\/operations_interface.idl4\";\ncomponent sender_impl_testsubprogram_source_inst {\n  include <sb_types.h>;\n  control;\n  uses operations_interface operations;\n  has semaphore sb_dispatch_sem;\n}\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testsubprogram--SeL4_TB\/components\/receiver_impl_testsubprogram_destination_inst\/receiver_impl_testsubprogram_destination_inst.camkes",
+        {
+          "type" : "TestResource",
+          "content" : "import \"..\/..\/interfaces\/operations_interface.idl4\";\ncomponent receiver_impl_testsubprogram_destination_inst {\n  include <sb_types.h>;\n  control;\n  provides operations_interface operations;\n  has semaphore sb_dispatch_sem;\n}\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testsubprogram--SeL4_TB\/top_impl_Instance.camkes",
+        {
+          "type" : "TestResource",
+          "content" : "\/\/ This file will be regenerated, do not edit\n\nimport <std_connector.camkes>;\nimport \"components\/sender_impl_testsubprogram_source_inst\/sender_impl_testsubprogram_source_inst.camkes\";\nimport \"components\/receiver_impl_testsubprogram_destination_inst\/receiver_impl_testsubprogram_destination_inst.camkes\";\n\nassembly {\n  composition {\n    component sender_impl_testsubprogram_source_inst testsubprogram_source_inst;\n    component receiver_impl_testsubprogram_destination_inst testsubprogram_destination_inst;\n\n    connection seL4RPCCall conn1(from testsubprogram_source_inst.operations, to testsubprogram_destination_inst.operations);\n  }\n\n  configuration {\n\n  }\n}\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testsubprogram--SeL4_TB\/interfaces\/add_uint32.idl4",
+        {
+          "type" : "TestResource",
+          "content" : "procedure add_uint32 {\n  void sub1(in Unsigned_32 A,in Unsigned_32 B,out Unsigned_32 result);\n};",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testsubprogram--SeL4_TB\/interfaces\/subtract_uint32.idl4",
+        {
+          "type" : "TestResource",
+          "content" : "procedure subtract_uint32 {\n  void sub2(in Unsigned_32 A,in Unsigned_32 B,out Unsigned_32 result);\n};",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testsubprogram--SeL4_TB\/interfaces\/operations_interface.idl4",
+        {
+          "type" : "TestResource",
+          "content" : "procedure operations_interface {\n  void add(in uint32_t A,in uint32_t B,out uint32_t result);\n  void subtract(in uint32_t A,in uint32_t B,out uint32_t result);\n};",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testsubprogram--SeL4_TB\/components\/sender_impl_testsubprogram_source_inst\/src\/sender.c",
+        {
+          "type" : "TestResource",
+          "content" : "\/* testsubprogram\/components\/sender\/src\/sender *\/\n\n#include <camkes.h>\n#include <sb_types.h>\n#include \"..\/includes\/sb_sender_impl.h\"\n\nvoid sender_init(const int64_t *arg){\n   printf(\"Initializer method for sender invoked\\n\");\n}\n\nvoid run_sender(int64_t * arg) {\n   uint32_t result;\n\n   operations_add(10, 5, &result);\n   printf(\"Result of 'add' call to receiver with arguments 10, 5 : (%d) \\n\", result);\n\n   operations_subtract(10, 5, &result);  \n   printf(\"Result of 'subtract' call to receiver with arguments 10, 5 : (%d) \\n\", result);\n}\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testsubprogram--SeL4_TB\/components\/receiver_impl_testsubprogram_destination_inst\/src\/receiver.c",
+        {
+          "type" : "TestResource",
+          "content" : "\/* testsubprogram\/components\/receiver\/src\/receiver *\/\n\n#include <camkes.h>\n#include <sb_types.h>\n#include \"..\/includes\/sb_receiver_impl.h\"\n\nvoid operations_add(uint32_t A, uint32_t B, uint32_t *result) {\n\t*result = A + B;\n}\n\nvoid operations_subtract(uint32_t A, uint32_t B, uint32_t *result) {\n\t*result = A - B;\n}\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testsubprogram--SeL4_TB\/CMakeLists.txt",
+        {
+          "type" : "TestResource",
+          "content" : "# This file will be regenerated, do not edit\n\ncmake_minimum_required(VERSION 3.8.2)\n\nproject (top_impl_Instance C)\n\nadd_definitions(-DCAMKES)\n\nif (\"${CMAKE_CXX_COMPILER_ID}\" MATCHES \"(C|c?)lang\")\n  add_compile_options(\"$<$<CONFIG:Release>:-Oz>\")\nelseif (\"${CMAKE_CXX_COMPILER_ID}\" STREQUAL \"GNU\")\n  add_compile_options(-fstack-usage)\n  add_compile_options(\"$<$<CONFIG:Release>:-Os>\")\nendif()\n\nadd_subdirectory(${CMAKE_CURRENT_LIST_DIR}\/types)\n\nDeclareCAmkESComponent(sender_impl_testsubprogram_source_inst\n  SOURCES components\/sender_impl_testsubprogram_source_inst\/\/src\/sender.c components\/sender_impl_testsubprogram_source_inst\/src\/sb_sender_impl.c\n  INCLUDES components\/sender_impl_testsubprogram_source_inst\/includes\/ types\/includes\n)\n\nDeclareCAmkESComponent(receiver_impl_testsubprogram_destination_inst\n  SOURCES components\/receiver_impl_testsubprogram_destination_inst\/\/src\/receiver.c components\/receiver_impl_testsubprogram_destination_inst\/src\/sb_receiver_impl.c\n  INCLUDES components\/receiver_impl_testsubprogram_destination_inst\/includes\/ types\/includes\n)\n\nDeclareCAmkESRootserver(top_impl_Instance.camkes)\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testsubprogram--SeL4_TB\/bin\/run-camkes.sh",
+        {
+          "type" : "TestResource",
+          "content" : "#!\/usr\/bin\/env bash\n\nset -o errexit -o pipefail -o noclobber -o nounset\n\nexport SCRIPT_HOME=$( cd \"$( dirname \"$0\" )\" &> \/dev\/null && pwd )\nexport PROJECT_HOME=$( cd \"$( dirname \"$0\" )\/..\" &> \/dev\/null && pwd )\ncd ${PROJECT_HOME}\n\n! getopt --test > \/dev\/null\nif [[ ${PIPESTATUS[0]} -ne 4 ]]; then\n  echo '`getopt --test` failed in this environment.'\n  exit 1\nfi\n\nNON_INTERACTIVE=false\nCAMKES_DIR=\"\"\nSIMULATE=false\nCAMKES_OPTIONS=\"\"\n\nOPTIONS=c:no:s\nLONGOPTS=camkes-dir:,non-interactive,camkes-options:,simulate\n\nfunction usage {\n  echo \"\"\n  echo \"Usage: <option>*\"\n  echo \"\"\n  echo \"Available Options:\"\n  echo \"  -c, --camkes-dir      Location of CAmkES project\"\n  echo \"  -n, --non-interactive Non-interactive mode.  Will not prompt before deleting apps and build directories\"\n  echo \"  -o, --camkes-options  CAmkES options (e.g -o \\\"-DWITH_LOC=ON -DCapDLLoaderMaxObjects=40000\\\")\"\n  echo \"  -s, --simulate        Simulate via QEMU\"\n  exit 2\n}\n\n! PARSED=$(getopt --options=$OPTIONS --longoptions=$LONGOPTS --name \"$0\" -- \"$@\")\nif [[ ${PIPESTATUS[0]} -ne 0 ]]; then\n    usage\nfi\n\neval set -- \"$PARSED\"\n\nwhile true; do\n  case \"$1\" in\n    -c|--camkes-dir) CAMKES_DIR=\"$2\"; shift 2 ;;\n    -n|--non-interactive) NON_INTERACTIVE=true; shift ;;\n    -o|--camkes-options) CAMKES_OPTIONS=\"$2\"; shift 2 ;;\n    -s|--simulate) SIMULATE=true; shift ;;\n    --) shift; break ;;\n  esac\ndone\n\n# handle non-option arguments\nif [[ $# -ne 0 ]]; then\n  echo \"$0: Unexpected non-option arguments\"\n  usage\nfi\n\n# if CAMKES_DIR option not set then look in some common locations\nif [[ -z \"${CAMKES_DIR}\" && -d \"\/host\/camkes-project\" ]]; then\n  # docker location\n  CAMKES_DIR=\"\/host\/camkes-project\"\nelif [[ -z \"$CAMKES_DIR\" && -d \"${HOME}\/CASE\/camkes\" ]]; then\n  # CASE Vagrant VM location\n  CAMKES_DIR=\"${HOME}\/CASE\/camkes\"\nfi\n\nif [[ -z \"${CAMKES_DIR}\" || ! -d \"${CAMKES_DIR}\" ]]; then\n  echo \"Directory '${CAMKES_DIR}' does not exist.  Please specify the location of your camkes project directory.\"\n  echo \"See https:\/\/docs.sel4.systems\/projects\/camkes\"\n  exit -1\nfi\n\n\n# use the directory name for the CAmkES apps directory name\nHAMR_CAMKES_PROJ=${PWD##*\/}\n\n\nCAMKES_APPS_DIR=${CAMKES_DIR}\/projects\/camkes\/apps\/$HAMR_CAMKES_PROJ\n\n# create a sym-link to the project in the CAmkES app directory\nif [ -e \"${CAMKES_APPS_DIR}\" ]; then\n  if [ \"${NON_INTERACTIVE}\" = true ]; then\n    rm -rf ${CAMKES_APPS_DIR}\n  else\n    read -p \"The following app directory already exists, replace ${CAMKES_APPS_DIR} [Y|y]? \" -n 1 -r; echo\n    if [[ $REPLY =~ ^[Yy]$ ]]; then\n      rm -rf ${CAMKES_APPS_DIR}\n    else\n      exit -1\n    fi\n  fi\nfi\n\nln -sv $PROJECT_HOME $CAMKES_APPS_DIR\n\n########################\n# run CAmkES\/seL4 build\n########################\n\nBUILD_DIR=${CAMKES_DIR}\/build_$HAMR_CAMKES_PROJ\n\nif [ -e \"${BUILD_DIR}\" ]; then\n  if [ \"${NON_INTERACTIVE}\" = true ];then\n    rm -rf ${BUILD_DIR}\n    mkdir ${BUILD_DIR}\n  else\n    read -p \"The following build directory already exists, replace ${BUILD_DIR} [Y|y]? \" -n 1 -r; echo\n    if [[ $REPLY =~ ^[Yy]$ ]]; then\n      rm -rf ${BUILD_DIR}\n      mkdir ${BUILD_DIR}\n    fi\n  fi\nelse\n  mkdir ${BUILD_DIR}\nfi\n\ncd ${BUILD_DIR}\n\n..\/init-build.sh ${CAMKES_OPTIONS} -DCAMKES_APP=$HAMR_CAMKES_PROJ\n\nninja\n\n########################\n# simulate via QEMU\n########################\n\nif [ \"${SIMULATE}\" = true ]; then\n  .\/simulate\nfi\n",
+          "overwrite" : true,
+          "makeExecutable" : true
+        }
+      ],
+      [
+        "testsubprogram--SeL4_TB\/components\/sender_impl_testsubprogram_source_inst\/src\/sb_sender_impl.c",
+        {
+          "type" : "TestResource",
+          "content" : "\/\/ This file will be regenerated, do not edit\n\n#include <sb_sender_impl.h>\n#include <string.h>\n#include <camkes.h>\n\n\/************************************************************************\n *  sb_entrypoint_sender_impl_testsubprogram_source_inst_initializer:\n *\n * This is the function invoked by an active thread dispatcher to\n * call to a user-defined entrypoint function.  It sets up the dispatch\n * context for the user-defined entrypoint, then calls it.\n *\n ************************************************************************\/\nvoid sb_entrypoint_sender_impl_testsubprogram_source_inst_initializer(const int64_t * in_arg) {\n  sender_init((int64_t *) in_arg);\n}\n\n\/************************************************************************\n * int run(void)\n * Main active thread function.\n ************************************************************************\/\nint run(void) {\n  {\n    int64_t sb_dummy;\n    sb_entrypoint_sender_impl_testsubprogram_source_inst_initializer(&sb_dummy);\n  }\n  MUTEXOP(sb_dispatch_sem_wait())\n  for(;;) {\n    MUTEXOP(sb_dispatch_sem_wait())\n  }\n  return 0;\n}\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testsubprogram--SeL4_TB\/components\/sender_impl_testsubprogram_source_inst\/includes\/sb_sender_impl.h",
+        {
+          "type" : "TestResource",
+          "content" : "\/\/ This file will be regenerated, do not edit\n\n#ifndef SB_SENDER_IMPL_H\n#define SB_SENDER_IMPL_H\n\n#include <sb_types.h>\n\nvoid sender_init(const int64_t *arg);\n\n#endif \/\/ SB_SENDER_IMPL_H\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testsubprogram--SeL4_TB\/components\/receiver_impl_testsubprogram_destination_inst\/src\/sb_receiver_impl.c",
+        {
+          "type" : "TestResource",
+          "content" : "\/\/ This file will be regenerated, do not edit\n\n#include <sb_receiver_impl.h>\n#include <string.h>\n#include <camkes.h>\n\n\n\/************************************************************************\n * int run(void)\n * Main active thread function.\n ************************************************************************\/\nint run(void) {\n  MUTEXOP(sb_dispatch_sem_wait())\n  for(;;) {\n    MUTEXOP(sb_dispatch_sem_wait())\n  }\n  return 0;\n}\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testsubprogram--SeL4_TB\/components\/receiver_impl_testsubprogram_destination_inst\/includes\/sb_receiver_impl.h",
+        {
+          "type" : "TestResource",
+          "content" : "\/\/ This file will be regenerated, do not edit\n\n#ifndef SB_RECEIVER_IMPL_H\n#define SB_RECEIVER_IMPL_H\n\n#include <sb_types.h>\n\n\n#endif \/\/ SB_RECEIVER_IMPL_H\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testsubprogram--SeL4_TB\/types\/includes\/sb_types.h",
+        {
+          "type" : "TestResource",
+          "content" : "#ifndef SB_TYPES_H\n#define SB_TYPES_H\n\n#include <stdio.h>\n#include <stdbool.h>\n#include <stdint.h>\n\n#ifndef SB_VERIFY\n#include <stddef.h>\n#endif \/\/ SB_VERIFY\n\n#define __SB_OS_CAMKES__\n\n#ifndef SB_VERIFY\n#define MUTEXOP(OP)\\\nif((OP) != 0) {\\\n  fprintf(stderr,\"Operation \" #OP \" failed in %s at %d.\\n\",__FILE__,__LINE__);\\\n  *((int*)0)=0xdeadbeef;\\\n}\n#else\n#define MUTEXOP(OP) OP\n#endif \/\/ SB_VERIFY\n#ifndef SB_VERIFY\n#define CALLBACKOP(OP)\\\nif((OP) != 0) {\\\n  fprintf(stderr,\"Operation \" #OP \" failed in %s at %d.\\n\",__FILE__,__LINE__);\\\n  *((int*)0)=0xdeadbeef;\\\n}\n#else\n#define CALLBACKOP(OP) OP\n#endif \/\/ SB_VERIFY\n\n\n#endif \/\/ SB_TYPES_H\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testsubprogram--SeL4_TB\/settings.cmake",
+        {
+          "type" : "TestResource",
+          "content" : "# This file will not be overwritten so is safe to edit\n\ncmake_minimum_required(VERSION 3.8.2)\n\n",
+          "overwrite" : false,
+          "makeExecutable" : false
+        }
+      ],
+      [
+        "testsubprogram--SeL4_TB\/types\/CMakeLists.txt",
+        {
+          "type" : "TestResource",
+          "content" : "# This file will be regenerated, do not edit\n\ncmake_minimum_required(VERSION 3.8.2)\n\nproject(SB_Type_Library)\n\nset(CMAKE_C_STANDARD 99)\n\nadd_compile_options(-Werror)\n\nif (\"${CMAKE_CXX_COMPILER_ID}\" MATCHES \"(C|c?)lang\")\n  add_compile_options(\"$<$<CONFIG:Release>:-Oz>\")\nelseif (\"${CMAKE_CXX_COMPILER_ID}\" STREQUAL \"GNU\")\n  add_compile_options(-fstack-usage)\n  add_compile_options(\"$<$<CONFIG:Release>:-Os>\")\nendif()\n\nadd_library(SB_Type_Library\n            INTERFACE\n            )\n\n# Assume that if the muslc target exists then this project is in an seL4 native\n# component build environment, otherwise it is in a linux userlevel environment.\n# In the linux userlevel environment, the C library will be linked automatically.\nif(TARGET muslc)\n  target_link_libraries(SB_Type_Library\n                        INTERFACE\n                        muslc)\nendif()\n\nadd_definitions(-DCAMKES)\n\nif(TARGET SlangTypeLibrary)\n  target_link_libraries(SB_Type_Library\n                        INTERFACE\n                        SlangTypeLibrary)\nendif()\n\ntarget_include_directories(SB_Type_Library\n                           INTERFACE\n                           includes)\n",
+          "overwrite" : true,
+          "makeExecutable" : false
+        }
+      ]
+    ]
+  }
+}

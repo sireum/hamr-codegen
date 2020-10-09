@@ -1,0 +1,118 @@
+--PCA_Error_Model.aadl
+
+--package that contains commonly-used EMV2 annex library
+
+package PCA_Error_Model public
+--  with EMV2;
+
+--EMV2 annex library, common reference for all the EMV2 annex subclauses attached to components
+--contains custom error type declarations and commonly used error state machines
+annex EMV2 {**
+	error types
+	  DrugFlowError : type;  --the actual drug flow differs from prescribed, may injure patient
+	  DrugStopped : type extends DrugFlowError;  --the flow rate may be incorrect, but it's zero, so it's safe
+	  DrugRateError : type extends DrugFlowError;  --the flow rate may be incorrect, and possibly harmful
+	  ThirdPartyPress : type;  --when someone other than the patient presses the paitent button
+	  AlarmError : type;		--the class of alarm errors
+	  FalseAlarm : type extends AlarmError;  --alarm erroneously sounded
+	  MissedAlarm : type extends AlarmError;  --alarm missed  
+	  StatusError : type;  --indicated status wrong 
+--	  RegulatorStatusError : type extends StatusError;  --indicated regulator status wrong
+--	  RegulatorModeError : type extends StatusError;  --regulator mode wrong
+--	  MonitorStatusError : type extends StatusError;  --indicated monitor status wrong
+--	  MonitorModeError : type extends StatusError;  --monitor mode wrong
+	  ThreadFault renames type ErrorLibrary::EarlyServiceTermination;  --thread fault halts thread
+	  InternalError : type;  --an internal error was detected
+	  DetectedFault : type extends InternalError;  --fault was detected (and announced)
+	  POSTdetectedFault : type extends DetectedFault;  --power-on self-test detected a fault
+	  RAMdetectedFault : type extends DetectedFault;  --RAM detected a fault
+	  ROMdetectedFault : type extends DetectedFault;  --ROM detected a fault
+	  CPUdetectedFault : type extends DetectedFault;  --CPU detected a fault
+	  HWdetectedFault : type extends DetectedFault;  --HW self-test detected a fault
+	  UndetectedFault : type extends InternalError;  --fault occurred, but not detected
+	  OperatorError : type;  --operator makes mistake entering desired and/or alarm temperatures
+	  LogError : type;  --error in the values returned from logs
+	  CorruptedLog : type extends LogError;  --some log values have been corrupted
+	  DeadLog : type extends LogError;  --no (correct) values are returned from log
+	  TruncatedLog : type extends LogError;  --log stops recording
+	end types;
+	--error state machine for components that have out-of range values when failed
+	error behavior FailStop
+	  use types PCA_Error_Model;
+	  events
+	  fail: error event;
+	  states  
+	    working: initial state; 
+	    failed : state;
+	  transitions
+	    working -[fail]-> failed;
+	end behavior;
+	--error state machine for components that may put out undetectable value errors
+	error behavior FailSubtle
+	  use types PCA_Error_Model;
+	  events 
+	    hardfail: error event;
+	    subtlefail: error event;
+	  states 
+	    working: initial state; 
+	    flakey: state;
+	    failed : state;
+	  transitions
+	    working -[hardfail]-> failed;
+	    working -[subtlefail]-> flakey;
+	end behavior;
+	
+--error state machine for components that may be corrupted, or stop recording
+	error behavior FailCorruptedTruncated
+	  use types PCA_Error_Model;
+	  events 
+	    hardfail: error event {DrugFlowError};  --complete failure
+	    corrupt: error event;   --corrupted data
+	    truncate: error event;  --stopped recording
+	  states 
+	    working: initial state; --no error
+	    corrupted: state;  --corrupted data
+	    truncated: state;  --truncated data
+	    failed : state;  --complete failure
+	  transitions
+	    sudden_failure: working -[hardfail]-> failed;
+	    corrupted_failure: corrupted-[hardfail]-> failed;
+	    truncated_failure: corrupted-[hardfail]-> failed;
+	    corruption: working -[corrupt]-> corrupted;  --once corrupt, stay corrupted until failure
+	    truncation: working -[truncate]-> truncated;  --once truncated, new values cannot corrupt
+	end behavior;
+	
+--composite error models defining error state of parent referencing subcomponents
+	error behavior CompositeFailStop
+	  use types PCA_Error_Model;
+	  states
+	    working: initial state;
+	    failed: state; 
+    end behavior;
+
+--composite 3-state working-operational-fail
+	error behavior CompositeWorkingOperationalFail
+	  use types PCA_Error_Model;
+	  states
+	    working: initial state;
+	    operational: state;  --system is impaired in some unimportant way, but fully functional
+	    failed: state;  --non-functional
+    end behavior;
+
+--error state machine for error_detector in PCA_Safety.aadl
+	error behavior ErrorDetector
+	  use types PCA_Error_Model;
+	  states 
+	    working: initial state; 
+	    failed : state 
+	      {PCA_Error_Model::POSTdetectedFault,
+	      PCA_Error_Model::RAMdetectedFault,
+	      PCA_Error_Model::ROMdetectedFault,
+	      PCA_Error_Model::CPUdetectedFault,
+	      PCA_Error_Model::ThreadFault,
+	      PCA_Error_Model::HWdetectedFault
+	      };
+	end behavior;
+  	
+**};
+end PCA_Error_Model;

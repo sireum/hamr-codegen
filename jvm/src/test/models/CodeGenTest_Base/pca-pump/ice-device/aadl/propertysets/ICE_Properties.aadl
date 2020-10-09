@@ -1,0 +1,7 @@
+--ICE_Properties.aadl
+--holds property set for ICE devices
+property set ICE_Properties is
+--	Broadcast_Type : enumeration (Periodic, Get, Sporadic) => Periodic
+--		applies to (process port);
+	Output_Rate : Time_Range applies to (port);
+end ICE_Properties;

@@ -1,0 +1,106 @@
+#PCA_Drug_Library::drug_library_thread.imp
+push
+sort-by-component[PCA_Drug_Library::drug_library_thread.imp]
+#PCA_Drug_Library::drug_library_thread.imp
+#[serial 1099] <<M(wait)>> -> <<I>> from invariant I when complete state wait has Assertion <<M(wait)>> in its definition
+make-an
+axioms
+#[serial 1100] <<M(run)>> -> <<I>> from invariant I when complete state run has Assertion <<M(run)>> in its definition.
+substitute-post
+axioms
+#[serial 1101] Serban's Theorem:  disjunction of execute conditions leaving execution state start, <<M(start)>> -> <<e1 or e2 or . . . en>>
+axioms
+#[serial 1102]  <<M(start)>> -> <<M(wait)>> for dlt0:start-[ ]->wait{};
+axioms
+#[serial 1103]  <<M(wait) and x>> A <<M(run)>> for dlt1:wait-[x]->run{A};
+reduce
+atomic
+laws
+normalize
+axioms
+#[serial 1104]  <<M(run) and x>> A <<M(run)>> for dlt2:run-[x]->run{A};
+reduce
+atomic
+laws
+normalize
+axioms
+#[serial 1105]  <<M(run) and x>> A <<M(run)>> for dlt3:run-[x]->run{A};
+reduce
+reduce
+reduce
+push
+#PCA_Drug_Library::drug_library_thread.imp
+#[serial 2686] as <<P>> -> <<pre>> in <<P>> { <<pre>> S <<post>> } <<Q>> for [serial 1105
+make-an
+substitute-post
+axioms
+#[serial 2687] as <<post>> -> <<Q>> in <<P>> { <<pre>> S <<post>> } <<Q>> [serial 1105]
+substitute-pre
+normalize
+axioms
+#[serial 2689] <<P and x=e>> -> <<A>> in existential lattice quantification for [serial 2688]
+normalize
+axioms
+#[serial 2692] P -> P1 in sequential composition for [serial 2690]
+normalize
+axioms
+#[serial 2693] Q2 -> Q in sequential composition for [serial 2690]
+axioms
+#[serial 2694] <<P0>> S0 <<Q0 and P1>> in sequential composition for [serial 2690]
+atomic
+laws
+normalize
+axioms
+#[serial 2695] <<Q0 and P1>> S1 <<Q1 and P2>> in sequential composition for [serial 2690]
+reduce
+reduce
+reduce
+atomic
+normalize
+laws
+axioms
+replace<=
+normalize
+DeMorgan
+normalize
+axioms
+substitute-post
+normalize
+split-post
+axioms
+substitute-post
+guided-sub-equals[k]
+normalize
+laws
+normalize
+axioms
+#[serial 2696] <<Q1 and P2>> S2 <<Q2>> in sequential composition for [serial 2690]
+reduce
+atomic
+normalize
+axioms
+laws
+axioms
+substitute-pre
+laws
+axioms
+DeMorgan
+replace<>
+replace<=
+normalize
+laws
+axioms
+sub-equals
+axioms
+laws
+normalize
+substitute-post
+normalize
+axioms
+guided-sub-equals[dl]
+laws
+axioms
+#[serial 2691] <<B>> -> <<Q>> in existential lattice quantification for [serial 2688]
+axioms
+#[serial 1106]  <<M(run) and x>> -> <<M(done)>> for dlt4:run-[x]->done{};
+axioms

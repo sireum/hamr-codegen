@@ -1,0 +1,74 @@
+package Physical_Types
+public
+	with BLESS_Types, Data_Model, BLESS;
+	with Base_Types;
+
+--electrical potential measurement 
+	data Voltage extends BLESS_Types::Integer
+		properties
+			Data_Model::Measurement_Unit => "Physical_Properties::Voltage_Units";
+			BLESS::Typed => "integer";
+	end Voltage;
+
+    data implementation Voltage.imp
+    	subcomponents
+    		value: data Base_Types::Integer_16;
+    end Voltage.imp;
+    
+--electrical current measurement  
+	data Current extends BLESS_Types::Integer
+		properties
+			Data_Model::Measurement_Unit => "Physical_Properties::Current_Units";
+			BLESS::Typed => "integer";
+	end Current;
+
+	data implementation Current.imp
+		subcomponents
+			value: data Base_Types::Integer_16;
+	end Current.imp;
+
+--physical liquid flow
+	data Fluid_Flow
+		properties
+			Data_Model::Measurement_Unit => "ml_per_hr";
+			BLESS::Typed => "real";
+	end Fluid_Flow;
+
+    data implementation Fluid_Flow.imp
+    	subcomponents
+    		value: data Base_Types::Float_32;
+    end Fluid_Flow.imp;
+    
+	data Fluid_Volume
+		properties
+			Data_Model::Measurement_Unit => "ml";
+			BLESS::Typed => "real";
+	end Fluid_Volume;
+
+    data implementation Fluid_Volume.imp
+    	subcomponents
+    		value: data Base_Types::Float_32;
+    end Fluid_Volume.imp;
+    
+	data Light_Wavelength
+		properties
+			Data_Model::Measurement_Unit => "nm";
+			BLESS::Typed => "integer"; --need to tighten up the type
+	end Light_Wavelength;
+
+	data Light_Intensity
+		properties
+			Data_Model::Measurement_Unit => "lumens";
+			BLESS::Typed => "integer"; --need to tighten up the type
+	end Light_Intensity;
+
+	data Touch --clinician pressing buttons or touch screen
+	end Touch;
+
+	data Image --user interface visual
+	end Image;
+
+	data Sound --user interface sound
+	end Sound;
+
+end Physical_Types;

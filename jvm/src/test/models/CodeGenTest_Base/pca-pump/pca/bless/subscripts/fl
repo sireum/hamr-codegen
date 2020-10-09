@@ -1,0 +1,20 @@
+#failure led
+push
+sort-by-component[PCA_Safety::failure_led.imp]
+#PCA_Safety::failure_led.imp
+#[serial 1108] <<M(run)>> -> <<I>> from invariant I when complete state run has Assertion <<M(run)>> in its definition
+make-an
+axioms
+#[serial 1109] Serban's Theorem:  disjunction of execute conditions leaving execution state start, <<M(start)>> -> <<e1 or e2 or . . . en>>
+axioms
+#[serial 1110]  <<M(start)>> -> <<M(run)>> for led0:start-[ ]->run{};
+axioms
+#[serial 1111]  <<M(run) and x>> A <<M(run)>> for led1:run-[x]->run{A};
+atomic
+axioms
+normalize
+laws
+now
+axioms
+#[serial 1112]  <<M(run) and x>> -> <<M(done)>> for led2:run-[x]->done{};
+axioms

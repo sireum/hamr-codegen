@@ -1,0 +1,100 @@
+--PCA_Fluid.aadl
+
+--fluid moving subsystem
+
+package PCA_Fluid
+  public
+  with
+    Base_Types, 
+    --EMV2, 
+--    ErrorLibrary,
+    Physical_Types,
+    BLESS,
+    PCA_Types, 
+    PCA_Mechanical, PCA_Pump;
+
+system fluid
+  features
+  --internal bus
+    i_bus: requires bus access PCA_Pump::Internal_Bus;
+  --drug to patient
+    Drug_Outlet : out data port Physical_Types::Fluid_Flow.imp  --drug to patient
+      {BLESS::Assertion => "<<:=INFUSION_RATE>>";};   
+    Halt: in event port 
+      {BLESS::Assertion => "<<INFUSION_RATE=0>>";};  --stop pumping
+    Rate_To_Pump: in data port PCA_Types::Flow_Rate.imp   --rate to pump
+      {BLESS::Assertion => "<<:=INFUSION_RATE>>";};
+--    Change_Rate: in event port           --start pumping at new rate
+--      {BLESS::Assertion => "<<INFUSION_RATE in 
+--        Rate-#PCA_Properties::Commanded_Drug_Flow_Rate_Tolerance..
+--        Rate+#PCA_Properties::Commanded_Drug_Flow_Rate_Tolerance>>";};  
+    Upstream_Flow_Rate: out data port PCA_Types::Flow_Rate.imp;  --measured flow rate into pump
+    Downstream_Flow_Rate: out data port PCA_Types::Flow_Rate.imp;  --measured flow rate out of pump
+  --reservoir signals
+    Low_Reservoir : out event port;
+    Empty_Reservoir : out event port;
+    Door_Open : out data port Base_Types::Boolean;  --status of door
+    Door_Closed : out event port;  --door being closed
+  --pump data to safety 
+    Bubble: out event port;
+    Pump_Too_Hot: out event port;
+    Upstream_Occlusion: out event port;
+    Downstream_Occlusion: out event port;
+    Power: requires bus access PCA_Pump::Power_Bus;
+  flows
+    Flow_MP_out : flow source Drug_Outlet;
+--    Flow_MP_path : flow path;
+end fluid;
+
+
+system implementation fluid.imp
+  subcomponents
+    mech_pump: device PCA_Mechanical::pump.imp;   --the physical pump that moves the drug
+    upstream_mon: device PCA_Mechanical::upstream_monitor.imp;      --flow and pressure between reservoir and pump
+    downstream_mon: device PCA_Mechanical::downstream_monitor.imp;  --flow and pressure between pump and patient
+    reservoir: device PCA_Mechanical::drug_reservoir.imp;  --holds drug before infusion
+  connections
+  --bus connections
+    i_bus_to_pump: bus access mech_pump.i_bus <-> i_bus ;
+    i_bus_to_upmon: bus access upstream_mon.i_bus -> i_bus ;
+    i_bus_to_downmon: bus access downstream_mon.i_bus -> i_bus ;
+    i_bus_to_reservoir: bus access reservoir.i_bus -> i_bus ;
+  --fluid flow
+    dri: port reservoir.Drug_Outlet->upstream_mon.Drug_Intake;  --from reservoir to upstream monitor
+    dru: port upstream_mon.Drug_Outlet->mech_pump.Drug_Intake;  --from upstream monitor to pump
+    drd: port mech_pump.Drug_Outlet->downstream_mon.Drug_Intake;  --from pump to downstream monitor
+    dro: port downstream_mon.Drug_Outlet->Drug_Outlet;  --from downstream monitor to outlet
+  --commands
+    hlt: port Halt->mech_pump.Halt;  
+    rat: port Rate_To_Pump->mech_pump.Rate;
+--    chr: port Change_Rate->mech_pump.Change_Rate;
+  --measured flow rate  
+    ufr: port upstream_mon.Upstream_Flow_Rate->Upstream_Flow_Rate;
+    dfr: port downstream_mon.Downstream_Flow_Rate->Downstream_Flow_Rate;
+    ufre: port upstream_mon.Upstream_Flow_Rate->Upstream_Flow_Rate;
+  --alarms
+    dno: port downstream_mon.Occlusion->Downstream_Occlusion;
+    upo: port upstream_mon.Occlusion->Upstream_Occlusion;
+  --pump data to safety
+    bba: port downstream_mon.Bubble->Bubble;
+    pth: port mech_pump.Pump_Too_Hot->Pump_Too_Hot;
+    uoc: port upstream_mon.Occlusion->Upstream_Occlusion;
+    doc: port downstream_mon.Occlusion->Downstream_Occlusion;
+  --reservoir
+    low: port reservoir.Low_Reservoir->Low_Reservoir;
+    mt: port reservoir.Empty_Reservoir->Empty_Reservoir;
+    do: port reservoir.Door_Open->Door_Open;
+    dc: port reservoir.Door_Closed->Door_Closed;
+--  flows
+--    Flow_MP_path : flow path reservoir.Drug_Outlet->dri->upstream_mon->dru->mech_pump->drd->downstream_mon->dro->Drug_Outlet;
+  annex EMV2
+  {**
+  use types ErrorLibrary, PCA_Error_Model;
+  use behavior PCA_Error_Model::CompositeFailStop; 	
+  error propagations
+    Halt: in propagation {EarlyServiceTermination};
+  end propagations;  	
+  **};
+end fluid.imp;
+
+end PCA_Fluid;

@@ -1,0 +1,258 @@
+--PCA_System.aadl
+
+--The PCA_System package contains two components:
+--  an ICE network adaptor:  ice_bus_adaptor
+--  and a wrapper around the PCA+network adapter:  wrap_pca
+--
+
+package PCA_System
+  public
+  with
+    PCA_Pump,Physical_Types,PCA_Types,BLESS,ICE,EMV2,PCA_Properties,PCA_Security,PCA_Context,
+    Base_Types;
+
+--wrap_pca is the top-level component for the PCA pump
+--the pca functionality is "wrapped" by its ICE Network Adaptor
+system wrap_pca
+  features
+--EXTERNAL EFFECT
+  --drug infused into patient
+    Infused_Drug : out data port Physical_Types::Fluid_Flow.imp
+      {BLESS::Assertion=>"<<:=INFUSION_RATE>>";};  --infusion rate into patient is value of Infused_Drug port
+--EXTERNAL PHENOMENON
+    Button_Press: in event port;  --physically depressing the button
+--EXTERNAL EFFECT
+    LightToEye: out data port Base_Types::Boolean;  --image seen by clinician
+--EXTERNAL PHENOMENON    
+    Finger_Press: in event data port Base_Types::Boolean;  --clinician touches screen
+--EXTERNAL EFFECT
+    Sound: out data port PCA_Types::Sound;  --noise made by speaker, heard by clinician
+  --bus access to ICE network   
+	to_ice: requires bus access ICE::Ice_Network;  
+  --jack
+	 maintenance_jack: requires bus access PCA_Context::Maintenance_Bus;     --undermined maintenance protocol
+  --signals with ICE app
+    app_signals: feature group PCA_Pump::PCA5;	 --feature group of 5 feature groups
+  --signals with technician software
+    to_tech: feature group Maintenance_Signals;
+end wrap_pca;
+
+--two subcomponents for PCA behavior and ICE network adaptor
+system implementation wrap_pca.imp
+  subcomponents
+    bus_adaptor: system PCA_System::ice_bus_adaptor.imp;
+    pump: system PCA_Pump::pca.imp;
+    maint : device PCA_System::maintenance.imp;
+    a_bus : bus adaptor_bus;
+    im_bus : bus internal_maintenance_bus;
+  connections
+  --bus connections
+--  --adaptor
+--    ba_to_a_bus: bus access a_bus <-> bus_adaptor.to_pca;
+--    p_to_a_bus: bus access a_bus <-> pump.To_Adaptor;
+----  --maintenance
+--    m_to_im_bus: bus access im_bus <-> maint.to_pca;
+--    p_to_im_bus: bus access im_bus <-> pump.To_Maintenance;
+  --bus out from adaptor
+--GET GOOFY WARNING HERE THAT DIDN'T USED TO HAPPEN, THAT BECOMES ERROR DURING INSTANTIATION  
+--    ba: bus access to_ice <-> bus_adaptor.to_ice;
+    as: feature group app_signals<->bus_adaptor.to_app;
+  --bus access to ICE network
+--    ic: bus access to_ice->bus_adaptor.to_ice;
+  --jack
+    j:  bus access Maintenance_Jack<->maint.Jack;
+  --liquid drug
+    id: port pump.out_Infused_Drug->Infused_Drug;
+  --touch see hear
+    bp: port Button_Press->pump.Patient_Button_Press;
+    lte: port pump.LightToEye->LightToEye;
+    snd: port pump.Sound->Sound;
+    fp: port Finger_Press->pump.Finger_Press;
+  --feature group connections between bus_adaptor and pump
+    co: feature group pump.command<->bus_adaptor.command_inv
+      ;--{Actual_Connection_Binding=>(reference(a_bus));};
+    pa: feature group pump.parameters<->bus_adaptor.parameters_inv
+      ;--{Actual_Connection_Binding=>(reference(a_bus));};
+    st: feature group pump.status<->bus_adaptor.status_inv
+      ;--{Actual_Connection_Binding=>(reference(a_bus));};
+    se: feature group pump.security<->bus_adaptor.security_inv
+      ;--{Actual_Connection_Binding=>(reference(a_bus));};
+    al: feature group pump.alarm<->bus_adaptor.alarm_inv
+      ;--{Actual_Connection_Binding=>(reference(a_bus));};
+  --fault & event logs; drug library, infused drug
+    gf: port maint.Get_Fault_Log->pump.in_Get_Fault_Log
+      ;--{Actual_Connection_Binding=>(reference(im_bus));};
+    tf: port pump.out_The_Fault_Log->maint.The_Fault_Log
+      ;--{Actual_Connection_Binding=>(reference(im_bus));};
+    ge: port maint.Get_Event_Log->pump.in_Get_Event_Log
+      ;--{Actual_Connection_Binding=>(reference(im_bus));};
+    te: port pump.out_The_Event_Log->maint.The_Event_Log
+      ;--{Actual_Connection_Binding=>(reference(im_bus));};
+    ma: feature group maint.to_maintenance_processor<->to_tech;
+  --load drug library through maintenance port
+    dl: port maint.Load_Drug_Library->pump.in_Load_Drug_Library
+      ;--{Actual_Connection_Binding=>(reference(im_bus));};
+  --provisioning channel
+    pc: feature group maint.Security_Provisioning<->pump.Security_Provisioning
+      ;--{Actual_Connection_Binding=>(reference(im_bus));};
+--the error model for a system as a whole deems the system "operational"
+--if pca works.  if either ICE or maintenance fails, the pump still works safely
+--  properties 
+  annex EMV2X
+  {**
+  use types ErrorLibrary, PCA_Error_Model;
+  --when pump still works, it's operational
+  use behavior PCA_Error_Model::CompositeWorkingOperationalFail; 	
+  --same error propagations as ui thread
+  error propagations
+    --sound errors
+    Sound: out propagation {ItemOmission,AlarmError,ValueError}; 
+    --errors seen by clinician
+    LightToEye: out propagation {ItemOmission,AlarmError,ValueError};
+    --errors caused by clinician
+    Finger_Press: in propagation {OperatorError};    
+    --must prevent third-party press from becoming drug flow error
+    Button_Press: in propagation {ThirdPartyPress};
+  end propagations;
+  composite error behavior
+    states 
+    --pca pump failed -> failed 
+     [pump.failed]->failed;
+    --pump working, either ice or maintenence is down -> operational
+     [pump.working and (bus_adaptor.failed or maint.failed)]->operational;
+     --all working -> working
+     [pump.working and bus_adaptor.working and maint.working]->working;
+     
+  end composite;  	
+  **};  --end of EMV2
+end wrap_pca.imp;
+
+--adapts raw ICE bus traffic to prototype feature groups events & data
+--ice_bus_adaptor is a pass-through component for signals on the five feature groups
+--Chapter 9.1
+--R5.4.0(1) issue alarms and warnings 
+--R5.7.0(1) ICE operating status 
+--R5.7.0(2) ICE alarms
+--R5.7.0(3) ICE bolus duration
+--R5.7.0(4) ICE KVO rate
+--R5.7.0(5) ICE resume infusion
+system ice_bus_adaptor
+  features  --all of the feature groups are "inverse of" so they mate with pump
+    command_inv: feature group inverse of PCA_Pump::PCA_Commands;
+    parameters_inv: feature group inverse of PCA_Pump::PCA_Parameters;
+    status_inv: feature group inverse of PCA_Pump::PCA_Status;
+    security_inv: feature group inverse of PCA_Pump::PCA_Security;  
+	alarm_inv: feature group inverse of PCA_Pump::PCA_Alarms;
+	to_app: feature group PCA_Pump::PCA5;
+	to_ice: requires bus access;  --connection to ICE network
+	to_pca: requires bus access adaptor_bus;  --connection to main PCA
+end ice_bus_adaptor;
+
+--when we figure out what to do for ICE network protocol, we'll fill-in this implementation
+system implementation ice_bus_adaptor.imp
+  connections
+    cmd: feature group command_inv<->to_app.command;
+    par: feature group parameters_inv<->to_app.parameters;
+    sta: feature group status_inv<->to_app.status;
+    sec: feature group security_inv<->to_app.security;
+    alr: feature group alarm_inv<->to_app.alarm;
+  annex EMV2
+  {**
+  use types ErrorLibrary, PCA_Error_Model;
+  use behavior PCA_Error_Model::FailStop; 	
+  error propagations
+    --button passes along third-party presses 
+    command_inv: in propagation {ThirdPartyPress};
+    --button may also be broken
+--    Request_Bolus: out propagation {ItemOmission,ThirdPartyPress}; 
+  flows
+    --no output when button fails (completely)
+    fail_silent: error sink command_inv{ThirdPartyPress};
+    --flow through errors
+--    third_party:  error path Button_Press{ThirdPartyPress}->Request_Bolus(ThirdPartyPress);
+  end propagations;
+  properties 
+    EMV2::OccurrenceDistribution => PCA_Properties::BusAdapterFailureRate 
+      applies to fail;	
+  **}; --end of EMV2
+end ice_bus_adaptor.imp;
+
+--maintenance processor used by technicians to access logs and load drug library
+--also used for security provisioning
+device maintenance
+  features
+    The_Fault_Log : in event data port PCA_Types::Fault_Log  --output fault log
+      {BLESS::Assertion=>"<<:=FAULT_LOG>>";};
+    The_Event_Log : in event data port PCA_Types::Event_Log  --output event log
+      {BLESS::Assertion=>"<<:=EVENT_LOG>>";};
+              
+    --fault log
+    Get_Fault_Log : out event port  --put out fault log next period
+      {BLESS::Assertion=>"<<The_Fault_Log'=FAULT_LOG>>";};
+    --event log
+    Get_Event_Log : out event port  --put out event log next period
+      {BLESS::Assertion=>"<<The_Event_Log'=EVENT_LOG>>";};
+    --download drug library
+    Load_Drug_Library : out event data port PCA_Types::Drug_Library
+      {BLESS::Assertion=>"<<DRUG_LIBRARY'=Load_Drug_Library>>";};  --next period the library will be stored or updated
+
+    --jack physical connection to external maintenance processor
+  	  Jack: requires bus access  PCA_Context::Maintenance_Bus;
+  --physical connection to main PCA
+    To_PCA: requires bus access internal_maintenance_bus;
+  --provisioning channel
+    Security_Provisioning : feature group inverse of PCA_Security::Provisioning_Signals;  --type T.B.D.
+  --signals to external maintenance processor
+    to_maintenance_processor: feature group Maintenance_Signals;
+end maintenance;
+
+device implementation maintenance.imp
+  annex EMV2
+  {**
+  use types ErrorLibrary, PCA_Error_Model;
+  use behavior PCA_Error_Model::FailStop; 	
+--  error propagations
+--    --button passes along third-party presses
+--    Button_Press: in propagation {ThirdPartyPress};
+--    --button may also be broken
+--    Request_Bolus: out propagation {ItemOmission,ThirdPartyPress}; 
+--  flows
+--    --no output when button fails (completely)
+--    fail_silent: error source Request_Bolus{EarlyServiceTermination} when failed;
+--    --flow through errors
+--    third_party:  error path Button_Press{ThirdPartyPress}->Request_Bolus(ThirdPartyPress);
+--  end propagations;
+  properties
+    EMV2::OccurrenceDistribution => PCA_Properties::MaintenanceControllerFailureRate 
+      applies to fail;	
+  **}; --end of EMV2 
+end maintenance.imp; 
+
+feature group Maintenance_Signals
+  features
+  --fault log
+    Get_Fault_Log : out event port  --put out fault log next period
+      {BLESS::Assertion=>"<<The_Fault_Log'=FAULT_LOG>>";};
+    The_Fault_Log : in event data port PCA_Types::Fault_Log  --output fault log
+      {BLESS::Assertion=>"<<:=FAULT_LOG>>";};
+  --event log
+    Get_Event_Log : out event port  --put out event log next period
+      {BLESS::Assertion=>"<<The_Event_Log'=EVENT_LOG>>";};
+    The_Event_Log : in event data port PCA_Types::Event_Log  --output event log
+      {BLESS::Assertion=>"<<:=EVENT_LOG>>";};
+  --download drug library
+    Load_Drug_Library : out event data port PCA_Types::Drug_Library
+      {BLESS::Assertion=>"<<DRUG_LIBRARY'=Load_Drug_Library>>";};  --next period the library will be stored or updated
+  --provisioning channel
+    Security_Provisioning : feature group inverse of PCA_Security::Provisioning_Signals;  --type T.B.D.
+end Maintenance_Signals;
+
+--wires between maintenance processor and main PCA
+bus internal_maintenance_bus
+end internal_maintenance_bus;
+
+--wires between bus adaptor and main PCA
+bus adaptor_bus
+end adaptor_bus;
+
+end PCA_System;

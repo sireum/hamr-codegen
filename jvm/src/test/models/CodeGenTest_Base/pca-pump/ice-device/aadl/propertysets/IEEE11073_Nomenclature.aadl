@@ -1,0 +1,20 @@
+property set IEEE11073_Nomenclature is
+
+  -- Partition codes may be considered to be unique as the
+  -- high-order 16 bits of a 32-bit integer code
+  
+  -- 
+--   #define MDC_PART_UNSPEC 0 /* Unspecified */
+--   #define MDC_PART_OBJ 1 /* Object Infrastr. */
+--   #define MDC_PART_SCADA 2 /* SCADA(Physio IDs) */
+--   #define MDC_PART_EVT 3 /* Event */
+--   #define MDC_PART_DIM 4 /* Dimension */
+  --
+
+  OID: aadlinteger applies to (data);
+  MDC_DIM_PERCENT: aadlinteger => 544 applies to (data);
+    --MDC_PART_DIM
+  MDC_PULS_OXIM_SAT_O2: aadlinteger => 19384 applies to (data);
+    --SpO2 335
+  
+end IEEE11073_Nomenclature;
