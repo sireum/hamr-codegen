@@ -111,7 +111,7 @@ println(s"sireumTimestamp: ${sireumTimestamp}")
 { // COPY sireum.jar over to osate lib directory
 
   val sireumJar = SIREUM_HOME / "bin" / "sireum.jar"
-  val osateLibJar = pluginDir / "org.sireum.aadl.osate "/ "lib" / "sireum.jar"
+  val osateLibJar = pluginDir / "org.sireum.aadl.osate" / "lib" / "sireum.jar"
 
   println(s"Copying ${sireumJar} to ${osateLibJar}")
   sireumJar.copyOverTo(osateLibJar)
