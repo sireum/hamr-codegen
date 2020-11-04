@@ -213,6 +213,9 @@ object CommonUtil {
     return s"${componentSingletonType}_Test"
   }
 
+  def testApisName: String = {
+    return s"${componentSingletonType}_TestApi"
+  }
 
   def cPackageName: String = {
     return st"${(path, "_")}".render
