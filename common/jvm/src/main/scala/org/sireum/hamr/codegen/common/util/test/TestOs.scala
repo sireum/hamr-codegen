@@ -23,14 +23,19 @@ object TestOs {
     return proc2(e, None(), None())
   }
 
-  def proc2(e:  Os.Proc, timeoutKey: Option[String], textToSendAfterTimeout: Option[String]): Os.Proc.Result = {
+  def proc2(ep:  Os.Proc, timeoutKey: Option[String], textToSendAfterTimeout: Option[String]): Os.Proc.Result = {
+    val e: Os.Proc =
+      if (ep.isScript)
+        if (Os.isWin) ep(cmds = ISZ[String]("cmd", "/c") ++ ep.cmds)
+        else ep(cmds = "sh" +: ep.cmds)
+      else ep
     def nativ(): Os.Proc.Result = {
       halt("Native not implemented")
     }
     def jvm(): Os.Proc.Result = {
       val commands = new java.util.ArrayList(e.cmds.elements.map(_.value).asJavaCollection)
       val m = scala.collection.mutable.Map[Predef.String, Predef.String]()
-      if (e.addEnv) {
+      if (e.shouldAddEnv) {
         for ((k, v) <- System.getenv().asScala) {
           val key = k.toString
           val value = v.toString
@@ -42,12 +47,12 @@ object TestOs {
         val value = v.toString
         m(key) = value
       }
-      if (e.outputEnv) {
+      if (e.shouldPrintEnv) {
         for ((k, v) <- m) {
           println(s"$k = $v")
         }
       }
-      if (e.outputCommands) {
+      if (e.shouldPrintCommands) {
         println(e.cmds.elements.mkString(" "))
       }
       val npb = new NuProcessBuilder(commands, m.asJava)
@@ -73,7 +78,7 @@ object TestOs {
       var p: NuProcess = null
       npb.setProcessListener(new NuAbstractProcessHandler {
         def append(isOut: B, buffer: BB): Unit = {
-          if (e.outputConsole) {
+          if (e.shouldOutputConsole) {
             lazy val s = {
               val bytes = new Array[Byte](buffer.remaining)
               buffer.get(bytes)
@@ -83,10 +88,10 @@ object TestOs {
               stopDemoTimer(p, e.timeoutInMillis.toLong)
             }
             if (isOut) System.out.print(s)
-            else if (e.errBuffered && !e.errAsOut) for (_ <- 0 until buffer.remaining()) err.write(buffer.get)
+            else if (e.isErrBuffered && !e.isErrAsOut) for (_ <- 0 until buffer.remaining()) err.write(buffer.get)
             else System.err.print(s)
           } else {
-            if (isOut || e.errAsOut) for (_ <- 0 until buffer.remaining()) out.write(buffer.get)
+            if (isOut || e.isErrAsOut) for (_ <- 0 until buffer.remaining()) out.write(buffer.get)
             else for (_ <- 0 until buffer.remaining()) err.write(buffer.get)
           }
         }
@@ -138,7 +143,7 @@ object TestOs {
       } else Os.Proc.Result.Exception(s"Could not execute command: ${e.cmds.elements.mkString(" ")}")
     }
     try {
-      if (isNative || e.standardLib) {
+      if (isNative || e.shouldUseStandardLib) {
         nativ()
       } else {
         try {
