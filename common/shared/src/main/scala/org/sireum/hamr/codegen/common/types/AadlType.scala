@@ -150,4 +150,16 @@ import org.sireum.hamr.ir
     }
     return ret
   }
+
+  def empty_C_Name(): String = {
+    val ret: String = typ match {
+      case e: EnumType => s"${qualifiedCTypeName}_${e.values(0)}"
+      case e: BaseType => s"${qualifiedCTypeName}_empty"
+      case e: BitType => s"${qualifiedCTypeName}_empty"
+      case e: ArrayType => s"${qualifiedCTypeName}_empty"
+      case e: RecordType => s"${qualifiedCTypeName}_empty"
+      case e: TODOType => s"${qualifiedCTypeName}_empty"
+    }
+    return ret
+  }
 }
