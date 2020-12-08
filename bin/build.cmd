@@ -51,7 +51,7 @@ import org.sireum._
 
 def usage(): Unit = {
   println("HAMR Codegen /build")
-  println("Usage: ( clean | compile | test )+")
+  println("Usage: ( clean | compile | test | tipe )+")
 }
 
 
@@ -147,6 +147,9 @@ for (i <- 0 until Os.cliArgs.size) {
     case string"test" =>
       cloneProjects()
       test()
+    case string"tipe" =>
+      cloneProjects()
+      tipe()
     case cmd =>
       usage()
       eprintln(s"Unrecognized command: $cmd")
