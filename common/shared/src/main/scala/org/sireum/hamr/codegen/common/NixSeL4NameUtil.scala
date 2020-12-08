@@ -4,7 +4,17 @@ package org.sireum.hamr.codegen.common
 
 import org.sireum._
 
-object SeL4NixNamesUtil {
+object BitCodecNameUtil {
+  def numBytesConstName(qualifiedCTypeName: String): String = {
+    return s"numBytes_${qualifiedCTypeName}"
+  }
+
+  def numBitsConstName(qualifiedCTypeName: String): String = {
+    return s"numBits_${qualifiedCTypeName}"
+  }
+}
+
+object NixSeL4NameUtil {
 
   def apiHelperFilename(names: Names): String = {
     return s"${names.componentSingletonType}_api"

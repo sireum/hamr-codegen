@@ -42,7 +42,9 @@ import org.sireum.hamr.ir
                         ) extends AadlType
 
 @datatype class BitType(val name: String,
-                        val container: Option[ir.Component]) extends AadlType
+                        val container: Option[ir.Component],
+
+                        originatingType: Option[AadlType]) extends AadlType
 
 @enum object SlangType {
   'B // Base_Types::Boolean
@@ -132,7 +134,7 @@ import org.sireum.hamr.ir
   }
 
   def isBitsTypes(): B = {
-    return typ == TypeUtil.SlangEmbeddedBitType
+    return typ.isInstanceOf[BitType]
   }
 
   def isAadlType(): B = {
@@ -147,6 +149,19 @@ import org.sireum.hamr.ir
       case e: ArrayType => s"${qualifiedTypeName}.empty()"
       case e: RecordType => s"${qualifiedTypeName}.empty()"
       case e: TODOType => s"${qualifiedTypeName}.empty()"
+    }
+    return ret
+  }
+
+  def empty_C_Name(): String = {
+    val ret: String = typ match {
+      case e: EnumType => s"${qualifiedCTypeName}_${e.values(0)}"
+      case b: BaseType =>
+        StringUtil.sanitizeName(s"${basePackage}_${split(0)}_${split(1)}_empty")
+      case e: BitType => s"${qualifiedCTypeName}_empty"
+      case e: ArrayType => s"${qualifiedCTypeName}_empty"
+      case e: RecordType => s"${qualifiedCTypeName}_empty"
+      case e: TODOType => s"${qualifiedCTypeName}_empty"
     }
     return ret
   }

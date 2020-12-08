@@ -17,7 +17,7 @@ object TypeUtil {
 
   val EmptyType: TODOType = TODOType("art::Empty", None())
 
-  val SlangEmbeddedBitType: BitType = BitType("Base_Types.Bits", None())
+  val SlangEmbeddedBitTypeName: String = "Base_Types.Bits"
 
   val BIT_SIG: String = "IS[Z, B]"
 

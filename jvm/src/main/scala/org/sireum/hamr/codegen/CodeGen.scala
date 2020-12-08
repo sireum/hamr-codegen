@@ -2,6 +2,8 @@ package org.sireum.hamr.codegen
 
 import org.sireum.Os.Path
 import org.sireum._
+import org.sireum.hamr.act.util.Util.ACT_INSTRUCTIONS_MESSAGE_KIND
+import org.sireum.hamr.arsit.Util.ARSIT_INSTRUCTIONS_MESSAGE_KIND
 import org.sireum.hamr.{act, arsit}
 import org.sireum.hamr.codegen.CodeGenPlatform._
 import org.sireum.hamr.codegen.common.DirectoryUtil
@@ -27,7 +29,13 @@ object CodeGen {
     val outputSlang_C_Directory = if (targetingSel4) {
       camkesOutputDir / DirectoryUtil.DIR_SLANG_LIBRARIES
     } else {
-      slangOutputDir / "src" / "c" / "nix"
+      slangOutputDir / "src" / "c"
+    }
+
+    val auxCodeDir: ISZ[String] = if(o.slangAuxCodeDirs.nonEmpty) {
+      o.slangAuxCodeDirs
+    } else {
+      ISZ((slangOutputDir / "src" / "c" ).value)
     }
 
     val packageName: String = if (o.packageName.nonEmpty) {
@@ -43,7 +51,7 @@ object CodeGen {
       case SeL4_Only | SeL4_TB => (F, T, F, F)
     }
 
-    var reporterIndex = 0
+    var reporterIndex = z"0"
 
     var resources: ISZ[Resource] = ISZ()
     var transpilerConfigs: ISZ[TranspilerConfig] = ISZ()
@@ -63,7 +71,7 @@ object CodeGen {
         verbose = o.verbose,
         devicesAsThreads = o.devicesAsThreads,
         ipc = ipc,
-        auxCodeDir = o.slangAuxCodeDirs,
+        auxCodeDir = auxCodeDir,
         outputCDir = toOption(outputSlang_C_Directory),
         excludeImpl = o.excludeComponentImpl,
         platform = platform,
@@ -75,13 +83,14 @@ object CodeGen {
       )
 
       reporter.info(None(), toolName, "Generating Slang artifacts...")
+      reporterIndex = printMessages(reporter, reporterIndex, ISZ())
 
       val results = arsit.Arsit.run(model, opt, reporter)
 
       resources = resources ++ results.resources
       transpilerConfigs = transpilerConfigs ++ results.transpilerOptions
 
-      reporterIndex = printMessages(reporter.messages, reporterIndex)
+      reporterIndex = printMessages(reporter, reporterIndex, ISZ(ARSIT_INSTRUCTIONS_MESSAGE_KIND))
 
       if (!reporter.hasError && o.runTranspiler && isTranspilerProject) {
 
@@ -89,7 +98,7 @@ object CodeGen {
         // resources to be written out
         writeOutResources(resources, reporter)
 
-        reporterIndex = printMessages(reporter.messages, reporterIndex)
+        reporterIndex = printMessages(reporter, reporterIndex, ISZ())
 
         for (transpilerConfig <- results.transpilerOptions) {
           if (transpilerCallback(transpilerConfig) != 0) {
@@ -116,21 +125,36 @@ object CodeGen {
       val results = org.sireum.hamr.act.Act.run(model, actOptions, reporter)
       resources = resources ++ results.resources
 
-      reporterIndex = printMessages(reporter.messages, reporterIndex)
+      reporterIndex = printMessages(reporter, reporterIndex, ISZ(ACT_INSTRUCTIONS_MESSAGE_KIND))
     }
 
     if(!reporter.hasError && o.writeOutResources) {
       writeOutResources(resources, reporter)
     }
 
-    reporterIndex = printMessages(reporter.messages, reporterIndex)
+    reporterIndex = printMessages(reporter, reporterIndex, ISZ())
+
+    if(!reporter.hasError && o.writeOutResources) {
+      // print out any instructional messages
+      val instructions = reporter.messages.filter(p =>
+        p.kind == ARSIT_INSTRUCTIONS_MESSAGE_KIND || p.kind == ACT_INSTRUCTIONS_MESSAGE_KIND)
+      for (i <- instructions) {
+        cprintln(F, "")
+        cprintln(F, i.text)
+      }
+    }
 
     return CodeGenResults(resources, transpilerConfigs)
   }
 
-  def printMessages(messages: ISZ[Message], index: Int): Int = {
-    for (i <- index until messages.size) {
-      val m = messages(i)
+  def printMessages(reporter: Reporter, reporterIndex: Z, kindsToFilterOut: ISZ[String]): Z = {
+
+    var messages = ops.ISZOps(reporter.messages).slice(reporterIndex, reporter.messages.size)
+    for(key <- kindsToFilterOut) {
+      messages = messages.filter(p => p.kind != key)
+    }
+
+    for (m <- messages) {
       val t = if (m.level != org.sireum.message.Level.Info) s"${m.level.name}: " else ""
       val err = m.level == org.sireum.message.Level.Error
       val mText: String = m.posOpt match {
@@ -141,7 +165,8 @@ object CodeGen {
       }
       cprintln(err, mText)
     }
-    return messages.size.toInt
+
+    return reporter.messages.size
   }
 
   def toOption(f: Path): Option[String] = {

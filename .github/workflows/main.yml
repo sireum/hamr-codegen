@@ -2,17 +2,17 @@ name: CI
 
 on:
   push:
-    
-  workflow_dispatch:  
+
+  workflow_dispatch:
 
 jobs:
 
   build-ubuntu:
-    
+
     runs-on: ubuntu-latest
-    
+
     if: "!contains(github.event.head_commit.message, '[skip ci]') && !contains(github.event.head_commit.message, '[skip action]')"
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -20,7 +20,7 @@ jobs:
       - name: Retrieve versions.properties
         run: |
           wget -q https://raw.githubusercontent.com/sireum/kekinian/master/versions.properties
-          
+
       - name: Cache Java
         id: cache-java
         uses: actions/cache@v2
@@ -41,20 +41,19 @@ jobs:
         with:
           path: cache/coursier
           key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-coursier
-          
+
       - name: Test
         run: |
           export COURSIER_CACHE=$GITHUB_WORKSPACE/cache/coursier
           cd $GITHUB_WORKSPACE
           git submodule update --init --recursive
           bin/build.cmd test
-
   build-mac:
-    
+
     runs-on: macOS-latest
-    
+
     if: "!contains(github.event.head_commit.message, '[skip ci]') && !contains(github.event.head_commit.message, '[skip action]')"
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -62,7 +61,7 @@ jobs:
       - name: Retrieve versions.properties
         run: |
           curl -JLOs https://raw.githubusercontent.com/sireum/kekinian/master/versions.properties
-          
+
       - name: Cache Java
         id: cache-java
         uses: actions/cache@v2
@@ -90,7 +89,6 @@ jobs:
           cd $GITHUB_WORKSPACE
           git submodule update --init --recursive
           bin/build.cmd test
-
   build-windows:
     runs-on: windows-latest
     if: "!contains(github.event.head_commit.message, '[skip ci]') && !contains(github.event.head_commit.message, '[skip action]')"
@@ -135,13 +133,13 @@ jobs:
           cd /d %GITHUB_WORKSPACE%
           git submodule update --init --recursive
           bin\build.cmd test
-          
+
   skip:
-    
+
     runs-on: ubuntu-latest
-    
+
     if: "contains(github.event.head_commit.message, '[skip ci]') || contains(github.event.head_commit.message, '[skip action]')"
-    
+
     steps:
       - run: |
           echo Skipped
