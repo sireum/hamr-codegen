@@ -98,6 +98,15 @@ import org.sireum.hamr.ir
     return s"${packageName}.${referencedTypeName}"
   }
 
+  def qualifiedReferencedSergenTypeName: String = {
+    val ret: String = typ match {
+      case b: BitType => "ISZ[B]"
+      case b: BaseType => TypeResolver.getSlangType(typeName).name
+      case _ => qualifiedReferencedTypeName
+    }
+    return ret
+  }
+
   def payloadName: String = {
     return if (typ == TypeUtil.EmptyType) typeName else s"${typeName}_Payload"
   }
