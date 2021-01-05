@@ -27,7 +27,7 @@ val currYear = java.time.Year.now.getValue
 
 // TODO get these from env or arguments
 val pluginDir = Os.home / "devel" / "sireum" / "osate-plugin"
-val updateSiteDir = Os.home / "devel" / "sireum" / "osate-plugin-update-site-2.13"
+val updateSiteDir = Os.home / "devel" / "sireum" / "osate-plugin-update-site"
 val updateSiteHAMRDir = Os.home / "devel" / "sireum" / "hamr-plugin-update-site"
 val caseDir = Os.home / "devel" / "case" / "CASE-loonwerks"
 
