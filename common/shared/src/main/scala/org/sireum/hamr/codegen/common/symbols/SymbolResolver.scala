@@ -21,8 +21,6 @@ object SymbolResolver {
     var airFeatureMap: HashSMap[String, ir.Feature] = HashSMap.empty
     var airClassifierMap: HashSMap[String, ir.Component] = HashSMap.empty
 
-    var featureGroupDisambiguator: Map[String, String] = Map.empty
-
     var connections: ISZ[ir.ConnectionInstance] = ISZ()
 
     // port-paths -> connInstances
@@ -46,23 +44,13 @@ object SymbolResolver {
 
       for (f <- c.features) {
 
-        def resolveFeature(_f: ir.Feature, groupPrefix: String, path: ISZ[String]): Unit = {
-          val _path: String = st"${(path, "_")}_".render
+        def resolveFeature(_f: ir.Feature, path: ISZ[String]): Unit = {
           _f match {
-            case fa: ir.FeatureAccess => {
-              val featurePath: String = s"${_path}${groupPrefix}${CommonUtil.getLastName(fa.identifier)}"
-
-              val fullFeaturePath: String = CommonUtil.getName(fa.identifier)
-              featureGroupDisambiguator = featureGroupDisambiguator + (fullFeaturePath ~> featurePath)
-
+            case fa: ir.FeatureAccess =>
+              val featurePath: String = CommonUtil.getName(fa.identifier)
               airFeatureMap = airFeatureMap + (featurePath ~> fa)
-              }
             case fe: ir.FeatureEnd =>
-              val featurePath: String = s"${_path}${groupPrefix}${CommonUtil.getLastName(fe.identifier)}"
-
-              val fullFeaturePath: String = CommonUtil.getName(fe.identifier)
-              featureGroupDisambiguator = featureGroupDisambiguator + (fullFeaturePath ~> featurePath)
-
+              val featurePath: String = CommonUtil.getName(fe.identifier)
               airFeatureMap = airFeatureMap + (featurePath ~> fe)
 
               if (CommonUtil.isDataPort(fe) && fe.classifier.isEmpty) {
@@ -70,13 +58,12 @@ object SymbolResolver {
               }
             case fg: ir.FeatureGroup =>
               for(_fge <- fg.features) {
-                val _groupPrefix = s"${CommonUtil.getLastName(fg.identifier)}_"
-                resolveFeature(_fge, _groupPrefix, path)
+                resolveFeature(_fge, path)
               }
           }
         }
 
-        resolveFeature(f, "", c.identifier.name)
+        resolveFeature(f, c.identifier.name)
       }
       for (sc <- c.subComponents) {
         buildComponentMap(sc)
@@ -169,9 +156,8 @@ object SymbolResolver {
                   resolveFeature2(_f)
                 }
               case _ =>
-                val id = CommonUtil.getName(feature.identifier)
-                val fid = featureGroupDisambiguator.get(id).get
-                val airFeature = airFeatureMap.get(fid).get
+                val featurePath = CommonUtil.getName(feature.identifier)
+                val airFeature = airFeatureMap.get(featurePath).get
                 assert(airFeature == feature)
 
                 val port: AadlFeature = feature.category match {
