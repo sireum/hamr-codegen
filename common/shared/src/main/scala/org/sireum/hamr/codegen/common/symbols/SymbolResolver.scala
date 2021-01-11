@@ -17,6 +17,8 @@ object SymbolResolver {
               aadlTypes: AadlTypes,
               reporter: Reporter): SymbolTable = {
 
+    var featureMap: HashSMap[String, AadlFeature] = HashSMap.empty
+
     var airComponentMap: HashSMap[String, ir.Component] = HashSMap.empty
     var airFeatureMap: HashSMap[String, ir.Feature] = HashSMap.empty
     var airClassifierMap: HashSMap[String, ir.Component] = HashSMap.empty
@@ -149,11 +151,11 @@ object SymbolResolver {
             return ret
           }
 
-          def resolveFeature2(feature: ir.Feature): Unit = {
+          def resolveFeature2(feature: ir.Feature, featureGroupIds: ISZ[String]): Unit = {
             feature match {
               case fg: ir.FeatureGroup =>
                 for(_f <- fg.features) {
-                  resolveFeature2(_f)
+                  resolveFeature2(_f, featureGroupIds :+ CommonUtil.getLastName(fg.identifier))
                 }
               case _ =>
                 val featurePath = CommonUtil.getName(feature.identifier)
@@ -163,12 +165,15 @@ object SymbolResolver {
                 val port: AadlFeature = feature.category match {
                   case ir.FeatureCategory.EventPort => {
                     val fend = feature.asInstanceOf[ir.FeatureEnd]
-                    AadlEventPort(feature = fend)
+                    AadlEventPort(
+                      feature = fend,
+                      featureGroupIds = featureGroupIds)
                   }
                   case ir.FeatureCategory.DataPort => {
                     val fend = feature.asInstanceOf[ir.FeatureEnd]
                     AadlDataPort(
                       feature = fend,
+                      featureGroupIds = featureGroupIds,
                       aadlType = getFeatureEndType(fend).get
                     )
                   }
@@ -176,16 +181,21 @@ object SymbolResolver {
                     val fend = feature.asInstanceOf[ir.FeatureEnd]
                     AadlDataPort(
                       feature = fend,
+                      featureGroupIds = featureGroupIds,
                       aadlType = getFeatureEndType(fend).get)
                   }
-                  case _ => AadlFeatureTODO(feature)
+                  case _ => AadlFeatureTODO(
+                    feature = feature,
+                    featureGroupIds = featureGroupIds)
                 }
                 aadlPorts = aadlPorts :+ port
+                featureMap = featureMap + (featurePath ~> port)
             }
           }
           for (feature <- c.features) {
-            resolveFeature2(feature)
+            resolveFeature2(feature, ISZ())
           }
+
           val dispatchProtocol: Dispatch_Protocol.Type = PropertyUtil.getDispatchProtocol(c) match {
             case Some(x) => x
             case _ =>
@@ -313,6 +323,8 @@ object SymbolResolver {
     val symbolTable = SymbolTable(rootSystem = aadlSystem,
 
       componentMap = componentMap,
+
+      featureMap = featureMap,
 
       airComponentMap = airComponentMap,
       airFeatureMap = airFeatureMap,

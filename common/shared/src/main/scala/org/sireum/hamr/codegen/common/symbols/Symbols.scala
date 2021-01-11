@@ -13,6 +13,8 @@ import org.sireum.hamr.ir.FeatureEnd
 
                             componentMap: HashSMap[String, AadlComponent],
 
+                            featureMap: HashSMap[String, AadlFeature],
+
                             airComponentMap: HashSMap[String, ir.Component],
                             airFeatureMap: HashSMap[String, ir.Feature],
                             airClassifierMap: HashSMap[String, ir.Component],
@@ -319,6 +321,7 @@ import org.sireum.hamr.ir.FeatureEnd
                                val path: String,
                                val identifier: String,
                                val subComponents: ISZ[AadlComponent],
+                               val features: ISZ[AadlFeature],
                                val connectionInstances: ISZ[ir.ConnectionInstance]) extends AadlComponent
 
 @datatype class AadlTODOComponent(val component: ir.Component,
@@ -330,6 +333,18 @@ import org.sireum.hamr.ir.FeatureEnd
 
 @sig trait AadlFeature {
   def feature: ir.Feature
+
+  // The identifiers of features groups this feature is nested within.
+  // Needed to ensure generated slang/c/etc identifiers are unique
+  def featureGroupIds: ISZ[String]
+
+  def identifier: String = {
+    val id = CommonUtil.getLastName(feature.identifier)
+    val ret: String =
+      if(featureGroupIds.nonEmpty) st"${(featureGroupIds, "_")}_${id}".render
+      else id
+    return ret
+  }
 }
 
 @sig trait AadlFeatureEvent extends AadlFeature
@@ -338,15 +353,19 @@ import org.sireum.hamr.ir.FeatureEnd
   def aadlType: AadlType
 }
 
-@datatype class AadlEventPort(val feature: ir.FeatureEnd) extends AadlFeatureEvent
+@datatype class AadlEventPort(val feature: ir.FeatureEnd,
+                              val featureGroupIds: ISZ[String]) extends AadlFeatureEvent
 
 @datatype class AadlEventDataPort(val feature: ir.FeatureEnd,
+                                  val featureGroupIds: ISZ[String],
                                   val aadlType: AadlType) extends AadlFeatureData with AadlFeatureEvent
 
 @datatype class AadlDataPort(val feature: ir.FeatureEnd,
+                             val featureGroupIds: ISZ[String],
                              val aadlType: AadlType) extends AadlFeatureData
 
-@datatype class AadlFeatureTODO(val feature: ir.Feature) extends AadlFeature
+@datatype class AadlFeatureTODO(val feature: ir.Feature,
+                                val featureGroupIds: ISZ[String]) extends AadlFeature
 
 
 
