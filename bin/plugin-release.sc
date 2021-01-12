@@ -29,9 +29,10 @@ val currYear = java.time.Year.now.getValue
 val pluginDir = Os.home / "devel" / "sireum" / "osate-plugin"
 val updateSiteDir = Os.home / "devel" / "sireum" / "osate-plugin-update-site"
 val updateSiteHAMRDir = Os.home / "devel" / "sireum" / "hamr-plugin-update-site"
-val caseDir = Os.home / "devel" / "case" / "CASE-loonwerks"
+val caseDir = Os.home / "devel" / "case" / "case-loonwerks"
 
-assert(SIREUM_HOME.exists && sireum.exists && pluginDir.exists && updateSiteDir.exists && updateSiteHAMRDir.exists && caseDir.exists)
+def assertResourceExists(p: ISZ[Os.Path]): Unit = { p.foreach((x: Os.Path) => assert(x.exists, s"${x} doesn't exist")) }
+assertResourceExists(ISZ(SIREUM_HOME, sireum, pluginDir, updateSiteDir, updateSiteHAMRDir, caseDir))
 
 def runGit(args: ISZ[String], path: Os.Path): String = {
   val p = org.sireum.Os.proc(args).at(path).runCheck()
