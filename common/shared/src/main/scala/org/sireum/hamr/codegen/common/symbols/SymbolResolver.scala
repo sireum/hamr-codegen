@@ -138,7 +138,7 @@ object SymbolResolver {
 
       def handleDeviceOrThread(): AadlComponent = {
         {
-          assert(c.subComponents.isEmpty) // TODO handle subprograms etc
+          //assert(c.subComponents.isEmpty) // TODO handle subprograms etc
 
           val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield process(sc, Some(path))
           var aadlPorts: ISZ[AadlFeature] = ISZ()
