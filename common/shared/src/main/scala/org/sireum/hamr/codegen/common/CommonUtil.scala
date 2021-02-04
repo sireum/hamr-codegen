@@ -141,6 +141,8 @@ object CommonUtil {
     ops.StringOps(san).split(char => char == ':')
   }
 
+  def aadlQualifiedName: String = { return CommonUtil.getName(c.identifier) }
+
   def componentType: String = {
     return StringUtil.sanitizeName(split(1))
   }
