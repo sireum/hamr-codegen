@@ -7,7 +7,6 @@ import org.sireum.hamr.codegen.common.properties.OsateProperties
 import org.sireum.hamr.codegen.common.types.TypeUtil
 import org.sireum.hamr.ir
 
-
 object Transformers {
 
   val toolName: String = CommonUtil.toolName
@@ -56,9 +55,10 @@ object Transformers {
       o.category match {
         case ir.ComponentCategory.Data =>
           if (o.classifier.isEmpty) {
-            reporter.warn(None(), toolName, s"Classifier not specified for ${CommonUtil.getName(o.identifier)}.  Substituting ${TypeUtil.MISSING_AADL_TYPE}")
+            reporter.warn(o.identifier.pos, toolName, s"Classifier not specified for '${CommonUtil.getName(o.identifier)}'.  Substituting ${TypeUtil.MISSING_AADL_TYPE}")
 
-            ir.Transformer.TPostResult(ctx(requiresMissingType = T), Some(o(classifier = Some(ir.Classifier(TypeUtil.MISSING_AADL_TYPE)))))
+            ir.Transformer.TPostResult(ctx(requiresMissingType = T),
+              Some(o(classifier = Some(ir.Classifier(TypeUtil.MISSING_AADL_TYPE)))))
           }
           else {
             ir.Transformer.TPostResult(ctx, None[ir.Component]())
@@ -69,7 +69,7 @@ object Transformers {
 
     override def postFeatureEnd(ctx: CTX, o: ir.FeatureEnd): ir.Transformer.TPostResult[CTX, ir.FeatureEnd] = {
       if ((CommonUtil.isDataPort(o)) && o.classifier.isEmpty) {
-        reporter.warn(None(), toolName, s"No datatype specified for data port ${CommonUtil.getName(o.identifier)}.  Substituting ${TypeUtil.MISSING_AADL_TYPE} ")
+        reporter.warn(o.identifier.pos, toolName, s"No datatype specified for data port ${CommonUtil.getName(o.identifier)}.  Substituting ${TypeUtil.MISSING_AADL_TYPE} ")
 
         ir.Transformer.TPostResult(ctx(requiresMissingType = T), Some(o(classifier = Some(ir.Classifier(TypeUtil.MISSING_AADL_TYPE)))))
       } else {

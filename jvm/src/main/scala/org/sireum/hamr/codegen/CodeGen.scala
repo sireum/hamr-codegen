@@ -23,19 +23,18 @@ object CodeGen {
 
     val targetingSel4 = o.platform == CodeGenPlatform.SeL4
 
-    val camkesOutputDir: Path = Os.path(o.camkesOutputDir.getOrElse("."))
     val slangOutputDir: Path = Os.path(o.slangOutputDir.getOrElse("."))
 
-    val outputSlang_C_Directory = if (targetingSel4) {
+    val camkesOutputDir: Path = Os.path(o.camkesOutputDir.getOrElse("."))
+
+    val output_shared_C_Directory: Path =
+      if(o.slangOutputCDir.nonEmpty) Os.path(o.slangOutputCDir.get)
+      else slangOutputDir / "src" / "c"
+
+    val output_platform_C_Directory: Path = if (targetingSel4) {
       camkesOutputDir / DirectoryUtil.DIR_SLANG_LIBRARIES
     } else {
-      slangOutputDir / "src" / "c"
-    }
-
-    val auxCodeDir: ISZ[String] = if(o.slangAuxCodeDirs.nonEmpty) {
-      o.slangAuxCodeDirs
-    } else {
-      ISZ((slangOutputDir / "src" / "c" ).value)
+      output_shared_C_Directory
     }
 
     val packageName: String = if (o.packageName.nonEmpty) {
@@ -64,15 +63,16 @@ object CodeGen {
       val fileSep = StringOps(org.sireum.Os.fileSep).first
 
       val opt = arsit.util.ArsitOptions(
-        outputDir = slangOutputDir.value,
+        outputDir = slangOutputDir,
         packageName = packageName,
         embedArt = o.embedArt,
         bless = genBlessEntryPoints,
         verbose = o.verbose,
         devicesAsThreads = o.devicesAsThreads,
         ipc = ipc,
-        auxCodeDir = auxCodeDir,
-        outputCDir = toOption(outputSlang_C_Directory),
+        auxCodeDirs = o.slangAuxCodeDirs,
+        outputSharedCDir = Some(output_shared_C_Directory),
+        outputPlatformCDir = Some(output_platform_C_Directory),
         excludeImpl = o.excludeComponentImpl,
         platform = platform,
         bitWidth = o.bitWidth,

@@ -37,22 +37,6 @@ object TypeUtil {
     return ret
   }
 
-  @pure def getArrayDimensions(a: ArrayType): ISZ[Z] = {
-    val ret: ISZ[Z] = a.container match {
-      case Some(c) =>
-        PropertyUtil.getPropertyValues(c.properties, OsateProperties.DATA_MODEL__DIMENSION)
-          .map((x: ir.PropertyValue) => x.asInstanceOf[ir.UnitProp])
-          .map((m: ir.UnitProp) => {
-            R(m.value) match {
-              case Some(x) => conversions.R.toZ(x)
-              case _ => z"-1"
-            }
-          })
-      case _ => ISZ()
-    }
-    return ret
-  }
-
   @pure def findMaxAadlArraySize(types: AadlTypes): Z = {
     var max: Z = 0
 
@@ -98,11 +82,31 @@ object TypeUtil {
     return ret
   }
 
+  @pure def getArrayDimensions(a: ArrayType): ISZ[Z] = {
+    val ret: ISZ[Z] = a.container match {
+      case Some(c) =>
+        PropertyUtil.getPropertyValues(c.properties, OsateProperties.DATA_MODEL__DIMENSION)
+          .map((x: ir.PropertyValue) => x.asInstanceOf[ir.UnitProp])
+          .map((m: ir.UnitProp) => {
+            R(m.value) match {
+              case Some(x) => conversions.R.toZ(x)
+              case _ => z"-1"
+            }
+          })
+      case _ => ISZ()
+    }
+    return ret
+  }
+
   @pure def getArrayBaseType(c: ir.Component): String = {
     for (p <- c.properties if CommonUtil.getLastName(p.name) == OsateProperties.DATA_MODEL__BASE_TYPE) {
       return p.propertyValues(0).asInstanceOf[ir.ClassifierProp].name
     }
     halt(s"${c} isn't an array")
+  }
+
+  @pure def isEnumType(c: ir.Component): B = {
+    return isEnum(c.properties)
   }
 
   @pure def isEnum(props: ISZ[ir.Property]): B = {
@@ -113,12 +117,28 @@ object TypeUtil {
     return F
   }
 
-  @pure def isEnumType(c: ir.Component): B = {
-    return isEnum(c.properties)
+  /* TODO: the following will have have two Data_Representation's attached (array and enum) so can't use
+           getDiscreetPropertyValue.  Perhaps a rewrite step introducing an array type whose base type
+           is <some_enum_type> and substituting the field's type with the new array type
+
+      data implementation SearchTask.i
+        subcomponents
+          id: data <some_enum_type> {Data_Model::Data_Representation => Array; Data_Model::Dimension => (8);};
+          ...
+   */
+
+  /*
+  @pure def isEnum(props: ISZ[ir.Property]): B = {
+    val ret: B = PropertyUtil.getDiscreetPropertyValue(props, OsateProperties.DATA_MODEL__DATA_REPRESENTATION) match {
+      case Some(ir.ValueProp("Enum")) => T
+      case _ => F
+    }
+    return ret
   }
+  */
 
   @pure def isRecordType(c: ir.Component): B = {
-    return c.subComponents.nonEmpty
+    return c.category == ir.ComponentCategory.Data && c.subComponents.nonEmpty
   }
 
   @pure def isArrayType(c: ir.Component): B = {
@@ -131,6 +151,14 @@ object TypeUtil {
 
   @pure def isBaseType(c: ir.Component): B = {
     return ops.StringOps(c.classifier.get.name).startsWith("Base_Types::")
+  }
+
+  def isMissingType(c: ir.Component) : B = {
+    return isMissingTypeClassifier(c.classifier.get)
+  }
+
+  def isMissingTypeClassifier(c: ir.Classifier) : B = {
+    return c.name == MISSING_AADL_TYPE
   }
 
   @pure def verifyBitCodec(aadlTypes: AadlTypes,
