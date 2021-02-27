@@ -25,17 +25,17 @@ object CodeGen {
 
     val slangOutputDir: Path = Os.path(o.slangOutputDir.getOrElse("."))
 
-    val camkesOutputDir: Path = Os.path(o.camkesOutputDir.getOrElse("."))
-
     val output_shared_C_Directory: Path =
       if(o.slangOutputCDir.nonEmpty) Os.path(o.slangOutputCDir.get)
       else slangOutputDir / "src" / "c"
 
-    val output_platform_C_Directory: Path = if (targetingSel4) {
-      camkesOutputDir / DirectoryUtil.DIR_SLANG_LIBRARIES
-    } else {
-      output_shared_C_Directory
-    }
+    val camkesOutputDir: Path =
+      if(o.camkesOutputDir.nonEmpty) Os.path(o.camkesOutputDir.get)
+      else output_shared_C_Directory / "camkes"
+
+    val output_platform_C_Directory: Path =
+      if (targetingSel4) camkesOutputDir / DirectoryUtil.DIR_SLANG_LIBRARIES
+      else output_shared_C_Directory
 
     val packageName: String = if (o.packageName.nonEmpty) {
       cleanupPackageName(o.packageName.get)
@@ -52,8 +52,9 @@ object CodeGen {
 
     var reporterIndex = z"0"
 
-    var resources: ISZ[Resource] = ISZ()
     var transpilerConfigs: ISZ[TranspilerConfig] = ISZ()
+
+    var arsitResources: ISZ[Resource] = ISZ()
 
     if (runArsit) {
 
@@ -65,7 +66,7 @@ object CodeGen {
       val opt = arsit.util.ArsitOptions(
         outputDir = slangOutputDir,
         packageName = packageName,
-        embedArt = o.embedArt,
+        noEmbedArt = o.noEmbedArt,
         bless = genBlessEntryPoints,
         verbose = o.verbose,
         devicesAsThreads = o.devicesAsThreads,
@@ -87,16 +88,18 @@ object CodeGen {
 
       val results = arsit.Arsit.run(model, opt, reporter)
 
-      resources = resources ++ results.resources
+      arsitResources = arsitResources ++ results.resources
       transpilerConfigs = transpilerConfigs ++ results.transpilerOptions
 
       reporterIndex = printMessages(reporter, reporterIndex, ISZ(ARSIT_INSTRUCTIONS_MESSAGE_KIND))
+
+      arsitResources = removeDuplicates(arsitResources, reporter)
 
       if (!reporter.hasError && o.runTranspiler && isTranspilerProject) {
 
         // doesn't matter what 'o.writeOutResources' is, transpiler needs the
         // resources to be written out
-        writeOutResources(resources, reporter)
+        writeOutResources(arsitResources, reporter)
 
         reporterIndex = printMessages(reporter, reporterIndex, ISZ())
 
@@ -108,6 +111,7 @@ object CodeGen {
       }
     }
 
+    var actResources: ISZ[Resource] = ISZ()
     if (!reporter.hasError && runACT) {
 
       val platform = org.sireum.hamr.act.util.ActPlatform.byName(o.platform.name).get
@@ -123,13 +127,15 @@ object CodeGen {
       )
 
       val results = org.sireum.hamr.act.Act.run(model, actOptions, reporter)
-      resources = resources ++ results.resources
+      actResources = actResources ++ results.resources
 
       reporterIndex = printMessages(reporter, reporterIndex, ISZ(ACT_INSTRUCTIONS_MESSAGE_KIND))
     }
 
+    actResources = removeDuplicates(actResources, reporter)
+
     if(!reporter.hasError && o.writeOutResources) {
-      writeOutResources(resources, reporter)
+      writeOutResources(actResources, reporter)
     }
 
     reporterIndex = printMessages(reporter, reporterIndex, ISZ())
@@ -144,7 +150,7 @@ object CodeGen {
       }
     }
 
-    return CodeGenResults(resources, transpilerConfigs)
+    return CodeGenResults(arsitResources ++ actResources, transpilerConfigs)
   }
 
   def printMessages(reporter: Reporter, reporterIndex: Z, kindsToFilterOut: ISZ[String]): Z = {
@@ -236,6 +242,29 @@ object CodeGen {
         reporter.info(None(), toolName, s"File exists, will not overwrite: ${p}")
       }
     }
+  }
+
+  def removeDuplicates(resources: ISZ[Resource], reporter: Reporter): ISZ[Resource] = {
+    var m: HashSMap[String, Resource] = HashSMap.empty[String, Resource]()
+    for(r <- resources) {
+      if(m.contains(r.path)) {
+        val entry = m.get(r.path).get
+
+        // sanity checks
+        if(r.content.render != entry.content.render) {
+          reporter.warn(None(), toolName, s"content of ${r.path} not the same for duplicate entries")
+        }
+        if(r.overwrite != entry.overwrite) {
+          reporter.warn(None(), toolName, s"overwrite flag for ${r.path} not the same for duplicate entries")
+        }
+        if(r.makeExecutable != entry.makeExecutable) {
+          reporter.warn(None(), toolName, s"makeExecutable flag for ${r.path} not the same for duplicate entries")
+        }
+      } else {
+        m = m + (r.path ~> r)
+      }
+    }
+    return m.values
   }
 }
 

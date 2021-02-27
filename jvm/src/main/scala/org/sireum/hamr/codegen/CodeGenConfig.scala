@@ -31,9 +31,10 @@ import org.sireum.hamr.codegen.common.containers.{Resource, TranspilerConfig}
                               // arsit options
                               slangOutputDir: Option[String],
                               packageName: Option[String],
-                              embedArt: B,
+                              noEmbedArt: B,
                               devicesAsThreads: B,
 
+                              //
                               slangAuxCodeDirs: ISZ[String],
                               slangOutputCDir: Option[String],
                               excludeComponentImpl: B,
