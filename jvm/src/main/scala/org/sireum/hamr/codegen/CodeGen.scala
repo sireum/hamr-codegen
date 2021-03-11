@@ -56,6 +56,8 @@ object CodeGen {
 
     var arsitResources: ISZ[Resource] = ISZ()
 
+    var wroteOutArsitResources: B = F
+
     if (runArsit) {
 
       val genBlessEntryPoints = false
@@ -100,6 +102,7 @@ object CodeGen {
         // doesn't matter what 'o.writeOutResources' is, transpiler needs the
         // resources to be written out
         writeOutResources(arsitResources, reporter)
+        wroteOutArsitResources = T
 
         reporterIndex = printMessages(reporter, reporterIndex, ISZ())
 
@@ -135,6 +138,9 @@ object CodeGen {
     actResources = removeDuplicates(actResources, reporter)
 
     if(!reporter.hasError && o.writeOutResources) {
+      if(!wroteOutArsitResources) {
+        writeOutResources(arsitResources, reporter)
+      }
       writeOutResources(actResources, reporter)
     }
 
