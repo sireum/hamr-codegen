@@ -39,7 +39,7 @@ import org.sireum.hamr.ir.FeatureEnd
     else ISZ()
   }
 
-  def getMaxDomain(): Z = {
+  def computeMaxDomain(): Z = {
     var max: Z = z"2" // threads start a domain 2
     for(p <- getThreads()) {
       p.getDomain(this) match {
@@ -189,6 +189,10 @@ import org.sireum.hamr.ir.FeatureEnd
       case _ => None()
     }
     return ret
+  }
+
+  def getMaxDomain(): Option[Z] = {
+    return PropertyUtil.getUnitPropZ(component.properties, CaseSchedulingProperties.MAX_DOMAIN)
   }
 
   def getScheduleSourceText(): Option[String] = {

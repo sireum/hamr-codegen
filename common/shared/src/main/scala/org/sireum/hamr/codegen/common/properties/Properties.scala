@@ -51,6 +51,7 @@ object HamrProperties {
 object CaseSchedulingProperties {
 
   val DOMAIN: String = "CASE_Scheduling::Domain"
+  val MAX_DOMAIN: String = "CASE_Scheduling::Max_Domain"
   val SCHEDULE_SOURCE_TEXT: String = "CASE_Scheduling::Schedule_Source_Text"
 
 }

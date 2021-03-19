@@ -351,23 +351,6 @@ object SymbolResolver {
             s"Fan out from ${conns._1} involves both native and VM components which is not currently supported")
         }
       }
-
-      { // all periodic components have domain info, or don't.  No mixtures
-        val processes: ISZ[AadlProcess] = symbolTable.getProcesses()
-        var withDomain: ISZ[AadlProcess] = ISZ()
-        var withoutDomain: ISZ[AadlProcess] = ISZ()
-        for (p <- processes) {
-          if (p.getDomain().nonEmpty) {
-            withDomain = withDomain :+ p
-          }
-          else {
-            withoutDomain = withoutDomain :+ p
-          }
-        }
-        val withoutDomains = st"Please fix the following: ${(withoutDomain.map((m: AadlProcess) => m.path), ", ")}".render
-        assert((withDomain.size == 0 && withoutDomain.size > 0) || (withDomain.size > 0 && withoutDomain.size == 0),
-          s"${withDomain.size} processes have domain info but ${withoutDomain.size} do not.  HAMR does not support such a model.  ${withoutDomains}")
-      }
     }
 
     return symbolTable
