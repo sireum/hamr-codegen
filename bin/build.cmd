@@ -134,6 +134,12 @@ def clean(): Unit = {
     val buildCmd = home / subProj / "bin" / "build.cmd"
     Os.proc(ISZ(buildCmd.canon.value, "clean")).console.run()
   })
+  if((homeBin / "sireum.jar").exists) {
+    (homeBin / "sireum.jar").remove()
+  }
+  if((homeBin / "sireum").exists) {
+    (homeBin / "sireum").remove()
+  }
 }
 
 downloadMill()

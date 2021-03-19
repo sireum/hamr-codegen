@@ -150,27 +150,27 @@ import org.sireum.hamr.ir
     return !isBaseType() && !isEmptyType() && !isBitsTypes()
   }
 
-  def empty(): String = {
+  def example(): String = {
     val ret: String = typ match {
       case e: EnumType => s"${qualifiedTypeName}.byOrdinal(0).get"
-      case e: BaseType => s"${qualifiedTypeName}_empty()"
-      case e: BitType => s"${qualifiedTypeName}_empty()"
-      case e: ArrayType => s"${qualifiedTypeName}.empty()"
-      case e: RecordType => s"${qualifiedTypeName}.empty()"
-      case e: TODOType => s"${qualifiedTypeName}.empty()"
+      case e: BaseType => s"${qualifiedTypeName}_example()"
+      case e: BitType => s"${qualifiedTypeName}_example()"
+      case e: ArrayType => s"${qualifiedTypeName}.example()"
+      case e: RecordType => s"${qualifiedTypeName}.example()"
+      case e: TODOType => s"${qualifiedTypeName}.example()"
     }
     return ret
   }
 
-  def empty_C_Name(): String = {
+  def example_C_Name(): String = {
     val ret: String = typ match {
       case e: EnumType => s"${qualifiedCTypeName}_${e.values(0)}"
       case b: BaseType =>
-        StringUtil.sanitizeName(s"${basePackage}_${split(0)}_${split(1)}_empty")
-      case e: BitType => s"${qualifiedCTypeName}_empty"
-      case e: ArrayType => s"${qualifiedCTypeName}_empty"
-      case e: RecordType => s"${qualifiedCTypeName}_empty"
-      case e: TODOType => s"${qualifiedCTypeName}_empty"
+        StringUtil.sanitizeName(s"${basePackage}_${split(0)}_${split(1)}_example")
+      case e: BitType => s"${qualifiedCTypeName}_example"
+      case e: ArrayType => s"${qualifiedCTypeName}_example"
+      case e: RecordType => s"${qualifiedCTypeName}_example"
+      case e: TODOType => s"${qualifiedCTypeName}_example"
     }
     return ret
   }

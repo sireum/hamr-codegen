@@ -29,7 +29,7 @@ object NixSeL4NameUtil {
   }
 
   def apiHelperSetterMethodName(portName: String, names: Names): String = {
-    return apiHelperMethodName(s"send_${portName}", names)
+    return apiHelperMethodName(s"put_${portName}", names)
   }
 
   def apiHelperLoggerMethodName(loggerName: String, componentType: String): String = {
