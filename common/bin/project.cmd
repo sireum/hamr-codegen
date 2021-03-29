@@ -31,8 +31,6 @@ import org.sireum._
 import org.sireum.project.ProjectUtil._
 import org.sireum.project.{JSON, Project}
 
-val test = "test"
-
 val air = "hamr-air"
 
 val common = "hamr-common"
@@ -44,7 +42,7 @@ val (commonShared, commonJvm) = moduleSharedJvm(
   baseDir = homeDir,
   sharedDeps = sharedId(air),
   sharedIvyDeps = ISZ(),
-  jvmDeps = ISZ(test, air),
+  jvmDeps = ISZ(air),
   jvmIvyDeps = ISZ()
 )
 
