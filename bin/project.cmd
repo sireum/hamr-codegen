@@ -28,11 +28,17 @@ val codegen = "hamr-codegen"
 
 val homeDir = Os.slashDir.up.canon
 
-val codegenJvm = moduleJvm(
+val codegenJvm = moduleJvmPub(
   id = codegen,
   baseDir = homeDir,
   jvmDeps = ISZ(act, arsit),
-  jvmIvyDeps = ISZ()
+  jvmIvyDeps = ISZ(),
+  pubOpt = pub(
+    desc = "HAMR AADL Code Generator",
+    url = "github.com/sireum/hamr-codegen",
+    licenses = org.sireum.project.ProjectUtil.bsd2,
+    devs = ISZ(jasonBelt)
+  )
 )
 
 val project = Project.empty + codegenJvm

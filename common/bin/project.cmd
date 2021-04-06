@@ -26,13 +26,19 @@ val common = "hamr-common"
 
 val homeDir = Os.slashDir.up.canon
 
-val (commonShared, commonJvm) = moduleSharedJvm(
+val (commonShared, commonJvm) = moduleSharedJvmPub(
   baseId = common,
   baseDir = homeDir,
   sharedDeps = sharedId(air),
   sharedIvyDeps = ISZ(),
   jvmDeps = ISZ(air),
-  jvmIvyDeps = ISZ()
+  jvmIvyDeps = ISZ(),
+  pubOpt = pub(
+    desc = "HAMR AADL Code Generator Common Library",
+    url = "github.com/sireum/hamr-codegen",
+    licenses = org.sireum.project.ProjectUtil.bsd2,
+    devs = ISZ(jasonBelt)
+  )
 )
 
 val project = Project.empty + commonShared + commonJvm
