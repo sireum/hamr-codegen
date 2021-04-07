@@ -36,7 +36,7 @@ val (commonShared, commonJvm) = moduleSharedJvmPub(
   pubOpt = pub(
     desc = "HAMR AADL Code Generator Common Library",
     url = "github.com/sireum/hamr-codegen",
-    licenses = org.sireum.project.ProjectUtil.bsd2,
+    licenses = bsd2,
     devs = ISZ(jasonBelt)
   )
 )
