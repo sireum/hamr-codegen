@@ -36,6 +36,7 @@ object hamrCodeGenCli {
     description = "", // description not currently used by cligen
     header = "Generate code from AADL IR (AIR)",
     usage = "<option>* air-file",
+    usageDescOpt = None(),
     opts = ISZ(
       Opt(name = "msgpack", longKey = "msgpack", shortKey = None(),
         tpe = Type.Flag(F),
