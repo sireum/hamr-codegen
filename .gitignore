@@ -22,3 +22,5 @@ versions.properties
 *.cmd.com
 air/
 runtime/
+project.json
+*.dot
