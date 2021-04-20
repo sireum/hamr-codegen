@@ -105,6 +105,8 @@ object TypeUtil {
     halt(s"${c} isn't an array")
   }
 
+  @pure def isEmptyType(t: AadlType): B = { return t == EmptyType }
+
   @pure def isEnumType(c: ir.Component): B = {
     return isEnum(c.properties)
   }
@@ -159,43 +161,6 @@ object TypeUtil {
 
   def isMissingTypeClassifier(c: ir.Classifier) : B = {
     return c.name == MISSING_AADL_TYPE
-  }
-
-  @pure def verifyBitCodec(aadlTypes: AadlTypes,
-                           symbolTable: SymbolTable,
-                           reporter: Reporter): B = {
-    var hasErrors: B = F
-    if (aadlTypes.rawConnections) {
-
-      for (featureConnections <- symbolTable.outConnections.values;
-           conn <- featureConnections) {
-
-        val src = symbolTable.airFeatureMap.get(CommonUtil.getName(conn.src.feature.get)).get
-
-        if (CommonUtil.isDataPort(src)) {
-          val fend = src.asInstanceOf[ir.FeatureEnd]
-          val aadlType = aadlTypes.typeMap.get(fend.classifier.get.name).get
-
-          val datatypeName = aadlType.name
-          val connectionName = CommonUtil.getLastName(conn.name)
-
-          TypeUtil.getBitCodecMaxSize(aadlType) match {
-            case Some(z) =>
-              if (z <= 0) {
-                hasErrors = T
-                reporter.error(None(), CommonUtil.toolName,
-                  s"${HamrProperties.HAMR__BIT_CODEC_MAX_SIZE} must be greater than 0 for data type ${datatypeName}")
-              }
-            case _ =>
-              hasErrors = T
-              reporter.error(None(), CommonUtil.toolName,
-                s"${HamrProperties.HAMR__BIT_CODEC_RAW_CONNECTIONS} specified but data type ${datatypeName} for connection ${connectionName} does not specify ${HamrProperties.HAMR__BIT_CODEC_MAX_SIZE}")
-          }
-        }
-      }
-    }
-
-    return !hasErrors
   }
 
   @pure def getBitsFullyQualifiedTypeName(): String = {

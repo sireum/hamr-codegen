@@ -4,8 +4,9 @@ package org.sireum.hamr.codegen.common.symbols
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
+import org.sireum.hamr.codegen.common.properties.HamrProperties.HAMR__BIT_CODEC_MAX_SIZE
 import org.sireum.hamr.codegen.common.properties.PropertyUtil
-import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes}
+import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, TypeUtil}
 import org.sireum.hamr.ir
 import org.sireum.message.Reporter
 
@@ -319,6 +320,83 @@ object SymbolResolver {
 
     val aadlSystem = process(system, None()).asInstanceOf[AadlSystem]
 
+    var aadlConnections: ISZ[AadlConnection] = ISZ()
+    val shouldUseRawConnections: B = PropertyUtil.getUseRawConnection(system.properties)
+
+    def resolveAadlConnectionInstances(): Unit = {
+      for (ci <- connections) {
+        val aadlConnection: AadlConnection = ci.kind match {
+          case ir.ConnectionKind.Port => {
+            val name = CommonUtil.getName(ci.name)
+
+            val srcFeatureName = CommonUtil.getName(ci.src.feature.get)
+            val srcComponent = componentMap.get(CommonUtil.getName(ci.src.component)).get
+            val srcFeature = featureMap.get(srcFeatureName).get
+
+            val dstFeatureName = CommonUtil.getName(ci.dst.feature.get)
+            val dstComponent = componentMap.get(CommonUtil.getName(ci.dst.component)).get
+            val dstFeature = featureMap.get(dstFeatureName).get
+
+            val connectionDataType: AadlType =
+              (CommonUtil.isDataPort(srcFeature.feature), CommonUtil.isDataPort(dstFeature.feature)) match {
+                case (T, T) =>
+                  val srcClassifier = srcFeature.feature.asInstanceOf[ir.FeatureEnd].classifier.get
+                  val dstClassifier = dstFeature.feature.asInstanceOf[ir.FeatureEnd].classifier.get
+
+                  val t: AadlType = (aadlTypes.typeMap.get(srcClassifier.name), aadlTypes.typeMap.get(dstClassifier.name)) match {
+                    case (Some(srcType), Some(dstType)) =>
+                      // TODO: this sanity check is too strong in general, but matches the models currently
+                      //       being processed.  Need to test with connections involving type extensions
+                      assert(srcType == dstType, s"Expecting both sides of connection ${name} to have the same type")
+                      srcType
+                    case _ =>
+                      // sanity check
+                      halt(s"Expecting both src and dst features of connection ${name} to have resolved types")
+                  }
+
+                  t
+                case (F, F) =>
+                  // sanity checking
+                  assert(CommonUtil.isEventPort(srcFeature.feature))
+                  assert(CommonUtil.isEventPort(dstFeature.feature))
+
+                  TypeUtil.EmptyType
+                case _ =>
+                  // sanity check
+                  halt(s"Both sides of ${name} must be (event) data ports or just event ports, mixtures not allowed")
+              }
+
+            if (shouldUseRawConnections && !TypeUtil.isEmptyType(connectionDataType)) {
+              TypeUtil.getBitCodecMaxSize(connectionDataType) match {
+                case Some(z) =>
+                  if(z <= 0) {
+                    reporter.error(None(), CommonUtil.toolName,
+                      s"${HAMR__BIT_CODEC_MAX_SIZE} must be greater than 0 for data type ${connectionDataType.name}")
+                  }
+                case _ =>
+                  val mesg = s"Raw connections requested but the data component used in connection ${name} does not specify the ${HAMR__BIT_CODEC_MAX_SIZE} property.  Need to fix ${connectionDataType.name}"
+                  reporter.error(None(), CommonUtil.toolName, mesg)
+              }
+            }
+
+            AadlPortConnection(
+              name,
+              srcComponent,
+              srcFeature,
+              dstComponent,
+              dstFeature,
+              connectionDataType,
+              ci
+            )
+          }
+          case _ => AadlConnectionTODO()
+        }
+
+        aadlConnections = aadlConnections :+ aadlConnection
+      }
+    }
+
+    resolveAadlConnectionInstances()
 
     val symbolTable = SymbolTable(rootSystem = aadlSystem,
 
@@ -330,9 +408,20 @@ object SymbolResolver {
       airFeatureMap = airFeatureMap,
       airClassifierMap = airClassifierMap,
 
+      aadlConnections = aadlConnections,
       connections = connections,
       inConnections = inConnections,
       outConnections = outConnections)
+
+
+    {
+      if (symbolTable.hasCakeMLComponents()) {
+        if (!symbolTable.rootSystem.getUseRawConnection()) {
+          val mesg = "Raw connections (i.e. byte-arrays) must be used when integrating CakeML components."
+          reporter.error(None(), CommonUtil.toolName, mesg)
+        }
+      }
+    }
 
     { // sanity checks TODO: move elsewhere
 

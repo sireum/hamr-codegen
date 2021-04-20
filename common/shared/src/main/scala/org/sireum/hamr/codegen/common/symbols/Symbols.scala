@@ -20,6 +20,8 @@ import org.sireum.hamr.ir.FeatureEnd
                             airClassifierMap: HashSMap[String, ir.Component],
 
                             // all handled connections
+                            aadlConnections: ISZ[AadlConnection],
+
                             connections: ISZ[ir.ConnectionInstance],
 
                             // feature name -> incoming connections
@@ -161,7 +163,10 @@ import org.sireum.hamr.ir.FeatureEnd
                            val subComponents: ISZ[AadlComponent],
                            val connectionInstances: ISZ[ir.ConnectionInstance]) extends AadlComponent {
 
-  def rawConnections(): B = {
+  // returns whether the system has HAMR::Bit_Codec_Raw_Connections set to true.  If true,
+  // and if this is the top level system, then the resolver guarantees all data components
+  // flowing through connections have the max bit codec property attached
+  def getUseRawConnection(): B = {
     return PropertyUtil.getUseRawConnection(component.properties)
   }
 }
@@ -371,7 +376,24 @@ import org.sireum.hamr.ir.FeatureEnd
 @datatype class AadlFeatureTODO(val feature: ir.Feature,
                                 val featureGroupIds: ISZ[String]) extends AadlFeature
 
+@sig trait AadlConnection
 
+@datatype class AadlPortConnection(val name: String,
+
+                                  val srcComponent: AadlComponent,
+                                  val srcFeature: AadlFeature,
+                                  val dstComponent: AadlComponent,
+                                  val dstFeature: AadlFeature,
+
+                                  val connectionDataType: AadlType, // will be EmptyType for event ports
+
+                                  val connectionInstance: ir.ConnectionInstance) extends AadlConnection {
+
+  def getConnectionKind(): ir.ConnectionKind.Type = { return connectionInstance.kind}
+  def getProperties(): ISZ[ir.Property] = { return connectionInstance.properties}
+}
+
+@datatype class AadlConnectionTODO extends AadlConnection
 
 @enum object Dispatch_Protocol {
   'Periodic
