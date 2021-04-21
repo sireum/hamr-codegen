@@ -57,5 +57,5 @@ object CaseSchedulingProperties {
 }
 
 object CasePropertiesProperties {
-  val PROP__CASE_PROPERTIES__COMPONENT_TYPE: String = "CASE_Properties::Component_Type"
+  val PROP__CASE_PROPERTIES__COMPONENT_LANGUAGE: String = "CASE_Properties::Component_Language"
 }

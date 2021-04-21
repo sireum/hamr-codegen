@@ -292,9 +292,8 @@ import org.sireum.hamr.ir.FeatureEnd
   }
 
   def isCakeMLComponent(): B = {
-    val ret: B = PropertyUtil.getDiscreetPropertyValue(component.properties, CasePropertiesProperties.PROP__CASE_PROPERTIES__COMPONENT_TYPE) match {
-      case Some(ir.ValueProp("MONITOR")) => T
-      case Some(ir.ValueProp("FILTER")) => T
+    val ret: B = PropertyUtil.getDiscreetPropertyValue(component.properties, CasePropertiesProperties.PROP__CASE_PROPERTIES__COMPONENT_LANGUAGE) match {
+      case Some(ir.ValueProp("CakeML")) => T
       case _ => F
     }
     return ret
