@@ -100,8 +100,8 @@ import org.sireum.hamr.ir.FeatureEnd
   def getBoundProcesses(c: AadlProcessor): ISZ[AadlProcess] = {
     val ret: ISZ[AadlComponent] = componentMap.values.filter((p: AadlComponent) => p match {
       case process: AadlProcess =>
-        process.boundProcessor match {
-          case Some(processor) => processor == c.path
+        getBoundProcessor(process) match {
+          case Some(processor) => processor == c
           case _ => F
         }
       case _ => F
@@ -109,9 +109,25 @@ import org.sireum.hamr.ir.FeatureEnd
     return ret.map(m => m.asInstanceOf[AadlProcess])
   }
 
+  def getActualBoundProcess(c: AadlVirtualProcessor): Option[AadlProcessor] = {
+    val ret: Option[AadlProcessor] = c.boundProcessor match {
+      case Some(path) =>
+        // assumes virtual processors can only be bound to actual processors (ie. no virtual processor chaining)
+        Some(componentMap.get(path).get.asInstanceOf[AadlProcessor])
+      case _ => None()
+    }
+    return ret
+  }
+
   def getBoundProcessor(c: AadlProcess): Option[AadlProcessor] = {
     val ret: Option[AadlProcessor] = c.boundProcessor match {
-      case Some(p) => Some(componentMap.get(p).get.asInstanceOf[AadlProcessor])
+      case Some(path) =>
+        componentMap.get(path) match {
+          case Some(a: AadlProcessor) => Some(a)
+          case Some(v: AadlVirtualProcessor) => getActualBoundProcess(v)
+          case Some(x) => halt("")
+          case _ => None()
+        }
       case None() => None()
     }
     return ret
@@ -122,11 +138,9 @@ import org.sireum.hamr.ir.FeatureEnd
 
     for(process <- getProcesses()){
       getBoundProcessor(process) match {
-        case Some(processor) =>
-          if(!processor.isVirtual) {
-            processors = processors + processor
-          }
-        case _ => halt(s"Unexpected: ${process.path} does not have a bound processor")
+        case Some(aadlProcessor) => processors = processors + aadlProcessor
+        case _ =>
+          halt(s"Unexpected: ${process.path} does not have a bound processor")
       }
     }
     return processors.elements
@@ -171,14 +185,13 @@ import org.sireum.hamr.ir.FeatureEnd
   }
 }
 
-@datatype class AadlProcessor(val component: ir.Component,
-                              val parent: Option[String],
-                              val path: String,
-                              val identifier: String,
-                              val subComponents: ISZ[AadlComponent],
-                              val connectionInstances: ISZ[ir.ConnectionInstance],
-
-                              isVirtual: B) extends AadlComponent {
+@sig trait Processor extends AadlComponent {
+  def component: ir.Component
+  def parent: Option[String]
+  def path: String
+  def identifier: String
+  def subComponents: ISZ[AadlComponent]
+  def connectionInstances: ISZ[ir.ConnectionInstance]
 
   def getFramePeriod(): Option[Z] = {
     val ret: Option[Z] = PropertyUtil.getDiscreetPropertyValue(component.properties, OsateProperties.TIMING_PROPERTIES__FRAME_PERIOD) match {
@@ -208,6 +221,22 @@ import org.sireum.hamr.ir.FeatureEnd
     return ret
   }
 }
+
+@datatype class AadlProcessor(val component: ir.Component,
+                              val parent: Option[String],
+                              val path: String,
+                              val identifier: String,
+                              val subComponents: ISZ[AadlComponent],
+                              val connectionInstances: ISZ[ir.ConnectionInstance]) extends Processor
+
+@datatype class AadlVirtualProcessor(val component: ir.Component,
+                                     val parent: Option[String],
+                                     val path: String,
+                                     val identifier: String,
+                                     val subComponents: ISZ[AadlComponent],
+                                     val connectionInstances: ISZ[ir.ConnectionInstance],
+
+                                     val boundProcessor: Option[String]) extends Processor
 
 
 @datatype class AadlProcess(val component: ir.Component,

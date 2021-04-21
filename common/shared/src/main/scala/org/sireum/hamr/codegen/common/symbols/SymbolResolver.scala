@@ -256,32 +256,35 @@ object SymbolResolver {
             parent = None(),
             path = path,
             identifier = identifier,
-            isVirtual = F,
             subComponents = ISZ(),
             connectionInstances = c.connectionInstances)
         }
         case ir.ComponentCategory.VirtualProcessor => {
           assert(c.subComponents.isEmpty, s"Need to handle subcomponents of ${c.category}? ${identifier}")
-          AadlProcessor(
+
+          val boundProcessor: Option[String] = PropertyUtil.getActualProcessorBinding(c)
+
+          AadlVirtualProcessor(
             component = c,
             parent = None(),
             path = path,
             identifier = identifier,
-            isVirtual = T,
             subComponents = ISZ(),
-            connectionInstances = c.connectionInstances)
+            connectionInstances = c.connectionInstances,
+            boundProcessor = boundProcessor
+          )
         }
         case ir.ComponentCategory.Process => {
           val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield process(sc, Some(path))
 
-          val processor: Option[String] = PropertyUtil.getActualProcessorBinding(c)
+          val boundProcessor: Option[String] = PropertyUtil.getActualProcessorBinding(c)
 
           AadlProcess(
             component = c,
             parent = parent,
             path = path,
             identifier = identifier,
-            boundProcessor = processor,
+            boundProcessor = boundProcessor,
             subComponents = subComponents,
             connectionInstances = c.connectionInstances)
         }
