@@ -50,7 +50,7 @@ def replaceLines(replacements: ISZ[(String, String)], file: Os.Path): Unit = {
     }
     newLine
   })
-  for(i <- 0 until found.size) assert(found(i), s"Didn't find ${replacements(i)._1}")
+  for(i <- 0 until found.size) { assert(found(i), s"Didn't find ${replacements(i)._1}") }
   file.writeOver(ops.ISZOps(modLines).foldRight((line: String, r: String) => s"${r}\n${line}", ""))
   println(s"Wrote: ${file}")
 }
@@ -168,6 +168,20 @@ println(s"sireumTimestamp: ${sireumTimestamp}")
   replaceLines(ISZ((a, aMod), (b, bMod), (c, cMod)), hamrFeature)
 }
 
+def keepFive(dir: Os.Path): Unit = {
+  val dirs = ISZ(dir / "features", dir / "plugins")
+  for(d <- dirs){
+    def date(f: Os.Path): String = { return ops.StringOps(f.name).substring(f.name.size - 16, f.name.size - 4)}
+    val sorted = ops.ISZOps(d.list).sortWith((a, b) => date(a) > date(b))
+    if(sorted.size > 5) {
+      for(i <- 5 until sorted.size) {
+        println(s"deleting ${sorted(i).name}")
+        sorted(i).remove()
+      }
+    }
+  }
+}
+
 { // Base Update Site version update
 
   val a =    st"""   <feature url="features/org.sireum.aadl.osate""".render
@@ -175,6 +189,8 @@ println(s"sireumTimestamp: ${sireumTimestamp}")
 
   val update = updateSiteDir / "org.sireum.aadl.osate.update.site" / "site.xml"
   replaceLines(ISZ((a, aMod)), update)
+
+  keepFive(update.up)
 }
 
 { // HAMR Update Site version update
@@ -184,6 +200,8 @@ println(s"sireumTimestamp: ${sireumTimestamp}")
 
   val hamrUpdate = updateSiteHAMRDir / "org.sireum.aadl.osate.hamr.update.site" / "site.xml"
   replaceLines(ISZ((a, aMod)), hamrUpdate)
+
+  keepFive(hamrUpdate.up)
 }
 
 { // UPDATE SITE README's
