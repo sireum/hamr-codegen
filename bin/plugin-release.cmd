@@ -23,16 +23,38 @@ import org.sireum._
 
 val SIREUM_HOME = Os.path(Os.env("SIREUM_HOME").get)
 val sireum = SIREUM_HOME / "bin" / "sireum"
+val sireumjar = SIREUM_HOME / "bin" / "sireum.jar"
 val currYear = java.time.Year.now.getValue
+
 
 // TODO get these from env or arguments
 val pluginDir = Os.home / "devel" / "sireum" / "osate-plugin"
 val updateSiteDir = Os.home / "devel" / "sireum" / "osate-plugin-update-site"
 val updateSiteHAMRDir = Os.home / "devel" / "sireum" / "hamr-plugin-update-site"
 val caseDir = Os.home / "devel" / "case" / "case-loonwerks"
+val case_setup = caseDir / "TA5" / "case-env" / "case-setup.sh"
+
+
+// need to download the case-env version of sireum to make
+// sure it can be used to build the rest
+val str = ops.StringOps(case_setup.read)
+val initIndex = str.stringIndexOf("SIREUM_INIT_V:=")
+val SIREUM_INIT_V = str.substring(initIndex + 15, initIndex + 28)
+
+for(f <- ISZ(sireum, sireumjar) if f.exists) {
+  f.remove()
+  println(s"Removed ${f}")
+}
+val envMap: Map[String, String] = Map(ISZ(("SIREUM_INIT_V", SIREUM_INIT_V)))
+Os.Proc(ISZ(s"${SIREUM_HOME}/bin/init.sh"), Os.cwd, envMap, T, None(), F, F, F, F, F, 0, F, F, None(), None()).console.runCheck()
+
+println(st"""The build will use: SIREUM_INIT_V=${SIREUM_INIT_V}.  If the build fails then do the following:
+            |   1. run Jenkins job: https://jenkins.cs.ksu.edu/job/Sireum-Kekinian-Init-Ver/.  Fetch the new version tag from https://github.com/sireum/init/releases
+            |   2. Once successful, replace SIREUM_INIT_V in ${case_setup} with the version tag from above and then rerun this script
+            |""".render)
 
 def assertResourceExists(p: ISZ[Os.Path]): Unit = { p.foreach((x: Os.Path) => assert(x.exists, s"${x} doesn't exist")) }
-assertResourceExists(ISZ(SIREUM_HOME, sireum, pluginDir, updateSiteDir, updateSiteHAMRDir, caseDir))
+assertResourceExists(ISZ(SIREUM_HOME, pluginDir, updateSiteDir, updateSiteHAMRDir, caseDir))
 
 def runGit(args: ISZ[String], path: Os.Path): String = {
   val p = org.sireum.Os.proc(args).at(path).runCheck()
