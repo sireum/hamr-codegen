@@ -13,7 +13,6 @@ import org.sireum.message.Reporter
 object SymbolResolver {
 
   def resolve(model: ir.Aadl,
-              basePackageName: Option[String],
               useCaseConnectors: B,
               aadlTypes: AadlTypes,
               reporter: Reporter): SymbolTable = {
@@ -201,7 +200,8 @@ object SymbolResolver {
             case Some(x) => x
             case _ =>
               // TODO should be handled by a rewriter
-              reporter.warn(None(), CommonUtil.toolName, "Dispatch Protocol not specified, assuming Sporadic")
+              val mesg = s"Dispatch Protocol not specified for ${identifier}, assuming Sporadic"
+              reporter.warn(c.identifier.pos, CommonUtil.toolName, mesg)
               Dispatch_Protocol.Sporadic
           }
 
@@ -369,19 +369,6 @@ object SymbolResolver {
                   halt(s"Both sides of ${name} must be (event) data ports or just event ports, mixtures not allowed")
               }
 
-            if (shouldUseRawConnections && !TypeUtil.isEmptyType(connectionDataType)) {
-              TypeUtil.getBitCodecMaxSize(connectionDataType) match {
-                case Some(z) =>
-                  if(z <= 0) {
-                    reporter.error(None(), CommonUtil.toolName,
-                      s"${HAMR__BIT_CODEC_MAX_SIZE} must be greater than 0 for data type ${connectionDataType.name}")
-                  }
-                case _ =>
-                  val mesg = s"Raw connections requested but the data component used in connection ${name} does not specify the ${HAMR__BIT_CODEC_MAX_SIZE} property.  Need to fix ${connectionDataType.name}"
-                  reporter.error(None(), CommonUtil.toolName, mesg)
-              }
-            }
-
             AadlPortConnection(
               name,
               srcComponent,
@@ -422,6 +409,32 @@ object SymbolResolver {
         if (!symbolTable.rootSystem.getUseRawConnection()) {
           val mesg = "Raw connections (i.e. byte-arrays) must be used when integrating CakeML components."
           reporter.error(None(), CommonUtil.toolName, mesg)
+        }
+      }
+    }
+
+    { // if raw then all data components used for (event) data ports must have bit size specified and
+      // it must be greater than 0
+      if(shouldUseRawConnections) {
+        for (thread <- symbolTable.getThreads()) {
+          for (port <- thread.ports) {
+            port match {
+              case a: AadlDataPort =>
+                val portName = s"${thread.identifier}.${a.identifier}"
+                val typeName = a.aadlType.name
+                a.aadlType.bitSize match {
+                  case Some(z) =>
+                    if(z <= 0) {
+                      val mesg = s"${HAMR__BIT_CODEC_MAX_SIZE} must be greater than 0 for data type ${typeName} used by port ${portName}"
+                      reporter.error(None(), CommonUtil.toolName, mesg)
+                    }
+                  case _ =>
+                    val mesg = s"${HAMR__BIT_CODEC_MAX_SIZE} must be specified for data type ${typeName} used by port ${portName}"
+                    reporter.error(port.feature.identifier.pos, CommonUtil.toolName, mesg)
+                }
+              case _ =>
+            }
+          }
         }
       }
     }

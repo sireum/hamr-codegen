@@ -15,7 +15,7 @@ object TypeUtil {
 
   val MISSING_AADL_TYPE: String = "Missing::MISSING_AADL_TYPE"
 
-  val EmptyType: TODOType = TODOType("art::Empty", None())
+  val EmptyType: TODOType = TODOType("art::Empty", None(), None())
 
   val SlangEmbeddedBitTypeName: String = "Base_Types.Bits"
 
@@ -60,26 +60,22 @@ object TypeUtil {
     return max
   }
 
-  @pure def getMaxBitsSize(types: AadlTypes): Option[Z] = {
+  /** Returns the maximum bit size of all data components that are
+    * attached to (event) data ports, even if the port is not connected
+    */
+  @pure def getMaxBitsSize(symbolTable: SymbolTable): Option[Z] = {
     var ret = z"-1"
-    for (t <- types.typeMap.values) {
-      TypeUtil.getBitCodecMaxSize(t) match {
-        case Some(z) => if (z > ret) {
-          ret = z
-        }
+    for (port <- symbolTable.getThreads().flatMap((t : AadlThread) => t.ports)){
+      port match {
+        case adp: AadlDataPort =>
+          adp.aadlType.bitSize match {
+            case Some(z) => if (z > ret) { ret = z }
+            case _ =>
+          }
         case _ =>
       }
     }
     return if (ret == -1) None() else Some(ret)
-  }
-
-  @pure def getBitCodecMaxSize(a: AadlType): Option[Z] = {
-    val ret: Option[Z] = a.container match {
-      case Some(c) =>
-        PropertyUtil.getUnitPropZ(c.properties, HamrProperties.HAMR__BIT_CODEC_MAX_SIZE)
-      case _ => None()
-    }
-    return ret
   }
 
   @pure def getArrayDimensions(a: ArrayType): ISZ[Z] = {

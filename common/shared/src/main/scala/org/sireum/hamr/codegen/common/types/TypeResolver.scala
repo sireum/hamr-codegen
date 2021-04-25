@@ -4,6 +4,7 @@ package org.sireum.hamr.codegen.common.types
 
 import org.sireum._
 import org.sireum.hamr.codegen.common._
+import org.sireum.hamr.codegen.common.properties.{HamrProperties, OsateProperties, PropertyUtil}
 import org.sireum.hamr.ir
 import org.sireum.hamr.ir.Aadl
 
@@ -37,26 +38,35 @@ object TypeResolver {
 
   def processDataTypes(model: Aadl,
                        rawConnections: B,
+                       maxStringSize: Z,
+                       unboundedZRBitWidth: Z,
                        basePackage: String): AadlTypes = {
 
     var typeMap: Map[String, AadlType] = Map.empty
 
     for (v <- model.dataComponents) {
-      typeMap = typeMap + (v.classifier.get.name ~> processType(v, basePackage, typeMap))
+      typeMap = typeMap + (v.classifier.get.name ~>
+        processType(v, basePackage, maxStringSize, unboundedZRBitWidth, typeMap))
     }
 
     return AadlTypes(rawConnections, typeMap)
   }
 
-  def processType(c: ir.Component, basePackage: String, typeMap: Map[String, AadlType]): AadlType = {
-    assert(c.category == ir.ComponentCategory.Data)
+  def processType(c: ir.Component,
+                  basePackage: String,
+                  maxStringSize: Z,
+                  unboundedZRBitWidth: Z,
+                  typeMap: Map[String, AadlType]): AadlType = {
     val cname = c.classifier.get.name
 
+    assert(c.category == ir.ComponentCategory.Data, s"Unexpected data type definition ${cname}")
+
     val container = Some(c)
+    val bitCodecSize = PropertyUtil.getUnitPropZ(c.properties, HamrProperties.HAMR__BIT_CODEC_MAX_SIZE)
 
     if (TypeUtil.isEnumType(c)) {
 
-      return EnumType(cname, container, TypeUtil.getEnumValues(c))
+      return EnumType(cname, container, bitCodecSize, TypeUtil.getEnumValues(c))
     }
     else if (TypeUtil.isBaseType(c)) {
 
@@ -64,27 +74,45 @@ object TypeResolver {
 
       val t: SlangType.Type = TypeResolver.getSlangType(aadlType)
 
-      return BaseType(cname, container, t)
+      val dataSize: Option[Z] =
+        bitCodecSize match {
+          case Some(bitCodec) => Some(bitCodec)
+          case _ => {
+            PropertyUtil.getUnitPropZ(c.properties, OsateProperties.MEMORY_PROPERTIES__DATA_SIZE) match {
+              case Some(bits) => Some(bits)
+              case _ => t match {
+                case SlangType.B => Some(z"1")
+                case SlangType.C => Some(z"8")
+                case SlangType.String => Some(maxStringSize * z"8")
+                case SlangType.Z => Some(unboundedZRBitWidth)
+                case SlangType.R => Some(unboundedZRBitWidth)
+                case _ => halt(s"Unexpected base type: ${aadlType}")
+              }
+            }
+          }
+        }
+
+      return BaseType(cname, container, dataSize, t)
     }
     else if (TypeUtil.isArrayType(c)) {
 
       val baseTypeName = TypeUtil.getArrayBaseType(c)
       val baseType = typeMap.get(baseTypeName).get
 
-      return ArrayType(cname, container, baseType)
+      return ArrayType(cname, container, bitCodecSize, baseType)
     }
     else if (TypeUtil.isRecordType(c)) {
       var fields: Map[String, AadlType] = Map.empty
 
       for (sc <- c.subComponents) {
         val fieldName = CommonUtil.getLastName(sc.identifier)
-        fields = fields + (fieldName ~> processType(sc, basePackage, typeMap))
+        fields = fields + (fieldName ~> processType(sc, basePackage, maxStringSize, unboundedZRBitWidth, typeMap))
       }
 
-      return RecordType(cname, container, fields)
+      return RecordType(cname, container, bitCodecSize, fields)
     }
     else {
-      return TODOType(cname, container)
+      return TODOType(cname, container, bitCodecSize)
     }
   }
 }

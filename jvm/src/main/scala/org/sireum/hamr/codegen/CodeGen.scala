@@ -8,13 +8,14 @@ import org.sireum.hamr.{act, arsit}
 import org.sireum.hamr.codegen.CodeGenPlatform._
 import org.sireum.hamr.codegen.common.DirectoryUtil
 import org.sireum.hamr.codegen.common.containers.{Resource, TranspilerConfig}
+import org.sireum.hamr.codegen.common.util.{ExperimentalOptions, ModelUtil}
 import org.sireum.hamr.ir.Aadl
 import org.sireum.message._
 import org.sireum.ops.StringOps
 
 object CodeGen {
 
-  val toolName: String = "Hamr CodeGen"
+  val toolName: String = "HAMR CodeGen"
 
   def codeGen(model: Aadl,
               o: CodeGenConfig,
@@ -58,7 +59,12 @@ object CodeGen {
 
     var wroteOutArsitResources: B = F
 
-    if (runArsit) {
+    val (rmodel, aadlTypes, symbolTable) =
+      ModelUtil.resolve(model, packageName, o.maxStringSize, o.bitWidth, ExperimentalOptions.useCaseConnectors(o.experimentalOptions), reporter)
+
+    reporterIndex = printMessages(reporter, reporterIndex, ISZ())
+
+    if (!reporter.hasError && runArsit) {
 
       val genBlessEntryPoints = false
       val ipc = arsit.util.IpcMechanism.byName(o.ipc.name).get
@@ -88,7 +94,7 @@ object CodeGen {
       reporter.info(None(), toolName, "Generating Slang artifacts...")
       reporterIndex = printMessages(reporter, reporterIndex, ISZ())
 
-      val results = arsit.Arsit.run(model, opt, reporter)
+      val results = arsit.Arsit.run(rmodel, opt, aadlTypes, symbolTable, reporter)
 
       arsitResources = arsitResources ++ results.resources
       transpilerConfigs = transpilerConfigs ++ results.transpilerOptions
@@ -129,7 +135,7 @@ object CodeGen {
         experimentalOptions = o.experimentalOptions
       )
 
-      val results = org.sireum.hamr.act.Act.run(model, actOptions, reporter)
+      val results = org.sireum.hamr.act.Act.run(rmodel, actOptions, aadlTypes, symbolTable, reporter)
       actResources = actResources ++ results.resources
 
       reporterIndex = printMessages(reporter, reporterIndex, ISZ(ACT_INSTRUCTIONS_MESSAGE_KIND))

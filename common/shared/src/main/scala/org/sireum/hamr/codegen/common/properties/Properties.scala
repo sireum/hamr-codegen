@@ -18,6 +18,7 @@ object OsateProperties {
   val DEPLOYMENT_PROPERTIES__ACTUAL_PROCESSOR_BINDING: String = "Deployment_Properties::Actual_Processor_Binding"
   val COMMUNICATION_PROPERTIES__QUEUE_SIZE: String = "Communication_Properties::Queue_Size"
 
+  val MEMORY_PROPERTIES__DATA_SIZE: String = "Memory_Properties::Data_Size"
   val MEMORY_PROPERTIES__STACK_SIZE: String = "Memory_Properties::Stack_Size"
 
   val PROGRAMMING_PROPERTIES__INITIALIZE_ENTRYPOINT_SOURCE_TEXT: String = "Programming_Properties::Initialize_Entrypoint_Source_Text"
