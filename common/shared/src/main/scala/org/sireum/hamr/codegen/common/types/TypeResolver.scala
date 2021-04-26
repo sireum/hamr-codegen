@@ -80,14 +80,7 @@ object TypeResolver {
           case _ => {
             PropertyUtil.getUnitPropZ(c.properties, OsateProperties.MEMORY_PROPERTIES__DATA_SIZE) match {
               case Some(bits) => Some(bits)
-              case _ => t match {
-                case SlangType.B => Some(z"1")
-                case SlangType.C => Some(z"8")
-                case SlangType.String => Some(maxStringSize * z"8")
-                case SlangType.Z => Some(unboundedZRBitWidth)
-                case SlangType.R => Some(unboundedZRBitWidth)
-                case _ => halt(s"Unexpected base type: ${aadlType}")
-              }
+              case _ => None()
             }
           }
         }

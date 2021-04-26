@@ -6,7 +6,7 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.properties.HamrProperties.HAMR__BIT_CODEC_MAX_SIZE
 import org.sireum.hamr.codegen.common.properties.PropertyUtil
-import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, TypeUtil}
+import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, BaseType, TypeUtil}
 import org.sireum.hamr.ir
 import org.sireum.message.Reporter
 
@@ -429,8 +429,14 @@ object SymbolResolver {
                       reporter.error(None(), CommonUtil.toolName, mesg)
                     }
                   case _ =>
-                    val mesg = s"${HAMR__BIT_CODEC_MAX_SIZE} must be specified for data type ${typeName} used by port ${portName}"
-                    reporter.error(port.feature.identifier.pos, CommonUtil.toolName, mesg)
+                    a.aadlType match {
+                      case b: BaseType =>
+                        val mesg = s"Unbounded type ${typeName} used by port ${portName} is not currently supported when using the wire protocol"
+                        reporter.error(port.feature.identifier.pos, CommonUtil.toolName, mesg)
+                      case _ =>
+                        val mesg = s"${HAMR__BIT_CODEC_MAX_SIZE} must be specified for data type ${typeName} used by port ${portName}"
+                        reporter.error(port.feature.identifier.pos, CommonUtil.toolName, mesg)
+                    }
                 }
               case _ =>
             }
