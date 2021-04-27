@@ -190,7 +190,7 @@ object CodeGen {
       }
     }
 
-    return messages.size
+    return reporterMessages.size
   }
 
   def toOption(f: Path): Option[String] = {
