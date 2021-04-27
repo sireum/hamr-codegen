@@ -45,8 +45,8 @@ for(f <- ISZ(sireum, sireumjar) if f.exists) {
   f.remove()
   println(s"Removed ${f}")
 }
-val envMap: Map[String, String] = Map(ISZ(("SIREUM_INIT_V", SIREUM_INIT_V)))
-Os.Proc(ISZ(s"${SIREUM_HOME}/bin/init.sh"), Os.cwd, envMap, T, None(), F, F, F, F, F, 0, F, F, None(), None()).console.runCheck()
+
+proc"${SIREUM_HOME}/bin/init.sh".at(SIREUM_HOME).env(ISZ(("SIREUM_INIT_V", SIREUM_INIT_V))).console.runCheck()
 
 println(st"""The build will use: SIREUM_INIT_V=${SIREUM_INIT_V}.  If the build fails then do the following:
             |   1. run Jenkins job: https://jenkins.cs.ksu.edu/job/Sireum-Kekinian-Init-Ver/.  Fetch the new version tag from https://github.com/sireum/init/releases
@@ -117,6 +117,11 @@ val buildsbt = SIREUM_HOME / "hamr" / "codegen" / "arsit" / "resources" / "util"
   Os.proc(ISZ(sireum.value, "slang", "run", build_cmd.value)).console.runCheck()
 }
 
+{ // run HAMR transpiler tests using the new sireum
+  println("Running HAMR transpiler regression tests")
+  proc"$sireum proyek test -n sireum-proyek --par --sha3 --ignore-runtime --classes org.sireum.hamr.codegen.test.TranspileTests ."
+    .at(SIREUM_HOME).console.runCheck()
+}
 
 val props = buildsbt.properties
 
