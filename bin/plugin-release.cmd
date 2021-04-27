@@ -118,8 +118,8 @@ val buildsbt = SIREUM_HOME / "hamr" / "codegen" / "arsit" / "resources" / "util"
 }
 
 { // run HAMR transpiler tests using the new sireum
-  println("Running HAMR transpiler regression tests")
-  proc"$sireum proyek test -n sireum-proyek --par --sha3 --ignore-runtime --classes org.sireum.hamr.codegen.test.TranspileTests ."
+  println("Running HAMR expensive regression tests")
+  proc"$sireum proyek test -n sireum-proyek --par --sha3 --ignore-runtime --packages org.sireum.hamr.codegen.test.expensive ."
     .at(SIREUM_HOME).console.runCheck()
 }
 
