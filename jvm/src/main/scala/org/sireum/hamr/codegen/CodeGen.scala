@@ -62,7 +62,7 @@ object CodeGen {
     val (rmodel, aadlTypes, symbolTable) =
       ModelUtil.resolve(model, packageName, o.maxStringSize, o.bitWidth, ExperimentalOptions.useCaseConnectors(o.experimentalOptions), reporter)
 
-    reporterIndex = printMessages(reporter, reporterIndex, ISZ())
+      reporterIndex = printMessages(reporter, o.verbose, reporterIndex, ISZ())
 
     if (!reporter.hasError && runArsit) {
 
@@ -92,14 +92,14 @@ object CodeGen {
       )
 
       reporter.info(None(), toolName, "Generating Slang artifacts...")
-      reporterIndex = printMessages(reporter, reporterIndex, ISZ())
+      reporterIndex = printMessages(reporter, o.verbose, reporterIndex, ISZ())
 
       val results = arsit.Arsit.run(rmodel, opt, aadlTypes, symbolTable, reporter)
 
       arsitResources = arsitResources ++ results.resources
       transpilerConfigs = transpilerConfigs ++ results.transpilerOptions
 
-      reporterIndex = printMessages(reporter, reporterIndex, ISZ(ARSIT_INSTRUCTIONS_MESSAGE_KIND))
+      reporterIndex = printMessages(reporter, o.verbose, reporterIndex, ISZ(ARSIT_INSTRUCTIONS_MESSAGE_KIND))
 
       arsitResources = removeDuplicates(arsitResources, reporter)
 
@@ -110,7 +110,7 @@ object CodeGen {
         writeOutResources(arsitResources, reporter)
         wroteOutArsitResources = T
 
-        reporterIndex = printMessages(reporter, reporterIndex, ISZ())
+        reporterIndex = printMessages(reporter, o.verbose, reporterIndex, ISZ())
 
         for (transpilerConfig <- results.transpilerOptions) {
           if (transpilerCallback(transpilerConfig) != 0) {
@@ -138,7 +138,7 @@ object CodeGen {
       val results = org.sireum.hamr.act.Act.run(rmodel, actOptions, aadlTypes, symbolTable, reporter)
       actResources = actResources ++ results.resources
 
-      reporterIndex = printMessages(reporter, reporterIndex, ISZ(ACT_INSTRUCTIONS_MESSAGE_KIND))
+      reporterIndex = printMessages(reporter, o.verbose, reporterIndex, ISZ(ACT_INSTRUCTIONS_MESSAGE_KIND))
     }
 
     actResources = removeDuplicates(actResources, reporter)
@@ -150,10 +150,10 @@ object CodeGen {
       writeOutResources(actResources, reporter)
     }
 
-    reporterIndex = printMessages(reporter, reporterIndex, ISZ())
+    reporterIndex = printMessages(reporter, o.verbose, reporterIndex, ISZ())
 
     if(!reporter.hasError && o.writeOutResources) {
-      // print out any instructional messages
+      // always print out any instructional messages
       val instructions = reporter.messages.filter(p =>
         p.kind == ARSIT_INSTRUCTIONS_MESSAGE_KIND || p.kind == ACT_INSTRUCTIONS_MESSAGE_KIND)
       for (i <- instructions) {
@@ -165,7 +165,7 @@ object CodeGen {
     return CodeGenResults(arsitResources ++ actResources, transpilerConfigs)
   }
 
-  def printMessages(reporter: Reporter, reporterIndex: Z, kindsToFilterOut: ISZ[String]): Z = {
+  def printMessages(reporter: Reporter, verbose: B, reporterIndex: Z, kindsToFilterOut: ISZ[String]): Z = {
 
     var messages = ops.ISZOps(reporter.messages).slice(reporterIndex, reporter.messages.size)
     for(key <- kindsToFilterOut) {
@@ -181,7 +181,9 @@ object CodeGen {
           s"${m.kind} - ${t}[${pos.beginLine}, ${pos.beginColumn}] ${m.text}. ${uri}"
         case _ => s"${m.kind} - ${t}${m.text}"
       }
-      cprintln(err, mText)
+      if(verbose) {
+        cprintln(err, mText)
+      }
     }
 
     return reporter.messages.size
