@@ -8,7 +8,7 @@ import org.sireum.hamr.codegen.common.properties.HamrProperties.HAMR__BIT_CODEC_
 import org.sireum.hamr.codegen.common.properties.PropertyUtil
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, BaseType, TypeUtil}
 import org.sireum.hamr.ir
-import org.sireum.message.Reporter
+import org.sireum.message.{Position, Reporter}
 
 object SymbolResolver {
 
@@ -413,33 +413,37 @@ object SymbolResolver {
       }
     }
 
-    { // if raw then all data components used for (event) data ports must have bit size specified and
-      // it must be greater than 0
+    { // if raw then all data components used in connections b/w threads
+      // must have bit size specified and it must be greater than 0
       if(shouldUseRawConnections) {
-        for (thread <- symbolTable.getThreads()) {
-          for (port <- thread.ports) {
-            port match {
-              case a: AadlDataPort =>
-                val portName = s"${thread.identifier}.${a.identifier}"
-                val typeName = a.aadlType.name
-                a.aadlType.bitSize match {
+        for(conn <- symbolTable.aadlConnections) {
+          conn match {
+            case apc: AadlPortConnection =>
+              if (!TypeUtil.isEmptyType(apc.connectionDataType)) {
+                val connName = apc.name
+                val typeName = apc.connectionDataType.name
+                val pos: Option[Position] = apc.connectionDataType.container match {
+                  case Some(c) => c.identifier.pos
+                  case _ => None()
+                }
+                apc.connectionDataType.bitSize match {
                   case Some(z) =>
-                    if(z <= 0) {
-                      val mesg = s"${HAMR__BIT_CODEC_MAX_SIZE} must be greater than 0 for data type ${typeName} used by port ${portName}"
-                      reporter.error(None(), CommonUtil.toolName, mesg)
+                    if (z <= 0) {
+                      val mesg = s"${HAMR__BIT_CODEC_MAX_SIZE} must be greater than 0 for data type ${typeName} used by connection ${connName}"
+                      reporter.error(pos, CommonUtil.toolName, mesg)
                     }
                   case _ =>
-                    a.aadlType match {
+                    apc.connectionDataType match {
                       case b: BaseType =>
-                        val mesg = s"Unbounded type ${typeName} used by port ${portName} is not currently supported when using the wire protocol"
-                        reporter.error(port.feature.identifier.pos, CommonUtil.toolName, mesg)
+                        val mesg = s"Unbounded type ${typeName} is not currently supported when using the wire protocol -- used by connection ${conn} "
+                        reporter.error(pos, CommonUtil.toolName, mesg)
                       case _ =>
-                        val mesg = s"${HAMR__BIT_CODEC_MAX_SIZE} must be specified for data type ${typeName} used by port ${portName}"
-                        reporter.error(port.feature.identifier.pos, CommonUtil.toolName, mesg)
+                        val mesg = s"${HAMR__BIT_CODEC_MAX_SIZE} must be specified for data type ${typeName} used by connection ${connName}"
+                        reporter.error(pos, CommonUtil.toolName, mesg)
                     }
                 }
-              case _ =>
-            }
+              }
+            case _ =>
           }
         }
       }
