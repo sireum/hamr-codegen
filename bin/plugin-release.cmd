@@ -105,7 +105,13 @@ val buildsbt = SIREUM_HOME / "hamr" / "codegen" / "arsit" / "resources" / "util"
   }
 }
 
-
+{ // remove cli.json to make sure build stamp gets updated correctly
+  val cli = SIREUM_HOME / "out" / "sireum-proyek" / "modules" / "cli.sha3.json"
+  if(cli.exists) {
+    cli.remove()
+    println(s"Removed ${cli}")
+  }
+}
 
 { // build sireum.jar
   val build_cmd = SIREUM_HOME / "bin" / "build.cmd"
