@@ -114,21 +114,16 @@ def test(): Unit = {
 
 def clean(): Unit = {
   println(s"Cleaning ${home}")
-  val dirsToDrop: ISZ[String] = ISZ("air", "lib", "out", "runtime")
-  dirsToDrop.map((m: String) => homeBin.up / m).foreach((f: Os.Path) => {
-    println(s"Deleting ${f}")
-    f.removeAll()
-  })
+  val homeResources: ISZ[Os.Path] = ISZ("air", "lib", "out", "runtime", "versions.properties").map(m => home / m)
+  val homeBinResources: ISZ[Os.Path] = ISZ("sireum.jar", "sireum").map(m => homeBin / m)
+  for(r <- (homeResources ++ homeBinResources) if r.exists ) {
+    println(s"Deleting ${r}")
+    r.removeAll()
+  }
   ISZ[String]("act", "arsit").foreach((subProj: String) => {
     val buildCmd = home / subProj / "bin" / "build.cmd"
     Os.proc(ISZ(buildCmd.canon.value, "clean")).console.run()
   })
-  if((homeBin / "sireum.jar").exists) {
-    (homeBin / "sireum.jar").remove()
-  }
-  if((homeBin / "sireum").exists) {
-    (homeBin / "sireum").remove()
-  }
 }
 
 for (i <- 0 until Os.cliArgs.size) {
