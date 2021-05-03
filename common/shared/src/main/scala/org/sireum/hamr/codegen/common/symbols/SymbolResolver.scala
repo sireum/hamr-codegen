@@ -410,8 +410,8 @@ object SymbolResolver {
         if(options.platform == CodeGenPlatform.SeL4_Only || options.platform == CodeGenPlatform.SeL4_TB) {
           var reasons: ISZ[String] = ISZ()
           if(symbolTable.hasCakeMLComponents()) { reasons = reasons :+ "CakeML components" }
-          if(shouldUseRawConnections) reasons = reasons :+ "wire protocol"
-          if(symbolTable.hasVM()) reasons = reasons :+ "virtual machines"
+          if(shouldUseRawConnections) { reasons = reasons :+ "wire protocol" }
+          if(symbolTable.hasVM()) { reasons = reasons :+ "virtual machines" }
           val mesg = st"${options.platform} platform does not support ${(reasons, ", ")}".render
           reporter.error(None(), CommonUtil.toolName, mesg)
         }
