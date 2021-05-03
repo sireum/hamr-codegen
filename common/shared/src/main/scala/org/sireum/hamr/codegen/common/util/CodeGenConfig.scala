@@ -1,6 +1,6 @@
 // #Sireum
 
-package org.sireum.hamr.codegen
+package org.sireum.hamr.codegen.common.util
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.containers.{Resource, TranspilerConfig}

@@ -13,9 +13,8 @@ import org.sireum.message.Reporter
 object ModelUtil {
   def resolve(model: Aadl,
               packageName: String,
-              maxStringSize: Z,
-              unboundedZRBitWidth: Z,
-              useCaseConnectors: B, reporter: Reporter): (Aadl, AadlTypes, SymbolTable) = {
+              options: CodeGenConfig,
+              reporter: Reporter): (Aadl, AadlTypes, SymbolTable) = {
 
     val result = Transformer(Transformers.MissingTypeRewriter(reporter)).transformAadl(Transformers.CTX(F, F), model)
     if(result.ctx.hasErrors) {
@@ -25,12 +24,12 @@ object ModelUtil {
     val rmodel: Aadl = if (result.resultOpt.nonEmpty) result.resultOpt.get else model
 
     val rawConnections: B = PropertyUtil.getUseRawConnection(rmodel.components(0).properties)
-    val aadlTypes = TypeResolver.processDataTypes(rmodel, rawConnections, maxStringSize, unboundedZRBitWidth, packageName)
+    val aadlTypes = TypeResolver.processDataTypes(rmodel, rawConnections, options.maxStringSize, options.bitWidth, packageName)
 
     val symbolTable = SymbolResolver.resolve(
       model = rmodel,
-      useCaseConnectors = useCaseConnectors,
       aadlTypes = aadlTypes,
+      options = options,
       reporter = reporter)
 
     return (rmodel, aadlTypes, symbolTable)

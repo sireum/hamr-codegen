@@ -5,10 +5,10 @@ import org.sireum._
 import org.sireum.hamr.act.util.Util.ACT_INSTRUCTIONS_MESSAGE_KIND
 import org.sireum.hamr.arsit.Util.ARSIT_INSTRUCTIONS_MESSAGE_KIND
 import org.sireum.hamr.{act, arsit}
-import org.sireum.hamr.codegen.CodeGenPlatform._
+import org.sireum.hamr.codegen.common.util.CodeGenPlatform._
 import org.sireum.hamr.codegen.common.DirectoryUtil
 import org.sireum.hamr.codegen.common.containers.{Resource, TranspilerConfig}
-import org.sireum.hamr.codegen.common.util.{ExperimentalOptions, ModelUtil}
+import org.sireum.hamr.codegen.common.util.{CodeGenConfig, CodeGenPlatform, CodeGenResults, ModelUtil}
 import org.sireum.hamr.ir.Aadl
 import org.sireum.message._
 import org.sireum.ops.StringOps
@@ -18,33 +18,33 @@ object CodeGen {
   val toolName: String = "HAMR CodeGen"
 
   def codeGen(model: Aadl,
-              o: CodeGenConfig,
+              options: CodeGenConfig,
               reporter: Reporter,
               transpilerCallback: (TranspilerConfig) => Z): CodeGenResults = {
 
-    val targetingSel4 = o.platform == CodeGenPlatform.SeL4
+    val targetingSel4 = options.platform == CodeGenPlatform.SeL4
 
-    val slangOutputDir: Path = Os.path(o.slangOutputDir.getOrElse("."))
+    val slangOutputDir: Path = Os.path(options.slangOutputDir.getOrElse("."))
 
     val output_shared_C_Directory: Path =
-      if(o.slangOutputCDir.nonEmpty) Os.path(o.slangOutputCDir.get)
+      if(options.slangOutputCDir.nonEmpty) Os.path(options.slangOutputCDir.get)
       else slangOutputDir / "src" / "c"
 
     val camkesOutputDir: Path =
-      if(o.camkesOutputDir.nonEmpty) Os.path(o.camkesOutputDir.get)
+      if(options.camkesOutputDir.nonEmpty) Os.path(options.camkesOutputDir.get)
       else output_shared_C_Directory / "camkes"
 
     val output_platform_C_Directory: Path =
       if (targetingSel4) camkesOutputDir / DirectoryUtil.DIR_SLANG_LIBRARIES
       else output_shared_C_Directory
 
-    val packageName: String = if (o.packageName.nonEmpty) {
-      cleanupPackageName(o.packageName.get)
+    val packageName: String = if (options.packageName.nonEmpty) {
+      cleanupPackageName(options.packageName.get)
     } else {
       cleanupPackageName(slangOutputDir.name)
     }
 
-    val (runArsit, runACT, hamrIntegration, isTranspilerProject) = o.platform match {
+    val (runArsit, runACT, hamrIntegration, isTranspilerProject) = options.platform match {
       case JVM => (T, F, F, F)
       case Linux | Cygwin | MacOS => (T, F, F, T)
       case SeL4 => (T, T, T, T)
@@ -60,57 +60,57 @@ object CodeGen {
     var wroteOutArsitResources: B = F
 
     val (rmodel, aadlTypes, symbolTable) =
-      ModelUtil.resolve(model, packageName, o.maxStringSize, o.bitWidth, ExperimentalOptions.useCaseConnectors(o.experimentalOptions), reporter)
+      ModelUtil.resolve(model, packageName, options, reporter)
 
-      reporterIndex = printMessages(reporter.messages, o.verbose, reporterIndex, ISZ())
+      reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
 
     if (!reporter.hasError && runArsit) {
 
       val genBlessEntryPoints = false
-      val ipc = arsit.util.IpcMechanism.byName(o.ipc.name).get
-      val platform = arsit.util.ArsitPlatform.byName(o.platform.name).get
+      val ipc = arsit.util.IpcMechanism.byName(options.ipc.name).get
+      val platform = arsit.util.ArsitPlatform.byName(options.platform.name).get
       val fileSep = StringOps(org.sireum.Os.fileSep).first
 
       val opt = arsit.util.ArsitOptions(
         outputDir = slangOutputDir,
         packageName = packageName,
-        noEmbedArt = o.noEmbedArt,
+        noEmbedArt = options.noEmbedArt,
         bless = genBlessEntryPoints,
-        verbose = o.verbose,
-        devicesAsThreads = o.devicesAsThreads,
+        verbose = options.verbose,
+        devicesAsThreads = options.devicesAsThreads,
         ipc = ipc,
-        auxCodeDirs = o.slangAuxCodeDirs,
+        auxCodeDirs = options.slangAuxCodeDirs,
         outputSharedCDir = Some(output_shared_C_Directory),
         outputPlatformCDir = Some(output_platform_C_Directory),
-        excludeImpl = o.excludeComponentImpl,
+        excludeImpl = options.excludeComponentImpl,
         platform = platform,
-        bitWidth = o.bitWidth,
-        maxStringSize = o.maxStringSize,
-        maxArraySize = o.maxArraySize,
+        bitWidth = options.bitWidth,
+        maxStringSize = options.maxStringSize,
+        maxArraySize = options.maxArraySize,
         pathSeparator = fileSep,
-        experimentalOptions = o.experimentalOptions
+        experimentalOptions = options.experimentalOptions
       )
 
       reporter.info(None(), toolName, "Generating Slang artifacts...")
-      reporterIndex = printMessages(reporter.messages, o.verbose, reporterIndex, ISZ())
+      reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
 
       val results = arsit.Arsit.run(rmodel, opt, aadlTypes, symbolTable, reporter)
 
       arsitResources = arsitResources ++ results.resources
       transpilerConfigs = transpilerConfigs ++ results.transpilerOptions
 
-      reporterIndex = printMessages(reporter.messages, o.verbose, reporterIndex, ISZ(ARSIT_INSTRUCTIONS_MESSAGE_KIND))
+      reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ(ARSIT_INSTRUCTIONS_MESSAGE_KIND))
 
       arsitResources = removeDuplicates(arsitResources, reporter)
 
-      if (!reporter.hasError && o.runTranspiler && isTranspilerProject) {
+      if (!reporter.hasError && options.runTranspiler && isTranspilerProject) {
 
         // doesn't matter what 'o.writeOutResources' is, transpiler needs the
         // resources to be written out
         writeOutResources(arsitResources, reporter)
         wroteOutArsitResources = T
 
-        reporterIndex = printMessages(reporter.messages, o.verbose, reporterIndex, ISZ())
+        reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
 
         for (transpilerConfig <- results.transpilerOptions) {
           if (transpilerCallback(transpilerConfig) != 0) {
@@ -123,36 +123,36 @@ object CodeGen {
     var actResources: ISZ[Resource] = ISZ()
     if (!reporter.hasError && runACT) {
 
-      val platform = org.sireum.hamr.act.util.ActPlatform.byName(o.platform.name).get
+      val platform = org.sireum.hamr.act.util.ActPlatform.byName(options.platform.name).get
       reporter.info(None(), toolName, "Generating CAmkES artifacts...")
 
       val actOptions = org.sireum.hamr.act.util.ActOptions(
         outputDir = camkesOutputDir.value,
-        auxFiles = getAuxFiles(o.camkesAuxCodeDirs, F, reporter),
-        aadlRootDirectory = o.aadlRootDir,
+        auxFiles = getAuxFiles(options.camkesAuxCodeDirs, F, reporter),
+        aadlRootDirectory = options.aadlRootDir,
         platform = platform,
         hamrBasePackageName = Some(packageName),
-        experimentalOptions = o.experimentalOptions
+        experimentalOptions = options.experimentalOptions
       )
 
       val results = org.sireum.hamr.act.Act.run(rmodel, actOptions, aadlTypes, symbolTable, reporter)
       actResources = actResources ++ results.resources
 
-      reporterIndex = printMessages(reporter.messages, o.verbose, reporterIndex, ISZ(ACT_INSTRUCTIONS_MESSAGE_KIND))
+      reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ(ACT_INSTRUCTIONS_MESSAGE_KIND))
     }
 
     actResources = removeDuplicates(actResources, reporter)
 
-    if(!reporter.hasError && o.writeOutResources) {
+    if(!reporter.hasError && options.writeOutResources) {
       if(!wroteOutArsitResources) {
         writeOutResources(arsitResources, reporter)
       }
       writeOutResources(actResources, reporter)
     }
 
-    reporterIndex = printMessages(reporter.messages, o.verbose, reporterIndex, ISZ())
+    reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
 
-    if(!reporter.hasError && o.writeOutResources) {
+    if(!reporter.hasError && options.writeOutResources) {
       // always print out any instructional messages
       val instructions = reporter.messages.filter(p =>
         p.kind == ARSIT_INSTRUCTIONS_MESSAGE_KIND || p.kind == ACT_INSTRUCTIONS_MESSAGE_KIND)
@@ -162,7 +162,7 @@ object CodeGen {
       }
     }
 
-    if(reporter.hasError && !o.verbose) { // at least need to print out the error messages
+    if(reporter.hasError && !options.verbose) { // at least need to print out the error messages
       printMessages(reporter.errors, T, 0, ISZ())
     }
 

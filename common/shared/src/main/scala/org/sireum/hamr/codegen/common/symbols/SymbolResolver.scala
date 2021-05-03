@@ -7,14 +7,15 @@ import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.properties.HamrProperties.HAMR__BIT_CODEC_MAX_SIZE
 import org.sireum.hamr.codegen.common.properties.PropertyUtil
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, BaseType, TypeUtil}
+import org.sireum.hamr.codegen.common.util.{CodeGenConfig, CodeGenPlatform, ExperimentalOptions}
 import org.sireum.hamr.ir
 import org.sireum.message.{Position, Reporter}
 
 object SymbolResolver {
 
   def resolve(model: ir.Aadl,
-              useCaseConnectors: B,
               aadlTypes: AadlTypes,
+              options: CodeGenConfig,
               reporter: Reporter): SymbolTable = {
 
     var featureMap: HashSMap[String, AadlFeature] = HashSMap.empty
@@ -404,6 +405,19 @@ object SymbolResolver {
       outConnections = outConnections)
 
 
+    { // restrict when VMs, wire protocol, CakeML components are allowed
+      if(symbolTable.hasCakeMLComponents() || shouldUseRawConnections || symbolTable.hasVM()) {
+        if(options.platform == CodeGenPlatform.SeL4_Only || options.platform == CodeGenPlatform.SeL4_TB) {
+          var reasons: ISZ[String] = ISZ()
+          if(symbolTable.hasCakeMLComponents()) { reasons = reasons :+ "CakeML components" }
+          if(shouldUseRawConnections) reasons = reasons :+ "wire protocol"
+          if(symbolTable.hasVM()) reasons = reasons :+ "virtual machines"
+          val mesg = st"${options.platform} platform does not support ${(reasons, ", ")}".render
+          reporter.error(None(), CommonUtil.toolName, mesg)
+        }
+      }
+    }
+
     {
       if (symbolTable.hasCakeMLComponents()) {
         if (!symbolTable.rootSystem.getUseRawConnection()) {
@@ -451,7 +465,7 @@ object SymbolResolver {
 
     { // sanity checks TODO: move elsewhere
 
-      if (!useCaseConnectors) { // makes sure there are no fan outs from native components to vm components
+      if (!ExperimentalOptions.useCaseConnectors(options.experimentalOptions)) { // makes sure there are no fan outs from native components to vm components
         for (conns <- outConnections.entries) {
           var vmConns = F
           var nativeConns = F
