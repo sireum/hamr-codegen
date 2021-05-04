@@ -105,7 +105,19 @@ object TypeResolver {
       return RecordType(cname, container, bitCodecSize, fields)
     }
     else {
-      return TODOType(cname, container, bitCodecSize)
+      val bitCodecOrDataSize: Option[Z] =
+        bitCodecSize match {
+          case Some(bitCodec) => Some(bitCodec)
+          case _ => {
+            // check to see if the component is potentially extending a bound base_type
+            PropertyUtil.getUnitPropZ(c.properties, OsateProperties.MEMORY_PROPERTIES__DATA_SIZE) match {
+              case Some(bits) => Some(bits)
+              case _ => None()
+            }
+          }
+        }
+
+      return TODOType(cname, container, bitCodecOrDataSize)
     }
   }
 }
