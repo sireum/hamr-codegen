@@ -9,9 +9,19 @@ import org.sireum.hamr.codegen.common.properties.PropertyUtil
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, BaseType, TypeUtil}
 import org.sireum.hamr.codegen.common.util.{CodeGenConfig, CodeGenPlatform, ExperimentalOptions}
 import org.sireum.hamr.ir
+import org.sireum.hamr.ir.{Annex, BLESSAnnex}
 import org.sireum.message.{Position, Reporter}
+import org.sireum.hamr.ir.{Transformer => AirTransformer}
+import org.sireum.hamr.ir.Transformer.{PrePost => AirPrePost}
+import org.sireum.hamr.ir.Transformer.{TPostResult => AirPostResult}
 
 object SymbolResolver {
+
+  @datatype class AadlMaps(airComponentMap: HashSMap[String, ir.Component],
+                           airFeatureMap: HashSMap[String, ir.Feature],
+                           airClassifierMap: HashSMap[String, ir.Component],
+
+                           connections: ISZ[ir.ConnectionInstance])
 
   def resolve(model: ir.Aadl,
               aadlTypes: AadlTypes,
@@ -200,7 +210,7 @@ object SymbolResolver {
           val dispatchProtocol: Dispatch_Protocol.Type = PropertyUtil.getDispatchProtocol(c) match {
             case Some(x) => x
             case _ =>
-              // TODO should be handled by a rewriter
+              // TODO should be handled by a rewriter -- or better yet, just reject the model
               val mesg = s"Dispatch Protocol not specified for ${identifier}, assuming Sporadic"
               reporter.warn(c.identifier.pos, CommonUtil.toolName, mesg)
               Dispatch_Protocol.Sporadic
@@ -389,17 +399,21 @@ object SymbolResolver {
 
     resolveAadlConnectionInstances()
 
-    val symbolTable = SymbolTable(rootSystem = aadlSystem,
+    val annexMap: HashSMap[AadlComponent, ISZ[AnnexInfo]] = HashSMap.empty
 
+    val symbolTable = SymbolTable(
+
+      rootSystem = aadlSystem,
       componentMap = componentMap,
-
       featureMap = featureMap,
+      aadlConnections = aadlConnections,
 
+      annexMap = annexMap,
+      
       airComponentMap = airComponentMap,
       airFeatureMap = airFeatureMap,
       airClassifierMap = airClassifierMap,
 
-      aadlConnections = aadlConnections,
       connections = connections,
       inConnections = inConnections,
       outConnections = outConnections)
@@ -553,4 +567,46 @@ object SymbolResolver {
     return ret
   }
 
+
+  def processAnnex(annex: Annex): AnnexInfo = {
+    val ret: AnnexInfo = annex.clause match {
+      case b: BLESSAnnex =>
+        BTSAnnexInfo(b)
+      case _ => TodoAnnexInfo(annex.clause)
+    }
+    return ret
+  }
+
+  def buildAadlMaps(aadl: ir.Aadl): AadlMaps = {
+    val w = Walker()
+    for(c <- aadl.components) {
+      AirTransformer(w).transformComponent(F, c)
+    }
+    var airClassifierMap: HashSMap[String, ir.Component] = HashSMap.empty
+    for(d <- aadl.dataComponents) {
+      airClassifierMap = airClassifierMap + (d.classifier.get.name ~> d)
+    }
+    return AadlMaps(w.airComponentMap, w.airFeatureMap, airClassifierMap, w.connections)
+  }
+
+  @datatype class Walker() extends AirPrePost[B] {
+    var airComponentMap: HashSMap[String, ir.Component] = HashSMap.empty
+    var airFeatureMap: HashSMap[String, ir.Feature] = HashSMap.empty
+    var connections: ISZ[ir.ConnectionInstance] = ISZ()
+
+    override def postComponent(b: B, o: ir.Component): AirPostResult[B, ir.Component] = {
+      val id = CommonUtil.getName(o.identifier)
+      airComponentMap = airComponentMap + (id ~> o)
+      return AirPostResult(b, None[ir.Component]())
+    }
+    override def postFeature(b: B, o: ir.Feature): AirPostResult[B, ir.Feature] = {
+      val id = CommonUtil.getName(o.identifier)
+      airFeatureMap = airFeatureMap + (id ~> o)
+      return AirPostResult(b, None[ir.Feature]())
+    }
+    override def postConnectionInstance(b: B, o: ir.ConnectionInstance): AirPostResult[B, ir.ConnectionInstance] = {
+      connections = connections :+ o
+      return AirPostResult(b, None[ir.ConnectionInstance]())
+    }
+  }
 }

@@ -7,31 +7,47 @@ import org.sireum.hamr.codegen.common.properties.PropertyUtil
 import org.sireum.hamr.codegen.common.symbols.{SymbolResolver, SymbolTable}
 import org.sireum.hamr.codegen.common.transformers.Transformers
 import org.sireum.hamr.codegen.common.types.{AadlTypes, TypeResolver}
-import org.sireum.hamr.ir.{Aadl, Transformer}
+import org.sireum.hamr.ir.Aadl
 import org.sireum.message.Reporter
+import org.sireum.hamr.ir.{Transformer => AirTransformer}
 
 object ModelUtil {
-  def resolve(model: Aadl,
+  @datatype class ModelElements(model: Aadl,
+                                types: AadlTypes,
+                                symbolTable: SymbolTable)
+
+  def resolve(origModel: Aadl,
               packageName: String,
               options: CodeGenConfig,
-              reporter: Reporter): (Aadl, AadlTypes, SymbolTable) = {
+              reporter: Reporter): Option[ModelElements] = {
 
-    val result = Transformer(Transformers.MissingTypeRewriter(reporter)).transformAadl(Transformers.CTX(F, F), model)
-    if(result.ctx.hasErrors) {
-      reporter.error(None(), "HAMR CodeGen", "AST rewrite encountered errors")
+    var transModel = origModel
+
+    val aadlMaps = SymbolResolver.buildAadlMaps(transModel)
+
+    val tResult = AirTransformer(Transformers.MissingTypeRewriter(reporter)).transformAadl(Transformers.CTX(F), transModel)
+    if(reporter.hasError) {
+      return None()
+    }
+    transModel = if(tResult.resultOpt.nonEmpty) tResult.resultOpt.get else transModel
+
+    // transform BTS nodes -- e.g. out data port assignments -> port output
+    val btxResults = AirTransformer(Transformers.BTSTransform(aadlMaps, reporter)).transformAadl(F, transModel)
+    if(reporter.hasError) {
+      return None()
     }
 
-    val rmodel: Aadl = if (result.resultOpt.nonEmpty) result.resultOpt.get else model
+    transModel = if(btxResults.resultOpt.nonEmpty) btxResults.resultOpt.get else transModel
 
-    val rawConnections: B = PropertyUtil.getUseRawConnection(rmodel.components(0).properties)
-    val aadlTypes = TypeResolver.processDataTypes(rmodel, rawConnections, options.maxStringSize, options.bitWidth, packageName)
+    val rawConnections: B = PropertyUtil.getUseRawConnection(transModel.components(0).properties)
+    val aadlTypes = TypeResolver.processDataTypes(transModel, rawConnections, options.maxStringSize, options.bitWidth, packageName)
 
     val symbolTable = SymbolResolver.resolve(
-      model = rmodel,
+      model = transModel,
       aadlTypes = aadlTypes,
       options = options,
       reporter = reporter)
 
-    return (rmodel, aadlTypes, symbolTable)
+    return Some(ModelElements(transModel, aadlTypes, symbolTable))
   }
 }

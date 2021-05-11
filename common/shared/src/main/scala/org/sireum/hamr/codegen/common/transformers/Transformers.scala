@@ -4,15 +4,18 @@ package org.sireum.hamr.codegen.common.transformers
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.properties.OsateProperties
+import org.sireum.hamr.codegen.common.symbols.SymbolResolver.AadlMaps
 import org.sireum.hamr.codegen.common.types.TypeUtil
 import org.sireum.hamr.ir
+import org.sireum.hamr.ir.Transformer.{PrePost => AirPrePost}
+import org.sireum.hamr.ir.Transformer.{TPostResult => AirPostResult}
+import org.sireum.hamr.ir.{BTSAction, BTSAssignmentAction, BTSNameExp, BTSPortOutAction, Feature}
 
 object Transformers {
 
   val toolName: String = CommonUtil.toolName
 
-  @datatype class CTX(requiresMissingType: B,
-                      hasErrors: B)
+  @datatype class CTX(requiresMissingType: B)
 
   @datatype class MissingTypeRewriter(reporter: org.sireum.message.Reporter) extends ir.Transformer.PrePost[CTX] {
 
@@ -97,6 +100,28 @@ object Transformers {
         return ir.Transformer.TPostResult(T, Some(ir.ClassifierProp(int32)))
       } else {
         return ir.Transformer.TPostResult(ctx, None())
+      }
+    }
+  }
+
+  @datatype class BTSTransform(aadlMaps: AadlMaps,
+                               reporter: org.sireum.message.Reporter) extends AirPrePost[B] {
+
+    override def postBTSAction(b: B, o: BTSAction): AirPostResult[B, BTSAction] = {
+      o match {
+        case a @ BTSAssignmentAction(lhs @ BTSNameExp(name), rhs) =>
+          val id = CommonUtil.getName(name)
+          aadlMaps.airFeatureMap.get(id) match {
+            case Some(f: Feature) if CommonUtil.isDataPort(f) =>
+              assert(CommonUtil.isOutPort(f), s"Data port is on lhs of an assignment exp but it isn't outgoing: $id")
+
+              return AirPostResult(b, Some(BTSPortOutAction(f.identifier, Some(rhs))))
+            case _ =>
+              // TODO
+              return AirPostResult(b, None[BTSAction]())
+          }
+
+        case _ => return AirPostResult(b, None[BTSAction]())
       }
     }
   }

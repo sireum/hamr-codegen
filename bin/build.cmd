@@ -51,7 +51,7 @@ import org.sireum._
 
 def usage(): Unit = {
   println("HAMR Codegen /build")
-  println("Usage: ( clean | compile | test | tipe )+")
+  println("Usage: ( clean | compile | test | tipe | regen-trans )+")
 }
 
 
@@ -126,6 +126,18 @@ def clean(): Unit = {
   })
 }
 
+def regenTransformers(): Unit = {
+  val commonRootPath = home / "common"
+  val symbolPackagePath = commonRootPath / "shared" / "src" / "main" / "scala" / "org" / "sireum" / "hamr" / "codegen" / "common" / "symbols"
+
+  val asts: ISZ[String] = ISZ("AadlSymbols.scala", "BTSSymbols.scala").map(m => (symbolPackagePath / m).value)
+
+  val license = home / "license.txt"
+
+  Os.proc(ISZ[String](sireum.value, "tools", "transgen", "-l", license.value,
+    "-m", "immutable,mutable") ++ asts).at(symbolPackagePath).console.runCheck()
+}
+
 for (i <- 0 until Os.cliArgs.size) {
   Os.cliArgs(i) match {
     case string"clean" => clean()
@@ -138,6 +150,8 @@ for (i <- 0 until Os.cliArgs.size) {
     case string"tipe" =>
       cloneProjects()
       tipe()
+    case string"regen-trans" =>
+      regenTransformers()
     case cmd =>
       usage()
       eprintln(s"Unrecognized command: $cmd")

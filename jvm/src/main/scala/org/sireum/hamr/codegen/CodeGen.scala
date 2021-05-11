@@ -8,6 +8,9 @@ import org.sireum.hamr.{act, arsit}
 import org.sireum.hamr.codegen.common.util.CodeGenPlatform._
 import org.sireum.hamr.codegen.common.DirectoryUtil
 import org.sireum.hamr.codegen.common.containers.{Resource, TranspilerConfig}
+import org.sireum.hamr.codegen.common.symbols.SymbolTable
+import org.sireum.hamr.codegen.common.types.AadlTypes
+import org.sireum.hamr.codegen.common.util.ModelUtil.ModelElements
 import org.sireum.hamr.codegen.common.util.{CodeGenConfig, CodeGenPlatform, CodeGenResults, ModelUtil}
 import org.sireum.hamr.ir.Aadl
 import org.sireum.message._
@@ -59,11 +62,13 @@ object CodeGen {
 
     var wroteOutArsitResources: B = F
 
-    val (rmodel, aadlTypes, symbolTable) =
-      ModelUtil.resolve(model, packageName, options, reporter)
+    val result: Option[ModelElements] = ModelUtil.resolve(model, packageName, options, reporter)
+    reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
+    if(result.isEmpty) {
+      return CodeGenResults(ISZ(), ISZ())
+    }
 
-      reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
-
+    val (rmodel, aadlTypes, symbolTable) : (Aadl, AadlTypes, SymbolTable) = (result.get.model, result.get.types, result.get.symbolTable)
     if (!reporter.hasError && runArsit) {
 
       val genBlessEntryPoints = false
