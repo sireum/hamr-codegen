@@ -11,9 +11,7 @@ import org.sireum.hamr.codegen.common.util.{CodeGenConfig, CodeGenPlatform, Expe
 import org.sireum.hamr.ir
 import org.sireum.hamr.ir.{Annex, BLESSAnnex}
 import org.sireum.message.{Position, Reporter}
-import org.sireum.hamr.ir.{Transformer => AirTransformer}
-import org.sireum.hamr.ir.Transformer.{PrePost => AirPrePost}
-import org.sireum.hamr.ir.Transformer.{TPostResult => AirPostResult}
+import org.sireum.hamr.ir.{MTransformer => MAirTransformer}
 
 object SymbolResolver {
 
@@ -580,7 +578,7 @@ object SymbolResolver {
   def buildAadlMaps(aadl: ir.Aadl): AadlMaps = {
     val w = Walker()
     for(c <- aadl.components) {
-      AirTransformer(w).transformComponent(F, c)
+      w.transformComponent(c)
     }
     var airClassifierMap: HashSMap[String, ir.Component] = HashSMap.empty
     for(d <- aadl.dataComponents) {
@@ -589,24 +587,24 @@ object SymbolResolver {
     return AadlMaps(w.airComponentMap, w.airFeatureMap, airClassifierMap, w.connections)
   }
 
-  @datatype class Walker() extends AirPrePost[B] {
+  @record class Walker() extends MAirTransformer {
     var airComponentMap: HashSMap[String, ir.Component] = HashSMap.empty
     var airFeatureMap: HashSMap[String, ir.Feature] = HashSMap.empty
     var connections: ISZ[ir.ConnectionInstance] = ISZ()
 
-    override def postComponent(b: B, o: ir.Component): AirPostResult[B, ir.Component] = {
+    override def postComponent(o: ir.Component): MOption[ir.Component] = {
       val id = CommonUtil.getName(o.identifier)
       airComponentMap = airComponentMap + (id ~> o)
-      return AirPostResult(b, None[ir.Component]())
+      return MNone[ir.Component]()
     }
-    override def postFeature(b: B, o: ir.Feature): AirPostResult[B, ir.Feature] = {
+    override def postFeature(o: ir.Feature): MOption[ir.Feature] = {
       val id = CommonUtil.getName(o.identifier)
       airFeatureMap = airFeatureMap + (id ~> o)
-      return AirPostResult(b, None[ir.Feature]())
+      return MNone[ir.Feature]()
     }
-    override def postConnectionInstance(b: B, o: ir.ConnectionInstance): AirPostResult[B, ir.ConnectionInstance] = {
+    override def postConnectionInstance(o: ir.ConnectionInstance): MOption[ir.ConnectionInstance] = {
       connections = connections :+ o
-      return AirPostResult(b, None[ir.ConnectionInstance]())
+      return MNone[ir.ConnectionInstance]()
     }
   }
 }

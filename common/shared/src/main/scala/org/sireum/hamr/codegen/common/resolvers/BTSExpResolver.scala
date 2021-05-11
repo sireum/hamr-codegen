@@ -21,10 +21,6 @@ import org.sireum.hamr.ir.{BTSAssignmentAction, BTSBLESSAnnexClause, BTSExp, BTS
 
     var m : Map[BTSKey, AadlSymbol] = Map.empty
 
-    @datatype class BTSVisitor() extends Transformer.PrePost[B] {
-
-    }
-
     BTSSymbolTable(m)
   }
 }

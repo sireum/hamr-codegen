@@ -112,7 +112,7 @@ object Transformers {
         case a @ BTSAssignmentAction(lhs @ BTSNameExp(name), rhs) =>
           val id = CommonUtil.getName(name)
           aadlMaps.airFeatureMap.get(id) match {
-            case Some(f: Feature) if CommonUtil.isDataPort(f) =>
+            case Some(f) if CommonUtil.isDataPort(f) =>
               assert(CommonUtil.isOutPort(f), s"Data port is on lhs of an assignment exp but it isn't outgoing: $id")
 
               return AirPostResult(b, Some(BTSPortOutAction(f.identifier, Some(rhs))))
