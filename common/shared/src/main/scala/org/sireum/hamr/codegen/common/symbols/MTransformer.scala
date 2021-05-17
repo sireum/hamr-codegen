@@ -45,6 +45,14 @@ object MTransformer {
 
   val PostResultBTSVariable: MOption[BTSVariable] = MNone()
 
+  val PreResultBTSExpKey: PreResult[BTSExpKey] = PreResult(T, MNone())
+
+  val PostResultBTSExpKey: MOption[BTSExpKey] = MNone()
+
+  val PreResultBTSSymbolTable: PreResult[BTSSymbolTable] = PreResult(T, MNone())
+
+  val PostResultBTSSymbolTable: MOption[BTSSymbolTable] = MNone()
+
   def transformISZ[T](s: IS[Z, T], f: T => MOption[T]): MOption[IS[Z, T]] = {
     val s2: MS[Z, T] = s.toMS
     var changed: B = F
@@ -109,6 +117,10 @@ object MTransformer {
 
   val PostResultAadlDataPort: MOption[AadlDataPort] = MNone()
 
+  val PreResultAadlParameter: PreResult[AadlParameter] = PreResult(T, MNone())
+
+  val PostResultAadlParameter: MOption[AadlParameter] = MNone()
+
   val PreResultAadlFeatureTODO: PreResult[AadlFeatureTODO] = PreResult(T, MNone())
 
   val PostResultAadlFeatureTODO: MOption[AadlFeatureTODO] = MNone()
@@ -160,6 +172,26 @@ import MTransformer._
 
   def preBTSVariable(o: BTSVariable): PreResult[BTSVariable] = {
     return PreResultBTSVariable
+  }
+
+  def preBTSKey(o: BTSKey): PreResult[BTSKey] = {
+    o match {
+      case o: BTSExpKey =>
+        val r: PreResult[BTSKey] = preBTSExpKey(o) match {
+         case PreResult(continu, MSome(r: BTSKey)) => PreResult(continu, MSome[BTSKey](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type BTSKey")
+         case PreResult(continu, _) => PreResult(continu, MNone[BTSKey]())
+        }
+        return r
+    }
+  }
+
+  def preBTSExpKey(o: BTSExpKey): PreResult[BTSExpKey] = {
+    return PreResultBTSExpKey
+  }
+
+  def preBTSSymbolTable(o: BTSSymbolTable): PreResult[BTSSymbolTable] = {
+    return PreResultBTSSymbolTable
   }
 
   def preAadlSymbol(o: AadlSymbol): PreResult[AadlSymbol] = {
@@ -257,6 +289,13 @@ import MTransformer._
         return r
       case o: AadlDataPort =>
         val r: PreResult[AadlSymbol] = preAadlDataPort(o) match {
+         case PreResult(continu, MSome(r: AadlSymbol)) => PreResult(continu, MSome[AadlSymbol](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlSymbol")
+         case PreResult(continu, _) => PreResult(continu, MNone[AadlSymbol]())
+        }
+        return r
+      case o: AadlParameter =>
+        val r: PreResult[AadlSymbol] = preAadlParameter(o) match {
          case PreResult(continu, MSome(r: AadlSymbol)) => PreResult(continu, MSome[AadlSymbol](r))
          case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlSymbol")
          case PreResult(continu, _) => PreResult(continu, MNone[AadlSymbol]())
@@ -451,6 +490,13 @@ import MTransformer._
          case PreResult(continu, _) => PreResult(continu, MNone[AadlFeature]())
         }
         return r
+      case o: AadlParameter =>
+        val r: PreResult[AadlFeature] = preAadlParameter(o) match {
+         case PreResult(continu, MSome(r: AadlFeature)) => PreResult(continu, MSome[AadlFeature](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlFeature")
+         case PreResult(continu, _) => PreResult(continu, MNone[AadlFeature]())
+        }
+        return r
       case o: AadlFeatureTODO =>
         val r: PreResult[AadlFeature] = preAadlFeatureTODO(o) match {
          case PreResult(continu, MSome(r: AadlFeature)) => PreResult(continu, MSome[AadlFeature](r))
@@ -496,6 +542,13 @@ import MTransformer._
          case PreResult(continu, _) => PreResult(continu, MNone[AadlFeatureData]())
         }
         return r
+      case o: AadlParameter =>
+        val r: PreResult[AadlFeatureData] = preAadlParameter(o) match {
+         case PreResult(continu, MSome(r: AadlFeatureData)) => PreResult(continu, MSome[AadlFeatureData](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlFeatureData")
+         case PreResult(continu, _) => PreResult(continu, MNone[AadlFeatureData]())
+        }
+        return r
     }
   }
 
@@ -509,6 +562,10 @@ import MTransformer._
 
   def preAadlDataPort(o: AadlDataPort): PreResult[AadlDataPort] = {
     return PreResultAadlDataPort
+  }
+
+  def preAadlParameter(o: AadlParameter): PreResult[AadlParameter] = {
+    return PreResultAadlParameter
   }
 
   def preAadlFeatureTODO(o: AadlFeatureTODO): PreResult[AadlFeatureTODO] = {
@@ -594,6 +651,26 @@ import MTransformer._
 
   def postBTSVariable(o: BTSVariable): MOption[BTSVariable] = {
     return PostResultBTSVariable
+  }
+
+  def postBTSKey(o: BTSKey): MOption[BTSKey] = {
+    o match {
+      case o: BTSExpKey =>
+        val r: MOption[BTSKey] = postBTSExpKey(o) match {
+         case MSome(result: BTSKey) => MSome[BTSKey](result)
+         case MSome(_) => halt("Can only produce object of type BTSKey")
+         case _ => MNone[BTSKey]()
+        }
+        return r
+    }
+  }
+
+  def postBTSExpKey(o: BTSExpKey): MOption[BTSExpKey] = {
+    return PostResultBTSExpKey
+  }
+
+  def postBTSSymbolTable(o: BTSSymbolTable): MOption[BTSSymbolTable] = {
+    return PostResultBTSSymbolTable
   }
 
   def postAadlSymbol(o: AadlSymbol): MOption[AadlSymbol] = {
@@ -691,6 +768,13 @@ import MTransformer._
         return r
       case o: AadlDataPort =>
         val r: MOption[AadlSymbol] = postAadlDataPort(o) match {
+         case MSome(result: AadlSymbol) => MSome[AadlSymbol](result)
+         case MSome(_) => halt("Can only produce object of type AadlSymbol")
+         case _ => MNone[AadlSymbol]()
+        }
+        return r
+      case o: AadlParameter =>
+        val r: MOption[AadlSymbol] = postAadlParameter(o) match {
          case MSome(result: AadlSymbol) => MSome[AadlSymbol](result)
          case MSome(_) => halt("Can only produce object of type AadlSymbol")
          case _ => MNone[AadlSymbol]()
@@ -885,6 +969,13 @@ import MTransformer._
          case _ => MNone[AadlFeature]()
         }
         return r
+      case o: AadlParameter =>
+        val r: MOption[AadlFeature] = postAadlParameter(o) match {
+         case MSome(result: AadlFeature) => MSome[AadlFeature](result)
+         case MSome(_) => halt("Can only produce object of type AadlFeature")
+         case _ => MNone[AadlFeature]()
+        }
+        return r
       case o: AadlFeatureTODO =>
         val r: MOption[AadlFeature] = postAadlFeatureTODO(o) match {
          case MSome(result: AadlFeature) => MSome[AadlFeature](result)
@@ -930,6 +1021,13 @@ import MTransformer._
          case _ => MNone[AadlFeatureData]()
         }
         return r
+      case o: AadlParameter =>
+        val r: MOption[AadlFeatureData] = postAadlParameter(o) match {
+         case MSome(result: AadlFeatureData) => MSome[AadlFeatureData](result)
+         case MSome(_) => halt("Can only produce object of type AadlFeatureData")
+         case _ => MNone[AadlFeatureData]()
+        }
+        return r
     }
   }
 
@@ -943,6 +1041,10 @@ import MTransformer._
 
   def postAadlDataPort(o: AadlDataPort): MOption[AadlDataPort] = {
     return PostResultAadlDataPort
+  }
+
+  def postAadlParameter(o: AadlParameter): MOption[AadlParameter] = {
+    return PostResultAadlParameter
   }
 
   def postAadlFeatureTODO(o: AadlFeatureTODO): MOption[AadlFeatureTODO] = {
@@ -1090,6 +1192,88 @@ import MTransformer._
     }
   }
 
+  def transformBTSKey(o: BTSKey): MOption[BTSKey] = {
+    val preR: PreResult[BTSKey] = preBTSKey(o)
+    val r: MOption[BTSKey] = if (preR.continu) {
+      val o2: BTSKey = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      val rOpt: MOption[BTSKey] = o2 match {
+        case o2: BTSExpKey =>
+          if (hasChanged)
+            MSome(o2)
+          else
+            MNone()
+      }
+      rOpt
+    } else if (preR.resultOpt.nonEmpty) {
+      MSome(preR.resultOpt.getOrElse(o))
+    } else {
+      MNone()
+    }
+    val hasChanged: B = r.nonEmpty
+    val o2: BTSKey = r.getOrElse(o)
+    val postR: MOption[BTSKey] = postBTSKey(o2)
+    if (postR.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return MSome(o2)
+    } else {
+      return MNone()
+    }
+  }
+
+  def transformBTSExpKey(o: BTSExpKey): MOption[BTSExpKey] = {
+    val preR: PreResult[BTSExpKey] = preBTSExpKey(o)
+    val r: MOption[BTSExpKey] = if (preR.continu) {
+      val o2: BTSExpKey = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      if (hasChanged)
+        MSome(o2)
+      else
+        MNone()
+    } else if (preR.resultOpt.nonEmpty) {
+      MSome(preR.resultOpt.getOrElse(o))
+    } else {
+      MNone()
+    }
+    val hasChanged: B = r.nonEmpty
+    val o2: BTSExpKey = r.getOrElse(o)
+    val postR: MOption[BTSExpKey] = postBTSExpKey(o2)
+    if (postR.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return MSome(o2)
+    } else {
+      return MNone()
+    }
+  }
+
+  def transformBTSSymbolTable(o: BTSSymbolTable): MOption[BTSSymbolTable] = {
+    val preR: PreResult[BTSSymbolTable] = preBTSSymbolTable(o)
+    val r: MOption[BTSSymbolTable] = if (preR.continu) {
+      val o2: BTSSymbolTable = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      if (hasChanged)
+        MSome(o2)
+      else
+        MNone()
+    } else if (preR.resultOpt.nonEmpty) {
+      MSome(preR.resultOpt.getOrElse(o))
+    } else {
+      MNone()
+    }
+    val hasChanged: B = r.nonEmpty
+    val o2: BTSSymbolTable = r.getOrElse(o)
+    val postR: MOption[BTSSymbolTable] = postBTSSymbolTable(o2)
+    if (postR.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return MSome(o2)
+    } else {
+      return MNone()
+    }
+  }
+
   def transformAadlSymbol(o: AadlSymbol): MOption[AadlSymbol] = {
     val preR: PreResult[AadlSymbol] = preAadlSymbol(o)
     val r: MOption[AadlSymbol] = if (preR.continu) {
@@ -1152,9 +1336,9 @@ import MTransformer._
             MNone()
         case o2: AadlSubprogram =>
           val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-          val r1: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+          val r1: MOption[IS[Z, AadlParameter]] = transformISZ(o2.parameters, transformAadlParameter _)
           if (hasChanged || r0.nonEmpty || r1.nonEmpty)
-            MSome(o2(subComponents = r0.getOrElse(o2.subComponents), features = r1.getOrElse(o2.features)))
+            MSome(o2(subComponents = r0.getOrElse(o2.subComponents), parameters = r1.getOrElse(o2.parameters)))
           else
             MNone()
         case o2: AadlTODOComponent =>
@@ -1174,6 +1358,11 @@ import MTransformer._
           else
             MNone()
         case o2: AadlDataPort =>
+          if (hasChanged)
+            MSome(o2)
+          else
+            MNone()
+        case o2: AadlParameter =>
           if (hasChanged)
             MSome(o2)
           else
@@ -1268,9 +1457,9 @@ import MTransformer._
             MNone()
         case o2: AadlSubprogram =>
           val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-          val r1: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+          val r1: MOption[IS[Z, AadlParameter]] = transformISZ(o2.parameters, transformAadlParameter _)
           if (hasChanged || r0.nonEmpty || r1.nonEmpty)
-            MSome(o2(subComponents = r0.getOrElse(o2.subComponents), features = r1.getOrElse(o2.features)))
+            MSome(o2(subComponents = r0.getOrElse(o2.subComponents), parameters = r1.getOrElse(o2.parameters)))
           else
             MNone()
         case o2: AadlTODOComponent =>
@@ -1571,9 +1760,9 @@ import MTransformer._
       val o2: AadlSubprogram = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
       val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-      val r1: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+      val r1: MOption[IS[Z, AadlParameter]] = transformISZ(o2.parameters, transformAadlParameter _)
       if (hasChanged || r0.nonEmpty || r1.nonEmpty)
-        MSome(o2(subComponents = r0.getOrElse(o2.subComponents), features = r1.getOrElse(o2.features)))
+        MSome(o2(subComponents = r0.getOrElse(o2.subComponents), parameters = r1.getOrElse(o2.parameters)))
       else
         MNone()
     } else if (preR.resultOpt.nonEmpty) {
@@ -1637,6 +1826,11 @@ import MTransformer._
           else
             MNone()
         case o2: AadlDataPort =>
+          if (hasChanged)
+            MSome(o2)
+          else
+            MNone()
+        case o2: AadlParameter =>
           if (hasChanged)
             MSome(o2)
           else
@@ -1712,6 +1906,11 @@ import MTransformer._
           else
             MNone()
         case o2: AadlDataPort =>
+          if (hasChanged)
+            MSome(o2)
+          else
+            MNone()
+        case o2: AadlParameter =>
           if (hasChanged)
             MSome(o2)
           else
@@ -1804,6 +2003,32 @@ import MTransformer._
     val hasChanged: B = r.nonEmpty
     val o2: AadlDataPort = r.getOrElse(o)
     val postR: MOption[AadlDataPort] = postAadlDataPort(o2)
+    if (postR.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return MSome(o2)
+    } else {
+      return MNone()
+    }
+  }
+
+  def transformAadlParameter(o: AadlParameter): MOption[AadlParameter] = {
+    val preR: PreResult[AadlParameter] = preAadlParameter(o)
+    val r: MOption[AadlParameter] = if (preR.continu) {
+      val o2: AadlParameter = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      if (hasChanged)
+        MSome(o2)
+      else
+        MNone()
+    } else if (preR.resultOpt.nonEmpty) {
+      MSome(preR.resultOpt.getOrElse(o))
+    } else {
+      MNone()
+    }
+    val hasChanged: B = r.nonEmpty
+    val o2: AadlParameter = r.getOrElse(o)
+    val postR: MOption[AadlParameter] = postAadlParameter(o2)
     if (postR.nonEmpty) {
       return postR
     } else if (hasChanged) {
@@ -1941,8 +2166,9 @@ import MTransformer._
       val hasChanged: B = preR.resultOpt.nonEmpty
       val rOpt: MOption[AnnexInfo] = o2 match {
         case o2: BTSAnnexInfo =>
-          if (hasChanged)
-            MSome(o2)
+          val r0: MOption[BTSSymbolTable] = transformBTSSymbolTable(o2.btsSymbolTable)
+          if (hasChanged || r0.nonEmpty)
+            MSome(o2(btsSymbolTable = r0.getOrElse(o2.btsSymbolTable)))
           else
             MNone()
         case o2: TodoAnnexInfo =>
@@ -1974,8 +2200,9 @@ import MTransformer._
     val r: MOption[BTSAnnexInfo] = if (preR.continu) {
       val o2: BTSAnnexInfo = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
-      if (hasChanged)
-        MSome(o2)
+      val r0: MOption[BTSSymbolTable] = transformBTSSymbolTable(o2.btsSymbolTable)
+      if (hasChanged || r0.nonEmpty)
+        MSome(o2(btsSymbolTable = r0.getOrElse(o2.btsSymbolTable)))
       else
         MNone()
     } else if (preR.resultOpt.nonEmpty) {

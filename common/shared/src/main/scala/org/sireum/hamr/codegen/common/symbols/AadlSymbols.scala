@@ -6,7 +6,7 @@ import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.properties.{CasePropertiesProperties, CaseSchedulingProperties, HamrProperties, OsateProperties, PropertyUtil}
 import org.sireum.hamr.codegen.common.types.AadlType
 import org.sireum.hamr.ir
-import org.sireum.hamr.ir.{Annex, AnnexClause, BLESSAnnex}
+import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
 
 
 @sig trait AadlSymbol
@@ -211,7 +211,7 @@ import org.sireum.hamr.ir.{Annex, AnnexClause, BLESSAnnex}
                                val path: String,
                                val identifier: String,
                                val subComponents: ISZ[AadlComponent],
-                               val features: ISZ[AadlFeature],
+                               val parameters: ISZ[AadlParameter],
                                val connectionInstances: ISZ[ir.ConnectionInstance]) extends AadlComponent
 
 @datatype class AadlTODOComponent(val component: ir.Component,
@@ -254,6 +254,11 @@ import org.sireum.hamr.ir.{Annex, AnnexClause, BLESSAnnex}
                              val featureGroupIds: ISZ[String],
                              val aadlType: AadlType) extends AadlFeatureData
 
+@datatype class AadlParameter(val feature: ir.FeatureEnd,
+                              val featureGroupIds: ISZ[String],
+                              val aadlType: AadlType,
+                              direction: ir.Direction.Type) extends AadlFeatureData
+
 @datatype class AadlFeatureTODO(val feature: ir.Feature,
                                 val featureGroupIds: ISZ[String]) extends AadlFeature
 
@@ -285,7 +290,8 @@ import org.sireum.hamr.ir.{Annex, AnnexClause, BLESSAnnex}
   def annex: AnnexClause
 }
 
-@datatype class BTSAnnexInfo(val annex: BLESSAnnex) extends AnnexInfo
+@datatype class BTSAnnexInfo(val annex: BTSBLESSAnnexClause,
+                             btsSymbolTable: BTSSymbolTable) extends AnnexInfo
 
 @datatype class TodoAnnexInfo(val annex: AnnexClause) extends AnnexInfo
 

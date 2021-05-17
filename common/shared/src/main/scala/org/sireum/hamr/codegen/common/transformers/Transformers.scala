@@ -7,9 +7,7 @@ import org.sireum.hamr.codegen.common.properties.OsateProperties
 import org.sireum.hamr.codegen.common.symbols.SymbolResolver.AadlMaps
 import org.sireum.hamr.codegen.common.types.TypeUtil
 import org.sireum.hamr.ir
-import org.sireum.hamr.ir.Transformer.{PrePost => AirPrePost}
-import org.sireum.hamr.ir.Transformer.{TPostResult => AirPostResult}
-import org.sireum.hamr.ir.{BTSAction, BTSAssignmentAction, BTSNameExp, BTSPortOutAction, Feature}
+import org.sireum.hamr.ir.{BTSAction, BTSAssignmentAction, BTSNameExp, BTSPortOutAction, BTSTransitionLabel, Name, MTransformer => MAirTransformer}
 
 object Transformers {
 
@@ -104,10 +102,20 @@ object Transformers {
     }
   }
 
-  @datatype class BTSTransform(aadlMaps: AadlMaps,
-                               reporter: org.sireum.message.Reporter) extends AirPrePost[B] {
+  @record class BTSMTransform(aadlMaps: AadlMaps,
+                              reporter: org.sireum.message.Reporter) extends MAirTransformer {
+    var unlabeledCount = 0
 
-    override def postBTSAction(b: B, o: BTSAction): AirPostResult[B, BTSAction] = {
+    override def postBTSTransitionLabel(o: BTSTransitionLabel): MOption[BTSTransitionLabel] = {
+      if(o.id.name.isEmpty){
+        val id = s"_unlabeled_transition_${unlabeledCount}"
+        unlabeledCount = unlabeledCount + 1
+        return MSome(BTSTransitionLabel(Name(ISZ(id), o.id.pos) , o.priority))
+      } else {
+        return MNone()
+      }
+    }
+    override def postBTSAction(o: BTSAction): MOption[BTSAction] = {
       o match {
         case a @ BTSAssignmentAction(lhs @ BTSNameExp(name), rhs) =>
           val id = CommonUtil.getName(name)
@@ -115,13 +123,13 @@ object Transformers {
             case Some(f) if CommonUtil.isDataPort(f) =>
               assert(CommonUtil.isOutPort(f), s"Data port is on lhs of an assignment exp but it isn't outgoing: $id")
 
-              return AirPostResult(b, Some(BTSPortOutAction(f.identifier, Some(rhs))))
+              return MSome(BTSPortOutAction(f.identifier, Some(rhs)))
             case _ =>
               // TODO
-              return AirPostResult(b, None[BTSAction]())
+              return MNone[BTSAction]()
           }
 
-        case _ => return AirPostResult(b, None[BTSAction]())
+        case _ => return MNone[BTSAction]()
       }
     }
   }

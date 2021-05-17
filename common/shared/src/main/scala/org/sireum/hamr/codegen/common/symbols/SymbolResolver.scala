@@ -6,12 +6,12 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.properties.HamrProperties.HAMR__BIT_CODEC_MAX_SIZE
 import org.sireum.hamr.codegen.common.properties.PropertyUtil
+import org.sireum.hamr.codegen.common.resolvers.BTSResolver
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, BaseType, TypeUtil}
 import org.sireum.hamr.codegen.common.util.{CodeGenConfig, CodeGenPlatform, ExperimentalOptions}
 import org.sireum.hamr.ir
-import org.sireum.hamr.ir.{Annex, BLESSAnnex}
+import org.sireum.hamr.ir.{Annex, BTSBLESSAnnexClause, MTransformer => MAirTransformer}
 import org.sireum.message.{Position, Reporter}
-import org.sireum.hamr.ir.{MTransformer => MAirTransformer}
 
 object SymbolResolver {
 
@@ -25,7 +25,30 @@ object SymbolResolver {
               aadlTypes: AadlTypes,
               options: CodeGenConfig,
               reporter: Reporter): SymbolTable = {
+    val st = buildSymbolTable(model, aadlTypes, options, reporter)
+    if(reporter.hasError) {
+      return st
+    } else {
+      var annexInfos: HashSMap[AadlComponent, ISZ[AnnexInfo]] = HashSMap.empty
+      for(component <- st.componentMap.values) {
+        var ais: ISZ[AnnexInfo] = ISZ()
+        for(annex <- component.component.annexes) {
+          processAnnex(st, aadlTypes, annex, reporter) match {
+            case Some(ai) => ais = ais :+ ai
+            case _ =>
+              assert(reporter.hasError, "No annex info returned so expecting an error")
+          }
+        }
+        annexInfos = annexInfos + (component ~> ais)
+      }
+      return st(annexInfos = annexInfos)
+    }
+  }
 
+  def buildSymbolTable(model: ir.Aadl,
+                       aadlTypes: AadlTypes,
+                       options: CodeGenConfig,
+                       reporter: Reporter): SymbolTable = {
     var featureMap: HashSMap[String, AadlFeature] = HashSMap.empty
 
     var airComponentMap: HashSMap[String, ir.Component] = HashSMap.empty
@@ -145,20 +168,20 @@ object SymbolResolver {
         return componentMap.get(path).get
       }
 
+      def getFeatureEndType(f: ir.FeatureEnd): Option[AadlType] = {
+        val ret: Option[AadlType] = f.classifier match {
+          case Some(c) => Some(aadlTypes.typeMap.get(c.name).get)
+          case _ => None()
+        }
+        return ret
+      }
+
       def handleDeviceOrThread(): AadlComponent = {
         {
           //assert(c.subComponents.isEmpty) // TODO handle subprograms etc
 
           val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield process(sc, Some(path))
           var aadlPorts: ISZ[AadlFeature] = ISZ()
-
-          def getFeatureEndType(f: ir.FeatureEnd): Option[AadlType] = {
-            val ret: Option[AadlType] = f.classifier match {
-              case Some(c) => Some(aadlTypes.typeMap.get(c.name).get)
-              case _ => None()
-            }
-            return ret
-          }
 
           def resolveFeature2(feature: ir.Feature, featureGroupIds: ISZ[String]): Unit = {
             feature match {
@@ -246,6 +269,37 @@ object SymbolResolver {
         }
       }
 
+      def handleSubprogram(): AadlSubprogram = {
+        assert(c.subComponents.isEmpty, s"Need to handle subcomponents of subprograms: ${c}")
+        assert(c.connectionInstances.isEmpty, s"Not expecting subprograms to have connection instances: ${c}")
+
+        val parameters: ISZ[AadlParameter] = c.features.map(p => {
+          p match {
+            case fe: ir.FeatureEnd =>
+              val paramType: AadlType = getFeatureEndType(fe).get
+
+              AadlParameter(
+                feature = fe,
+                featureGroupIds = ISZ(),
+                aadlType = paramType,
+                direction = fe.direction)
+
+            case _ => halt(s"Unexpected feature type ${p}")
+          }
+        })
+
+        val ret: AadlSubprogram = AadlSubprogram(
+          component = c,
+          parent = parent,
+          path = path,
+          identifier = identifier,
+          subComponents = ISZ(),
+          parameters = parameters,
+          connectionInstances = ISZ())
+
+        return ret
+      }
+
       val aadlComponent: AadlComponent = c.category match {
         case ir.ComponentCategory.System => {
           val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield process(sc, Some(path))
@@ -312,6 +366,8 @@ object SymbolResolver {
             identifier = identifier,
             subComponents = subComponents,
             connectionInstances = c.connectionInstances)
+
+        case ir.ComponentCategory.Subprogram => handleSubprogram()
 
         case _ => {
           val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield process(sc, Some(path))
@@ -397,7 +453,7 @@ object SymbolResolver {
 
     resolveAadlConnectionInstances()
 
-    val annexMap: HashSMap[AadlComponent, ISZ[AnnexInfo]] = HashSMap.empty
+    val annexInfos: HashSMap[AadlComponent, ISZ[AnnexInfo]] = HashSMap.empty
 
     val symbolTable = SymbolTable(
 
@@ -406,7 +462,7 @@ object SymbolResolver {
       featureMap = featureMap,
       aadlConnections = aadlConnections,
 
-      annexMap = annexMap,
+      annexInfos = annexInfos,
       
       airComponentMap = airComponentMap,
       airFeatureMap = airFeatureMap,
@@ -566,11 +622,19 @@ object SymbolResolver {
   }
 
 
-  def processAnnex(annex: Annex): AnnexInfo = {
-    val ret: AnnexInfo = annex.clause match {
-      case b: BLESSAnnex =>
-        BTSAnnexInfo(b)
-      case _ => TodoAnnexInfo(annex.clause)
+  def processAnnex(symbolTable: SymbolTable,
+                   aadlTypes: AadlTypes,
+                   annex: Annex,
+                   reporter: Reporter): Option[AnnexInfo] = {
+    val ret: Option[AnnexInfo] = annex.clause match {
+      case b: BTSBLESSAnnexClause =>
+        val ret: Option[AnnexInfo] =
+          BTSResolver().processBTSAnnex(b, symbolTable, aadlTypes, reporter) match {
+            case Some(bts) => Some(BTSAnnexInfo(bts.annex, bts))
+            case _ => None()
+        }
+        return ret
+      case _ => Some(TodoAnnexInfo(annex.clause))
     }
     return ret
   }

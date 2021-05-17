@@ -72,6 +72,26 @@ object Transformer {
       return PreResult(ctx, T, None())
     }
 
+    @pure def preBTSKey(ctx: Context, o: BTSKey): PreResult[Context, BTSKey] = {
+      o match {
+        case o: BTSExpKey =>
+          val r: PreResult[Context, BTSKey] = preBTSExpKey(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: BTSKey)) => PreResult(preCtx, continu, Some[BTSKey](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type BTSKey")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[BTSKey]())
+          }
+          return r
+      }
+    }
+
+    @pure def preBTSExpKey(ctx: Context, o: BTSExpKey): PreResult[Context, BTSExpKey] = {
+      return PreResult(ctx, T, None())
+    }
+
+    @pure def preBTSSymbolTable(ctx: Context, o: BTSSymbolTable): PreResult[Context, BTSSymbolTable] = {
+      return PreResult(ctx, T, None())
+    }
+
     @pure def preAadlSymbol(ctx: Context, o: AadlSymbol): PreResult[Context, AadlSymbol] = {
       o match {
         case o: BTSState =>
@@ -167,6 +187,13 @@ object Transformer {
           return r
         case o: AadlDataPort =>
           val r: PreResult[Context, AadlSymbol] = preAadlDataPort(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: AadlSymbol)) => PreResult(preCtx, continu, Some[AadlSymbol](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlSymbol")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlSymbol]())
+          }
+          return r
+        case o: AadlParameter =>
+          val r: PreResult[Context, AadlSymbol] = preAadlParameter(ctx, o) match {
            case PreResult(preCtx, continu, Some(r: AadlSymbol)) => PreResult(preCtx, continu, Some[AadlSymbol](r))
            case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlSymbol")
            case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlSymbol]())
@@ -361,6 +388,13 @@ object Transformer {
            case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlFeature]())
           }
           return r
+        case o: AadlParameter =>
+          val r: PreResult[Context, AadlFeature] = preAadlParameter(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: AadlFeature)) => PreResult(preCtx, continu, Some[AadlFeature](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlFeature")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlFeature]())
+          }
+          return r
         case o: AadlFeatureTODO =>
           val r: PreResult[Context, AadlFeature] = preAadlFeatureTODO(ctx, o) match {
            case PreResult(preCtx, continu, Some(r: AadlFeature)) => PreResult(preCtx, continu, Some[AadlFeature](r))
@@ -406,6 +440,13 @@ object Transformer {
            case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlFeatureData]())
           }
           return r
+        case o: AadlParameter =>
+          val r: PreResult[Context, AadlFeatureData] = preAadlParameter(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: AadlFeatureData)) => PreResult(preCtx, continu, Some[AadlFeatureData](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlFeatureData")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlFeatureData]())
+          }
+          return r
       }
     }
 
@@ -418,6 +459,10 @@ object Transformer {
     }
 
     @pure def preAadlDataPort(ctx: Context, o: AadlDataPort): PreResult[Context, AadlDataPort] = {
+      return PreResult(ctx, T, None())
+    }
+
+    @pure def preAadlParameter(ctx: Context, o: AadlParameter): PreResult[Context, AadlParameter] = {
       return PreResult(ctx, T, None())
     }
 
@@ -503,6 +548,26 @@ object Transformer {
     }
 
     @pure def postBTSVariable(ctx: Context, o: BTSVariable): TPostResult[Context, BTSVariable] = {
+      return TPostResult(ctx, None())
+    }
+
+    @pure def postBTSKey(ctx: Context, o: BTSKey): TPostResult[Context, BTSKey] = {
+      o match {
+        case o: BTSExpKey =>
+          val r: TPostResult[Context, BTSKey] = postBTSExpKey(ctx, o) match {
+           case TPostResult(postCtx, Some(result: BTSKey)) => TPostResult(postCtx, Some[BTSKey](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type BTSKey")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[BTSKey]())
+          }
+          return r
+      }
+    }
+
+    @pure def postBTSExpKey(ctx: Context, o: BTSExpKey): TPostResult[Context, BTSExpKey] = {
+      return TPostResult(ctx, None())
+    }
+
+    @pure def postBTSSymbolTable(ctx: Context, o: BTSSymbolTable): TPostResult[Context, BTSSymbolTable] = {
       return TPostResult(ctx, None())
     }
 
@@ -601,6 +666,13 @@ object Transformer {
           return r
         case o: AadlDataPort =>
           val r: TPostResult[Context, AadlSymbol] = postAadlDataPort(ctx, o) match {
+           case TPostResult(postCtx, Some(result: AadlSymbol)) => TPostResult(postCtx, Some[AadlSymbol](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlSymbol")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlSymbol]())
+          }
+          return r
+        case o: AadlParameter =>
+          val r: TPostResult[Context, AadlSymbol] = postAadlParameter(ctx, o) match {
            case TPostResult(postCtx, Some(result: AadlSymbol)) => TPostResult(postCtx, Some[AadlSymbol](result))
            case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlSymbol")
            case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlSymbol]())
@@ -795,6 +867,13 @@ object Transformer {
            case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlFeature]())
           }
           return r
+        case o: AadlParameter =>
+          val r: TPostResult[Context, AadlFeature] = postAadlParameter(ctx, o) match {
+           case TPostResult(postCtx, Some(result: AadlFeature)) => TPostResult(postCtx, Some[AadlFeature](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlFeature")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlFeature]())
+          }
+          return r
         case o: AadlFeatureTODO =>
           val r: TPostResult[Context, AadlFeature] = postAadlFeatureTODO(ctx, o) match {
            case TPostResult(postCtx, Some(result: AadlFeature)) => TPostResult(postCtx, Some[AadlFeature](result))
@@ -840,6 +919,13 @@ object Transformer {
            case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlFeatureData]())
           }
           return r
+        case o: AadlParameter =>
+          val r: TPostResult[Context, AadlFeatureData] = postAadlParameter(ctx, o) match {
+           case TPostResult(postCtx, Some(result: AadlFeatureData)) => TPostResult(postCtx, Some[AadlFeatureData](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlFeatureData")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlFeatureData]())
+          }
+          return r
       }
     }
 
@@ -852,6 +938,10 @@ object Transformer {
     }
 
     @pure def postAadlDataPort(ctx: Context, o: AadlDataPort): TPostResult[Context, AadlDataPort] = {
+      return TPostResult(ctx, None())
+    }
+
+    @pure def postAadlParameter(ctx: Context, o: AadlParameter): TPostResult[Context, AadlParameter] = {
       return TPostResult(ctx, None())
     }
 
@@ -1026,6 +1116,88 @@ import Transformer._
     }
   }
 
+  @pure def transformBTSKey(ctx: Context, o: BTSKey): TPostResult[Context, BTSKey] = {
+    val preR: PreResult[Context, BTSKey] = pp.preBTSKey(ctx, o)
+    val r: TPostResult[Context, BTSKey] = if (preR.continu) {
+      val o2: BTSKey = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      val rOpt: TPostResult[Context, BTSKey] = o2 match {
+        case o2: BTSExpKey =>
+          if (hasChanged)
+            TPostResult(preR.ctx, Some(o2))
+          else
+            TPostResult(preR.ctx, None())
+      }
+      rOpt
+    } else if (preR.resultOpt.nonEmpty) {
+      TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
+    } else {
+      TPostResult(preR.ctx, None())
+    }
+    val hasChanged: B = r.resultOpt.nonEmpty
+    val o2: BTSKey = r.resultOpt.getOrElse(o)
+    val postR: TPostResult[Context, BTSKey] = pp.postBTSKey(r.ctx, o2)
+    if (postR.resultOpt.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return TPostResult(postR.ctx, Some(o2))
+    } else {
+      return TPostResult(postR.ctx, None())
+    }
+  }
+
+  @pure def transformBTSExpKey(ctx: Context, o: BTSExpKey): TPostResult[Context, BTSExpKey] = {
+    val preR: PreResult[Context, BTSExpKey] = pp.preBTSExpKey(ctx, o)
+    val r: TPostResult[Context, BTSExpKey] = if (preR.continu) {
+      val o2: BTSExpKey = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      if (hasChanged)
+        TPostResult(preR.ctx, Some(o2))
+      else
+        TPostResult(preR.ctx, None())
+    } else if (preR.resultOpt.nonEmpty) {
+      TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
+    } else {
+      TPostResult(preR.ctx, None())
+    }
+    val hasChanged: B = r.resultOpt.nonEmpty
+    val o2: BTSExpKey = r.resultOpt.getOrElse(o)
+    val postR: TPostResult[Context, BTSExpKey] = pp.postBTSExpKey(r.ctx, o2)
+    if (postR.resultOpt.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return TPostResult(postR.ctx, Some(o2))
+    } else {
+      return TPostResult(postR.ctx, None())
+    }
+  }
+
+  @pure def transformBTSSymbolTable(ctx: Context, o: BTSSymbolTable): TPostResult[Context, BTSSymbolTable] = {
+    val preR: PreResult[Context, BTSSymbolTable] = pp.preBTSSymbolTable(ctx, o)
+    val r: TPostResult[Context, BTSSymbolTable] = if (preR.continu) {
+      val o2: BTSSymbolTable = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      if (hasChanged)
+        TPostResult(preR.ctx, Some(o2))
+      else
+        TPostResult(preR.ctx, None())
+    } else if (preR.resultOpt.nonEmpty) {
+      TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
+    } else {
+      TPostResult(preR.ctx, None())
+    }
+    val hasChanged: B = r.resultOpt.nonEmpty
+    val o2: BTSSymbolTable = r.resultOpt.getOrElse(o)
+    val postR: TPostResult[Context, BTSSymbolTable] = pp.postBTSSymbolTable(r.ctx, o2)
+    if (postR.resultOpt.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return TPostResult(postR.ctx, Some(o2))
+    } else {
+      return TPostResult(postR.ctx, None())
+    }
+  }
+
   @pure def transformAadlSymbol(ctx: Context, o: AadlSymbol): TPostResult[Context, AadlSymbol] = {
     val preR: PreResult[Context, AadlSymbol] = pp.preAadlSymbol(ctx, o)
     val r: TPostResult[Context, AadlSymbol] = if (preR.continu) {
@@ -1088,9 +1260,9 @@ import Transformer._
             TPostResult(r1.ctx, None())
         case o2: AadlSubprogram =>
           val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-          val r1: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(r0.ctx, o2.features, transformAadlFeature _)
+          val r1: TPostResult[Context, IS[Z, AadlParameter]] = transformISZ(r0.ctx, o2.parameters, transformAadlParameter _)
           if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
-            TPostResult(r1.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents), features = r1.resultOpt.getOrElse(o2.features))))
+            TPostResult(r1.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents), parameters = r1.resultOpt.getOrElse(o2.parameters))))
           else
             TPostResult(r1.ctx, None())
         case o2: AadlTODOComponent =>
@@ -1110,6 +1282,11 @@ import Transformer._
           else
             TPostResult(preR.ctx, None())
         case o2: AadlDataPort =>
+          if (hasChanged)
+            TPostResult(preR.ctx, Some(o2))
+          else
+            TPostResult(preR.ctx, None())
+        case o2: AadlParameter =>
           if (hasChanged)
             TPostResult(preR.ctx, Some(o2))
           else
@@ -1204,9 +1381,9 @@ import Transformer._
             TPostResult(r1.ctx, None())
         case o2: AadlSubprogram =>
           val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-          val r1: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(r0.ctx, o2.features, transformAadlFeature _)
+          val r1: TPostResult[Context, IS[Z, AadlParameter]] = transformISZ(r0.ctx, o2.parameters, transformAadlParameter _)
           if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
-            TPostResult(r1.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents), features = r1.resultOpt.getOrElse(o2.features))))
+            TPostResult(r1.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents), parameters = r1.resultOpt.getOrElse(o2.parameters))))
           else
             TPostResult(r1.ctx, None())
         case o2: AadlTODOComponent =>
@@ -1507,9 +1684,9 @@ import Transformer._
       val o2: AadlSubprogram = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
       val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-      val r1: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(r0.ctx, o2.features, transformAadlFeature _)
+      val r1: TPostResult[Context, IS[Z, AadlParameter]] = transformISZ(r0.ctx, o2.parameters, transformAadlParameter _)
       if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
-        TPostResult(r1.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents), features = r1.resultOpt.getOrElse(o2.features))))
+        TPostResult(r1.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents), parameters = r1.resultOpt.getOrElse(o2.parameters))))
       else
         TPostResult(r1.ctx, None())
     } else if (preR.resultOpt.nonEmpty) {
@@ -1573,6 +1750,11 @@ import Transformer._
           else
             TPostResult(preR.ctx, None())
         case o2: AadlDataPort =>
+          if (hasChanged)
+            TPostResult(preR.ctx, Some(o2))
+          else
+            TPostResult(preR.ctx, None())
+        case o2: AadlParameter =>
           if (hasChanged)
             TPostResult(preR.ctx, Some(o2))
           else
@@ -1648,6 +1830,11 @@ import Transformer._
           else
             TPostResult(preR.ctx, None())
         case o2: AadlDataPort =>
+          if (hasChanged)
+            TPostResult(preR.ctx, Some(o2))
+          else
+            TPostResult(preR.ctx, None())
+        case o2: AadlParameter =>
           if (hasChanged)
             TPostResult(preR.ctx, Some(o2))
           else
@@ -1740,6 +1927,32 @@ import Transformer._
     val hasChanged: B = r.resultOpt.nonEmpty
     val o2: AadlDataPort = r.resultOpt.getOrElse(o)
     val postR: TPostResult[Context, AadlDataPort] = pp.postAadlDataPort(r.ctx, o2)
+    if (postR.resultOpt.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return TPostResult(postR.ctx, Some(o2))
+    } else {
+      return TPostResult(postR.ctx, None())
+    }
+  }
+
+  @pure def transformAadlParameter(ctx: Context, o: AadlParameter): TPostResult[Context, AadlParameter] = {
+    val preR: PreResult[Context, AadlParameter] = pp.preAadlParameter(ctx, o)
+    val r: TPostResult[Context, AadlParameter] = if (preR.continu) {
+      val o2: AadlParameter = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      if (hasChanged)
+        TPostResult(preR.ctx, Some(o2))
+      else
+        TPostResult(preR.ctx, None())
+    } else if (preR.resultOpt.nonEmpty) {
+      TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
+    } else {
+      TPostResult(preR.ctx, None())
+    }
+    val hasChanged: B = r.resultOpt.nonEmpty
+    val o2: AadlParameter = r.resultOpt.getOrElse(o)
+    val postR: TPostResult[Context, AadlParameter] = pp.postAadlParameter(r.ctx, o2)
     if (postR.resultOpt.nonEmpty) {
       return postR
     } else if (hasChanged) {
@@ -1877,10 +2090,11 @@ import Transformer._
       val hasChanged: B = preR.resultOpt.nonEmpty
       val rOpt: TPostResult[Context, AnnexInfo] = o2 match {
         case o2: BTSAnnexInfo =>
-          if (hasChanged)
-            TPostResult(preR.ctx, Some(o2))
+          val r0: TPostResult[Context, BTSSymbolTable] = transformBTSSymbolTable(preR.ctx, o2.btsSymbolTable)
+          if (hasChanged || r0.resultOpt.nonEmpty)
+            TPostResult(r0.ctx, Some(o2(btsSymbolTable = r0.resultOpt.getOrElse(o2.btsSymbolTable))))
           else
-            TPostResult(preR.ctx, None())
+            TPostResult(r0.ctx, None())
         case o2: TodoAnnexInfo =>
           if (hasChanged)
             TPostResult(preR.ctx, Some(o2))
@@ -1910,10 +2124,11 @@ import Transformer._
     val r: TPostResult[Context, BTSAnnexInfo] = if (preR.continu) {
       val o2: BTSAnnexInfo = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
-      if (hasChanged)
-        TPostResult(preR.ctx, Some(o2))
+      val r0: TPostResult[Context, BTSSymbolTable] = transformBTSSymbolTable(preR.ctx, o2.btsSymbolTable)
+      if (hasChanged || r0.resultOpt.nonEmpty)
+        TPostResult(r0.ctx, Some(o2(btsSymbolTable = r0.resultOpt.getOrElse(o2.btsSymbolTable))))
       else
-        TPostResult(preR.ctx, None())
+        TPostResult(r0.ctx, None())
     } else if (preR.resultOpt.nonEmpty) {
       TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
     } else {

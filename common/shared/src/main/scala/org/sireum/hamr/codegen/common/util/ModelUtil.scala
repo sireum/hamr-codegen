@@ -32,12 +32,12 @@ object ModelUtil {
     transModel = if(tResult.resultOpt.nonEmpty) tResult.resultOpt.get else transModel
 
     // transform BTS nodes -- e.g. out data port assignments -> port output
-    val btxResults = AirTransformer(Transformers.BTSTransform(aadlMaps, reporter)).transformAadl(F, transModel)
+    val btxResults = Transformers.BTSMTransform(aadlMaps, reporter).transformAadl(transModel)
     if(reporter.hasError) {
       return None()
     }
 
-    transModel = if(btxResults.resultOpt.nonEmpty) btxResults.resultOpt.get else transModel
+    transModel = if(btxResults.nonEmpty) btxResults.get else transModel
 
     val rawConnections: B = PropertyUtil.getUseRawConnection(transModel.components(0).properties)
     val aadlTypes = TypeResolver.processDataTypes(transModel, rawConnections, options.maxStringSize, options.bitWidth, packageName)
