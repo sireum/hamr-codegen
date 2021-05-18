@@ -21,7 +21,7 @@ import org.sireum.hamr.ir.{BTSBLESSAnnexClause, BTSExp, BTSStateDeclaration, BTS
 
 @datatype class BTSSymbolTable(annex: BTSBLESSAnnexClause,
                                symbols: Map[BTSKey, AadlSymbol],
-                               expTypes: Map[BTSExp, AadlType],
+                               expTypes: HashMap[BTSExp, AadlType],
                                states: Map[String, BTSState],
                                variables: Map[String, BTSVariable]) {
 

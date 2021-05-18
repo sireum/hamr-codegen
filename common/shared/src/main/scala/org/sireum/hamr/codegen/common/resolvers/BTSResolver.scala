@@ -45,7 +45,7 @@ import org.sireum.message.Reporter
         if(reporter.hasError) {
           return None()
         } else {
-          val bst = BTSExpResolver(symbolTable, aadlTypes, _states, _variables, reporter).resolve(o)
+          val bst = BTSExpResolver(symbolTable, aadlTypes, _states, _variables).resolve(o, reporter)
           return Some(BTSSymbolTable(bst._1, bst._2, bst._3, _states, _variables))
         }
 

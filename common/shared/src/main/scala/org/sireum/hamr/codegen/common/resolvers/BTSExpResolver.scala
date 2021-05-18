@@ -5,24 +5,26 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.symbols.{AadlEventPort, AadlFeatureData, AadlSubprogram, AadlSymbol, BTSKey, BTSState, BTSVariable, SymbolTable}
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, EnumType, RecordType, TypeUtil}
-import org.sireum.hamr.ir.{BTSAccessExp, BTSAssignmentAction, BTSBLESSAnnexClause, BTSBinaryExp, BTSExp, BTSLiteralExp, BTSLiteralType, BTSNameExp, BTSSubprogramCallAction, MTransformer => MAirTransformer}
+import org.sireum.hamr.ir.{BTSAccessExp, BTSAssignmentAction, BTSBLESSAnnexClause, BTSBinaryExp, BTSExp, BTSLiteralExp, BTSLiteralType, BTSNameExp, BTSPortOutAction, BTSSubprogramCallAction, MTransformer => MAirTransformer}
 import org.sireum.message.Reporter
 
 @record class BTSExpResolver(symbolTable: SymbolTable,
                              aadlTypes: AadlTypes,
                              states: Map[String, BTSState],
-                             variables: Map[String, BTSVariable],
-                             reporter: Reporter) {
+                             variables: Map[String, BTSVariable]) {
 
-  def resolve(annex: BTSBLESSAnnexClause): (BTSBLESSAnnexClause, Map[BTSKey, AadlSymbol], Map[BTSExp, AadlType]) = {
+  def resolve(annex: BTSBLESSAnnexClause, reporter: Reporter):
+    (BTSBLESSAnnexClause, Map[BTSKey, AadlSymbol], HashMap[BTSExp, AadlType]) = {
 
     var m : Map[BTSKey, AadlSymbol] = Map.empty
 
-    val expTypes = ExpWalker(symbolTable, aadlTypes, states, variables, reporter)
+    val expTypes = ExpWalker(symbolTable, aadlTypes, states, variables)
     val results: BTSBLESSAnnexClause = expTypes.transformBTSBLESSAnnexClause(annex) match {
       case MSome(rewrittenAnnex) => rewrittenAnnex
       case _ => annex
     }
+
+    reporter.setMessages(expTypes.reporter.messages)
 
     return (results, m, expTypes.expType)
   }
@@ -31,10 +33,35 @@ import org.sireum.message.Reporter
 @record class ExpWalker(symbolTable: SymbolTable,
                         aadlTypes: AadlTypes,
                         states: Map[String, BTSState],
-                        variables: Map[String, BTSVariable],
-                        reporter: Reporter) extends MAirTransformer {
+                        variables: Map[String, BTSVariable]) extends MAirTransformer {
 
-  var expType: Map[BTSExp, AadlType] = Map.empty
+  val reporter = Reporter.create
+
+  var expType: HashMap[BTSExp, AadlType] = HashMap.empty
+
+  override def postBTSPortOutAction(o: BTSPortOutAction): MOption[BTSPortOutAction] = {
+    o.exp match {
+      case Some(exp) =>
+        val id = CommonUtil.getName(o.name)
+        symbolTable.featureMap.get(id) match {
+          case Some(a : AadlFeatureData) =>
+            val evalledType = expType.get(exp).get
+            if(a.aadlType != evalledType) {
+              val simplePortName = CommonUtil.getLastName(o.name)
+              reporter.error(exp.pos, CommonUtil.toolName,
+                s"Expecting type ${a.aadlType.name} for port output on ${simplePortName}, but found ${evalledType.name}"
+              )
+              println()
+            }
+          case x =>
+            halt(s"what is this feature ${x}")
+        }
+
+      case _ =>
+    }
+
+    return MNone()
+  }
 
   override  def postBTSAssignmentAction(o: BTSAssignmentAction): MOption[BTSAssignmentAction] = {
     expType.get(o.lhs) match {
@@ -42,7 +69,7 @@ import org.sireum.message.Reporter
         expType.get(o.rhs) match {
           case Some(rhsType) =>
             if(lhsType != rhsType) {
-              reporter.error(None(), CommonUtil.toolName,
+              reporter.error(o.rhs.pos, CommonUtil.toolName,
               s"Type mismatch for assignment action: ${lhsType.name} vs ${rhsType.name} for ${o}")
             }
           case _ =>
@@ -67,7 +94,8 @@ import org.sireum.message.Reporter
           expType.get(e) match {
             case Some(pType) =>
               if(expectedType != pType) {
-                halt(s"Types don't match ${expectedType.name} vs ${pType.name} for ${paramPair}")
+                reporter.error(None(), CommonUtil.toolName,
+                s"Expecting type ${expectedType.name} but found ${pType.name} for ${paramPair}")
               }
             case _ =>
               halt(s"no type found for ${paramPair}")
@@ -84,11 +112,13 @@ import org.sireum.message.Reporter
         a.fields.get(o.attributeName) match {
           case Some(attributeType) => expType = expType + (o ~> attributeType)
           case _ =>
-            halt(s"Attribute name ${o.attributeName} not found in ${a.name}")
+            reporter.error(o.pos, CommonUtil.toolName,
+              s"Attribute name ${o.attributeName} not found in ${a.name}")
         }
       case Some(e: EnumType) =>
-        if(!ops.ISZOps(e.values).contains(o.attributeName)){
-          halt(s"Enum value ${o.attributeName} is not a member of ${e.name}")
+        if(!ops.ISZOps(e.values).contains(o.attributeName)) {
+          reporter.error(o.pos, CommonUtil.toolName,
+            s"Enum value ${o.attributeName} is not a member of ${e.name}")
         }
         expType = expType + (o ~> e)
       case _ => halt(s"Type not resolved for accessed exp ${o}")
@@ -103,7 +133,8 @@ import org.sireum.message.Reporter
     val rhsType = expType.get(o.rhs).get
 
     if(lhsType != rhsType) {
-      halt(s"Types do not match: ${lhsType.name} vs ${rhsType.name} for ${o}")
+      reporter.error(o.pos, CommonUtil.toolName,
+        s"Types do not match: ${lhsType.name} vs ${rhsType.name} for ${o}")
     }
 
     expType = expType + (o ~> lhsType)
@@ -119,7 +150,7 @@ import org.sireum.message.Reporter
           segments(0) match {
             case "u16" =>
 
-              val rewriteExp = BTSLiteralExp(BTSLiteralType.INTEGER, segments(1))
+              val rewriteExp = BTSLiteralExp(BTSLiteralType.INTEGER, segments(1), o.pos)
               expType = expType + (rewriteExp ~> aadlTypes.typeMap.get("Base_Types::Unsigned_16").get)
 
               return MSome(rewriteExp)

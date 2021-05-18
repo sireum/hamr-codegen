@@ -117,7 +117,7 @@ object Transformers {
     }
     override def postBTSAction(o: BTSAction): MOption[BTSAction] = {
       o match {
-        case a @ BTSAssignmentAction(lhs @ BTSNameExp(name), rhs) =>
+        case a @ BTSAssignmentAction(lhs @ BTSNameExp(name, pos), rhs) =>
           val id = CommonUtil.getName(name)
           aadlMaps.airFeatureMap.get(id) match {
             case Some(f) if CommonUtil.isDataPort(f) =>
