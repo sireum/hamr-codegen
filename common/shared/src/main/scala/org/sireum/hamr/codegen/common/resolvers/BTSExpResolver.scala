@@ -35,7 +35,7 @@ import org.sireum.message.Reporter
                         states: Map[String, BTSState],
                         variables: Map[String, BTSVariable]) extends MAirTransformer {
 
-  val reporter = Reporter.create
+  val reporter: Reporter = Reporter.create
 
   var expType: HashMap[BTSExp, AadlType] = HashMap.empty
 

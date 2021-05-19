@@ -104,7 +104,7 @@ object Transformers {
 
   @record class BTSMTransform(aadlMaps: AadlMaps,
                               reporter: org.sireum.message.Reporter) extends MAirTransformer {
-    var unlabeledCount = 0
+    var unlabeledCount: Z = 0
 
     override def postBTSTransitionLabel(o: BTSTransitionLabel): MOption[BTSTransitionLabel] = {
       if(o.id.name.isEmpty){
