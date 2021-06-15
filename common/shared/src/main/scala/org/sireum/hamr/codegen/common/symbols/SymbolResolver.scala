@@ -487,8 +487,20 @@ object SymbolResolver {
 
     {
       if (symbolTable.hasCakeMLComponents()) {
+
+        for(cakemlThread <- symbolTable.getThreads().filter((a: AadlThread) => a.isCakeMLComponent())){
+          if(cakemlThread.dispatchProtocol != Dispatch_Protocol.Periodic) {
+            val mesg = s"CakeML components must be periodic: ${cakemlThread.identifier}"
+            reporter.error(cakemlThread.component.identifier.pos, CommonUtil.toolName, mesg)
+          }
+        }
         if (!symbolTable.rootSystem.getUseRawConnection()) {
           val mesg = "Raw connections (i.e. byte-arrays) must be used when integrating CakeML components."
+          reporter.error(None(), CommonUtil.toolName, mesg)
+        }
+
+        if(!PacerUtil.canUseDomainScheduling(symbolTable, options.platform, reporter)) {
+          val mesg = "Model contains CakeML components so it must use domain scheduling."
           reporter.error(None(), CommonUtil.toolName, mesg)
         }
       }
