@@ -5,7 +5,7 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.symbols.{AadlEventPort, AadlFeatureData, AadlSubprogram, AadlSymbol, BTSKey, BTSState, BTSVariable, SymbolTable}
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, EnumType, RecordType, TypeUtil}
-import org.sireum.hamr.ir.{BTSAccessExp, BTSAssignmentAction, BTSBLESSAnnexClause, BTSBinaryExp, BTSExp, BTSLiteralExp, BTSLiteralType, BTSNameExp, BTSPortOutAction, BTSSubprogramCallAction, MTransformer => MAirTransformer}
+import org.sireum.hamr.ir.{BTSAccessExp, BTSAssignmentAction, BTSBLESSAnnexClause, BTSBinaryExp, BTSExp, BTSLiteralExp, BTSLiteralType, BTSNameExp, BTSPortOutAction, BTSSubprogramCallAction, BTSUnaryExp, MTransformer => MAirTransformer}
 import org.sireum.message.Reporter
 
 @record class BTSExpResolver(symbolTable: SymbolTable,
@@ -138,6 +138,12 @@ import org.sireum.message.Reporter
     }
 
     expType = expType + (o ~> lhsType)
+    return MNone()
+  }
+
+  override def postBTSUnaryExp(o: BTSUnaryExp): MOption[BTSUnaryExp] = {
+    val typ = expType.get(o.exp).get
+    expType = expType + (o ~> typ)
     return MNone()
   }
 
