@@ -194,18 +194,36 @@ object SymbolResolver {
                 val airFeature = airFeatureMap.get(featurePath).get
                 assert(airFeature == feature)
 
+                feature match {
+                  case fe: ir.FeatureEnd if fe.direction == ir.Direction.InOut => {
+                    if (fe.category == ir.FeatureCategory.FeatureGroup) {
+                      // oddly, an empty feature group is treated as a feature end by osate.  Can be
+                      // ignored as it doesn't add any features to the component
+                    }
+                    else {
+                      val id = CommonUtil.getLastName(fe.identifier)
+                      val mesg = s"Invalid direction: ${fe.direction} for ${id}.  Only uni-directional ports are supported"
+                      reporter.error(fe.identifier.pos, CommonUtil.toolName, mesg)
+                    }
+                  }
+                  case _ =>
+                }
+
                 val port: AadlFeature = feature.category match {
                   case ir.FeatureCategory.EventPort => {
                     val fend = feature.asInstanceOf[ir.FeatureEnd]
                     AadlEventPort(
                       feature = fend,
-                      featureGroupIds = featureGroupIds)
+                      featureGroupIds = featureGroupIds,
+                      direction = fend.direction
+                    )
                   }
                   case ir.FeatureCategory.DataPort => {
                     val fend = feature.asInstanceOf[ir.FeatureEnd]
                     AadlDataPort(
                       feature = fend,
                       featureGroupIds = featureGroupIds,
+                      direction = fend.direction,
                       aadlType = getFeatureEndType(fend).get
                     )
                   }
@@ -214,6 +232,7 @@ object SymbolResolver {
                     AadlDataPort(
                       feature = fend,
                       featureGroupIds = featureGroupIds,
+                      direction = fend.direction,
                       aadlType = getFeatureEndType(fend).get)
                   }
                   case _ => AadlFeatureTODO(

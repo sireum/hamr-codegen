@@ -99,7 +99,7 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
                             val subComponents: ISZ[AadlComponent],
                             val connectionInstances: ISZ[ir.ConnectionInstance],
 
-                            boundProcessor: Option[String]) extends AadlComponent {
+                            val boundProcessor: Option[String]) extends AadlComponent {
 
   def getDomain(): Option[Z] = {
     return PropertyUtil.getUnitPropZ(component.properties, CaseSchedulingProperties.DOMAIN)
@@ -235,29 +235,40 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
       else id
     return ret
   }
+
+  def path: String = {
+    return CommonUtil.getName(feature.identifier)
+  }
 }
 
-@sig trait AadlFeatureEvent extends AadlFeature
+@sig trait AadlPort extends AadlFeature {
+  def direction: ir.Direction.Type
+}
 
-@sig trait AadlFeatureData extends AadlFeature {
+@sig trait AadlFeatureEvent extends AadlPort
+
+@sig trait AadlFeatureData extends AadlPort {
   def aadlType: AadlType
 }
 
 @datatype class AadlEventPort(val feature: ir.FeatureEnd,
-                              val featureGroupIds: ISZ[String]) extends AadlFeatureEvent
+                              val featureGroupIds: ISZ[String],
+                              val direction: ir.Direction.Type) extends AadlFeatureEvent
 
 @datatype class AadlEventDataPort(val feature: ir.FeatureEnd,
                                   val featureGroupIds: ISZ[String],
+                                  val direction: ir.Direction.Type,
                                   val aadlType: AadlType) extends AadlFeatureData with AadlFeatureEvent
 
 @datatype class AadlDataPort(val feature: ir.FeatureEnd,
                              val featureGroupIds: ISZ[String],
+                             val direction: ir.Direction.Type,
                              val aadlType: AadlType) extends AadlFeatureData
 
 @datatype class AadlParameter(val feature: ir.FeatureEnd,
                               val featureGroupIds: ISZ[String],
                               val aadlType: AadlType,
-                              direction: ir.Direction.Type) extends AadlFeatureData
+                              val direction: ir.Direction.Type) extends AadlFeatureData
 
 @datatype class AadlFeatureTODO(val feature: ir.Feature,
                                 val featureGroupIds: ISZ[String]) extends AadlFeature
@@ -291,7 +302,7 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
 }
 
 @datatype class BTSAnnexInfo(val annex: BTSBLESSAnnexClause,
-                             btsSymbolTable: BTSSymbolTable) extends AnnexInfo
+                             val btsSymbolTable: BTSSymbolTable) extends AnnexInfo
 
 @datatype class TodoAnnexInfo(val annex: AnnexClause) extends AnnexInfo
 
