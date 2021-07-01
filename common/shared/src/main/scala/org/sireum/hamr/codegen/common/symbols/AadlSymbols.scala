@@ -73,6 +73,17 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
     }
     return ret
   }
+
+
+  def getPacingMethod(): Option[CaseSchedulingProperties.PacingMethod.Type] = {
+    val ret: Option[CaseSchedulingProperties.PacingMethod.Type] = PropertyUtil.getDiscreetPropertyValue(component.properties, CaseSchedulingProperties.PACING_METHOD) match {
+      case Some(ir.ValueProp("Pacer")) => Some(CaseSchedulingProperties.PacingMethod.Pacer)
+      case Some(ir.ValueProp("Self_Pacing")) => Some(CaseSchedulingProperties.PacingMethod.SelfPacing)
+      case Some(t) => halt(s"Unexpected ${CaseSchedulingProperties.PACING_METHOD} ${t} attached to process ${identifier}")
+      case None() => None()
+    }
+    return ret
+  }
 }
 
 @datatype class AadlProcessor(val component: ir.Component,
@@ -108,10 +119,14 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
   def toVirtualMachine(): B = {
     val ret: B = PropertyUtil.getDiscreetPropertyValue(component.properties, HamrProperties.HAMR__COMPONENT_TYPE) match {
       case Some(ir.ValueProp("VIRTUAL_MACHINE")) => T
-      case Some(t) => halt(s"Unexpected HAMR::Component_Type ${t} attached to process ${identifier}")
+      case Some(t) => halt(s"Unexpected ${HamrProperties.HAMR__COMPONENT_TYPE} ${t} attached to process ${identifier}")
       case None() => F
     }
     return ret
+  }
+
+  def getBoundProcessor(symbolTable: SymbolTable): Option[AadlProcessor] = {
+    return symbolTable.getBoundProcessor(this)
   }
 }
 

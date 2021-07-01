@@ -51,8 +51,14 @@ object HamrProperties {
 
 object CaseSchedulingProperties {
 
+  @enum object PacingMethod {
+    "Pacer"
+    "SelfPacing"
+  }
+
   val DOMAIN: String = "CASE_Scheduling::Domain"
   val MAX_DOMAIN: String = "CASE_Scheduling::Max_Domain"
+  val PACING_METHOD: String = "CASE_Scheduling::Pacing_Method"
   val SCHEDULE_SOURCE_TEXT: String = "CASE_Scheduling::Schedule_Source_Text"
 
 }

@@ -5,7 +5,7 @@ package org.sireum.hamr.codegen.common.symbols
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.properties.HamrProperties.HAMR__BIT_CODEC_MAX_SIZE
-import org.sireum.hamr.codegen.common.properties.PropertyUtil
+import org.sireum.hamr.codegen.common.properties.{CaseSchedulingProperties, PropertyUtil}
 import org.sireum.hamr.codegen.common.resolvers.BTSResolver
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, BaseType, TypeUtil}
 import org.sireum.hamr.codegen.common.util.{CodeGenConfig, CodeGenPlatform, ExperimentalOptions}
@@ -500,6 +500,19 @@ object SymbolResolver {
           if(shouldUseRawConnections) { reasons = reasons :+ "wire protocol" }
           val mesg = st"${options.platform} platform does not support ${(reasons, ", ")}".render
           reporter.error(None(), CommonUtil.toolName, mesg)
+        }
+      }
+    }
+
+    {
+      if (symbolTable.hasVM()) {
+        for(p <- symbolTable.getAllBoundProcessors()){
+          p.getPacingMethod() match {
+            case Some(CaseSchedulingProperties.PacingMethod.SelfPacing) =>
+              val mesg = s"Model has virtual machines so it must use the pacer component style of pacing"
+              reporter.error(p.component.identifier.pos, CommonUtil.toolName, mesg)
+            case _ =>
+          }
         }
       }
     }
