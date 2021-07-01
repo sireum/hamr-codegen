@@ -41,7 +41,7 @@ trait Module extends CrossJvmJsJitPack {
 
   final override def testIvyDeps = Agg(ivy"org.scalatest::scalatest::$scalaTestVersion")
 
-  final override def jvmTestIvyDeps = Agg(ivy"com.sksamuel.diff:diff:$diffVersion")
+  final override def jvmTestIvyDeps = Agg.empty
 
   final override def jsTestIvyDeps = Agg.empty
 
