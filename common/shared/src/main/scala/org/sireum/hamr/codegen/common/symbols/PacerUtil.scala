@@ -66,7 +66,7 @@ object PacerUtil {
       for (p <- processes) {
         symbolTable.getBoundProcessor(p) match {
           case Some(proc) => boundProcessors = boundProcessors + proc
-          case None() => unboundedProcesses = unboundedProcesses :+ p
+          case _ => unboundedProcesses = unboundedProcesses :+ p
         }
       }
 

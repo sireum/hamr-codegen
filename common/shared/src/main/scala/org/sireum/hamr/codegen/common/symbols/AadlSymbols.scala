@@ -80,7 +80,7 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
       case Some(ir.ValueProp("Pacer")) => Some(CaseSchedulingProperties.PacingMethod.Pacer)
       case Some(ir.ValueProp("Self_Pacing")) => Some(CaseSchedulingProperties.PacingMethod.SelfPacing)
       case Some(t) => halt(s"Unexpected ${CaseSchedulingProperties.PACING_METHOD} ${t} attached to process ${identifier}")
-      case None() => None()
+      case _ => None()
     }
     return ret
   }
@@ -120,7 +120,7 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
     val ret: B = PropertyUtil.getDiscreetPropertyValue(component.properties, HamrProperties.HAMR__COMPONENT_TYPE) match {
       case Some(ir.ValueProp("VIRTUAL_MACHINE")) => T
       case Some(t) => halt(s"Unexpected ${HamrProperties.HAMR__COMPONENT_TYPE} ${t} attached to process ${identifier}")
-      case None() => F
+      case _ => F
     }
     return ret
   }

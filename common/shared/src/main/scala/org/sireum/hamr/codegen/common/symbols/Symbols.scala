@@ -128,7 +128,7 @@ import org.sireum.hamr.ir.FeatureEnd
           case Some(x) => halt("")
           case _ => None()
         }
-      case None() => None()
+      case _ => None()
     }
     return ret
   }
