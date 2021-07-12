@@ -7,7 +7,7 @@ import org.sireum.hamr.arsit.Util.ARSIT_INSTRUCTIONS_MESSAGE_KIND
 import org.sireum.hamr.{act, arsit}
 import org.sireum.hamr.codegen.common.util.CodeGenPlatform._
 import org.sireum.hamr.codegen.common.DirectoryUtil
-import org.sireum.hamr.codegen.common.containers.{Resource, TranspilerConfig}
+import org.sireum.hamr.codegen.common.containers.{ProyekIveConfig, Resource, TranspilerConfig}
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.ModelUtil.ModelElements
@@ -23,7 +23,8 @@ object CodeGen {
   def codeGen(model: Aadl,
               options: CodeGenConfig,
               reporter: Reporter,
-              transpilerCallback: (TranspilerConfig) => Z): CodeGenResults = {
+              transpilerCallback: (TranspilerConfig) => Z,
+              proyekIveCallback: (ProyekIveConfig) => Z): CodeGenResults = {
 
     val targetingSel4 = options.platform == CodeGenPlatform.SeL4
 
@@ -47,11 +48,11 @@ object CodeGen {
       cleanupPackageName(slangOutputDir.name)
     }
 
-    val (runArsit, runACT, hamrIntegration, isTranspilerProject) = options.platform match {
-      case JVM => (T, F, F, F)
-      case Linux | Cygwin | MacOS => (T, F, F, T)
-      case SeL4 => (T, T, T, T)
-      case SeL4_Only | SeL4_TB => (F, T, F, F)
+    val (runArsit, runACT, hamrIntegration, isTranspilerProject, isSlangProject) = options.platform match {
+      case JVM => (T, F, F, F, T)
+      case Linux | Cygwin | MacOS => (T, F, F, T, T)
+      case SeL4 => (T, T, T, T, T)
+      case SeL4_Only | SeL4_TB => (F, T, F, F, F)
     }
 
     var reporterIndex = z"0"
@@ -107,6 +108,39 @@ object CodeGen {
       reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ(ARSIT_INSTRUCTIONS_MESSAGE_KIND))
 
       arsitResources = removeDuplicates(arsitResources, reporter)
+
+      if (!reporter.hasError && !options.noProyekIve && isSlangProject) {
+        // doesn't matter what 'o.writeOutResources' is, proyek ive needs the
+        // resources to be written out
+        writeOutResources(arsitResources, reporter)
+        wroteOutArsitResources = T
+
+        val proyekConfig = ProyekIveConfig(
+          help = "",
+          args = ISZ(slangOutputDir.canon.value),
+          force = F,
+          ultimate = F,
+          ignoreRuntime = F,
+          json = None(),
+          name = None(),
+          outputDirName = Some("out"),
+          project = None(),
+          slice = ISZ(),
+          symlink = F,
+          versions = ISZ(),
+          cache = None(),
+          docs = T,
+          sources = T,
+          repositories = ISZ()
+        )
+
+        reporter.info(None(), toolName, "Generating IVE project via Proyek IVE ...")
+        reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
+
+        if (proyekIveCallback(proyekConfig) != 0) {
+          reporter.error(None(), toolName, "Proyek IVE did not complete successfully")
+        }
+      }
 
       if (!reporter.hasError && options.runTranspiler && isTranspilerProject) {
 

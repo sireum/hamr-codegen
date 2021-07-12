@@ -31,6 +31,7 @@ import org.sireum.hamr.codegen.common.containers.{Resource, TranspilerConfig}
                               // arsit options
                               slangOutputDir: Option[String],
                               packageName: Option[String],
+                              noProyekIve: B,
                               noEmbedArt: B,
                               devicesAsThreads: B,
 

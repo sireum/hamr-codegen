@@ -33,3 +33,20 @@ import org.sireum._
                                  load: Option[String],
                                  customConstants: ISZ[String],
                                  forwarding: ISZ[String])
+
+@datatype class ProyekIveConfig(val help: String,
+                                val args: ISZ[String],
+                                val force: B,
+                                val ultimate: B,
+                                val ignoreRuntime: B,
+                                val json: Option[String],
+                                val name: Option[String],
+                                val outputDirName: Option[String],
+                                val project: Option[String],
+                                val slice: ISZ[String],
+                                val symlink: B,
+                                val versions: ISZ[String],
+                                val cache: Option[String],
+                                val docs: B,
+                                val sources: B,
+                                val repositories: ISZ[String])
