@@ -5,7 +5,7 @@ package org.sireum.hamr.codegen.common.containers
 import org.sireum._
 
 @datatype class Resource(path: String,
-                         content: String,
+                         content: ST,
                          overwrite: B,
                          makeExecutable: B)
 
