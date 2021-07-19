@@ -289,7 +289,7 @@ object CodeGen {
       assert(!p.exists || p.isFile)
       p.up.mkdirAll()
       if (r.overwrite || !p.exists) {
-        p.writeOver(r.content.render)
+        p.writeOver(r.content)
         reporter.info(None(), toolName, s"Wrote: ${p}")
         if (r.makeExecutable) {
           p.chmodAll("700")
@@ -308,7 +308,7 @@ object CodeGen {
         val entry = m.get(r.path).get
 
         // sanity checks
-        if(r.content.render != entry.content.render) {
+        if(r.content != entry.content) {
           reporter.warn(None(), toolName, s"content of ${r.path} not the same for duplicate entries")
         }
         if(r.overwrite != entry.overwrite) {
