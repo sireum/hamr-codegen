@@ -7,10 +7,8 @@ import org.sireum.hamr.codegen.common.containers.Resource
 
 object ResourceUtil {
 
-  def makeCRLF(content: ST): ST = {
-    val c = content.render
-    val crlf = ops.StringOps(c).replaceAllLiterally("\n", "\r\n")
-    return st"$crlf"
+  def makeCRLF(content: String): String = {
+    return ops.StringOps(content).replaceAllLiterally("\n", "\r\n")
   }
 
   def createResource(path: String,
