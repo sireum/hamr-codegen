@@ -289,7 +289,10 @@ object CodeGen {
       assert(!p.exists || p.isFile)
       p.up.mkdirAll()
       if (r.overwrite || !p.exists) {
-        p.writeOver(r.content.render)
+        val content: String =
+          if(r.makeCRLF && !Os.isWin) { ops.StringOps(r.content.render).replaceAllLiterally("\n", "\r\n") }
+          else { r.content.render }
+        p.writeOver(content)
         reporter.info(None(), toolName, s"Wrote: ${p}")
         if (r.makeExecutable) {
           p.chmodAll("700")

@@ -7,7 +7,8 @@ import org.sireum._
 @datatype class Resource(path: String,
                          content: ST,
                          overwrite: B,
-                         makeExecutable: B)
+                         makeExecutable: B,
+                         makeCRLF: B)
 
 @datatype class TranspilerConfig(help: String,
                                  args: ISZ[String],

@@ -7,21 +7,22 @@ import org.sireum.hamr.codegen.common.containers.Resource
 
 object ResourceUtil {
 
-  def makeCRLF(content: String): String = {
-    //return ops.StringOps(content).replaceAllLiterally("\n", "\r\n")
-    return content
-  }
-
   def createResource(path: String,
                      content: ST,
                      overwrite: B): Resource = {
-    return Resource(path, content, overwrite, F)
+    return Resource(path, content, overwrite, F, F)
   }
 
   def createExeResource(path: String,
                         content: ST,
                         overwrite: B): Resource = {
-    return Resource(path, content, overwrite, T)
+    return Resource(path, content, overwrite, T, F)
+  }
+
+  def createExeCrlfResource(path: String,
+                        content: ST,
+                        overwrite: B): Resource = {
+    return Resource(path, content, overwrite, T, T)
   }
 
   def createStringResource(path: String,
