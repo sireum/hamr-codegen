@@ -17,7 +17,8 @@ object TestJSON {
         ("type", st""""TestResource""""),
         ("content", printString(o.content)),
         ("overwrite", printB(o.overwrite)),
-        ("makeExecutable", printB(o.makeExecutable))
+        ("makeExecutable", printB(o.makeExecutable)),
+        ("makeCRLF", printB(o.makeCRLF))
       ))
     }
 
@@ -30,7 +31,7 @@ object TestJSON {
 
   }
 
-  @record class Parser(input: String) {
+  @record class Parser(val input: String) {
     val parser: Json.Parser = Json.Parser.create(input)
 
     def errorOpt: Option[Json.ErrorMsg] = {
@@ -55,7 +56,10 @@ object TestJSON {
       parser.parseObjectKey("makeExecutable")
       val makeExecutable = parser.parseB()
       parser.parseObjectNext()
-      return TestResource(content, overwrite, makeExecutable)
+      parser.parseObjectKey("makeCRLF")
+      val makeCRLF = parser.parseB()
+      parser.parseObjectNext()
+      return TestResource(content, overwrite, makeExecutable, makeCRLF)
     }
 
     def parseTestResult(): TestResult = {

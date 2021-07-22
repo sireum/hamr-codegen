@@ -282,16 +282,18 @@ object CodeGen {
     return ret
   }
 
-  def writeOutResources(resources: IS[Z, Resource], reporter: Reporter) = {
+  def writeOutResources(resources: IS[Z, Resource], reporter: Reporter): Unit = {
     for (r <- resources) {
-      val _p = Os.path(r.path)
+      val _p = Os.path(r.path).canon
       val p = _p.canon
       assert(!p.exists || p.isFile)
       p.up.mkdirAll()
       if (r.overwrite || !p.exists) {
-        val content: String =
-          if(r.makeCRLF && !Os.isWin) { ops.StringOps(r.content.render).replaceAllLiterally("\n", "\r\n") }
-          else { r.content.render }
+        val content: String = {
+          val lineSep = if(Os.isWin) "\r\n" else "\n" // ST render uses System.lineSep
+          val replace = if(r.makeCRLF) "\r\n" else "\n"
+          ops.StringOps(r.content.render).replaceAllLiterally(lineSep, replace)
+        }
         p.writeOver(content)
         reporter.info(None(), toolName, s"Wrote: ${p}")
         if (r.makeExecutable) {

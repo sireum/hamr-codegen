@@ -32,6 +32,7 @@ object TestMsgPack {
       writer.writeString(o.content)
       writer.writeB(o.overwrite)
       writer.writeB(o.makeExecutable)
+      writer.writeB(o.makeCRLF)
     }
 
     def writeTestResult(o: TestResult): Unit = {
@@ -71,7 +72,8 @@ object TestMsgPack {
       val content = reader.readString()
       val overwrite = reader.readB()
       val makeExecutable = reader.readB()
-      return TestResource(content, overwrite, makeExecutable)
+      val makeCRLF = reader.readB()
+      return TestResource(content, overwrite, makeExecutable, makeCRLF)
     }
 
     def readTestResult(): TestResult = {
