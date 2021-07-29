@@ -91,6 +91,17 @@ import org.sireum.hamr.ir.FeatureEnd
     return c.map(m => m.asInstanceOf[AadlProcess])
   }
 
+  def getThreadOrDevices(): ISZ[AadlThreadOrDevice] = {
+    var ret:ISZ[AadlThreadOrDevice] = ISZ()
+    for(t <- getThreads()) { ret = ret :+ t }
+    for(d <- getDevices()) { ret = ret :+ d }
+    return ret
+  }
+
+  def getDevices(): ISZ[AadlDevice] = {
+    val c = componentMap.values.filter(f => f.isInstanceOf[AadlDevice])
+    return c.map(m => m.asInstanceOf[AadlDevice])
+  }
 
   def getThreads(): ISZ[AadlThread] = {
     val c = componentMap.values.filter(f => f.isInstanceOf[AadlThread])
