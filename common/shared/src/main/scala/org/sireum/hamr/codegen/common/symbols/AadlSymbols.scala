@@ -48,7 +48,9 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
 
   def getFramePeriod(): Option[Z] = {
     val ret: Option[Z] = PropertyUtil.getDiscreetPropertyValue(component.properties, OsateProperties.TIMING_PROPERTIES__FRAME_PERIOD) match {
-      case Some(ir.UnitProp(value, unit)) => PropertyUtil.convertToMS(value, unit)
+      case Some(ir.UnitProp(value, unit)) =>
+        assert(unit.nonEmpty, s"frame period's unit not provided for ${identifier}")
+        Some(PropertyUtil.convertToMS(value, unit.get))
       case _ => None()
     }
     return ret
@@ -56,7 +58,9 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
 
   def getClockPeriod(): Option[Z] = {
     val ret: Option[Z] = PropertyUtil.getDiscreetPropertyValue(component.properties, OsateProperties.TIMING_PROPERTIES__CLOCK_PERIOD) match {
-      case Some(ir.UnitProp(value, unit)) => PropertyUtil.convertToMS(value, unit)
+      case Some(ir.UnitProp(value, unit)) =>
+        assert(unit.nonEmpty, s"clock period's unit not provided for ${identifier}")
+        Some(PropertyUtil.convertToMS(value, unit.get))
       case _ => None()
     }
     return ret
@@ -64,6 +68,10 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
 
   def getMaxDomain(): Option[Z] = {
     return PropertyUtil.getUnitPropZ(component.properties, CaseSchedulingProperties.MAX_DOMAIN)
+  }
+
+  def getSlotTime(): Option[Z] = {
+    return PropertyUtil.getUnitPropZ(component.properties, OsateProperties.TIMING_PROPERTIES__SLOT_TIME)
   }
 
   def getScheduleSourceText(): Option[String] = {
@@ -149,13 +157,24 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
 
   def isSporadic(): B = { return dispatchProtocol == Dispatch_Protocol.Sporadic }
 
-  def getMaxComputeExecutionTime(): Z = {
-    val ret: Z = PropertyUtil.getDiscreetPropertyValue(component.properties, OsateProperties.TIMING_PROPERTIES__COMPUTE_EXECUTION_TIME) match {
+  def getComputeExecutionTime(): Option[(Z, Z)] = {
+    val ret: Option[(Z, Z)] = PropertyUtil.getDiscreetPropertyValue(component.properties, OsateProperties.TIMING_PROPERTIES__COMPUTE_EXECUTION_TIME) match {
       case Some(ir.RangeProp(low, high)) =>
-        PropertyUtil.convertToMS(high.value, high.unit) match {
-          case Some(z) => z
-          case _ => z"0"
-        }
+        assert(low.unit.nonEmpty, s"unit not provided for min compute execution time for ${identifier}")
+        assert(high.unit.nonEmpty, s"unit not provided for max compute execution time for ${identifier}")
+
+        val _low = PropertyUtil.convertToMS(low.value, low.unit.get)
+        val _high = PropertyUtil.convertToMS(high.value, high.unit.get)
+
+        Some((_low, _high))
+      case _ => None()
+    }
+    return ret
+  }
+
+  def getMaxComputeExecutionTime(): Z = {
+    val ret: Z = getComputeExecutionTime() match {
+      case Some((low, high)) => high
       case _ => z"0"
     }
     return ret

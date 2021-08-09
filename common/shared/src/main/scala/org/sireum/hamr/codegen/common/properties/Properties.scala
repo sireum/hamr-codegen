@@ -29,6 +29,7 @@ object OsateProperties {
   val TIMING_PROPERTIES__CLOCK_PERIOD: String = "Timing_Properties::Clock_Period"
   val TIMING_PROPERTIES__FRAME_PERIOD: String = "Timing_Properties::Frame_Period"
   val TIMING_PROPERTIES__PERIOD: String = "Timing_Properties::Period"
+  val TIMING_PROPERTIES__SLOT_TIME: String = "Timing_Properties::Slot_Time"
 }
 
 object HamrProperties {
