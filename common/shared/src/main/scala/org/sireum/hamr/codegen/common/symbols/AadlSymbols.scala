@@ -186,7 +186,7 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
     val ret: AadlProcess = _parent match {
       case a: AadlThreadGroup =>symbolTable.getProcess(a.parent.get)
       case p: AadlProcess => symbolTable.getProcess(parent.get)
-      case _ => halt("Unexpected parent: _parent")
+      case _ => halt(s"Unexpected parent for ${parent.get}: ${_parent}")
     }
     return ret
   }
@@ -196,7 +196,10 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
   def getFeatureEnds(): ISZ[ir.FeatureEnd] = { return component.features.filter(f => f.isInstanceOf[ir.FeatureEnd]).map(f => f.asInstanceOf[ir.FeatureEnd]) }
 
   def getDomain(symbolTable: SymbolTable): Option[Z] = {
-    return getParent(symbolTable).getDomain()
+    this match {
+      case a: AadlDevice => return None()
+      case a: AadlThread => return getParent(symbolTable).getDomain()
+    }
   }
 
   def getComputeEntrypointSourceText(): Option[String] = {
