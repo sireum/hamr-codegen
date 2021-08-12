@@ -104,10 +104,10 @@ def test(): Unit = {
   tipe()
 
   println("Testing ...")
-  val packageNames: String = "org.sireum.hamr"
+  //val names: String = "org.sireum.hamr.arsit"
   val names: String = "org.sireum.hamr"
 
-  proc"$sireum proyek test --project $project -n $proyekName --par --sha3 --packages $packageNames . $names".at(home).console.runCheck()
+  proc"$sireum proyek test --project $project -n $proyekName --par --sha3 . $names".at(home).console.runCheck()
   println()
 }
 
