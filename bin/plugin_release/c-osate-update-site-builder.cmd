@@ -45,9 +45,8 @@ import Templates._
                          directory: Os.Path
                          )
 
-val launcher = Os.home / "devel/osate/osate2_2021-03-master/eclipse/plugins/org.eclipse.equinox.launcher_1.6.100.v20201223-0822.jar"
-val osate_plugin_dir = Os.home / "devel/sireum/osate-plugin/"
-val dest = Os.home / "devel/sireum/osate-update-site"
+val osate_plugin_dir = Os.home / "devel" / "sireum" / "osate-plugin"
+val dest = Os.home / "devel" / "sireum" / "osate-update-site"
 
 
 val releases = getSortedDirs(dest)
@@ -59,7 +58,7 @@ for(releaseDir <- releases) {
   var previousVersion: String = ""
   for(featureUpdateDir <- features) {
 
-    val feature = parse(osate_plugin_dir / s"${featureUpdateDir.name}.feature")
+    val feature: Feature = parse(osate_plugin_dir / s"${featureUpdateDir.name}.feature")
 
     val featuresDir = (featureUpdateDir / "features")
     assert(featuresDir.list.size == 1, s"${featuresDir.value} -- ${featuresDir.list.size}")
@@ -89,7 +88,7 @@ for(releaseDir <- releases) {
 val (a,b): (ST, ST) = composite(releases.map(m => m.name))
 (dest / "compositeArtifacts.xml").writeOver(a.render)
 (dest / "compositeContent.xml").writeOver(b.render)
-(dest / "readme.md").writeOver(rootUpdateSiteReadme().render)
+(dest / "readme.md").writeOver(rootUpdateSiteReadme(releases).render)
 
 object Templates {
 
@@ -250,7 +249,8 @@ object Templates {
     return (a, b)
   }
 
-  def rootUpdateSiteReadme() : ST = {
+  def rootUpdateSiteReadme(dirs: ISZ[Os.Path]) : ST = {
+    val _dirs = dirs.map(m => s"- [${m.name}](${m.name})")
     val ret =
       st"""# Sireum OSATE Plugins Releases
           |
@@ -258,7 +258,7 @@ object Templates {
           |intended to be used with [Sireum's Phantom tool](https://github.com/sireum/phantom)
           |or the FMIDE install script (see the
           |[CASE](https://github.com/sireum/case-env#setting-up-fmide-and-hamr-only)
-          |setup instructions for mor information). No other support is offered.
+          |setup instructions for more information). No other support is offered.
           |
           |## How to Install the Latest Sireum OSATE Plugins Using Phantom
           |
@@ -271,6 +271,10 @@ object Templates {
           |## Installing a Specific Version of the Plugins
           |
           |Refer to the readme of a particular release for specific installation instructions.
+          |
+          |**Releases**
+          |
+          |${(_dirs, "\n")}
           |"""
     return ret
   }

@@ -120,7 +120,7 @@ def clean(): Unit = {
     println(s"Deleting ${r}")
     r.removeAll()
   }
-  ISZ[String]("act", "arsit").foreach((subProj: String) => {
+  ISZ[String]("act", "arsit", "art").foreach((subProj: String) => {
     val buildCmd = home / subProj / "bin" / "build.cmd"
     Os.proc(ISZ(buildCmd.canon.value, "clean")).console.run()
   })
