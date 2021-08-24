@@ -21,6 +21,7 @@ exit /B %errorlevel%
 
 import org.sireum._
 
+
 val SIREUM_HOME = Os.path(Os.env("SIREUM_HOME").get)
 val sireum = SIREUM_HOME / "bin" / "sireum"
 val sireumjar = SIREUM_HOME / "bin" / "sireum.jar"
