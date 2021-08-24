@@ -250,7 +250,7 @@ object Templates {
   }
 
   def rootUpdateSiteReadme(dirs: ISZ[Os.Path]) : ST = {
-    val _dirs = dirs.map(m => s"- [${m.name}](${m.name})")
+    val _dirs = dirs.map((m: Os.Path) => s"- [${m.name}](${m.name})")
     val ret =
       st"""# Sireum OSATE Plugins Releases
           |
@@ -284,6 +284,7 @@ object Templates {
       s"org.sireum.aadl.osate.${m}.feature.feature.group=https://raw.githubusercontent.com/sireum/osate-update-site/master/${version}"
     })
     val features = st"${(_features, ";")}"
+    val bt: String = "\\"
     val ret =
       st"""# Sireum OSATE Plugins ${version} Release
           |
@@ -315,8 +316,8 @@ object Templates {
           |  cd Sireum
           |  git checkout ${sireumVersion}
           |  git submodule update --init --recursive
-          |  bin\build.cmd
-          |  bin\sireum hamr phantom -u --features "${features}"
+          |  bin${bt}build.cmd
+          |  bin${bt}sireum hamr phantom -u --features "${features}"
           |  ```
           |
           |* Linux:

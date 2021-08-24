@@ -24,7 +24,6 @@ import org.sireum._
 val SIREUM_HOME = Os.path(Os.env("SIREUM_HOME").get)
 val sireum = SIREUM_HOME / "bin" / "sireum"
 val sireumjar = SIREUM_HOME / "bin" / "sireum.jar"
-val currYear = java.time.Year.now.getValue
 
 
 // TODO get these from env or arguments
@@ -37,12 +36,12 @@ val case_setup = Os.home / "devel" / "sireum" / "case-env" / "case-setup.sh"
 def getGitRepos(d: Os.Path): ISZ[Os.Path] = {
   assert(d.isDir)
   val children: ISZ[Os.Path] = d.list.filter(p => p.isDir).flatMap(f => getGitRepos(f))
-  if((d / ".git").exists) return d +: children
-  else return children
+  if((d / ".git").exists) { return d +: children }
+  else { return children }
 }
 
 var gitStaged: B = T
-getGitRepos(SIREUM_HOME / "hamr" / "codegen").foreach(repo => {
+getGitRepos(SIREUM_HOME / "hamr" / "codegen").foreach((repo: Os.Path) => {
   val onMaster = proc"git -C ${repo} branch".at(repo).runCheck()
   val uncommitedChanges = proc"git -C ${repo} status --porcelain".at(repo).runCheck()
   val unpushedCommits = proc"git -C ${repo} log origin/master..master".at(repo).runCheck()
@@ -60,6 +59,8 @@ getGitRepos(SIREUM_HOME / "hamr" / "codegen").foreach(repo => {
     ready = F
   }
   gitStaged = gitStaged && ready
+
+  gitStaged // just need to return somethin
 })
 
 if(!gitStaged) { Os.exit(1) }

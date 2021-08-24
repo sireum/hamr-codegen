@@ -80,7 +80,7 @@ val ids: ISZ[String] = ISZ(
   "org.sireum.aadl.osate.cli",
   "org.sireum.aadl.osate.hamr")
 
-ids.foreach(id => updateManfiest(id))
+ids.foreach((id: String) => updateManfiest(id))
 
 
 def updateFeatureXml(id: String, addImport: B): Unit ={
@@ -93,17 +93,17 @@ def updateFeatureXml(id: String, addImport: B): Unit ={
 
   val featureXML = pluginDir / id / "feature.xml"
   assert(featureXML.exists, s"${featureXML} does not exist")
-  val mods: ISZ[(String, String)] = ISZ[(String,String)]((a, aMod)) ++ (if(addImport) ISZ((b, bMod)) else ISZ())
+  val mods: ISZ[(String, String)] = ISZ[(String,String)]((a, aMod)) ++ (if(addImport) ISZ((b, bMod)) else ISZ[(String, String)]())
   replaceLines(mods, featureXML)
 }
 
-ops.ISZOps(ids).tail.foreach(id => updateFeatureXml(s"${id}.feature", id != "org.sireum.aadl.osate"))
+ops.ISZOps(ids).tail.foreach((id: String) => updateFeatureXml(s"${id}.feature", id != "org.sireum.aadl.osate"))
 
 
 val releaseDir = updateSiteDir / s"1.0.${sireumTimestamp}.${sireumCommit}"
 releaseDir.mkdir()
 
-val dirs = ids.map(id => {
+val dirs = ids.map((id: String) => {
   val d = releaseDir / id
   d.mkdir()
   assert(d.exists, s"${d} does not exist")
