@@ -506,7 +506,38 @@ object SymbolResolver {
 
     {
       if (symbolTable.hasVM()) {
-        for(p <- symbolTable.getAllBoundProcessors()){
+        var validProcessors: ISZ[AadlProcessor] = ISZ()
+        for(process <- symbolTable.getProcesses().filter(p => p.toVirtualMachine(symbolTable))) {
+          assert(process.boundProcessor.nonEmpty, s"Unexpected: ${process.identifier} is going to a vm but it isn't bound to a processor?")
+          assert(symbolTable.componentMap.contains(process.boundProcessor.get), s"Unexpected: unable to resolve ${process.identifier}'s bound processor ${process.boundProcessor.get}")
+
+          symbolTable.componentMap.get(process.boundProcessor.get).get match {
+            case apv: AadlVirtualProcessor =>
+              apv.boundProcessor match {
+                case Some(_parent) =>
+                  symbolTable.componentMap.get(_parent) match {
+                    case Some(apv2: AadlVirtualProcessor) =>
+                      val mesg = s"Chained virtual processors is not supported.  Bind virtual processor ${apv.identifier} to an actual processor"
+                      reporter.error(apv2.component.identifier.pos, CommonUtil.toolName, mesg)
+                    case Some(ap2: AadlProcessor) => validProcessors = validProcessors :+ ap2 // ok, virtual processor is bound to an actual processor
+                    case _ =>
+                      val mesg = s"Unexpected: couldn't resolve the bound processor ${_parent} for virtual processor ${apv.identifier}. Please report"
+                      reporter.error(apv.component.identifier.pos, CommonUtil.toolName, mesg)
+                  }
+                case _ =>
+                  val mesg = s"Virtual processor ${apv.identifier} must be bound to an actual processor since process ${process.identifier} is bound to it"
+                  reporter.error(apv.component.identifier.pos, CommonUtil.toolName, mesg)
+              }
+            case x: AadlProcessor => validProcessors = validProcessors :+ x // ok, process is bound directly to an actual processor
+            case x =>
+              val mesg = s"Unexpected: process ${process.identifier} is bound to ${x} rather than a processor"
+              reporter.error(process.component.identifier.pos, CommonUtil.toolName, mesg)
+          }
+        }
+
+        // don't use symbolTable.getAllBoundProcessors() here as that expects we always reach an AadlProcessor,
+        // but that might not be case due to issues from the above block
+        for(p <- validProcessors){
           p.getPacingMethod() match {
             case Some(CaseSchedulingProperties.PacingMethod.SelfPacing) =>
               val mesg = s"Model has virtual machines so it must use the pacer component style of pacing"

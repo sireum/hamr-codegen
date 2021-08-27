@@ -123,8 +123,14 @@ import org.sireum.hamr.ir.FeatureEnd
   def getActualBoundProcess(c: AadlVirtualProcessor): Option[AadlProcessor] = {
     val ret: Option[AadlProcessor] = c.boundProcessor match {
       case Some(path) =>
-        // assumes virtual processors can only be bound to actual processors (ie. no virtual processor chaining)
-        Some(componentMap.get(path).get.asInstanceOf[AadlProcessor])
+        componentMap.get(path).get match {
+          case ap: AadlProcessor => Some(ap)
+          case apv: AadlVirtualProcessor =>
+            // allow virtual processor chaining here, but symbol checking phase currently
+            // rejects this, though maybe this will be allowed in the future
+            return getActualBoundProcess(apv)
+          case _ => None()
+        }
       case _ => None()
     }
     return ret
@@ -136,7 +142,7 @@ import org.sireum.hamr.ir.FeatureEnd
         componentMap.get(path) match {
           case Some(a: AadlProcessor) => Some(a)
           case Some(v: AadlVirtualProcessor) => getActualBoundProcess(v)
-          case Some(x) => halt("")
+          case Some(x) => halt(s"Unexpected, ${c.identifier} is a process but is bound to ${x} rather than a processor")
           case _ => None()
         }
       case _ => None()
@@ -151,6 +157,7 @@ import org.sireum.hamr.ir.FeatureEnd
       getBoundProcessor(process) match {
         case Some(aadlProcessor) => processors = processors + aadlProcessor
         case _ =>
+          // symbol checking phase should mean this is infeasible
           halt(s"Unexpected: ${process.path} does not have a bound processor")
       }
     }
@@ -158,7 +165,7 @@ import org.sireum.hamr.ir.FeatureEnd
   }
 
   def hasVM(): B = {
-    return ops.ISZOps(getProcesses()).exists(p => p.toVirtualMachine())
+    return ops.ISZOps(getProcesses()).exists(p => p.toVirtualMachine(this))
   }
 
   def hasCakeMLComponents(): B = {

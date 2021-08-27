@@ -124,13 +124,28 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
     return PropertyUtil.getUnitPropZ(component.properties, CaseSchedulingProperties.DOMAIN)
   }
 
-  def toVirtualMachine(): B = {
-    val ret: B = PropertyUtil.getDiscreetPropertyValue(component.properties, HamrProperties.HAMR__COMPONENT_TYPE) match {
-      case Some(ir.ValueProp("VIRTUAL_MACHINE")) => T
+  /**
+    *  @return T if bound to a virtual processor or it has HAMR::Component_Type => VIRTUAL_MACHINE
+    */
+  def toVirtualMachine(symbolTable: SymbolTable): B = {
+    PropertyUtil.getDiscreetPropertyValue(component.properties, HamrProperties.HAMR__COMPONENT_TYPE) match {
+      case Some(ir.ValueProp("VIRTUAL_MACHINE")) => return T
       case Some(t) => halt(s"Unexpected ${HamrProperties.HAMR__COMPONENT_TYPE} ${t} attached to process ${identifier}")
-      case _ => F
+      case _ =>
     }
-    return ret
+
+    // or is the parent a virtual processor (symbol checking phase ensures the virtual processor
+    // is bound to an actual processor)
+    boundProcessor match {
+      case Some(_parent) =>
+        symbolTable.componentMap.get(_parent).get match {
+          case avp: AadlVirtualProcessor => return T
+          case _ =>
+        }
+      case _ =>
+    }
+
+    return F
   }
 
   def getBoundProcessor(symbolTable: SymbolTable): Option[AadlProcessor] = {
@@ -207,7 +222,7 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
   }
 
   def toVirtualMachine(symbolTable: SymbolTable): B = {
-    return getParent(symbolTable).toVirtualMachine()
+    return getParent(symbolTable).toVirtualMachine(symbolTable)
   }
 
   def isCakeMLComponent(): B = {
