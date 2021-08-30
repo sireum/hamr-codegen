@@ -150,9 +150,8 @@ val buildsbt = SIREUM_HOME / "hamr" / "codegen" / "arsit" / "resources" / "util"
 { // build sireum.jar
   val build_cmd = SIREUM_HOME / "bin" / "build.cmd"
 
-  //println("Running tipe")
-  //Os.proc(ISZ(sireum.value, "slang", "run", build_cmd.value, "tipe")).console.runCheck()
-  println("\n\n\nSKIPPING TIPE FOR NOW\n\n\n")
+  println("Running tipe")
+  Os.proc(ISZ(sireum.value, "slang", "run", build_cmd.value, "tipe")).console.runCheck()
 
   println("Building sireum.jar")
   Os.proc(ISZ(sireum.value, "slang", "run", build_cmd.value)).console.runCheck()
