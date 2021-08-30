@@ -132,6 +132,10 @@ val buildsbt = SIREUM_HOME / "hamr" / "codegen" / "arsit" / "resources" / "util"
   }
 }
 
+{
+  val hamr = SIREUM_HOME / "out" / "sireum-proyek" / "modules"
+  hamr.list.filter(f => f.isDir)
+}
 /*
 { // remove cli.json to make sure build stamp gets updated correctly
   val cli = SIREUM_HOME / "out" / "sireum-proyek" / "modules" / "cli.sha3.json"
@@ -145,8 +149,9 @@ val buildsbt = SIREUM_HOME / "hamr" / "codegen" / "arsit" / "resources" / "util"
 { // build sireum.jar
   val build_cmd = SIREUM_HOME / "bin" / "build.cmd"
 
-  println("Running tipe")
-  Os.proc(ISZ(sireum.value, "slang", "run", build_cmd.value, "tipe")).console.runCheck()
+  //println("Running tipe")
+  //Os.proc(ISZ(sireum.value, "slang", "run", build_cmd.value, "tipe")).console.runCheck()
+  println("\n\n\nSKIPPING TIPE FOR NOW\n\n\n")
 
   println("Building sireum.jar")
   Os.proc(ISZ(sireum.value, "slang", "run", build_cmd.value)).console.runCheck()
