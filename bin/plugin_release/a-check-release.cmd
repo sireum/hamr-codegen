@@ -26,13 +26,18 @@ val SIREUM_HOME = Os.path(Os.env("SIREUM_HOME").get)
 val sireum = SIREUM_HOME / "bin" / "sireum"
 val sireumjar = SIREUM_HOME / "bin" / "sireum.jar"
 
+val CASE_Env_home: Os.Path = Os.home / "devel" / "sireum" / "case-env"
 
 // TODO get these from env or arguments
 val pluginDir = Os.home / "devel" / "sireum" / "osate-plugin"
 val updateSiteDir = Os.home / "devel" / "sireum" / "osate-plugin-update-site"
 val updateSiteHAMRDir = Os.home / "devel" / "sireum" / "hamr-plugin-update-site"
 
-val case_setup = Os.home / "devel" / "sireum" / "case-env" / "case-setup.sh"
+
+def runGit(args: ISZ[String], path: Os.Path): String = {
+  val p = org.sireum.Os.proc(args).at(path).runCheck()
+  return ops.StringOps(p.out).trim
+}
 
 def getGitRepos(d: Os.Path): ISZ[Os.Path] = {
   assert(d.isDir)
@@ -43,11 +48,11 @@ def getGitRepos(d: Os.Path): ISZ[Os.Path] = {
 
 var gitStaged: B = T
 getGitRepos(SIREUM_HOME / "hamr" / "codegen").foreach((repo: Os.Path) => {
-  val onMaster = proc"git -C ${repo} branch".at(repo).runCheck()
+  val onMaster = proc"git -C ${repo} rev-parse --abbrev-ref HEAD".at(repo).runCheck()
   val uncommitedChanges = proc"git -C ${repo} status --porcelain".at(repo).runCheck()
   val unpushedCommits = proc"git -C ${repo} log origin/master..master".at(repo).runCheck()
   var ready: B = T
-  if(ops.StringOps(onMaster.out).trim != "* master"){
+  if(ops.StringOps(onMaster.out).trim != "master"){
     eprintln(s"Not on master: ${repo} -- ${ops.StringOps(onMaster.out).trim}")
     ready = F
   }
@@ -56,8 +61,17 @@ getGitRepos(SIREUM_HOME / "hamr" / "codegen").foreach((repo: Os.Path) => {
     ready = F
   }
   if(unpushedCommits.out != "") {
-    eprintln(s"Unpushed changes: ${repo}")
-    ready = F
+    var onlyReleaseScripts = T
+    for(sha1 <- org.sireum.ops.StringOps(proc"git cherry".at(repo).runCheck().out).split(c => c == '\n').map(m => ops.StringOps(m).replaceAllLiterally("+ ", ""))){
+      for(file <- ops.StringOps(proc"git diff-tree --no-commit-id --name-only -r ${sha1}".at(repo).runCheck().out).split(c => c == '\n').map(p => Os.path(p))){
+        // ignore commits that only contain changes to the release scripts
+        onlyReleaseScripts = onlyReleaseScripts && file.up.name == "plugin_release"// && file.up.up == "bin"
+      }
+    }
+    if(!onlyReleaseScripts) {
+      eprintln(s"Unpushed changes: ${repo}: ${unpushedCommits.out}")
+    }
+    ready = ready && onlyReleaseScripts
   }
   gitStaged = gitStaged && ready
 
@@ -66,7 +80,8 @@ getGitRepos(SIREUM_HOME / "hamr" / "codegen").foreach((repo: Os.Path) => {
 
 if(!gitStaged) { Os.exit(1) }
 
-
+proc"git -C ${CASE_Env_home} pull".at(CASE_Env_home).console.runCheck()
+val case_setup = CASE_Env_home / "case-setup.sh"
 
 // need to download the case-env version of sireum to make
 // sure it can be used to build the rest
@@ -88,11 +103,6 @@ println(st"""The build will use: SIREUM_INIT_V=${SIREUM_INIT_V}.  If the build f
 
 def assertResourceExists(p: ISZ[Os.Path]): Unit = { p.foreach((x: Os.Path) => assert(x.exists, s"${x} doesn't exist")) }
 assertResourceExists(ISZ(SIREUM_HOME, pluginDir, updateSiteDir, updateSiteHAMRDir, case_setup))
-
-def runGit(args: ISZ[String], path: Os.Path): String = {
-  val p = org.sireum.Os.proc(args).at(path).runCheck()
-  return ops.StringOps(p.out).trim
-}
 
 
 // clean codegen projects
