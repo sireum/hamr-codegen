@@ -132,9 +132,10 @@ val buildsbt = SIREUM_HOME / "hamr" / "codegen" / "arsit" / "resources" / "util"
   }
 }
 
-{
-  val hamr = SIREUM_HOME / "out" / "sireum-proyek" / "modules"
-  hamr.list.filter(f => f.isDir)
+{ // make sure arsit's ext lib macro are actually triggered
+  val arsitJson = SIREUM_HOME / "out" / "sireum-proyek" / "modules" / "hamr-arsit.sha3.json"
+  arsitJson.remove()
+  println(s"removed ${arsitJson}")
 }
 /*
 { // remove cli.json to make sure build stamp gets updated correctly
@@ -173,3 +174,15 @@ val sireumBuildstamp = ops.StringOps(Os.proc(ISZ(sireum.value)).run().out).split
 println(s"sireumVersion: ${sireumVersion}")
 println(s"sireumBuildstamp: ${sireumBuildstamp}")
 println(s"sireumTimestamp: ${sireumTimestamp}")
+
+{ // vagrant
+  val caseEnv = CASE_Env_home / "case-setup.sh"
+
+  val contents = ops.StringOps(caseEnv.read)
+  val pos = contents.stringIndexOf(": \"${SIREUM_V:=")
+  val orig = contents.substring(pos, contents.indexOfFrom('\n', pos))
+  val updated = contents.replaceAllLiterally(orig, s": \"$${SIREUM_V:=${sireumVersionFull}}\"")
+  caseEnv.writeOver(updated)
+
+  println(s"Updated ${caseEnv}")
+}
