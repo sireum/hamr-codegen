@@ -5,7 +5,7 @@ package org.sireum.hamr.codegen.common.symbols
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.properties.HamrProperties.HAMR__BIT_CODEC_MAX_SIZE
-import org.sireum.hamr.codegen.common.properties.{CaseSchedulingProperties, PropertyUtil}
+import org.sireum.hamr.codegen.common.properties.{CasePropertiesProperties, CaseSchedulingProperties, PropertyUtil}
 import org.sireum.hamr.codegen.common.resolvers.BTSResolver
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, BaseType, TypeUtil}
 import org.sireum.hamr.codegen.common.util.{CodeGenConfig, CodeGenPlatform, ExperimentalOptions}
@@ -512,21 +512,35 @@ object SymbolResolver {
           assert(symbolTable.componentMap.contains(process.boundProcessor.get), s"Unexpected: unable to resolve ${process.identifier}'s bound processor ${process.boundProcessor.get}")
 
           symbolTable.componentMap.get(process.boundProcessor.get).get match {
-            case apv: AadlVirtualProcessor =>
-              apv.boundProcessor match {
+            case avp: AadlVirtualProcessor =>
+              avp.boundProcessor match {
                 case Some(_parent) =>
                   symbolTable.componentMap.get(_parent) match {
-                    case Some(apv2: AadlVirtualProcessor) =>
-                      val mesg = s"Chained virtual processors is not supported.  Bind virtual processor ${apv.identifier} to an actual processor"
-                      reporter.error(apv2.component.identifier.pos, CommonUtil.toolName, mesg)
-                    case Some(ap2: AadlProcessor) => validProcessors = validProcessors :+ ap2 // ok, virtual processor is bound to an actual processor
+                    case Some(avp2: AadlVirtualProcessor) =>
+                      val mesg = s"Chained virtual processors is not supported.  Bind virtual processor ${avp.identifier} to an actual processor"
+                      reporter.error(avp2.component.identifier.pos, CommonUtil.toolName, mesg)
+                    case Some(ap2: AadlProcessor) =>
+
+                      PropertyUtil.getDiscreetPropertyValue(avp.component.properties, CasePropertiesProperties.PROP__CASE_PROPERTIES__OS) match {
+                        case Some(ir.ValueProp(os)) if os != "Linux" =>
+                          val mesg = s"Invalid OS ${os} for virtual processor ${avp.identifier}.  HAMR only supports Linux based virtual machines"
+                          reporter.error(avp.component.identifier.pos, CommonUtil.toolName, mesg)
+                        case _ =>
+                          val mesg = s"${CasePropertiesProperties.PROP__CASE_PROPERTIES__OS} not provided for virtual processor ${avp.identifier}.  Assuming Linux"
+                          reporter.warn(avp.component.identifier.pos, CommonUtil.toolName, mesg)
+                      }
+
+                      // ok, virtual processor is bound to an actual processor
+                      validProcessors = validProcessors :+ ap2
+
+
                     case _ =>
-                      val mesg = s"Unexpected: couldn't resolve the bound processor ${_parent} for virtual processor ${apv.identifier}. Please report"
-                      reporter.error(apv.component.identifier.pos, CommonUtil.toolName, mesg)
+                      val mesg = s"Unexpected: couldn't resolve the bound processor ${_parent} for virtual processor ${avp.identifier}. Please report"
+                      reporter.error(avp.component.identifier.pos, CommonUtil.toolName, mesg)
                   }
                 case _ =>
-                  val mesg = s"Virtual processor ${apv.identifier} must be bound to an actual processor since process ${process.identifier} is bound to it"
-                  reporter.error(apv.component.identifier.pos, CommonUtil.toolName, mesg)
+                  val mesg = s"Virtual processor ${avp.identifier} must be bound to an actual processor since process ${process.identifier} is bound to it"
+                  reporter.error(avp.component.identifier.pos, CommonUtil.toolName, mesg)
               }
             case x: AadlProcessor => validProcessors = validProcessors :+ x // ok, process is bound directly to an actual processor
             case x =>

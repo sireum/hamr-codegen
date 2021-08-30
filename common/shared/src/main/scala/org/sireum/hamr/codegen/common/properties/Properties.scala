@@ -66,4 +66,6 @@ object CaseSchedulingProperties {
 
 object CasePropertiesProperties {
   val PROP__CASE_PROPERTIES__COMPONENT_LANGUAGE: String = "CASE_Properties::Component_Language"
+
+  val PROP__CASE_PROPERTIES__OS: String = "CASE_Properties::OS"
 }
