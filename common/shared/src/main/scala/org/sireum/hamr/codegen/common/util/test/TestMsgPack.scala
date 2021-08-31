@@ -11,9 +11,11 @@ object TestMsgPack {
 
   object Constants {
 
-    val TestResource: Z = -32
+    val ITestResource: Z = -32
 
-    val TestResult: Z = -31
+    val ETestResource: Z = -31
+
+    val TestResult: Z = -30
 
   }
 
@@ -28,11 +30,24 @@ object TestMsgPack {
     def writer: MessagePack.Writer
 
     def writeTestResource(o: TestResource): Unit = {
-      writer.writeZ(Constants.TestResource)
+      o match {
+        case o: ITestResource => writeITestResource(o)
+        case o: ETestResource => writeETestResource(o)
+      }
+    }
+
+    def writeITestResource(o: ITestResource): Unit = {
+      writer.writeZ(Constants.ITestResource)
       writer.writeString(o.content)
       writer.writeB(o.overwrite)
       writer.writeB(o.makeExecutable)
       writer.writeB(o.makeCRLF)
+    }
+
+    def writeETestResource(o: ETestResource): Unit = {
+      writer.writeZ(Constants.ETestResource)
+      writer.writeString(o.content)
+      writer.writeB(o.symlink)
     }
 
     def writeTestResult(o: TestResult): Unit = {
@@ -61,19 +76,46 @@ object TestMsgPack {
     def reader: MessagePack.Reader
 
     def readTestResource(): TestResource = {
-      val r = readTestResourceT(F)
+      val i = reader.curr
+      val t = reader.readZ()
+      t match {
+        case Constants.ITestResource => val r = readITestResourceT(T); return r
+        case Constants.ETestResource => val r = readETestResourceT(T); return r
+        case _ =>
+          reader.error(i, s"$t is not a valid type of TestResource.")
+          val r = readETestResourceT(T)
+          return r
+      }
+    }
+
+    def readITestResource(): ITestResource = {
+      val r = readITestResourceT(F)
       return r
     }
 
-    def readTestResourceT(typeParsed: B): TestResource = {
+    def readITestResourceT(typeParsed: B): ITestResource = {
       if (!typeParsed) {
-        reader.expectZ(Constants.TestResource)
+        reader.expectZ(Constants.ITestResource)
       }
       val content = reader.readString()
       val overwrite = reader.readB()
       val makeExecutable = reader.readB()
       val makeCRLF = reader.readB()
-      return TestResource(content, overwrite, makeExecutable, makeCRLF)
+      return ITestResource(content, overwrite, makeExecutable, makeCRLF)
+    }
+
+    def readETestResource(): ETestResource = {
+      val r = readETestResourceT(F)
+      return r
+    }
+
+    def readETestResourceT(typeParsed: B): ETestResource = {
+      if (!typeParsed) {
+        reader.expectZ(Constants.ETestResource)
+      }
+      val content = reader.readString()
+      val symlink = reader.readB()
+      return ETestResource(content, symlink)
     }
 
     def readTestResult(): TestResult = {
@@ -113,6 +155,36 @@ object TestMsgPack {
       return r
     }
     val r = to(data, fTestResource _)
+    return r
+  }
+
+  def fromITestResource(o: ITestResource, pooling: B): ISZ[U8] = {
+    val w = Writer.Default(MessagePack.writer(pooling))
+    w.writeITestResource(o)
+    return w.result
+  }
+
+  def toITestResource(data: ISZ[U8]): Either[ITestResource, MessagePack.ErrorMsg] = {
+    def fITestResource(reader: Reader): ITestResource = {
+      val r = reader.readITestResource()
+      return r
+    }
+    val r = to(data, fITestResource _)
+    return r
+  }
+
+  def fromETestResource(o: ETestResource, pooling: B): ISZ[U8] = {
+    val w = Writer.Default(MessagePack.writer(pooling))
+    w.writeETestResource(o)
+    return w.result
+  }
+
+  def toETestResource(data: ISZ[U8]): Either[ETestResource, MessagePack.ErrorMsg] = {
+    def fETestResource(reader: Reader): ETestResource = {
+      val r = reader.readETestResource()
+      return r
+    }
+    val r = to(data, fETestResource _)
     return r
   }
 

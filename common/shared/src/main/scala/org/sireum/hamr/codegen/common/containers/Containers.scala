@@ -4,11 +4,19 @@ package org.sireum.hamr.codegen.common.containers
 
 import org.sireum._
 
-@datatype class Resource(path: String,
-                         content: ST,
-                         overwrite: B,
-                         makeExecutable: B,
-                         makeCRLF: B)
+@sig trait Resource {
+  def dstPath: String
+}
+
+@datatype class IResource(val dstPath: String,
+                          content: ST,
+                          overwrite: B,
+                          makeExecutable: B,
+                          makeCRLF: B) extends Resource
+
+@datatype class EResource(srcPath: String,
+                          val dstPath: String,
+                          symlink: B) extends Resource
 
 @datatype class TranspilerConfig(help: String,
                                  args: ISZ[String],

@@ -3,26 +3,26 @@
 package org.sireum.hamr.codegen.common.util
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.containers.Resource
+import org.sireum.hamr.codegen.common.containers.{EResource, IResource, Resource}
 
 object ResourceUtil {
 
   def createResource(path: String,
                      content: ST,
                      overwrite: B): Resource = {
-    return Resource(path, content, overwrite, F, F)
+    return IResource(path, content, overwrite, F, F)
   }
 
   def createExeResource(path: String,
                         content: ST,
                         overwrite: B): Resource = {
-    return Resource(path, content, overwrite, T, F)
+    return IResource(path, content, overwrite, T, F)
   }
 
   def createExeCrlfResource(path: String,
                         content: ST,
                         overwrite: B): Resource = {
-    return Resource(path, content, overwrite, T, T)
+    return IResource(path, content, overwrite, T, T)
   }
 
   def createStringResource(path: String,
@@ -35,5 +35,12 @@ object ResourceUtil {
                               content: String,
                               overwrite: B): Resource = {
     return createExeResource(path, st"${content}", overwrite)
+  }
+
+  def createExternalResource(srcPath: String, dstPath: String, symlink: B): Resource = {
+    return EResource(
+      srcPath = srcPath,
+      dstPath = dstPath,
+      symlink = symlink)
   }
 }

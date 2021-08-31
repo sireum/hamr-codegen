@@ -7,7 +7,7 @@ import org.sireum.hamr.arsit.Util.ARSIT_INSTRUCTIONS_MESSAGE_KIND
 import org.sireum.hamr.{act, arsit}
 import org.sireum.hamr.codegen.common.util.CodeGenPlatform._
 import org.sireum.hamr.codegen.common.DirectoryUtil
-import org.sireum.hamr.codegen.common.containers.{ProyekIveConfig, Resource, TranspilerConfig}
+import org.sireum.hamr.codegen.common.containers.{EResource, IResource, ProyekIveConfig, Resource, TranspilerConfig}
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.ModelUtil.ModelElements
@@ -284,24 +284,34 @@ object CodeGen {
 
   def writeOutResources(resources: IS[Z, Resource], reporter: Reporter): Unit = {
     for (r <- resources) {
-      val _p = Os.path(r.path).canon
+      val _p = Os.path(r.dstPath).canon
       val p = _p.canon
       assert(!p.exists || p.isFile)
       p.up.mkdirAll()
-      if (r.overwrite || !p.exists) {
-        val content: String = {
-          val lineSep = if(Os.isWin) "\r\n" else "\n" // ST render uses System.lineSep
-          val replace = if(r.makeCRLF) "\r\n" else "\n"
-          ops.StringOps(r.content.render).replaceAllLiterally(lineSep, replace)
-        }
-        p.writeOver(content)
-        reporter.info(None(), toolName, s"Wrote: ${p}")
-        if (r.makeExecutable) {
-          p.chmodAll("700")
-          reporter.info(None(), toolName, s"Made ${p} executable")
-        }
-      } else {
-        reporter.info(None(), toolName, s"File exists, will not overwrite: ${p}")
+      r match {
+        case i: IResource =>
+          if (i.overwrite || !p.exists) {
+            val content: String = {
+              val lineSep = if(Os.isWin) "\r\n" else "\n" // ST render uses System.lineSep
+              val replace = if(i.makeCRLF) "\r\n" else "\n"
+              ops.StringOps(i.content.render).replaceAllLiterally(lineSep, replace)
+            }
+            p.writeOver(content)
+            reporter.info(None(), toolName, s"Wrote: ${p}")
+            if (i.makeExecutable) {
+              p.chmodAll("700")
+              reporter.info(None(), toolName, s"Made ${p} executable")
+            }
+          } else {
+            reporter.info(None(), toolName, s"File exists, will not overwrite: ${p}")
+          }
+        case e: EResource =>
+          if(e.symlink) {
+            halt("sym linking not yet supported")
+          } else {
+            Os.path(e.srcPath).copyOverTo(p)
+            reporter.info(None(), toolName, s"Copied: ${e.srcPath} to ${p}")
+          }
       }
     }
   }
@@ -309,21 +319,33 @@ object CodeGen {
   def removeDuplicates(resources: ISZ[Resource], reporter: Reporter): ISZ[Resource] = {
     var m: HashSMap[String, Resource] = HashSMap.empty[String, Resource]()
     for(r <- resources) {
-      if(m.contains(r.path)) {
-        val entry = m.get(r.path).get
+      if(m.contains(r.dstPath)) {
+        val entry = m.get(r.dstPath).get
 
         // sanity checks
-        if(r.content.render != entry.content.render) {
-          reporter.warn(None(), toolName, s"content of ${r.path} not the same for duplicate entries")
-        }
-        if(r.overwrite != entry.overwrite) {
-          reporter.warn(None(), toolName, s"overwrite flag for ${r.path} not the same for duplicate entries")
-        }
-        if(r.makeExecutable != entry.makeExecutable) {
-          reporter.warn(None(), toolName, s"makeExecutable flag for ${r.path} not the same for duplicate entries")
+        (r, entry) match {
+          case ((ei: EResource, ci: EResource)) =>
+            if(ei.srcPath != ci.srcPath) {
+              reporter.warn(None(), toolName, s"srcPath for ${r.dstPath} not the same for duplicate entries")
+            }
+            if(ei.symlink != ci.symlink) {
+              reporter.warn(None(), toolName, s"symLink flag for ${r.dstPath} not the same for duplicate entries")
+            }
+          case ((ri: IResource, ci: IResource)) =>
+            if(ri.content.render != ci.content.render) {
+              reporter.warn(None(), toolName, s"content of ${r.dstPath} not the same for duplicate entries")
+            }
+            if(ri.overwrite != ci.overwrite) {
+              reporter.warn(None(), toolName, s"overwrite flag for ${r.dstPath} not the same for duplicate entries")
+            }
+            if(ri.makeExecutable != ci.makeExecutable) {
+              reporter.warn(None(), toolName, s"makeExecutable flag for ${r.dstPath} not the same for duplicate entries")
+            }
+
+          case _ => halt(s"Infeasible: resource types not the same")
         }
       } else {
-        m = m + (r.path ~> r)
+        m = m + (r.dstPath ~> r)
       }
     }
     return m.values

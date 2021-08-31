@@ -13,12 +13,27 @@ object TestJSON {
   object Printer {
 
     @pure def printTestResource(o: TestResource): ST = {
+      o match {
+        case o: ITestResource => return printITestResource(o)
+        case o: ETestResource => return printETestResource(o)
+      }
+    }
+
+    @pure def printITestResource(o: ITestResource): ST = {
       return printObject(ISZ(
-        ("type", st""""TestResource""""),
+        ("type", st""""ITestResource""""),
         ("content", printString(o.content)),
         ("overwrite", printB(o.overwrite)),
         ("makeExecutable", printB(o.makeExecutable)),
         ("makeCRLF", printB(o.makeCRLF))
+      ))
+    }
+
+    @pure def printETestResource(o: ETestResource): ST = {
+      return printObject(ISZ(
+        ("type", st""""ETestResource""""),
+        ("content", printString(o.content)),
+        ("symlink", printB(o.symlink))
       ))
     }
 
@@ -39,13 +54,22 @@ object TestJSON {
     }
 
     def parseTestResource(): TestResource = {
-      val r = parseTestResourceT(F)
+      val t = parser.parseObjectTypes(ISZ("ITestResource", "ETestResource"))
+      t.native match {
+        case "ITestResource" => val r = parseITestResourceT(T); return r
+        case "ETestResource" => val r = parseETestResourceT(T); return r
+        case _ => val r = parseETestResourceT(T); return r
+      }
+    }
+
+    def parseITestResource(): ITestResource = {
+      val r = parseITestResourceT(F)
       return r
     }
 
-    def parseTestResourceT(typeParsed: B): TestResource = {
+    def parseITestResourceT(typeParsed: B): ITestResource = {
       if (!typeParsed) {
-        parser.parseObjectType("TestResource")
+        parser.parseObjectType("ITestResource")
       }
       parser.parseObjectKey("content")
       val content = parser.parseString()
@@ -59,7 +83,25 @@ object TestJSON {
       parser.parseObjectKey("makeCRLF")
       val makeCRLF = parser.parseB()
       parser.parseObjectNext()
-      return TestResource(content, overwrite, makeExecutable, makeCRLF)
+      return ITestResource(content, overwrite, makeExecutable, makeCRLF)
+    }
+
+    def parseETestResource(): ETestResource = {
+      val r = parseETestResourceT(F)
+      return r
+    }
+
+    def parseETestResourceT(typeParsed: B): ETestResource = {
+      if (!typeParsed) {
+        parser.parseObjectType("ETestResource")
+      }
+      parser.parseObjectKey("content")
+      val content = parser.parseString()
+      parser.parseObjectNext()
+      parser.parseObjectKey("symlink")
+      val symlink = parser.parseB()
+      parser.parseObjectNext()
+      return ETestResource(content, symlink)
     }
 
     def parseTestResult(): TestResult = {
@@ -109,6 +151,42 @@ object TestJSON {
       return r
     }
     val r = to(s, fTestResource _)
+    return r
+  }
+
+  def fromITestResource(o: ITestResource, isCompact: B): String = {
+    val st = Printer.printITestResource(o)
+    if (isCompact) {
+      return st.renderCompact
+    } else {
+      return st.render
+    }
+  }
+
+  def toITestResource(s: String): Either[ITestResource, Json.ErrorMsg] = {
+    def fITestResource(parser: Parser): ITestResource = {
+      val r = parser.parseITestResource()
+      return r
+    }
+    val r = to(s, fITestResource _)
+    return r
+  }
+
+  def fromETestResource(o: ETestResource, isCompact: B): String = {
+    val st = Printer.printETestResource(o)
+    if (isCompact) {
+      return st.renderCompact
+    } else {
+      return st.render
+    }
+  }
+
+  def toETestResource(s: String): Either[ETestResource, Json.ErrorMsg] = {
+    def fETestResource(parser: Parser): ETestResource = {
+      val r = parser.parseETestResource()
+      return r
+    }
+    val r = to(s, fETestResource _)
     return r
   }
 

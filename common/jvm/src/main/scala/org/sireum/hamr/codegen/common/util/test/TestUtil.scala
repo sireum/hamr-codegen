@@ -3,7 +3,7 @@
 package org.sireum.hamr.codegen.common.util.test
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.containers.Resource
+import org.sireum.hamr.codegen.common.containers.{EResource, IResource, Resource}
 
 object TestUtil {
 
@@ -18,23 +18,40 @@ object TestUtil {
   def convertToTestResult(resources: ISZ[Resource], resultsDir: Os.Path): TestResult = {
     def normalize(t: TestResult): TestResult = {
       val nmap: ISZ[(String, TestResource)] = t.map.entries.map(m => {
-        val path: String =
+
+        val dstPath: String =
           if(Os.isWin) { ops.StringOps(m._1).replaceAllChars('\\', '/') }
           else { m._1 }
 
-        val contents: String = {
-          val lineSep: String = if (Os.isWin) "\r\n" else "\n" // ST render uses System.lineSep
-          val replace: String = if (m._2.makeCRLF) "\r\n" else "\n"
-          ops.StringOps(m._2.content).replaceAllLiterally(lineSep, replace)
-        }
-        (path, TestResource(content = contents, overwrite = m._2.overwrite, makeExecutable = m._2.makeExecutable, makeCRLF = m._2.makeCRLF))
+        m._2 match {
+          case i: ITestResource =>
+            val contents: String = {
+              val lineSep: String = if (Os.isWin) "\r\n" else "\n" // ST render uses System.lineSep
+              val replace: String = if (i.makeCRLF) "\r\n" else "\n"
+              ops.StringOps(i.content).replaceAllLiterally(lineSep, replace)
+            }
+            (dstPath, ITestResource(content = i.content, overwrite = i.overwrite, makeExecutable = i.makeExecutable, makeCRLF = i.makeCRLF))
+
+          case e: ETestResource =>
+            //val srcPath: String =
+            //  if(Os.isWin) { ops.StringOps(e.srcPath).replaceAllChars('\\', '/') }
+            //  else { e.srcPath }
+            (dstPath, ETestResource(content = e.content, e.symlink))
+          }
       })
       return TestResult(Map(nmap))
     }
 
     return normalize(TestResult(Map.empty[String, TestResource] ++ (resources.map((m: Resource) => {
-      val key = resultsDir.relativize(Os.path(m.path)).value
-      (key, TestResource(m.content.render, m.overwrite, m.makeExecutable, m.makeCRLF))
+      val key = resultsDir.relativize(Os.path(m.dstPath)).value
+      m match {
+        case i: IResource =>
+          (key, ITestResource (i.content.render, i.overwrite, i.makeExecutable, i.makeCRLF) )
+        case e: EResource =>
+          val src = resultsDir.relativize(Os.path(e.srcPath)).value
+          val dst = resultsDir.relativize(Os.path(e.dstPath)).value
+          (key, ETestResource (src, e.symlink))
+      }
     }))))
   }
 }
