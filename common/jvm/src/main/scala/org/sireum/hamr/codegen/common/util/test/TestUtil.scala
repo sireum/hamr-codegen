@@ -25,17 +25,14 @@ object TestUtil {
 
         m._2 match {
           case i: ITestResource =>
-            val contents: String = {
+            val content: String = {
               val lineSep: String = if (Os.isWin) "\r\n" else "\n" // ST render uses System.lineSep
               val replace: String = if (i.makeCRLF) "\r\n" else "\n"
               ops.StringOps(i.content).replaceAllLiterally(lineSep, replace)
             }
-            (dstPath, ITestResource(content = i.content, overwrite = i.overwrite, makeExecutable = i.makeExecutable, makeCRLF = i.makeCRLF))
+            (dstPath, ITestResource(content = content, overwrite = i.overwrite, makeExecutable = i.makeExecutable, makeCRLF = i.makeCRLF))
 
           case e: ETestResource =>
-            //val srcPath: String =
-            //  if(Os.isWin) { ops.StringOps(e.srcPath).replaceAllChars('\\', '/') }
-            //  else { e.srcPath }
             (dstPath, ETestResource(content = e.content, e.symlink))
           }
       })
