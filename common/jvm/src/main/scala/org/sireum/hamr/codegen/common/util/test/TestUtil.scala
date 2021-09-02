@@ -33,7 +33,7 @@ object TestUtil {
             (dstPath, ITestResource(content = content, overwrite = i.overwrite, makeExecutable = i.makeExecutable, makeCRLF = i.makeCRLF))
 
           case e: ETestResource =>
-            (dstPath, ETestResource(content = e.content, e.symlink))
+           (dstPath, ETestResource(content = e.content, symlink = e.symlink))
           }
       })
       return TestResult(Map(nmap))
@@ -41,7 +41,7 @@ object TestUtil {
 
     return normalize(TestResult(Map.empty[String, TestResource] ++ (resources.map((m: Resource) => {
       val key = resultsDir.relativize(Os.path(m.dstPath)).value
-      m match {
+      val results: (String, TestResource) = m match {
         case i: IResource =>
           (key, ITestResource (i.content.render, i.overwrite, i.makeExecutable, i.makeCRLF) )
         case e: EResource =>
@@ -49,6 +49,7 @@ object TestUtil {
           val dst = resultsDir.relativize(Os.path(e.dstPath)).value
           (key, ETestResource (src, e.symlink))
       }
+      results
     }))))
   }
 }
