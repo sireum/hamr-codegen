@@ -108,6 +108,8 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
                                      val subComponents: ISZ[AadlComponent],
                                      val connectionInstances: ISZ[ir.ConnectionInstance],
 
+                                     val dispatchProtocol: Dispatch_Protocol.Type,
+
                                      val boundProcessor: Option[String]) extends Processor
 
 

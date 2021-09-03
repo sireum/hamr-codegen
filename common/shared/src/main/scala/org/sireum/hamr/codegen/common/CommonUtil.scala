@@ -42,12 +42,12 @@ object CommonUtil {
     return f.category == ir.ComponentCategory.Data
   }
 
-  def isPeriodic(c: ir.Component): B = {
-    return PropertyUtil.getDispatchProtocol(c) == Some(Dispatch_Protocol.Periodic)
+  def isPeriodic(a: AadlThreadOrDevice): B = {
+    return a.dispatchProtocol == Dispatch_Protocol.Periodic
   }
 
-  def isSporadic(c: ir.Component): B = {
-    return PropertyUtil.getDispatchProtocol(c) == Some(Dispatch_Protocol.Sporadic)
+  def isSporadic(a: AadlThreadOrDevice): B = {
+    return a.dispatchProtocol == Dispatch_Protocol.Sporadic
   }
 
   def isAadlEventPort(f: ir.Feature): B = {

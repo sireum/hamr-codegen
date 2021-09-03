@@ -55,7 +55,7 @@ import org.sireum.hamr.ir.FeatureEnd
   }
 
   def hasPeriodicThreads(): B = {
-    return ops.ISZOps(getThreads()).exists(p => CommonUtil.isPeriodic(p.component))
+    return ops.ISZOps(getThreads()).exists(p => CommonUtil.isPeriodic(p))
   }
 
   def getThreadById(id: String): AadlThread = {
@@ -79,7 +79,7 @@ import org.sireum.hamr.ir.FeatureEnd
   }
 
   def getPeriodicThreads(): ISZ[AadlThread] = {
-    return ops.ISZOps(getThreads()).filter(p => CommonUtil.isPeriodic(p.component))
+    return ops.ISZOps(getThreads()).filter(p => CommonUtil.isPeriodic(p))
   }
 
   def getProcess(id: String): AadlProcess = {

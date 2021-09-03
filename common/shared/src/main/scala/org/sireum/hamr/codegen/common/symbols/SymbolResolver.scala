@@ -250,10 +250,19 @@ object SymbolResolver {
           val dispatchProtocol: Dispatch_Protocol.Type = PropertyUtil.getDispatchProtocol(c) match {
             case Some(x) => x
             case _ =>
+              val (protocol, mesg) : (Dispatch_Protocol.Type, String) =c.category match {
+                case ir.ComponentCategory.Thread =>
+                  val mesg = s"Dispatch Protocol not specified for thread ${identifier}, assuming Sporadic"
+                  (Dispatch_Protocol.Sporadic, mesg)
+                case ir.ComponentCategory.Device =>
+                  val mesg = s"Dispatch Protocol not specified for device ${identifier}, assuming Periodic"
+                  (Dispatch_Protocol.Periodic, mesg)
+                case _ =>
+                  halt("Infeasible")
+              }
               // TODO should be handled by a rewriter -- or better yet, just reject the model
-              val mesg = s"Dispatch Protocol not specified for ${identifier}, assuming Sporadic"
               reporter.warn(c.identifier.pos, CommonUtil.toolName, mesg)
-              Dispatch_Protocol.Sporadic
+              protocol
           }
 
           val period = PropertyUtil.getPeriod(c)
@@ -346,6 +355,16 @@ object SymbolResolver {
 
           val boundProcessor: Option[String] = PropertyUtil.getActualProcessorBinding(c)
 
+          val dispatchProtocol: Dispatch_Protocol.Type = PropertyUtil.getDispatchProtocol(c) match {
+            case Some(Dispatch_Protocol.Periodic) => Dispatch_Protocol.Periodic
+            case Some(x) =>
+              val mesg = s"Dispatch Protocol for virtual processor ${identifier} must be Periodic instead of ${x}"
+              reporter.error(c.identifier.pos, CommonUtil.toolName, mesg)
+              x
+            case _ =>
+              Dispatch_Protocol.Periodic
+          }
+
           AadlVirtualProcessor(
             component = c,
             parent = None(),
@@ -353,6 +372,7 @@ object SymbolResolver {
             identifier = identifier,
             subComponents = ISZ(),
             connectionInstances = c.connectionInstances,
+            dispatchProtocol = dispatchProtocol,
             boundProcessor = boundProcessor
           )
         }
