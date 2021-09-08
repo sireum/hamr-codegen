@@ -57,6 +57,7 @@ for(releaseDir <- releases) {
 
   var previousVersion: String = ""
   for(featureUpdateDir <- features) {
+    println(s"Processing ${featureUpdateDir}")
 
     val feature: Feature = parse(osate_plugin_dir / s"${featureUpdateDir.name}.feature")
 
@@ -72,7 +73,7 @@ for(releaseDir <- releases) {
     println(s"Wrote: ${(featureUpdateDir / "site.xml").value}")
 
     if(previousVersion == "") { previousVersion = pluginVersion}
-    else { assert (previousVersion == pluginVersion)}
+    else { assert (previousVersion == pluginVersion, s"${previousVersion} vs ${pluginVersion} for ${featuresDir}")}
   }
 
   val (a,b): (ST, ST) = composite(features.map(m => m.name))

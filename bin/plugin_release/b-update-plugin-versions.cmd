@@ -97,7 +97,7 @@ def updateFeatureXml(id: String, addImport: B): Unit ={
   replaceLines(mods, featureXML)
 }
 
-ops.ISZOps(ids).tail.foreach((id: String) => updateFeatureXml(s"${id}.feature", id != "org.sireum.aadl.osate"))
+ids.foreach((id: String) => updateFeatureXml(s"${id}.feature", id != "org.sireum.aadl.osate"))
 
 
 val releaseDir = updateSiteDir / s"1.0.${sireumTimestamp}.${sireumCommit}"
