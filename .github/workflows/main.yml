@@ -80,10 +80,6 @@ jobs:
         uses: actions/checkout@v2
         with:
           submodules: recursive
-      - name: Remove broken bash
-        shell: cmd
-        run: |
-          rm.exe "C:/WINDOWS/system32/bash.EXE"
       - name: Install Cygwin
         shell: cmd
         run: |
