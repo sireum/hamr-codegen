@@ -50,4 +50,8 @@ object StackFrameTemplate {
     val ret: ST = st"""DeclNewStackFrame(${_caller}, "${uri}", "${owner}", "${name}", ${line})"""
     return ret
   }
+
+  def sfAssert(cond: String, mesg: String): ST = {
+    return st"""sfAssert(${cond}, "${mesg}")"""
+  }
 }
