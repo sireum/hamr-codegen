@@ -37,6 +37,8 @@ jobs:
         run: |
           export COURSIER_CACHE=$GITHUB_WORKSPACE/cache/coursier
           cd $GITHUB_WORKSPACE
+          export HamrTestModes=transpile,compile,generated_unit_tests
+          echo "HamrTestModes=${HamrTestModes}"
           bin/build.cmd test
 
   build-mac:
@@ -71,6 +73,8 @@ jobs:
         run: |
           export COURSIER_CACHE=$GITHUB_WORKSPACE/cache/coursier
           cd $GITHUB_WORKSPACE
+          export HamrTestModes=transpile,compile,generated_unit_tests
+          echo "HamrTestModes=${HamrTestModes}"
           bin/build.cmd test
 
   build-windows:
@@ -115,4 +119,6 @@ jobs:
           set CC=x86_64-w64-mingw32-gcc.exe
           set CXX=x86_64-w64-mingw32-c++.exe
           cd /d %GITHUB_WORKSPACE%
+          set HamrTestModes=transpile,compile,generated_unit_tests
+          echo HamrTestModes=%HamrTestModes%
           bin\build.cmd test
