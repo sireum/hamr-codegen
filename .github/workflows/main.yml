@@ -35,11 +35,12 @@ jobs:
           key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-coursier
       - name: Test
         run: |
-          which tar
+          which tar || true
           tar --version
-          which bsdtar
-          bsdtar --version
-          which unzip
+          which bsdtar || true
+          bsdtar --version || true
+          which unzip || true
+          unzip --version || true
           export COURSIER_CACHE=$GITHUB_WORKSPACE/cache/coursier
           cd $GITHUB_WORKSPACE
           export HamrTestModes=transpile,compile,generated_unit_tests
@@ -76,6 +77,12 @@ jobs:
           key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-coursier
       - name: Test
         run: |
+          which tar || true
+          tar --version
+          which bsdtar || true
+          bsdtar --version || true
+          which unzip || true
+          unzip --version || true
           export COURSIER_CACHE=$GITHUB_WORKSPACE/cache/coursier
           cd $GITHUB_WORKSPACE
           export HamrTestModes=transpile,compile,generated_unit_tests
