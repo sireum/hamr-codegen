@@ -35,6 +35,11 @@ jobs:
           key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-coursier
       - name: Test
         run: |
+          which tar
+          tar --version
+          which bsdtar
+          bsdtar --version
+          which unzip
           export COURSIER_CACHE=$GITHUB_WORKSPACE/cache/coursier
           cd $GITHUB_WORKSPACE
           export HamrTestModes=transpile,compile,generated_unit_tests
