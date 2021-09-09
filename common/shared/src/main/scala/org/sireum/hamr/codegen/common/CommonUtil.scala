@@ -219,6 +219,10 @@ object CommonUtil {
     return s"${componentSingletonType}_TestApi"
   }
 
+  def cArchInstanceName: String = {
+    return s"${basePackage}_Arch_${instanceName}"
+  }
+
   def cPackageName: String = {
     return st"${(path, "_")}".render
   }

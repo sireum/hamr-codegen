@@ -33,14 +33,6 @@ jobs:
         with:
           path: cache/coursier
           key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-coursier
-      - name: Version
-        run: |
-          which tar || true
-          tar --version
-          which bsdtar || true
-          bsdtar --version || true
-          which unzip || true
-          unzip --version || true          
       - name: Test
         run: |
           export COURSIER_CACHE=$GITHUB_WORKSPACE/cache/coursier
@@ -77,14 +69,6 @@ jobs:
         with:
           path: cache/coursier
           key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-coursier
-      - name: Versions
-        run: |
-          which tar || true
-          tar --version
-          which bsdtar || true
-          bsdtar --version || true
-          which unzip || true
-          unzip --version || true
       - name: Test
         run: |
           export COURSIER_CACHE=$GITHUB_WORKSPACE/cache/coursier
@@ -127,6 +111,9 @@ jobs:
         with:
           path: cache\coursier
           key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-coursier
+      - name: Check LongPathsEnabled
+        run: |
+          (Get-ItemProperty "HKLM:System\CurrentControlSet\Control\FileSystem").LongPathsEnabled
       - name: Test
         shell: cmd
         run: |
