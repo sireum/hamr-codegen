@@ -34,8 +34,8 @@ import org.sireum._
 
 object MTransformer {
 
-  @record class PreResult[T](continu: B,
-                             resultOpt: MOption[T])
+  @record class PreResult[T](val continu: B,
+                             val resultOpt: MOption[T])
 
   val PreResultBTSState: PreResult[BTSState] = PreResult(T, MNone())
 
@@ -101,9 +101,29 @@ object MTransformer {
 
   val PostResultAadlSubprogram: MOption[AadlSubprogram] = MNone()
 
-  val PreResultAadlTODOComponent: PreResult[AadlTODOComponent] = PreResult(T, MNone())
+  val PreResultAadlSubprogramGroup: PreResult[AadlSubprogramGroup] = PreResult(T, MNone())
 
-  val PostResultAadlTODOComponent: MOption[AadlTODOComponent] = MNone()
+  val PostResultAadlSubprogramGroup: MOption[AadlSubprogramGroup] = MNone()
+
+  val PreResultAadlData: PreResult[AadlData] = PreResult(T, MNone())
+
+  val PostResultAadlData: MOption[AadlData] = MNone()
+
+  val PreResultAadlMemory: PreResult[AadlMemory] = PreResult(T, MNone())
+
+  val PostResultAadlMemory: MOption[AadlMemory] = MNone()
+
+  val PreResultAadlBus: PreResult[AadlBus] = PreResult(T, MNone())
+
+  val PostResultAadlBus: MOption[AadlBus] = MNone()
+
+  val PreResultAadlVirtualBus: PreResult[AadlVirtualBus] = PreResult(T, MNone())
+
+  val PostResultAadlVirtualBus: MOption[AadlVirtualBus] = MNone()
+
+  val PreResultAadlAbstract: PreResult[AadlAbstract] = PreResult(T, MNone())
+
+  val PostResultAadlAbstract: MOption[AadlAbstract] = MNone()
 
   val PreResultAadlEventPort: PreResult[AadlEventPort] = PreResult(T, MNone())
 
@@ -120,6 +140,22 @@ object MTransformer {
   val PreResultAadlParameter: PreResult[AadlParameter] = PreResult(T, MNone())
 
   val PostResultAadlParameter: MOption[AadlParameter] = MNone()
+
+  val PreResultAadlBusAccess: PreResult[AadlBusAccess] = PreResult(T, MNone())
+
+  val PostResultAadlBusAccess: MOption[AadlBusAccess] = MNone()
+
+  val PreResultAadlDataAccess: PreResult[AadlDataAccess] = PreResult(T, MNone())
+
+  val PostResultAadlDataAccess: MOption[AadlDataAccess] = MNone()
+
+  val PreResultAadlSubprogramAccess: PreResult[AadlSubprogramAccess] = PreResult(T, MNone())
+
+  val PostResultAadlSubprogramAccess: MOption[AadlSubprogramAccess] = MNone()
+
+  val PreResultAadlSubprogramGroupAccess: PreResult[AadlSubprogramGroupAccess] = PreResult(T, MNone())
+
+  val PostResultAadlSubprogramGroupAccess: MOption[AadlSubprogramGroupAccess] = MNone()
 
   val PreResultAadlFeatureTODO: PreResult[AadlFeatureTODO] = PreResult(T, MNone())
 
@@ -266,8 +302,43 @@ import MTransformer._
          case PreResult(continu, _) => PreResult(continu, MNone[AadlSymbol]())
         }
         return r
-      case o: AadlTODOComponent =>
-        val r: PreResult[AadlSymbol] = preAadlTODOComponent(o) match {
+      case o: AadlSubprogramGroup =>
+        val r: PreResult[AadlSymbol] = preAadlSubprogramGroup(o) match {
+         case PreResult(continu, MSome(r: AadlSymbol)) => PreResult(continu, MSome[AadlSymbol](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlSymbol")
+         case PreResult(continu, _) => PreResult(continu, MNone[AadlSymbol]())
+        }
+        return r
+      case o: AadlData =>
+        val r: PreResult[AadlSymbol] = preAadlData(o) match {
+         case PreResult(continu, MSome(r: AadlSymbol)) => PreResult(continu, MSome[AadlSymbol](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlSymbol")
+         case PreResult(continu, _) => PreResult(continu, MNone[AadlSymbol]())
+        }
+        return r
+      case o: AadlMemory =>
+        val r: PreResult[AadlSymbol] = preAadlMemory(o) match {
+         case PreResult(continu, MSome(r: AadlSymbol)) => PreResult(continu, MSome[AadlSymbol](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlSymbol")
+         case PreResult(continu, _) => PreResult(continu, MNone[AadlSymbol]())
+        }
+        return r
+      case o: AadlBus =>
+        val r: PreResult[AadlSymbol] = preAadlBus(o) match {
+         case PreResult(continu, MSome(r: AadlSymbol)) => PreResult(continu, MSome[AadlSymbol](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlSymbol")
+         case PreResult(continu, _) => PreResult(continu, MNone[AadlSymbol]())
+        }
+        return r
+      case o: AadlVirtualBus =>
+        val r: PreResult[AadlSymbol] = preAadlVirtualBus(o) match {
+         case PreResult(continu, MSome(r: AadlSymbol)) => PreResult(continu, MSome[AadlSymbol](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlSymbol")
+         case PreResult(continu, _) => PreResult(continu, MNone[AadlSymbol]())
+        }
+        return r
+      case o: AadlAbstract =>
+        val r: PreResult[AadlSymbol] = preAadlAbstract(o) match {
          case PreResult(continu, MSome(r: AadlSymbol)) => PreResult(continu, MSome[AadlSymbol](r))
          case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlSymbol")
          case PreResult(continu, _) => PreResult(continu, MNone[AadlSymbol]())
@@ -296,6 +367,34 @@ import MTransformer._
         return r
       case o: AadlParameter =>
         val r: PreResult[AadlSymbol] = preAadlParameter(o) match {
+         case PreResult(continu, MSome(r: AadlSymbol)) => PreResult(continu, MSome[AadlSymbol](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlSymbol")
+         case PreResult(continu, _) => PreResult(continu, MNone[AadlSymbol]())
+        }
+        return r
+      case o: AadlBusAccess =>
+        val r: PreResult[AadlSymbol] = preAadlBusAccess(o) match {
+         case PreResult(continu, MSome(r: AadlSymbol)) => PreResult(continu, MSome[AadlSymbol](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlSymbol")
+         case PreResult(continu, _) => PreResult(continu, MNone[AadlSymbol]())
+        }
+        return r
+      case o: AadlDataAccess =>
+        val r: PreResult[AadlSymbol] = preAadlDataAccess(o) match {
+         case PreResult(continu, MSome(r: AadlSymbol)) => PreResult(continu, MSome[AadlSymbol](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlSymbol")
+         case PreResult(continu, _) => PreResult(continu, MNone[AadlSymbol]())
+        }
+        return r
+      case o: AadlSubprogramAccess =>
+        val r: PreResult[AadlSymbol] = preAadlSubprogramAccess(o) match {
+         case PreResult(continu, MSome(r: AadlSymbol)) => PreResult(continu, MSome[AadlSymbol](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlSymbol")
+         case PreResult(continu, _) => PreResult(continu, MNone[AadlSymbol]())
+        }
+        return r
+      case o: AadlSubprogramGroupAccess =>
+        val r: PreResult[AadlSymbol] = preAadlSubprogramGroupAccess(o) match {
          case PreResult(continu, MSome(r: AadlSymbol)) => PreResult(continu, MSome[AadlSymbol](r))
          case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlSymbol")
          case PreResult(continu, _) => PreResult(continu, MNone[AadlSymbol]())
@@ -383,8 +482,43 @@ import MTransformer._
          case PreResult(continu, _) => PreResult(continu, MNone[AadlComponent]())
         }
         return r
-      case o: AadlTODOComponent =>
-        val r: PreResult[AadlComponent] = preAadlTODOComponent(o) match {
+      case o: AadlSubprogramGroup =>
+        val r: PreResult[AadlComponent] = preAadlSubprogramGroup(o) match {
+         case PreResult(continu, MSome(r: AadlComponent)) => PreResult(continu, MSome[AadlComponent](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlComponent")
+         case PreResult(continu, _) => PreResult(continu, MNone[AadlComponent]())
+        }
+        return r
+      case o: AadlData =>
+        val r: PreResult[AadlComponent] = preAadlData(o) match {
+         case PreResult(continu, MSome(r: AadlComponent)) => PreResult(continu, MSome[AadlComponent](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlComponent")
+         case PreResult(continu, _) => PreResult(continu, MNone[AadlComponent]())
+        }
+        return r
+      case o: AadlMemory =>
+        val r: PreResult[AadlComponent] = preAadlMemory(o) match {
+         case PreResult(continu, MSome(r: AadlComponent)) => PreResult(continu, MSome[AadlComponent](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlComponent")
+         case PreResult(continu, _) => PreResult(continu, MNone[AadlComponent]())
+        }
+        return r
+      case o: AadlBus =>
+        val r: PreResult[AadlComponent] = preAadlBus(o) match {
+         case PreResult(continu, MSome(r: AadlComponent)) => PreResult(continu, MSome[AadlComponent](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlComponent")
+         case PreResult(continu, _) => PreResult(continu, MNone[AadlComponent]())
+        }
+        return r
+      case o: AadlVirtualBus =>
+        val r: PreResult[AadlComponent] = preAadlVirtualBus(o) match {
+         case PreResult(continu, MSome(r: AadlComponent)) => PreResult(continu, MSome[AadlComponent](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlComponent")
+         case PreResult(continu, _) => PreResult(continu, MNone[AadlComponent]())
+        }
+        return r
+      case o: AadlAbstract =>
+        val r: PreResult[AadlComponent] = preAadlAbstract(o) match {
          case PreResult(continu, MSome(r: AadlComponent)) => PreResult(continu, MSome[AadlComponent](r))
          case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlComponent")
          case PreResult(continu, _) => PreResult(continu, MNone[AadlComponent]())
@@ -463,8 +597,28 @@ import MTransformer._
     return PreResultAadlSubprogram
   }
 
-  def preAadlTODOComponent(o: AadlTODOComponent): PreResult[AadlTODOComponent] = {
-    return PreResultAadlTODOComponent
+  def preAadlSubprogramGroup(o: AadlSubprogramGroup): PreResult[AadlSubprogramGroup] = {
+    return PreResultAadlSubprogramGroup
+  }
+
+  def preAadlData(o: AadlData): PreResult[AadlData] = {
+    return PreResultAadlData
+  }
+
+  def preAadlMemory(o: AadlMemory): PreResult[AadlMemory] = {
+    return PreResultAadlMemory
+  }
+
+  def preAadlBus(o: AadlBus): PreResult[AadlBus] = {
+    return PreResultAadlBus
+  }
+
+  def preAadlVirtualBus(o: AadlVirtualBus): PreResult[AadlVirtualBus] = {
+    return PreResultAadlVirtualBus
+  }
+
+  def preAadlAbstract(o: AadlAbstract): PreResult[AadlAbstract] = {
+    return PreResultAadlAbstract
   }
 
   def preAadlFeature(o: AadlFeature): PreResult[AadlFeature] = {
@@ -497,11 +651,72 @@ import MTransformer._
          case PreResult(continu, _) => PreResult(continu, MNone[AadlFeature]())
         }
         return r
+      case o: AadlBusAccess =>
+        val r: PreResult[AadlFeature] = preAadlBusAccess(o) match {
+         case PreResult(continu, MSome(r: AadlFeature)) => PreResult(continu, MSome[AadlFeature](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlFeature")
+         case PreResult(continu, _) => PreResult(continu, MNone[AadlFeature]())
+        }
+        return r
+      case o: AadlDataAccess =>
+        val r: PreResult[AadlFeature] = preAadlDataAccess(o) match {
+         case PreResult(continu, MSome(r: AadlFeature)) => PreResult(continu, MSome[AadlFeature](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlFeature")
+         case PreResult(continu, _) => PreResult(continu, MNone[AadlFeature]())
+        }
+        return r
+      case o: AadlSubprogramAccess =>
+        val r: PreResult[AadlFeature] = preAadlSubprogramAccess(o) match {
+         case PreResult(continu, MSome(r: AadlFeature)) => PreResult(continu, MSome[AadlFeature](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlFeature")
+         case PreResult(continu, _) => PreResult(continu, MNone[AadlFeature]())
+        }
+        return r
+      case o: AadlSubprogramGroupAccess =>
+        val r: PreResult[AadlFeature] = preAadlSubprogramGroupAccess(o) match {
+         case PreResult(continu, MSome(r: AadlFeature)) => PreResult(continu, MSome[AadlFeature](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlFeature")
+         case PreResult(continu, _) => PreResult(continu, MNone[AadlFeature]())
+        }
+        return r
       case o: AadlFeatureTODO =>
         val r: PreResult[AadlFeature] = preAadlFeatureTODO(o) match {
          case PreResult(continu, MSome(r: AadlFeature)) => PreResult(continu, MSome[AadlFeature](r))
          case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlFeature")
          case PreResult(continu, _) => PreResult(continu, MNone[AadlFeature]())
+        }
+        return r
+    }
+  }
+
+  def preAadlDirectedFeature(o: AadlDirectedFeature): PreResult[AadlDirectedFeature] = {
+    o match {
+      case o: AadlEventPort =>
+        val r: PreResult[AadlDirectedFeature] = preAadlEventPort(o) match {
+         case PreResult(continu, MSome(r: AadlDirectedFeature)) => PreResult(continu, MSome[AadlDirectedFeature](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlDirectedFeature")
+         case PreResult(continu, _) => PreResult(continu, MNone[AadlDirectedFeature]())
+        }
+        return r
+      case o: AadlEventDataPort =>
+        val r: PreResult[AadlDirectedFeature] = preAadlEventDataPort(o) match {
+         case PreResult(continu, MSome(r: AadlDirectedFeature)) => PreResult(continu, MSome[AadlDirectedFeature](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlDirectedFeature")
+         case PreResult(continu, _) => PreResult(continu, MNone[AadlDirectedFeature]())
+        }
+        return r
+      case o: AadlDataPort =>
+        val r: PreResult[AadlDirectedFeature] = preAadlDataPort(o) match {
+         case PreResult(continu, MSome(r: AadlDirectedFeature)) => PreResult(continu, MSome[AadlDirectedFeature](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlDirectedFeature")
+         case PreResult(continu, _) => PreResult(continu, MNone[AadlDirectedFeature]())
+        }
+        return r
+      case o: AadlParameter =>
+        val r: PreResult[AadlDirectedFeature] = preAadlParameter(o) match {
+         case PreResult(continu, MSome(r: AadlDirectedFeature)) => PreResult(continu, MSome[AadlDirectedFeature](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlDirectedFeature")
+         case PreResult(continu, _) => PreResult(continu, MNone[AadlDirectedFeature]())
         }
         return r
     }
@@ -566,6 +781,55 @@ import MTransformer._
 
   def preAadlParameter(o: AadlParameter): PreResult[AadlParameter] = {
     return PreResultAadlParameter
+  }
+
+  def preAadlAccessFeature(o: AadlAccessFeature): PreResult[AadlAccessFeature] = {
+    o match {
+      case o: AadlBusAccess =>
+        val r: PreResult[AadlAccessFeature] = preAadlBusAccess(o) match {
+         case PreResult(continu, MSome(r: AadlAccessFeature)) => PreResult(continu, MSome[AadlAccessFeature](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlAccessFeature")
+         case PreResult(continu, _) => PreResult(continu, MNone[AadlAccessFeature]())
+        }
+        return r
+      case o: AadlDataAccess =>
+        val r: PreResult[AadlAccessFeature] = preAadlDataAccess(o) match {
+         case PreResult(continu, MSome(r: AadlAccessFeature)) => PreResult(continu, MSome[AadlAccessFeature](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlAccessFeature")
+         case PreResult(continu, _) => PreResult(continu, MNone[AadlAccessFeature]())
+        }
+        return r
+      case o: AadlSubprogramAccess =>
+        val r: PreResult[AadlAccessFeature] = preAadlSubprogramAccess(o) match {
+         case PreResult(continu, MSome(r: AadlAccessFeature)) => PreResult(continu, MSome[AadlAccessFeature](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlAccessFeature")
+         case PreResult(continu, _) => PreResult(continu, MNone[AadlAccessFeature]())
+        }
+        return r
+      case o: AadlSubprogramGroupAccess =>
+        val r: PreResult[AadlAccessFeature] = preAadlSubprogramGroupAccess(o) match {
+         case PreResult(continu, MSome(r: AadlAccessFeature)) => PreResult(continu, MSome[AadlAccessFeature](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlAccessFeature")
+         case PreResult(continu, _) => PreResult(continu, MNone[AadlAccessFeature]())
+        }
+        return r
+    }
+  }
+
+  def preAadlBusAccess(o: AadlBusAccess): PreResult[AadlBusAccess] = {
+    return PreResultAadlBusAccess
+  }
+
+  def preAadlDataAccess(o: AadlDataAccess): PreResult[AadlDataAccess] = {
+    return PreResultAadlDataAccess
+  }
+
+  def preAadlSubprogramAccess(o: AadlSubprogramAccess): PreResult[AadlSubprogramAccess] = {
+    return PreResultAadlSubprogramAccess
+  }
+
+  def preAadlSubprogramGroupAccess(o: AadlSubprogramGroupAccess): PreResult[AadlSubprogramGroupAccess] = {
+    return PreResultAadlSubprogramGroupAccess
   }
 
   def preAadlFeatureTODO(o: AadlFeatureTODO): PreResult[AadlFeatureTODO] = {
@@ -745,8 +1009,43 @@ import MTransformer._
          case _ => MNone[AadlSymbol]()
         }
         return r
-      case o: AadlTODOComponent =>
-        val r: MOption[AadlSymbol] = postAadlTODOComponent(o) match {
+      case o: AadlSubprogramGroup =>
+        val r: MOption[AadlSymbol] = postAadlSubprogramGroup(o) match {
+         case MSome(result: AadlSymbol) => MSome[AadlSymbol](result)
+         case MSome(_) => halt("Can only produce object of type AadlSymbol")
+         case _ => MNone[AadlSymbol]()
+        }
+        return r
+      case o: AadlData =>
+        val r: MOption[AadlSymbol] = postAadlData(o) match {
+         case MSome(result: AadlSymbol) => MSome[AadlSymbol](result)
+         case MSome(_) => halt("Can only produce object of type AadlSymbol")
+         case _ => MNone[AadlSymbol]()
+        }
+        return r
+      case o: AadlMemory =>
+        val r: MOption[AadlSymbol] = postAadlMemory(o) match {
+         case MSome(result: AadlSymbol) => MSome[AadlSymbol](result)
+         case MSome(_) => halt("Can only produce object of type AadlSymbol")
+         case _ => MNone[AadlSymbol]()
+        }
+        return r
+      case o: AadlBus =>
+        val r: MOption[AadlSymbol] = postAadlBus(o) match {
+         case MSome(result: AadlSymbol) => MSome[AadlSymbol](result)
+         case MSome(_) => halt("Can only produce object of type AadlSymbol")
+         case _ => MNone[AadlSymbol]()
+        }
+        return r
+      case o: AadlVirtualBus =>
+        val r: MOption[AadlSymbol] = postAadlVirtualBus(o) match {
+         case MSome(result: AadlSymbol) => MSome[AadlSymbol](result)
+         case MSome(_) => halt("Can only produce object of type AadlSymbol")
+         case _ => MNone[AadlSymbol]()
+        }
+        return r
+      case o: AadlAbstract =>
+        val r: MOption[AadlSymbol] = postAadlAbstract(o) match {
          case MSome(result: AadlSymbol) => MSome[AadlSymbol](result)
          case MSome(_) => halt("Can only produce object of type AadlSymbol")
          case _ => MNone[AadlSymbol]()
@@ -775,6 +1074,34 @@ import MTransformer._
         return r
       case o: AadlParameter =>
         val r: MOption[AadlSymbol] = postAadlParameter(o) match {
+         case MSome(result: AadlSymbol) => MSome[AadlSymbol](result)
+         case MSome(_) => halt("Can only produce object of type AadlSymbol")
+         case _ => MNone[AadlSymbol]()
+        }
+        return r
+      case o: AadlBusAccess =>
+        val r: MOption[AadlSymbol] = postAadlBusAccess(o) match {
+         case MSome(result: AadlSymbol) => MSome[AadlSymbol](result)
+         case MSome(_) => halt("Can only produce object of type AadlSymbol")
+         case _ => MNone[AadlSymbol]()
+        }
+        return r
+      case o: AadlDataAccess =>
+        val r: MOption[AadlSymbol] = postAadlDataAccess(o) match {
+         case MSome(result: AadlSymbol) => MSome[AadlSymbol](result)
+         case MSome(_) => halt("Can only produce object of type AadlSymbol")
+         case _ => MNone[AadlSymbol]()
+        }
+        return r
+      case o: AadlSubprogramAccess =>
+        val r: MOption[AadlSymbol] = postAadlSubprogramAccess(o) match {
+         case MSome(result: AadlSymbol) => MSome[AadlSymbol](result)
+         case MSome(_) => halt("Can only produce object of type AadlSymbol")
+         case _ => MNone[AadlSymbol]()
+        }
+        return r
+      case o: AadlSubprogramGroupAccess =>
+        val r: MOption[AadlSymbol] = postAadlSubprogramGroupAccess(o) match {
          case MSome(result: AadlSymbol) => MSome[AadlSymbol](result)
          case MSome(_) => halt("Can only produce object of type AadlSymbol")
          case _ => MNone[AadlSymbol]()
@@ -862,8 +1189,43 @@ import MTransformer._
          case _ => MNone[AadlComponent]()
         }
         return r
-      case o: AadlTODOComponent =>
-        val r: MOption[AadlComponent] = postAadlTODOComponent(o) match {
+      case o: AadlSubprogramGroup =>
+        val r: MOption[AadlComponent] = postAadlSubprogramGroup(o) match {
+         case MSome(result: AadlComponent) => MSome[AadlComponent](result)
+         case MSome(_) => halt("Can only produce object of type AadlComponent")
+         case _ => MNone[AadlComponent]()
+        }
+        return r
+      case o: AadlData =>
+        val r: MOption[AadlComponent] = postAadlData(o) match {
+         case MSome(result: AadlComponent) => MSome[AadlComponent](result)
+         case MSome(_) => halt("Can only produce object of type AadlComponent")
+         case _ => MNone[AadlComponent]()
+        }
+        return r
+      case o: AadlMemory =>
+        val r: MOption[AadlComponent] = postAadlMemory(o) match {
+         case MSome(result: AadlComponent) => MSome[AadlComponent](result)
+         case MSome(_) => halt("Can only produce object of type AadlComponent")
+         case _ => MNone[AadlComponent]()
+        }
+        return r
+      case o: AadlBus =>
+        val r: MOption[AadlComponent] = postAadlBus(o) match {
+         case MSome(result: AadlComponent) => MSome[AadlComponent](result)
+         case MSome(_) => halt("Can only produce object of type AadlComponent")
+         case _ => MNone[AadlComponent]()
+        }
+        return r
+      case o: AadlVirtualBus =>
+        val r: MOption[AadlComponent] = postAadlVirtualBus(o) match {
+         case MSome(result: AadlComponent) => MSome[AadlComponent](result)
+         case MSome(_) => halt("Can only produce object of type AadlComponent")
+         case _ => MNone[AadlComponent]()
+        }
+        return r
+      case o: AadlAbstract =>
+        val r: MOption[AadlComponent] = postAadlAbstract(o) match {
          case MSome(result: AadlComponent) => MSome[AadlComponent](result)
          case MSome(_) => halt("Can only produce object of type AadlComponent")
          case _ => MNone[AadlComponent]()
@@ -942,8 +1304,28 @@ import MTransformer._
     return PostResultAadlSubprogram
   }
 
-  def postAadlTODOComponent(o: AadlTODOComponent): MOption[AadlTODOComponent] = {
-    return PostResultAadlTODOComponent
+  def postAadlSubprogramGroup(o: AadlSubprogramGroup): MOption[AadlSubprogramGroup] = {
+    return PostResultAadlSubprogramGroup
+  }
+
+  def postAadlData(o: AadlData): MOption[AadlData] = {
+    return PostResultAadlData
+  }
+
+  def postAadlMemory(o: AadlMemory): MOption[AadlMemory] = {
+    return PostResultAadlMemory
+  }
+
+  def postAadlBus(o: AadlBus): MOption[AadlBus] = {
+    return PostResultAadlBus
+  }
+
+  def postAadlVirtualBus(o: AadlVirtualBus): MOption[AadlVirtualBus] = {
+    return PostResultAadlVirtualBus
+  }
+
+  def postAadlAbstract(o: AadlAbstract): MOption[AadlAbstract] = {
+    return PostResultAadlAbstract
   }
 
   def postAadlFeature(o: AadlFeature): MOption[AadlFeature] = {
@@ -976,11 +1358,72 @@ import MTransformer._
          case _ => MNone[AadlFeature]()
         }
         return r
+      case o: AadlBusAccess =>
+        val r: MOption[AadlFeature] = postAadlBusAccess(o) match {
+         case MSome(result: AadlFeature) => MSome[AadlFeature](result)
+         case MSome(_) => halt("Can only produce object of type AadlFeature")
+         case _ => MNone[AadlFeature]()
+        }
+        return r
+      case o: AadlDataAccess =>
+        val r: MOption[AadlFeature] = postAadlDataAccess(o) match {
+         case MSome(result: AadlFeature) => MSome[AadlFeature](result)
+         case MSome(_) => halt("Can only produce object of type AadlFeature")
+         case _ => MNone[AadlFeature]()
+        }
+        return r
+      case o: AadlSubprogramAccess =>
+        val r: MOption[AadlFeature] = postAadlSubprogramAccess(o) match {
+         case MSome(result: AadlFeature) => MSome[AadlFeature](result)
+         case MSome(_) => halt("Can only produce object of type AadlFeature")
+         case _ => MNone[AadlFeature]()
+        }
+        return r
+      case o: AadlSubprogramGroupAccess =>
+        val r: MOption[AadlFeature] = postAadlSubprogramGroupAccess(o) match {
+         case MSome(result: AadlFeature) => MSome[AadlFeature](result)
+         case MSome(_) => halt("Can only produce object of type AadlFeature")
+         case _ => MNone[AadlFeature]()
+        }
+        return r
       case o: AadlFeatureTODO =>
         val r: MOption[AadlFeature] = postAadlFeatureTODO(o) match {
          case MSome(result: AadlFeature) => MSome[AadlFeature](result)
          case MSome(_) => halt("Can only produce object of type AadlFeature")
          case _ => MNone[AadlFeature]()
+        }
+        return r
+    }
+  }
+
+  def postAadlDirectedFeature(o: AadlDirectedFeature): MOption[AadlDirectedFeature] = {
+    o match {
+      case o: AadlEventPort =>
+        val r: MOption[AadlDirectedFeature] = postAadlEventPort(o) match {
+         case MSome(result: AadlDirectedFeature) => MSome[AadlDirectedFeature](result)
+         case MSome(_) => halt("Can only produce object of type AadlDirectedFeature")
+         case _ => MNone[AadlDirectedFeature]()
+        }
+        return r
+      case o: AadlEventDataPort =>
+        val r: MOption[AadlDirectedFeature] = postAadlEventDataPort(o) match {
+         case MSome(result: AadlDirectedFeature) => MSome[AadlDirectedFeature](result)
+         case MSome(_) => halt("Can only produce object of type AadlDirectedFeature")
+         case _ => MNone[AadlDirectedFeature]()
+        }
+        return r
+      case o: AadlDataPort =>
+        val r: MOption[AadlDirectedFeature] = postAadlDataPort(o) match {
+         case MSome(result: AadlDirectedFeature) => MSome[AadlDirectedFeature](result)
+         case MSome(_) => halt("Can only produce object of type AadlDirectedFeature")
+         case _ => MNone[AadlDirectedFeature]()
+        }
+        return r
+      case o: AadlParameter =>
+        val r: MOption[AadlDirectedFeature] = postAadlParameter(o) match {
+         case MSome(result: AadlDirectedFeature) => MSome[AadlDirectedFeature](result)
+         case MSome(_) => halt("Can only produce object of type AadlDirectedFeature")
+         case _ => MNone[AadlDirectedFeature]()
         }
         return r
     }
@@ -1045,6 +1488,55 @@ import MTransformer._
 
   def postAadlParameter(o: AadlParameter): MOption[AadlParameter] = {
     return PostResultAadlParameter
+  }
+
+  def postAadlAccessFeature(o: AadlAccessFeature): MOption[AadlAccessFeature] = {
+    o match {
+      case o: AadlBusAccess =>
+        val r: MOption[AadlAccessFeature] = postAadlBusAccess(o) match {
+         case MSome(result: AadlAccessFeature) => MSome[AadlAccessFeature](result)
+         case MSome(_) => halt("Can only produce object of type AadlAccessFeature")
+         case _ => MNone[AadlAccessFeature]()
+        }
+        return r
+      case o: AadlDataAccess =>
+        val r: MOption[AadlAccessFeature] = postAadlDataAccess(o) match {
+         case MSome(result: AadlAccessFeature) => MSome[AadlAccessFeature](result)
+         case MSome(_) => halt("Can only produce object of type AadlAccessFeature")
+         case _ => MNone[AadlAccessFeature]()
+        }
+        return r
+      case o: AadlSubprogramAccess =>
+        val r: MOption[AadlAccessFeature] = postAadlSubprogramAccess(o) match {
+         case MSome(result: AadlAccessFeature) => MSome[AadlAccessFeature](result)
+         case MSome(_) => halt("Can only produce object of type AadlAccessFeature")
+         case _ => MNone[AadlAccessFeature]()
+        }
+        return r
+      case o: AadlSubprogramGroupAccess =>
+        val r: MOption[AadlAccessFeature] = postAadlSubprogramGroupAccess(o) match {
+         case MSome(result: AadlAccessFeature) => MSome[AadlAccessFeature](result)
+         case MSome(_) => halt("Can only produce object of type AadlAccessFeature")
+         case _ => MNone[AadlAccessFeature]()
+        }
+        return r
+    }
+  }
+
+  def postAadlBusAccess(o: AadlBusAccess): MOption[AadlBusAccess] = {
+    return PostResultAadlBusAccess
+  }
+
+  def postAadlDataAccess(o: AadlDataAccess): MOption[AadlDataAccess] = {
+    return PostResultAadlDataAccess
+  }
+
+  def postAadlSubprogramAccess(o: AadlSubprogramAccess): MOption[AadlSubprogramAccess] = {
+    return PostResultAadlSubprogramAccess
+  }
+
+  def postAadlSubprogramGroupAccess(o: AadlSubprogramGroupAccess): MOption[AadlSubprogramGroupAccess] = {
+    return PostResultAadlSubprogramGroupAccess
   }
 
   def postAadlFeatureTODO(o: AadlFeatureTODO): MOption[AadlFeatureTODO] = {
@@ -1341,7 +1833,37 @@ import MTransformer._
             MSome(o2(subComponents = r0.getOrElse(o2.subComponents), parameters = r1.getOrElse(o2.parameters)))
           else
             MNone()
-        case o2: AadlTODOComponent =>
+        case o2: AadlSubprogramGroup =>
+          val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.nonEmpty)
+            MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+          else
+            MNone()
+        case o2: AadlData =>
+          val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.nonEmpty)
+            MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+          else
+            MNone()
+        case o2: AadlMemory =>
+          val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.nonEmpty)
+            MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+          else
+            MNone()
+        case o2: AadlBus =>
+          val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.nonEmpty)
+            MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+          else
+            MNone()
+        case o2: AadlVirtualBus =>
+          val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.nonEmpty)
+            MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+          else
+            MNone()
+        case o2: AadlAbstract =>
           val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
           if (hasChanged || r0.nonEmpty)
             MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
@@ -1363,6 +1885,26 @@ import MTransformer._
           else
             MNone()
         case o2: AadlParameter =>
+          if (hasChanged)
+            MSome(o2)
+          else
+            MNone()
+        case o2: AadlBusAccess =>
+          if (hasChanged)
+            MSome(o2)
+          else
+            MNone()
+        case o2: AadlDataAccess =>
+          if (hasChanged)
+            MSome(o2)
+          else
+            MNone()
+        case o2: AadlSubprogramAccess =>
+          if (hasChanged)
+            MSome(o2)
+          else
+            MNone()
+        case o2: AadlSubprogramGroupAccess =>
           if (hasChanged)
             MSome(o2)
           else
@@ -1462,7 +2004,37 @@ import MTransformer._
             MSome(o2(subComponents = r0.getOrElse(o2.subComponents), parameters = r1.getOrElse(o2.parameters)))
           else
             MNone()
-        case o2: AadlTODOComponent =>
+        case o2: AadlSubprogramGroup =>
+          val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.nonEmpty)
+            MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+          else
+            MNone()
+        case o2: AadlData =>
+          val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.nonEmpty)
+            MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+          else
+            MNone()
+        case o2: AadlMemory =>
+          val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.nonEmpty)
+            MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+          else
+            MNone()
+        case o2: AadlBus =>
+          val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.nonEmpty)
+            MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+          else
+            MNone()
+        case o2: AadlVirtualBus =>
+          val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.nonEmpty)
+            MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+          else
+            MNone()
+        case o2: AadlAbstract =>
           val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
           if (hasChanged || r0.nonEmpty)
             MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
@@ -1782,10 +2354,10 @@ import MTransformer._
     }
   }
 
-  def transformAadlTODOComponent(o: AadlTODOComponent): MOption[AadlTODOComponent] = {
-    val preR: PreResult[AadlTODOComponent] = preAadlTODOComponent(o)
-    val r: MOption[AadlTODOComponent] = if (preR.continu) {
-      val o2: AadlTODOComponent = preR.resultOpt.getOrElse(o)
+  def transformAadlSubprogramGroup(o: AadlSubprogramGroup): MOption[AadlSubprogramGroup] = {
+    val preR: PreResult[AadlSubprogramGroup] = preAadlSubprogramGroup(o)
+    val r: MOption[AadlSubprogramGroup] = if (preR.continu) {
+      val o2: AadlSubprogramGroup = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
       val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
       if (hasChanged || r0.nonEmpty)
@@ -1798,8 +2370,143 @@ import MTransformer._
       MNone()
     }
     val hasChanged: B = r.nonEmpty
-    val o2: AadlTODOComponent = r.getOrElse(o)
-    val postR: MOption[AadlTODOComponent] = postAadlTODOComponent(o2)
+    val o2: AadlSubprogramGroup = r.getOrElse(o)
+    val postR: MOption[AadlSubprogramGroup] = postAadlSubprogramGroup(o2)
+    if (postR.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return MSome(o2)
+    } else {
+      return MNone()
+    }
+  }
+
+  def transformAadlData(o: AadlData): MOption[AadlData] = {
+    val preR: PreResult[AadlData] = preAadlData(o)
+    val r: MOption[AadlData] = if (preR.continu) {
+      val o2: AadlData = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+      if (hasChanged || r0.nonEmpty)
+        MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+      else
+        MNone()
+    } else if (preR.resultOpt.nonEmpty) {
+      MSome(preR.resultOpt.getOrElse(o))
+    } else {
+      MNone()
+    }
+    val hasChanged: B = r.nonEmpty
+    val o2: AadlData = r.getOrElse(o)
+    val postR: MOption[AadlData] = postAadlData(o2)
+    if (postR.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return MSome(o2)
+    } else {
+      return MNone()
+    }
+  }
+
+  def transformAadlMemory(o: AadlMemory): MOption[AadlMemory] = {
+    val preR: PreResult[AadlMemory] = preAadlMemory(o)
+    val r: MOption[AadlMemory] = if (preR.continu) {
+      val o2: AadlMemory = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+      if (hasChanged || r0.nonEmpty)
+        MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+      else
+        MNone()
+    } else if (preR.resultOpt.nonEmpty) {
+      MSome(preR.resultOpt.getOrElse(o))
+    } else {
+      MNone()
+    }
+    val hasChanged: B = r.nonEmpty
+    val o2: AadlMemory = r.getOrElse(o)
+    val postR: MOption[AadlMemory] = postAadlMemory(o2)
+    if (postR.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return MSome(o2)
+    } else {
+      return MNone()
+    }
+  }
+
+  def transformAadlBus(o: AadlBus): MOption[AadlBus] = {
+    val preR: PreResult[AadlBus] = preAadlBus(o)
+    val r: MOption[AadlBus] = if (preR.continu) {
+      val o2: AadlBus = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+      if (hasChanged || r0.nonEmpty)
+        MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+      else
+        MNone()
+    } else if (preR.resultOpt.nonEmpty) {
+      MSome(preR.resultOpt.getOrElse(o))
+    } else {
+      MNone()
+    }
+    val hasChanged: B = r.nonEmpty
+    val o2: AadlBus = r.getOrElse(o)
+    val postR: MOption[AadlBus] = postAadlBus(o2)
+    if (postR.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return MSome(o2)
+    } else {
+      return MNone()
+    }
+  }
+
+  def transformAadlVirtualBus(o: AadlVirtualBus): MOption[AadlVirtualBus] = {
+    val preR: PreResult[AadlVirtualBus] = preAadlVirtualBus(o)
+    val r: MOption[AadlVirtualBus] = if (preR.continu) {
+      val o2: AadlVirtualBus = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+      if (hasChanged || r0.nonEmpty)
+        MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+      else
+        MNone()
+    } else if (preR.resultOpt.nonEmpty) {
+      MSome(preR.resultOpt.getOrElse(o))
+    } else {
+      MNone()
+    }
+    val hasChanged: B = r.nonEmpty
+    val o2: AadlVirtualBus = r.getOrElse(o)
+    val postR: MOption[AadlVirtualBus] = postAadlVirtualBus(o2)
+    if (postR.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return MSome(o2)
+    } else {
+      return MNone()
+    }
+  }
+
+  def transformAadlAbstract(o: AadlAbstract): MOption[AadlAbstract] = {
+    val preR: PreResult[AadlAbstract] = preAadlAbstract(o)
+    val r: MOption[AadlAbstract] = if (preR.continu) {
+      val o2: AadlAbstract = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+      if (hasChanged || r0.nonEmpty)
+        MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+      else
+        MNone()
+    } else if (preR.resultOpt.nonEmpty) {
+      MSome(preR.resultOpt.getOrElse(o))
+    } else {
+      MNone()
+    }
+    val hasChanged: B = r.nonEmpty
+    val o2: AadlAbstract = r.getOrElse(o)
+    val postR: MOption[AadlAbstract] = postAadlAbstract(o2)
     if (postR.nonEmpty) {
       return postR
     } else if (hasChanged) {
@@ -1835,6 +2542,26 @@ import MTransformer._
             MSome(o2)
           else
             MNone()
+        case o2: AadlBusAccess =>
+          if (hasChanged)
+            MSome(o2)
+          else
+            MNone()
+        case o2: AadlDataAccess =>
+          if (hasChanged)
+            MSome(o2)
+          else
+            MNone()
+        case o2: AadlSubprogramAccess =>
+          if (hasChanged)
+            MSome(o2)
+          else
+            MNone()
+        case o2: AadlSubprogramGroupAccess =>
+          if (hasChanged)
+            MSome(o2)
+          else
+            MNone()
         case o2: AadlFeatureTODO =>
           if (hasChanged)
             MSome(o2)
@@ -1850,6 +2577,51 @@ import MTransformer._
     val hasChanged: B = r.nonEmpty
     val o2: AadlFeature = r.getOrElse(o)
     val postR: MOption[AadlFeature] = postAadlFeature(o2)
+    if (postR.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return MSome(o2)
+    } else {
+      return MNone()
+    }
+  }
+
+  def transformAadlDirectedFeature(o: AadlDirectedFeature): MOption[AadlDirectedFeature] = {
+    val preR: PreResult[AadlDirectedFeature] = preAadlDirectedFeature(o)
+    val r: MOption[AadlDirectedFeature] = if (preR.continu) {
+      val o2: AadlDirectedFeature = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      val rOpt: MOption[AadlDirectedFeature] = o2 match {
+        case o2: AadlEventPort =>
+          if (hasChanged)
+            MSome(o2)
+          else
+            MNone()
+        case o2: AadlEventDataPort =>
+          if (hasChanged)
+            MSome(o2)
+          else
+            MNone()
+        case o2: AadlDataPort =>
+          if (hasChanged)
+            MSome(o2)
+          else
+            MNone()
+        case o2: AadlParameter =>
+          if (hasChanged)
+            MSome(o2)
+          else
+            MNone()
+      }
+      rOpt
+    } else if (preR.resultOpt.nonEmpty) {
+      MSome(preR.resultOpt.getOrElse(o))
+    } else {
+      MNone()
+    }
+    val hasChanged: B = r.nonEmpty
+    val o2: AadlDirectedFeature = r.getOrElse(o)
+    val postR: MOption[AadlDirectedFeature] = postAadlDirectedFeature(o2)
     if (postR.nonEmpty) {
       return postR
     } else if (hasChanged) {
@@ -2029,6 +2801,155 @@ import MTransformer._
     val hasChanged: B = r.nonEmpty
     val o2: AadlParameter = r.getOrElse(o)
     val postR: MOption[AadlParameter] = postAadlParameter(o2)
+    if (postR.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return MSome(o2)
+    } else {
+      return MNone()
+    }
+  }
+
+  def transformAadlAccessFeature(o: AadlAccessFeature): MOption[AadlAccessFeature] = {
+    val preR: PreResult[AadlAccessFeature] = preAadlAccessFeature(o)
+    val r: MOption[AadlAccessFeature] = if (preR.continu) {
+      val o2: AadlAccessFeature = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      val rOpt: MOption[AadlAccessFeature] = o2 match {
+        case o2: AadlBusAccess =>
+          if (hasChanged)
+            MSome(o2)
+          else
+            MNone()
+        case o2: AadlDataAccess =>
+          if (hasChanged)
+            MSome(o2)
+          else
+            MNone()
+        case o2: AadlSubprogramAccess =>
+          if (hasChanged)
+            MSome(o2)
+          else
+            MNone()
+        case o2: AadlSubprogramGroupAccess =>
+          if (hasChanged)
+            MSome(o2)
+          else
+            MNone()
+      }
+      rOpt
+    } else if (preR.resultOpt.nonEmpty) {
+      MSome(preR.resultOpt.getOrElse(o))
+    } else {
+      MNone()
+    }
+    val hasChanged: B = r.nonEmpty
+    val o2: AadlAccessFeature = r.getOrElse(o)
+    val postR: MOption[AadlAccessFeature] = postAadlAccessFeature(o2)
+    if (postR.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return MSome(o2)
+    } else {
+      return MNone()
+    }
+  }
+
+  def transformAadlBusAccess(o: AadlBusAccess): MOption[AadlBusAccess] = {
+    val preR: PreResult[AadlBusAccess] = preAadlBusAccess(o)
+    val r: MOption[AadlBusAccess] = if (preR.continu) {
+      val o2: AadlBusAccess = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      if (hasChanged)
+        MSome(o2)
+      else
+        MNone()
+    } else if (preR.resultOpt.nonEmpty) {
+      MSome(preR.resultOpt.getOrElse(o))
+    } else {
+      MNone()
+    }
+    val hasChanged: B = r.nonEmpty
+    val o2: AadlBusAccess = r.getOrElse(o)
+    val postR: MOption[AadlBusAccess] = postAadlBusAccess(o2)
+    if (postR.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return MSome(o2)
+    } else {
+      return MNone()
+    }
+  }
+
+  def transformAadlDataAccess(o: AadlDataAccess): MOption[AadlDataAccess] = {
+    val preR: PreResult[AadlDataAccess] = preAadlDataAccess(o)
+    val r: MOption[AadlDataAccess] = if (preR.continu) {
+      val o2: AadlDataAccess = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      if (hasChanged)
+        MSome(o2)
+      else
+        MNone()
+    } else if (preR.resultOpt.nonEmpty) {
+      MSome(preR.resultOpt.getOrElse(o))
+    } else {
+      MNone()
+    }
+    val hasChanged: B = r.nonEmpty
+    val o2: AadlDataAccess = r.getOrElse(o)
+    val postR: MOption[AadlDataAccess] = postAadlDataAccess(o2)
+    if (postR.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return MSome(o2)
+    } else {
+      return MNone()
+    }
+  }
+
+  def transformAadlSubprogramAccess(o: AadlSubprogramAccess): MOption[AadlSubprogramAccess] = {
+    val preR: PreResult[AadlSubprogramAccess] = preAadlSubprogramAccess(o)
+    val r: MOption[AadlSubprogramAccess] = if (preR.continu) {
+      val o2: AadlSubprogramAccess = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      if (hasChanged)
+        MSome(o2)
+      else
+        MNone()
+    } else if (preR.resultOpt.nonEmpty) {
+      MSome(preR.resultOpt.getOrElse(o))
+    } else {
+      MNone()
+    }
+    val hasChanged: B = r.nonEmpty
+    val o2: AadlSubprogramAccess = r.getOrElse(o)
+    val postR: MOption[AadlSubprogramAccess] = postAadlSubprogramAccess(o2)
+    if (postR.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return MSome(o2)
+    } else {
+      return MNone()
+    }
+  }
+
+  def transformAadlSubprogramGroupAccess(o: AadlSubprogramGroupAccess): MOption[AadlSubprogramGroupAccess] = {
+    val preR: PreResult[AadlSubprogramGroupAccess] = preAadlSubprogramGroupAccess(o)
+    val r: MOption[AadlSubprogramGroupAccess] = if (preR.continu) {
+      val o2: AadlSubprogramGroupAccess = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      if (hasChanged)
+        MSome(o2)
+      else
+        MNone()
+    } else if (preR.resultOpt.nonEmpty) {
+      MSome(preR.resultOpt.getOrElse(o))
+    } else {
+      MNone()
+    }
+    val hasChanged: B = r.nonEmpty
+    val o2: AadlSubprogramGroupAccess = r.getOrElse(o)
+    val postR: MOption[AadlSubprogramGroupAccess] = postAadlSubprogramGroupAccess(o2)
     if (postR.nonEmpty) {
       return postR
     } else if (hasChanged) {

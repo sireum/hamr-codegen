@@ -36,12 +36,12 @@ import org.sireum._
 
 object Transformer {
 
-  @datatype class PreResult[Context, T](ctx: Context,
-                                        continu: B,
-                                        resultOpt: Option[T])
+  @datatype class PreResult[Context, T](val ctx: Context,
+                                        val continu: B,
+                                        val resultOpt: Option[T])
 
-  @datatype class TPostResult[Context, T](ctx: Context,
-                                     resultOpt: Option[T])
+  @datatype class TPostResult[Context, T](val ctx: Context,
+                                          val resultOpt: Option[T])
 
   @sig trait PrePost[Context] {
 
@@ -164,8 +164,43 @@ object Transformer {
            case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlSymbol]())
           }
           return r
-        case o: AadlTODOComponent =>
-          val r: PreResult[Context, AadlSymbol] = preAadlTODOComponent(ctx, o) match {
+        case o: AadlSubprogramGroup =>
+          val r: PreResult[Context, AadlSymbol] = preAadlSubprogramGroup(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: AadlSymbol)) => PreResult(preCtx, continu, Some[AadlSymbol](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlSymbol")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlSymbol]())
+          }
+          return r
+        case o: AadlData =>
+          val r: PreResult[Context, AadlSymbol] = preAadlData(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: AadlSymbol)) => PreResult(preCtx, continu, Some[AadlSymbol](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlSymbol")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlSymbol]())
+          }
+          return r
+        case o: AadlMemory =>
+          val r: PreResult[Context, AadlSymbol] = preAadlMemory(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: AadlSymbol)) => PreResult(preCtx, continu, Some[AadlSymbol](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlSymbol")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlSymbol]())
+          }
+          return r
+        case o: AadlBus =>
+          val r: PreResult[Context, AadlSymbol] = preAadlBus(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: AadlSymbol)) => PreResult(preCtx, continu, Some[AadlSymbol](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlSymbol")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlSymbol]())
+          }
+          return r
+        case o: AadlVirtualBus =>
+          val r: PreResult[Context, AadlSymbol] = preAadlVirtualBus(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: AadlSymbol)) => PreResult(preCtx, continu, Some[AadlSymbol](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlSymbol")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlSymbol]())
+          }
+          return r
+        case o: AadlAbstract =>
+          val r: PreResult[Context, AadlSymbol] = preAadlAbstract(ctx, o) match {
            case PreResult(preCtx, continu, Some(r: AadlSymbol)) => PreResult(preCtx, continu, Some[AadlSymbol](r))
            case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlSymbol")
            case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlSymbol]())
@@ -194,6 +229,34 @@ object Transformer {
           return r
         case o: AadlParameter =>
           val r: PreResult[Context, AadlSymbol] = preAadlParameter(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: AadlSymbol)) => PreResult(preCtx, continu, Some[AadlSymbol](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlSymbol")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlSymbol]())
+          }
+          return r
+        case o: AadlBusAccess =>
+          val r: PreResult[Context, AadlSymbol] = preAadlBusAccess(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: AadlSymbol)) => PreResult(preCtx, continu, Some[AadlSymbol](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlSymbol")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlSymbol]())
+          }
+          return r
+        case o: AadlDataAccess =>
+          val r: PreResult[Context, AadlSymbol] = preAadlDataAccess(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: AadlSymbol)) => PreResult(preCtx, continu, Some[AadlSymbol](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlSymbol")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlSymbol]())
+          }
+          return r
+        case o: AadlSubprogramAccess =>
+          val r: PreResult[Context, AadlSymbol] = preAadlSubprogramAccess(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: AadlSymbol)) => PreResult(preCtx, continu, Some[AadlSymbol](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlSymbol")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlSymbol]())
+          }
+          return r
+        case o: AadlSubprogramGroupAccess =>
+          val r: PreResult[Context, AadlSymbol] = preAadlSubprogramGroupAccess(ctx, o) match {
            case PreResult(preCtx, continu, Some(r: AadlSymbol)) => PreResult(preCtx, continu, Some[AadlSymbol](r))
            case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlSymbol")
            case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlSymbol]())
@@ -281,8 +344,43 @@ object Transformer {
            case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlComponent]())
           }
           return r
-        case o: AadlTODOComponent =>
-          val r: PreResult[Context, AadlComponent] = preAadlTODOComponent(ctx, o) match {
+        case o: AadlSubprogramGroup =>
+          val r: PreResult[Context, AadlComponent] = preAadlSubprogramGroup(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: AadlComponent)) => PreResult(preCtx, continu, Some[AadlComponent](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlComponent")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlComponent]())
+          }
+          return r
+        case o: AadlData =>
+          val r: PreResult[Context, AadlComponent] = preAadlData(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: AadlComponent)) => PreResult(preCtx, continu, Some[AadlComponent](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlComponent")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlComponent]())
+          }
+          return r
+        case o: AadlMemory =>
+          val r: PreResult[Context, AadlComponent] = preAadlMemory(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: AadlComponent)) => PreResult(preCtx, continu, Some[AadlComponent](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlComponent")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlComponent]())
+          }
+          return r
+        case o: AadlBus =>
+          val r: PreResult[Context, AadlComponent] = preAadlBus(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: AadlComponent)) => PreResult(preCtx, continu, Some[AadlComponent](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlComponent")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlComponent]())
+          }
+          return r
+        case o: AadlVirtualBus =>
+          val r: PreResult[Context, AadlComponent] = preAadlVirtualBus(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: AadlComponent)) => PreResult(preCtx, continu, Some[AadlComponent](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlComponent")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlComponent]())
+          }
+          return r
+        case o: AadlAbstract =>
+          val r: PreResult[Context, AadlComponent] = preAadlAbstract(ctx, o) match {
            case PreResult(preCtx, continu, Some(r: AadlComponent)) => PreResult(preCtx, continu, Some[AadlComponent](r))
            case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlComponent")
            case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlComponent]())
@@ -361,7 +459,27 @@ object Transformer {
       return PreResult(ctx, T, None())
     }
 
-    @pure def preAadlTODOComponent(ctx: Context, o: AadlTODOComponent): PreResult[Context, AadlTODOComponent] = {
+    @pure def preAadlSubprogramGroup(ctx: Context, o: AadlSubprogramGroup): PreResult[Context, AadlSubprogramGroup] = {
+      return PreResult(ctx, T, None())
+    }
+
+    @pure def preAadlData(ctx: Context, o: AadlData): PreResult[Context, AadlData] = {
+      return PreResult(ctx, T, None())
+    }
+
+    @pure def preAadlMemory(ctx: Context, o: AadlMemory): PreResult[Context, AadlMemory] = {
+      return PreResult(ctx, T, None())
+    }
+
+    @pure def preAadlBus(ctx: Context, o: AadlBus): PreResult[Context, AadlBus] = {
+      return PreResult(ctx, T, None())
+    }
+
+    @pure def preAadlVirtualBus(ctx: Context, o: AadlVirtualBus): PreResult[Context, AadlVirtualBus] = {
+      return PreResult(ctx, T, None())
+    }
+
+    @pure def preAadlAbstract(ctx: Context, o: AadlAbstract): PreResult[Context, AadlAbstract] = {
       return PreResult(ctx, T, None())
     }
 
@@ -395,11 +513,72 @@ object Transformer {
            case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlFeature]())
           }
           return r
+        case o: AadlBusAccess =>
+          val r: PreResult[Context, AadlFeature] = preAadlBusAccess(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: AadlFeature)) => PreResult(preCtx, continu, Some[AadlFeature](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlFeature")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlFeature]())
+          }
+          return r
+        case o: AadlDataAccess =>
+          val r: PreResult[Context, AadlFeature] = preAadlDataAccess(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: AadlFeature)) => PreResult(preCtx, continu, Some[AadlFeature](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlFeature")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlFeature]())
+          }
+          return r
+        case o: AadlSubprogramAccess =>
+          val r: PreResult[Context, AadlFeature] = preAadlSubprogramAccess(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: AadlFeature)) => PreResult(preCtx, continu, Some[AadlFeature](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlFeature")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlFeature]())
+          }
+          return r
+        case o: AadlSubprogramGroupAccess =>
+          val r: PreResult[Context, AadlFeature] = preAadlSubprogramGroupAccess(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: AadlFeature)) => PreResult(preCtx, continu, Some[AadlFeature](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlFeature")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlFeature]())
+          }
+          return r
         case o: AadlFeatureTODO =>
           val r: PreResult[Context, AadlFeature] = preAadlFeatureTODO(ctx, o) match {
            case PreResult(preCtx, continu, Some(r: AadlFeature)) => PreResult(preCtx, continu, Some[AadlFeature](r))
            case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlFeature")
            case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlFeature]())
+          }
+          return r
+      }
+    }
+
+    @pure def preAadlDirectedFeature(ctx: Context, o: AadlDirectedFeature): PreResult[Context, AadlDirectedFeature] = {
+      o match {
+        case o: AadlEventPort =>
+          val r: PreResult[Context, AadlDirectedFeature] = preAadlEventPort(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: AadlDirectedFeature)) => PreResult(preCtx, continu, Some[AadlDirectedFeature](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlDirectedFeature")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlDirectedFeature]())
+          }
+          return r
+        case o: AadlEventDataPort =>
+          val r: PreResult[Context, AadlDirectedFeature] = preAadlEventDataPort(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: AadlDirectedFeature)) => PreResult(preCtx, continu, Some[AadlDirectedFeature](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlDirectedFeature")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlDirectedFeature]())
+          }
+          return r
+        case o: AadlDataPort =>
+          val r: PreResult[Context, AadlDirectedFeature] = preAadlDataPort(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: AadlDirectedFeature)) => PreResult(preCtx, continu, Some[AadlDirectedFeature](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlDirectedFeature")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlDirectedFeature]())
+          }
+          return r
+        case o: AadlParameter =>
+          val r: PreResult[Context, AadlDirectedFeature] = preAadlParameter(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: AadlDirectedFeature)) => PreResult(preCtx, continu, Some[AadlDirectedFeature](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlDirectedFeature")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlDirectedFeature]())
           }
           return r
       }
@@ -463,6 +642,55 @@ object Transformer {
     }
 
     @pure def preAadlParameter(ctx: Context, o: AadlParameter): PreResult[Context, AadlParameter] = {
+      return PreResult(ctx, T, None())
+    }
+
+    @pure def preAadlAccessFeature(ctx: Context, o: AadlAccessFeature): PreResult[Context, AadlAccessFeature] = {
+      o match {
+        case o: AadlBusAccess =>
+          val r: PreResult[Context, AadlAccessFeature] = preAadlBusAccess(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: AadlAccessFeature)) => PreResult(preCtx, continu, Some[AadlAccessFeature](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlAccessFeature")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlAccessFeature]())
+          }
+          return r
+        case o: AadlDataAccess =>
+          val r: PreResult[Context, AadlAccessFeature] = preAadlDataAccess(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: AadlAccessFeature)) => PreResult(preCtx, continu, Some[AadlAccessFeature](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlAccessFeature")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlAccessFeature]())
+          }
+          return r
+        case o: AadlSubprogramAccess =>
+          val r: PreResult[Context, AadlAccessFeature] = preAadlSubprogramAccess(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: AadlAccessFeature)) => PreResult(preCtx, continu, Some[AadlAccessFeature](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlAccessFeature")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlAccessFeature]())
+          }
+          return r
+        case o: AadlSubprogramGroupAccess =>
+          val r: PreResult[Context, AadlAccessFeature] = preAadlSubprogramGroupAccess(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: AadlAccessFeature)) => PreResult(preCtx, continu, Some[AadlAccessFeature](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlAccessFeature")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlAccessFeature]())
+          }
+          return r
+      }
+    }
+
+    @pure def preAadlBusAccess(ctx: Context, o: AadlBusAccess): PreResult[Context, AadlBusAccess] = {
+      return PreResult(ctx, T, None())
+    }
+
+    @pure def preAadlDataAccess(ctx: Context, o: AadlDataAccess): PreResult[Context, AadlDataAccess] = {
+      return PreResult(ctx, T, None())
+    }
+
+    @pure def preAadlSubprogramAccess(ctx: Context, o: AadlSubprogramAccess): PreResult[Context, AadlSubprogramAccess] = {
+      return PreResult(ctx, T, None())
+    }
+
+    @pure def preAadlSubprogramGroupAccess(ctx: Context, o: AadlSubprogramGroupAccess): PreResult[Context, AadlSubprogramGroupAccess] = {
       return PreResult(ctx, T, None())
     }
 
@@ -643,8 +871,43 @@ object Transformer {
            case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlSymbol]())
           }
           return r
-        case o: AadlTODOComponent =>
-          val r: TPostResult[Context, AadlSymbol] = postAadlTODOComponent(ctx, o) match {
+        case o: AadlSubprogramGroup =>
+          val r: TPostResult[Context, AadlSymbol] = postAadlSubprogramGroup(ctx, o) match {
+           case TPostResult(postCtx, Some(result: AadlSymbol)) => TPostResult(postCtx, Some[AadlSymbol](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlSymbol")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlSymbol]())
+          }
+          return r
+        case o: AadlData =>
+          val r: TPostResult[Context, AadlSymbol] = postAadlData(ctx, o) match {
+           case TPostResult(postCtx, Some(result: AadlSymbol)) => TPostResult(postCtx, Some[AadlSymbol](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlSymbol")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlSymbol]())
+          }
+          return r
+        case o: AadlMemory =>
+          val r: TPostResult[Context, AadlSymbol] = postAadlMemory(ctx, o) match {
+           case TPostResult(postCtx, Some(result: AadlSymbol)) => TPostResult(postCtx, Some[AadlSymbol](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlSymbol")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlSymbol]())
+          }
+          return r
+        case o: AadlBus =>
+          val r: TPostResult[Context, AadlSymbol] = postAadlBus(ctx, o) match {
+           case TPostResult(postCtx, Some(result: AadlSymbol)) => TPostResult(postCtx, Some[AadlSymbol](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlSymbol")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlSymbol]())
+          }
+          return r
+        case o: AadlVirtualBus =>
+          val r: TPostResult[Context, AadlSymbol] = postAadlVirtualBus(ctx, o) match {
+           case TPostResult(postCtx, Some(result: AadlSymbol)) => TPostResult(postCtx, Some[AadlSymbol](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlSymbol")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlSymbol]())
+          }
+          return r
+        case o: AadlAbstract =>
+          val r: TPostResult[Context, AadlSymbol] = postAadlAbstract(ctx, o) match {
            case TPostResult(postCtx, Some(result: AadlSymbol)) => TPostResult(postCtx, Some[AadlSymbol](result))
            case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlSymbol")
            case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlSymbol]())
@@ -673,6 +936,34 @@ object Transformer {
           return r
         case o: AadlParameter =>
           val r: TPostResult[Context, AadlSymbol] = postAadlParameter(ctx, o) match {
+           case TPostResult(postCtx, Some(result: AadlSymbol)) => TPostResult(postCtx, Some[AadlSymbol](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlSymbol")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlSymbol]())
+          }
+          return r
+        case o: AadlBusAccess =>
+          val r: TPostResult[Context, AadlSymbol] = postAadlBusAccess(ctx, o) match {
+           case TPostResult(postCtx, Some(result: AadlSymbol)) => TPostResult(postCtx, Some[AadlSymbol](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlSymbol")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlSymbol]())
+          }
+          return r
+        case o: AadlDataAccess =>
+          val r: TPostResult[Context, AadlSymbol] = postAadlDataAccess(ctx, o) match {
+           case TPostResult(postCtx, Some(result: AadlSymbol)) => TPostResult(postCtx, Some[AadlSymbol](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlSymbol")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlSymbol]())
+          }
+          return r
+        case o: AadlSubprogramAccess =>
+          val r: TPostResult[Context, AadlSymbol] = postAadlSubprogramAccess(ctx, o) match {
+           case TPostResult(postCtx, Some(result: AadlSymbol)) => TPostResult(postCtx, Some[AadlSymbol](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlSymbol")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlSymbol]())
+          }
+          return r
+        case o: AadlSubprogramGroupAccess =>
+          val r: TPostResult[Context, AadlSymbol] = postAadlSubprogramGroupAccess(ctx, o) match {
            case TPostResult(postCtx, Some(result: AadlSymbol)) => TPostResult(postCtx, Some[AadlSymbol](result))
            case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlSymbol")
            case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlSymbol]())
@@ -760,8 +1051,43 @@ object Transformer {
            case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlComponent]())
           }
           return r
-        case o: AadlTODOComponent =>
-          val r: TPostResult[Context, AadlComponent] = postAadlTODOComponent(ctx, o) match {
+        case o: AadlSubprogramGroup =>
+          val r: TPostResult[Context, AadlComponent] = postAadlSubprogramGroup(ctx, o) match {
+           case TPostResult(postCtx, Some(result: AadlComponent)) => TPostResult(postCtx, Some[AadlComponent](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlComponent")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlComponent]())
+          }
+          return r
+        case o: AadlData =>
+          val r: TPostResult[Context, AadlComponent] = postAadlData(ctx, o) match {
+           case TPostResult(postCtx, Some(result: AadlComponent)) => TPostResult(postCtx, Some[AadlComponent](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlComponent")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlComponent]())
+          }
+          return r
+        case o: AadlMemory =>
+          val r: TPostResult[Context, AadlComponent] = postAadlMemory(ctx, o) match {
+           case TPostResult(postCtx, Some(result: AadlComponent)) => TPostResult(postCtx, Some[AadlComponent](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlComponent")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlComponent]())
+          }
+          return r
+        case o: AadlBus =>
+          val r: TPostResult[Context, AadlComponent] = postAadlBus(ctx, o) match {
+           case TPostResult(postCtx, Some(result: AadlComponent)) => TPostResult(postCtx, Some[AadlComponent](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlComponent")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlComponent]())
+          }
+          return r
+        case o: AadlVirtualBus =>
+          val r: TPostResult[Context, AadlComponent] = postAadlVirtualBus(ctx, o) match {
+           case TPostResult(postCtx, Some(result: AadlComponent)) => TPostResult(postCtx, Some[AadlComponent](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlComponent")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlComponent]())
+          }
+          return r
+        case o: AadlAbstract =>
+          val r: TPostResult[Context, AadlComponent] = postAadlAbstract(ctx, o) match {
            case TPostResult(postCtx, Some(result: AadlComponent)) => TPostResult(postCtx, Some[AadlComponent](result))
            case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlComponent")
            case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlComponent]())
@@ -840,7 +1166,27 @@ object Transformer {
       return TPostResult(ctx, None())
     }
 
-    @pure def postAadlTODOComponent(ctx: Context, o: AadlTODOComponent): TPostResult[Context, AadlTODOComponent] = {
+    @pure def postAadlSubprogramGroup(ctx: Context, o: AadlSubprogramGroup): TPostResult[Context, AadlSubprogramGroup] = {
+      return TPostResult(ctx, None())
+    }
+
+    @pure def postAadlData(ctx: Context, o: AadlData): TPostResult[Context, AadlData] = {
+      return TPostResult(ctx, None())
+    }
+
+    @pure def postAadlMemory(ctx: Context, o: AadlMemory): TPostResult[Context, AadlMemory] = {
+      return TPostResult(ctx, None())
+    }
+
+    @pure def postAadlBus(ctx: Context, o: AadlBus): TPostResult[Context, AadlBus] = {
+      return TPostResult(ctx, None())
+    }
+
+    @pure def postAadlVirtualBus(ctx: Context, o: AadlVirtualBus): TPostResult[Context, AadlVirtualBus] = {
+      return TPostResult(ctx, None())
+    }
+
+    @pure def postAadlAbstract(ctx: Context, o: AadlAbstract): TPostResult[Context, AadlAbstract] = {
       return TPostResult(ctx, None())
     }
 
@@ -874,11 +1220,72 @@ object Transformer {
            case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlFeature]())
           }
           return r
+        case o: AadlBusAccess =>
+          val r: TPostResult[Context, AadlFeature] = postAadlBusAccess(ctx, o) match {
+           case TPostResult(postCtx, Some(result: AadlFeature)) => TPostResult(postCtx, Some[AadlFeature](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlFeature")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlFeature]())
+          }
+          return r
+        case o: AadlDataAccess =>
+          val r: TPostResult[Context, AadlFeature] = postAadlDataAccess(ctx, o) match {
+           case TPostResult(postCtx, Some(result: AadlFeature)) => TPostResult(postCtx, Some[AadlFeature](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlFeature")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlFeature]())
+          }
+          return r
+        case o: AadlSubprogramAccess =>
+          val r: TPostResult[Context, AadlFeature] = postAadlSubprogramAccess(ctx, o) match {
+           case TPostResult(postCtx, Some(result: AadlFeature)) => TPostResult(postCtx, Some[AadlFeature](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlFeature")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlFeature]())
+          }
+          return r
+        case o: AadlSubprogramGroupAccess =>
+          val r: TPostResult[Context, AadlFeature] = postAadlSubprogramGroupAccess(ctx, o) match {
+           case TPostResult(postCtx, Some(result: AadlFeature)) => TPostResult(postCtx, Some[AadlFeature](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlFeature")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlFeature]())
+          }
+          return r
         case o: AadlFeatureTODO =>
           val r: TPostResult[Context, AadlFeature] = postAadlFeatureTODO(ctx, o) match {
            case TPostResult(postCtx, Some(result: AadlFeature)) => TPostResult(postCtx, Some[AadlFeature](result))
            case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlFeature")
            case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlFeature]())
+          }
+          return r
+      }
+    }
+
+    @pure def postAadlDirectedFeature(ctx: Context, o: AadlDirectedFeature): TPostResult[Context, AadlDirectedFeature] = {
+      o match {
+        case o: AadlEventPort =>
+          val r: TPostResult[Context, AadlDirectedFeature] = postAadlEventPort(ctx, o) match {
+           case TPostResult(postCtx, Some(result: AadlDirectedFeature)) => TPostResult(postCtx, Some[AadlDirectedFeature](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlDirectedFeature")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlDirectedFeature]())
+          }
+          return r
+        case o: AadlEventDataPort =>
+          val r: TPostResult[Context, AadlDirectedFeature] = postAadlEventDataPort(ctx, o) match {
+           case TPostResult(postCtx, Some(result: AadlDirectedFeature)) => TPostResult(postCtx, Some[AadlDirectedFeature](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlDirectedFeature")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlDirectedFeature]())
+          }
+          return r
+        case o: AadlDataPort =>
+          val r: TPostResult[Context, AadlDirectedFeature] = postAadlDataPort(ctx, o) match {
+           case TPostResult(postCtx, Some(result: AadlDirectedFeature)) => TPostResult(postCtx, Some[AadlDirectedFeature](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlDirectedFeature")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlDirectedFeature]())
+          }
+          return r
+        case o: AadlParameter =>
+          val r: TPostResult[Context, AadlDirectedFeature] = postAadlParameter(ctx, o) match {
+           case TPostResult(postCtx, Some(result: AadlDirectedFeature)) => TPostResult(postCtx, Some[AadlDirectedFeature](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlDirectedFeature")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlDirectedFeature]())
           }
           return r
       }
@@ -942,6 +1349,55 @@ object Transformer {
     }
 
     @pure def postAadlParameter(ctx: Context, o: AadlParameter): TPostResult[Context, AadlParameter] = {
+      return TPostResult(ctx, None())
+    }
+
+    @pure def postAadlAccessFeature(ctx: Context, o: AadlAccessFeature): TPostResult[Context, AadlAccessFeature] = {
+      o match {
+        case o: AadlBusAccess =>
+          val r: TPostResult[Context, AadlAccessFeature] = postAadlBusAccess(ctx, o) match {
+           case TPostResult(postCtx, Some(result: AadlAccessFeature)) => TPostResult(postCtx, Some[AadlAccessFeature](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlAccessFeature")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlAccessFeature]())
+          }
+          return r
+        case o: AadlDataAccess =>
+          val r: TPostResult[Context, AadlAccessFeature] = postAadlDataAccess(ctx, o) match {
+           case TPostResult(postCtx, Some(result: AadlAccessFeature)) => TPostResult(postCtx, Some[AadlAccessFeature](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlAccessFeature")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlAccessFeature]())
+          }
+          return r
+        case o: AadlSubprogramAccess =>
+          val r: TPostResult[Context, AadlAccessFeature] = postAadlSubprogramAccess(ctx, o) match {
+           case TPostResult(postCtx, Some(result: AadlAccessFeature)) => TPostResult(postCtx, Some[AadlAccessFeature](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlAccessFeature")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlAccessFeature]())
+          }
+          return r
+        case o: AadlSubprogramGroupAccess =>
+          val r: TPostResult[Context, AadlAccessFeature] = postAadlSubprogramGroupAccess(ctx, o) match {
+           case TPostResult(postCtx, Some(result: AadlAccessFeature)) => TPostResult(postCtx, Some[AadlAccessFeature](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlAccessFeature")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlAccessFeature]())
+          }
+          return r
+      }
+    }
+
+    @pure def postAadlBusAccess(ctx: Context, o: AadlBusAccess): TPostResult[Context, AadlBusAccess] = {
+      return TPostResult(ctx, None())
+    }
+
+    @pure def postAadlDataAccess(ctx: Context, o: AadlDataAccess): TPostResult[Context, AadlDataAccess] = {
+      return TPostResult(ctx, None())
+    }
+
+    @pure def postAadlSubprogramAccess(ctx: Context, o: AadlSubprogramAccess): TPostResult[Context, AadlSubprogramAccess] = {
+      return TPostResult(ctx, None())
+    }
+
+    @pure def postAadlSubprogramGroupAccess(ctx: Context, o: AadlSubprogramGroupAccess): TPostResult[Context, AadlSubprogramGroupAccess] = {
       return TPostResult(ctx, None())
     }
 
@@ -1027,7 +1483,7 @@ object Transformer {
 
 import Transformer._
 
-@datatype class Transformer[Context](pp: PrePost[Context]) {
+@datatype class Transformer[Context](val pp: PrePost[Context]) {
 
   @pure def transformBTSSymbol(ctx: Context, o: BTSSymbol): TPostResult[Context, BTSSymbol] = {
     val preR: PreResult[Context, BTSSymbol] = pp.preBTSSymbol(ctx, o)
@@ -1265,7 +1721,37 @@ import Transformer._
             TPostResult(r1.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents), parameters = r1.resultOpt.getOrElse(o2.parameters))))
           else
             TPostResult(r1.ctx, None())
-        case o2: AadlTODOComponent =>
+        case o2: AadlSubprogramGroup =>
+          val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.resultOpt.nonEmpty)
+            TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+          else
+            TPostResult(r0.ctx, None())
+        case o2: AadlData =>
+          val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.resultOpt.nonEmpty)
+            TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+          else
+            TPostResult(r0.ctx, None())
+        case o2: AadlMemory =>
+          val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.resultOpt.nonEmpty)
+            TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+          else
+            TPostResult(r0.ctx, None())
+        case o2: AadlBus =>
+          val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.resultOpt.nonEmpty)
+            TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+          else
+            TPostResult(r0.ctx, None())
+        case o2: AadlVirtualBus =>
+          val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.resultOpt.nonEmpty)
+            TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+          else
+            TPostResult(r0.ctx, None())
+        case o2: AadlAbstract =>
           val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
           if (hasChanged || r0.resultOpt.nonEmpty)
             TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
@@ -1287,6 +1773,26 @@ import Transformer._
           else
             TPostResult(preR.ctx, None())
         case o2: AadlParameter =>
+          if (hasChanged)
+            TPostResult(preR.ctx, Some(o2))
+          else
+            TPostResult(preR.ctx, None())
+        case o2: AadlBusAccess =>
+          if (hasChanged)
+            TPostResult(preR.ctx, Some(o2))
+          else
+            TPostResult(preR.ctx, None())
+        case o2: AadlDataAccess =>
+          if (hasChanged)
+            TPostResult(preR.ctx, Some(o2))
+          else
+            TPostResult(preR.ctx, None())
+        case o2: AadlSubprogramAccess =>
+          if (hasChanged)
+            TPostResult(preR.ctx, Some(o2))
+          else
+            TPostResult(preR.ctx, None())
+        case o2: AadlSubprogramGroupAccess =>
           if (hasChanged)
             TPostResult(preR.ctx, Some(o2))
           else
@@ -1386,7 +1892,37 @@ import Transformer._
             TPostResult(r1.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents), parameters = r1.resultOpt.getOrElse(o2.parameters))))
           else
             TPostResult(r1.ctx, None())
-        case o2: AadlTODOComponent =>
+        case o2: AadlSubprogramGroup =>
+          val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.resultOpt.nonEmpty)
+            TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+          else
+            TPostResult(r0.ctx, None())
+        case o2: AadlData =>
+          val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.resultOpt.nonEmpty)
+            TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+          else
+            TPostResult(r0.ctx, None())
+        case o2: AadlMemory =>
+          val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.resultOpt.nonEmpty)
+            TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+          else
+            TPostResult(r0.ctx, None())
+        case o2: AadlBus =>
+          val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.resultOpt.nonEmpty)
+            TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+          else
+            TPostResult(r0.ctx, None())
+        case o2: AadlVirtualBus =>
+          val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.resultOpt.nonEmpty)
+            TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+          else
+            TPostResult(r0.ctx, None())
+        case o2: AadlAbstract =>
           val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
           if (hasChanged || r0.resultOpt.nonEmpty)
             TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
@@ -1706,10 +2242,10 @@ import Transformer._
     }
   }
 
-  @pure def transformAadlTODOComponent(ctx: Context, o: AadlTODOComponent): TPostResult[Context, AadlTODOComponent] = {
-    val preR: PreResult[Context, AadlTODOComponent] = pp.preAadlTODOComponent(ctx, o)
-    val r: TPostResult[Context, AadlTODOComponent] = if (preR.continu) {
-      val o2: AadlTODOComponent = preR.resultOpt.getOrElse(o)
+  @pure def transformAadlSubprogramGroup(ctx: Context, o: AadlSubprogramGroup): TPostResult[Context, AadlSubprogramGroup] = {
+    val preR: PreResult[Context, AadlSubprogramGroup] = pp.preAadlSubprogramGroup(ctx, o)
+    val r: TPostResult[Context, AadlSubprogramGroup] = if (preR.continu) {
+      val o2: AadlSubprogramGroup = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
       val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
       if (hasChanged || r0.resultOpt.nonEmpty)
@@ -1722,8 +2258,143 @@ import Transformer._
       TPostResult(preR.ctx, None())
     }
     val hasChanged: B = r.resultOpt.nonEmpty
-    val o2: AadlTODOComponent = r.resultOpt.getOrElse(o)
-    val postR: TPostResult[Context, AadlTODOComponent] = pp.postAadlTODOComponent(r.ctx, o2)
+    val o2: AadlSubprogramGroup = r.resultOpt.getOrElse(o)
+    val postR: TPostResult[Context, AadlSubprogramGroup] = pp.postAadlSubprogramGroup(r.ctx, o2)
+    if (postR.resultOpt.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return TPostResult(postR.ctx, Some(o2))
+    } else {
+      return TPostResult(postR.ctx, None())
+    }
+  }
+
+  @pure def transformAadlData(ctx: Context, o: AadlData): TPostResult[Context, AadlData] = {
+    val preR: PreResult[Context, AadlData] = pp.preAadlData(ctx, o)
+    val r: TPostResult[Context, AadlData] = if (preR.continu) {
+      val o2: AadlData = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
+      if (hasChanged || r0.resultOpt.nonEmpty)
+        TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+      else
+        TPostResult(r0.ctx, None())
+    } else if (preR.resultOpt.nonEmpty) {
+      TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
+    } else {
+      TPostResult(preR.ctx, None())
+    }
+    val hasChanged: B = r.resultOpt.nonEmpty
+    val o2: AadlData = r.resultOpt.getOrElse(o)
+    val postR: TPostResult[Context, AadlData] = pp.postAadlData(r.ctx, o2)
+    if (postR.resultOpt.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return TPostResult(postR.ctx, Some(o2))
+    } else {
+      return TPostResult(postR.ctx, None())
+    }
+  }
+
+  @pure def transformAadlMemory(ctx: Context, o: AadlMemory): TPostResult[Context, AadlMemory] = {
+    val preR: PreResult[Context, AadlMemory] = pp.preAadlMemory(ctx, o)
+    val r: TPostResult[Context, AadlMemory] = if (preR.continu) {
+      val o2: AadlMemory = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
+      if (hasChanged || r0.resultOpt.nonEmpty)
+        TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+      else
+        TPostResult(r0.ctx, None())
+    } else if (preR.resultOpt.nonEmpty) {
+      TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
+    } else {
+      TPostResult(preR.ctx, None())
+    }
+    val hasChanged: B = r.resultOpt.nonEmpty
+    val o2: AadlMemory = r.resultOpt.getOrElse(o)
+    val postR: TPostResult[Context, AadlMemory] = pp.postAadlMemory(r.ctx, o2)
+    if (postR.resultOpt.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return TPostResult(postR.ctx, Some(o2))
+    } else {
+      return TPostResult(postR.ctx, None())
+    }
+  }
+
+  @pure def transformAadlBus(ctx: Context, o: AadlBus): TPostResult[Context, AadlBus] = {
+    val preR: PreResult[Context, AadlBus] = pp.preAadlBus(ctx, o)
+    val r: TPostResult[Context, AadlBus] = if (preR.continu) {
+      val o2: AadlBus = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
+      if (hasChanged || r0.resultOpt.nonEmpty)
+        TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+      else
+        TPostResult(r0.ctx, None())
+    } else if (preR.resultOpt.nonEmpty) {
+      TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
+    } else {
+      TPostResult(preR.ctx, None())
+    }
+    val hasChanged: B = r.resultOpt.nonEmpty
+    val o2: AadlBus = r.resultOpt.getOrElse(o)
+    val postR: TPostResult[Context, AadlBus] = pp.postAadlBus(r.ctx, o2)
+    if (postR.resultOpt.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return TPostResult(postR.ctx, Some(o2))
+    } else {
+      return TPostResult(postR.ctx, None())
+    }
+  }
+
+  @pure def transformAadlVirtualBus(ctx: Context, o: AadlVirtualBus): TPostResult[Context, AadlVirtualBus] = {
+    val preR: PreResult[Context, AadlVirtualBus] = pp.preAadlVirtualBus(ctx, o)
+    val r: TPostResult[Context, AadlVirtualBus] = if (preR.continu) {
+      val o2: AadlVirtualBus = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
+      if (hasChanged || r0.resultOpt.nonEmpty)
+        TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+      else
+        TPostResult(r0.ctx, None())
+    } else if (preR.resultOpt.nonEmpty) {
+      TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
+    } else {
+      TPostResult(preR.ctx, None())
+    }
+    val hasChanged: B = r.resultOpt.nonEmpty
+    val o2: AadlVirtualBus = r.resultOpt.getOrElse(o)
+    val postR: TPostResult[Context, AadlVirtualBus] = pp.postAadlVirtualBus(r.ctx, o2)
+    if (postR.resultOpt.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return TPostResult(postR.ctx, Some(o2))
+    } else {
+      return TPostResult(postR.ctx, None())
+    }
+  }
+
+  @pure def transformAadlAbstract(ctx: Context, o: AadlAbstract): TPostResult[Context, AadlAbstract] = {
+    val preR: PreResult[Context, AadlAbstract] = pp.preAadlAbstract(ctx, o)
+    val r: TPostResult[Context, AadlAbstract] = if (preR.continu) {
+      val o2: AadlAbstract = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
+      if (hasChanged || r0.resultOpt.nonEmpty)
+        TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+      else
+        TPostResult(r0.ctx, None())
+    } else if (preR.resultOpt.nonEmpty) {
+      TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
+    } else {
+      TPostResult(preR.ctx, None())
+    }
+    val hasChanged: B = r.resultOpt.nonEmpty
+    val o2: AadlAbstract = r.resultOpt.getOrElse(o)
+    val postR: TPostResult[Context, AadlAbstract] = pp.postAadlAbstract(r.ctx, o2)
     if (postR.resultOpt.nonEmpty) {
       return postR
     } else if (hasChanged) {
@@ -1759,6 +2430,26 @@ import Transformer._
             TPostResult(preR.ctx, Some(o2))
           else
             TPostResult(preR.ctx, None())
+        case o2: AadlBusAccess =>
+          if (hasChanged)
+            TPostResult(preR.ctx, Some(o2))
+          else
+            TPostResult(preR.ctx, None())
+        case o2: AadlDataAccess =>
+          if (hasChanged)
+            TPostResult(preR.ctx, Some(o2))
+          else
+            TPostResult(preR.ctx, None())
+        case o2: AadlSubprogramAccess =>
+          if (hasChanged)
+            TPostResult(preR.ctx, Some(o2))
+          else
+            TPostResult(preR.ctx, None())
+        case o2: AadlSubprogramGroupAccess =>
+          if (hasChanged)
+            TPostResult(preR.ctx, Some(o2))
+          else
+            TPostResult(preR.ctx, None())
         case o2: AadlFeatureTODO =>
           if (hasChanged)
             TPostResult(preR.ctx, Some(o2))
@@ -1774,6 +2465,51 @@ import Transformer._
     val hasChanged: B = r.resultOpt.nonEmpty
     val o2: AadlFeature = r.resultOpt.getOrElse(o)
     val postR: TPostResult[Context, AadlFeature] = pp.postAadlFeature(r.ctx, o2)
+    if (postR.resultOpt.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return TPostResult(postR.ctx, Some(o2))
+    } else {
+      return TPostResult(postR.ctx, None())
+    }
+  }
+
+  @pure def transformAadlDirectedFeature(ctx: Context, o: AadlDirectedFeature): TPostResult[Context, AadlDirectedFeature] = {
+    val preR: PreResult[Context, AadlDirectedFeature] = pp.preAadlDirectedFeature(ctx, o)
+    val r: TPostResult[Context, AadlDirectedFeature] = if (preR.continu) {
+      val o2: AadlDirectedFeature = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      val rOpt: TPostResult[Context, AadlDirectedFeature] = o2 match {
+        case o2: AadlEventPort =>
+          if (hasChanged)
+            TPostResult(preR.ctx, Some(o2))
+          else
+            TPostResult(preR.ctx, None())
+        case o2: AadlEventDataPort =>
+          if (hasChanged)
+            TPostResult(preR.ctx, Some(o2))
+          else
+            TPostResult(preR.ctx, None())
+        case o2: AadlDataPort =>
+          if (hasChanged)
+            TPostResult(preR.ctx, Some(o2))
+          else
+            TPostResult(preR.ctx, None())
+        case o2: AadlParameter =>
+          if (hasChanged)
+            TPostResult(preR.ctx, Some(o2))
+          else
+            TPostResult(preR.ctx, None())
+      }
+      rOpt
+    } else if (preR.resultOpt.nonEmpty) {
+      TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
+    } else {
+      TPostResult(preR.ctx, None())
+    }
+    val hasChanged: B = r.resultOpt.nonEmpty
+    val o2: AadlDirectedFeature = r.resultOpt.getOrElse(o)
+    val postR: TPostResult[Context, AadlDirectedFeature] = pp.postAadlDirectedFeature(r.ctx, o2)
     if (postR.resultOpt.nonEmpty) {
       return postR
     } else if (hasChanged) {
@@ -1953,6 +2689,155 @@ import Transformer._
     val hasChanged: B = r.resultOpt.nonEmpty
     val o2: AadlParameter = r.resultOpt.getOrElse(o)
     val postR: TPostResult[Context, AadlParameter] = pp.postAadlParameter(r.ctx, o2)
+    if (postR.resultOpt.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return TPostResult(postR.ctx, Some(o2))
+    } else {
+      return TPostResult(postR.ctx, None())
+    }
+  }
+
+  @pure def transformAadlAccessFeature(ctx: Context, o: AadlAccessFeature): TPostResult[Context, AadlAccessFeature] = {
+    val preR: PreResult[Context, AadlAccessFeature] = pp.preAadlAccessFeature(ctx, o)
+    val r: TPostResult[Context, AadlAccessFeature] = if (preR.continu) {
+      val o2: AadlAccessFeature = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      val rOpt: TPostResult[Context, AadlAccessFeature] = o2 match {
+        case o2: AadlBusAccess =>
+          if (hasChanged)
+            TPostResult(preR.ctx, Some(o2))
+          else
+            TPostResult(preR.ctx, None())
+        case o2: AadlDataAccess =>
+          if (hasChanged)
+            TPostResult(preR.ctx, Some(o2))
+          else
+            TPostResult(preR.ctx, None())
+        case o2: AadlSubprogramAccess =>
+          if (hasChanged)
+            TPostResult(preR.ctx, Some(o2))
+          else
+            TPostResult(preR.ctx, None())
+        case o2: AadlSubprogramGroupAccess =>
+          if (hasChanged)
+            TPostResult(preR.ctx, Some(o2))
+          else
+            TPostResult(preR.ctx, None())
+      }
+      rOpt
+    } else if (preR.resultOpt.nonEmpty) {
+      TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
+    } else {
+      TPostResult(preR.ctx, None())
+    }
+    val hasChanged: B = r.resultOpt.nonEmpty
+    val o2: AadlAccessFeature = r.resultOpt.getOrElse(o)
+    val postR: TPostResult[Context, AadlAccessFeature] = pp.postAadlAccessFeature(r.ctx, o2)
+    if (postR.resultOpt.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return TPostResult(postR.ctx, Some(o2))
+    } else {
+      return TPostResult(postR.ctx, None())
+    }
+  }
+
+  @pure def transformAadlBusAccess(ctx: Context, o: AadlBusAccess): TPostResult[Context, AadlBusAccess] = {
+    val preR: PreResult[Context, AadlBusAccess] = pp.preAadlBusAccess(ctx, o)
+    val r: TPostResult[Context, AadlBusAccess] = if (preR.continu) {
+      val o2: AadlBusAccess = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      if (hasChanged)
+        TPostResult(preR.ctx, Some(o2))
+      else
+        TPostResult(preR.ctx, None())
+    } else if (preR.resultOpt.nonEmpty) {
+      TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
+    } else {
+      TPostResult(preR.ctx, None())
+    }
+    val hasChanged: B = r.resultOpt.nonEmpty
+    val o2: AadlBusAccess = r.resultOpt.getOrElse(o)
+    val postR: TPostResult[Context, AadlBusAccess] = pp.postAadlBusAccess(r.ctx, o2)
+    if (postR.resultOpt.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return TPostResult(postR.ctx, Some(o2))
+    } else {
+      return TPostResult(postR.ctx, None())
+    }
+  }
+
+  @pure def transformAadlDataAccess(ctx: Context, o: AadlDataAccess): TPostResult[Context, AadlDataAccess] = {
+    val preR: PreResult[Context, AadlDataAccess] = pp.preAadlDataAccess(ctx, o)
+    val r: TPostResult[Context, AadlDataAccess] = if (preR.continu) {
+      val o2: AadlDataAccess = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      if (hasChanged)
+        TPostResult(preR.ctx, Some(o2))
+      else
+        TPostResult(preR.ctx, None())
+    } else if (preR.resultOpt.nonEmpty) {
+      TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
+    } else {
+      TPostResult(preR.ctx, None())
+    }
+    val hasChanged: B = r.resultOpt.nonEmpty
+    val o2: AadlDataAccess = r.resultOpt.getOrElse(o)
+    val postR: TPostResult[Context, AadlDataAccess] = pp.postAadlDataAccess(r.ctx, o2)
+    if (postR.resultOpt.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return TPostResult(postR.ctx, Some(o2))
+    } else {
+      return TPostResult(postR.ctx, None())
+    }
+  }
+
+  @pure def transformAadlSubprogramAccess(ctx: Context, o: AadlSubprogramAccess): TPostResult[Context, AadlSubprogramAccess] = {
+    val preR: PreResult[Context, AadlSubprogramAccess] = pp.preAadlSubprogramAccess(ctx, o)
+    val r: TPostResult[Context, AadlSubprogramAccess] = if (preR.continu) {
+      val o2: AadlSubprogramAccess = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      if (hasChanged)
+        TPostResult(preR.ctx, Some(o2))
+      else
+        TPostResult(preR.ctx, None())
+    } else if (preR.resultOpt.nonEmpty) {
+      TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
+    } else {
+      TPostResult(preR.ctx, None())
+    }
+    val hasChanged: B = r.resultOpt.nonEmpty
+    val o2: AadlSubprogramAccess = r.resultOpt.getOrElse(o)
+    val postR: TPostResult[Context, AadlSubprogramAccess] = pp.postAadlSubprogramAccess(r.ctx, o2)
+    if (postR.resultOpt.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return TPostResult(postR.ctx, Some(o2))
+    } else {
+      return TPostResult(postR.ctx, None())
+    }
+  }
+
+  @pure def transformAadlSubprogramGroupAccess(ctx: Context, o: AadlSubprogramGroupAccess): TPostResult[Context, AadlSubprogramGroupAccess] = {
+    val preR: PreResult[Context, AadlSubprogramGroupAccess] = pp.preAadlSubprogramGroupAccess(ctx, o)
+    val r: TPostResult[Context, AadlSubprogramGroupAccess] = if (preR.continu) {
+      val o2: AadlSubprogramGroupAccess = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      if (hasChanged)
+        TPostResult(preR.ctx, Some(o2))
+      else
+        TPostResult(preR.ctx, None())
+    } else if (preR.resultOpt.nonEmpty) {
+      TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
+    } else {
+      TPostResult(preR.ctx, None())
+    }
+    val hasChanged: B = r.resultOpt.nonEmpty
+    val o2: AadlSubprogramGroupAccess = r.resultOpt.getOrElse(o)
+    val postR: TPostResult[Context, AadlSubprogramGroupAccess] = pp.postAadlSubprogramGroupAccess(r.ctx, o2)
     if (postR.resultOpt.nonEmpty) {
       return postR
     } else if (hasChanged) {

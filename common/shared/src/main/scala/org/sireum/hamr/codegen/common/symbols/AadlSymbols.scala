@@ -292,12 +292,34 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
                          val subComponents: ISZ[AadlComponent],
                          val connectionInstances: ISZ[ir.ConnectionInstance]) extends AadlComponent
 
-@datatype class AadlTODOComponent(val component: ir.Component,
-                                  val parent: Option[String],
-                                  val path: String,
-                                  val identifier: String,
-                                  val subComponents: ISZ[AadlComponent],
-                                  val connectionInstances: ISZ[ir.ConnectionInstance]) extends  AadlComponent
+@datatype class AadlMemory(val component: ir.Component,
+                           val parent: Option[String],
+                           val path: String,
+                           val identifier: String,
+                           val subComponents: ISZ[AadlComponent],
+                           val connectionInstances: ISZ[ir.ConnectionInstance]) extends AadlComponent
+
+@datatype class AadlBus(val component: ir.Component,
+                        val parent: Option[String],
+                        val path: String,
+                        val identifier: String,
+                        val subComponents: ISZ[AadlComponent],
+                        val connectionInstances: ISZ[ir.ConnectionInstance]) extends AadlComponent
+
+@datatype class AadlVirtualBus(val component: ir.Component,
+                               val parent: Option[String],
+                               val path: String,
+                               val identifier: String,
+                               val subComponents: ISZ[AadlComponent],
+                               val connectionInstances: ISZ[ir.ConnectionInstance]) extends AadlComponent
+
+@datatype class AadlAbstract(val component: ir.Component,
+                             val parent: Option[String],
+                             val path: String,
+                             val identifier: String,
+                             val subComponents: ISZ[AadlComponent],
+                             val connectionInstances: ISZ[ir.ConnectionInstance]) extends AadlComponent
+
 
 /************************************************************************************
 *

@@ -458,17 +458,49 @@ object SymbolResolver {
             subComponents = subComponents,
             connectionInstances = c.connectionInstances)
 
-        case _ => {
+        case ir.ComponentCategory.Bus =>
           val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield process(sc, Some(path))
 
-          AadlTODOComponent(
+          AadlBus(
             component = c,
             parent = parent,
             path = path,
             identifier = identifier,
             subComponents = subComponents,
             connectionInstances = c.connectionInstances)
-        }
+
+        case ir.ComponentCategory.VirtualBus =>
+          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield process(sc, Some(path))
+
+          AadlVirtualBus(
+            component = c,
+            parent = parent,
+            path = path,
+            identifier = identifier,
+            subComponents = subComponents,
+            connectionInstances = c.connectionInstances)
+
+        case ir.ComponentCategory.Memory =>
+          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield process(sc, Some(path))
+
+          AadlMemory(
+            component = c,
+            parent = parent,
+            path = path,
+            identifier = identifier,
+            subComponents = subComponents,
+            connectionInstances = c.connectionInstances)
+
+        case ir.ComponentCategory.Abstract =>
+          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield process(sc, Some(path))
+
+          AadlAbstract(
+            component = c,
+            parent = parent,
+            path = path,
+            identifier = identifier,
+            subComponents = subComponents,
+            connectionInstances = c.connectionInstances)
       }
 
       componentMap = componentMap + (path ~> aadlComponent)
