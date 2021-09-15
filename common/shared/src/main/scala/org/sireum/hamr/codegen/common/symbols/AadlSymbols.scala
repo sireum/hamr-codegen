@@ -2,7 +2,7 @@
 package org.sireum.hamr.codegen.common.symbols
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.CommonUtil
+import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
 import org.sireum.hamr.codegen.common.properties.{CasePropertiesProperties, CaseSchedulingProperties, HamrProperties, OsateProperties, PropertyUtil}
 import org.sireum.hamr.codegen.common.types.AadlType
 import org.sireum.hamr.ir
@@ -265,8 +265,32 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
                                val path: String,
                                val identifier: String,
                                val subComponents: ISZ[AadlComponent],
-                               val parameters: ISZ[AadlParameter],
-                               val connectionInstances: ISZ[ir.ConnectionInstance]) extends AadlComponent
+                               val connectionInstances: ISZ[ir.ConnectionInstance],
+
+                               val parameters: ISZ[AadlParameter]) extends AadlComponent {
+  def getClassifier(): String = {
+    var s = ops.StringOps(component.classifier.get.name)
+    val index = s.lastIndexOf(':') + 1
+    s = ops.StringOps(s.substring(index, component.classifier.get.name.size))
+    return StringUtil.replaceAll(s.s, ".", "_")
+  }
+}
+
+@datatype class AadlSubprogramGroup(val component: ir.Component,
+                                    val parent: Option[String],
+                                    val path: String,
+                                    val identifier: String,
+                                    val subComponents: ISZ[AadlComponent],
+                                    val connectionInstances: ISZ[ir.ConnectionInstance]
+
+                                   ) extends AadlComponent
+
+@datatype class AadlData(val component: ir.Component,
+                         val parent: Option[String],
+                         val path: String,
+                         val identifier: String,
+                         val subComponents: ISZ[AadlComponent],
+                         val connectionInstances: ISZ[ir.ConnectionInstance]) extends AadlComponent
 
 @datatype class AadlTODOComponent(val component: ir.Component,
                                   val parent: Option[String],
@@ -274,6 +298,12 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
                                   val identifier: String,
                                   val subComponents: ISZ[AadlComponent],
                                   val connectionInstances: ISZ[ir.ConnectionInstance]) extends  AadlComponent
+
+/************************************************************************************
+*
+* Feature
+*
+***********************************************************************************/
 
 @sig trait AadlFeature extends AadlSymbol {
   def feature: ir.Feature
@@ -295,13 +325,13 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
   }
 }
 
-@sig trait AadlPort extends AadlFeature {
+@sig trait AadlDirectedFeature extends AadlFeature {
   def direction: ir.Direction.Type
 }
 
-@sig trait AadlFeatureEvent extends AadlPort
+@sig trait AadlFeatureEvent extends AadlDirectedFeature
 
-@sig trait AadlFeatureData extends AadlPort {
+@sig trait AadlFeatureData extends AadlDirectedFeature {
   def aadlType: AadlType
 }
 
@@ -322,10 +352,38 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
 @datatype class AadlParameter(val feature: ir.FeatureEnd,
                               val featureGroupIds: ISZ[String],
                               val aadlType: AadlType,
-                              val direction: ir.Direction.Type) extends AadlFeatureData
+                              val direction: ir.Direction.Type) extends AadlFeatureData {
+
+  def getName(): String = { return CommonUtil.getLastName(feature.identifier) }
+}
+
+@sig trait AadlAccessFeature extends AadlFeature {
+
+  def kind: ir.AccessType.Type
+
+}
+
+@datatype class AadlBusAccess(val feature: ir.FeatureAccess,
+                              val featureGroupIds: ISZ[String],
+                              val kind: ir.AccessType.Type) extends AadlAccessFeature
+
+@datatype class AadlDataAccess(val feature: ir.FeatureAccess,
+                               val featureGroupIds: ISZ[String],
+                               val kind: ir.AccessType.Type) extends AadlAccessFeature
+
+@datatype class AadlSubprogramAccess(val feature: ir.FeatureAccess,
+                                     val featureGroupIds: ISZ[String],
+                                     val kind: ir.AccessType.Type) extends AadlAccessFeature
+
+@datatype class AadlSubprogramGroupAccess(val feature: ir.FeatureAccess,
+                                          val featureGroupIds: ISZ[String],
+                                          val kind: ir.AccessType.Type) extends AadlAccessFeature
+
 
 @datatype class AadlFeatureTODO(val feature: ir.Feature,
                                 val featureGroupIds: ISZ[String]) extends AadlFeature
+
+
 
 @sig trait AadlConnection extends AadlSymbol
 

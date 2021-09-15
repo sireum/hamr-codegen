@@ -209,7 +209,7 @@ object SymbolResolver {
                   case _ =>
                 }
 
-                val port: AadlFeature = feature.category match {
+                val aadlFeature: AadlFeature = feature.category match {
                   case ir.FeatureCategory.EventPort => {
                     val fend = feature.asInstanceOf[ir.FeatureEnd]
                     AadlEventPort(
@@ -235,12 +235,40 @@ object SymbolResolver {
                       direction = fend.direction,
                       aadlType = getFeatureEndType(fend).get)
                   }
+                  case ir.FeatureCategory.BusAccess => {
+                    val facc = feature.asInstanceOf[ir.FeatureAccess]
+                    AadlBusAccess(
+                      feature = facc,
+                      featureGroupIds = featureGroupIds,
+                      kind = facc.accessType)
+                  }
+                  case ir.FeatureCategory.DataAccess => {
+                    val facc = feature.asInstanceOf[ir.FeatureAccess]
+                    AadlDataAccess(
+                      feature = facc,
+                      featureGroupIds = featureGroupIds,
+                      kind = facc.accessType)
+                  }
+                  case ir.FeatureCategory.SubprogramAccess => {
+                    val facc = feature.asInstanceOf[ir.FeatureAccess]
+                    AadlSubprogramAccess(
+                      feature = facc,
+                      featureGroupIds = featureGroupIds,
+                      kind = facc.accessType)
+                  }
+                  case ir.FeatureCategory.SubprogramAccessGroup => {
+                    val facc = feature.asInstanceOf[ir.FeatureAccess]
+                    AadlSubprogramGroupAccess(
+                      feature = facc,
+                      featureGroupIds = featureGroupIds,
+                      kind = facc.accessType)
+                  }
                   case _ => AadlFeatureTODO(
                     feature = feature,
                     featureGroupIds = featureGroupIds)
                 }
-                aadlPorts = aadlPorts :+ port
-                featureMap = featureMap + (featurePath ~> port)
+                aadlPorts = aadlPorts :+ aadlFeature
+                featureMap = featureMap + (featurePath ~> aadlFeature)
             }
           }
           for (feature <- c.features) {
@@ -407,6 +435,28 @@ object SymbolResolver {
             connectionInstances = c.connectionInstances)
 
         case ir.ComponentCategory.Subprogram => handleSubprogram()
+
+        case ir.ComponentCategory.SubprogramGroup =>
+          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield process(sc, Some(path))
+
+          AadlSubprogramGroup(
+            component = c,
+            parent = parent,
+            path = path,
+            identifier = identifier,
+            subComponents = subComponents,
+            connectionInstances = c.connectionInstances)
+
+        case ir.ComponentCategory.Data =>
+          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield process(sc, Some(path))
+
+          AadlData(
+            component = c,
+            parent = parent,
+            path = path,
+            identifier = identifier,
+            subComponents = subComponents,
+            connectionInstances = c.connectionInstances)
 
         case _ => {
           val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield process(sc, Some(path))
