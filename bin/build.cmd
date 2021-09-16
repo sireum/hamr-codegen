@@ -125,8 +125,12 @@ def getIVE(): B = {
       sfx.downloadFrom(url)
 
       println(s"Unzipping ${sfx}")
-      sfx.chmod("700")
-      proc"${sfx.string} -y".console.runCheck()
+      if(Os.isWin) {
+        proc"7z x -y -o%homedrive%%homepath%\Applications ${sfx}".console.runCheck()
+      } else {
+        sfx.chmod("700")
+        proc"${sfx.string} -y".console.runCheck()
+      }
       sfx.removeAll()
     }
     destDir.mkdirAll()
