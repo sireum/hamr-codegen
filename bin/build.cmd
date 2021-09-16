@@ -114,8 +114,10 @@ def getIVE(): B = {
   if(!destDir.exists) {
     if (!ideaDir.exists) {
       val releases = home / "releases.json"
+      val releaseUrl = "https://api.github.com/repos/sireum/kekinian/releases"
+      println(s"Downloading ${releaseUrl}")
+      releases.downloadFrom(releaseUrl)
 
-      //releases.downloadFrom("https://api.github.com/repos/sireum/kekinian/releases")
       val o = ops.StringOps(releases.read)
       val pos = o.stringIndexOf(suffix)
       val start = o.stringIndexOfFrom("browser_download_url", pos - 150) + 23
