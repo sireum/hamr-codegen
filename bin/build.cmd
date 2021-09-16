@@ -99,8 +99,62 @@ def compile(): Unit = {
   println()
 }
 
+def getIVE(): B = {
+  // need the IVE if doing 'proyek ive'
+  val (suffix, os): (String, String) = {
+    if (Os.isWin) ("/sireum-dev-win.sfx", "win")
+    else if (Os.isMac) ("/sireum-dev-mac.sfx", "mac")
+    else if (Os.isLinux) ("/sireum-dev-linux.sfx", "linux")
+    else halt("Os not supported")
+  }
+
+  val destDir = homeBin / os / "idea"
+  val ideaDir = Os.home / "Applications" / "Sireum-dev" / "bin" / os / "idea"
+
+  if(!destDir.exists) {
+    if (!ideaDir.exists) {
+      val releases = home / "releases.json"
+
+      //releases.downloadFrom("https://api.github.com/repos/sireum/kekinian/releases")
+      val o = ops.StringOps(releases.read)
+      val pos = o.stringIndexOf(suffix)
+      val start = o.stringIndexOfFrom("browser_download_url", pos - 150) + 23
+      val url = o.substring(start, pos + suffix.size)
+      releases.removeAll()
+
+      println(s"Downloading ${url}")
+      val sfx = homeBin / suffix
+      sfx.downloadFrom(url)
+
+      println(s"Unzipping ${sfx}")
+      sfx.chmod("700")
+      proc"${sfx.string} -y".console.runCheck()
+      sfx.removeAll()
+    }
+    destDir.mkdirAll()
+    println(s"Sym-linking ${destDir} to ${ideaDir}")
+    (destDir).mklink(ideaDir)
+  }
+  return destDir.exists
+}
+
+def getScalac(): B = {
+  // need to make lib dir has the plugin version that HAMR sticks into version.properties
+  val x = home / "arsit" / "resources" / "util" / "buildSbt.properties"
+  val SCALAC_PLUGIN_VER = x.properties.get("org.sireum.version.scalac-plugin").get
+  val jarLoc = home / "lib" / s"scalac-plugin-${SCALAC_PLUGIN_VER}.jar"
+  if(!jarLoc.exists) {
+    val url = s"https://github.com/sireum/scalac-plugin/releases/download/${SCALAC_PLUGIN_VER}/scalac-plugin-${SCALAC_PLUGIN_VER}.jar"
+    println(s"Downloading ${url}")
+    jarLoc.downloadFrom(url)
+  }
+  return jarLoc.exists
+}
 
 def test(): Unit = {
+  assert(getIVE(), "IVE doesn't exist")
+  assert(getScalac(), "scalac plugin doesn't exist")
+
   tipe()
 
   println("Testing ...")
@@ -115,7 +169,7 @@ def test(): Unit = {
 def clean(): Unit = {
   println(s"Cleaning ${home}")
   val homeResources: ISZ[Os.Path] = ISZ("air", "lib", "out", "runtime", "versions.properties").map(m => home / m)
-  val homeBinResources: ISZ[Os.Path] = ISZ("sireum.jar", "sireum").map(m => homeBin / m)
+  val homeBinResources: ISZ[Os.Path] = ISZ("sireum.jar", "sireum", "scala", "linux", "win", "mac").map(m => homeBin / m)
   for(r <- (homeResources ++ homeBinResources) if r.exists ) {
     println(s"Deleting ${r}")
     r.removeAll()
