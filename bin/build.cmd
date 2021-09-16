@@ -100,7 +100,7 @@ def compile(): Unit = {
 }
 
 def getIVE(): B = {
-  // need the IVE if doing 'proyek ive'
+
   val (suffix, os): (String, String) = {
     if (Os.isWin) ("/sireum-dev-win.sfx", "win")
     else if (Os.isMac) ("/sireum-dev-mac.sfx", "mac")
@@ -113,21 +113,14 @@ def getIVE(): B = {
 
   if(!destDir.exists) {
     if (!ideaDir.exists) {
+      val repo = GitHub.repo("sireum", "kekinian")
+      val latest = repo.releases.head
 
-      val releases = home / "releases.json"
-      val releaseUrl = "https://api.github.com/repos/sireum/kekinian/releases"
-      println(s"Downloading ${releaseUrl} to ${releases}")
-      for(i <- 0 until 5 if !releases.exists) {
-        releases.downloadFrom(releaseUrl)
-      }
-
-      val o = ops.StringOps(releases.read)
-      val pos = o.stringIndexOf(suffix)
-      val start = o.stringIndexOfFrom("browser_download_url", pos - 150) + 23
-      val url = o.substring(start, pos + suffix.size)
-      releases.removeAll()
+      val candidates = latest.assets.filter(asset => ops.StringOps(asset.getUrl).endsWith(suffix))
+      assert(candidates.count() == 1, s"hmm, so many ${candidates.count()}")
 
       val sfx = homeBin / suffix
+      val url = candidates.head.getUrl
       println(s"Downloading ${url} to ${sfx}")
       sfx.downloadFrom(url)
 
