@@ -102,9 +102,9 @@ def compile(): Unit = {
 def getIVE(): B = {
 
   val (suffix, os): (String, String) = {
-    if (Os.isWin) ("/sireum-dev-win.sfx", "win")
-    else if (Os.isMac) ("/sireum-dev-mac.sfx", "mac")
-    else if (Os.isLinux) ("/sireum-dev-linux.sfx", "linux")
+    if (Os.isWin) ("sireum-dev-win.sfx", "win")
+    else if (Os.isMac) ("sireum-dev-mac.sfx", "mac")
+    else if (Os.isLinux) ("sireum-dev-linux.sfx", "linux")
     else halt("Os not supported")
   }
 
@@ -126,7 +126,7 @@ def getIVE(): B = {
 
       println(s"Unzipping ${sfx}")
       if(Os.isWin) {
-        proc"7z x -y -o%homedrive%%homepath%\Applications ${sfx}".console.runCheck()
+        proc"7z x -y -o%homedrive%%homepath%\\Applications ${sfx}".console.runCheck()
       } else {
         sfx.chmod("700")
         proc"${sfx.string} -y".console.runCheck()
