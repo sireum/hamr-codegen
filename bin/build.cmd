@@ -113,6 +113,7 @@ def getIVE(): B = {
 
   if(!destDir.exists) {
     if (!ideaDir.exists) {
+
       val releases = home / "releases.json"
       val releaseUrl = "https://api.github.com/repos/sireum/kekinian/releases"
       println(s"Downloading ${releaseUrl} to ${releases}")
@@ -126,8 +127,8 @@ def getIVE(): B = {
       val url = o.substring(start, pos + suffix.size)
       releases.removeAll()
 
-      println(s"Downloading ${url} to ${sfx}")
       val sfx = homeBin / suffix
+      println(s"Downloading ${url} to ${sfx}")
       sfx.downloadFrom(url)
 
       println(s"Unzipping ${sfx}")
