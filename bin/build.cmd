@@ -115,8 +115,10 @@ def getIVE(): B = {
     if (!ideaDir.exists) {
       val releases = home / "releases.json"
       val releaseUrl = "https://api.github.com/repos/sireum/kekinian/releases"
-      println(s"Downloading ${releaseUrl}")
-      releases.downloadFrom(releaseUrl)
+      println(s"Downloading ${releaseUrl} to ${releases}")
+      for(i <- 0 until 5 if !releases.exists) {
+        releases.downloadFrom(releaseUrl)
+      }
 
       val o = ops.StringOps(releases.read)
       val pos = o.stringIndexOf(suffix)
@@ -124,7 +126,7 @@ def getIVE(): B = {
       val url = o.substring(start, pos + suffix.size)
       releases.removeAll()
 
-      println(s"Downloading ${url}")
+      println(s"Downloading ${url} to ${sfx}")
       val sfx = homeBin / suffix
       sfx.downloadFrom(url)
 
