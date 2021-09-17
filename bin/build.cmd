@@ -109,7 +109,9 @@ def getIVE(): B = {
   }
 
   val destDir = homeBin / os / "idea"
-  val ideaDir = Os.home / "Applications" / "Sireum-dev" / "bin" / os / "idea"
+  val ideaDir =
+    if (Os.envs.contains("GITHUB_ACTIONS")) homeBin / "Sireum-dev" / "bin" / os / "idea"
+    else Os.home / "Applications" / "Sireum-dev" / "bin" / os / "idea"
 
   if(!destDir.exists) {
     if (!ideaDir.exists) {
@@ -124,18 +126,13 @@ def getIVE(): B = {
       println(s"Downloading ${url} to ${sfx}")
       sfx.downloadFrom(url)
 
-      println(s"Unzipping ${sfx}")
-      if(Os.isWin) {
-        proc"7z x -y -o%homedrive%%homepath%\\Applications ${sfx}".console.runCheck()
-      } else {
-        sfx.chmod("700")
-        proc"${sfx.string} -y".console.runCheck()
-      }
+      println(s"Unzipping ${sfx} to ${ideaDir.up.up.up.up}")
+      proc"7z x -y -o${ideaDir.up.up.up.up} ${sfx}".console.run()
       sfx.removeAll()
     }
     destDir.mkdirAll()
     println(s"Sym-linking ${destDir} to ${ideaDir}")
-    (destDir).mklink(ideaDir)
+    destDir.mklink(ideaDir)
   }
   return destDir.exists
 }
