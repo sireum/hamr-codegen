@@ -121,7 +121,8 @@ jobs:
       - name: Test
         shell: cmd
         run: |
-          set COURSIER_CACHE=%GITHUB_WORKSPACE%\cache\coursier
+          xcopy %GITHUB_WORKSPACE%\cache\coursier %HOMEDRIVE%%HOMEPATH%\cache\coursier\ /E/H
+          set COURSIER_CACHE=%HOMEDRIVE%%HOMEPATH%\cache\coursier
           set PATH=C:\tools\cygwin\bin;C:\tools\cygwin\usr\bin;%PATH%
           set CC=gcc.exe
           set CXX=c++.exe
