@@ -37,7 +37,7 @@ jobs:
         run: |
           export COURSIER_CACHE=$GITHUB_WORKSPACE/cache/coursier
           cd $GITHUB_WORKSPACE
-          export HamrTestModes=transpile,compile,generated_unit_tests
+          export HamrTestModes=phantom,compile,generated_unit_tests
           echo "HamrTestModes=${HamrTestModes}"
           export ALSO_TRANSPILE_VIA_CALLBACKS=true
           echo "ALSO_TRANSPILE_VIA_CALLBACKS=${ALSO_TRANSPILE_VIA_CALLBACKS}"
@@ -75,7 +75,7 @@ jobs:
         run: |
           export COURSIER_CACHE=$GITHUB_WORKSPACE/cache/coursier
           cd $GITHUB_WORKSPACE
-          export HamrTestModes=transpile,compile,generated_unit_tests
+          export HamrTestModes=phantom,compile,generated_unit_tests
           echo "HamrTestModes=${HamrTestModes}"
           export ALSO_TRANSPILE_VIA_CALLBACKS=true
           echo "ALSO_TRANSPILE_VIA_CALLBACKS=${ALSO_TRANSPILE_VIA_CALLBACKS}"
@@ -127,7 +127,7 @@ jobs:
           set CC=gcc.exe
           set CXX=c++.exe
           cd /d %GITHUB_WORKSPACE%
-          set HamrTestModes=transpile,compile,generated_unit_tests
+          set HamrTestModes=phantom,compile,generated_unit_tests
           echo HamrTestModes=%HamrTestModes%
           set ALSO_TRANSPILE_VIA_CALLBACKS=true
           echo ALSO_TRANSPILE_VIA_CALLBACKS=%ALSO_TRANSPILE_VIA_CALLBACKS%
