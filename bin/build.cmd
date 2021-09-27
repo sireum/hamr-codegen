@@ -138,7 +138,7 @@ def getIVE(): B = {
 }
 
 def getScalac(): B = {
-  // need to make lib dir has the plugin version that HAMR sticks into version.properties
+  // need to make sure lib dir has the plugin version that HAMR sticks into version.properties
   val x = home / "arsit" / "resources" / "util" / "buildSbt.properties"
   val SCALAC_PLUGIN_VER = x.properties.get("org.sireum.version.scalac-plugin").get
   val jarLoc = home / "lib" / s"scalac-plugin-${SCALAC_PLUGIN_VER}.jar"
@@ -150,9 +150,22 @@ def getScalac(): B = {
   return jarLoc.exists
 }
 
+def prepareWindows(): Unit = {
+  if(Os.isWin) {
+    Os.env("HamrTestModes") match {
+      case Some(options) if ops.StringOps(options).contains("phantom") =>
+        // install OSATE via phantom manually before running the tests.
+        proc"${(Os.slashDir / "sireum.bat").value} hamr phantom -u".runCheck()
+      case _ =>
+    }
+  }
+}
+
 def test(): Unit = {
   assert(getIVE(), "IVE doesn't exist")
-  assert(getScalac(), "scalac plugin doesn't exist")
+  //assert(getScalac(), "scalac plugin doesn't exist")
+
+  prepareWindows()
 
   tipe()
 
