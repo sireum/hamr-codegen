@@ -150,22 +150,9 @@ def getScalac(): B = {
   return jarLoc.exists
 }
 
-def prepareWindows(): Unit = {
-  if(Os.isWin) {
-    Os.env("HamrTestModes") match {
-      case Some(options) if ops.StringOps(options).contains("phantom") =>
-        // install OSATE via phantom manually before running the tests.
-        proc"${(Os.slashDir / "sireum.bat").value} hamr phantom -u".runCheck()
-      case _ =>
-    }
-  }
-}
-
 def test(): Unit = {
   assert(getIVE(), "IVE doesn't exist")
   //assert(getScalac(), "scalac plugin doesn't exist")
-
-  prepareWindows()
 
   tipe()
 
