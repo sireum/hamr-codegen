@@ -1,0 +1,45 @@
+name: macOS
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+
+  ci:
+    runs-on: macOS-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          submodules: recursive
+      - name: Retrieve versions.properties
+        run: |
+          curl -JLOs https://raw.githubusercontent.com/sireum/kekinian/master/versions.properties
+      - name: Cache Java
+        id: cache-java
+        uses: actions/cache@v2
+        with:
+          path: bin/mac/java
+          key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-java
+      - name: Cache Scala
+        id: cache-scala
+        uses: actions/cache@v2
+        with:
+          path: bin/scala
+          key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-scala
+      - name: Cache Coursier
+        id: cache-coursier
+        uses: actions/cache@v2
+        with:
+          path: cache/coursier
+          key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-coursier
+      - name: Test
+        run: |
+          export COURSIER_CACHE=$GITHUB_WORKSPACE/cache/coursier
+          cd $GITHUB_WORKSPACE
+          export HamrTestModes=phantom,compile,generated_unit_tests
+          echo "HamrTestModes=${HamrTestModes}"
+          export ALSO_TRANSPILE_VIA_CALLBACKS=true
+          echo "ALSO_TRANSPILE_VIA_CALLBACKS=${ALSO_TRANSPILE_VIA_CALLBACKS}"
+          bin/build.cmd test
