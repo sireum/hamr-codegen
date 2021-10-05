@@ -1,5 +1,5 @@
 # hamr-codegen
 
-[![Actions Status](https://github.com/sireum/hamr-codegen/workflows/CI/badge.svg)](https://github.com/sireum/hamr-codegen/actions)
-| :--: |
-| <sub><sup>amd64: mac, linux, windows</sup></sub> | 
+[![macOS](https://github.com/sireum/hamr-codegen/actions/workflows/CI-macOS.yml/badge.svg)](https://github.com/sireum/hamr-codegen/actions/workflows/CI-macOS.yml)
+[![Linux](https://github.com/sireum/hamr-codegen/actions/workflows/CI_linux.yml/badge.svg)](https://github.com/sireum/hamr-codegen/actions/workflows/CI_linux.yml)
+[![Windows](https://github.com/sireum/hamr-codegen/actions/workflows/CI-windows.yml/badge.svg)](https://github.com/sireum/hamr-codegen/actions/workflows/CI-windows.yml)
