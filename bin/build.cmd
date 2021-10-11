@@ -137,22 +137,20 @@ def getIVE(): B = {
   return destDir.exists
 }
 
-def getScalac(): B = {
-  // need to make sure lib dir has the plugin version that HAMR sticks into version.properties
-  val x = home / "arsit" / "resources" / "util" / "buildSbt.properties"
-  val SCALAC_PLUGIN_VER = x.properties.get("org.sireum.version.scalac-plugin").get
-  val jarLoc = home / "lib" / s"scalac-plugin-${SCALAC_PLUGIN_VER}.jar"
-  if(!jarLoc.exists) {
-    val url = s"https://github.com/sireum/scalac-plugin/releases/download/${SCALAC_PLUGIN_VER}/scalac-plugin-${SCALAC_PLUGIN_VER}.jar"
-    println(s"Downloading ${url}")
-    jarLoc.downloadFrom(url)
-  }
-  return jarLoc.exists
-}
-
 def test(): Unit = {
   assert(getIVE(), "IVE doesn't exist")
-  //assert(getScalac(), "scalac plugin doesn't exist")
+
+  if(Os.isWin && Os.envs.contains("GITHUB_ACTIONS")) {
+    println("Installing OSATE plugins ...")
+    proc"$sireum hamr phantom -u".at(home).console.runCheck()
+
+    val osateDir = Os.home / ".sireum" / "phantom" / "osate-2.9.2-vfinal"
+    println(s"${osateDir}.exists = ${osateDir.exists} and contents are: ")
+
+    for(f <- osateDir.list) {
+      println(s"${f}: is it a file? ${f.isFile}")
+    }
+  }
 
   tipe()
 
