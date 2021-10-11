@@ -119,15 +119,15 @@ object Transformers {
              var r: ISZ[VContainer] = ISZ()
              var other: ISZ[ir.Component] = ISZ()
              for(s <- o.subComponents) {
-               if(replaced.contains(s.identifier.name)) r = r :+ replaced.get(s.identifier.name).get
-               else other = other :+ s
+               if(replaced.contains(s.identifier.name)) { r = r :+ replaced.get(s.identifier.name).get }
+               else { other = other :+ s }
              }
              (r, other)
            }
 
           if(replacedProcesses.nonEmpty) {
             val connectionInstances:ISZ[ir.ConnectionInstance] = {
-              for(ci <- o.connectionInstances) yield {
+              o.connectionInstances.map((ci: ir.ConnectionInstance) => {
                 val src = ci.src.component.name
                 val dst = ci.dst.component.name
 
@@ -166,7 +166,7 @@ object Transformers {
                 isOldThread(dst) match {
                   // connection entering a replaced thread
                   case Some(x) =>
-                    val lastcrn = ci.connectionRefs(ci.connectionRefs.length - 1).name.name
+                    val lastcrn = ci.connectionRefs(ci.connectionRefs.size - 1).name.name
                     val lastc = aadlMap.connectionsMap.get(lastcrn).get
                     if(lastc.src.size > 1){
                       halt(s"Connection Instance ${ci.name} has more destination connections than expected. Please report this")
@@ -184,7 +184,7 @@ object Transformers {
 
                 if(mod) { xci }
                 else { ci }
-              }
+              })
             }
 
             val rSystem = o(connectionInstances = connectionInstances)
@@ -217,10 +217,10 @@ object Transformers {
               var subComponents = o.subComponents.filter(p => p.category != ir.ComponentCategory.Thread)
 
               val vFeatures: ISZ[ir.Feature] = {
-                for(f <- CommonUtil.getInPorts(o) ++ CommonUtil.getOutPorts(o)) yield {
+                (CommonUtil.getInPorts(o) ++ CommonUtil.getOutPorts(o)).map((f: ir.FeatureEnd) => {
                   val x = ops.ISZOps(f.identifier.name)
                   f(identifier = ir.Name((x.slice(0, x.s.size - 1) :+ REPLACEMENT_THREAD_NAME) :+ x.last, f.identifier.pos))
-                }
+                })
               }
 
               val classifier: Option[ir.Classifier] = {
