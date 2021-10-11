@@ -30,21 +30,21 @@ object PacerUtil {
     }
 
     // - all threads must be in separate processes
-    var processes: ISZ[AadlProcess] = ISZ()
+    var processesWithThreads: ISZ[AadlProcess] = ISZ()
     for (t <- threads) {
       val p = t.getParent(symbolTable)
 
-      if (ops.ISZOps(processes).contains(p)) {
+      if (ops.ISZOps(processesWithThreads).contains(p)) {
         canUseDomainScheduling = F
         mesg = mesg :+ st"More than one thread is in process ${p.identifier}.  Move ${t.identifier} to a different process."
       }
-      processes = processes :+ p
+      processesWithThreads = processesWithThreads :+ p
     }
 
     // - each process with a thread must have domain info
     if (canUseDomainScheduling) {
       var withoutDomain: ISZ[AadlProcess] = ISZ()
-      for (p <- processes) {
+      for (p <- processesWithThreads) {
         if (p.getDomain().isEmpty) {
           withoutDomain = withoutDomain :+ p
         }
@@ -63,7 +63,7 @@ object PacerUtil {
     if (canUseDomainScheduling) {
       var boundProcessors: Set[AadlProcessor] = Set.empty
       var unboundedProcesses: ISZ[AadlProcess] = ISZ()
-      for (p <- processes) {
+      for (p <- processesWithThreads) {
         symbolTable.getBoundProcessor(p) match {
           case Some(proc) => boundProcessors = boundProcessors + proc
           case _ => unboundedProcesses = unboundedProcesses :+ p

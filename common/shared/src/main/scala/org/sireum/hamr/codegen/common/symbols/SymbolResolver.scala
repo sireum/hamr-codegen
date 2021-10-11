@@ -5,7 +5,7 @@ package org.sireum.hamr.codegen.common.symbols
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.properties.HamrProperties.HAMR__BIT_CODEC_MAX_SIZE
-import org.sireum.hamr.codegen.common.properties.{CasePropertiesProperties, CaseSchedulingProperties, PropertyUtil}
+import org.sireum.hamr.codegen.common.properties.{CasePropertiesProperties, CaseSchedulingProperties, OsateProperties, PropertyUtil}
 import org.sireum.hamr.codegen.common.resolvers.BTSResolver
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, BaseType, TypeUtil}
 import org.sireum.hamr.codegen.common.util.{CodeGenConfig, CodeGenPlatform, ExperimentalOptions}
@@ -19,7 +19,24 @@ object SymbolResolver {
                            airFeatureMap: HashSMap[String, ir.Feature],
                            airClassifierMap: HashSMap[String, ir.Component],
 
-                           connections: ISZ[ir.ConnectionInstance])
+                           connections: ISZ[ir.Connection],
+                           connectionsMap: Map[ISZ[String], ir.Connection],
+
+                           connectionInstances: ISZ[ir.ConnectionInstance],
+                           connectionInstancesMap: Map[ISZ[String], ir.ConnectionInstance],
+                           altConnectionInstancesMap: Map[ISZ[String], ir.ConnectionInstance],
+
+                           // this map is currently incomplete for the feature groups in pca pump
+                           connectionInstanceToConnectionsMap: Map[ISZ[String], ISZ[ir.Connection]]
+                          ) {
+    def validate(): Unit = {
+      for(c <- connections) {
+        for(ci <- c.connectionInstances) {
+          assert(altConnectionInstancesMap.contains(ci.name), s"Couldn't find conn instance ${ci.name} for ${c.name.name}")
+        }
+      }
+    }
+  }
 
   def resolve(model: ir.Aadl,
               aadlTypes: AadlTypes,
@@ -55,7 +72,7 @@ object SymbolResolver {
     var airFeatureMap: HashSMap[String, ir.Feature] = HashSMap.empty
     var airClassifierMap: HashSMap[String, ir.Component] = HashSMap.empty
 
-    var connections: ISZ[ir.ConnectionInstance] = ISZ()
+    var connectionInstances: ISZ[ir.ConnectionInstance] = ISZ()
 
     // port-paths -> connInstances
     var inConnections: HashSMap[String, ISZ[ir.ConnectionInstance]] = HashSMap.empty
@@ -112,7 +129,7 @@ object SymbolResolver {
 
         for (ci <- c.connectionInstances) {
           if (isHandledConnection(ci, airComponentMap, airFeatureMap)) {
-            connections = connections :+ ci
+            connectionInstances = connectionInstances :+ ci
 
             def add(portPath: String, isIn: B): Unit = {
               val map: HashSMap[String, ISZ[ir.ConnectionInstance]] = isIn match {
@@ -513,7 +530,7 @@ object SymbolResolver {
     val shouldUseRawConnections: B = PropertyUtil.getUseRawConnection(system.properties)
 
     def resolveAadlConnectionInstances(): Unit = {
-      for (ci <- connections) {
+      for (ci <- connectionInstances) {
         val aadlConnection: AadlConnection = ci.kind match {
           case ir.ConnectionKind.Port => {
             val name = CommonUtil.getName(ci.name)
@@ -535,7 +552,7 @@ object SymbolResolver {
                   val t: AadlType = (aadlTypes.typeMap.get(srcClassifier.name), aadlTypes.typeMap.get(dstClassifier.name)) match {
                     case (Some(srcType), Some(dstType)) =>
                       // TODO: this sanity check is too strong in general, but matches the models currently
-                      //       being processed.  Need to test with connections involving type extensions
+                      //       being processed.  Need to test with connectionInstances involving type extensions
                       assert(srcType == dstType, s"Expecting both sides of connection ${name} to have the same type")
                       srcType
                     case _ =>
@@ -589,10 +606,18 @@ object SymbolResolver {
       airFeatureMap = airFeatureMap,
       airClassifierMap = airClassifierMap,
 
-      connections = connections,
+      connections = connectionInstances,
       inConnections = inConnections,
       outConnections = outConnections)
 
+    {
+      for(thread <- symbolTable.getThreads()) {
+        if(thread.dispatchProtocol == Dispatch_Protocol.Periodic && thread.period.isEmpty) {
+          val mesg = s"Must specify ${OsateProperties.TIMING_PROPERTIES__PERIOD} for periodic thread ${thread.identifier}"
+          reporter.error(thread.component.identifier.pos, CommonUtil.toolName, mesg)
+        }
+      }
+    }
 
     { // restrict when wire protocol and CakeML components are allowed
       if(symbolTable.hasCakeMLComponents() || shouldUseRawConnections) {
@@ -606,8 +631,33 @@ object SymbolResolver {
       }
     }
 
+    val willUserPacer: B = PacerUtil.canUseDomainScheduling(symbolTable, options.platform, reporter)
+
+    if(willUserPacer) {
+      var seenDomains: Set[Z] = Set.empty
+      for(p <- symbolTable.getProcesses()) {
+        p.getDomain() match {
+          case Some(z) =>
+            if(seenDomains.contains(z)) {
+              val mesg = s"More than one process is in domain ${z}"
+              reporter.warn(None(), CommonUtil.toolName, mesg)
+            }
+            seenDomains = seenDomains + z
+          case _ =>
+            if (p.getThreads().nonEmpty) {
+              halt(s"This should be infeasible: process ${p.identifier} contains threads but does not not have a domain")
+            }
+        }
+      }
+    }
+
     {
       if (symbolTable.hasVM()) {
+        if(!willUserPacer) {
+          val mesg = "Model contains VM components so it must use domain scheduling."
+          reporter.error(None(), CommonUtil.toolName, mesg)
+        }
+
         var validProcessors: ISZ[AadlProcessor] = ISZ()
         for(process <- symbolTable.getProcesses().filter(p => p.toVirtualMachine(symbolTable))) {
           assert(process.boundProcessor.nonEmpty, s"Unexpected: ${process.identifier} is going to a vm but it isn't bound to a processor?")
@@ -624,9 +674,11 @@ object SymbolResolver {
                     case Some(ap2: AadlProcessor) =>
 
                       PropertyUtil.getDiscreetPropertyValue(avp.component.properties, CasePropertiesProperties.PROP__CASE_PROPERTIES__OS) match {
-                        case Some(ir.ValueProp(os)) if os != "Linux" =>
-                          val mesg = s"Invalid OS ${os} for virtual processor ${avp.identifier}.  HAMR only supports Linux based virtual machines"
-                          reporter.error(avp.component.identifier.pos, CommonUtil.toolName, mesg)
+                        case Some(ir.ValueProp(os)) =>
+                          if (os != "Linux") {
+                            val mesg = s"Invalid OS ${os} for virtual processor ${avp.identifier}.  HAMR only supports Linux based virtual machines"
+                            reporter.error(avp.component.identifier.pos, CommonUtil.toolName, mesg)
+                          }
                         case _ =>
                           val mesg = s"${CasePropertiesProperties.PROP__CASE_PROPERTIES__OS} not provided for virtual processor ${avp.identifier}.  Assuming Linux"
                           reporter.warn(avp.component.identifier.pos, CommonUtil.toolName, mesg)
@@ -678,14 +730,14 @@ object SymbolResolver {
           reporter.error(None(), CommonUtil.toolName, mesg)
         }
 
-        if(!PacerUtil.canUseDomainScheduling(symbolTable, options.platform, reporter)) {
+        if(!willUserPacer) {
           val mesg = "Model contains CakeML components so it must use domain scheduling."
           reporter.error(None(), CommonUtil.toolName, mesg)
         }
       }
     }
 
-    { // if raw then all data components used in connections b/w threads
+    { // if raw then all data components used in connectionInstances b/w threads
       // must have bit size specified and it must be greater than 0
       if(shouldUseRawConnections) {
         for(conn <- symbolTable.aadlConnections) {
@@ -830,7 +882,7 @@ object SymbolResolver {
     return ret
   }
 
-  def buildAadlMaps(aadl: ir.Aadl): AadlMaps = {
+  def buildAadlMaps(aadl: ir.Aadl, reporter: Reporter): AadlMaps = {
     val w = Walker()
     for(c <- aadl.components) {
       w.transformComponent(c)
@@ -839,13 +891,58 @@ object SymbolResolver {
     for(d <- aadl.dataComponents) {
       airClassifierMap = airClassifierMap + (d.classifier.get.name ~> d)
     }
-    return AadlMaps(w.airComponentMap, w.airFeatureMap, airClassifierMap, w.connections)
+    var connInst2Conn: Map[ISZ[String], ISZ[ir.Connection]] = Map.empty
+    for(ci <- w.connectionInstances) {
+      var conns: ISZ[ir.Connection] = ISZ()
+      for(cr <- ci.connectionRefs) {
+        w.connectionsMap.get(cr.name.name) match {
+          case Some(c) => conns = conns :+ c
+          case _ =>
+            // maybe it's from a feature group?
+
+            val crops = ops.ISZOps(cr.name.name)
+            val src: ISZ[String]= {
+              val srcops = ops.ISZOps(ci.src.feature.get.name)
+              srcops.slice(ci.src.component.name.size, srcops.s.size)
+            }
+            val dst: ISZ[String] = {
+              val dstops = ops.ISZOps(ci.dst.feature.get.name)
+              dstops.slice(ci.dst.component.name.size, dstops.s.size)
+            }
+            val connCand = st"${crops.last}-${(src, "_")}_${(dst, "_")}".render
+            val candName = crops.slice(0, crops.s.size - 1) :+ connCand
+
+            w.connectionsMap.get(candName) match {
+              case Some(c2) => conns = conns :+ c2
+              case _ =>
+                /*
+                val msg = s"Couldn't find connection reference ${cr.name.name} for connection instance ${ci.name.name}"
+                reporter.warn(ci.name.pos, "", msg)
+                */
+            }
+        }
+      }
+      connInst2Conn = connInst2Conn + (ci.name.name ~> conns)
+    }
+    val ret = AadlMaps(w.airComponentMap, w.airFeatureMap, airClassifierMap,
+      w.connections, w.connectionsMap,
+      w.connectionInstances, w.connectionInstancesMap, w.altConnectionInstancesMap,
+      connInst2Conn)
+
+    ret.validate()
+    return ret;
   }
 
   @record class Walker() extends MAirTransformer {
     var airComponentMap: HashSMap[String, ir.Component] = HashSMap.empty
     var airFeatureMap: HashSMap[String, ir.Feature] = HashSMap.empty
-    var connections: ISZ[ir.ConnectionInstance] = ISZ()
+
+    var connections: ISZ[ir.Connection] = ISZ()
+    var connectionsMap: Map[ISZ[String], ir.Connection] = Map.empty
+
+    var connectionInstances: ISZ[ir.ConnectionInstance] = ISZ()
+    var connectionInstancesMap: Map[ISZ[String], ir.ConnectionInstance] = Map.empty
+    var altConnectionInstancesMap: Map[ISZ[String], ir.ConnectionInstance] = Map.empty
 
     override def postComponent(o: ir.Component): MOption[ir.Component] = {
       val id = CommonUtil.getName(o.identifier)
@@ -857,8 +954,36 @@ object SymbolResolver {
       airFeatureMap = airFeatureMap + (id ~> o)
       return MNone[ir.Feature]()
     }
-    override def postConnectionInstance(o: ir.ConnectionInstance): MOption[ir.ConnectionInstance] = {
+    override def postConnection(o: ir.Connection): MOption[ir.Connection] = {
       connections = connections :+ o
+      connectionsMap = connectionsMap + (o.name.name ~> o)
+      return MNone[ir.Connection]()
+    }
+    override def postConnectionInstance(o: ir.ConnectionInstance): MOption[ir.ConnectionInstance] = {
+      connectionInstances = connectionInstances :+ o
+      connectionInstancesMap = connectionInstancesMap + (o.name.name ~> o)
+
+      var altName:ISZ[String] = ISZ()
+      for(n <- o.name.name) {
+        val contents = ops.StringOps(n)
+        val pos = contents.stringIndexOf(" -> ")
+        if(pos > 0) {
+          val src = ops.StringOps(contents.substring(0, pos))
+          val dst = ops.StringOps(contents.substring(pos + 4, contents.size))
+
+          val srcs = ops.ISZOps(src.split((c: C) => c == '.'))
+          val dsts = ops.ISZOps(dst.split((c: C) => c == '.'))
+
+          altName = altName ++ (srcs.slice(0, srcs.s.size - 1))
+          altName = altName :+ s"${srcs.last} -> ${dsts.first}"
+          altName = altName ++ dsts.tail
+        } else {
+          altName = altName :+ n
+        }
+      }
+
+      altConnectionInstancesMap = altConnectionInstancesMap + (altName ~> o)
+
       return MNone[ir.ConnectionInstance]()
     }
   }

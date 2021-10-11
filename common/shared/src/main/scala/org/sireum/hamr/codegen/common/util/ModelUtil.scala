@@ -23,7 +23,7 @@ object ModelUtil {
 
     var transModel = origModel
 
-    val aadlMaps = SymbolResolver.buildAadlMaps(transModel)
+    val aadlMaps = SymbolResolver.buildAadlMaps(transModel, reporter)
 
     val tResult = AirTransformer(Transformers.MissingTypeRewriter(reporter)).transformAadl(Transformers.CTX(F), transModel)
     if(reporter.hasError) {
@@ -38,6 +38,14 @@ object ModelUtil {
     }
 
     transModel = if(btxResults.nonEmpty) btxResults.get else transModel
+
+    val virtResults = Transformers.VirtProcessRewriter(aadlMaps, reporter).transformAadl(transModel)
+    if(reporter.hasError) {
+      return None()
+    }
+
+    transModel = if(virtResults.nonEmpty) virtResults.get else transModel
+
 
     val rawConnections: B = PropertyUtil.getUseRawConnection(transModel.components(0).properties)
     val aadlTypes = TypeResolver.processDataTypes(transModel, rawConnections, options.maxStringSize, options.bitWidth, packageName)

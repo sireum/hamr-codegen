@@ -153,6 +153,10 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
   def getBoundProcessor(symbolTable: SymbolTable): Option[AadlProcessor] = {
     return symbolTable.getBoundProcessor(this)
   }
+
+  def getThreads(): ISZ[AadlThread] = {
+    return subComponents.filter((p: AadlComponent) => p.isInstanceOf[AadlThread]).map((m: AadlComponent) => m.asInstanceOf[AadlThread])
+  }
 }
 
 @datatype class AadlThreadGroup(val component: ir.Component,
