@@ -140,18 +140,6 @@ def getIVE(): B = {
 def test(): Unit = {
   assert(getIVE(), "IVE doesn't exist")
 
-  if(Os.isWin && Os.envs.contains("GITHUB_ACTIONS")) {
-    println("Installing OSATE plugins ...")
-    proc"$sireum hamr phantom -u".at(home).console.runCheck()
-
-    val osateDir = Os.home / ".sireum" / "phantom" / "osate-2.9.2-vfinal"
-    println(s"${osateDir}.exists = ${osateDir.exists} and contents are: ")
-
-    for(f <- osateDir.list) {
-      println(s"${f}: is it a file? ${f.isFile}")
-    }
-  }
-
   tipe()
 
   println("Testing ...")
