@@ -584,25 +584,6 @@ object Transformer {
       }
     }
 
-    @pure def preAadlFeatureEvent(ctx: Context, o: AadlFeatureEvent): PreResult[Context, AadlFeatureEvent] = {
-      o match {
-        case o: AadlEventPort =>
-          val r: PreResult[Context, AadlFeatureEvent] = preAadlEventPort(ctx, o) match {
-           case PreResult(preCtx, continu, Some(r: AadlFeatureEvent)) => PreResult(preCtx, continu, Some[AadlFeatureEvent](r))
-           case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlFeatureEvent")
-           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlFeatureEvent]())
-          }
-          return r
-        case o: AadlEventDataPort =>
-          val r: PreResult[Context, AadlFeatureEvent] = preAadlEventDataPort(ctx, o) match {
-           case PreResult(preCtx, continu, Some(r: AadlFeatureEvent)) => PreResult(preCtx, continu, Some[AadlFeatureEvent](r))
-           case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlFeatureEvent")
-           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlFeatureEvent]())
-          }
-          return r
-      }
-    }
-
     @pure def preAadlFeatureData(ctx: Context, o: AadlFeatureData): PreResult[Context, AadlFeatureData] = {
       o match {
         case o: AadlEventDataPort =>
@@ -624,6 +605,51 @@ object Transformer {
            case PreResult(preCtx, continu, Some(r: AadlFeatureData)) => PreResult(preCtx, continu, Some[AadlFeatureData](r))
            case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlFeatureData")
            case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlFeatureData]())
+          }
+          return r
+      }
+    }
+
+    @pure def preAadlPort(ctx: Context, o: AadlPort): PreResult[Context, AadlPort] = {
+      o match {
+        case o: AadlEventPort =>
+          val r: PreResult[Context, AadlPort] = preAadlEventPort(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: AadlPort)) => PreResult(preCtx, continu, Some[AadlPort](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlPort")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlPort]())
+          }
+          return r
+        case o: AadlEventDataPort =>
+          val r: PreResult[Context, AadlPort] = preAadlEventDataPort(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: AadlPort)) => PreResult(preCtx, continu, Some[AadlPort](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlPort")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlPort]())
+          }
+          return r
+        case o: AadlDataPort =>
+          val r: PreResult[Context, AadlPort] = preAadlDataPort(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: AadlPort)) => PreResult(preCtx, continu, Some[AadlPort](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlPort")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlPort]())
+          }
+          return r
+      }
+    }
+
+    @pure def preAadlFeatureEvent(ctx: Context, o: AadlFeatureEvent): PreResult[Context, AadlFeatureEvent] = {
+      o match {
+        case o: AadlEventPort =>
+          val r: PreResult[Context, AadlFeatureEvent] = preAadlEventPort(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: AadlFeatureEvent)) => PreResult(preCtx, continu, Some[AadlFeatureEvent](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlFeatureEvent")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlFeatureEvent]())
+          }
+          return r
+        case o: AadlEventDataPort =>
+          val r: PreResult[Context, AadlFeatureEvent] = preAadlEventDataPort(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: AadlFeatureEvent)) => PreResult(preCtx, continu, Some[AadlFeatureEvent](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlFeatureEvent")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlFeatureEvent]())
           }
           return r
       }
@@ -1291,25 +1317,6 @@ object Transformer {
       }
     }
 
-    @pure def postAadlFeatureEvent(ctx: Context, o: AadlFeatureEvent): TPostResult[Context, AadlFeatureEvent] = {
-      o match {
-        case o: AadlEventPort =>
-          val r: TPostResult[Context, AadlFeatureEvent] = postAadlEventPort(ctx, o) match {
-           case TPostResult(postCtx, Some(result: AadlFeatureEvent)) => TPostResult(postCtx, Some[AadlFeatureEvent](result))
-           case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlFeatureEvent")
-           case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlFeatureEvent]())
-          }
-          return r
-        case o: AadlEventDataPort =>
-          val r: TPostResult[Context, AadlFeatureEvent] = postAadlEventDataPort(ctx, o) match {
-           case TPostResult(postCtx, Some(result: AadlFeatureEvent)) => TPostResult(postCtx, Some[AadlFeatureEvent](result))
-           case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlFeatureEvent")
-           case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlFeatureEvent]())
-          }
-          return r
-      }
-    }
-
     @pure def postAadlFeatureData(ctx: Context, o: AadlFeatureData): TPostResult[Context, AadlFeatureData] = {
       o match {
         case o: AadlEventDataPort =>
@@ -1331,6 +1338,51 @@ object Transformer {
            case TPostResult(postCtx, Some(result: AadlFeatureData)) => TPostResult(postCtx, Some[AadlFeatureData](result))
            case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlFeatureData")
            case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlFeatureData]())
+          }
+          return r
+      }
+    }
+
+    @pure def postAadlPort(ctx: Context, o: AadlPort): TPostResult[Context, AadlPort] = {
+      o match {
+        case o: AadlEventPort =>
+          val r: TPostResult[Context, AadlPort] = postAadlEventPort(ctx, o) match {
+           case TPostResult(postCtx, Some(result: AadlPort)) => TPostResult(postCtx, Some[AadlPort](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlPort")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlPort]())
+          }
+          return r
+        case o: AadlEventDataPort =>
+          val r: TPostResult[Context, AadlPort] = postAadlEventDataPort(ctx, o) match {
+           case TPostResult(postCtx, Some(result: AadlPort)) => TPostResult(postCtx, Some[AadlPort](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlPort")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlPort]())
+          }
+          return r
+        case o: AadlDataPort =>
+          val r: TPostResult[Context, AadlPort] = postAadlDataPort(ctx, o) match {
+           case TPostResult(postCtx, Some(result: AadlPort)) => TPostResult(postCtx, Some[AadlPort](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlPort")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlPort]())
+          }
+          return r
+      }
+    }
+
+    @pure def postAadlFeatureEvent(ctx: Context, o: AadlFeatureEvent): TPostResult[Context, AadlFeatureEvent] = {
+      o match {
+        case o: AadlEventPort =>
+          val r: TPostResult[Context, AadlFeatureEvent] = postAadlEventPort(ctx, o) match {
+           case TPostResult(postCtx, Some(result: AadlFeatureEvent)) => TPostResult(postCtx, Some[AadlFeatureEvent](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlFeatureEvent")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlFeatureEvent]())
+          }
+          return r
+        case o: AadlEventDataPort =>
+          val r: TPostResult[Context, AadlFeatureEvent] = postAadlEventDataPort(ctx, o) match {
+           case TPostResult(postCtx, Some(result: AadlFeatureEvent)) => TPostResult(postCtx, Some[AadlFeatureEvent](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlFeatureEvent")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlFeatureEvent]())
           }
           return r
       }
@@ -1702,16 +1754,16 @@ import Transformer._
             TPostResult(r0.ctx, None())
         case o2: AadlThread =>
           val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-          val r1: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(r0.ctx, o2.ports, transformAadlFeature _)
+          val r1: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(r0.ctx, o2.features, transformAadlFeature _)
           if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
-            TPostResult(r1.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents), ports = r1.resultOpt.getOrElse(o2.ports))))
+            TPostResult(r1.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents), features = r1.resultOpt.getOrElse(o2.features))))
           else
             TPostResult(r1.ctx, None())
         case o2: AadlDevice =>
           val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-          val r1: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(r0.ctx, o2.ports, transformAadlFeature _)
+          val r1: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(r0.ctx, o2.features, transformAadlFeature _)
           if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
-            TPostResult(r1.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents), ports = r1.resultOpt.getOrElse(o2.ports))))
+            TPostResult(r1.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents), features = r1.resultOpt.getOrElse(o2.features))))
           else
             TPostResult(r1.ctx, None())
         case o2: AadlSubprogram =>
@@ -1873,16 +1925,16 @@ import Transformer._
             TPostResult(r0.ctx, None())
         case o2: AadlThread =>
           val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-          val r1: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(r0.ctx, o2.ports, transformAadlFeature _)
+          val r1: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(r0.ctx, o2.features, transformAadlFeature _)
           if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
-            TPostResult(r1.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents), ports = r1.resultOpt.getOrElse(o2.ports))))
+            TPostResult(r1.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents), features = r1.resultOpt.getOrElse(o2.features))))
           else
             TPostResult(r1.ctx, None())
         case o2: AadlDevice =>
           val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-          val r1: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(r0.ctx, o2.ports, transformAadlFeature _)
+          val r1: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(r0.ctx, o2.features, transformAadlFeature _)
           if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
-            TPostResult(r1.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents), ports = r1.resultOpt.getOrElse(o2.ports))))
+            TPostResult(r1.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents), features = r1.resultOpt.getOrElse(o2.features))))
           else
             TPostResult(r1.ctx, None())
         case o2: AadlSubprogram =>
@@ -2127,16 +2179,16 @@ import Transformer._
       val rOpt: TPostResult[Context, AadlThreadOrDevice] = o2 match {
         case o2: AadlThread =>
           val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-          val r1: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(r0.ctx, o2.ports, transformAadlFeature _)
+          val r1: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(r0.ctx, o2.features, transformAadlFeature _)
           if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
-            TPostResult(r1.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents), ports = r1.resultOpt.getOrElse(o2.ports))))
+            TPostResult(r1.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents), features = r1.resultOpt.getOrElse(o2.features))))
           else
             TPostResult(r1.ctx, None())
         case o2: AadlDevice =>
           val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-          val r1: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(r0.ctx, o2.ports, transformAadlFeature _)
+          val r1: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(r0.ctx, o2.features, transformAadlFeature _)
           if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
-            TPostResult(r1.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents), ports = r1.resultOpt.getOrElse(o2.ports))))
+            TPostResult(r1.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents), features = r1.resultOpt.getOrElse(o2.features))))
           else
             TPostResult(r1.ctx, None())
       }
@@ -2164,9 +2216,9 @@ import Transformer._
       val o2: AadlThread = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
       val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-      val r1: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(r0.ctx, o2.ports, transformAadlFeature _)
+      val r1: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(r0.ctx, o2.features, transformAadlFeature _)
       if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
-        TPostResult(r1.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents), ports = r1.resultOpt.getOrElse(o2.ports))))
+        TPostResult(r1.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents), features = r1.resultOpt.getOrElse(o2.features))))
       else
         TPostResult(r1.ctx, None())
     } else if (preR.resultOpt.nonEmpty) {
@@ -2192,9 +2244,9 @@ import Transformer._
       val o2: AadlDevice = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
       val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-      val r1: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(r0.ctx, o2.ports, transformAadlFeature _)
+      val r1: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(r0.ctx, o2.features, transformAadlFeature _)
       if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
-        TPostResult(r1.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents), ports = r1.resultOpt.getOrElse(o2.ports))))
+        TPostResult(r1.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents), features = r1.resultOpt.getOrElse(o2.features))))
       else
         TPostResult(r1.ctx, None())
     } else if (preR.resultOpt.nonEmpty) {
@@ -2519,41 +2571,6 @@ import Transformer._
     }
   }
 
-  @pure def transformAadlFeatureEvent(ctx: Context, o: AadlFeatureEvent): TPostResult[Context, AadlFeatureEvent] = {
-    val preR: PreResult[Context, AadlFeatureEvent] = pp.preAadlFeatureEvent(ctx, o)
-    val r: TPostResult[Context, AadlFeatureEvent] = if (preR.continu) {
-      val o2: AadlFeatureEvent = preR.resultOpt.getOrElse(o)
-      val hasChanged: B = preR.resultOpt.nonEmpty
-      val rOpt: TPostResult[Context, AadlFeatureEvent] = o2 match {
-        case o2: AadlEventPort =>
-          if (hasChanged)
-            TPostResult(preR.ctx, Some(o2))
-          else
-            TPostResult(preR.ctx, None())
-        case o2: AadlEventDataPort =>
-          if (hasChanged)
-            TPostResult(preR.ctx, Some(o2))
-          else
-            TPostResult(preR.ctx, None())
-      }
-      rOpt
-    } else if (preR.resultOpt.nonEmpty) {
-      TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
-    } else {
-      TPostResult(preR.ctx, None())
-    }
-    val hasChanged: B = r.resultOpt.nonEmpty
-    val o2: AadlFeatureEvent = r.resultOpt.getOrElse(o)
-    val postR: TPostResult[Context, AadlFeatureEvent] = pp.postAadlFeatureEvent(r.ctx, o2)
-    if (postR.resultOpt.nonEmpty) {
-      return postR
-    } else if (hasChanged) {
-      return TPostResult(postR.ctx, Some(o2))
-    } else {
-      return TPostResult(postR.ctx, None())
-    }
-  }
-
   @pure def transformAadlFeatureData(ctx: Context, o: AadlFeatureData): TPostResult[Context, AadlFeatureData] = {
     val preR: PreResult[Context, AadlFeatureData] = pp.preAadlFeatureData(ctx, o)
     val r: TPostResult[Context, AadlFeatureData] = if (preR.continu) {
@@ -2585,6 +2602,81 @@ import Transformer._
     val hasChanged: B = r.resultOpt.nonEmpty
     val o2: AadlFeatureData = r.resultOpt.getOrElse(o)
     val postR: TPostResult[Context, AadlFeatureData] = pp.postAadlFeatureData(r.ctx, o2)
+    if (postR.resultOpt.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return TPostResult(postR.ctx, Some(o2))
+    } else {
+      return TPostResult(postR.ctx, None())
+    }
+  }
+
+  @pure def transformAadlPort(ctx: Context, o: AadlPort): TPostResult[Context, AadlPort] = {
+    val preR: PreResult[Context, AadlPort] = pp.preAadlPort(ctx, o)
+    val r: TPostResult[Context, AadlPort] = if (preR.continu) {
+      val o2: AadlPort = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      val rOpt: TPostResult[Context, AadlPort] = o2 match {
+        case o2: AadlEventPort =>
+          if (hasChanged)
+            TPostResult(preR.ctx, Some(o2))
+          else
+            TPostResult(preR.ctx, None())
+        case o2: AadlEventDataPort =>
+          if (hasChanged)
+            TPostResult(preR.ctx, Some(o2))
+          else
+            TPostResult(preR.ctx, None())
+        case o2: AadlDataPort =>
+          if (hasChanged)
+            TPostResult(preR.ctx, Some(o2))
+          else
+            TPostResult(preR.ctx, None())
+      }
+      rOpt
+    } else if (preR.resultOpt.nonEmpty) {
+      TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
+    } else {
+      TPostResult(preR.ctx, None())
+    }
+    val hasChanged: B = r.resultOpt.nonEmpty
+    val o2: AadlPort = r.resultOpt.getOrElse(o)
+    val postR: TPostResult[Context, AadlPort] = pp.postAadlPort(r.ctx, o2)
+    if (postR.resultOpt.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return TPostResult(postR.ctx, Some(o2))
+    } else {
+      return TPostResult(postR.ctx, None())
+    }
+  }
+
+  @pure def transformAadlFeatureEvent(ctx: Context, o: AadlFeatureEvent): TPostResult[Context, AadlFeatureEvent] = {
+    val preR: PreResult[Context, AadlFeatureEvent] = pp.preAadlFeatureEvent(ctx, o)
+    val r: TPostResult[Context, AadlFeatureEvent] = if (preR.continu) {
+      val o2: AadlFeatureEvent = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      val rOpt: TPostResult[Context, AadlFeatureEvent] = o2 match {
+        case o2: AadlEventPort =>
+          if (hasChanged)
+            TPostResult(preR.ctx, Some(o2))
+          else
+            TPostResult(preR.ctx, None())
+        case o2: AadlEventDataPort =>
+          if (hasChanged)
+            TPostResult(preR.ctx, Some(o2))
+          else
+            TPostResult(preR.ctx, None())
+      }
+      rOpt
+    } else if (preR.resultOpt.nonEmpty) {
+      TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
+    } else {
+      TPostResult(preR.ctx, None())
+    }
+    val hasChanged: B = r.resultOpt.nonEmpty
+    val o2: AadlFeatureEvent = r.resultOpt.getOrElse(o)
+    val postR: TPostResult[Context, AadlFeatureEvent] = pp.postAadlFeatureEvent(r.ctx, o2)
     if (postR.resultOpt.nonEmpty) {
       return postR
     } else if (hasChanged) {

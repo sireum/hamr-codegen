@@ -51,7 +51,9 @@ import org.sireum._
 
 def usage(): Unit = {
   println("HAMR Codegen /build")
-  println("Usage: ( clean | compile | test | tipe | regen-trans )+")
+  println(
+    st"""Usage: ( clean | compile | test | tipe | regen-trans
+        |       | cvc4  | z3                                  )+""".render)
 }
 
 
@@ -67,6 +69,18 @@ val sireum : Os.Path = homeBin / (if (Os.isWin) "sireum.bat" else "sireum")
 
 val proyekName: String = "sireum-proyek"
 val project: Os.Path = homeBin / "project4testing.cmd"
+
+val versions = (home / "versions.properties").properties
+
+val cache: Os.Path = Os.env("SIREUM_CACHE") match {
+  case Some(p) =>
+    val d = Os.path(p)
+    if (!d.exists) {
+      d.mkdirAll()
+    }
+    d
+  case _ => Os.home / "Downloads" / "sireum"
+}
 
 def clone(repo: String): Unit = {
   if (!(home / repo).exists) {
@@ -97,6 +111,95 @@ def compile(): Unit = {
   println(home)
   proc"$sireum proyek compile --project $project -n $proyekName --par --sha3 .".at(home).console.runCheck()
   println()
+}
+
+
+def platformKind(kind: Os.Kind.Type): String = {
+  kind match {
+    case Os.Kind.Win => return "win"
+    case Os.Kind.Linux => return "linux"
+    case Os.Kind.LinuxArm => return "linux/arm"
+    case Os.Kind.Mac => return "mac"
+    case _ => return "unsupported"
+  }
+}
+
+def installZ3(kind: Os.Kind.Type): Unit = {
+  val version = versions.get("org.sireum.version.z3").get
+  val dir = homeBin / platformKind(kind) / "z3"
+  val ver = dir / "VER"
+
+  if (ver.exists && ver.read == version) {
+    return
+  }
+
+  val filename: String = kind match {
+    case Os.Kind.Win => s"z3-$version-x64-win.zip"
+    case Os.Kind.Linux => s"z3-$version-x64-glibc-2.31.zip"
+    case Os.Kind.Mac => s"z3-$version-x64-osx-10.15.7.zip"
+    case _ => return
+  }
+
+  val bundle = cache / filename
+
+  if (!bundle.exists) {
+    println(s"Please wait while downloading Z3 $version ...")
+    bundle.up.mkdirAll()
+    bundle.downloadFrom(s"https://github.com/Z3Prover/z3/releases/download/z3-$version/$filename")
+  }
+
+  println("Extracting Z3 ...")
+  bundle.unzipTo(dir.up)
+  println()
+
+  for (p <- dir.up.list if ops.StringOps(p.name).startsWith("z3-")) {
+    dir.removeAll()
+    p.moveTo(dir)
+  }
+
+  kind match {
+    case Os.Kind.Linux => (dir / "bin" / "z3").chmod("+x")
+    case Os.Kind.Mac => (dir / "bin" / "z3").chmod("+x")
+    case _ =>
+  }
+
+  ver.writeOver(version)
+}
+
+def installCVC4(kind: Os.Kind.Type): Unit = {
+  val version = versions.get("org.sireum.version.cvc4").get
+  val exe = homeBin / platformKind(kind) / (if (kind == Os.Kind.Win) "cvc4.exe" else "cvc4")
+  val ver = homeBin / platformKind(kind) / ".cvc4.ver"
+
+  if (ver.exists && ver.read == version) {
+    return
+  }
+
+  val filename: String = kind match {
+    case Os.Kind.Win => s"cvc4-$version-win64-opt.exe"
+    case Os.Kind.Linux => s"cvc4-$version-x86_64-linux-opt"
+    case Os.Kind.Mac => s"cvc4-$version-macos-opt"
+    case _ => return
+  }
+
+  val drop = cache / filename
+
+  if (!drop.exists) {
+    println(s"Please wait while downloading CVC4 $version ...")
+    drop.up.mkdirAll()
+    drop.downloadFrom(s"https://github.com/cvc5/cvc5/releases/download/$version/$filename")
+  }
+
+  drop.copyOverTo(exe)
+  println()
+
+  kind match {
+    case Os.Kind.Linux => exe.chmod("+x")
+    case Os.Kind.Mac => exe.chmod("+x")
+    case _ =>
+  }
+
+  ver.writeOver(version)
 }
 
 def getIVE(): B = {
@@ -139,6 +242,9 @@ def getIVE(): B = {
 
 def test(): Unit = {
   assert(getIVE(), "IVE doesn't exist")
+
+  installZ3(Os.kind)
+  installCVC4(Os.kind)
 
   tipe()
 
@@ -191,6 +297,10 @@ for (i <- 0 until Os.cliArgs.size) {
       tipe()
     case string"regen-trans" =>
       regenTransformers()
+    case string"cvc4" => installCVC4(Os.kind)
+    case string"z3" => installZ3(Os.kind)
+    case string"-h" => usage()
+    case string"--help" => usage()
     case cmd =>
       usage()
       eprintln(s"Unrecognized command: $cmd")

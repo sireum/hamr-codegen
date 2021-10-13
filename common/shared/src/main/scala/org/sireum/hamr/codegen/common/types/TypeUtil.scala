@@ -65,10 +65,10 @@ object TypeUtil {
     */
   @pure def getMaxBitsSize(symbolTable: SymbolTable): Option[Z] = {
     var ret = z"-1"
-    for (port <- symbolTable.getThreads().flatMap((t : AadlThread) => t.ports)){
+    for (port <- symbolTable.getThreads().flatMap((t : AadlThread) => t.getPorts())){
       port match {
-        case adp: AadlDataPort =>
-          adp.aadlType.bitSize match {
+        case afd: AadlFeatureData =>
+          afd.aadlType.bitSize match {
             case Some(z) => if (z > ret) { ret = z }
             case _ =>
           }

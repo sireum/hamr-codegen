@@ -198,7 +198,7 @@ object SymbolResolver {
           //assert(c.subComponents.isEmpty) // TODO handle subprograms etc
 
           val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield process(sc, Some(path))
-          var aadlPorts: ISZ[AadlFeature] = ISZ()
+          var aadlFeatures: ISZ[AadlFeature] = ISZ()
 
           def resolveFeature2(feature: ir.Feature, featureGroupIds: ISZ[String]): Unit = {
             feature match {
@@ -246,7 +246,7 @@ object SymbolResolver {
                   }
                   case ir.FeatureCategory.EventDataPort => {
                     val fend = feature.asInstanceOf[ir.FeatureEnd]
-                    AadlDataPort(
+                    AadlEventDataPort(
                       feature = fend,
                       featureGroupIds = featureGroupIds,
                       direction = fend.direction,
@@ -284,7 +284,7 @@ object SymbolResolver {
                     feature = feature,
                     featureGroupIds = featureGroupIds)
                 }
-                aadlPorts = aadlPorts :+ aadlFeature
+                aadlFeatures = aadlFeatures :+ aadlFeature
                 featureMap = featureMap + (featurePath ~> aadlFeature)
             }
           }
@@ -320,7 +320,7 @@ object SymbolResolver {
               identifier = identifier,
               dispatchProtocol = dispatchProtocol,
               period = period,
-              ports = aadlPorts,
+              features = aadlFeatures,
               subComponents = subComponents,
               connectionInstances = c.connectionInstances)
 
@@ -334,7 +334,7 @@ object SymbolResolver {
               identifier = identifier,
               dispatchProtocol = dispatchProtocol,
               period = period,
-              ports = aadlPorts,
+              features = aadlFeatures,
               subComponents = subComponents,
               connectionInstances = c.connectionInstances)
           }

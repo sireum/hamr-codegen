@@ -722,25 +722,6 @@ import MTransformer._
     }
   }
 
-  def preAadlFeatureEvent(o: AadlFeatureEvent): PreResult[AadlFeatureEvent] = {
-    o match {
-      case o: AadlEventPort =>
-        val r: PreResult[AadlFeatureEvent] = preAadlEventPort(o) match {
-         case PreResult(continu, MSome(r: AadlFeatureEvent)) => PreResult(continu, MSome[AadlFeatureEvent](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlFeatureEvent")
-         case PreResult(continu, _) => PreResult(continu, MNone[AadlFeatureEvent]())
-        }
-        return r
-      case o: AadlEventDataPort =>
-        val r: PreResult[AadlFeatureEvent] = preAadlEventDataPort(o) match {
-         case PreResult(continu, MSome(r: AadlFeatureEvent)) => PreResult(continu, MSome[AadlFeatureEvent](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlFeatureEvent")
-         case PreResult(continu, _) => PreResult(continu, MNone[AadlFeatureEvent]())
-        }
-        return r
-    }
-  }
-
   def preAadlFeatureData(o: AadlFeatureData): PreResult[AadlFeatureData] = {
     o match {
       case o: AadlEventDataPort =>
@@ -762,6 +743,51 @@ import MTransformer._
          case PreResult(continu, MSome(r: AadlFeatureData)) => PreResult(continu, MSome[AadlFeatureData](r))
          case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlFeatureData")
          case PreResult(continu, _) => PreResult(continu, MNone[AadlFeatureData]())
+        }
+        return r
+    }
+  }
+
+  def preAadlPort(o: AadlPort): PreResult[AadlPort] = {
+    o match {
+      case o: AadlEventPort =>
+        val r: PreResult[AadlPort] = preAadlEventPort(o) match {
+         case PreResult(continu, MSome(r: AadlPort)) => PreResult(continu, MSome[AadlPort](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlPort")
+         case PreResult(continu, _) => PreResult(continu, MNone[AadlPort]())
+        }
+        return r
+      case o: AadlEventDataPort =>
+        val r: PreResult[AadlPort] = preAadlEventDataPort(o) match {
+         case PreResult(continu, MSome(r: AadlPort)) => PreResult(continu, MSome[AadlPort](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlPort")
+         case PreResult(continu, _) => PreResult(continu, MNone[AadlPort]())
+        }
+        return r
+      case o: AadlDataPort =>
+        val r: PreResult[AadlPort] = preAadlDataPort(o) match {
+         case PreResult(continu, MSome(r: AadlPort)) => PreResult(continu, MSome[AadlPort](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlPort")
+         case PreResult(continu, _) => PreResult(continu, MNone[AadlPort]())
+        }
+        return r
+    }
+  }
+
+  def preAadlFeatureEvent(o: AadlFeatureEvent): PreResult[AadlFeatureEvent] = {
+    o match {
+      case o: AadlEventPort =>
+        val r: PreResult[AadlFeatureEvent] = preAadlEventPort(o) match {
+         case PreResult(continu, MSome(r: AadlFeatureEvent)) => PreResult(continu, MSome[AadlFeatureEvent](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlFeatureEvent")
+         case PreResult(continu, _) => PreResult(continu, MNone[AadlFeatureEvent]())
+        }
+        return r
+      case o: AadlEventDataPort =>
+        val r: PreResult[AadlFeatureEvent] = preAadlEventDataPort(o) match {
+         case PreResult(continu, MSome(r: AadlFeatureEvent)) => PreResult(continu, MSome[AadlFeatureEvent](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlFeatureEvent")
+         case PreResult(continu, _) => PreResult(continu, MNone[AadlFeatureEvent]())
         }
         return r
     }
@@ -1429,25 +1455,6 @@ import MTransformer._
     }
   }
 
-  def postAadlFeatureEvent(o: AadlFeatureEvent): MOption[AadlFeatureEvent] = {
-    o match {
-      case o: AadlEventPort =>
-        val r: MOption[AadlFeatureEvent] = postAadlEventPort(o) match {
-         case MSome(result: AadlFeatureEvent) => MSome[AadlFeatureEvent](result)
-         case MSome(_) => halt("Can only produce object of type AadlFeatureEvent")
-         case _ => MNone[AadlFeatureEvent]()
-        }
-        return r
-      case o: AadlEventDataPort =>
-        val r: MOption[AadlFeatureEvent] = postAadlEventDataPort(o) match {
-         case MSome(result: AadlFeatureEvent) => MSome[AadlFeatureEvent](result)
-         case MSome(_) => halt("Can only produce object of type AadlFeatureEvent")
-         case _ => MNone[AadlFeatureEvent]()
-        }
-        return r
-    }
-  }
-
   def postAadlFeatureData(o: AadlFeatureData): MOption[AadlFeatureData] = {
     o match {
       case o: AadlEventDataPort =>
@@ -1469,6 +1476,51 @@ import MTransformer._
          case MSome(result: AadlFeatureData) => MSome[AadlFeatureData](result)
          case MSome(_) => halt("Can only produce object of type AadlFeatureData")
          case _ => MNone[AadlFeatureData]()
+        }
+        return r
+    }
+  }
+
+  def postAadlPort(o: AadlPort): MOption[AadlPort] = {
+    o match {
+      case o: AadlEventPort =>
+        val r: MOption[AadlPort] = postAadlEventPort(o) match {
+         case MSome(result: AadlPort) => MSome[AadlPort](result)
+         case MSome(_) => halt("Can only produce object of type AadlPort")
+         case _ => MNone[AadlPort]()
+        }
+        return r
+      case o: AadlEventDataPort =>
+        val r: MOption[AadlPort] = postAadlEventDataPort(o) match {
+         case MSome(result: AadlPort) => MSome[AadlPort](result)
+         case MSome(_) => halt("Can only produce object of type AadlPort")
+         case _ => MNone[AadlPort]()
+        }
+        return r
+      case o: AadlDataPort =>
+        val r: MOption[AadlPort] = postAadlDataPort(o) match {
+         case MSome(result: AadlPort) => MSome[AadlPort](result)
+         case MSome(_) => halt("Can only produce object of type AadlPort")
+         case _ => MNone[AadlPort]()
+        }
+        return r
+    }
+  }
+
+  def postAadlFeatureEvent(o: AadlFeatureEvent): MOption[AadlFeatureEvent] = {
+    o match {
+      case o: AadlEventPort =>
+        val r: MOption[AadlFeatureEvent] = postAadlEventPort(o) match {
+         case MSome(result: AadlFeatureEvent) => MSome[AadlFeatureEvent](result)
+         case MSome(_) => halt("Can only produce object of type AadlFeatureEvent")
+         case _ => MNone[AadlFeatureEvent]()
+        }
+        return r
+      case o: AadlEventDataPort =>
+        val r: MOption[AadlFeatureEvent] = postAadlEventDataPort(o) match {
+         case MSome(result: AadlFeatureEvent) => MSome[AadlFeatureEvent](result)
+         case MSome(_) => halt("Can only produce object of type AadlFeatureEvent")
+         case _ => MNone[AadlFeatureEvent]()
         }
         return r
     }
@@ -1814,16 +1866,16 @@ import MTransformer._
             MNone()
         case o2: AadlThread =>
           val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-          val r1: MOption[IS[Z, AadlFeature]] = transformISZ(o2.ports, transformAadlFeature _)
+          val r1: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
           if (hasChanged || r0.nonEmpty || r1.nonEmpty)
-            MSome(o2(subComponents = r0.getOrElse(o2.subComponents), ports = r1.getOrElse(o2.ports)))
+            MSome(o2(subComponents = r0.getOrElse(o2.subComponents), features = r1.getOrElse(o2.features)))
           else
             MNone()
         case o2: AadlDevice =>
           val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-          val r1: MOption[IS[Z, AadlFeature]] = transformISZ(o2.ports, transformAadlFeature _)
+          val r1: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
           if (hasChanged || r0.nonEmpty || r1.nonEmpty)
-            MSome(o2(subComponents = r0.getOrElse(o2.subComponents), ports = r1.getOrElse(o2.ports)))
+            MSome(o2(subComponents = r0.getOrElse(o2.subComponents), features = r1.getOrElse(o2.features)))
           else
             MNone()
         case o2: AadlSubprogram =>
@@ -1985,16 +2037,16 @@ import MTransformer._
             MNone()
         case o2: AadlThread =>
           val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-          val r1: MOption[IS[Z, AadlFeature]] = transformISZ(o2.ports, transformAadlFeature _)
+          val r1: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
           if (hasChanged || r0.nonEmpty || r1.nonEmpty)
-            MSome(o2(subComponents = r0.getOrElse(o2.subComponents), ports = r1.getOrElse(o2.ports)))
+            MSome(o2(subComponents = r0.getOrElse(o2.subComponents), features = r1.getOrElse(o2.features)))
           else
             MNone()
         case o2: AadlDevice =>
           val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-          val r1: MOption[IS[Z, AadlFeature]] = transformISZ(o2.ports, transformAadlFeature _)
+          val r1: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
           if (hasChanged || r0.nonEmpty || r1.nonEmpty)
-            MSome(o2(subComponents = r0.getOrElse(o2.subComponents), ports = r1.getOrElse(o2.ports)))
+            MSome(o2(subComponents = r0.getOrElse(o2.subComponents), features = r1.getOrElse(o2.features)))
           else
             MNone()
         case o2: AadlSubprogram =>
@@ -2239,16 +2291,16 @@ import MTransformer._
       val rOpt: MOption[AadlThreadOrDevice] = o2 match {
         case o2: AadlThread =>
           val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-          val r1: MOption[IS[Z, AadlFeature]] = transformISZ(o2.ports, transformAadlFeature _)
+          val r1: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
           if (hasChanged || r0.nonEmpty || r1.nonEmpty)
-            MSome(o2(subComponents = r0.getOrElse(o2.subComponents), ports = r1.getOrElse(o2.ports)))
+            MSome(o2(subComponents = r0.getOrElse(o2.subComponents), features = r1.getOrElse(o2.features)))
           else
             MNone()
         case o2: AadlDevice =>
           val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-          val r1: MOption[IS[Z, AadlFeature]] = transformISZ(o2.ports, transformAadlFeature _)
+          val r1: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
           if (hasChanged || r0.nonEmpty || r1.nonEmpty)
-            MSome(o2(subComponents = r0.getOrElse(o2.subComponents), ports = r1.getOrElse(o2.ports)))
+            MSome(o2(subComponents = r0.getOrElse(o2.subComponents), features = r1.getOrElse(o2.features)))
           else
             MNone()
       }
@@ -2276,9 +2328,9 @@ import MTransformer._
       val o2: AadlThread = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
       val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-      val r1: MOption[IS[Z, AadlFeature]] = transformISZ(o2.ports, transformAadlFeature _)
+      val r1: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
       if (hasChanged || r0.nonEmpty || r1.nonEmpty)
-        MSome(o2(subComponents = r0.getOrElse(o2.subComponents), ports = r1.getOrElse(o2.ports)))
+        MSome(o2(subComponents = r0.getOrElse(o2.subComponents), features = r1.getOrElse(o2.features)))
       else
         MNone()
     } else if (preR.resultOpt.nonEmpty) {
@@ -2304,9 +2356,9 @@ import MTransformer._
       val o2: AadlDevice = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
       val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-      val r1: MOption[IS[Z, AadlFeature]] = transformISZ(o2.ports, transformAadlFeature _)
+      val r1: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
       if (hasChanged || r0.nonEmpty || r1.nonEmpty)
-        MSome(o2(subComponents = r0.getOrElse(o2.subComponents), ports = r1.getOrElse(o2.ports)))
+        MSome(o2(subComponents = r0.getOrElse(o2.subComponents), features = r1.getOrElse(o2.features)))
       else
         MNone()
     } else if (preR.resultOpt.nonEmpty) {
@@ -2631,41 +2683,6 @@ import MTransformer._
     }
   }
 
-  def transformAadlFeatureEvent(o: AadlFeatureEvent): MOption[AadlFeatureEvent] = {
-    val preR: PreResult[AadlFeatureEvent] = preAadlFeatureEvent(o)
-    val r: MOption[AadlFeatureEvent] = if (preR.continu) {
-      val o2: AadlFeatureEvent = preR.resultOpt.getOrElse(o)
-      val hasChanged: B = preR.resultOpt.nonEmpty
-      val rOpt: MOption[AadlFeatureEvent] = o2 match {
-        case o2: AadlEventPort =>
-          if (hasChanged)
-            MSome(o2)
-          else
-            MNone()
-        case o2: AadlEventDataPort =>
-          if (hasChanged)
-            MSome(o2)
-          else
-            MNone()
-      }
-      rOpt
-    } else if (preR.resultOpt.nonEmpty) {
-      MSome(preR.resultOpt.getOrElse(o))
-    } else {
-      MNone()
-    }
-    val hasChanged: B = r.nonEmpty
-    val o2: AadlFeatureEvent = r.getOrElse(o)
-    val postR: MOption[AadlFeatureEvent] = postAadlFeatureEvent(o2)
-    if (postR.nonEmpty) {
-      return postR
-    } else if (hasChanged) {
-      return MSome(o2)
-    } else {
-      return MNone()
-    }
-  }
-
   def transformAadlFeatureData(o: AadlFeatureData): MOption[AadlFeatureData] = {
     val preR: PreResult[AadlFeatureData] = preAadlFeatureData(o)
     val r: MOption[AadlFeatureData] = if (preR.continu) {
@@ -2697,6 +2714,81 @@ import MTransformer._
     val hasChanged: B = r.nonEmpty
     val o2: AadlFeatureData = r.getOrElse(o)
     val postR: MOption[AadlFeatureData] = postAadlFeatureData(o2)
+    if (postR.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return MSome(o2)
+    } else {
+      return MNone()
+    }
+  }
+
+  def transformAadlPort(o: AadlPort): MOption[AadlPort] = {
+    val preR: PreResult[AadlPort] = preAadlPort(o)
+    val r: MOption[AadlPort] = if (preR.continu) {
+      val o2: AadlPort = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      val rOpt: MOption[AadlPort] = o2 match {
+        case o2: AadlEventPort =>
+          if (hasChanged)
+            MSome(o2)
+          else
+            MNone()
+        case o2: AadlEventDataPort =>
+          if (hasChanged)
+            MSome(o2)
+          else
+            MNone()
+        case o2: AadlDataPort =>
+          if (hasChanged)
+            MSome(o2)
+          else
+            MNone()
+      }
+      rOpt
+    } else if (preR.resultOpt.nonEmpty) {
+      MSome(preR.resultOpt.getOrElse(o))
+    } else {
+      MNone()
+    }
+    val hasChanged: B = r.nonEmpty
+    val o2: AadlPort = r.getOrElse(o)
+    val postR: MOption[AadlPort] = postAadlPort(o2)
+    if (postR.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return MSome(o2)
+    } else {
+      return MNone()
+    }
+  }
+
+  def transformAadlFeatureEvent(o: AadlFeatureEvent): MOption[AadlFeatureEvent] = {
+    val preR: PreResult[AadlFeatureEvent] = preAadlFeatureEvent(o)
+    val r: MOption[AadlFeatureEvent] = if (preR.continu) {
+      val o2: AadlFeatureEvent = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      val rOpt: MOption[AadlFeatureEvent] = o2 match {
+        case o2: AadlEventPort =>
+          if (hasChanged)
+            MSome(o2)
+          else
+            MNone()
+        case o2: AadlEventDataPort =>
+          if (hasChanged)
+            MSome(o2)
+          else
+            MNone()
+      }
+      rOpt
+    } else if (preR.resultOpt.nonEmpty) {
+      MSome(preR.resultOpt.getOrElse(o))
+    } else {
+      MNone()
+    }
+    val hasChanged: B = r.nonEmpty
+    val o2: AadlFeatureEvent = r.getOrElse(o)
+    val postR: MOption[AadlFeatureEvent] = postAadlFeatureEvent(o2)
     if (postR.nonEmpty) {
       return postR
     } else if (hasChanged) {

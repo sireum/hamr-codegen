@@ -38,7 +38,7 @@ jobs:
         run: |
           export COURSIER_CACHE=$GITHUB_WORKSPACE/cache/coursier
           cd $GITHUB_WORKSPACE
-          export HamrTestModes=phantom,compile,generated_unit_tests
+          export HamrTestModes=phantom,compile,generated_unit_tests,smt2
           echo "HamrTestModes=${HamrTestModes}"
           export ALSO_TRANSPILE_VIA_CALLBACKS=true
           echo "ALSO_TRANSPILE_VIA_CALLBACKS=${ALSO_TRANSPILE_VIA_CALLBACKS}"

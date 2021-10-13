@@ -172,7 +172,7 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
 
   def period: Option[Z]
 
-  def ports: ISZ[AadlFeature]
+  def features: ISZ[AadlFeature]
 
   def isPeriodic(): B = { return dispatchProtocol == Dispatch_Protocol.Periodic }
 
@@ -212,9 +212,9 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
     return ret
   }
 
-  def getFeatureAccesses(): ISZ[ir.FeatureAccess] = { return component.features.filter(f => f.isInstanceOf[ir.FeatureAccess]).map(f => f.asInstanceOf[ir.FeatureAccess]) }
+  def getFeatureAccesses(): ISZ[AadlAccessFeature] = { return features.filter(p => p.isInstanceOf[AadlAccessFeature]).map(m => m.asInstanceOf[AadlAccessFeature])}
 
-  def getFeatureEnds(): ISZ[ir.FeatureEnd] = { return component.features.filter(f => f.isInstanceOf[ir.FeatureEnd]).map(f => f.asInstanceOf[ir.FeatureEnd]) }
+  def getPorts(): ISZ[AadlPort] = { return features.filter(p => p.isInstanceOf[AadlPort]).map(m => m.asInstanceOf[AadlPort]) }
 
   def getDomain(symbolTable: SymbolTable): Option[Z] = {
     this match {
@@ -250,7 +250,7 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
                            val dispatchProtocol: Dispatch_Protocol.Type,
                            val period: Option[Z],
 
-                           val ports: ISZ[AadlFeature]) extends AadlThreadOrDevice
+                           val features: ISZ[AadlFeature]) extends AadlThreadOrDevice
 
 @datatype class AadlDevice(val component: ir.Component,
                            val parent: Option[String],
@@ -262,7 +262,7 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
                            val dispatchProtocol: Dispatch_Protocol.Type,
                            val period: Option[Z],
 
-                           val ports: ISZ[AadlFeature]) extends AadlThreadOrDevice
+                           val features: ISZ[AadlFeature]) extends AadlThreadOrDevice
 
 @datatype class AadlSubprogram(val component: ir.Component,
                                val parent: Option[String],
@@ -352,38 +352,45 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
 }
 
 @sig trait AadlDirectedFeature extends AadlFeature {
+
+  override def feature: ir.FeatureEnd
+
   def direction: ir.Direction.Type
 }
 
-@sig trait AadlFeatureEvent extends AadlDirectedFeature
-
-@sig trait AadlFeatureData extends AadlDirectedFeature {
+@sig trait AadlFeatureData {
   def aadlType: AadlType
 }
 
+@sig trait AadlPort extends AadlDirectedFeature
+
+@sig trait AadlFeatureEvent
+
 @datatype class AadlEventPort(val feature: ir.FeatureEnd,
                               val featureGroupIds: ISZ[String],
-                              val direction: ir.Direction.Type) extends AadlFeatureEvent
+                              val direction: ir.Direction.Type) extends AadlPort with AadlFeatureEvent
 
 @datatype class AadlEventDataPort(val feature: ir.FeatureEnd,
                                   val featureGroupIds: ISZ[String],
                                   val direction: ir.Direction.Type,
-                                  val aadlType: AadlType) extends AadlFeatureData with AadlFeatureEvent
+                                  val aadlType: AadlType) extends AadlPort with AadlFeatureData with AadlFeatureEvent
 
 @datatype class AadlDataPort(val feature: ir.FeatureEnd,
                              val featureGroupIds: ISZ[String],
                              val direction: ir.Direction.Type,
-                             val aadlType: AadlType) extends AadlFeatureData
+                             val aadlType: AadlType) extends AadlPort with AadlFeatureData
 
 @datatype class AadlParameter(val feature: ir.FeatureEnd,
                               val featureGroupIds: ISZ[String],
                               val aadlType: AadlType,
-                              val direction: ir.Direction.Type) extends AadlFeatureData {
+                              val direction: ir.Direction.Type) extends AadlDirectedFeature with AadlFeatureData {
 
   def getName(): String = { return CommonUtil.getLastName(feature.identifier) }
 }
 
 @sig trait AadlAccessFeature extends AadlFeature {
+
+  override def feature: ir.FeatureAccess
 
   def kind: ir.AccessType.Type
 
