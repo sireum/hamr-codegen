@@ -98,7 +98,7 @@ def cloneProjects(): Unit = {
 def tipe(): Unit = {
   println("Slang type checking ...")
   val excludes = "arsit/resources,jvm/src/test/result"
-  Os.proc(ISZ(sireum.string, "slang", "tipe", "--verbose", "-r", "-s", home.string, "-x", excludes)).
+  Os.proc(ISZ(sireum.string, "proyek", "tipe", "--project", project.string, "--par", "--strict-aliasing", home.string)).
     at(home).console.runCheck()
   println()
 }
