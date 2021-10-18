@@ -25,14 +25,17 @@ object ModelUtil {
 
     val aadlMaps = SymbolResolver.buildAadlMaps(transModel)
 
-    val tResult = AirTransformer(Transformers.MissingTypeRewriter(reporter)).transformAadl(Transformers.CTX(F), transModel)
+    val tResult = AirTransformer(Transformers.MissingTypeRewriter()).transformAadl(Transformers.CTX(F, ISZ()), transModel)
+    reporter.reports(tResult.ctx.messages)
     if(reporter.hasError) {
       return None()
     }
     transModel = if(tResult.resultOpt.nonEmpty) tResult.resultOpt.get else transModel
 
     // transform BTS nodes -- e.g. out data port assignments -> port output
-    val btxResults = Transformers.BTSMTransform(aadlMaps, reporter).transformAadl(transModel)
+    val btsmt = Transformers.BTSMTransform(aadlMaps, Reporter.create)
+    val btxResults = btsmt.transformAadl(transModel)
+    reporter.reports(btsmt.reporter.messages)
     if(reporter.hasError) {
       return None()
     }

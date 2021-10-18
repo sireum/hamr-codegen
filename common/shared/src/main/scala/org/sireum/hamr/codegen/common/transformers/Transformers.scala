@@ -13,9 +13,9 @@ object Transformers {
 
   val toolName: String = CommonUtil.toolName
 
-  @datatype class CTX(requiresMissingType: B)
+  @datatype class CTX(val requiresMissingType: B, val messages: ISZ[message.Message])
 
-  @datatype class MissingTypeRewriter(reporter: org.sireum.message.Reporter) extends ir.Transformer.PrePost[CTX] {
+  @datatype class MissingTypeRewriter extends ir.Transformer.PrePost[CTX] {
 
     val missingType: ir.Component = ir.Component(
       identifier = ir.Name(ISZ(), None()),
@@ -56,9 +56,10 @@ object Transformers {
       o.category match {
         case ir.ComponentCategory.Data =>
           if (o.classifier.isEmpty) {
+            val reporter = message.Reporter.create
             reporter.warn(o.identifier.pos, toolName, s"Classifier not specified for '${CommonUtil.getName(o.identifier)}'.  Substituting ${TypeUtil.MISSING_AADL_TYPE}")
 
-            ir.Transformer.TPostResult(ctx(requiresMissingType = T),
+            ir.Transformer.TPostResult(ctx(requiresMissingType = T, messages = ctx.messages ++ reporter.messages),
               Some(o(classifier = Some(ir.Classifier(TypeUtil.MISSING_AADL_TYPE)))))
           }
           else {
@@ -70,40 +71,43 @@ object Transformers {
 
     override def postFeatureEnd(ctx: CTX, o: ir.FeatureEnd): ir.Transformer.TPostResult[CTX, ir.FeatureEnd] = {
       if ((CommonUtil.isDataPort(o)) && o.classifier.isEmpty) {
+        val reporter = message.Reporter.create
         reporter.warn(o.identifier.pos, toolName, s"No datatype specified for data port ${CommonUtil.getName(o.identifier)}.  Substituting ${TypeUtil.MISSING_AADL_TYPE} ")
 
-        ir.Transformer.TPostResult(ctx(requiresMissingType = T), Some(o(classifier = Some(ir.Classifier(TypeUtil.MISSING_AADL_TYPE)))))
+        ir.Transformer.TPostResult(ctx(requiresMissingType = T, messages = ctx.messages ++ reporter.messages), Some(o(classifier = Some(ir.Classifier(TypeUtil.MISSING_AADL_TYPE)))))
       } else {
         ir.Transformer.TPostResult(ctx, None[ir.FeatureEnd]())
       }
     }
   }
 
-  @datatype class UnboundedIntegerRewriter(reporter: org.sireum.message.Reporter) extends ir.Transformer.PrePost[B] {
+  @datatype class UnboundedIntegerRewriter extends ir.Transformer.PrePost[ISZ[message.Message]] {
     val unboundInt: String = "Base_Types::Integer"
     val int32: String = "Base_Types::Integer_32"
 
-    override def postClassifier(ctx: B, o: ir.Classifier): ir.Transformer.TPostResult[B, ir.Classifier] = {
+    override def postClassifier(ctx: ISZ[message.Message], o: ir.Classifier): ir.Transformer.TPostResult[ISZ[message.Message], ir.Classifier] = {
       if(o.name == unboundInt) {
+        val reporter = message.Reporter.create
         reporter.warn(None(), toolName, s"Replacing classifier ${unboundInt} with ${int32}")
-        return ir.Transformer.TPostResult(T, Some(ir.Classifier(int32)))
+        return ir.Transformer.TPostResult(ctx ++ reporter.messages, Some(ir.Classifier(int32)))
       } else {
         return ir.Transformer.TPostResult(ctx, None())
       }
     }
 
-    override def postClassifierProp(ctx: B, o: ir.ClassifierProp): ir.Transformer.TPostResult[B, ir.PropertyValue] = {
+    override def postClassifierProp(ctx: ISZ[message.Message], o: ir.ClassifierProp): ir.Transformer.TPostResult[ISZ[message.Message], ir.PropertyValue] = {
       if(o.name == unboundInt) {
+        val reporter = message.Reporter.create
         reporter.warn(None(), toolName, s"Replacing classifier ${unboundInt} with ${int32}")
-        return ir.Transformer.TPostResult(T, Some(ir.ClassifierProp(int32)))
+        return ir.Transformer.TPostResult(ctx ++ reporter.messages, Some(ir.ClassifierProp(int32)))
       } else {
         return ir.Transformer.TPostResult(ctx, None())
       }
     }
   }
 
-  @record class BTSMTransform(aadlMaps: AadlMaps,
-                              reporter: org.sireum.message.Reporter) extends MAirTransformer {
+  @record class BTSMTransform(val aadlMaps: AadlMaps,
+                              val reporter: org.sireum.message.Reporter) extends MAirTransformer {
     var unlabeledCount: Z = 0
 
     override def postBTSTransitionLabel(o: BTSTransitionLabel): MOption[BTSTransitionLabel] = {
