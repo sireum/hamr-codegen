@@ -40,9 +40,10 @@ object SymbolResolver {
 
   def resolve(model: ir.Aadl,
               aadlTypes: AadlTypes,
+              aadlMaps: AadlMaps,
               options: CodeGenConfig,
               reporter: Reporter): SymbolTable = {
-    val st = buildSymbolTable(model, aadlTypes, options, reporter)
+    val st = buildSymbolTable(model, aadlTypes, aadlMaps, options, reporter)
     if(reporter.hasError) {
       return st
     } else {
@@ -64,6 +65,7 @@ object SymbolResolver {
 
   def buildSymbolTable(model: ir.Aadl,
                        aadlTypes: AadlTypes,
+                       aadlMaps: AadlMaps,
                        options: CodeGenConfig,
                        reporter: Reporter): SymbolTable = {
     var featureMap: HashSMap[String, AadlFeature] = HashSMap.empty
@@ -193,6 +195,99 @@ object SymbolResolver {
         return ret
       }
 
+      def resolveFeature2(feature: ir.Feature, featureGroupIds: ISZ[String], parentIsThread: B): ISZ[AadlFeature] = {
+        feature match {
+          case fg: ir.FeatureGroup =>
+            var ret: ISZ[AadlFeature] = ISZ()
+            for(_f <- fg.features) {
+              ret = ret ++ resolveFeature2(_f, featureGroupIds :+ CommonUtil.getLastName(fg.identifier), parentIsThread)
+            }
+            return ret
+          case _ =>
+            val featurePath = CommonUtil.getName(feature.identifier)
+            val airFeature = airFeatureMap.get(featurePath).get
+            assert(airFeature == feature)
+
+            feature match {
+              case fe: ir.FeatureEnd if fe.direction == ir.Direction.InOut => {
+                if (fe.category == ir.FeatureCategory.FeatureGroup) {
+                  // oddly, an empty feature group is treated as a feature end by osate.  Can be
+                  // ignored as it doesn't add any features to the component
+                }
+                else if (parentIsThread){
+                  val id = CommonUtil.getLastName(fe.identifier)
+                  val mesg = s"Invalid direction: ${fe.direction} for ${id}.  Only uni-directional ports are supported"
+                  reporter.error(fe.identifier.pos, CommonUtil.toolName, mesg)
+                }
+              }
+              case _ =>
+            }
+
+            val aadlFeature: AadlFeature = feature.category match {
+              case ir.FeatureCategory.EventPort => {
+                val fend = feature.asInstanceOf[ir.FeatureEnd]
+                AadlEventPort(
+                  feature = fend,
+                  featureGroupIds = featureGroupIds,
+                  direction = fend.direction
+                )
+              }
+              case ir.FeatureCategory.DataPort => {
+                val fend = feature.asInstanceOf[ir.FeatureEnd]
+                AadlDataPort(
+                  feature = fend,
+                  featureGroupIds = featureGroupIds,
+                  direction = fend.direction,
+                  aadlType = getFeatureEndType(fend).get
+                )
+              }
+              case ir.FeatureCategory.EventDataPort => {
+                val fend = feature.asInstanceOf[ir.FeatureEnd]
+                AadlEventDataPort(
+                  feature = fend,
+                  featureGroupIds = featureGroupIds,
+                  direction = fend.direction,
+                  aadlType = getFeatureEndType(fend).get)
+              }
+              case ir.FeatureCategory.BusAccess => {
+                val facc = feature.asInstanceOf[ir.FeatureAccess]
+                AadlBusAccess(
+                  feature = facc,
+                  featureGroupIds = featureGroupIds,
+                  kind = facc.accessType)
+              }
+              case ir.FeatureCategory.DataAccess => {
+                val facc = feature.asInstanceOf[ir.FeatureAccess]
+                AadlDataAccess(
+                  feature = facc,
+                  featureGroupIds = featureGroupIds,
+                  kind = facc.accessType)
+              }
+              case ir.FeatureCategory.SubprogramAccess => {
+                val facc = feature.asInstanceOf[ir.FeatureAccess]
+                AadlSubprogramAccess(
+                  feature = facc,
+                  featureGroupIds = featureGroupIds,
+                  kind = facc.accessType)
+              }
+              case ir.FeatureCategory.SubprogramAccessGroup => {
+                val facc = feature.asInstanceOf[ir.FeatureAccess]
+                AadlSubprogramGroupAccess(
+                  feature = facc,
+                  featureGroupIds = featureGroupIds,
+                  kind = facc.accessType)
+              }
+              case _ => AadlFeatureTODO(
+                feature = feature,
+                featureGroupIds = featureGroupIds)
+            }
+
+            featureMap = featureMap + (featurePath ~> aadlFeature)
+
+            return ISZ(aadlFeature)
+        }
+      }
+
       def handleDeviceOrThread(): AadlComponent = {
         {
           //assert(c.subComponents.isEmpty) // TODO handle subprograms etc
@@ -200,96 +295,8 @@ object SymbolResolver {
           val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield process(sc, Some(path))
           var aadlFeatures: ISZ[AadlFeature] = ISZ()
 
-          def resolveFeature2(feature: ir.Feature, featureGroupIds: ISZ[String]): Unit = {
-            feature match {
-              case fg: ir.FeatureGroup =>
-                for(_f <- fg.features) {
-                  resolveFeature2(_f, featureGroupIds :+ CommonUtil.getLastName(fg.identifier))
-                }
-              case _ =>
-                val featurePath = CommonUtil.getName(feature.identifier)
-                val airFeature = airFeatureMap.get(featurePath).get
-                assert(airFeature == feature)
-
-                feature match {
-                  case fe: ir.FeatureEnd if fe.direction == ir.Direction.InOut => {
-                    if (fe.category == ir.FeatureCategory.FeatureGroup) {
-                      // oddly, an empty feature group is treated as a feature end by osate.  Can be
-                      // ignored as it doesn't add any features to the component
-                    }
-                    else {
-                      val id = CommonUtil.getLastName(fe.identifier)
-                      val mesg = s"Invalid direction: ${fe.direction} for ${id}.  Only uni-directional ports are supported"
-                      reporter.error(fe.identifier.pos, CommonUtil.toolName, mesg)
-                    }
-                  }
-                  case _ =>
-                }
-
-                val aadlFeature: AadlFeature = feature.category match {
-                  case ir.FeatureCategory.EventPort => {
-                    val fend = feature.asInstanceOf[ir.FeatureEnd]
-                    AadlEventPort(
-                      feature = fend,
-                      featureGroupIds = featureGroupIds,
-                      direction = fend.direction
-                    )
-                  }
-                  case ir.FeatureCategory.DataPort => {
-                    val fend = feature.asInstanceOf[ir.FeatureEnd]
-                    AadlDataPort(
-                      feature = fend,
-                      featureGroupIds = featureGroupIds,
-                      direction = fend.direction,
-                      aadlType = getFeatureEndType(fend).get
-                    )
-                  }
-                  case ir.FeatureCategory.EventDataPort => {
-                    val fend = feature.asInstanceOf[ir.FeatureEnd]
-                    AadlEventDataPort(
-                      feature = fend,
-                      featureGroupIds = featureGroupIds,
-                      direction = fend.direction,
-                      aadlType = getFeatureEndType(fend).get)
-                  }
-                  case ir.FeatureCategory.BusAccess => {
-                    val facc = feature.asInstanceOf[ir.FeatureAccess]
-                    AadlBusAccess(
-                      feature = facc,
-                      featureGroupIds = featureGroupIds,
-                      kind = facc.accessType)
-                  }
-                  case ir.FeatureCategory.DataAccess => {
-                    val facc = feature.asInstanceOf[ir.FeatureAccess]
-                    AadlDataAccess(
-                      feature = facc,
-                      featureGroupIds = featureGroupIds,
-                      kind = facc.accessType)
-                  }
-                  case ir.FeatureCategory.SubprogramAccess => {
-                    val facc = feature.asInstanceOf[ir.FeatureAccess]
-                    AadlSubprogramAccess(
-                      feature = facc,
-                      featureGroupIds = featureGroupIds,
-                      kind = facc.accessType)
-                  }
-                  case ir.FeatureCategory.SubprogramAccessGroup => {
-                    val facc = feature.asInstanceOf[ir.FeatureAccess]
-                    AadlSubprogramGroupAccess(
-                      feature = facc,
-                      featureGroupIds = featureGroupIds,
-                      kind = facc.accessType)
-                  }
-                  case _ => AadlFeatureTODO(
-                    feature = feature,
-                    featureGroupIds = featureGroupIds)
-                }
-                aadlFeatures = aadlFeatures :+ aadlFeature
-                featureMap = featureMap + (featurePath ~> aadlFeature)
-            }
-          }
           for (feature <- c.features) {
-            resolveFeature2(feature, ISZ())
+            aadlFeatures = aadlFeatures ++ resolveFeature2(feature, ISZ(), T)
           }
 
           val dispatchProtocol: Dispatch_Protocol.Type = PropertyUtil.getDispatchProtocol(c) match {
@@ -426,6 +433,11 @@ object SymbolResolver {
 
           val boundProcessor: Option[String] = PropertyUtil.getActualProcessorBinding(c)
 
+          var aadlFeatures: ISZ[AadlFeature] = ISZ()
+          for(f <- c.features){
+            aadlFeatures = aadlFeatures ++ resolveFeature2(f, ISZ(), F)
+          }
+
           AadlProcess(
             component = c,
             parent = parent,
@@ -433,6 +445,7 @@ object SymbolResolver {
             identifier = identifier,
             boundProcessor = boundProcessor,
             subComponents = subComponents,
+            features = aadlFeatures,
             connectionInstances = c.connectionInstances)
         }
 
@@ -605,6 +618,8 @@ object SymbolResolver {
       airComponentMap = airComponentMap,
       airFeatureMap = airFeatureMap,
       airClassifierMap = airClassifierMap,
+
+      aadlMaps = aadlMaps,
 
       connections = connectionInstances,
       inConnections = inConnections,

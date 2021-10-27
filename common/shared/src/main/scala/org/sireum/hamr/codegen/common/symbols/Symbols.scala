@@ -4,6 +4,7 @@ package org.sireum.hamr.codegen.common.symbols
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
+import org.sireum.hamr.codegen.common.symbols.SymbolResolver.AadlMaps
 import org.sireum.hamr.ir
 import org.sireum.hamr.ir.FeatureEnd
 
@@ -21,6 +22,8 @@ import org.sireum.hamr.ir.FeatureEnd
                             airComponentMap: HashSMap[String, ir.Component],
                             airFeatureMap: HashSMap[String, ir.Feature],
                             airClassifierMap: HashSMap[String, ir.Component],
+
+                            aadlMaps: AadlMaps,
 
                             connections: ISZ[ir.ConnectionInstance],
 

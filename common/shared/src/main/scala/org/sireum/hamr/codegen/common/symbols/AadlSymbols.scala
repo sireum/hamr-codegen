@@ -118,6 +118,7 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
                             val path: String,
                             val identifier: String,
                             val subComponents: ISZ[AadlComponent],
+                            val features: ISZ[AadlFeature],
                             val connectionInstances: ISZ[ir.ConnectionInstance],
 
                             val boundProcessor: Option[String]) extends AadlComponent {

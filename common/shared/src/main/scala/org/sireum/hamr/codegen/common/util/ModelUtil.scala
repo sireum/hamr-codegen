@@ -56,6 +56,7 @@ object ModelUtil {
     val symbolTable = SymbolResolver.resolve(
       model = transModel,
       aadlTypes = aadlTypes,
+      aadlMaps = aadlMaps,
       options = options,
       reporter = reporter)
 
