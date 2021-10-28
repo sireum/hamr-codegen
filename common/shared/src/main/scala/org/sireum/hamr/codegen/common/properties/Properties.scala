@@ -45,9 +45,6 @@ object HamrProperties {
   val HAMR__BIT_CODEC_ENCODED: String = "HAMR::Bit_Codec_Encoded"
   val HAMR__BIT_CODEC_MAX_SIZE: String = "HAMR::Bit_Codec_Max_Size"
   val HAMR__BIT_CODEC_RAW_CONNECTIONS: String = "HAMR::Bit_Codec_Raw_Connections"
-
-  val HAMR__COMPONENT_TYPE: String = "HAMR::Component_Type"
-
 }
 
 object CaseSchedulingProperties {

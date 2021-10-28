@@ -94,6 +94,15 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
   }
 }
 
+
+@sig trait AadlDispatchableComponent {
+  def dispatchProtocol: Dispatch_Protocol.Type
+
+  def isPeriodic(): B = { return dispatchProtocol == Dispatch_Protocol.Periodic }
+
+  def isSporadic(): B = { return dispatchProtocol == Dispatch_Protocol.Sporadic }
+}
+
 @datatype class AadlProcessor(val component: ir.Component,
                               val parent: Option[String],
                               val path: String,
@@ -110,8 +119,7 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
 
                                      val dispatchProtocol: Dispatch_Protocol.Type,
 
-                                     val boundProcessor: Option[String]) extends Processor
-
+                                     val boundProcessor: Option[String]) extends Processor with AadlDispatchableComponent
 
 @datatype class AadlProcess(val component: ir.Component,
                             val parent: Option[String],
@@ -131,11 +139,6 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
     *  @return T if bound to a virtual processor or it has HAMR::Component_Type => VIRTUAL_MACHINE
     */
   def toVirtualMachine(symbolTable: SymbolTable): B = {
-    PropertyUtil.getDiscreetPropertyValue(component.properties, HamrProperties.HAMR__COMPONENT_TYPE) match {
-      case Some(ir.ValueProp("VIRTUAL_MACHINE")) => return T
-      case Some(t) => halt(s"Unexpected ${HamrProperties.HAMR__COMPONENT_TYPE} ${t} attached to process ${identifier}")
-      case _ =>
-    }
 
     // or is the parent a virtual processor (symbol checking phase ensures the virtual processor
     // is bound to an actual processor)
@@ -151,7 +154,7 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
     return F
   }
 
-  def getBoundProcessor(symbolTable: SymbolTable): Option[AadlProcessor] = {
+  def getBoundProcessor(symbolTable: SymbolTable): Option[Processor] = {
     return symbolTable.getBoundProcessor(this)
   }
 
@@ -167,17 +170,11 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
                                 val subComponents: ISZ[AadlComponent],
                                 val connectionInstances: ISZ[ir.ConnectionInstance]) extends AadlComponent
 
-@sig trait AadlThreadOrDevice extends AadlComponent {
-
-  def dispatchProtocol: Dispatch_Protocol.Type
+@sig trait AadlThreadOrDevice extends AadlComponent with AadlDispatchableComponent {
 
   def period: Option[Z]
 
   def features: ISZ[AadlFeature]
-
-  def isPeriodic(): B = { return dispatchProtocol == Dispatch_Protocol.Periodic }
-
-  def isSporadic(): B = { return dispatchProtocol == Dispatch_Protocol.Sporadic }
 
   def getComputeExecutionTime(): Option[(Z, Z)] = {
     val ret: Option[(Z, Z)] = PropertyUtil.getDiscreetPropertyValue(component.properties, OsateProperties.TIMING_PROPERTIES__COMPUTE_EXECUTION_TIME) match {

@@ -65,7 +65,8 @@ object PacerUtil {
       var unboundedProcesses: ISZ[AadlProcess] = ISZ()
       for (p <- processesWithThreads) {
         symbolTable.getBoundProcessor(p) match {
-          case Some(proc) => boundProcessors = boundProcessors + proc
+          case Some(proc: AadlProcessor) => boundProcessors = boundProcessors + proc
+          case Some(proc: AadlVirtualProcessor) => boundProcessors = boundProcessors + symbolTable.getActualBoundProcess(proc).get
           case _ => unboundedProcesses = unboundedProcesses :+ p
         }
       }

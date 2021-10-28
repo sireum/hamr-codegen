@@ -139,12 +139,12 @@ import org.sireum.hamr.ir.FeatureEnd
     return ret
   }
 
-  def getBoundProcessor(c: AadlProcess): Option[AadlProcessor] = {
-    val ret: Option[AadlProcessor] = c.boundProcessor match {
+  def getBoundProcessor(c: AadlProcess): Option[Processor] = {
+    val ret: Option[Processor] = c.boundProcessor match {
       case Some(path) =>
         componentMap.get(path) match {
           case Some(a: AadlProcessor) => Some(a)
-          case Some(v: AadlVirtualProcessor) => getActualBoundProcess(v)
+          case Some(v: AadlVirtualProcessor) => Some(v)
           case Some(x) => halt(s"Unexpected, ${c.identifier} is a process but is bound to ${x} rather than a processor")
           case _ => None()
         }
@@ -153,8 +153,8 @@ import org.sireum.hamr.ir.FeatureEnd
     return ret
   }
 
-  def getAllBoundProcessors(): ISZ[AadlProcessor] = {
-    var processors: Set[AadlProcessor] = Set.empty
+  def getAllBoundProcessors(): ISZ[Processor] = {
+    var processors: Set[Processor] = Set.empty
 
     for(process <- getProcesses()){
       getBoundProcessor(process) match {

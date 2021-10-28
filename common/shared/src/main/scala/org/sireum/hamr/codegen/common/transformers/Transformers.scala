@@ -208,11 +208,7 @@ object Transformers {
                   T
                 case _ => F
               }
-            case _ =>
-              PropertyUtil.getDiscreetPropertyValue(o.properties, HamrProperties.HAMR__COMPONENT_TYPE) match {
-                case Some(ir.ValueProp("VIRTUAL_MACHINE")) => T
-                case _ => F
-              }
+            case _ => F
           }
 
           if(toVM) {

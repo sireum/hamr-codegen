@@ -438,6 +438,13 @@ object SymbolResolver {
             aadlFeatures = aadlFeatures ++ resolveFeature2(f, ISZ(), F)
           }
 
+          PropertyUtil.getDiscreetPropertyValue(c.properties, "HAMR::Component_Type") match {
+            case Some(x) =>
+              val msg = s"Identifying VM bound processes via HAMR::Component_Type is no longer supported. Remove the annotation and ensure process ${path} is bound to a virtual processor instead"
+              reporter.error(c.identifier.pos, CommonUtil.toolName, msg)
+            case _ =>
+          }
+
           AadlProcess(
             component = c,
             parent = parent,
@@ -646,53 +653,39 @@ object SymbolResolver {
       }
     }
 
-    val willUserPacer: B = PacerUtil.canUseDomainScheduling(symbolTable, options.platform, reporter)
-
-    if(willUserPacer) {
-      var seenDomains: Set[Z] = Set.empty
-      for(p <- symbolTable.getProcesses()) {
-        p.getDomain() match {
-          case Some(z) =>
-            if(seenDomains.contains(z)) {
-              val mesg = s"More than one process is in domain ${z}"
-              reporter.warn(None(), CommonUtil.toolName, mesg)
-            }
-            seenDomains = seenDomains + z
-          case _ =>
-            if (p.getThreads().nonEmpty) {
-              halt(s"This should be infeasible: process ${p.identifier} contains threads but does not not have a domain")
-            }
-        }
-      }
-    }
+    var validProcessorBindings: B = T
 
     {
       if (symbolTable.hasVM()) {
-        if(!willUserPacer) {
-          val mesg = "Model contains VM components so it must use domain scheduling."
-          reporter.error(None(), CommonUtil.toolName, mesg)
-        }
 
         var validProcessors: ISZ[AadlProcessor] = ISZ()
+        var seenVirtualProcessor: Set[AadlVirtualProcessor] = Set.empty
         for(process <- symbolTable.getProcesses().filter(p => p.toVirtualMachine(symbolTable))) {
           assert(process.boundProcessor.nonEmpty, s"Unexpected: ${process.identifier} is going to a vm but it isn't bound to a processor?")
           assert(symbolTable.componentMap.contains(process.boundProcessor.get), s"Unexpected: unable to resolve ${process.identifier}'s bound processor ${process.boundProcessor.get}")
 
-          symbolTable.componentMap.get(process.boundProcessor.get).get match {
-            case avp: AadlVirtualProcessor =>
+          symbolTable.getBoundProcessor(process) match {
+            case Some(avp: AadlVirtualProcessor) =>
+              if(seenVirtualProcessor.contains(avp)) {
+                val msg = s"Multiple processes are bound to the virtual processor ${avp.identifier}. That might be acceptable, but is currently unexpected. Please report"
+                reporter.error(avp.component.identifier.pos, CommonUtil.toolName, msg)
+                validProcessorBindings = F
+              }
+              seenVirtualProcessor = seenVirtualProcessor + avp
               avp.boundProcessor match {
-                case Some(_parent) =>
-                  symbolTable.componentMap.get(_parent) match {
+                case Some(avpsBoundProcessor) =>
+                  symbolTable.componentMap.get(avpsBoundProcessor) match {
                     case Some(avp2: AadlVirtualProcessor) =>
                       val mesg = s"Chained virtual processors is not supported.  Bind virtual processor ${avp.identifier} to an actual processor"
                       reporter.error(avp2.component.identifier.pos, CommonUtil.toolName, mesg)
-                    case Some(ap2: AadlProcessor) =>
-
+                      validProcessorBindings = F
+                    case Some(ap: AadlProcessor) =>
                       PropertyUtil.getDiscreetPropertyValue(avp.component.properties, CasePropertiesProperties.PROP__CASE_PROPERTIES__OS) match {
                         case Some(ir.ValueProp(os)) =>
                           if (os != "Linux") {
                             val mesg = s"Invalid OS ${os} for virtual processor ${avp.identifier}.  HAMR only supports Linux based virtual machines"
                             reporter.error(avp.component.identifier.pos, CommonUtil.toolName, mesg)
+                            validProcessorBindings = F
                           }
                         case _ =>
                           val mesg = s"${CasePropertiesProperties.PROP__CASE_PROPERTIES__OS} not provided for virtual processor ${avp.identifier}.  Assuming Linux"
@@ -700,26 +693,26 @@ object SymbolResolver {
                       }
 
                       // ok, virtual processor is bound to an actual processor
-                      validProcessors = validProcessors :+ ap2
-
-
+                      validProcessors = validProcessors :+ ap
                     case _ =>
-                      val mesg = s"Unexpected: couldn't resolve the bound processor ${_parent} for virtual processor ${avp.identifier}. Please report"
+                      val mesg = s"Unexpected: couldn't resolve the bound processor ${avpsBoundProcessor} for virtual processor ${avp.identifier}. Please report"
                       reporter.error(avp.component.identifier.pos, CommonUtil.toolName, mesg)
+                      validProcessorBindings = F
                   }
                 case _ =>
                   val mesg = s"Virtual processor ${avp.identifier} must be bound to an actual processor since process ${process.identifier} is bound to it"
                   reporter.error(avp.component.identifier.pos, CommonUtil.toolName, mesg)
+                  validProcessorBindings = F
               }
-            case x: AadlProcessor => validProcessors = validProcessors :+ x // ok, process is bound directly to an actual processor
+            case Some(x: AadlProcessor) =>
+              validProcessors = validProcessors :+ x // ok, process is bound directly to an actual processor
             case x =>
               val mesg = s"Unexpected: process ${process.identifier} is bound to ${x} rather than a processor"
               reporter.error(process.component.identifier.pos, CommonUtil.toolName, mesg)
+              validProcessorBindings = F
           }
         }
 
-        // don't use symbolTable.getAllBoundProcessors() here as that expects we always reach an AadlProcessor,
-        // but that might not be case due to issues from the above block
         for(p <- validProcessors){
           p.getPacingMethod() match {
             case Some(CaseSchedulingProperties.PacingMethod.SelfPacing) =>
@@ -730,6 +723,33 @@ object SymbolResolver {
         }
       }
     }
+
+    val willUsePacer: B = validProcessorBindings && PacerUtil.canUseDomainScheduling(symbolTable, options.platform, reporter)
+
+      if (willUsePacer) {
+        var seenDomains: Set[Z] = Set.empty
+        for (p <- symbolTable.getProcesses()) {
+          p.getDomain() match {
+            case Some(z) =>
+              if (seenDomains.contains(z)) {
+                val mesg = s"More than one process is in domain ${z}"
+                reporter.warn(None(), CommonUtil.toolName, mesg)
+              }
+              seenDomains = seenDomains + z
+            case _ =>
+              if (p.getThreads().nonEmpty) {
+                halt(s"This should be infeasible: process ${p.identifier} contains threads but does not not have a domain")
+              }
+          }
+        }
+      }
+
+      if(symbolTable.hasVM() && !willUsePacer) {
+        val msg = "Model contains VM components so it must use domain scheduling"
+        reporter.error(None(), CommonUtil.toolName, msg)
+      }
+
+
 
     {
       if (symbolTable.hasCakeMLComponents()) {
@@ -745,7 +765,7 @@ object SymbolResolver {
           reporter.error(None(), CommonUtil.toolName, mesg)
         }
 
-        if(!willUserPacer) {
+        if(!willUsePacer) {
           val mesg = "Model contains CakeML components so it must use domain scheduling."
           reporter.error(None(), CommonUtil.toolName, mesg)
         }
