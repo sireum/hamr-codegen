@@ -18,15 +18,24 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
   def path: String
   def identifier: String
 
+  def features: ISZ[AadlFeature]
+
   def subComponents: ISZ[AadlComponent]
 
   def connectionInstances: ISZ[ir.ConnectionInstance]
+
+
+  def getFeatureAccesses(): ISZ[AadlAccessFeature] = { return features.filter(p => p.isInstanceOf[AadlAccessFeature]).map(m => m.asInstanceOf[AadlAccessFeature])}
+
+  def getPorts(): ISZ[AadlPort] = { return features.filter(p => p.isInstanceOf[AadlPort]).map(m => m.asInstanceOf[AadlPort]) }
+
 }
 
 @datatype class AadlSystem(val component: ir.Component,
                            val parent: Option[String],
                            val path: String,
                            val identifier: String,
+                           val features: ISZ[AadlFeature],
                            val subComponents: ISZ[AadlComponent],
                            val connectionInstances: ISZ[ir.ConnectionInstance]) extends AadlComponent {
 
@@ -109,6 +118,7 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
                               val parent: Option[String],
                               val path: String,
                               val identifier: String,
+                              val features: ISZ[AadlFeature],
                               val subComponents: ISZ[AadlComponent],
                               val connectionInstances: ISZ[ir.ConnectionInstance]) extends Processor
 
@@ -116,6 +126,7 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
                                      val parent: Option[String],
                                      val path: String,
                                      val identifier: String,
+                                     val features: ISZ[AadlFeature],
                                      val subComponents: ISZ[AadlComponent],
                                      val connectionInstances: ISZ[ir.ConnectionInstance],
 
@@ -128,8 +139,8 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
                             val parent: Option[String],
                             val path: String,
                             val identifier: String,
-                            val subComponents: ISZ[AadlComponent],
                             val features: ISZ[AadlFeature],
+                            val subComponents: ISZ[AadlComponent],
                             val connectionInstances: ISZ[ir.ConnectionInstance],
 
                             val boundProcessor: Option[String]) extends AadlComponent {
@@ -170,14 +181,13 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
                                 val parent: Option[String],
                                 val path: String,
                                 val identifier: String,
+                                val features: ISZ[AadlFeature],
                                 val subComponents: ISZ[AadlComponent],
                                 val connectionInstances: ISZ[ir.ConnectionInstance]) extends AadlComponent
 
 @sig trait AadlThreadOrDevice extends AadlComponent with AadlDispatchableComponent {
 
   def period: Option[Z]
-
-  def features: ISZ[AadlFeature]
 
   def getComputeExecutionTime(): Option[(Z, Z)] = {
     val ret: Option[(Z, Z)] = PropertyUtil.getDiscreetPropertyValue(component.properties, OsateProperties.TIMING_PROPERTIES__COMPUTE_EXECUTION_TIME) match {
@@ -212,10 +222,6 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
     }
     return ret
   }
-
-  def getFeatureAccesses(): ISZ[AadlAccessFeature] = { return features.filter(p => p.isInstanceOf[AadlAccessFeature]).map(m => m.asInstanceOf[AadlAccessFeature])}
-
-  def getPorts(): ISZ[AadlPort] = { return features.filter(p => p.isInstanceOf[AadlPort]).map(m => m.asInstanceOf[AadlPort]) }
 
   def getDomain(symbolTable: SymbolTable): Option[Z] = {
     this match {
@@ -272,12 +278,16 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
                                val subComponents: ISZ[AadlComponent],
                                val connectionInstances: ISZ[ir.ConnectionInstance],
 
-                               val parameters: ISZ[AadlParameter]) extends AadlComponent {
+                               val features: ISZ[AadlFeature]) extends AadlComponent {
   def getClassifier(): String = {
     var s = ops.StringOps(component.classifier.get.name)
     val index = s.lastIndexOf(':') + 1
     s = ops.StringOps(s.substring(index, component.classifier.get.name.size))
     return StringUtil.replaceAll(s.s, ".", "_")
+  }
+
+  def parameters: ISZ[AadlParameter] = {
+    return features.filter((f: AadlFeature) => f.isInstanceOf[AadlParameter]).map((m: AadlFeature) => m.asInstanceOf[AadlParameter])
   }
 }
 
@@ -285,6 +295,7 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
                                     val parent: Option[String],
                                     val path: String,
                                     val identifier: String,
+                                    val features: ISZ[AadlFeature],
                                     val subComponents: ISZ[AadlComponent],
                                     val connectionInstances: ISZ[ir.ConnectionInstance]
 
@@ -294,6 +305,7 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
                          val parent: Option[String],
                          val path: String,
                          val identifier: String,
+                         val features: ISZ[AadlFeature],
                          val subComponents: ISZ[AadlComponent],
                          val connectionInstances: ISZ[ir.ConnectionInstance]) extends AadlComponent
 
@@ -301,6 +313,7 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
                            val parent: Option[String],
                            val path: String,
                            val identifier: String,
+                           val features: ISZ[AadlFeature],
                            val subComponents: ISZ[AadlComponent],
                            val connectionInstances: ISZ[ir.ConnectionInstance]) extends AadlComponent
 
@@ -308,6 +321,7 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
                         val parent: Option[String],
                         val path: String,
                         val identifier: String,
+                        val features: ISZ[AadlFeature],
                         val subComponents: ISZ[AadlComponent],
                         val connectionInstances: ISZ[ir.ConnectionInstance]) extends AadlComponent
 
@@ -315,6 +329,7 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
                                val parent: Option[String],
                                val path: String,
                                val identifier: String,
+                               val features: ISZ[AadlFeature],
                                val subComponents: ISZ[AadlComponent],
                                val connectionInstances: ISZ[ir.ConnectionInstance]) extends AadlComponent
 
@@ -322,6 +337,7 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
                              val parent: Option[String],
                              val path: String,
                              val identifier: String,
+                             val features: ISZ[AadlFeature],
                              val subComponents: ISZ[AadlComponent],
                              val connectionInstances: ISZ[ir.ConnectionInstance]) extends AadlComponent
 

@@ -412,6 +412,32 @@ object Transformer {
       }
     }
 
+    @pure def preAadlDispatchableComponent(ctx: Context, o: AadlDispatchableComponent): PreResult[Context, AadlDispatchableComponent] = {
+      o match {
+        case o: AadlVirtualProcessor =>
+          val r: PreResult[Context, AadlDispatchableComponent] = preAadlVirtualProcessor(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: AadlDispatchableComponent)) => PreResult(preCtx, continu, Some[AadlDispatchableComponent](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlDispatchableComponent")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlDispatchableComponent]())
+          }
+          return r
+        case o: AadlThread =>
+          val r: PreResult[Context, AadlDispatchableComponent] = preAadlThread(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: AadlDispatchableComponent)) => PreResult(preCtx, continu, Some[AadlDispatchableComponent](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlDispatchableComponent")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlDispatchableComponent]())
+          }
+          return r
+        case o: AadlDevice =>
+          val r: PreResult[Context, AadlDispatchableComponent] = preAadlDevice(ctx, o) match {
+           case PreResult(preCtx, continu, Some(r: AadlDispatchableComponent)) => PreResult(preCtx, continu, Some[AadlDispatchableComponent](r))
+           case PreResult(_, _, Some(_)) => halt("Can only produce object of type AadlDispatchableComponent")
+           case PreResult(preCtx, continu, _) => PreResult(preCtx, continu, None[AadlDispatchableComponent]())
+          }
+          return r
+      }
+    }
+
     @pure def preAadlProcessor(ctx: Context, o: AadlProcessor): PreResult[Context, AadlProcessor] = {
       return PreResult(ctx, T, None())
     }
@@ -1145,6 +1171,32 @@ object Transformer {
       }
     }
 
+    @pure def postAadlDispatchableComponent(ctx: Context, o: AadlDispatchableComponent): TPostResult[Context, AadlDispatchableComponent] = {
+      o match {
+        case o: AadlVirtualProcessor =>
+          val r: TPostResult[Context, AadlDispatchableComponent] = postAadlVirtualProcessor(ctx, o) match {
+           case TPostResult(postCtx, Some(result: AadlDispatchableComponent)) => TPostResult(postCtx, Some[AadlDispatchableComponent](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlDispatchableComponent")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlDispatchableComponent]())
+          }
+          return r
+        case o: AadlThread =>
+          val r: TPostResult[Context, AadlDispatchableComponent] = postAadlThread(ctx, o) match {
+           case TPostResult(postCtx, Some(result: AadlDispatchableComponent)) => TPostResult(postCtx, Some[AadlDispatchableComponent](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlDispatchableComponent")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlDispatchableComponent]())
+          }
+          return r
+        case o: AadlDevice =>
+          val r: TPostResult[Context, AadlDispatchableComponent] = postAadlDevice(ctx, o) match {
+           case TPostResult(postCtx, Some(result: AadlDispatchableComponent)) => TPostResult(postCtx, Some[AadlDispatchableComponent](result))
+           case TPostResult(_, Some(_)) => halt("Can only produce object of type AadlDispatchableComponent")
+           case TPostResult(postCtx, _) => TPostResult(postCtx, None[AadlDispatchableComponent]())
+          }
+          return r
+      }
+    }
+
     @pure def postAadlProcessor(ctx: Context, o: AadlProcessor): TPostResult[Context, AadlProcessor] = {
       return TPostResult(ctx, None())
     }
@@ -1723,35 +1775,40 @@ import Transformer._
           else
             TPostResult(preR.ctx, None())
         case o2: AadlSystem =>
-          val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.resultOpt.nonEmpty)
-            TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+          val r0: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(preR.ctx, o2.features, transformAadlFeature _)
+          val r1: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(r0.ctx, o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+            TPostResult(r1.ctx, Some(o2(features = r0.resultOpt.getOrElse(o2.features), subComponents = r1.resultOpt.getOrElse(o2.subComponents))))
           else
-            TPostResult(r0.ctx, None())
+            TPostResult(r1.ctx, None())
         case o2: AadlProcessor =>
-          val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.resultOpt.nonEmpty)
-            TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+          val r0: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(preR.ctx, o2.features, transformAadlFeature _)
+          val r1: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(r0.ctx, o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+            TPostResult(r1.ctx, Some(o2(features = r0.resultOpt.getOrElse(o2.features), subComponents = r1.resultOpt.getOrElse(o2.subComponents))))
           else
-            TPostResult(r0.ctx, None())
+            TPostResult(r1.ctx, None())
         case o2: AadlVirtualProcessor =>
-          val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.resultOpt.nonEmpty)
-            TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+          val r0: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(preR.ctx, o2.features, transformAadlFeature _)
+          val r1: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(r0.ctx, o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+            TPostResult(r1.ctx, Some(o2(features = r0.resultOpt.getOrElse(o2.features), subComponents = r1.resultOpt.getOrElse(o2.subComponents))))
           else
-            TPostResult(r0.ctx, None())
+            TPostResult(r1.ctx, None())
         case o2: AadlProcess =>
-          val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.resultOpt.nonEmpty)
-            TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+          val r0: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(preR.ctx, o2.features, transformAadlFeature _)
+          val r1: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(r0.ctx, o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+            TPostResult(r1.ctx, Some(o2(features = r0.resultOpt.getOrElse(o2.features), subComponents = r1.resultOpt.getOrElse(o2.subComponents))))
           else
-            TPostResult(r0.ctx, None())
+            TPostResult(r1.ctx, None())
         case o2: AadlThreadGroup =>
-          val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.resultOpt.nonEmpty)
-            TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+          val r0: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(preR.ctx, o2.features, transformAadlFeature _)
+          val r1: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(r0.ctx, o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+            TPostResult(r1.ctx, Some(o2(features = r0.resultOpt.getOrElse(o2.features), subComponents = r1.resultOpt.getOrElse(o2.subComponents))))
           else
-            TPostResult(r0.ctx, None())
+            TPostResult(r1.ctx, None())
         case o2: AadlThread =>
           val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
           val r1: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(r0.ctx, o2.features, transformAadlFeature _)
@@ -1768,47 +1825,53 @@ import Transformer._
             TPostResult(r1.ctx, None())
         case o2: AadlSubprogram =>
           val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-          val r1: TPostResult[Context, IS[Z, AadlParameter]] = transformISZ(r0.ctx, o2.parameters, transformAadlParameter _)
+          val r1: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(r0.ctx, o2.features, transformAadlFeature _)
           if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
-            TPostResult(r1.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents), parameters = r1.resultOpt.getOrElse(o2.parameters))))
+            TPostResult(r1.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents), features = r1.resultOpt.getOrElse(o2.features))))
           else
             TPostResult(r1.ctx, None())
         case o2: AadlSubprogramGroup =>
-          val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.resultOpt.nonEmpty)
-            TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+          val r0: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(preR.ctx, o2.features, transformAadlFeature _)
+          val r1: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(r0.ctx, o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+            TPostResult(r1.ctx, Some(o2(features = r0.resultOpt.getOrElse(o2.features), subComponents = r1.resultOpt.getOrElse(o2.subComponents))))
           else
-            TPostResult(r0.ctx, None())
+            TPostResult(r1.ctx, None())
         case o2: AadlData =>
-          val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.resultOpt.nonEmpty)
-            TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+          val r0: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(preR.ctx, o2.features, transformAadlFeature _)
+          val r1: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(r0.ctx, o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+            TPostResult(r1.ctx, Some(o2(features = r0.resultOpt.getOrElse(o2.features), subComponents = r1.resultOpt.getOrElse(o2.subComponents))))
           else
-            TPostResult(r0.ctx, None())
+            TPostResult(r1.ctx, None())
         case o2: AadlMemory =>
-          val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.resultOpt.nonEmpty)
-            TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+          val r0: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(preR.ctx, o2.features, transformAadlFeature _)
+          val r1: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(r0.ctx, o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+            TPostResult(r1.ctx, Some(o2(features = r0.resultOpt.getOrElse(o2.features), subComponents = r1.resultOpt.getOrElse(o2.subComponents))))
           else
-            TPostResult(r0.ctx, None())
+            TPostResult(r1.ctx, None())
         case o2: AadlBus =>
-          val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.resultOpt.nonEmpty)
-            TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+          val r0: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(preR.ctx, o2.features, transformAadlFeature _)
+          val r1: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(r0.ctx, o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+            TPostResult(r1.ctx, Some(o2(features = r0.resultOpt.getOrElse(o2.features), subComponents = r1.resultOpt.getOrElse(o2.subComponents))))
           else
-            TPostResult(r0.ctx, None())
+            TPostResult(r1.ctx, None())
         case o2: AadlVirtualBus =>
-          val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.resultOpt.nonEmpty)
-            TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+          val r0: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(preR.ctx, o2.features, transformAadlFeature _)
+          val r1: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(r0.ctx, o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+            TPostResult(r1.ctx, Some(o2(features = r0.resultOpt.getOrElse(o2.features), subComponents = r1.resultOpt.getOrElse(o2.subComponents))))
           else
-            TPostResult(r0.ctx, None())
+            TPostResult(r1.ctx, None())
         case o2: AadlAbstract =>
-          val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.resultOpt.nonEmpty)
-            TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+          val r0: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(preR.ctx, o2.features, transformAadlFeature _)
+          val r1: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(r0.ctx, o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+            TPostResult(r1.ctx, Some(o2(features = r0.resultOpt.getOrElse(o2.features), subComponents = r1.resultOpt.getOrElse(o2.subComponents))))
           else
-            TPostResult(r0.ctx, None())
+            TPostResult(r1.ctx, None())
         case o2: AadlEventPort =>
           if (hasChanged)
             TPostResult(preR.ctx, Some(o2))
@@ -1894,35 +1957,40 @@ import Transformer._
       val hasChanged: B = preR.resultOpt.nonEmpty
       val rOpt: TPostResult[Context, AadlComponent] = o2 match {
         case o2: AadlSystem =>
-          val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.resultOpt.nonEmpty)
-            TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+          val r0: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(preR.ctx, o2.features, transformAadlFeature _)
+          val r1: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(r0.ctx, o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+            TPostResult(r1.ctx, Some(o2(features = r0.resultOpt.getOrElse(o2.features), subComponents = r1.resultOpt.getOrElse(o2.subComponents))))
           else
-            TPostResult(r0.ctx, None())
+            TPostResult(r1.ctx, None())
         case o2: AadlProcessor =>
-          val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.resultOpt.nonEmpty)
-            TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+          val r0: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(preR.ctx, o2.features, transformAadlFeature _)
+          val r1: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(r0.ctx, o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+            TPostResult(r1.ctx, Some(o2(features = r0.resultOpt.getOrElse(o2.features), subComponents = r1.resultOpt.getOrElse(o2.subComponents))))
           else
-            TPostResult(r0.ctx, None())
+            TPostResult(r1.ctx, None())
         case o2: AadlVirtualProcessor =>
-          val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.resultOpt.nonEmpty)
-            TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+          val r0: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(preR.ctx, o2.features, transformAadlFeature _)
+          val r1: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(r0.ctx, o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+            TPostResult(r1.ctx, Some(o2(features = r0.resultOpt.getOrElse(o2.features), subComponents = r1.resultOpt.getOrElse(o2.subComponents))))
           else
-            TPostResult(r0.ctx, None())
+            TPostResult(r1.ctx, None())
         case o2: AadlProcess =>
-          val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.resultOpt.nonEmpty)
-            TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+          val r0: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(preR.ctx, o2.features, transformAadlFeature _)
+          val r1: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(r0.ctx, o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+            TPostResult(r1.ctx, Some(o2(features = r0.resultOpt.getOrElse(o2.features), subComponents = r1.resultOpt.getOrElse(o2.subComponents))))
           else
-            TPostResult(r0.ctx, None())
+            TPostResult(r1.ctx, None())
         case o2: AadlThreadGroup =>
-          val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.resultOpt.nonEmpty)
-            TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+          val r0: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(preR.ctx, o2.features, transformAadlFeature _)
+          val r1: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(r0.ctx, o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+            TPostResult(r1.ctx, Some(o2(features = r0.resultOpt.getOrElse(o2.features), subComponents = r1.resultOpt.getOrElse(o2.subComponents))))
           else
-            TPostResult(r0.ctx, None())
+            TPostResult(r1.ctx, None())
         case o2: AadlThread =>
           val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
           val r1: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(r0.ctx, o2.features, transformAadlFeature _)
@@ -1939,47 +2007,53 @@ import Transformer._
             TPostResult(r1.ctx, None())
         case o2: AadlSubprogram =>
           val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-          val r1: TPostResult[Context, IS[Z, AadlParameter]] = transformISZ(r0.ctx, o2.parameters, transformAadlParameter _)
+          val r1: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(r0.ctx, o2.features, transformAadlFeature _)
           if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
-            TPostResult(r1.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents), parameters = r1.resultOpt.getOrElse(o2.parameters))))
+            TPostResult(r1.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents), features = r1.resultOpt.getOrElse(o2.features))))
           else
             TPostResult(r1.ctx, None())
         case o2: AadlSubprogramGroup =>
-          val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.resultOpt.nonEmpty)
-            TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+          val r0: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(preR.ctx, o2.features, transformAadlFeature _)
+          val r1: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(r0.ctx, o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+            TPostResult(r1.ctx, Some(o2(features = r0.resultOpt.getOrElse(o2.features), subComponents = r1.resultOpt.getOrElse(o2.subComponents))))
           else
-            TPostResult(r0.ctx, None())
+            TPostResult(r1.ctx, None())
         case o2: AadlData =>
-          val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.resultOpt.nonEmpty)
-            TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+          val r0: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(preR.ctx, o2.features, transformAadlFeature _)
+          val r1: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(r0.ctx, o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+            TPostResult(r1.ctx, Some(o2(features = r0.resultOpt.getOrElse(o2.features), subComponents = r1.resultOpt.getOrElse(o2.subComponents))))
           else
-            TPostResult(r0.ctx, None())
+            TPostResult(r1.ctx, None())
         case o2: AadlMemory =>
-          val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.resultOpt.nonEmpty)
-            TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+          val r0: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(preR.ctx, o2.features, transformAadlFeature _)
+          val r1: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(r0.ctx, o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+            TPostResult(r1.ctx, Some(o2(features = r0.resultOpt.getOrElse(o2.features), subComponents = r1.resultOpt.getOrElse(o2.subComponents))))
           else
-            TPostResult(r0.ctx, None())
+            TPostResult(r1.ctx, None())
         case o2: AadlBus =>
-          val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.resultOpt.nonEmpty)
-            TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+          val r0: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(preR.ctx, o2.features, transformAadlFeature _)
+          val r1: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(r0.ctx, o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+            TPostResult(r1.ctx, Some(o2(features = r0.resultOpt.getOrElse(o2.features), subComponents = r1.resultOpt.getOrElse(o2.subComponents))))
           else
-            TPostResult(r0.ctx, None())
+            TPostResult(r1.ctx, None())
         case o2: AadlVirtualBus =>
-          val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.resultOpt.nonEmpty)
-            TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+          val r0: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(preR.ctx, o2.features, transformAadlFeature _)
+          val r1: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(r0.ctx, o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+            TPostResult(r1.ctx, Some(o2(features = r0.resultOpt.getOrElse(o2.features), subComponents = r1.resultOpt.getOrElse(o2.subComponents))))
           else
-            TPostResult(r0.ctx, None())
+            TPostResult(r1.ctx, None())
         case o2: AadlAbstract =>
-          val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.resultOpt.nonEmpty)
-            TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+          val r0: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(preR.ctx, o2.features, transformAadlFeature _)
+          val r1: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(r0.ctx, o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+            TPostResult(r1.ctx, Some(o2(features = r0.resultOpt.getOrElse(o2.features), subComponents = r1.resultOpt.getOrElse(o2.subComponents))))
           else
-            TPostResult(r0.ctx, None())
+            TPostResult(r1.ctx, None())
       }
       rOpt
     } else if (preR.resultOpt.nonEmpty) {
@@ -2004,11 +2078,12 @@ import Transformer._
     val r: TPostResult[Context, AadlSystem] = if (preR.continu) {
       val o2: AadlSystem = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
-      val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-      if (hasChanged || r0.resultOpt.nonEmpty)
-        TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+      val r0: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(preR.ctx, o2.features, transformAadlFeature _)
+      val r1: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(r0.ctx, o2.subComponents, transformAadlComponent _)
+      if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+        TPostResult(r1.ctx, Some(o2(features = r0.resultOpt.getOrElse(o2.features), subComponents = r1.resultOpt.getOrElse(o2.subComponents))))
       else
-        TPostResult(r0.ctx, None())
+        TPostResult(r1.ctx, None())
     } else if (preR.resultOpt.nonEmpty) {
       TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
     } else {
@@ -2033,17 +2108,19 @@ import Transformer._
       val hasChanged: B = preR.resultOpt.nonEmpty
       val rOpt: TPostResult[Context, Processor] = o2 match {
         case o2: AadlProcessor =>
-          val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.resultOpt.nonEmpty)
-            TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+          val r0: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(preR.ctx, o2.features, transformAadlFeature _)
+          val r1: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(r0.ctx, o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+            TPostResult(r1.ctx, Some(o2(features = r0.resultOpt.getOrElse(o2.features), subComponents = r1.resultOpt.getOrElse(o2.subComponents))))
           else
-            TPostResult(r0.ctx, None())
+            TPostResult(r1.ctx, None())
         case o2: AadlVirtualProcessor =>
-          val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.resultOpt.nonEmpty)
-            TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+          val r0: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(preR.ctx, o2.features, transformAadlFeature _)
+          val r1: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(r0.ctx, o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+            TPostResult(r1.ctx, Some(o2(features = r0.resultOpt.getOrElse(o2.features), subComponents = r1.resultOpt.getOrElse(o2.subComponents))))
           else
-            TPostResult(r0.ctx, None())
+            TPostResult(r1.ctx, None())
       }
       rOpt
     } else if (preR.resultOpt.nonEmpty) {
@@ -2063,16 +2140,63 @@ import Transformer._
     }
   }
 
+  @pure def transformAadlDispatchableComponent(ctx: Context, o: AadlDispatchableComponent): TPostResult[Context, AadlDispatchableComponent] = {
+    val preR: PreResult[Context, AadlDispatchableComponent] = pp.preAadlDispatchableComponent(ctx, o)
+    val r: TPostResult[Context, AadlDispatchableComponent] = if (preR.continu) {
+      val o2: AadlDispatchableComponent = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      val rOpt: TPostResult[Context, AadlDispatchableComponent] = o2 match {
+        case o2: AadlVirtualProcessor =>
+          val r0: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(preR.ctx, o2.features, transformAadlFeature _)
+          val r1: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(r0.ctx, o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+            TPostResult(r1.ctx, Some(o2(features = r0.resultOpt.getOrElse(o2.features), subComponents = r1.resultOpt.getOrElse(o2.subComponents))))
+          else
+            TPostResult(r1.ctx, None())
+        case o2: AadlThread =>
+          val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
+          val r1: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(r0.ctx, o2.features, transformAadlFeature _)
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+            TPostResult(r1.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents), features = r1.resultOpt.getOrElse(o2.features))))
+          else
+            TPostResult(r1.ctx, None())
+        case o2: AadlDevice =>
+          val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
+          val r1: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(r0.ctx, o2.features, transformAadlFeature _)
+          if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+            TPostResult(r1.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents), features = r1.resultOpt.getOrElse(o2.features))))
+          else
+            TPostResult(r1.ctx, None())
+      }
+      rOpt
+    } else if (preR.resultOpt.nonEmpty) {
+      TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
+    } else {
+      TPostResult(preR.ctx, None())
+    }
+    val hasChanged: B = r.resultOpt.nonEmpty
+    val o2: AadlDispatchableComponent = r.resultOpt.getOrElse(o)
+    val postR: TPostResult[Context, AadlDispatchableComponent] = pp.postAadlDispatchableComponent(r.ctx, o2)
+    if (postR.resultOpt.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return TPostResult(postR.ctx, Some(o2))
+    } else {
+      return TPostResult(postR.ctx, None())
+    }
+  }
+
   @pure def transformAadlProcessor(ctx: Context, o: AadlProcessor): TPostResult[Context, AadlProcessor] = {
     val preR: PreResult[Context, AadlProcessor] = pp.preAadlProcessor(ctx, o)
     val r: TPostResult[Context, AadlProcessor] = if (preR.continu) {
       val o2: AadlProcessor = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
-      val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-      if (hasChanged || r0.resultOpt.nonEmpty)
-        TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+      val r0: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(preR.ctx, o2.features, transformAadlFeature _)
+      val r1: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(r0.ctx, o2.subComponents, transformAadlComponent _)
+      if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+        TPostResult(r1.ctx, Some(o2(features = r0.resultOpt.getOrElse(o2.features), subComponents = r1.resultOpt.getOrElse(o2.subComponents))))
       else
-        TPostResult(r0.ctx, None())
+        TPostResult(r1.ctx, None())
     } else if (preR.resultOpt.nonEmpty) {
       TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
     } else {
@@ -2095,11 +2219,12 @@ import Transformer._
     val r: TPostResult[Context, AadlVirtualProcessor] = if (preR.continu) {
       val o2: AadlVirtualProcessor = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
-      val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-      if (hasChanged || r0.resultOpt.nonEmpty)
-        TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+      val r0: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(preR.ctx, o2.features, transformAadlFeature _)
+      val r1: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(r0.ctx, o2.subComponents, transformAadlComponent _)
+      if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+        TPostResult(r1.ctx, Some(o2(features = r0.resultOpt.getOrElse(o2.features), subComponents = r1.resultOpt.getOrElse(o2.subComponents))))
       else
-        TPostResult(r0.ctx, None())
+        TPostResult(r1.ctx, None())
     } else if (preR.resultOpt.nonEmpty) {
       TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
     } else {
@@ -2122,11 +2247,12 @@ import Transformer._
     val r: TPostResult[Context, AadlProcess] = if (preR.continu) {
       val o2: AadlProcess = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
-      val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-      if (hasChanged || r0.resultOpt.nonEmpty)
-        TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+      val r0: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(preR.ctx, o2.features, transformAadlFeature _)
+      val r1: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(r0.ctx, o2.subComponents, transformAadlComponent _)
+      if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+        TPostResult(r1.ctx, Some(o2(features = r0.resultOpt.getOrElse(o2.features), subComponents = r1.resultOpt.getOrElse(o2.subComponents))))
       else
-        TPostResult(r0.ctx, None())
+        TPostResult(r1.ctx, None())
     } else if (preR.resultOpt.nonEmpty) {
       TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
     } else {
@@ -2149,11 +2275,12 @@ import Transformer._
     val r: TPostResult[Context, AadlThreadGroup] = if (preR.continu) {
       val o2: AadlThreadGroup = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
-      val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-      if (hasChanged || r0.resultOpt.nonEmpty)
-        TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+      val r0: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(preR.ctx, o2.features, transformAadlFeature _)
+      val r1: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(r0.ctx, o2.subComponents, transformAadlComponent _)
+      if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+        TPostResult(r1.ctx, Some(o2(features = r0.resultOpt.getOrElse(o2.features), subComponents = r1.resultOpt.getOrElse(o2.subComponents))))
       else
-        TPostResult(r0.ctx, None())
+        TPostResult(r1.ctx, None())
     } else if (preR.resultOpt.nonEmpty) {
       TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
     } else {
@@ -2272,9 +2399,9 @@ import Transformer._
       val o2: AadlSubprogram = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
       val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-      val r1: TPostResult[Context, IS[Z, AadlParameter]] = transformISZ(r0.ctx, o2.parameters, transformAadlParameter _)
+      val r1: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(r0.ctx, o2.features, transformAadlFeature _)
       if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
-        TPostResult(r1.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents), parameters = r1.resultOpt.getOrElse(o2.parameters))))
+        TPostResult(r1.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents), features = r1.resultOpt.getOrElse(o2.features))))
       else
         TPostResult(r1.ctx, None())
     } else if (preR.resultOpt.nonEmpty) {
@@ -2299,11 +2426,12 @@ import Transformer._
     val r: TPostResult[Context, AadlSubprogramGroup] = if (preR.continu) {
       val o2: AadlSubprogramGroup = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
-      val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-      if (hasChanged || r0.resultOpt.nonEmpty)
-        TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+      val r0: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(preR.ctx, o2.features, transformAadlFeature _)
+      val r1: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(r0.ctx, o2.subComponents, transformAadlComponent _)
+      if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+        TPostResult(r1.ctx, Some(o2(features = r0.resultOpt.getOrElse(o2.features), subComponents = r1.resultOpt.getOrElse(o2.subComponents))))
       else
-        TPostResult(r0.ctx, None())
+        TPostResult(r1.ctx, None())
     } else if (preR.resultOpt.nonEmpty) {
       TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
     } else {
@@ -2326,11 +2454,12 @@ import Transformer._
     val r: TPostResult[Context, AadlData] = if (preR.continu) {
       val o2: AadlData = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
-      val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-      if (hasChanged || r0.resultOpt.nonEmpty)
-        TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+      val r0: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(preR.ctx, o2.features, transformAadlFeature _)
+      val r1: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(r0.ctx, o2.subComponents, transformAadlComponent _)
+      if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+        TPostResult(r1.ctx, Some(o2(features = r0.resultOpt.getOrElse(o2.features), subComponents = r1.resultOpt.getOrElse(o2.subComponents))))
       else
-        TPostResult(r0.ctx, None())
+        TPostResult(r1.ctx, None())
     } else if (preR.resultOpt.nonEmpty) {
       TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
     } else {
@@ -2353,11 +2482,12 @@ import Transformer._
     val r: TPostResult[Context, AadlMemory] = if (preR.continu) {
       val o2: AadlMemory = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
-      val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-      if (hasChanged || r0.resultOpt.nonEmpty)
-        TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+      val r0: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(preR.ctx, o2.features, transformAadlFeature _)
+      val r1: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(r0.ctx, o2.subComponents, transformAadlComponent _)
+      if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+        TPostResult(r1.ctx, Some(o2(features = r0.resultOpt.getOrElse(o2.features), subComponents = r1.resultOpt.getOrElse(o2.subComponents))))
       else
-        TPostResult(r0.ctx, None())
+        TPostResult(r1.ctx, None())
     } else if (preR.resultOpt.nonEmpty) {
       TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
     } else {
@@ -2380,11 +2510,12 @@ import Transformer._
     val r: TPostResult[Context, AadlBus] = if (preR.continu) {
       val o2: AadlBus = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
-      val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-      if (hasChanged || r0.resultOpt.nonEmpty)
-        TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+      val r0: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(preR.ctx, o2.features, transformAadlFeature _)
+      val r1: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(r0.ctx, o2.subComponents, transformAadlComponent _)
+      if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+        TPostResult(r1.ctx, Some(o2(features = r0.resultOpt.getOrElse(o2.features), subComponents = r1.resultOpt.getOrElse(o2.subComponents))))
       else
-        TPostResult(r0.ctx, None())
+        TPostResult(r1.ctx, None())
     } else if (preR.resultOpt.nonEmpty) {
       TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
     } else {
@@ -2407,11 +2538,12 @@ import Transformer._
     val r: TPostResult[Context, AadlVirtualBus] = if (preR.continu) {
       val o2: AadlVirtualBus = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
-      val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-      if (hasChanged || r0.resultOpt.nonEmpty)
-        TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+      val r0: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(preR.ctx, o2.features, transformAadlFeature _)
+      val r1: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(r0.ctx, o2.subComponents, transformAadlComponent _)
+      if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+        TPostResult(r1.ctx, Some(o2(features = r0.resultOpt.getOrElse(o2.features), subComponents = r1.resultOpt.getOrElse(o2.subComponents))))
       else
-        TPostResult(r0.ctx, None())
+        TPostResult(r1.ctx, None())
     } else if (preR.resultOpt.nonEmpty) {
       TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
     } else {
@@ -2434,11 +2566,12 @@ import Transformer._
     val r: TPostResult[Context, AadlAbstract] = if (preR.continu) {
       val o2: AadlAbstract = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
-      val r0: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(preR.ctx, o2.subComponents, transformAadlComponent _)
-      if (hasChanged || r0.resultOpt.nonEmpty)
-        TPostResult(r0.ctx, Some(o2(subComponents = r0.resultOpt.getOrElse(o2.subComponents))))
+      val r0: TPostResult[Context, IS[Z, AadlFeature]] = transformISZ(preR.ctx, o2.features, transformAadlFeature _)
+      val r1: TPostResult[Context, IS[Z, AadlComponent]] = transformISZ(r0.ctx, o2.subComponents, transformAadlComponent _)
+      if (hasChanged || r0.resultOpt.nonEmpty || r1.resultOpt.nonEmpty)
+        TPostResult(r1.ctx, Some(o2(features = r0.resultOpt.getOrElse(o2.features), subComponents = r1.resultOpt.getOrElse(o2.subComponents))))
       else
-        TPostResult(r0.ctx, None())
+        TPostResult(r1.ctx, None())
     } else if (preR.resultOpt.nonEmpty) {
       TPostResult(preR.ctx, Some(preR.resultOpt.getOrElse(o)))
     } else {

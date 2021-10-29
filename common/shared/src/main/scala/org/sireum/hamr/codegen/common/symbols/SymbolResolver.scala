@@ -10,7 +10,7 @@ import org.sireum.hamr.codegen.common.resolvers.BTSResolver
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, BaseType, TypeUtil}
 import org.sireum.hamr.codegen.common.util.{CodeGenConfig, CodeGenPlatform, ExperimentalOptions}
 import org.sireum.hamr.ir
-import org.sireum.hamr.ir.{Annex, BTSBLESSAnnexClause, MTransformer => MAirTransformer}
+import org.sireum.hamr.ir.{Annex, BTSBLESSAnnexClause, ComponentCategory, MTransformer => MAirTransformer}
 import org.sireum.message.{Position, Reporter}
 
 object SymbolResolver {
@@ -214,7 +214,7 @@ object SymbolResolver {
                   // oddly, an empty feature group is treated as a feature end by osate.  Can be
                   // ignored as it doesn't add any features to the component
                 }
-                else if (parentIsThread){
+                else if (parentIsThread) {
                   val id = CommonUtil.getLastName(fe.identifier)
                   val mesg = s"Invalid direction: ${fe.direction} for ${id}.  Only uni-directional ports are supported"
                   reporter.error(fe.identifier.pos, CommonUtil.toolName, mesg)
@@ -249,6 +249,14 @@ object SymbolResolver {
                   direction = fend.direction,
                   aadlType = getFeatureEndType(fend).get)
               }
+              case ir.FeatureCategory.Parameter => {
+                val fend = feature.asInstanceOf[ir.FeatureEnd]
+                AadlParameter(
+                  feature = fend,
+                  featureGroupIds = ISZ(),
+                  aadlType = getFeatureEndType(fend).get,
+                  direction = fend.direction)
+              }
               case ir.FeatureCategory.BusAccess => {
                 val facc = feature.asInstanceOf[ir.FeatureAccess]
                 AadlBusAccess(
@@ -277,6 +285,7 @@ object SymbolResolver {
                   featureGroupIds = featureGroupIds,
                   kind = facc.accessType)
               }
+
               case _ => AadlFeatureTODO(
                 feature = feature,
                 featureGroupIds = featureGroupIds)
@@ -288,16 +297,17 @@ object SymbolResolver {
         }
       }
 
+      var aadlFeatures: ISZ[AadlFeature] = ISZ()
+
+      for (feature <- c.features) {
+        aadlFeatures = aadlFeatures ++ resolveFeature2(feature, ISZ(), c.category == ir.ComponentCategory.Thread)
+      }
+
       def handleDeviceOrThread(): AadlComponent = {
         {
           //assert(c.subComponents.isEmpty) // TODO handle subprograms etc
 
           val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield process(sc, Some(path))
-          var aadlFeatures: ISZ[AadlFeature] = ISZ()
-
-          for (feature <- c.features) {
-            aadlFeatures = aadlFeatures ++ resolveFeature2(feature, ISZ(), T)
-          }
 
           val dispatchProtocol: Dispatch_Protocol.Type = PropertyUtil.getDispatchProtocol(c) match {
             case Some(x) => x
@@ -353,28 +363,13 @@ object SymbolResolver {
         assert(c.subComponents.isEmpty, s"Need to handle subcomponents of subprograms: ${c}")
         assert(c.connectionInstances.isEmpty, s"Not expecting subprograms to have connection instances: ${c}")
 
-        val parameters: ISZ[AadlParameter] = c.features.map(p => {
-          p match {
-            case fe: ir.FeatureEnd =>
-              val paramType: AadlType = getFeatureEndType(fe).get
-
-              AadlParameter(
-                feature = fe,
-                featureGroupIds = ISZ(),
-                aadlType = paramType,
-                direction = fe.direction)
-
-            case _ => halt(s"Unexpected feature type ${p}")
-          }
-        })
-
         val ret: AadlSubprogram = AadlSubprogram(
           component = c,
           parent = parent,
           path = path,
           identifier = identifier,
           subComponents = ISZ(),
-          parameters = parameters,
+          features = aadlFeatures,
           connectionInstances = ISZ())
 
         return ret
@@ -389,6 +384,7 @@ object SymbolResolver {
             parent = parent,
             path = path,
             identifier = identifier,
+            features = aadlFeatures,
             subComponents = subComponents,
             connectionInstances = c.connectionInstances)
         }
@@ -399,6 +395,7 @@ object SymbolResolver {
             parent = None(),
             path = path,
             identifier = identifier,
+            features = aadlFeatures,
             subComponents = ISZ(),
             connectionInstances = c.connectionInstances)
         }
@@ -424,6 +421,7 @@ object SymbolResolver {
             parent = None(),
             path = path,
             identifier = identifier,
+            features = aadlFeatures,
             subComponents = ISZ(),
             connectionInstances = c.connectionInstances,
             dispatchProtocol = dispatchProtocol,
@@ -435,11 +433,6 @@ object SymbolResolver {
           val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield process(sc, Some(path))
 
           val boundProcessor: Option[String] = PropertyUtil.getActualProcessorBinding(c)
-
-          var aadlFeatures: ISZ[AadlFeature] = ISZ()
-          for(f <- c.features){
-            aadlFeatures = aadlFeatures ++ resolveFeature2(f, ISZ(), F)
-          }
 
           PropertyUtil.getDiscreetPropertyValue(c.properties, "HAMR::Component_Type") match {
             case Some(x) =>
@@ -471,6 +464,7 @@ object SymbolResolver {
             parent = parent,
             path = path,
             identifier = identifier,
+            features = aadlFeatures,
             subComponents = subComponents,
             connectionInstances = c.connectionInstances)
 
@@ -484,6 +478,7 @@ object SymbolResolver {
             parent = parent,
             path = path,
             identifier = identifier,
+            features = aadlFeatures,
             subComponents = subComponents,
             connectionInstances = c.connectionInstances)
 
@@ -495,6 +490,7 @@ object SymbolResolver {
             parent = parent,
             path = path,
             identifier = identifier,
+            features = aadlFeatures,
             subComponents = subComponents,
             connectionInstances = c.connectionInstances)
 
@@ -506,6 +502,7 @@ object SymbolResolver {
             parent = parent,
             path = path,
             identifier = identifier,
+            features = aadlFeatures,
             subComponents = subComponents,
             connectionInstances = c.connectionInstances)
 
@@ -517,6 +514,7 @@ object SymbolResolver {
             parent = parent,
             path = path,
             identifier = identifier,
+            features = aadlFeatures,
             subComponents = subComponents,
             connectionInstances = c.connectionInstances)
 
@@ -528,6 +526,7 @@ object SymbolResolver {
             parent = parent,
             path = path,
             identifier = identifier,
+            features = aadlFeatures,
             subComponents = subComponents,
             connectionInstances = c.connectionInstances)
 
@@ -539,6 +538,7 @@ object SymbolResolver {
             parent = parent,
             path = path,
             identifier = identifier,
+            features = aadlFeatures,
             subComponents = subComponents,
             connectionInstances = c.connectionInstances)
       }

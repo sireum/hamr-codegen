@@ -550,6 +550,32 @@ import MTransformer._
     }
   }
 
+  def preAadlDispatchableComponent(o: AadlDispatchableComponent): PreResult[AadlDispatchableComponent] = {
+    o match {
+      case o: AadlVirtualProcessor =>
+        val r: PreResult[AadlDispatchableComponent] = preAadlVirtualProcessor(o) match {
+         case PreResult(continu, MSome(r: AadlDispatchableComponent)) => PreResult(continu, MSome[AadlDispatchableComponent](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlDispatchableComponent")
+         case PreResult(continu, _) => PreResult(continu, MNone[AadlDispatchableComponent]())
+        }
+        return r
+      case o: AadlThread =>
+        val r: PreResult[AadlDispatchableComponent] = preAadlThread(o) match {
+         case PreResult(continu, MSome(r: AadlDispatchableComponent)) => PreResult(continu, MSome[AadlDispatchableComponent](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlDispatchableComponent")
+         case PreResult(continu, _) => PreResult(continu, MNone[AadlDispatchableComponent]())
+        }
+        return r
+      case o: AadlDevice =>
+        val r: PreResult[AadlDispatchableComponent] = preAadlDevice(o) match {
+         case PreResult(continu, MSome(r: AadlDispatchableComponent)) => PreResult(continu, MSome[AadlDispatchableComponent](r))
+         case PreResult(_, MSome(_)) => halt("Can only produce object of type AadlDispatchableComponent")
+         case PreResult(continu, _) => PreResult(continu, MNone[AadlDispatchableComponent]())
+        }
+        return r
+    }
+  }
+
   def preAadlProcessor(o: AadlProcessor): PreResult[AadlProcessor] = {
     return PreResultAadlProcessor
   }
@@ -1283,6 +1309,32 @@ import MTransformer._
     }
   }
 
+  def postAadlDispatchableComponent(o: AadlDispatchableComponent): MOption[AadlDispatchableComponent] = {
+    o match {
+      case o: AadlVirtualProcessor =>
+        val r: MOption[AadlDispatchableComponent] = postAadlVirtualProcessor(o) match {
+         case MSome(result: AadlDispatchableComponent) => MSome[AadlDispatchableComponent](result)
+         case MSome(_) => halt("Can only produce object of type AadlDispatchableComponent")
+         case _ => MNone[AadlDispatchableComponent]()
+        }
+        return r
+      case o: AadlThread =>
+        val r: MOption[AadlDispatchableComponent] = postAadlThread(o) match {
+         case MSome(result: AadlDispatchableComponent) => MSome[AadlDispatchableComponent](result)
+         case MSome(_) => halt("Can only produce object of type AadlDispatchableComponent")
+         case _ => MNone[AadlDispatchableComponent]()
+        }
+        return r
+      case o: AadlDevice =>
+        val r: MOption[AadlDispatchableComponent] = postAadlDevice(o) match {
+         case MSome(result: AadlDispatchableComponent) => MSome[AadlDispatchableComponent](result)
+         case MSome(_) => halt("Can only produce object of type AadlDispatchableComponent")
+         case _ => MNone[AadlDispatchableComponent]()
+        }
+        return r
+    }
+  }
+
   def postAadlProcessor(o: AadlProcessor): MOption[AadlProcessor] = {
     return PostResultAadlProcessor
   }
@@ -1835,33 +1887,38 @@ import MTransformer._
           else
             MNone()
         case o2: AadlSystem =>
-          val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.nonEmpty)
-            MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+          val r0: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+          val r1: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+            MSome(o2(features = r0.getOrElse(o2.features), subComponents = r1.getOrElse(o2.subComponents)))
           else
             MNone()
         case o2: AadlProcessor =>
-          val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.nonEmpty)
-            MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+          val r0: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+          val r1: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+            MSome(o2(features = r0.getOrElse(o2.features), subComponents = r1.getOrElse(o2.subComponents)))
           else
             MNone()
         case o2: AadlVirtualProcessor =>
-          val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.nonEmpty)
-            MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+          val r0: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+          val r1: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+            MSome(o2(features = r0.getOrElse(o2.features), subComponents = r1.getOrElse(o2.subComponents)))
           else
             MNone()
         case o2: AadlProcess =>
-          val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.nonEmpty)
-            MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+          val r0: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+          val r1: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+            MSome(o2(features = r0.getOrElse(o2.features), subComponents = r1.getOrElse(o2.subComponents)))
           else
             MNone()
         case o2: AadlThreadGroup =>
-          val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.nonEmpty)
-            MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+          val r0: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+          val r1: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+            MSome(o2(features = r0.getOrElse(o2.features), subComponents = r1.getOrElse(o2.subComponents)))
           else
             MNone()
         case o2: AadlThread =>
@@ -1880,45 +1937,51 @@ import MTransformer._
             MNone()
         case o2: AadlSubprogram =>
           val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-          val r1: MOption[IS[Z, AadlParameter]] = transformISZ(o2.parameters, transformAadlParameter _)
+          val r1: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
           if (hasChanged || r0.nonEmpty || r1.nonEmpty)
-            MSome(o2(subComponents = r0.getOrElse(o2.subComponents), parameters = r1.getOrElse(o2.parameters)))
+            MSome(o2(subComponents = r0.getOrElse(o2.subComponents), features = r1.getOrElse(o2.features)))
           else
             MNone()
         case o2: AadlSubprogramGroup =>
-          val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.nonEmpty)
-            MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+          val r0: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+          val r1: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+            MSome(o2(features = r0.getOrElse(o2.features), subComponents = r1.getOrElse(o2.subComponents)))
           else
             MNone()
         case o2: AadlData =>
-          val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.nonEmpty)
-            MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+          val r0: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+          val r1: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+            MSome(o2(features = r0.getOrElse(o2.features), subComponents = r1.getOrElse(o2.subComponents)))
           else
             MNone()
         case o2: AadlMemory =>
-          val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.nonEmpty)
-            MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+          val r0: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+          val r1: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+            MSome(o2(features = r0.getOrElse(o2.features), subComponents = r1.getOrElse(o2.subComponents)))
           else
             MNone()
         case o2: AadlBus =>
-          val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.nonEmpty)
-            MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+          val r0: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+          val r1: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+            MSome(o2(features = r0.getOrElse(o2.features), subComponents = r1.getOrElse(o2.subComponents)))
           else
             MNone()
         case o2: AadlVirtualBus =>
-          val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.nonEmpty)
-            MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+          val r0: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+          val r1: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+            MSome(o2(features = r0.getOrElse(o2.features), subComponents = r1.getOrElse(o2.subComponents)))
           else
             MNone()
         case o2: AadlAbstract =>
-          val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.nonEmpty)
-            MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+          val r0: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+          val r1: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+            MSome(o2(features = r0.getOrElse(o2.features), subComponents = r1.getOrElse(o2.subComponents)))
           else
             MNone()
         case o2: AadlEventPort =>
@@ -2006,33 +2069,38 @@ import MTransformer._
       val hasChanged: B = preR.resultOpt.nonEmpty
       val rOpt: MOption[AadlComponent] = o2 match {
         case o2: AadlSystem =>
-          val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.nonEmpty)
-            MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+          val r0: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+          val r1: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+            MSome(o2(features = r0.getOrElse(o2.features), subComponents = r1.getOrElse(o2.subComponents)))
           else
             MNone()
         case o2: AadlProcessor =>
-          val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.nonEmpty)
-            MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+          val r0: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+          val r1: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+            MSome(o2(features = r0.getOrElse(o2.features), subComponents = r1.getOrElse(o2.subComponents)))
           else
             MNone()
         case o2: AadlVirtualProcessor =>
-          val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.nonEmpty)
-            MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+          val r0: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+          val r1: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+            MSome(o2(features = r0.getOrElse(o2.features), subComponents = r1.getOrElse(o2.subComponents)))
           else
             MNone()
         case o2: AadlProcess =>
-          val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.nonEmpty)
-            MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+          val r0: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+          val r1: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+            MSome(o2(features = r0.getOrElse(o2.features), subComponents = r1.getOrElse(o2.subComponents)))
           else
             MNone()
         case o2: AadlThreadGroup =>
-          val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.nonEmpty)
-            MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+          val r0: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+          val r1: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+            MSome(o2(features = r0.getOrElse(o2.features), subComponents = r1.getOrElse(o2.subComponents)))
           else
             MNone()
         case o2: AadlThread =>
@@ -2051,45 +2119,51 @@ import MTransformer._
             MNone()
         case o2: AadlSubprogram =>
           val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-          val r1: MOption[IS[Z, AadlParameter]] = transformISZ(o2.parameters, transformAadlParameter _)
+          val r1: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
           if (hasChanged || r0.nonEmpty || r1.nonEmpty)
-            MSome(o2(subComponents = r0.getOrElse(o2.subComponents), parameters = r1.getOrElse(o2.parameters)))
+            MSome(o2(subComponents = r0.getOrElse(o2.subComponents), features = r1.getOrElse(o2.features)))
           else
             MNone()
         case o2: AadlSubprogramGroup =>
-          val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.nonEmpty)
-            MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+          val r0: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+          val r1: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+            MSome(o2(features = r0.getOrElse(o2.features), subComponents = r1.getOrElse(o2.subComponents)))
           else
             MNone()
         case o2: AadlData =>
-          val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.nonEmpty)
-            MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+          val r0: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+          val r1: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+            MSome(o2(features = r0.getOrElse(o2.features), subComponents = r1.getOrElse(o2.subComponents)))
           else
             MNone()
         case o2: AadlMemory =>
-          val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.nonEmpty)
-            MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+          val r0: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+          val r1: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+            MSome(o2(features = r0.getOrElse(o2.features), subComponents = r1.getOrElse(o2.subComponents)))
           else
             MNone()
         case o2: AadlBus =>
-          val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.nonEmpty)
-            MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+          val r0: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+          val r1: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+            MSome(o2(features = r0.getOrElse(o2.features), subComponents = r1.getOrElse(o2.subComponents)))
           else
             MNone()
         case o2: AadlVirtualBus =>
-          val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.nonEmpty)
-            MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+          val r0: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+          val r1: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+            MSome(o2(features = r0.getOrElse(o2.features), subComponents = r1.getOrElse(o2.subComponents)))
           else
             MNone()
         case o2: AadlAbstract =>
-          val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.nonEmpty)
-            MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+          val r0: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+          val r1: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+            MSome(o2(features = r0.getOrElse(o2.features), subComponents = r1.getOrElse(o2.subComponents)))
           else
             MNone()
       }
@@ -2116,9 +2190,10 @@ import MTransformer._
     val r: MOption[AadlSystem] = if (preR.continu) {
       val o2: AadlSystem = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
-      val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-      if (hasChanged || r0.nonEmpty)
-        MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+      val r0: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+      val r1: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+      if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+        MSome(o2(features = r0.getOrElse(o2.features), subComponents = r1.getOrElse(o2.subComponents)))
       else
         MNone()
     } else if (preR.resultOpt.nonEmpty) {
@@ -2145,15 +2220,17 @@ import MTransformer._
       val hasChanged: B = preR.resultOpt.nonEmpty
       val rOpt: MOption[Processor] = o2 match {
         case o2: AadlProcessor =>
-          val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.nonEmpty)
-            MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+          val r0: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+          val r1: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+            MSome(o2(features = r0.getOrElse(o2.features), subComponents = r1.getOrElse(o2.subComponents)))
           else
             MNone()
         case o2: AadlVirtualProcessor =>
-          val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-          if (hasChanged || r0.nonEmpty)
-            MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+          val r0: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+          val r1: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+            MSome(o2(features = r0.getOrElse(o2.features), subComponents = r1.getOrElse(o2.subComponents)))
           else
             MNone()
       }
@@ -2175,14 +2252,61 @@ import MTransformer._
     }
   }
 
+  def transformAadlDispatchableComponent(o: AadlDispatchableComponent): MOption[AadlDispatchableComponent] = {
+    val preR: PreResult[AadlDispatchableComponent] = preAadlDispatchableComponent(o)
+    val r: MOption[AadlDispatchableComponent] = if (preR.continu) {
+      val o2: AadlDispatchableComponent = preR.resultOpt.getOrElse(o)
+      val hasChanged: B = preR.resultOpt.nonEmpty
+      val rOpt: MOption[AadlDispatchableComponent] = o2 match {
+        case o2: AadlVirtualProcessor =>
+          val r0: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+          val r1: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+            MSome(o2(features = r0.getOrElse(o2.features), subComponents = r1.getOrElse(o2.subComponents)))
+          else
+            MNone()
+        case o2: AadlThread =>
+          val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+          val r1: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+            MSome(o2(subComponents = r0.getOrElse(o2.subComponents), features = r1.getOrElse(o2.features)))
+          else
+            MNone()
+        case o2: AadlDevice =>
+          val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+          val r1: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+          if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+            MSome(o2(subComponents = r0.getOrElse(o2.subComponents), features = r1.getOrElse(o2.features)))
+          else
+            MNone()
+      }
+      rOpt
+    } else if (preR.resultOpt.nonEmpty) {
+      MSome(preR.resultOpt.getOrElse(o))
+    } else {
+      MNone()
+    }
+    val hasChanged: B = r.nonEmpty
+    val o2: AadlDispatchableComponent = r.getOrElse(o)
+    val postR: MOption[AadlDispatchableComponent] = postAadlDispatchableComponent(o2)
+    if (postR.nonEmpty) {
+      return postR
+    } else if (hasChanged) {
+      return MSome(o2)
+    } else {
+      return MNone()
+    }
+  }
+
   def transformAadlProcessor(o: AadlProcessor): MOption[AadlProcessor] = {
     val preR: PreResult[AadlProcessor] = preAadlProcessor(o)
     val r: MOption[AadlProcessor] = if (preR.continu) {
       val o2: AadlProcessor = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
-      val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-      if (hasChanged || r0.nonEmpty)
-        MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+      val r0: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+      val r1: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+      if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+        MSome(o2(features = r0.getOrElse(o2.features), subComponents = r1.getOrElse(o2.subComponents)))
       else
         MNone()
     } else if (preR.resultOpt.nonEmpty) {
@@ -2207,9 +2331,10 @@ import MTransformer._
     val r: MOption[AadlVirtualProcessor] = if (preR.continu) {
       val o2: AadlVirtualProcessor = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
-      val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-      if (hasChanged || r0.nonEmpty)
-        MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+      val r0: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+      val r1: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+      if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+        MSome(o2(features = r0.getOrElse(o2.features), subComponents = r1.getOrElse(o2.subComponents)))
       else
         MNone()
     } else if (preR.resultOpt.nonEmpty) {
@@ -2234,9 +2359,10 @@ import MTransformer._
     val r: MOption[AadlProcess] = if (preR.continu) {
       val o2: AadlProcess = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
-      val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-      if (hasChanged || r0.nonEmpty)
-        MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+      val r0: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+      val r1: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+      if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+        MSome(o2(features = r0.getOrElse(o2.features), subComponents = r1.getOrElse(o2.subComponents)))
       else
         MNone()
     } else if (preR.resultOpt.nonEmpty) {
@@ -2261,9 +2387,10 @@ import MTransformer._
     val r: MOption[AadlThreadGroup] = if (preR.continu) {
       val o2: AadlThreadGroup = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
-      val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-      if (hasChanged || r0.nonEmpty)
-        MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+      val r0: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+      val r1: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+      if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+        MSome(o2(features = r0.getOrElse(o2.features), subComponents = r1.getOrElse(o2.subComponents)))
       else
         MNone()
     } else if (preR.resultOpt.nonEmpty) {
@@ -2384,9 +2511,9 @@ import MTransformer._
       val o2: AadlSubprogram = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
       val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-      val r1: MOption[IS[Z, AadlParameter]] = transformISZ(o2.parameters, transformAadlParameter _)
+      val r1: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
       if (hasChanged || r0.nonEmpty || r1.nonEmpty)
-        MSome(o2(subComponents = r0.getOrElse(o2.subComponents), parameters = r1.getOrElse(o2.parameters)))
+        MSome(o2(subComponents = r0.getOrElse(o2.subComponents), features = r1.getOrElse(o2.features)))
       else
         MNone()
     } else if (preR.resultOpt.nonEmpty) {
@@ -2411,9 +2538,10 @@ import MTransformer._
     val r: MOption[AadlSubprogramGroup] = if (preR.continu) {
       val o2: AadlSubprogramGroup = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
-      val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-      if (hasChanged || r0.nonEmpty)
-        MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+      val r0: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+      val r1: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+      if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+        MSome(o2(features = r0.getOrElse(o2.features), subComponents = r1.getOrElse(o2.subComponents)))
       else
         MNone()
     } else if (preR.resultOpt.nonEmpty) {
@@ -2438,9 +2566,10 @@ import MTransformer._
     val r: MOption[AadlData] = if (preR.continu) {
       val o2: AadlData = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
-      val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-      if (hasChanged || r0.nonEmpty)
-        MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+      val r0: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+      val r1: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+      if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+        MSome(o2(features = r0.getOrElse(o2.features), subComponents = r1.getOrElse(o2.subComponents)))
       else
         MNone()
     } else if (preR.resultOpt.nonEmpty) {
@@ -2465,9 +2594,10 @@ import MTransformer._
     val r: MOption[AadlMemory] = if (preR.continu) {
       val o2: AadlMemory = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
-      val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-      if (hasChanged || r0.nonEmpty)
-        MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+      val r0: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+      val r1: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+      if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+        MSome(o2(features = r0.getOrElse(o2.features), subComponents = r1.getOrElse(o2.subComponents)))
       else
         MNone()
     } else if (preR.resultOpt.nonEmpty) {
@@ -2492,9 +2622,10 @@ import MTransformer._
     val r: MOption[AadlBus] = if (preR.continu) {
       val o2: AadlBus = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
-      val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-      if (hasChanged || r0.nonEmpty)
-        MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+      val r0: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+      val r1: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+      if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+        MSome(o2(features = r0.getOrElse(o2.features), subComponents = r1.getOrElse(o2.subComponents)))
       else
         MNone()
     } else if (preR.resultOpt.nonEmpty) {
@@ -2519,9 +2650,10 @@ import MTransformer._
     val r: MOption[AadlVirtualBus] = if (preR.continu) {
       val o2: AadlVirtualBus = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
-      val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-      if (hasChanged || r0.nonEmpty)
-        MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+      val r0: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+      val r1: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+      if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+        MSome(o2(features = r0.getOrElse(o2.features), subComponents = r1.getOrElse(o2.subComponents)))
       else
         MNone()
     } else if (preR.resultOpt.nonEmpty) {
@@ -2546,9 +2678,10 @@ import MTransformer._
     val r: MOption[AadlAbstract] = if (preR.continu) {
       val o2: AadlAbstract = preR.resultOpt.getOrElse(o)
       val hasChanged: B = preR.resultOpt.nonEmpty
-      val r0: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
-      if (hasChanged || r0.nonEmpty)
-        MSome(o2(subComponents = r0.getOrElse(o2.subComponents)))
+      val r0: MOption[IS[Z, AadlFeature]] = transformISZ(o2.features, transformAadlFeature _)
+      val r1: MOption[IS[Z, AadlComponent]] = transformISZ(o2.subComponents, transformAadlComponent _)
+      if (hasChanged || r0.nonEmpty || r1.nonEmpty)
+        MSome(o2(features = r0.getOrElse(o2.features), subComponents = r1.getOrElse(o2.subComponents)))
       else
         MNone()
     } else if (preR.resultOpt.nonEmpty) {
