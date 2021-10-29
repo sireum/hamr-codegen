@@ -417,6 +417,8 @@ object SymbolResolver {
               Dispatch_Protocol.Periodic
           }
 
+          val period = PropertyUtil.getPeriod(c)
+
           AadlVirtualProcessor(
             component = c,
             parent = None(),
@@ -425,6 +427,7 @@ object SymbolResolver {
             subComponents = ISZ(),
             connectionInstances = c.connectionInstances,
             dispatchProtocol = dispatchProtocol,
+            period = period,
             boundProcessor = boundProcessor
           )
         }

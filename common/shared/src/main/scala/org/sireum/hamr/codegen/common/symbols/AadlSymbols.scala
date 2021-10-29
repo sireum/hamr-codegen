@@ -98,6 +98,8 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
 @sig trait AadlDispatchableComponent {
   def dispatchProtocol: Dispatch_Protocol.Type
 
+  def period: Option[Z]
+
   def isPeriodic(): B = { return dispatchProtocol == Dispatch_Protocol.Periodic }
 
   def isSporadic(): B = { return dispatchProtocol == Dispatch_Protocol.Sporadic }
@@ -118,6 +120,7 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
                                      val connectionInstances: ISZ[ir.ConnectionInstance],
 
                                      val dispatchProtocol: Dispatch_Protocol.Type,
+                                     val period: Option[Z],
 
                                      val boundProcessor: Option[String]) extends Processor with AadlDispatchableComponent
 
