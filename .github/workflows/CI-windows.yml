@@ -52,7 +52,7 @@ jobs:
           set CC=gcc.exe
           set CXX=c++.exe
           cd /d %GITHUB_WORKSPACE%
-          set HamrTestModes=phantom,compile,generated_unit_tests,smt2
+          set HamrTestModes=phantom,compile,generated_unit_tests,smt2,verbose
           echo HamrTestModes=%HamrTestModes%
           set ALSO_TRANSPILE_VIA_CALLBACKS=true
           echo ALSO_TRANSPILE_VIA_CALLBACKS=%ALSO_TRANSPILE_VIA_CALLBACKS%
