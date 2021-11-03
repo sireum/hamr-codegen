@@ -17,7 +17,7 @@ jobs:
         shell: cmd
         run: |
           choco config get cacheLocation
-          choco install --no-progress cygwin --version 2.905
+          choco install --no-progress cygwin --version 3.2.0
           C:\tools\cygwin\cygwinsetup.exe -qgnNdO -R C:/tools/cygwin -s http://mirrors.kernel.org/sourceware/cygwin/ -P gcc-core,gcc-g++,make,cmake
       - name: Retrieve versions.properties
         run: |
