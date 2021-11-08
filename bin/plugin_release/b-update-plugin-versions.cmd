@@ -49,7 +49,7 @@ def replaceLines(replacements: ISZ[(String, String)], file: Os.Path): Unit = {
     }
     newLine
   })
-  for(i <- 0 until found.size) { assert(found(i), s"Didn't find ${replacements(i)._1}") }
+  for(i <- 0 until found.size) { assert(found(i), s"Didn't find ${replacements(i)._1} for ${file}") }
   file.writeOver(ops.ISZOps(modLines).foldRight((line: String, r: String) => s"${r}\n${line}", ""))
   println(s"Wrote: ${file}")
 }
@@ -65,25 +65,31 @@ println(s"sireumTimestamp: ${sireumTimestamp}")
 
 // TODO figure out how plugin.properties file work, for now just modify the files directly
 
-def updateManfiest(id: String): Unit = {
+def updateManfiest(proj: OsateProject): Unit = {
   val a =     "Bundle-Version:"
   val aMod = s"Bundle-Version: 1.0.${sireumTimestamp}.qualifier"
 
-  val manifest = pluginDir / id / "META-INF" / "MANIFEST.MF"
+  val manifest = proj.projectDir / proj.projectId / "META-INF" / "MANIFEST.MF"
   assert(manifest.exists, s"${manifest} does not exist")
   replaceLines(ISZ((a, aMod)), manifest)
 }
 
-val ids: ISZ[String] = ISZ(
-  "org.sireum.aadl.osate",
-  "org.sireum.aadl.osate.awas",
-  "org.sireum.aadl.osate.cli",
-  "org.sireum.aadl.osate.hamr")
+@datatype class OsateProject(projectDir: Os.Path,
+                             projectId: String,
+                             addOsatePluginImport: B)
 
-ids.foreach((id: String) => updateManfiest(id))
+val ids: ISZ[OsateProject] = ISZ(
+  OsateProject(pluginDir, "org.sireum.aadl.osate", F),
+  OsateProject(pluginDir, "org.sireum.aadl.osate.awas", T),
+  OsateProject(pluginDir, "org.sireum.aadl.osate.cli", T),
+  OsateProject(pluginDir, "org.sireum.aadl.osate.hamr", T),
+  OsateProject(pluginDir / "aadl-security", "org.sireum.aadl.osate.securitymodel", F)
+)
+
+ids.foreach((proj: OsateProject) => updateManfiest(proj))
 
 
-def updateFeatureXml(id: String, addImport: B): Unit ={
+def updateFeatureXml(project: OsateProject): Unit ={
 
   val a =        "      version="
   val aMod = st"""      version="1.0.${sireumTimestamp}.qualifier"""".render
@@ -91,25 +97,25 @@ def updateFeatureXml(id: String, addImport: B): Unit ={
   val b =    st"""      <import plugin="org.sireum.aadl.osate""".render
   val bMod = st"""      <import plugin="org.sireum.aadl.osate" version="1.0.${sireumTimestamp}" match="greaterOrEqual"/>""".render
 
-  val featureXML = pluginDir / id / "feature.xml"
+  val featureXML = project.projectDir / s"${project.projectId}.feature" / "feature.xml"
   assert(featureXML.exists, s"${featureXML} does not exist")
-  val mods: ISZ[(String, String)] = ISZ[(String,String)]((a, aMod)) ++ (if(addImport) ISZ((b, bMod)) else ISZ[(String, String)]())
+  val mods: ISZ[(String, String)] = ISZ[(String,String)]((a, aMod)) ++ (if(project.addOsatePluginImport) ISZ((b, bMod)) else ISZ[(String, String)]())
   replaceLines(mods, featureXML)
 }
 
-ids.foreach((id: String) => updateFeatureXml(s"${id}.feature", id != "org.sireum.aadl.osate"))
+ids.foreach((proj: OsateProject) => updateFeatureXml(proj))
 
 
 val releaseDir = updateSiteDir / s"1.0.${sireumTimestamp}.${sireumCommit}"
 releaseDir.mkdir()
 
-val dirs = ids.map((id: String) => {
-  val d = releaseDir / id
+val dirs = ids.map((proj: OsateProject) => {
+  val d = releaseDir / proj.projectId
   d.mkdir()
   assert(d.exists, s"${d} does not exist")
   println(s"Created ${d}")
 
-  st"${id}.feature ~> ${d}"
+  st"${proj.projectId}.feature ~> ${d}"
 })
 
 

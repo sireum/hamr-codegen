@@ -24,6 +24,8 @@ import Templates._
 
 @enum object Matches {
   "GreaterOrEqual"
+  "compatible"
+  "perfect"
 }
 
 @datatype class Require(pluginId: String,
@@ -51,6 +53,14 @@ val dest = Os.home / "devel" / "sireum" / "osate-update-site"
 
 val releases = getSortedDirs(dest)
 
+val knownProjects: Map[String, Os.Path] = Map(ISZ(
+  ("org.sireum.aadl.osate", osate_plugin_dir),
+  ("org.sireum.aadl.osate.awas", osate_plugin_dir),
+  ("org.sireum.aadl.osate.cli", osate_plugin_dir),
+  ("org.sireum.aadl.osate.hamr", osate_plugin_dir),
+  ("org.sireum.aadl.osate.securitymodel", osate_plugin_dir / "aadl-security"),
+))
+
 for(releaseDir <- releases) {
   println(s"Processing: ${releaseDir.name}")
   val features = getSortedDirs(releaseDir)
@@ -59,7 +69,8 @@ for(releaseDir <- releases) {
   for(featureUpdateDir <- features) {
     println(s"Processing ${featureUpdateDir}")
 
-    val feature: Feature = parse(osate_plugin_dir / s"${featureUpdateDir.name}.feature")
+    val projDir = knownProjects.get(featureUpdateDir.name).get
+    val feature: Feature = parse(projDir / s"${featureUpdateDir.name}.feature")
 
     val featuresDir = (featureUpdateDir / "features")
     assert(featuresDir.list.size == 1, s"${featuresDir.value} -- ${featuresDir.list.size}")
@@ -119,7 +130,9 @@ object Templates {
       val m = str.substring(matchPos + 7, str.indexOfFrom('"', matchPos + 8))
       m match {
         case "greaterOrEqual" => matches = Some(Matches.GreaterOrEqual)
-        case x => halt(x)
+        case "compatible" => matches = Some(Matches.compatible)
+        case "perfect" => matches = Some(Matches.perfect)
+        case x => halt(s"Expecting greaterOrEqual but found ${x}")
       }
     }
     return Require(plugin, version, matches)
