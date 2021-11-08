@@ -29,22 +29,22 @@ object PacerUtil {
       mesg = mesg :+ st"Domain scheduling not supported for legacy Trusted Build platform"
     }
 
-    // - all threads must be in separate processes
-    var processesWithThreads: ISZ[AadlProcess] = ISZ()
+    var processesWithThreads: Set[AadlProcess] = Set.empty
     for (t <- threads) {
       val p = t.getParent(symbolTable)
 
-      if (ops.ISZOps(processesWithThreads).contains(p)) {
+      if(!t.toVirtualMachine(symbolTable) && processesWithThreads.contains(p)) {
         canUseDomainScheduling = F
-        mesg = mesg :+ st"More than one thread is in process ${p.identifier}.  Move ${t.identifier} to a different process."
+        mesg = mesg :+ st"More than one thread is in non-VM process ${p.identifier}.  Move ${t.identifier} to a different process."
       }
-      processesWithThreads = processesWithThreads :+ p
+
+      processesWithThreads = processesWithThreads + p
     }
 
     // - each process with a thread must have domain info
     if (canUseDomainScheduling) {
       var withoutDomain: ISZ[AadlProcess] = ISZ()
-      for (p <- processesWithThreads) {
+      for (p <- processesWithThreads.elements) {
         if (p.getDomain().isEmpty) {
           withoutDomain = withoutDomain :+ p
         }
@@ -63,7 +63,7 @@ object PacerUtil {
     if (canUseDomainScheduling) {
       var boundProcessors: Set[AadlProcessor] = Set.empty
       var unboundedProcesses: ISZ[AadlProcess] = ISZ()
-      for (p <- processesWithThreads) {
+      for (p <- processesWithThreads.elements) {
         symbolTable.getBoundProcessor(p) match {
           case Some(proc: AadlProcessor) => boundProcessors = boundProcessors + proc
           case Some(proc: AadlVirtualProcessor) => boundProcessors = boundProcessors + symbolTable.getActualBoundProcess(proc).get

@@ -637,9 +637,27 @@ object SymbolResolver {
 
     {
       for(thread <- symbolTable.getThreads()) {
-        if(thread.dispatchProtocol == Dispatch_Protocol.Periodic && thread.period.isEmpty) {
-          val mesg = s"Must specify ${OsateProperties.TIMING_PROPERTIES__PERIOD} for periodic thread ${thread.identifier}"
-          reporter.error(thread.component.identifier.pos, CommonUtil.toolName, mesg)
+        if(thread.toVirtualMachine(symbolTable)) {
+          val parent = thread.getParent(symbolTable)
+          parent.getBoundProcessor(symbolTable) match {
+            case Some(avp: AadlVirtualProcessor) =>
+              if(avp.dispatchProtocol != Dispatch_Protocol.Periodic) {
+                val mesg = s"Virtual processor ${avp.identifier} has ${avp.dispatchProtocol.name} dispatching. Only periodic dispatching is supported."
+                reporter.error(avp.component.identifier.pos, CommonUtil.toolName, mesg)
+              }
+              if (avp.period.isEmpty) {
+                val mesg = s"Must specify ${OsateProperties.TIMING_PROPERTIES__PERIOD} for periodic virtual processor ${avp.identifier}"
+                reporter.error(avp.component.identifier.pos, CommonUtil.toolName, mesg)
+              }
+            case x =>
+              val mesg = s"Thread ${thread.identifier} is going to a VM so its process ${parent.identifier} must be bound to a virtual processor. Instead it's bound to ${x}"
+              reporter.error(thread.component.identifier.pos, CommonUtil.toolName, mesg)
+          }
+        } else {
+          if (thread.dispatchProtocol == Dispatch_Protocol.Periodic && thread.period.isEmpty) {
+            val mesg = s"Must specify ${OsateProperties.TIMING_PROPERTIES__PERIOD} for periodic thread ${thread.identifier}"
+            reporter.error(thread.component.identifier.pos, CommonUtil.toolName, mesg)
+          }
         }
       }
     }
@@ -735,8 +753,14 @@ object SymbolResolver {
           p.getDomain() match {
             case Some(z) =>
               if (seenDomains.contains(z)) {
-                val mesg = s"More than one process is in domain ${z}"
-                reporter.warn(None(), CommonUtil.toolName, mesg)
+                p.getBoundProcessor(symbolTable) match {
+                  case Some(vp: AadlVirtualProcessor) => // ok
+                  case Some(p: AadlProcessor) =>
+                    val mesg = s"More than one process is in domain ${z}"
+                    reporter.warn(None(), CommonUtil.toolName, mesg)
+                  case _ =>
+                    halt("Should be infeasible")
+                }
               }
               seenDomains = seenDomains + z
             case _ =>

@@ -42,14 +42,6 @@ object ModelUtil {
 
     transModel = if(btxResults.nonEmpty) btxResults.get else transModel
 
-    val virtResults = Transformers.VirtProcessRewriter(aadlMaps, reporter).transformAadl(transModel)
-    if(reporter.hasError) {
-      return None()
-    }
-
-    transModel = if(virtResults.nonEmpty) virtResults.get else transModel
-
-
     val rawConnections: B = PropertyUtil.getUseRawConnection(transModel.components(0).properties)
     val aadlTypes = TypeResolver.processDataTypes(transModel, rawConnections, options.maxStringSize, options.bitWidth, packageName)
 
