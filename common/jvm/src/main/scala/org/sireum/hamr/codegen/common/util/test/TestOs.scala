@@ -17,7 +17,7 @@ import org.sireum._
  */
 object TestOs {
 
-  var isNative: B = Os_ExtJava.isNative
+  var isNative: B = NativeUtil.isNative
 
   def proc(e:  Os.Proc): Os.Proc.Result = {
     return proc2(e, None(), None())
