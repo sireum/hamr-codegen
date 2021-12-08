@@ -6,11 +6,11 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.properties.HamrProperties.HAMR__BIT_CODEC_MAX_SIZE
 import org.sireum.hamr.codegen.common.properties.{CasePropertiesProperties, CaseSchedulingProperties, OsateProperties, PropertyUtil}
-import org.sireum.hamr.codegen.common.resolvers.BTSResolver
+import org.sireum.hamr.codegen.common.resolvers.{BTSResolver, GclResolver}
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, BaseType, TypeUtil}
 import org.sireum.hamr.codegen.common.util.{CodeGenConfig, CodeGenPlatform, ExperimentalOptions}
 import org.sireum.hamr.ir
-import org.sireum.hamr.ir.{Annex, BTSBLESSAnnexClause, ComponentCategory, MTransformer => MAirTransformer}
+import org.sireum.hamr.ir.{Annex, BTSBLESSAnnexClause, ComponentCategory, GclAnnex, MTransformer => MAirTransformer}
 import org.sireum.message.{Position, Reporter}
 
 object SymbolResolver {
@@ -939,6 +939,13 @@ object SymbolResolver {
             case _ => None()
         }
         return ret
+      case b: GclAnnex =>
+        val ret: Option[AnnexInfo] =
+          GclResolver().processGclAnnex(b, symbolTable, aadlTypes, reporter) match {
+            case Some(gclSymbolTable) => Some(GclAnnexInfo(b, gclSymbolTable))
+            case _ => None()
+          }
+          return ret
       case _ => Some(TodoAnnexInfo(annex.clause))
     }
     return ret
