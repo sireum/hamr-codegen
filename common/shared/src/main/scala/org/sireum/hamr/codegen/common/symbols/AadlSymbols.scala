@@ -3,10 +3,10 @@ package org.sireum.hamr.codegen.common.symbols
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
-import org.sireum.hamr.codegen.common.properties.{CasePropertiesProperties, CaseSchedulingProperties, HamrProperties, OsateProperties, PropertyUtil}
+import org.sireum.hamr.codegen.common.properties.{CasePropertiesProperties, CaseSchedulingProperties, OsateProperties, PropertyUtil}
 import org.sireum.hamr.codegen.common.types.AadlType
 import org.sireum.hamr.ir
-import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
+import org.sireum.hamr.ir.{AnnexClause, GclAnnex, BTSBLESSAnnexClause}
 
 
 @sig trait AadlSymbol
@@ -462,6 +462,9 @@ import org.sireum.hamr.ir.{AnnexClause, BTSBLESSAnnexClause}
 @sig trait AnnexInfo {
   def annex: AnnexClause
 }
+
+@datatype class GclAnnexInfo(val annex: GclAnnex,
+                             val gclSymbolTable: GclSymbolTable) extends AnnexInfo
 
 @datatype class BTSAnnexInfo(val annex: BTSBLESSAnnexClause,
                              val btsSymbolTable: BTSSymbolTable) extends AnnexInfo

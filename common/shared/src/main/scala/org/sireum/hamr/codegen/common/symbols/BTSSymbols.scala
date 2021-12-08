@@ -1,4 +1,4 @@
-//# Sireum
+// #Sireum
 package org.sireum.hamr.codegen.common.symbols
 
 import org.sireum._
