@@ -55,6 +55,8 @@ jobs:
           echo Need to add back 'compile' mode once github actions issue is resolved
           set HamrTestModes=phantom,generated_unit_tests,smt2,verbose
           echo HamrTestModes=%HamrTestModes%
+          set SMT2_TIMEOUT=180000
+          echo SMT2_TIMEOUT=%SMT2_TIMEOUT%
           set ALSO_TRANSPILE_VIA_CALLBACKS=true
           echo ALSO_TRANSPILE_VIA_CALLBACKS=%ALSO_TRANSPILE_VIA_CALLBACKS%
           bin\build.cmd test

@@ -40,6 +40,8 @@ jobs:
           cd $GITHUB_WORKSPACE
           export HamrTestModes=phantom,compile,generated_unit_tests,smt2
           echo "HamrTestModes=${HamrTestModes}"
+          export SMT2_TIMEOUT=180000
+          echo "SMT2_TIMEOUT=${SMT2_TIMEOUT}"
           export ALSO_TRANSPILE_VIA_CALLBACKS=true
           echo "ALSO_TRANSPILE_VIA_CALLBACKS=${ALSO_TRANSPILE_VIA_CALLBACKS}"
           bin/build.cmd test
