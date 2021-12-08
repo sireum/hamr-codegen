@@ -53,7 +53,7 @@ def usage(): Unit = {
   println("HAMR Codegen /build")
   println(
     st"""Usage: ( clean | compile | test | tipe | regen-trans
-        |       | cvc4  | z3                                  )+""".render)
+        |       | cvc   | z3                                  )+""".render)
 }
 
 
@@ -136,7 +136,7 @@ def installZ3(kind: Os.Kind.Type): Unit = {
   val filename: String = kind match {
     case Os.Kind.Win => s"z3-$version-x64-win.zip"
     case Os.Kind.Linux => s"z3-$version-x64-glibc-2.31.zip"
-    case Os.Kind.Mac => s"z3-$version-x64-osx-10.15.7.zip"
+    case Os.Kind.Mac => s"z3-$version-x64-osx-10.16.zip"
     case _ => return
   }
 
@@ -166,28 +166,39 @@ def installZ3(kind: Os.Kind.Type): Unit = {
   ver.writeOver(version)
 }
 
-def installCVC4(kind: Os.Kind.Type): Unit = {
-  val version = versions.get("org.sireum.version.cvc4").get
-  val exe = homeBin / platformKind(kind) / (if (kind == Os.Kind.Win) "cvc4.exe" else "cvc4")
-  val ver = homeBin / platformKind(kind) / ".cvc4.ver"
+def installCVC(kind: Os.Kind.Type): Unit = {
+  val (macLinuxGen, macLinuxVersion, winGen, winVersion): (String, String, String, String) =
+    ops.StringOps(versions.get("org.sireum.version.cvc").get).split((c: C) => c === '-' || c === ',') match {
+      case ISZ(mlGen, mlVersion, wGen, wVersion) => (mlGen, mlVersion, wGen, wVersion)
+      case ISZ(string"1.8") => ("4", "1.8", "4", "1.8")
+      case ISZ(version) => ("5", version, "5", version)
+    }
+  val (gen, version): (String, String) = if (kind == Os.Kind.Win) (winGen, winVersion) else (macLinuxGen, macLinuxVersion)
+  val exe = homeBin / platformKind(kind) / (if (kind == Os.Kind.Win) s"cvc.exe" else s"cvc")
+  val ver = homeBin / platformKind(kind) / s".cvc.ver"
 
-  if (ver.exists && ver.read == version) {
+  val VER = s"$gen-$version"
+
+  if (ver.exists && ver.read == VER) {
     return
   }
 
-  val filename: String = kind match {
-    case Os.Kind.Win => s"cvc4-$version-win64-opt.exe"
-    case Os.Kind.Linux => s"cvc4-$version-x86_64-linux-opt"
-    case Os.Kind.Mac => s"cvc4-$version-macos-opt"
+  val (sub, filename): (String, String) = (gen, kind) match {
+    case (string"5", Os.Kind.Win) => (s"cvc$gen-$version", s"cvc$gen-Windows.exe")
+    case (string"5", Os.Kind.Linux) => (s"cvc$gen-$version", s"cvc$gen-Linux")
+    case (string"5", Os.Kind.Mac) => (s"cvc$gen-$version", s"cvc$gen-macOS")
+    case (string"4", Os.Kind.Win) => (version, s"cvc$gen-$version-win64-opt.exe")
+    case (string"4", Os.Kind.Linux) => (version, s"cvc$gen-$version-x86_64-linux-opt")
+    case (string"4", Os.Kind.Mac) => (version, s"cvc$gen-$version-macos-opt")
     case _ => return
   }
 
   val drop = cache / filename
 
   if (!drop.exists) {
-    println(s"Please wait while downloading CVC4 $version ...")
+    println(s"Please wait while downloading CVC$gen $version ...")
     drop.up.mkdirAll()
-    drop.downloadFrom(s"https://github.com/cvc5/cvc5/releases/download/$version/$filename")
+    drop.downloadFrom(s"https://github.com/cvc5/cvc5/releases/download/$sub/$filename")
   }
 
   drop.copyOverTo(exe)
@@ -199,7 +210,7 @@ def installCVC4(kind: Os.Kind.Type): Unit = {
     case _ =>
   }
 
-  ver.writeOver(version)
+  ver.writeOver(VER)
 }
 
 def getIVE(): B = {
@@ -244,7 +255,7 @@ def test(): Unit = {
   assert(getIVE(), "IVE doesn't exist")
 
   installZ3(Os.kind)
-  installCVC4(Os.kind)
+  installCVC(Os.kind)
 
   tipe()
 
@@ -297,7 +308,7 @@ for (i <- 0 until Os.cliArgs.size) {
       tipe()
     case string"regen-trans" =>
       regenTransformers()
-    case string"cvc4" => installCVC4(Os.kind)
+    case string"cvc" => installCVC(Os.kind)
     case string"z3" => installZ3(Os.kind)
     case string"-h" => usage()
     case string"--help" => usage()
