@@ -305,6 +305,7 @@ import org.sireum.hamr.ir.{AnnexClause, GclAnnex, BTSBLESSAnnexClause}
                          val parent: Option[String],
                          val path: String,
                          val identifier: String,
+                         val typ: AadlType,
                          val features: ISZ[AadlFeature],
                          val subComponents: ISZ[AadlComponent],
                          val connectionInstances: ISZ[ir.ConnectionInstance]) extends AadlComponent

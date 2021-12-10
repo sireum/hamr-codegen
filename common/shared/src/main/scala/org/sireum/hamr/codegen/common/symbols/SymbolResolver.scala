@@ -51,7 +51,7 @@ object SymbolResolver {
       for(component <- st.componentMap.values) {
         var ais: ISZ[AnnexInfo] = ISZ()
         for(annex <- component.component.annexes) {
-          processAnnex(st, aadlTypes, annex, reporter) match {
+          processAnnex(component, st, aadlTypes, annex, reporter) match {
             case Some(ai) => ais = ais :+ ai
             case _ =>
               assert(reporter.hasError, "No annex info returned so expecting an error")
@@ -81,107 +81,123 @@ object SymbolResolver {
     var outConnections: HashSMap[String, ISZ[ir.ConnectionInstance]] = HashSMap.empty
 
 
-    val components = model.components.filter(f => f.category != ir.ComponentCategory.Data)
+    val components = model.components
     if (components.size != z"1" || components(0).category != ir.ComponentCategory.System) {
       halt(s"Model contains ${components.size} components.  Should only contain a single top-level system")
     }
     val system = components(0)
 
-    def buildComponentMap(c: ir.Component): Unit = {
-      val name = CommonUtil.getName(c.identifier)
-      assert(!airComponentMap.contains(name))
-      airComponentMap = airComponentMap + (name ~> c)
-      if (c.classifier.nonEmpty) {
-        airClassifierMap = airClassifierMap + (c.classifier.get.name ~> c)
-      }
-
-      for (f <- c.features) {
-
-        def resolveFeature(_f: ir.Feature, path: ISZ[String]): Unit = {
-          _f match {
-            case fa: ir.FeatureAccess =>
-              val featurePath: String = CommonUtil.getName(fa.identifier)
-              airFeatureMap = airFeatureMap + (featurePath ~> fa)
-            case fe: ir.FeatureEnd =>
-              val featurePath: String = CommonUtil.getName(fe.identifier)
-              airFeatureMap = airFeatureMap + (featurePath ~> fe)
-
-              if (CommonUtil.isDataPort(fe) && fe.classifier.isEmpty) {
-                reporter.warn(None(), CommonUtil.toolName, s"Data type missing for feature ${fe.category} ${CommonUtil.getName(fe.identifier)}")
-              }
-            case fg: ir.FeatureGroup =>
-              for(_fge <- fg.features) {
-                resolveFeature(_fge, path)
-              }
-          }
+    { // build airComponent and airClassifier maps
+      def buildAirMaps(c: ir.Component): Unit = {
+        val name = CommonUtil.getName(c.identifier)
+        assert(!airComponentMap.contains(name))
+        airComponentMap = airComponentMap + (name ~> c)
+        if (c.classifier.nonEmpty) {
+          airClassifierMap = airClassifierMap + (c.classifier.get.name ~> c)
         }
 
-        resolveFeature(f, c.identifier.name)
-      }
-      for (sc <- c.subComponents) {
-        buildComponentMap(sc)
-      }
-    }
+        for (f <- c.features) {
 
-    buildComponentMap(system)
+          def resolveAirFeature(_f: ir.Feature, path: ISZ[String]): Unit = {
+            _f match {
+              case fa: ir.FeatureAccess =>
+                val featurePath: String = CommonUtil.getName(fa.identifier)
+                airFeatureMap = airFeatureMap + (featurePath ~> fa)
+              case fe: ir.FeatureEnd =>
+                val featurePath: String = CommonUtil.getName(fe.identifier)
+                airFeatureMap = airFeatureMap + (featurePath ~> fe)
 
-    def resolver(sys: ir.Component): B = {
-
-      for (c <- airComponentMap.values) {
-
-        for (ci <- c.connectionInstances) {
-          if (isHandledConnection(ci, airComponentMap, airFeatureMap)) {
-            connectionInstances = connectionInstances :+ ci
-
-            def add(portPath: String, isIn: B): Unit = {
-              val map: HashSMap[String, ISZ[ir.ConnectionInstance]] = isIn match {
-                case T => inConnections
-                case F => outConnections
-              }
-              var cis: ISZ[ir.ConnectionInstance] = map.get(portPath) match {
-                case Some(x) => x
-                case _ => ISZ()
-              }
-              cis = cis :+ ci
-              isIn match {
-                case T => inConnections = inConnections + (portPath ~> cis)
-                case F => outConnections = outConnections + (portPath ~> cis)
-              }
+                if (CommonUtil.isDataPort(fe) && fe.classifier.isEmpty) {
+                  reporter.warn(None(), CommonUtil.toolName, s"Data type missing for feature ${fe.category} ${CommonUtil.getName(fe.identifier)}")
+                }
+              case fg: ir.FeatureGroup =>
+                for (_fge <- fg.features) {
+                  resolveAirFeature(_fge, path)
+                }
             }
-
-            val portNames = getPortConnectionNames(ci, airComponentMap)
-            add(portNames._1, F)
-            add(portNames._2, T)
-          } else {
-            val src = airComponentMap.get(CommonUtil.getName(ci.src.component)).get
-            val dst = airComponentMap.get(CommonUtil.getName(ci.dst.component)).get
-
-            val srcName: String = if (ci.src.feature.nonEmpty) {
-              s"${CommonUtil.getLastName(src.identifier)}.${CommonUtil.getLastName(ci.src.feature.get)}"
-            } else {
-              CommonUtil.getLastName(src.identifier)
-            }
-
-            val dstName: String = if (ci.dst.feature.nonEmpty) {
-              s"${CommonUtil.getLastName(dst.identifier)}.${CommonUtil.getLastName(ci.dst.feature.get)}"
-            } else {
-              CommonUtil.getLastName(dst.identifier)
-            }
-            reporter.info(None(), CommonUtil.toolName, s"Ignoring ${src.category} to ${dst.category} connection: ${srcName} -> ${dstName}")
           }
+
+          resolveAirFeature(f, c.identifier.name)
+        }
+        for (sc <- c.subComponents) {
+          buildAirMaps(sc)
         }
       }
 
-      return !reporter.hasError
+      buildAirMaps(system)
     }
 
-    resolver(system)
+    {
+      def populateInOutConnectionMaps(sys: ir.Component): B = {
+
+        for (c <- airComponentMap.values) {
+
+          for (ci <- c.connectionInstances) {
+            if (isHandledConnection(ci, airComponentMap, airFeatureMap)) {
+              connectionInstances = connectionInstances :+ ci
+
+              def add(portPath: String, isIn: B): Unit = {
+                val map: HashSMap[String, ISZ[ir.ConnectionInstance]] = isIn match {
+                  case T => inConnections
+                  case F => outConnections
+                }
+                var cis: ISZ[ir.ConnectionInstance] = map.get(portPath) match {
+                  case Some(x) => x
+                  case _ => ISZ()
+                }
+                cis = cis :+ ci
+                isIn match {
+                  case T => inConnections = inConnections + (portPath ~> cis)
+                  case F => outConnections = outConnections + (portPath ~> cis)
+                }
+              }
+
+              val portNames = getPortConnectionNames(ci, airComponentMap)
+              add(portNames._1, F)
+              add(portNames._2, T)
+            } else {
+              val src = airComponentMap.get(CommonUtil.getName(ci.src.component)).get
+              val dst = airComponentMap.get(CommonUtil.getName(ci.dst.component)).get
+
+              val srcName: String = if (ci.src.feature.nonEmpty) {
+                s"${CommonUtil.getLastName(src.identifier)}.${CommonUtil.getLastName(ci.src.feature.get)}"
+              } else {
+                CommonUtil.getLastName(src.identifier)
+              }
+
+              val dstName: String = if (ci.dst.feature.nonEmpty) {
+                s"${CommonUtil.getLastName(dst.identifier)}.${CommonUtil.getLastName(ci.dst.feature.get)}"
+              } else {
+                CommonUtil.getLastName(dst.identifier)
+              }
+              reporter.info(None(), CommonUtil.toolName, s"Ignoring ${src.category} to ${dst.category} connection: ${srcName} -> ${dstName}")
+            }
+          }
+        }
+
+        return !reporter.hasError
+      }
+
+      populateInOutConnectionMaps(system)
+    }
 
     var componentMap: HashSMap[String, AadlComponent] = HashSMap.empty
 
-    def process(c: ir.Component, parent: Option[String]): AadlComponent = {
-      val path = CommonUtil.getName(c.identifier)
-      val identifier = CommonUtil.getLastName(c.identifier)
+    /** Builds an AadlComponents and AadlFeatures from the passed in AIR component
+    */
+    def buildAadlComponent(c: ir.Component, parent: Option[String]): AadlComponent = {
+      val (identifier, path): (String, String) = c.category match {
+        case ComponentCategory.Data =>
+          val name: String = if(c.identifier.name.isEmpty) {
+            c.classifier.get.name
+          } else {
+            CommonUtil.getName(c.identifier)
+          }
+          val path: String = if(parent.isEmpty) name
+            else st"${(parent.get, "_")}_${name}".render
+          (name, path)
+        case _ => (CommonUtil.getLastName(c.identifier), CommonUtil.getName(c.identifier))
+      }
 
       if (componentMap.contains(path)) {
         return componentMap.get(path).get
@@ -195,12 +211,12 @@ object SymbolResolver {
         return ret
       }
 
-      def resolveFeature2(feature: ir.Feature, featureGroupIds: ISZ[String], parentIsThread: B): ISZ[AadlFeature] = {
+      def buildAadlFeature(feature: ir.Feature, featureGroupIds: ISZ[String], parentIsThread: B): ISZ[AadlFeature] = {
         feature match {
           case fg: ir.FeatureGroup =>
             var ret: ISZ[AadlFeature] = ISZ()
             for(_f <- fg.features) {
-              ret = ret ++ resolveFeature2(_f, featureGroupIds :+ CommonUtil.getLastName(fg.identifier), parentIsThread)
+              ret = ret ++ buildAadlFeature(_f, featureGroupIds :+ CommonUtil.getLastName(fg.identifier), parentIsThread)
             }
             return ret
           case _ =>
@@ -300,14 +316,14 @@ object SymbolResolver {
       var aadlFeatures: ISZ[AadlFeature] = ISZ()
 
       for (feature <- c.features) {
-        aadlFeatures = aadlFeatures ++ resolveFeature2(feature, ISZ(), c.category == ir.ComponentCategory.Thread)
+        aadlFeatures = aadlFeatures ++ buildAadlFeature(feature, ISZ(), c.category == ir.ComponentCategory.Thread)
       }
 
       def handleDeviceOrThread(): AadlComponent = {
         {
           //assert(c.subComponents.isEmpty) // TODO handle subprograms etc
 
-          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield process(sc, Some(path))
+          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, Some(path))
 
           val dispatchProtocol: Dispatch_Protocol.Type = PropertyUtil.getDispatchProtocol(c) match {
             case Some(x) => x
@@ -377,7 +393,7 @@ object SymbolResolver {
 
       val aadlComponent: AadlComponent = c.category match {
         case ir.ComponentCategory.System => {
-          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield process(sc, Some(path))
+          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, Some(path))
 
           AadlSystem(
             component = c,
@@ -430,7 +446,7 @@ object SymbolResolver {
           )
         }
         case ir.ComponentCategory.Process => {
-          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield process(sc, Some(path))
+          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, Some(path))
 
           val boundProcessor: Option[String] = PropertyUtil.getActualProcessorBinding(c)
 
@@ -457,7 +473,7 @@ object SymbolResolver {
         case ir.ComponentCategory.Thread => handleDeviceOrThread()
 
         case ir.ComponentCategory.ThreadGroup =>
-          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield process(sc, Some(path))
+          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, Some(path))
 
           AadlThreadGroup(
             component = c,
@@ -471,7 +487,7 @@ object SymbolResolver {
         case ir.ComponentCategory.Subprogram => handleSubprogram()
 
         case ir.ComponentCategory.SubprogramGroup =>
-          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield process(sc, Some(path))
+          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, Some(path))
 
           AadlSubprogramGroup(
             component = c,
@@ -483,19 +499,25 @@ object SymbolResolver {
             connectionInstances = c.connectionInstances)
 
         case ir.ComponentCategory.Data =>
-          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield process(sc, Some(path))
+          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, Some(path))
+
+          val typ: Option[AadlType] = c.classifier match {
+            case Some(c) => aadlTypes.typeMap.get(c.name)
+            case _ => None()
+          }
 
           AadlData(
             component = c,
             parent = parent,
             path = path,
+            typ = typ.get,
             identifier = identifier,
             features = aadlFeatures,
             subComponents = subComponents,
             connectionInstances = c.connectionInstances)
 
         case ir.ComponentCategory.Bus =>
-          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield process(sc, Some(path))
+          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, Some(path))
 
           AadlBus(
             component = c,
@@ -507,7 +529,7 @@ object SymbolResolver {
             connectionInstances = c.connectionInstances)
 
         case ir.ComponentCategory.VirtualBus =>
-          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield process(sc, Some(path))
+          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, Some(path))
 
           AadlVirtualBus(
             component = c,
@@ -519,7 +541,7 @@ object SymbolResolver {
             connectionInstances = c.connectionInstances)
 
         case ir.ComponentCategory.Memory =>
-          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield process(sc, Some(path))
+          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, Some(path))
 
           AadlMemory(
             component = c,
@@ -531,7 +553,7 @@ object SymbolResolver {
             connectionInstances = c.connectionInstances)
 
         case ir.ComponentCategory.Abstract =>
-          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield process(sc, Some(path))
+          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, Some(path))
 
           AadlAbstract(
             component = c,
@@ -547,7 +569,12 @@ object SymbolResolver {
       return aadlComponent
     }
 
-    val aadlSystem = process(system, None()).asInstanceOf[AadlSystem]
+    val aadlSystem = buildAadlComponent(system, None()).asInstanceOf[AadlSystem]
+
+    // add data components to componentMap
+    for(c <- model.dataComponents) {
+      buildAadlComponent(c, None())
+    }
 
     var aadlConnections: ISZ[AadlConnection] = ISZ()
     val shouldUseRawConnections: B = PropertyUtil.getUseRawConnection(system.properties)
@@ -927,7 +954,8 @@ object SymbolResolver {
   }
 
 
-  def processAnnex(symbolTable: SymbolTable,
+  def processAnnex(context: AadlComponent,
+                   symbolTable: SymbolTable,
                    aadlTypes: AadlTypes,
                    annex: Annex,
                    reporter: Reporter): Option[AnnexInfo] = {
@@ -938,14 +966,14 @@ object SymbolResolver {
             case Some(bts) => Some(BTSAnnexInfo(bts.annex, bts))
             case _ => None()
         }
-        return ret
+        ret
       case b: GclAnnex =>
         val ret: Option[AnnexInfo] =
-          GclResolver().processGclAnnex(b, symbolTable, aadlTypes, reporter) match {
+          GclResolver().processGclAnnex(context, b, symbolTable, aadlTypes, reporter) match {
             case Some(gclSymbolTable) => Some(GclAnnexInfo(b, gclSymbolTable))
             case _ => None()
           }
-          return ret
+          ret
       case _ => Some(TodoAnnexInfo(annex.clause))
     }
     return ret

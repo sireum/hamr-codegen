@@ -2,11 +2,20 @@
 package org.sireum.hamr.codegen.common.symbols
 
 import org.sireum._
+import org.sireum.hamr.codegen.common.types.AadlType
 import org.sireum.hamr.ir.GclExp
 
-@sig trait  GclSymbols extends AadlSymbol
+@sig trait GclSymbols extends AadlSymbol
 
 @sig trait GclKey
+
 @datatype class GclExpKey(exp: GclExp) extends GclKey
 
-@datatype class GclSymbolTable()
+@datatype class GclSymbolTable(symbols: Map[GclKey, AadlSymbol],
+                               expTypes: HashMap[GclExp, AadlType]) {
+
+  def lookup(e: GclExp): Option[AadlSymbol] = {
+    return symbols.get(GclExpKey(e))
+  }
+
+}
