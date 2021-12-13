@@ -97,7 +97,6 @@ def cloneProjects(): Unit = {
 
 def tipe(): Unit = {
   println("Slang type checking ...")
-  val excludes = "arsit/resources,jvm/src/test/result"
   Os.proc(ISZ(sireum.string, "proyek", "tipe", "--project", project.string, "--par", "--strict-aliasing", home.string)).
     at(home).console.runCheck()
   println()
@@ -216,14 +215,15 @@ def installCVC(kind: Os.Kind.Type): Unit = {
 def getIVE(): B = {
 
   val (suffix, os): (String, String) = {
-    if (Os.isWin) ("sireum-dev-win.sfx", "win")
-    else if (Os.isMac) ("sireum-dev-mac.sfx", "mac")
-    else if (Os.isLinux) ("sireum-dev-linux.sfx", "linux")
-    else halt("Os not supported")
+    val ret: (String, String) = if (Os.isWin) { ("sireum-dev-win.sfx", "win") }
+    else if (Os.isMac) { ("sireum-dev-mac.sfx", "mac") }
+    else if (Os.isLinux) { ("sireum-dev-linux.sfx", "linux") }
+    else { halt("Os not supported") }
+    ret
   }
 
   val destDir = homeBin / os / "idea"
-  val ideaDir =
+  val ideaDir: Os.Path =
     if (Os.envs.contains("GITHUB_ACTIONS")) homeBin / "Sireum-dev" / "bin" / os / "idea"
     else Os.home / "Applications" / "Sireum-dev" / "bin" / os / "idea"
 
@@ -232,11 +232,11 @@ def getIVE(): B = {
       val repo = GitHub.repo("sireum", "kekinian")
       val latest = repo.releases.head
 
-      val candidates = latest.assets.filter(asset => ops.StringOps(asset.getUrl).endsWith(suffix))
+      val candidates = latest.assets.filter((gasset: GitHub.Asset) => ops.StringOps(gasset.url).endsWith(suffix))
       assert(candidates.count() == 1, s"hmm, so many ${candidates.count()}")
 
       val sfx = homeBin / suffix
-      val url = candidates.head.getUrl
+      val url = candidates.head.url
       println(s"Downloading ${url} to ${sfx}")
       sfx.downloadFrom(url)
 
