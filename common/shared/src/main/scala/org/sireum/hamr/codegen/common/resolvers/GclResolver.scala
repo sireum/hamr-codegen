@@ -14,7 +14,7 @@ import org.sireum.message.Reporter
 
   def fetchSubcomponent(name: Name, context: AadlComponent): Option[AadlComponent] = {
     val n = CommonUtil.getName(name)
-    for(sc <-context.subComponents if sc.identifier == n) {
+    for (sc <- context.subComponents if sc.identifier == n) {
       return Some(sc)
     }
     return None()
@@ -26,7 +26,7 @@ import org.sireum.message.Reporter
 
   def fetchPort(name: Name, context: AadlComponent): Option[AadlPort] = {
     val n = CommonUtil.getName(name)
-    for(p <- context.getPorts() if p.identifier == n) {
+    for (p <- context.getPorts() if p.identifier == n) {
       return Some(p)
     }
     return None()
@@ -50,11 +50,11 @@ import org.sireum.message.Reporter
     val baseTypeFloat64 = aadlTypes.typeMap.get("Base_Types::Float_64").get
 
     def isBool(a: AadlType): B = {
-      return a == baseTypeBoolean
+      return a.name == baseTypeBoolean.name
     }
 
     def isString(aadlType: AadlType): B = {
-      return aadlType == baseTypeString
+      return aadlType.name == baseTypeString.name
     }
 
     def isNumeric(aadlType: AadlType): B = {
@@ -70,10 +70,12 @@ import org.sireum.message.Reporter
     }
 
     def unifyInteger(a: AadlType, b: AadlType): Option[AadlType] = {
+      // TODO
       return Some(a)
     }
 
     def unifyReal(a: AadlType, b: AadlType): Option[AadlType] = {
+      // TODO
       return Some(a)
     }
 
@@ -85,7 +87,7 @@ import org.sireum.message.Reporter
       } else if (isNumeric(a) && isNumeric(b)) {
         return if (isInteger(a) && isInteger(b)) unifyInteger(a, b)
         else if (isReal(a) && isReal(b)) unifyReal(a, b)
-        else Some(baseTypeFloat)
+        else Some(baseTypeFloat) // TODO, mixed real/ints
       } else {
         return None()
       }
@@ -94,14 +96,7 @@ import org.sireum.message.Reporter
     def visitExp(exp: GclExp): AadlType = {
       exp match {
         case lit: GclLiteralExp =>
-          val t: AadlType = lit.typ match {
-            case GclLiteralType.Boolean => baseTypeBoolean
-            case GclLiteralType.String => baseTypeString
-            case GclLiteralType.Integer => baseTypeInteger
-            case GclLiteralType.Real => baseTypeFloat
-          }
-          expTypes = expTypes + (exp ~> t)
-          return t
+          return visitLiteralExp(lit)
         case be: GclBinaryExp =>
           val lhs = visitExp(be.lhs)
           val rhs = visitExp(be.rhs)
@@ -121,40 +116,60 @@ import org.sireum.message.Reporter
           expTypes = expTypes + (ue ~> et)
           return et
         case ne: GclNameExp =>
-          val name = ne.name
-          if(name.name.size == 1) {
-            if(isPort(name, context)) {
-              halt("todo")
-            } else if(isSubcomponent(name, context)) {
-              val sc = fetchSubcomponent(name, context).get
-               sc match {
-                case ad: AadlData =>
-                  val typ = ad.typ
-                  expTypes = expTypes + (ne ~> typ)
-                  return typ
-                case x =>
-                  halt(s"hi ${x}")
-              }
-            } else {
-              halt(s"todo ${name}")
-            }
-          } else {
-            halt(s"todo ${ne}")
-          }
+          return visitNameExp(ne)
         case ae: GclAccessExp =>
-          val e = visitExp(ae.exp)
+          return visitAccessExp(ae)
 
-          e match {
-            case r: RecordType =>
-              val typ = r.fields.get(ae.attributeName).get
-              expTypes = expTypes + (ae ~> typ)
-              return typ
-
-            case x => halt(s"need to handle handle ${x}")
-          }
-
-        case x => halt(s"Need to handle exprs of type $x")
+        case x => halt(s"TODO: need to handle exps of type $x")
       }
+    }
+
+    def visitNameExp(ne: GclNameExp): AadlType = {
+      val name = ne.name
+      if (name.name.size == 1) {
+        if (isPort(name, context)) {
+          halt("TODO: handle port refs")
+        } else if (isSubcomponent(name, context)) {
+          val sc = fetchSubcomponent(name, context).get
+          sc match {
+            case ad: AadlData =>
+              val typ = ad.typ
+              expTypes = expTypes + (ne ~> typ)
+              return typ
+            case x =>
+              halt(s"TODO: Accessing subcomponent ${sc.identifier} but it's not a data component")
+          }
+        } else {
+          halt(s"TODO: name exp isn't a port or subcomponent: ${ne}")
+        }
+      } else {
+        halt(s"TODO: handle external refs: ${ne}")
+      }
+    }
+
+    def visitAccessExp(ae: GclAccessExp): AadlType = {
+      val e = visitExp(ae.exp)
+
+      e match {
+        case r: RecordType =>
+          val fieldType = r.fields.get(ae.attributeName).get
+          expTypes = expTypes + (ae ~> fieldType)
+          return fieldType
+
+        case x => halt(s"TODO: need to handle non record type access exps: ${x}")
+      }
+    }
+
+    def visitLiteralExp(exp: GclLiteralExp): AadlType = {
+      // TODO: refine real/int
+      val t: AadlType = exp.typ match {
+        case GclLiteralType.Boolean => baseTypeBoolean
+        case GclLiteralType.String => baseTypeString
+        case GclLiteralType.Integer => baseTypeInteger
+        case GclLiteralType.Real => baseTypeFloat
+      }
+      expTypes = expTypes + (exp ~> t)
+      return t
     }
 
     annex match {
@@ -170,7 +185,7 @@ import org.sireum.message.Reporter
 
         return Some(GclSymbolTable(symbols, expTypes))
       case x =>
-        halt(s"Not handling ${x}")
+        halt(s"TODO: need to handle gcl annex type: ${x}")
     }
   }
 }
