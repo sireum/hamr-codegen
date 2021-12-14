@@ -5,7 +5,7 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlData, AadlPort, AadlSymbol, GclKey, GclSymbolTable, SymbolTable}
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, RecordType}
-import org.sireum.hamr.ir.{GclAccessExp, GclAnnex, GclBinaryExp, GclExp, GclLiteralExp, GclLiteralType, GclNameExp, GclSubclause, GclUnaryExp, Name}
+import org.sireum.hamr.ir.{GclAccessExp, GclAnnex, GclBinaryExp, GclBinaryOp, GclExp, GclInvariant, GclLiteralExp, GclLiteralType, GclNameExp, GclSubclause, GclUnaryExp, GclUnaryOp, Name}
 import org.sireum.message.Reporter
 
 @record class GclResolver() {
@@ -34,6 +34,66 @@ import org.sireum.message.Reporter
 
   def isPort(name: Name, context: AadlComponent): B = {
     return !fetchPort(name, context).isEmpty
+  }
+
+  def isBoolUnaryOp(op: GclUnaryOp.Type): B = {
+    val ret: B = op match {
+      case GclUnaryOp.Abs => F
+      case GclUnaryOp.Neg => F
+      case GclUnaryOp.Not => T
+    }
+    return ret
+  }
+
+  def isArithUnaryOp(op: GclUnaryOp.Type): B = {
+    return !isBoolUnaryOp(op)
+  }
+
+  def isLogicalBinaryOp(op: GclBinaryOp.Type): B = {
+    val ret: B = op match {
+      case GclBinaryOp.And => T
+      case GclBinaryOp.AndThen => T
+      case GclBinaryOp.Or => T
+      case GclBinaryOp.OrElse => T
+      case GclBinaryOp.Xor => T
+      case GclBinaryOp.Implies => T
+      case GclBinaryOp.Equiv => T
+
+      case GclBinaryOp.Eq => T
+      case GclBinaryOp.Neq => T
+
+      case _ => F
+    }
+    return ret
+  }
+
+  def isArithBinaryOp(op: GclBinaryOp.Type): B = {
+    val ret: B = op match {
+      case GclBinaryOp.Plus => T
+      case GclBinaryOp.Minus => T
+      case GclBinaryOp.Div => T
+      case GclBinaryOp.Mult => T
+      case GclBinaryOp.Mod => T
+      case GclBinaryOp.Rem => T
+      case GclBinaryOp.Exp => T
+
+      case _ => F
+    }
+    return ret
+  }
+
+  def isRelationalBinaryOp(op: GclBinaryOp.Type): B = {
+    val ret: B = op match {
+      case GclBinaryOp.Eq => T
+      case GclBinaryOp.Neq => T
+      case GclBinaryOp.Lt => T
+      case GclBinaryOp.Lte => T
+      case GclBinaryOp.Gt => T
+      case GclBinaryOp.Gte => T
+
+      case _ => F
+    }
+    return ret
   }
 
   def processGclAnnex(context: AadlComponent,
@@ -100,10 +160,26 @@ import org.sireum.message.Reporter
         case be: GclBinaryExp =>
           val lhs = visitExp(be.lhs)
           val rhs = visitExp(be.rhs)
+
           unify(lhs, rhs) match {
             case Some(unified) =>
-              expTypes = expTypes + (be ~> unified)
-              return unified
+              val beType: AadlType = {
+
+                if(isLogicalBinaryOp(be.op) && isBool(unified)) {
+                  baseTypeBoolean
+                } else if (isArithBinaryOp(be.op) && isNumeric(unified)) {
+                  unified
+                } else if (isRelationalBinaryOp(be.op) && isNumeric(unified)) {
+                  baseTypeBoolean
+                } else {
+                  reporter.error(exp.pos, "", s"Binary operator ${be.op} cannot be applied to expressions of type ${lhs.name} and ${rhs.name}")
+                  baseTypeBoolean // dummy type as type-checking failed
+                }
+              }
+
+              expTypes = expTypes + (be ~> beType)
+
+              return beType
             case _ =>
               println(lhs)
               println(rhs)
@@ -113,6 +189,15 @@ import org.sireum.message.Reporter
           }
         case ue: GclUnaryExp =>
           val et = visitExp(ue.exp)
+
+          if(isBoolUnaryOp(ue.op) && !isBool(et)) {
+            reporter.error(exp.pos, "", s"Unary operator ${ue.op} cannot be applied to ${et.name}")
+          }
+
+          if(isArithUnaryOp(ue.op) && !isNumeric(et)) {
+            reporter.error(exp.pos, "", s"Unary operator ${ue.op} cannot be applied to ${et.name}")
+          }
+
           expTypes = expTypes + (ue ~> et)
           return et
         case ne: GclNameExp =>
@@ -172,17 +257,33 @@ import org.sireum.message.Reporter
       return t
     }
 
+    def visitGclSubclause(s: GclSubclause): Unit = {
+      var seenInvariantNames: Set[String] = Set.empty
+
+      for (i <- s.invariants) {
+        if(seenInvariantNames.contains(i.name)) {
+          reporter.error(i.exp.pos, "", s"Duplicate invariant name: ${i.name}")
+        }
+        seenInvariantNames = seenInvariantNames + i.name
+        visitInvariant(i)
+      }
+
+      assert(s.state.isEmpty, "not yet")
+      assert(s.initializes.isEmpty, "not yet")
+      assert(s.integration.isEmpty, "not yet")
+      assert(s.compute.isEmpty, "not yet")
+    }
+
+    def visitInvariant(i: GclInvariant): Unit = {
+      val r = visitExp(i.exp)
+      if(r.name != baseTypeBoolean.name) {
+        reporter.error(i.exp.pos, "", "Invariant expressions must be boolean")
+      }
+    }
+
     annex match {
       case g: GclSubclause =>
-        assert(g.state.isEmpty)
-
-        for (i <- g.invariants) {
-          visitExp(i.exp)
-        }
-        assert(g.initializes.isEmpty)
-        assert(g.integration.isEmpty)
-        assert(g.compute.isEmpty)
-
+        visitGclSubclause(g)
         return Some(GclSymbolTable(symbols, expTypes))
       case x =>
         halt(s"TODO: need to handle gcl annex type: ${x}")
