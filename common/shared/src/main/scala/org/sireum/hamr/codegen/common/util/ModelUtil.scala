@@ -4,7 +4,7 @@ package org.sireum.hamr.codegen.common.util
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.properties.PropertyUtil
-import org.sireum.hamr.codegen.common.symbols.{SymbolResolver, SymbolTable}
+import org.sireum.hamr.codegen.common.symbols.{SymbolResolver, SymbolTable, SymbolUtil}
 import org.sireum.hamr.codegen.common.transformers.Transformers
 import org.sireum.hamr.codegen.common.types.{AadlTypes, TypeResolver}
 import org.sireum.hamr.ir.Aadl
@@ -23,7 +23,7 @@ object ModelUtil {
 
     var transModel = origModel
 
-    val aadlMaps = SymbolResolver.buildAadlMaps(transModel, reporter)
+    val aadlMaps = SymbolUtil.buildAadlMaps(transModel, reporter)
 
     val tResult = AirTransformer(Transformers.MissingTypeRewriter()).transformAadl(Transformers.CTX(F, ISZ()), transModel)
     reporter.reports(tResult.ctx.messages)

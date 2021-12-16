@@ -4,12 +4,12 @@ package org.sireum.hamr.codegen.common.resolvers
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
-import org.sireum.hamr.codegen.common.symbols.{BTSState, BTSSymbolTable, BTSVariable, SymbolTable}
+import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AnnexInfo, AnnexVisitor, BTSAnnexInfo, BTSState, BTSSymbolTable, BTSVariable, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlTypes
-import org.sireum.hamr.ir.{BLESSAnnex, BTSBLESSAnnexClause, BTSClassifier}
+import org.sireum.hamr.ir.{Annex, BLESSAnnex, BTSBLESSAnnexClause, BTSClassifier}
 import org.sireum.message.Reporter
 
-@record class BTSResolver {
+@record class BTSResolver extends AnnexVisitor {
 
   def processBTSAnnex(a: BLESSAnnex,
                       symbolTable: SymbolTable,
@@ -53,5 +53,19 @@ import org.sireum.message.Reporter
         reporter.error(None(), CommonUtil.toolName, s"Unexpected BTS annex type ${x}")
         return None()
     }
+  }
+
+  var seenAnnexes: Set[Annex] = Set.empty
+  def offer(context: AadlComponent, annex: Annex, symbolTable: SymbolTable, aadlTypes: AadlTypes, reporter: Reporter): Option[AnnexInfo] = {
+    if(!seenAnnexes.contains(annex)) {
+      seenAnnexes = seenAnnexes + annex
+      annex.clause match {
+        case b: BTSBLESSAnnexClause =>
+          val btsSymTable = processBTSAnnex(b, symbolTable, aadlTypes, reporter).get
+          return Some(BTSAnnexInfo(b, btsSymTable))
+        case _ =>
+      }
+    }
+    return None()
   }
 }

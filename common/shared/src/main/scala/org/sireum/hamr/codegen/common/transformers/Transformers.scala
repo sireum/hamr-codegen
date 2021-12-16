@@ -3,8 +3,8 @@ package org.sireum.hamr.codegen.common.transformers
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
-import org.sireum.hamr.codegen.common.properties.{HamrProperties, OsateProperties, PropertyUtil}
-import org.sireum.hamr.codegen.common.symbols.SymbolResolver.AadlMaps
+import org.sireum.hamr.codegen.common.properties.OsateProperties
+import org.sireum.hamr.codegen.common.symbols.AadlMaps
 import org.sireum.hamr.codegen.common.types.TypeUtil
 import org.sireum.hamr.ir
 import org.sireum.hamr.ir.{BTSAction, BTSAssignmentAction, BTSNameExp, BTSPortOutAction, BTSTransitionLabel, Name, MTransformer => MAirTransformer}

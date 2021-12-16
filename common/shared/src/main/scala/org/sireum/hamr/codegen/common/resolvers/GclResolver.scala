@@ -3,12 +3,13 @@ package org.sireum.hamr.codegen.common.resolvers
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
-import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlData, AadlPort, AadlSymbol, GclKey, GclSymbolTable, SymbolTable}
+import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlData, AadlPort, AadlSymbol, AnnexInfo, AnnexVisitor, GclAnnexInfo, GclKey, GclSymbolTable, SymbolTable}
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, RecordType}
-import org.sireum.hamr.ir.{GclAccessExp, GclAnnex, GclBinaryExp, GclBinaryOp, GclExp, GclInvariant, GclLiteralExp, GclLiteralType, GclNameExp, GclSubclause, GclUnaryExp, GclUnaryOp, Name}
+import org.sireum.hamr.ir.{Annex, GclAccessExp, GclAnnex, GclBinaryExp, GclBinaryOp, GclExp, GclInvariant, GclLiteralExp, GclLiteralType, GclNameExp, GclSubclause, GclUnaryExp, GclUnaryOp, Name}
 import org.sireum.message.Reporter
 
-@record class GclResolver() {
+@record class GclResolver() extends AnnexVisitor {
+
   var symbols: Map[GclKey, AadlSymbol] = Map.empty
   var expTypes: HashMap[GclExp, AadlType] = HashMap.empty
 
@@ -140,6 +141,7 @@ import org.sireum.message.Reporter
     }
 
     def unify(a: AadlType, b: AadlType): Option[AadlType] = {
+      // TODO
       if (isBool(a) && isBool(b)) {
         return Some(a)
       } else if (isString(a) && isString(b)) {
@@ -147,7 +149,7 @@ import org.sireum.message.Reporter
       } else if (isNumeric(a) && isNumeric(b)) {
         return if (isInteger(a) && isInteger(b)) unifyInteger(a, b)
         else if (isReal(a) && isReal(b)) unifyReal(a, b)
-        else Some(baseTypeFloat) // TODO, mixed real/ints
+        else None()
       } else {
         return None()
       }
@@ -165,7 +167,7 @@ import org.sireum.message.Reporter
             case Some(unified) =>
               val beType: AadlType = {
 
-                if(isLogicalBinaryOp(be.op) && isBool(unified)) {
+                if (isLogicalBinaryOp(be.op) && isBool(unified)) {
                   baseTypeBoolean
                 } else if (isArithBinaryOp(be.op) && isNumeric(unified)) {
                   unified
@@ -181,20 +183,17 @@ import org.sireum.message.Reporter
 
               return beType
             case _ =>
-              println(lhs)
-              println(rhs)
-              println(exp)
-              reporter.error(exp.pos, "", s"Could not unify type for binary expression ${exp}")
+              reporter.error(exp.pos, "", s"Could not unify ${lhs.name} and ${rhs.name}")
               return rhs
           }
         case ue: GclUnaryExp =>
           val et = visitExp(ue.exp)
 
-          if(isBoolUnaryOp(ue.op) && !isBool(et)) {
+          if (isBoolUnaryOp(ue.op) && !isBool(et)) {
             reporter.error(exp.pos, "", s"Unary operator ${ue.op} cannot be applied to ${et.name}")
           }
 
-          if(isArithUnaryOp(ue.op) && !isNumeric(et)) {
+          if (isArithUnaryOp(ue.op) && !isNumeric(et)) {
             reporter.error(exp.pos, "", s"Unary operator ${ue.op} cannot be applied to ${et.name}")
           }
 
@@ -261,7 +260,7 @@ import org.sireum.message.Reporter
       var seenInvariantNames: Set[String] = Set.empty
 
       for (i <- s.invariants) {
-        if(seenInvariantNames.contains(i.name)) {
+        if (seenInvariantNames.contains(i.name)) {
           reporter.error(i.exp.pos, "", s"Duplicate invariant name: ${i.name}")
         }
         seenInvariantNames = seenInvariantNames + i.name
@@ -276,7 +275,7 @@ import org.sireum.message.Reporter
 
     def visitInvariant(i: GclInvariant): Unit = {
       val r = visitExp(i.exp)
-      if(r.name != baseTypeBoolean.name) {
+      if (r.name != baseTypeBoolean.name) {
         reporter.error(i.exp.pos, "", "Invariant expressions must be boolean")
       }
     }
@@ -288,5 +287,19 @@ import org.sireum.message.Reporter
       case x =>
         halt(s"TODO: need to handle gcl annex type: ${x}")
     }
+  }
+
+  var seenAnnexes: Set[Annex] = Set.empty
+  def offer(context: AadlComponent, annex: Annex, symbolTable: SymbolTable, aadlTypes: AadlTypes, reporter: Reporter): Option[AnnexInfo] = {
+    if (!seenAnnexes.contains(annex)) {
+      seenAnnexes = seenAnnexes + annex
+      annex.clause match {
+        case b: GclAnnex =>
+          val gclSymbolTable: GclSymbolTable = processGclAnnex(context, b, symbolTable, aadlTypes, reporter).get
+          return Some(GclAnnexInfo(b, gclSymbolTable))
+        case _ =>
+      }
+    }
+    return None()
   }
 }
