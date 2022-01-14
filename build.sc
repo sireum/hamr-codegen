@@ -4,7 +4,6 @@ import $file.air.Air
 import $file.arsit.Arsit
 import $file.art.Art
 import $file.Codegen
-import ammonite.ops.up
 
 object runtime extends mill.Module {
 
@@ -30,7 +29,7 @@ object air extends Air.Module {
 
 object codegen extends Codegen.Module.Codegen {
 
-  final override val millSourcePath = super.millSourcePath / up
+  final override val millSourcePath = super.millSourcePath / os.up
 
   object common extends Codegen.Module.Common {
     final override def airObject = air
