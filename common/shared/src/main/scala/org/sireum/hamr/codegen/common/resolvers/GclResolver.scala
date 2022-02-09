@@ -3,15 +3,33 @@ package org.sireum.hamr.codegen.common.resolvers
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
-import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlData, AadlPort, AadlSymbol, AnnexInfo, AnnexVisitor, GclAnnexInfo, GclKey, GclSymbolTable, SymbolTable}
+import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlData, AadlDataPort, AadlEventDataPort, AadlEventPort, AadlPort, AadlSymbol, AnnexInfo, AnnexVisitor, GclAnnexInfo, GclKey, GclSymbolTable, SymbolTable}
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, RecordType}
-import org.sireum.hamr.ir.{Annex, GclAccessExp, GclAnnex, GclBinaryExp, GclBinaryOp, GclExp, GclInvariant, GclLiteralExp, GclLiteralType, GclNameExp, GclSubclause, GclUnaryExp, GclUnaryOp, Name}
+import org.sireum.hamr.ir.{Annex, Direction, GclAccessExp, GclAnnex, GclAssume, GclBinaryExp, GclBinaryOp, GclExp, GclGuarantee, GclIntegration, GclInvariant, GclLiteralExp, GclLiteralType, GclNameExp, GclSpec, GclSubclause, GclUnaryExp, GclUnaryOp, Name}
 import org.sireum.message.Reporter
 
 @record class GclResolver() extends AnnexVisitor {
 
   var symbols: Map[GclKey, AadlSymbol] = Map.empty
   var expTypes: HashMap[GclExp, AadlType] = HashMap.empty
+  var specPort: Map[GclSpec, AadlPort] = Map.empty
+
+  var symbolRecorder: Stack[Set[AadlPort]] = Stack.empty
+  def symbolRecorderPush(a: AadlPort): Unit = {
+    if(symbolRecorder.nonEmpty) {
+      val (set, stack) = symbolRecorder.pop.get
+      symbolRecorder = stack.push(set + a)
+    }
+  }
+  def symbolRecorderStart(): Z = {
+    symbolRecorder = symbolRecorder.push(Set.empty)
+    return symbolRecorder.size
+  }
+  def symbolRecorderStop(): Set[AadlPort] = {
+    val (set, stack) = symbolRecorder.pop.get
+    symbolRecorder = stack
+    return set
+  }
 
   def fetchSubcomponent(name: Name, context: AadlComponent): Option[AadlComponent] = {
     val n = CommonUtil.getName(name)
@@ -212,6 +230,20 @@ import org.sireum.message.Reporter
       val name = ne.name
       if (name.name.size == 1) {
         if (isPort(name, context)) {
+          val port: AadlPort = fetchPort(name, context).get
+
+          symbolRecorderPush(port)
+
+          port match {
+            case i: AadlDataPort =>
+              expTypes = expTypes + (ne ~> i.aadlType)
+              return i.aadlType
+            case i: AadlEventDataPort =>
+              expTypes = expTypes + (ne ~> i.aadlType)
+              return i.aadlType
+            case i: AadlEventPort =>
+              reporter.error(ne.pos, "", s"Invalid use of event port ${i.identifier}")
+          }
           halt("TODO: handle port refs")
         } else if (isSubcomponent(name, context)) {
           val sc = fetchSubcomponent(name, context).get
@@ -267,9 +299,44 @@ import org.sireum.message.Reporter
         visitInvariant(i)
       }
 
+      if(s.integration.nonEmpty) {
+        var seenSpecNames: Set[String] = Set.empty
+        val gclIntegration = s.integration.get
+
+        for(s <- gclIntegration.specs) {
+
+          if(seenSpecNames.contains(s.name)) {
+            reporter.error(s.exp.pos, "", s"Duplicate spec name: ${s.name}")
+          }
+          seenSpecNames = seenSpecNames + s.name
+
+          val size = symbolRecorderStart()
+          visitExp(s.exp)
+          val symbols = symbolRecorderStop()
+          assert(symbolRecorder.size == size - 1, s"${symbolRecorder.size} vs ${size - 1}")
+
+          if(symbols.size != 1) {
+            reporter.error(s.exp.pos, "", s"An integration clause must refer to exactly one port")
+          } else {
+            val sym = symbols.elements(0)
+            sym.direction match {
+              case Direction.Out =>
+                if (!s.isInstanceOf[GclGuarantee]) {
+                  reporter.error(s.exp.pos, "", s"Integration contracts for outgoing ports must be Guarantee statements")
+                }
+              case Direction.In =>
+                if(!s.isInstanceOf[GclAssume]) {
+                  reporter.error (s.exp.pos, "", s"Integration contracts for incoming ports must be Assume statements")
+                }
+              case x => halt(s"Other phase rejects this case: ${x}")
+            }
+            specPort = specPort + (s ~> sym)
+          }
+        }
+      }
+
       assert(s.state.isEmpty, "not yet")
       assert(s.initializes.isEmpty, "not yet")
-      assert(s.integration.isEmpty, "not yet")
       assert(s.compute.isEmpty, "not yet")
     }
 
@@ -283,7 +350,7 @@ import org.sireum.message.Reporter
     annex match {
       case g: GclSubclause =>
         visitGclSubclause(g)
-        return Some(GclSymbolTable(symbols, expTypes))
+        return Some(GclSymbolTable(symbols, expTypes, specPort))
       case x =>
         halt(s"TODO: need to handle gcl annex type: ${x}")
     }
