@@ -660,10 +660,6 @@ object SymbolResolver {
                 val mesg = s"Virtual processor ${avp.identifier} has ${avp.dispatchProtocol.name} dispatching. Only periodic dispatching is supported."
                 reporter.error(avp.component.identifier.pos, CommonUtil.toolName, mesg)
               }
-              if (avp.period.isEmpty) {
-                val mesg = s"Must specify ${OsateProperties.TIMING_PROPERTIES__PERIOD} for periodic virtual processor ${avp.identifier}"
-                reporter.error(avp.component.identifier.pos, CommonUtil.toolName, mesg)
-              }
             case x =>
               val mesg = s"Thread ${thread.identifier} is going to a VM so its process ${parent.identifier} must be bound to a virtual processor. Instead it's bound to ${x}"
               reporter.error(thread.component.identifier.pos, CommonUtil.toolName, mesg)
