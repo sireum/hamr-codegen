@@ -52,6 +52,10 @@ jobs:
           set CC=gcc.exe
           set CXX=c++.exe
           cd /d %GITHUB_WORKSPACE%
+          
+          rem see https://github.com/sireum/osate-plugin/blob/57785407d84793cf1f8d5926647e4dc75ab197a9/org.sireum.aadl.osate.cli/src/org/sireum/aadl/osate/cli/Phantom.java#L508-L517
+          set CHECK_PHANTOM_HAMR_API_COMPATIBILITY=true
+          
           echo Need to add back 'compile' mode once github actions issue is resolved
           set HamrTestModes=phantom,generated_unit_tests,smt2,verbose
           echo HamrTestModes=%HamrTestModes%

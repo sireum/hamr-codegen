@@ -38,6 +38,10 @@ jobs:
         run: |
           export COURSIER_CACHE=$GITHUB_WORKSPACE/cache/coursier
           cd $GITHUB_WORKSPACE
+          
+          # see https://github.com/sireum/osate-plugin/blob/57785407d84793cf1f8d5926647e4dc75ab197a9/org.sireum.aadl.osate.cli/src/org/sireum/aadl/osate/cli/Phantom.java#L508-L517
+          export CHECK_PHANTOM_HAMR_API_COMPATIBILITY=true
+          
           export HamrTestModes=phantom,compile,generated_unit_tests,smt2
           echo "HamrTestModes=${HamrTestModes}"
           export SMT2_TIMEOUT=180000
