@@ -382,7 +382,11 @@ import org.sireum.hamr.ir.{AnnexClause, GclAnnex, BTSBLESSAnnexClause}
 
 @sig trait AadlPort extends AadlDirectedFeature
 
-@sig trait AadlFeatureEvent
+@sig trait AadlFeatureEvent extends AadlDirectedFeature {
+  def getComputeEntrypointSourceText(): Option[String] = {
+    return PropertyUtil.getComputeEntrypointSourceText(feature.properties)
+  }
+}
 
 @datatype class AadlEventPort(val feature: ir.FeatureEnd,
                               val featureGroupIds: ISZ[String],
