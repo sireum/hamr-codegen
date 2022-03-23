@@ -3,7 +3,7 @@
 package org.sireum.hamr.codegen.common.util.test
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.containers.{EResource, IResource, Resource}
+import org.sireum.hamr.codegen.common.containers.{EResource, IResource, Marker, Resource}
 
 object TestUtil {
 
@@ -30,7 +30,7 @@ object TestUtil {
               val replace: String = if (i.makeCRLF) "\r\n" else "\n"
               ops.StringOps(i.content).replaceAllLiterally(lineSep, replace)
             }
-            (dstPath, ITestResource(content = content, overwrite = i.overwrite, makeExecutable = i.makeExecutable, makeCRLF = i.makeCRLF))
+            (dstPath, ITestResource(content = content, overwrite = i.overwrite, makeExecutable = i.makeExecutable, makeCRLF = i.makeCRLF, markers = i.markers))
 
           case e: ETestResource =>
            (dstPath, ETestResource(content = e.content, symlink = e.symlink))
@@ -43,7 +43,8 @@ object TestUtil {
       val key = resultsDir.relativize(Os.path(m.dstPath)).value
       val results: (String, TestResource) = m match {
         case i: IResource =>
-          (key, ITestResource (i.content.render, i.overwrite, i.makeExecutable, i.makeCRLF) )
+          val testMarkers = i.markers.map((m: Marker) => TestMarker(beginMarker = m.beginMarker, endMarker = m.endMarker))
+          (key, ITestResource (content = i.content.render, overwrite = i.overwrite, makeExecutable = i.makeExecutable, makeCRLF = i.makeCRLF, markers = testMarkers) )
         case e: EResource =>
           val src = resultsDir.relativize(Os.path(e.srcPath)).value
           val dst = resultsDir.relativize(Os.path(e.dstPath)).value

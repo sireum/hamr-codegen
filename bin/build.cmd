@@ -92,7 +92,7 @@ def clone(repo: String): Unit = {
 }
 
 def cloneProjects(): Unit = {
-  ISZ[String]("air", "runtime").foreach((p: String) => clone(p))
+  ISZ[String]("air", "runtime", "slang").foreach((p: String) => clone(p))
 }
 
 def tipe(): Unit = {

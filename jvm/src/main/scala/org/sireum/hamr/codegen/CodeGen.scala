@@ -6,8 +6,8 @@ import org.sireum.hamr.act.util.Util.ACT_INSTRUCTIONS_MESSAGE_KIND
 import org.sireum.hamr.arsit.Util.ARSIT_INSTRUCTIONS_MESSAGE_KIND
 import org.sireum.hamr.{act, arsit}
 import org.sireum.hamr.codegen.common.util.CodeGenPlatform._
-import org.sireum.hamr.codegen.common.DirectoryUtil
-import org.sireum.hamr.codegen.common.containers.{EResource, IResource, ProyekIveConfig, Resource, TranspilerConfig}
+import org.sireum.hamr.codegen.common.{DirectoryUtil, StringUtil}
+import org.sireum.hamr.codegen.common.containers.{EResource, IResource, Marker, ProyekIveConfig, Resource, TranspilerConfig}
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.ModelUtil.ModelElements
@@ -283,6 +283,15 @@ object CodeGen {
   }
 
   def writeOutResources(resources: IS[Z, Resource], reporter: Reporter): Unit = {
+    def render(i: IResource): String = {
+      val ret: String = {
+        val lineSep = if(Os.isWin) "\r\n" else "\n" // ST render uses System.lineSep
+        val replace = if(i.makeCRLF) "\r\n" else "\n"
+        ops.StringOps(i.content.render).replaceAllLiterally(lineSep, replace)
+      }
+      return ret
+    }
+
     for (r <- resources) {
       val _p = Os.path(r.dstPath).canon
       val p = _p.canon
@@ -291,17 +300,31 @@ object CodeGen {
       r match {
         case i: IResource =>
           if (i.overwrite || !p.exists) {
-            val content: String = {
-              val lineSep = if(Os.isWin) "\r\n" else "\n" // ST render uses System.lineSep
-              val replace = if(i.makeCRLF) "\r\n" else "\n"
-              ops.StringOps(i.content.render).replaceAllLiterally(lineSep, replace)
-            }
+            val content = render(i)
             p.writeOver(content)
             reporter.info(None(), toolName, s"Wrote: ${p}")
             if (i.makeExecutable) {
               p.chmodAll("700")
               reporter.info(None(), toolName, s"Made ${p} executable")
             }
+          } else if (p.exists && i.markers.nonEmpty) {
+            val newContent = render(i)
+            val oldSections = StringUtil.collectSections(p.read, toolName, i.markers, reporter)
+            val newSections = StringUtil.collectSections(newContent, toolName, i.markers, reporter)
+
+            if(oldSections.size != i.markers.size) {
+              val fixme = p.up / s"${p.name}_fixme"
+              fixme.writeOver(newContent)
+
+              reporter.error(None(), toolName, s"Existing file did not contain expected markers. Copy the markers found in the following file to the existing file: ${fixme.value}")
+            } else {
+              val replacements: ISZ[(Z, Z, String)] = oldSections.entries.map((oldEntry: (Marker, (Z, Z, String))) =>
+                ((oldEntry._2._1, oldEntry._2._2, newSections.get(oldEntry._1).get._3)))
+              val content: String = StringUtil.replaceSections(p.read, replacements, reporter)
+              p.writeOver(content)
+              reporter.info(None(), toolName, s"Wrote and preserved existing content: ${p}")
+            }
+
           } else {
             reporter.info(None(), toolName, s"File exists, will not overwrite: ${p}")
           }

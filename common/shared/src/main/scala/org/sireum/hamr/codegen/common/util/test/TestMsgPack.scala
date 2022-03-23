@@ -11,11 +11,13 @@ object TestMsgPack {
 
   object Constants {
 
-    val ITestResource: Z = -32
+    val TestMarker: Z = -32
 
-    val ETestResource: Z = -31
+    val ITestResource: Z = -31
 
-    val TestResult: Z = -30
+    val ETestResource: Z = -30
+
+    val TestResult: Z = -29
 
   }
 
@@ -36,12 +38,19 @@ object TestMsgPack {
       }
     }
 
+    def writeTestMarker(o: TestMarker): Unit = {
+      writer.writeZ(Constants.TestMarker)
+      writer.writeString(o.beginMarker)
+      writer.writeString(o.endMarker)
+    }
+
     def writeITestResource(o: ITestResource): Unit = {
       writer.writeZ(Constants.ITestResource)
       writer.writeString(o.content)
       writer.writeB(o.overwrite)
       writer.writeB(o.makeExecutable)
       writer.writeB(o.makeCRLF)
+      writer.writeISZ(o.markers, writeTestMarker _)
     }
 
     def writeETestResource(o: ETestResource): Unit = {
@@ -88,6 +97,20 @@ object TestMsgPack {
       }
     }
 
+    def readTestMarker(): TestMarker = {
+      val r = readTestMarkerT(F)
+      return r
+    }
+
+    def readTestMarkerT(typeParsed: B): TestMarker = {
+      if (!typeParsed) {
+        reader.expectZ(Constants.TestMarker)
+      }
+      val beginMarker = reader.readString()
+      val endMarker = reader.readString()
+      return TestMarker(beginMarker, endMarker)
+    }
+
     def readITestResource(): ITestResource = {
       val r = readITestResourceT(F)
       return r
@@ -101,7 +124,8 @@ object TestMsgPack {
       val overwrite = reader.readB()
       val makeExecutable = reader.readB()
       val makeCRLF = reader.readB()
-      return ITestResource(content, overwrite, makeExecutable, makeCRLF)
+      val markers = reader.readISZ(readTestMarker _)
+      return ITestResource(content, overwrite, makeExecutable, makeCRLF, markers)
     }
 
     def readETestResource(): ETestResource = {
@@ -155,6 +179,21 @@ object TestMsgPack {
       return r
     }
     val r = to(data, fTestResource _)
+    return r
+  }
+
+  def fromTestMarker(o: TestMarker, pooling: B): ISZ[U8] = {
+    val w = Writer.Default(MessagePack.writer(pooling))
+    w.writeTestMarker(o)
+    return w.result
+  }
+
+  def toTestMarker(data: ISZ[U8]): Either[TestMarker, MessagePack.ErrorMsg] = {
+    def fTestMarker(reader: Reader): TestMarker = {
+      val r = reader.readTestMarker()
+      return r
+    }
+    val r = to(data, fTestMarker _)
     return r
   }
 

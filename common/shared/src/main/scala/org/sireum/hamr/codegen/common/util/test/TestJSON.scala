@@ -19,13 +19,22 @@ object TestJSON {
       }
     }
 
+    @pure def printTestMarker(o: TestMarker): ST = {
+      return printObject(ISZ(
+        ("type", st""""TestMarker""""),
+        ("beginMarker", printString(o.beginMarker)),
+        ("endMarker", printString(o.endMarker))
+      ))
+    }
+
     @pure def printITestResource(o: ITestResource): ST = {
       return printObject(ISZ(
         ("type", st""""ITestResource""""),
         ("content", printString(o.content)),
         ("overwrite", printB(o.overwrite)),
         ("makeExecutable", printB(o.makeExecutable)),
-        ("makeCRLF", printB(o.makeCRLF))
+        ("makeCRLF", printB(o.makeCRLF)),
+        ("markers", printISZ(F, o.markers, printTestMarker _))
       ))
     }
 
@@ -62,6 +71,24 @@ object TestJSON {
       }
     }
 
+    def parseTestMarker(): TestMarker = {
+      val r = parseTestMarkerT(F)
+      return r
+    }
+
+    def parseTestMarkerT(typeParsed: B): TestMarker = {
+      if (!typeParsed) {
+        parser.parseObjectType("TestMarker")
+      }
+      parser.parseObjectKey("beginMarker")
+      val beginMarker = parser.parseString()
+      parser.parseObjectNext()
+      parser.parseObjectKey("endMarker")
+      val endMarker = parser.parseString()
+      parser.parseObjectNext()
+      return TestMarker(beginMarker, endMarker)
+    }
+
     def parseITestResource(): ITestResource = {
       val r = parseITestResourceT(F)
       return r
@@ -83,7 +110,10 @@ object TestJSON {
       parser.parseObjectKey("makeCRLF")
       val makeCRLF = parser.parseB()
       parser.parseObjectNext()
-      return ITestResource(content, overwrite, makeExecutable, makeCRLF)
+      parser.parseObjectKey("markers")
+      val markers = parser.parseISZ(parseTestMarker _)
+      parser.parseObjectNext()
+      return ITestResource(content, overwrite, makeExecutable, makeCRLF, markers)
     }
 
     def parseETestResource(): ETestResource = {
@@ -151,6 +181,24 @@ object TestJSON {
       return r
     }
     val r = to(s, fTestResource _)
+    return r
+  }
+
+  def fromTestMarker(o: TestMarker, isCompact: B): String = {
+    val st = Printer.printTestMarker(o)
+    if (isCompact) {
+      return st.renderCompact
+    } else {
+      return st.render
+    }
+  }
+
+  def toTestMarker(s: String): Either[TestMarker, Json.ErrorMsg] = {
+    def fTestMarker(parser: Parser): TestMarker = {
+      val r = parser.parseTestMarker()
+      return r
+    }
+    val r = to(s, fTestMarker _)
     return r
   }
 

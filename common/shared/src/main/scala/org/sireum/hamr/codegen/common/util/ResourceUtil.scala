@@ -3,26 +3,33 @@
 package org.sireum.hamr.codegen.common.util
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.containers.{EResource, IResource, Resource}
+import org.sireum.hamr.codegen.common.containers.{EResource, IResource, Marker, Resource}
 
 object ResourceUtil {
 
   def createResource(path: String,
                      content: ST,
                      overwrite: B): Resource = {
-    return IResource(path, content, overwrite, F, F)
+    return IResource(path, content, ISZ(), overwrite, F, F)
+  }
+
+  def createResourceWithMarkers(path: String,
+                                content: ST,
+                                markers: ISZ[Marker],
+                                overwrite: B): Resource = {
+    return IResource(path, content, markers, overwrite, F, F)
   }
 
   def createExeResource(path: String,
                         content: ST,
                         overwrite: B): Resource = {
-    return IResource(path, content, overwrite, T, F)
+    return IResource(path, content, ISZ(), overwrite, T, F)
   }
 
   def createExeCrlfResource(path: String,
                         content: ST,
                         overwrite: B): Resource = {
-    return IResource(path, content, overwrite, T, T)
+    return IResource(path, content, ISZ(), overwrite, T, T)
   }
 
   def createStringResource(path: String,

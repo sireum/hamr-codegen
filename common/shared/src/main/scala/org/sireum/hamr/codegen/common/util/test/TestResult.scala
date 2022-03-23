@@ -8,12 +8,16 @@ import org.sireum._
   def content: String
 }
 
+@datatype class TestMarker(val beginMarker: String,
+                           val endMarker: String)
+
 @datatype class ITestResource(val content: String,
-                              overwrite: B,
-                              makeExecutable: B,
-                              makeCRLF: B) extends TestResource
+                              val overwrite: B,
+                              val makeExecutable: B,
+                              val makeCRLF: B,
+                              val markers: ISZ[TestMarker]) extends TestResource
 
 @datatype class ETestResource(val content: String,
-                              symlink: B) extends TestResource
+                              val symlink: B) extends TestResource
 
-@datatype class TestResult(map: Map[String, TestResource])
+@datatype class TestResult(val map: Map[String, TestResource])
