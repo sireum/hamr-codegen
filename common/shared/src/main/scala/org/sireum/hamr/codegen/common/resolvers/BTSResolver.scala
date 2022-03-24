@@ -4,6 +4,7 @@ package org.sireum.hamr.codegen.common.resolvers
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
+import org.sireum.hamr.codegen.common.CommonUtil.IdPath
 import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AnnexInfo, AnnexVisitor, BTSAnnexInfo, BTSState, BTSSymbolTable, BTSVariable, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.ir.{Annex, BLESSAnnex, BTSBLESSAnnexClause, BTSClassifier}
@@ -22,23 +23,23 @@ import org.sireum.message.Reporter
           (name, BTSState(name, m))
         }))
 
-        var _variables: Map[String, BTSVariable] = Map.empty
+        var _variables: Map[IdPath, BTSVariable] = Map.empty
         for(o <- o.variables) {
-          val id = CommonUtil.getName(o.name)
+          val path = o.name.name
 
           o.varType match {
             case BTSClassifier(classifier) =>
               aadlTypes.typeMap.get(classifier.name) match {
                 case Some(t) =>
-                  _variables = _variables + (id ~> BTSVariable(id, t, o))
+                  _variables = _variables + (path ~> BTSVariable(path, t, o))
                 case _ =>
                   reporter.error(o.name.pos, CommonUtil.toolName,
-                    s"Couldn't resolve AADL type '${classifier.name}' for variable ${id}")
+                    s"Couldn't resolve AADL type '${classifier.name}' for variable ${path}")
               }
 
             case x =>
               reporter.error(o.name.pos, CommonUtil.toolName,
-                s"Currently only handling BTSClassifiers but ${id} has type ${x}")
+                s"Currently only handling BTSClassifiers but ${path} has type ${x}")
           }
         }
 

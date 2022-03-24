@@ -10,6 +10,8 @@ import org.sireum.hamr.ir.{Direction, Feature, FeatureEnd}
 
 object CommonUtil {
 
+  type IdPath = ISZ[String]
+
   val toolName: String = "HAMR Codegen"
 
   def getLastName(n: ir.Name): String = {

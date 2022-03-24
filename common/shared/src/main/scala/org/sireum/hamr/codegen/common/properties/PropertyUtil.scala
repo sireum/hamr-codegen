@@ -4,6 +4,7 @@ package org.sireum.hamr.codegen.common.properties
 
 import org.sireum._
 import org.sireum.hamr.codegen.common._
+import org.sireum.hamr.codegen.common.CommonUtil.IdPath
 import org.sireum.hamr.codegen.common.symbols.Dispatch_Protocol
 import org.sireum.hamr.ir
 
@@ -113,12 +114,12 @@ object PropertyUtil {
     return ret
   }
 
-  def getActualProcessorBinding(c: ir.Component): Option[String] = {
+  def getActualProcessorBinding(c: ir.Component): Option[IdPath] = {
 
-    val ret: Option[String] =
+    val ret: Option[IdPath] =
       getDiscreetPropertyValue(c.properties, OsateProperties.DEPLOYMENT_PROPERTIES__ACTUAL_PROCESSOR_BINDING) match {
-        case Some(v: ir.ReferenceProp) => Some(CommonUtil.getName(v.value))
-        case _ => return None[String]()
+        case Some(v: ir.ReferenceProp) => Some(v.value.name)
+        case _ => return None()
       }
 
     return ret

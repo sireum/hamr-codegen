@@ -4,6 +4,7 @@ package org.sireum.hamr.codegen.common.symbols
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
+import org.sireum.hamr.codegen.common.CommonUtil.IdPath
 import org.sireum.hamr.codegen.common.properties.HamrProperties.HAMR__BIT_CODEC_MAX_SIZE
 import org.sireum.hamr.codegen.common.properties.{CasePropertiesProperties, CaseSchedulingProperties, OsateProperties, PropertyUtil}
 import org.sireum.hamr.codegen.common.resolvers.{BTSResolver, GclResolver}
@@ -56,17 +57,17 @@ object SymbolResolver {
                        aadlMaps: AadlMaps,
                        options: CodeGenConfig,
                        reporter: Reporter): SymbolTable = {
-    var featureMap: HashSMap[String, AadlFeature] = HashSMap.empty
+    var featureMap: HashSMap[IdPath, AadlFeature] = HashSMap.empty
 
-    var airComponentMap: HashSMap[String, ir.Component] = HashSMap.empty
-    var airFeatureMap: HashSMap[String, ir.Feature] = HashSMap.empty
+    var airComponentMap: HashSMap[IdPath, ir.Component] = HashSMap.empty
+    var airFeatureMap: HashSMap[IdPath, ir.Feature] = HashSMap.empty
     var airClassifierMap: HashSMap[String, ir.Component] = HashSMap.empty
 
     var connectionInstances: ISZ[ir.ConnectionInstance] = ISZ()
 
     // port-paths -> connInstances
-    var inConnections: HashSMap[String, ISZ[ir.ConnectionInstance]] = HashSMap.empty
-    var outConnections: HashSMap[String, ISZ[ir.ConnectionInstance]] = HashSMap.empty
+    var inConnections: HashSMap[IdPath, ISZ[ir.ConnectionInstance]] = HashSMap.empty
+    var outConnections: HashSMap[IdPath, ISZ[ir.ConnectionInstance]] = HashSMap.empty
 
 
     val components = model.components
@@ -77,22 +78,22 @@ object SymbolResolver {
 
     { // build airComponent and airClassifier maps
       def buildAirMaps(c: ir.Component): Unit = {
-        val name = CommonUtil.getName(c.identifier)
-        assert(!airComponentMap.contains(name))
-        airComponentMap = airComponentMap + (name ~> c)
+        val path = c.identifier.name
+        assert(!airComponentMap.contains(path))
+        airComponentMap = airComponentMap + (path ~> c)
         if (c.classifier.nonEmpty) {
           airClassifierMap = airClassifierMap + (c.classifier.get.name ~> c)
         }
 
         for (f <- c.features) {
 
-          def resolveAirFeature(_f: ir.Feature, path: ISZ[String]): Unit = {
+          def resolveAirFeature(_f: ir.Feature): Unit = {
             _f match {
               case fa: ir.FeatureAccess =>
-                val featurePath: String = CommonUtil.getName(fa.identifier)
+                val featurePath: IdPath = fa.identifier.name
                 airFeatureMap = airFeatureMap + (featurePath ~> fa)
               case fe: ir.FeatureEnd =>
-                val featurePath: String = CommonUtil.getName(fe.identifier)
+                val featurePath: IdPath = fe.identifier.name
                 airFeatureMap = airFeatureMap + (featurePath ~> fe)
 
                 if (CommonUtil.isDataPort(fe) && fe.classifier.isEmpty) {
@@ -100,12 +101,12 @@ object SymbolResolver {
                 }
               case fg: ir.FeatureGroup =>
                 for (_fge <- fg.features) {
-                  resolveAirFeature(_fge, path)
+                  resolveAirFeature(_fge)
                 }
             }
           }
 
-          resolveAirFeature(f, c.identifier.name)
+          resolveAirFeature(f)
         }
         for (sc <- c.subComponents) {
           buildAirMaps(sc)
@@ -124,8 +125,8 @@ object SymbolResolver {
             if (isHandledConnection(ci, airComponentMap, airFeatureMap)) {
               connectionInstances = connectionInstances :+ ci
 
-              def add(portPath: String, isIn: B): Unit = {
-                val map: HashSMap[String, ISZ[ir.ConnectionInstance]] = isIn match {
+              def add(portPath: IdPath, isIn: B): Unit = {
+                val map: HashSMap[IdPath, ISZ[ir.ConnectionInstance]] = isIn match {
                   case T => inConnections
                   case F => outConnections
                 }
@@ -144,8 +145,8 @@ object SymbolResolver {
               add(portNames._1, F)
               add(portNames._2, T)
             } else {
-              val src = airComponentMap.get(CommonUtil.getName(ci.src.component)).get
-              val dst = airComponentMap.get(CommonUtil.getName(ci.dst.component)).get
+              val src = airComponentMap.get(ci.src.component.name).get
+              val dst = airComponentMap.get(ci.dst.component.name).get
 
               val srcName: String = if (ci.src.feature.nonEmpty) {
                 s"${CommonUtil.getLastName(src.identifier)}.${CommonUtil.getLastName(ci.src.feature.get)}"
@@ -169,22 +170,22 @@ object SymbolResolver {
       populateInOutConnectionMaps(system)
     }
 
-    var componentMap: HashSMap[String, AadlComponent] = HashSMap.empty
+    var componentMap: HashSMap[IdPath, AadlComponent] = HashSMap.empty
 
     /** Builds an AadlComponents and AadlFeatures from the passed in AIR component
     */
-    def buildAadlComponent(c: ir.Component, parent: Option[String]): AadlComponent = {
-      val (identifier, path): (String, String) = c.category match {
+    def buildAadlComponent(c: ir.Component, parent: IdPath): AadlComponent = {
+      val (identifier, path): (String, IdPath) = c.category match {
         case ComponentCategory.Data =>
           val name: String = if(c.identifier.name.isEmpty) {
             c.classifier.get.name
           } else {
             CommonUtil.getName(c.identifier)
           }
-          val path: String = if(parent.isEmpty) name
-            else st"${(parent.get, "_")}_${name}".render
+          val path: IdPath = if(parent.isEmpty) ISZ(name)
+            else parent :+ name
           (name, path)
-        case _ => (CommonUtil.getLastName(c.identifier), CommonUtil.getName(c.identifier))
+        case _ => (CommonUtil.getLastName(c.identifier), c.identifier.name)
       }
 
       if (componentMap.contains(path)) {
@@ -208,7 +209,7 @@ object SymbolResolver {
             }
             return ret
           case _ =>
-            val featurePath = CommonUtil.getName(feature.identifier)
+            val featurePath = feature.identifier.name
             val airFeature = airFeatureMap.get(featurePath).get
             assert(airFeature == feature)
 
@@ -311,7 +312,7 @@ object SymbolResolver {
         {
           //assert(c.subComponents.isEmpty) // TODO handle subprograms etc
 
-          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, Some(path))
+          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, path)
 
           val dispatchProtocol: Dispatch_Protocol.Type = PropertyUtil.getDispatchProtocol(c) match {
             case Some(x) => x
@@ -381,7 +382,7 @@ object SymbolResolver {
 
       val aadlComponent: AadlComponent = c.category match {
         case ir.ComponentCategory.System => {
-          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, Some(path))
+          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, path)
 
           AadlSystem(
             component = c,
@@ -396,7 +397,7 @@ object SymbolResolver {
           assert(c.subComponents.isEmpty, s"Need to handle subcomponents of ${c.category}: ${identifier}")
           AadlProcessor(
             component = c,
-            parent = None(),
+            parent = ISZ(),
             path = path,
             identifier = identifier,
             features = aadlFeatures,
@@ -406,7 +407,7 @@ object SymbolResolver {
         case ir.ComponentCategory.VirtualProcessor => {
           assert(c.subComponents.isEmpty, s"Need to handle subcomponents of ${c.category}? ${identifier}")
 
-          val boundProcessor: Option[String] = PropertyUtil.getActualProcessorBinding(c)
+          val boundProcessor: Option[IdPath] = PropertyUtil.getActualProcessorBinding(c)
 
           val dispatchProtocol: Dispatch_Protocol.Type = PropertyUtil.getDispatchProtocol(c) match {
             case Some(Dispatch_Protocol.Periodic) => Dispatch_Protocol.Periodic
@@ -422,7 +423,7 @@ object SymbolResolver {
 
           AadlVirtualProcessor(
             component = c,
-            parent = None(),
+            parent = ISZ(),
             path = path,
             identifier = identifier,
             features = aadlFeatures,
@@ -434,9 +435,9 @@ object SymbolResolver {
           )
         }
         case ir.ComponentCategory.Process => {
-          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, Some(path))
+          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, path)
 
-          val boundProcessor: Option[String] = PropertyUtil.getActualProcessorBinding(c)
+          val boundProcessor: Option[IdPath] = PropertyUtil.getActualProcessorBinding(c)
 
           PropertyUtil.getDiscreetPropertyValue(c.properties, "HAMR::Component_Type") match {
             case Some(x) =>
@@ -461,7 +462,7 @@ object SymbolResolver {
         case ir.ComponentCategory.Thread => handleDeviceOrThread()
 
         case ir.ComponentCategory.ThreadGroup =>
-          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, Some(path))
+          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, path)
 
           AadlThreadGroup(
             component = c,
@@ -475,7 +476,7 @@ object SymbolResolver {
         case ir.ComponentCategory.Subprogram => handleSubprogram()
 
         case ir.ComponentCategory.SubprogramGroup =>
-          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, Some(path))
+          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, path)
 
           AadlSubprogramGroup(
             component = c,
@@ -487,7 +488,7 @@ object SymbolResolver {
             connectionInstances = c.connectionInstances)
 
         case ir.ComponentCategory.Data =>
-          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, Some(path))
+          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, path)
 
           val typ: Option[AadlType] = c.classifier match {
             case Some(c) => aadlTypes.typeMap.get(c.name)
@@ -505,7 +506,7 @@ object SymbolResolver {
             connectionInstances = c.connectionInstances)
 
         case ir.ComponentCategory.Bus =>
-          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, Some(path))
+          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, path)
 
           AadlBus(
             component = c,
@@ -517,7 +518,7 @@ object SymbolResolver {
             connectionInstances = c.connectionInstances)
 
         case ir.ComponentCategory.VirtualBus =>
-          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, Some(path))
+          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, path)
 
           AadlVirtualBus(
             component = c,
@@ -529,7 +530,7 @@ object SymbolResolver {
             connectionInstances = c.connectionInstances)
 
         case ir.ComponentCategory.Memory =>
-          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, Some(path))
+          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, path)
 
           AadlMemory(
             component = c,
@@ -541,7 +542,7 @@ object SymbolResolver {
             connectionInstances = c.connectionInstances)
 
         case ir.ComponentCategory.Abstract =>
-          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, Some(path))
+          val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, path)
 
           AadlAbstract(
             component = c,
@@ -557,11 +558,11 @@ object SymbolResolver {
       return aadlComponent
     }
 
-    val aadlSystem = buildAadlComponent(system, None()).asInstanceOf[AadlSystem]
+    val aadlSystem = buildAadlComponent(system, ISZ()).asInstanceOf[AadlSystem]
 
     // add data components to componentMap
     for(c <- model.dataComponents) {
-      buildAadlComponent(c, None())
+      buildAadlComponent(c, ISZ())
     }
 
     var aadlConnections: ISZ[AadlConnection] = ISZ()
@@ -573,12 +574,12 @@ object SymbolResolver {
           case ir.ConnectionKind.Port => {
             val name = CommonUtil.getName(ci.name)
 
-            val srcFeatureName = CommonUtil.getName(ci.src.feature.get)
-            val srcComponent = componentMap.get(CommonUtil.getName(ci.src.component)).get
+            val srcFeatureName: IdPath = ci.src.feature.get.name
+            val srcComponent = componentMap.get(ci.src.component.name).get
             val srcFeature = featureMap.get(srcFeatureName).get
 
-            val dstFeatureName = CommonUtil.getName(ci.dst.feature.get)
-            val dstComponent = componentMap.get(CommonUtil.getName(ci.dst.component)).get
+            val dstFeatureName: IdPath = ci.dst.feature.get.name
+            val dstComponent = componentMap.get(ci.dst.component.name).get
             val dstFeature = featureMap.get(dstFeatureName).get
 
             val connectionDataType: AadlType =
@@ -853,7 +854,7 @@ object SymbolResolver {
           var vmConns = F
           var nativeConns = F
           for (conn <- conns._2) {
-            if (symbolTable.getThreadById(CommonUtil.getName(conn.dst.component)).toVirtualMachine(symbolTable)) {
+            if (symbolTable.getThreadById(conn.dst.component.name).toVirtualMachine(symbolTable)) {
               vmConns = T
             } else {
               nativeConns = T
@@ -869,15 +870,15 @@ object SymbolResolver {
   }
 
   def getPortConnectionNames(c: ir.ConnectionInstance,
-                             componentMap: HashSMap[String, ir.Component]): (String, String) = {
-    val src = componentMap.get(CommonUtil.getName(c.src.component)).get
-    val dst = componentMap.get(CommonUtil.getName(c.dst.component)).get
+                             componentMap: HashSMap[IdPath, ir.Component]): (IdPath, IdPath) = {
+    val src = componentMap.get(c.src.component.name).get
+    val dst = componentMap.get(c.dst.component.name).get
 
-    val ret: (String, String) = (src.category, dst.category) match {
+    val ret: (IdPath, IdPath) = (src.category, dst.category) match {
       case (ir.ComponentCategory.Thread, ir.ComponentCategory.Thread) =>
-        (CommonUtil.getName(c.src.feature.get), CommonUtil.getName(c.dst.feature.get))
+        (c.src.feature.get.name, c.dst.feature.get.name)
       case (ir.ComponentCategory.Data, ir.ComponentCategory.Thread) =>
-        (CommonUtil.getName(c.src.component), CommonUtil.getName(c.dst.feature.get))
+        (c.src.component.name, c.dst.feature.get.name)
 
       case _ => halt(s"Unexpected connection: ${c}")
     }
@@ -885,8 +886,8 @@ object SymbolResolver {
   }
 
   def isHandledConnection(c: ir.ConnectionInstance,
-                          componentMap: HashSMap[String, ir.Component],
-                          featureMap: HashSMap[String, ir.Feature]): B = {
+                          componentMap: HashSMap[IdPath, ir.Component],
+                          featureMap: HashSMap[IdPath, ir.Feature]): B = {
 
     def validFeature(f: ir.Feature): B = {
       var ret: B = f match {
@@ -915,19 +916,19 @@ object SymbolResolver {
       return ret
     }
 
-    val src = componentMap.get(CommonUtil.getName(c.src.component)).get
-    val dst = componentMap.get(CommonUtil.getName(c.dst.component)).get
+    val src = componentMap.get(c.src.component.name).get
+    val dst = componentMap.get(c.dst.component.name).get
 
     val ret: B = (src.category, dst.category) match {
       case (ir.ComponentCategory.Thread, ir.ComponentCategory.Thread) =>
 
-        val srcFeature = featureMap.get(CommonUtil.getName(c.src.feature.get)).get
-        val dstFeature = featureMap.get(CommonUtil.getName(c.dst.feature.get)).get
+        val srcFeature = featureMap.get(c.src.feature.get.name).get
+        val dstFeature = featureMap.get(c.dst.feature.get.name).get
 
         validFeature(srcFeature) && validFeature(dstFeature)
 
       case (ir.ComponentCategory.Data, ir.ComponentCategory.Thread) =>
-        val dstFeature = featureMap.get(CommonUtil.getName(c.dst.feature.get)).get
+        val dstFeature = featureMap.get(c.dst.feature.get.name).get
         validFeature(dstFeature)
 
       case _ =>

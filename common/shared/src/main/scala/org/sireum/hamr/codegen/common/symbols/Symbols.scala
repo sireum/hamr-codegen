@@ -4,22 +4,23 @@ package org.sireum.hamr.codegen.common.symbols
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
+import org.sireum.hamr.codegen.common.CommonUtil.IdPath
 import org.sireum.hamr.ir
 import org.sireum.hamr.ir.FeatureEnd
 
 @datatype class SymbolTable(rootSystem: AadlSystem,
 
-                            componentMap: HashSMap[String, AadlComponent],
+                            componentMap: HashSMap[IdPath, AadlComponent],
 
-                            featureMap: HashSMap[String, AadlFeature],
+                            featureMap: HashSMap[IdPath, AadlFeature],
 
                             // all handled connections
                             aadlConnections: ISZ[AadlConnection],
 
                             annexInfos: HashSMap[AadlComponent, ISZ[AnnexInfo]],
 
-                            airComponentMap: HashSMap[String, ir.Component],
-                            airFeatureMap: HashSMap[String, ir.Feature],
+                            airComponentMap: HashSMap[IdPath, ir.Component],
+                            airFeatureMap: HashSMap[IdPath, ir.Feature],
                             airClassifierMap: HashSMap[String, ir.Component],
 
                             aadlMaps: AadlMaps,
@@ -27,18 +28,18 @@ import org.sireum.hamr.ir.FeatureEnd
                             connections: ISZ[ir.ConnectionInstance],
 
                             // feature name -> incoming connections
-                            inConnections: HashSMap[String, ISZ[ir.ConnectionInstance]],
+                            inConnections: HashSMap[IdPath, ISZ[ir.ConnectionInstance]],
 
                             // feature name -> outgoing connections
-                            outConnections: HashSMap[String, ISZ[ir.ConnectionInstance]]
+                            outConnections: HashSMap[IdPath, ISZ[ir.ConnectionInstance]]
                            ) {
 
   def isConnected(featureEnd: FeatureEnd): B = {
-    val fid = CommonUtil.getName(featureEnd.identifier)
-    return inConnections.contains(fid) || outConnections.contains(fid)
+    val path = featureEnd.identifier.name
+    return inConnections.contains(path) || outConnections.contains(path)
   }
 
-  def getInConnections(featurePath: String): ISZ[ir.ConnectionInstance] = {
+  def getInConnections(featurePath: IdPath): ISZ[ir.ConnectionInstance] = {
     return if(inConnections.contains(featurePath)) inConnections.get(featurePath).get
     else ISZ()
   }
@@ -60,32 +61,32 @@ import org.sireum.hamr.ir.FeatureEnd
     return ops.ISZOps(getThreads()).exists(p => CommonUtil.isPeriodic(p))
   }
 
-  def getThreadById(id: String): AadlThread = {
+  def getThreadById(id: IdPath): AadlThread = {
     return componentMap.get(id).get.asInstanceOf[AadlThread]
   }
 
   def getThreadByName(name: ir.Name): AadlThread = {
-    return getThreadById(CommonUtil.getName(name))
+    return getThreadById(name.name)
   }
 
   def getThread(c: ir.Component): AadlThread = {
     return getThreadByName(c.identifier)
   }
 
-  def getFeatureFromId(id: String): ir.Feature = {
+  def getFeatureFromId(id: IdPath): ir.Feature = {
     return airFeatureMap.get(id).get
   }
 
   def getFeatureFromName(name: ir.Name): ir.Feature = {
-    return getFeatureFromId(CommonUtil.getName(name))
+    return getFeatureFromId(name.name)
   }
 
   def getPeriodicThreads(): ISZ[AadlThread] = {
     return ops.ISZOps(getThreads()).filter(p => CommonUtil.isPeriodic(p))
   }
 
-  def getProcess(id: String): AadlProcess = {
-    return componentMap.get(id).get.asInstanceOf[AadlProcess]
+  def getProcess(path: IdPath): AadlProcess = {
+    return componentMap.get(path).get.asInstanceOf[AadlProcess]
   }
 
   def getProcesses(): ISZ[AadlProcess] = {

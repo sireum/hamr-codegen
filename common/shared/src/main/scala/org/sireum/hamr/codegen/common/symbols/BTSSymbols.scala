@@ -2,6 +2,7 @@
 package org.sireum.hamr.codegen.common.symbols
 
 import org.sireum._
+import org.sireum.hamr.codegen.common.CommonUtil.IdPath
 import org.sireum.hamr.codegen.common.types.AadlType
 import org.sireum.hamr.ir.{BTSBLESSAnnexClause, BTSExp, BTSStateDeclaration, BTSVariableDeclaration}
 
@@ -10,7 +11,7 @@ import org.sireum.hamr.ir.{BTSBLESSAnnexClause, BTSExp, BTSStateDeclaration, BTS
 @datatype class BTSState(id: String,
                          state: BTSStateDeclaration) extends BTSSymbol
 
-@datatype class BTSVariable(id: String,
+@datatype class BTSVariable(path: IdPath,
                             typ: AadlType,
 
                             decl: BTSVariableDeclaration) extends BTSSymbol
@@ -23,7 +24,7 @@ import org.sireum.hamr.ir.{BTSBLESSAnnexClause, BTSExp, BTSStateDeclaration, BTS
                                symbols: Map[BTSKey, AadlSymbol],
                                expTypes: HashMap[BTSExp, AadlType],
                                states: Map[String, BTSState],
-                               variables: Map[String, BTSVariable]) {
+                               variables: Map[IdPath, BTSVariable]) {
 
   def lookupExp(k: BTSExp): Option[AadlSymbol] = { return symbols.get(BTSExpKey(k)) }
 }

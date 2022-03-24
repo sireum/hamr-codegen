@@ -3,6 +3,7 @@ package org.sireum.hamr.codegen.common.resolvers
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
+import org.sireum.hamr.codegen.common.CommonUtil.IdPath
 import org.sireum.hamr.codegen.common.symbols.{AadlEventPort, AadlFeatureData, AadlSubprogram, AadlSymbol, BTSKey, BTSState, BTSVariable, SymbolTable}
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, EnumType, RecordType, TypeUtil}
 import org.sireum.hamr.ir.{BTSAccessExp, BTSAssignmentAction, BTSBLESSAnnexClause, BTSBinaryExp, BTSExp, BTSLiteralExp, BTSLiteralType, BTSNameExp, BTSPortOutAction, BTSSubprogramCallAction, BTSUnaryExp, MTransformer => MAirTransformer}
@@ -11,7 +12,7 @@ import org.sireum.message.Reporter
 @record class BTSExpResolver(symbolTable: SymbolTable,
                              aadlTypes: AadlTypes,
                              states: Map[String, BTSState],
-                             variables: Map[String, BTSVariable]) {
+                             variables: Map[IdPath, BTSVariable]) {
 
   def resolve(annex: BTSBLESSAnnexClause, reporter: Reporter):
     (BTSBLESSAnnexClause, Map[BTSKey, AadlSymbol], HashMap[BTSExp, AadlType]) = {
@@ -33,7 +34,7 @@ import org.sireum.message.Reporter
 @record class ExpWalker(symbolTable: SymbolTable,
                         aadlTypes: AadlTypes,
                         states: Map[String, BTSState],
-                        variables: Map[String, BTSVariable]) extends MAirTransformer {
+                        variables: Map[IdPath, BTSVariable]) extends MAirTransformer {
 
   val reporter: Reporter = Reporter.create
 
@@ -42,8 +43,8 @@ import org.sireum.message.Reporter
   override def postBTSPortOutAction(o: BTSPortOutAction): MOption[BTSPortOutAction] = {
     o.exp match {
       case Some(exp) =>
-        val id = CommonUtil.getName(o.name)
-        symbolTable.featureMap.get(id) match {
+        val path = o.name.name
+        symbolTable.featureMap.get(path) match {
           case Some(a : AadlFeatureData) =>
             val evalledType = expType.get(exp).get
             if(a.aadlType != evalledType) {
@@ -81,8 +82,8 @@ import org.sireum.message.Reporter
   }
 
   override def postBTSSubprogramCallAction(o: BTSSubprogramCallAction): MOption[BTSSubprogramCallAction] = {
-    val id = CommonUtil.getName(o.name)
-    val s = symbolTable.componentMap.get(id).get.asInstanceOf[AadlSubprogram]
+    val path = o.name.name
+    val s = symbolTable.componentMap.get(path).get.asInstanceOf[AadlSubprogram]
 
     assert(s.parameters.size == o.params.size, s"Sizes don't match ${s.parameters.size} vs ${o.params.size}")
 
@@ -174,28 +175,30 @@ import org.sireum.message.Reporter
   }
 
   override def postBTSNameExp(o: BTSNameExp): MOption[BTSNameExp] = {
-    val id = CommonUtil.getName(o.name)
+    val path = o.name.name
 
-    if(variables.contains(id)) {
+    if(variables.contains(path)) {
       // bts variable
-      expType = expType + (o ~> variables.get(id).get.typ)
-    } else if(symbolTable.featureMap.contains(id)) {
+      expType = expType + (o ~> variables.get(path).get.typ)
+    } else if(symbolTable.featureMap.contains(path)) {
       // port??
-      symbolTable.featureMap.get(id).get match {
+      symbolTable.featureMap.get(path).get match {
         case afd: AadlFeatureData => expType = expType + (o ~> afd.aadlType)
         case aep: AadlEventPort => expType = expType + (o ~> TypeUtil.EmptyType)
         case x => halt(s"Need to resolve type for feature $x")
       }
-    } else if(aadlTypes.typeMap.contains(id)) {
-      aadlTypes.typeMap.get(id) match {
-        case Some(et :EnumType) => expType = expType + (o ~> et)
-        case x =>
-          halt(s"Hmm, this doesn't look like an enum ${x}")
-      }
     } else {
-      halt(s"Need to resolve type for ${o}")
+      val id = CommonUtil.getName(o.name)
+      if (aadlTypes.typeMap.contains(id)) {
+        aadlTypes.typeMap.get(id) match {
+          case Some(et: EnumType) => expType = expType + (o ~> et)
+          case x =>
+            halt(s"Hmm, this doesn't look like an enum ${x}")
+        }
+      } else {
+        halt(s"Need to resolve type for ${o}")
+      }
     }
-
     return MNone()
   }
 }

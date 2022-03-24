@@ -3,19 +3,23 @@ package org.sireum.hamr.codegen.common.symbols
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
+import org.sireum.hamr.codegen.common.CommonUtil.IdPath
 import org.sireum.hamr.codegen.common.properties.{CasePropertiesProperties, CaseSchedulingProperties, OsateProperties, PropertyUtil}
 import org.sireum.hamr.codegen.common.types.AadlType
 import org.sireum.hamr.ir
 import org.sireum.hamr.ir.{AnnexClause, GclAnnex, BTSBLESSAnnexClause}
 
-
 @sig trait AadlSymbol
 
 @sig trait AadlComponent extends AadlSymbol {
   def component: ir.Component
-  def parent: Option[String]
+  def parent: IdPath
 
-  def path: String
+  def path: IdPath
+  def pathAsString(sep: String): String = {
+    return st"${(path, sep)}".render
+  }
+
   def identifier: String
 
   def features: ISZ[AadlFeature]
@@ -32,8 +36,8 @@ import org.sireum.hamr.ir.{AnnexClause, GclAnnex, BTSBLESSAnnexClause}
 }
 
 @datatype class AadlSystem(val component: ir.Component,
-                           val parent: Option[String],
-                           val path: String,
+                           val parent: IdPath,
+                           val path: IdPath,
                            val identifier: String,
                            val features: ISZ[AadlFeature],
                            val subComponents: ISZ[AadlComponent],
@@ -49,8 +53,8 @@ import org.sireum.hamr.ir.{AnnexClause, GclAnnex, BTSBLESSAnnexClause}
 
 @sig trait Processor extends AadlComponent {
   def component: ir.Component
-  def parent: Option[String]
-  def path: String
+  def parent: IdPath
+  def path: IdPath
   def identifier: String
   def subComponents: ISZ[AadlComponent]
   def connectionInstances: ISZ[ir.ConnectionInstance]
@@ -115,16 +119,16 @@ import org.sireum.hamr.ir.{AnnexClause, GclAnnex, BTSBLESSAnnexClause}
 }
 
 @datatype class AadlProcessor(val component: ir.Component,
-                              val parent: Option[String],
-                              val path: String,
+                              val parent: IdPath,
+                              val path: IdPath,
                               val identifier: String,
                               val features: ISZ[AadlFeature],
                               val subComponents: ISZ[AadlComponent],
                               val connectionInstances: ISZ[ir.ConnectionInstance]) extends Processor
 
 @datatype class AadlVirtualProcessor(val component: ir.Component,
-                                     val parent: Option[String],
-                                     val path: String,
+                                     val parent: IdPath,
+                                     val path: IdPath,
                                      val identifier: String,
                                      val features: ISZ[AadlFeature],
                                      val subComponents: ISZ[AadlComponent],
@@ -133,17 +137,17 @@ import org.sireum.hamr.ir.{AnnexClause, GclAnnex, BTSBLESSAnnexClause}
                                      val dispatchProtocol: Dispatch_Protocol.Type,
                                      val period: Option[Z],
 
-                                     val boundProcessor: Option[String]) extends Processor with AadlDispatchableComponent
+                                     val boundProcessor: Option[IdPath]) extends Processor with AadlDispatchableComponent
 
 @datatype class AadlProcess(val component: ir.Component,
-                            val parent: Option[String],
-                            val path: String,
+                            val parent: IdPath,
+                            val path: IdPath,
                             val identifier: String,
                             val features: ISZ[AadlFeature],
                             val subComponents: ISZ[AadlComponent],
                             val connectionInstances: ISZ[ir.ConnectionInstance],
 
-                            val boundProcessor: Option[String]) extends AadlComponent {
+                            val boundProcessor: Option[ISZ[String]]) extends AadlComponent {
 
   def getDomain(): Option[Z] = {
     return PropertyUtil.getUnitPropZ(component.properties, CaseSchedulingProperties.DOMAIN)
@@ -178,8 +182,8 @@ import org.sireum.hamr.ir.{AnnexClause, GclAnnex, BTSBLESSAnnexClause}
 }
 
 @datatype class AadlThreadGroup(val component: ir.Component,
-                                val parent: Option[String],
-                                val path: String,
+                                val parent: IdPath,
+                                val path: IdPath,
                                 val identifier: String,
                                 val features: ISZ[AadlFeature],
                                 val subComponents: ISZ[AadlComponent],
@@ -213,12 +217,12 @@ import org.sireum.hamr.ir.{AnnexClause, GclAnnex, BTSBLESSAnnexClause}
   }
 
   def getParent(symbolTable: SymbolTable): AadlProcess = {
-    val _parent = symbolTable.componentMap.get(parent.get).get
+    val _parent = symbolTable.componentMap.get(parent).get
 
     val ret: AadlProcess = _parent match {
-      case a: AadlThreadGroup =>symbolTable.getProcess(a.parent.get)
-      case p: AadlProcess => symbolTable.getProcess(parent.get)
-      case _ => halt(s"Unexpected parent for ${parent.get}: ${_parent}")
+      case a: AadlThreadGroup => symbolTable.getProcess(a.parent)
+      case p: AadlProcess => symbolTable.getProcess(parent)
+      case _ => halt(s"Unexpected parent for ${parent}: ${_parent}")
     }
     return ret
   }
@@ -248,8 +252,8 @@ import org.sireum.hamr.ir.{AnnexClause, GclAnnex, BTSBLESSAnnexClause}
 }
 
 @datatype class AadlThread(val component: ir.Component,
-                           val parent: Option[String],
-                           val path: String,
+                           val parent: IdPath,
+                           val path: IdPath,
                            val identifier: String,
                            val subComponents: ISZ[AadlComponent],
                            val connectionInstances: ISZ[ir.ConnectionInstance],
@@ -260,8 +264,8 @@ import org.sireum.hamr.ir.{AnnexClause, GclAnnex, BTSBLESSAnnexClause}
                            val features: ISZ[AadlFeature]) extends AadlThreadOrDevice
 
 @datatype class AadlDevice(val component: ir.Component,
-                           val parent: Option[String],
-                           val path: String,
+                           val parent: IdPath,
+                           val path: IdPath,
                            val identifier: String,
                            val subComponents: ISZ[AadlComponent],
                            val connectionInstances: ISZ[ir.ConnectionInstance],
@@ -272,8 +276,8 @@ import org.sireum.hamr.ir.{AnnexClause, GclAnnex, BTSBLESSAnnexClause}
                            val features: ISZ[AadlFeature]) extends AadlThreadOrDevice
 
 @datatype class AadlSubprogram(val component: ir.Component,
-                               val parent: Option[String],
-                               val path: String,
+                               val parent: IdPath,
+                               val path: IdPath,
                                val identifier: String,
                                val subComponents: ISZ[AadlComponent],
                                val connectionInstances: ISZ[ir.ConnectionInstance],
@@ -292,8 +296,8 @@ import org.sireum.hamr.ir.{AnnexClause, GclAnnex, BTSBLESSAnnexClause}
 }
 
 @datatype class AadlSubprogramGroup(val component: ir.Component,
-                                    val parent: Option[String],
-                                    val path: String,
+                                    val parent: IdPath,
+                                    val path: IdPath,
                                     val identifier: String,
                                     val features: ISZ[AadlFeature],
                                     val subComponents: ISZ[AadlComponent],
@@ -302,8 +306,8 @@ import org.sireum.hamr.ir.{AnnexClause, GclAnnex, BTSBLESSAnnexClause}
                                    ) extends AadlComponent
 
 @datatype class AadlData(val component: ir.Component,
-                         val parent: Option[String],
-                         val path: String,
+                         val parent: IdPath,
+                         val path: IdPath,
                          val identifier: String,
                          val typ: AadlType,
                          val features: ISZ[AadlFeature],
@@ -311,32 +315,32 @@ import org.sireum.hamr.ir.{AnnexClause, GclAnnex, BTSBLESSAnnexClause}
                          val connectionInstances: ISZ[ir.ConnectionInstance]) extends AadlComponent
 
 @datatype class AadlMemory(val component: ir.Component,
-                           val parent: Option[String],
-                           val path: String,
+                           val parent: IdPath,
+                           val path: IdPath,
                            val identifier: String,
                            val features: ISZ[AadlFeature],
                            val subComponents: ISZ[AadlComponent],
                            val connectionInstances: ISZ[ir.ConnectionInstance]) extends AadlComponent
 
 @datatype class AadlBus(val component: ir.Component,
-                        val parent: Option[String],
-                        val path: String,
+                        val parent: IdPath,
+                        val path: IdPath,
                         val identifier: String,
                         val features: ISZ[AadlFeature],
                         val subComponents: ISZ[AadlComponent],
                         val connectionInstances: ISZ[ir.ConnectionInstance]) extends AadlComponent
 
 @datatype class AadlVirtualBus(val component: ir.Component,
-                               val parent: Option[String],
-                               val path: String,
+                               val parent: IdPath,
+                               val path: IdPath,
                                val identifier: String,
                                val features: ISZ[AadlFeature],
                                val subComponents: ISZ[AadlComponent],
                                val connectionInstances: ISZ[ir.ConnectionInstance]) extends AadlComponent
 
 @datatype class AadlAbstract(val component: ir.Component,
-                             val parent: Option[String],
-                             val path: String,
+                             val parent: IdPath,
+                             val path: IdPath,
                              val identifier: String,
                              val features: ISZ[AadlFeature],
                              val subComponents: ISZ[AadlComponent],
@@ -364,8 +368,12 @@ import org.sireum.hamr.ir.{AnnexClause, GclAnnex, BTSBLESSAnnexClause}
     return ret
   }
 
-  def path: String = {
-    return CommonUtil.getName(feature.identifier)
+  def path: IdPath = {
+    return feature.identifier.name
+  }
+
+  def pathAsString(sep: String): String = {
+    return st"${(path, sep)}".render
   }
 }
 
