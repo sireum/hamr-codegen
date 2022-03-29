@@ -270,7 +270,7 @@ def test(): Unit = {
 
 def clean(): Unit = {
   println(s"Cleaning ${home}")
-  val homeResources: ISZ[Os.Path] = ISZ("air", "lib", "out", "runtime", "versions.properties").map(m => home / m)
+  val homeResources: ISZ[Os.Path] = ISZ("air", "lib", "out", "runtime", "slang", "versions.properties").map(m => home / m)
   val homeBinResources: ISZ[Os.Path] = ISZ("sireum.jar", "sireum", "scala", "linux", "win", "mac").map(m => homeBin / m)
   for(r <- (homeResources ++ homeBinResources) if r.exists ) {
     println(s"Deleting ${r}")
