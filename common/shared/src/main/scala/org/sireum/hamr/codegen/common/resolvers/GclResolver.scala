@@ -180,7 +180,8 @@ object GclResolver {
                   reporter.error(s.exp.posOpt, GclResolver.toolName, s"Expecting B but found ${x}")
                   s.exp
                 case _ =>
-                  reporter.error(s.exp.posOpt, GclResolver.toolName, "Invariant expression is untyped")
+                  assert(reporter.hasError, "Integration expression is untyped so Tipe should have reported errors already") // sanity check
+                  //reporter.error(s.exp.posOpt, GclResolver.toolName, "Integration expression is untyped")
                   s.exp
               }
             case _ =>
@@ -228,7 +229,9 @@ object GclResolver {
                 rexprs = rexprs + (exp ~> rexp)
                 val symbols = GclResolver.collectSymbols(rexp, context, s.state, symbolTable, reporter)
               case Some(x) => reporter.error(exp.posOpt, GclResolver.toolName, s"Expecting B but found ${x}")
-              case _ => reporter.error(exp.posOpt, GclResolver.toolName, "Guarantee expression is untyped")
+              case _ =>
+                assert(reporter.hasError, "Guarantee express is untyped so Tipe should have reported errors already") // sanity check
+                //reporter.error(exp.posOpt, GclResolver.toolName, "Guarantee expression is untyped")
             }
           case _ => reporter.error(exp.posOpt, GclResolver.toolName, "Unexpected: type checking returned none")
         }
@@ -245,7 +248,9 @@ object GclResolver {
               rexprs = rexprs + (i.exp ~> rexp)
               val symbols = GclResolver.collectSymbols(rexp, context, ISZ(), symbolTable, reporter)
             case Some(x) => reporter.error(i.exp.posOpt, GclResolver.toolName, s"Expecting B but found ${x}")
-            case _ => reporter.error(i.exp.posOpt, GclResolver.toolName, "Invariant expression is untyped")
+            case _ =>
+              assert(reporter.hasError, "Invariant expression is untyped so Tipe should have reported errors already")
+              //reporter.error(i.exp.posOpt, GclResolver.toolName, "Invariant expression is untyped")
           }
         case _ => reporter.error(i.exp.posOpt, GclResolver.toolName, "Unexpected: type checking returned none")
       }
