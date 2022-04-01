@@ -7,6 +7,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver.AadlSymbolHolder
 import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlData, AadlDataPort, AadlEventDataPort, AadlFeatureData, AadlPort, AadlSymbol, AadlThread, AnnexInfo, AnnexVisitor, GclAnnexInfo, GclSymbolTable, SymbolTable}
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, ArrayType, BaseType, BitType, EnumType, RecordType}
 import org.sireum.hamr.ir.{Annex, Direction, GclAnnex, GclAssume, GclGuarantee, GclInvariant, GclSpec, GclStateVar, GclSubclause, Name}
+import org.sireum.lang.FrontEnd.libraryReporter
 import org.sireum.lang.ast.{AdtParam, Exp, ResolvedAttr, ResolvedInfo, TypeParam}
 import org.sireum.lang.symbol.Resolver.{NameMap, QName, TypeMap}
 import org.sireum.lang.symbol.{Info, Scope, TypeInfo}
@@ -695,9 +696,34 @@ object GclResolver {
     var (localNameMap, globalNameMap) = buildNameMap(context)
 
     val methodReturnOpt: Option[AST.Typed] = None()
-    val outerOpt: Option[Scope] = None()
     val indexMap: HashMap[String, AST.Typed] = HashMap.empty
     val scopeTypeMap: HashMap[String, TypeInfo] = HashMap.empty
+
+    val emptyAttr = AST.Attr(None())
+
+    val importers: ISZ[AST.Stmt.Import.Importer] = {
+      ISZ[String]("S8", "S16", "S32", "S64", "U8", "U16", "U32", "U64").map((m: String) =>
+        AST.Stmt.Import.Importer(
+          name = AST.Name(
+            ids = ISZ[AST.Id](AST.Id("org", emptyAttr), AST.Id("sireum", emptyAttr), AST.Id(m, emptyAttr)),
+            attr = emptyAttr),
+          selectorOpt = Some(AST.Stmt.Import.WildcardSelector())
+        )
+      ) :+ AST.Stmt.Import.Importer(
+        name = AST.Name(
+          ids = ISZ[AST.Id](AST.Id("org", emptyAttr), AST.Id("sireum", emptyAttr)),
+          attr = emptyAttr),
+        selectorOpt = Some(AST.Stmt.Import.WildcardSelector())
+      )
+    }
+
+    val imports= AST.Stmt.Import(importers = importers, attr = emptyAttr)
+
+    val outerOpt: Scope = Scope.Global(
+      packageName = ISZ[String]("placeholder"),
+      imports = ISZ(imports),
+      enclosingName = ISZ[String]("placeholder")
+    )
 
     val scope: Scope = context match {
       case a: AadlData =>
@@ -705,7 +731,7 @@ object GclResolver {
         val qTypeName = getPathFromClassifier(a.typ.name)
         val localThisOp: Option[AST.Typed] = Some(AST.Typed.Name(ids = qTypeName, args = ISZ()))
 
-        Local(localNameMap, scopeTypeMap, localThisOp, methodReturnOpt, indexMap, outerOpt)
+        Local(localNameMap, scopeTypeMap, localThisOp, methodReturnOpt, indexMap, Some(outerOpt))
       case a: AadlThread =>
         val localThisOp: Option[AST.Typed] = Some(AST.Typed.Object(owner = a.parent, id = a.identifier))
 
@@ -718,11 +744,15 @@ object GclResolver {
           globalNameMap = globalNameMap + (name ~> gv)
         }
 
-        Local(localNameMap, scopeTypeMap, localThisOp, methodReturnOpt, indexMap, outerOpt)
+        Local(localNameMap, scopeTypeMap, localThisOp, methodReturnOpt, indexMap, Some(outerOpt))
       case x => halt(s"Not expected ${x}")
     }
 
-    val typeHierarchy: TypeHierarchy = TypeHierarchy(globalNameMap, _typeMap, poset, aliases)
+    val th = libraryReporter._1.typeHierarchy
+
+
+    val typeHierarchy: TypeHierarchy = TypeHierarchy(globalNameMap ++ th.nameMap.entries, _typeMap ++ th.typeMap.entries,
+      poset, aliases)
 
     return (typeHierarchy, scope)
   }

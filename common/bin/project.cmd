@@ -24,12 +24,14 @@ val air = "hamr-air"
 
 val common = "hamr-common"
 
+val slangFrontEnd = "slang-frontend"
+
 val homeDir = Os.slashDir.up.canon
 
 val (commonShared, commonJvm) = moduleSharedJvmPub(
   baseId = common,
   baseDir = homeDir,
-  sharedDeps = sharedId(air),
+  sharedDeps = sharedId(air) :+ slangFrontEnd,
   sharedIvyDeps = ISZ(),
   jvmDeps = ISZ(air),
   jvmIvyDeps = ISZ(),
