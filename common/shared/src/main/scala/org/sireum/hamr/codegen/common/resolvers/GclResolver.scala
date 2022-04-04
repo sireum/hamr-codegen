@@ -4,8 +4,8 @@ package org.sireum.hamr.codegen.common.resolvers
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.resolvers.GclResolver.AadlSymbolHolder
-import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlData, AadlDataPort, AadlEventDataPort, AadlFeatureData, AadlPort, AadlSymbol, AadlThread, AnnexInfo, AnnexVisitor, GclAnnexInfo, GclSymbolTable, SymbolTable}
-import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, ArrayType, BaseType, BitType, EnumType, RecordType}
+import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlData, AadlDataPort, AadlEventDataPort, AadlEventPort, AadlFeatureData, AadlPort, AadlSymbol, AadlThread, AnnexInfo, AnnexVisitor, GclAnnexInfo, GclSymbolTable, SymbolTable}
+import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, ArrayType, BaseType, BitType, EnumType, RecordType, TypeUtil}
 import org.sireum.hamr.ir.{Annex, Direction, GclAnnex, GclAssume, GclGuarantee, GclInvariant, GclSpec, GclStateVar, GclSubclause, Name}
 import org.sireum.lang.FrontEnd.libraryReporter
 import org.sireum.lang.ast.{AdtParam, Exp, ResolvedAttr, ResolvedInfo, TypeParam}
@@ -534,6 +534,8 @@ object GclResolver {
       resolveType(aadlType)
     }
 
+    typeMap = typeMap + (ISZ("art", "Empty") ~> typeMap.get(ISZ("Base_Types", "Boolean")).get)
+
     return typeMap
   }
 
@@ -617,7 +619,16 @@ object GclResolver {
               val typeInfo = typeMap.get(_qualifiedTypeName).get
 
               (_qualifiedTypeName, typeInfo)
-            case x => halt(s"Not yet handling ${x}")
+
+            case a: AadlEventPort =>
+              val emptyType = TypeUtil.EmptyType
+              val _qualifiedTypeName = getPathFromClassifier(emptyType.name)
+              val typeInfo = typeMap.get(_qualifiedTypeName).get
+
+              (_qualifiedTypeName, typeInfo)
+
+            case x => halt(s"Not currently supported ${x}")
+
           }
 
           val infoVar = buildGlobalVar(aadlPort.identifier,  qualifiedTypeName, a.path)

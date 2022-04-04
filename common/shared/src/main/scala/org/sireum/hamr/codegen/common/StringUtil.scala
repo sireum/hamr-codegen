@@ -37,7 +37,7 @@ object StringUtil {
     val lines = split_PreserveEmptyLines(s, c => c == '\n')
 
     // sanity checks
-    val checkIndex = 1
+    var checkIndex = 1
     if(replacements(0)._1 >= replacements(0)._2) {
       reporter.error(None(), "Error", s"The following replacement is invalid, please report: ${replacements(0)}")
       return s
@@ -47,6 +47,7 @@ object StringUtil {
         reporter.error(None(), "Error", s"Replacements must be sequential, please report: ${replacements(checkIndex - 1)} and ${replacements(checkIndex)}")
         return s
       }
+      checkIndex = checkIndex + 1
     }
     if(replacements(checkIndex - 1)._2 >= lines.size) {
       reporter.error(None(), "Error", s"Replacement offset is more than the content size, please report: size=${lines.size}, replacement=${replacements(checkIndex - 1)}")
