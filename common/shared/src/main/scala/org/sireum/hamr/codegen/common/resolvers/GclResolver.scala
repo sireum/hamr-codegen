@@ -24,6 +24,8 @@ object GclResolver {
 
   val toolName: String = "GCL-Resolver"
 
+  val libraryReporter: TypeChecker = org.sireum.lang.FrontEnd.libraryReporter._1
+
   @record class SymbolFinder(val context: AadlComponent, stateVars: ISZ[GclStateVar], val symbolTable: SymbolTable) extends org.sireum.hamr.ir.MTransformer {
     var symbols: Set[SymbolHolder] = Set.empty
     var reporter: Reporter = ReporterImpl(ISZ())
@@ -759,8 +761,7 @@ object GclResolver {
       case x => halt(s"Not expected ${x}")
     }
 
-    val th = libraryReporter._1.typeHierarchy
-
+    val th = GclResolver.libraryReporter
 
     val typeHierarchy: TypeHierarchy = TypeHierarchy(globalNameMap ++ th.nameMap.entries, _typeMap ++ th.typeMap.entries,
       poset, aliases)
