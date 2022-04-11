@@ -223,20 +223,34 @@ object GclResolver {
         }
       }
 
-      for(initClause <- s.initializes){
-        val exp = initClause.exp
-        visitSlangExp(exp) match {
-          case Some((rexp, roptType)) =>
-            roptType match {
-              case Some(AST.Typed.Name(ISZ("org", "sireum", "B"), _)) =>
-                rexprs = rexprs + (exp ~> rexp)
-                val symbols = GclResolver.collectSymbols(rexp, context, s.state, symbolTable, reporter)
-              case Some(x) => reporter.error(exp.posOpt, GclResolver.toolName, s"Expecting B but found ${x}")
-              case _ =>
-                assert(reporter.hasError, "Guarantee express is untyped so Tipe should have reported errors already") // sanity check
+      if(s.initializes.nonEmpty) {
+        for(modifies <- s.initializes.get.modifies) {
+          modifies match {
+            case e: Exp.Ident =>
+              val symbols = GclResolver.collectSymbols(modifies, context, s.state, symbolTable, reporter)
+              if(symbols.size != 1) {
+                reporter.error(e.posOpt, GclResolver.toolName, s"Modifies should resolve to exactly one symbol, instead resolved to ${symbols.size}")
+              }
+            case _ =>
+              reporter.error(modifies.posOpt, GclResolver.toolName, s"Expecting modifies to be Idents, found ${modifies}")
+          }
+        }
+
+        for(guarantees <- s.initializes.get.guarantees) {
+          val exp = guarantees.exp
+          visitSlangExp(exp) match {
+            case Some((rexp, roptType)) =>
+              roptType match {
+                case Some(AST.Typed.Name(ISZ("org", "sireum", "B"), _)) =>
+                  rexprs = rexprs + (exp ~> rexp)
+                  val symbols = GclResolver.collectSymbols(rexp, context, s.state, symbolTable, reporter)
+                case Some(x) => reporter.error(exp.posOpt, GclResolver.toolName, s"Expecting B but found ${x}")
+                case _ =>
+                  assert(reporter.hasError, "Guarantee express is untyped so Tipe should have reported errors already") // sanity check
                 //reporter.error(exp.posOpt, GclResolver.toolName, "Guarantee expression is untyped")
-            }
-          case _ => reporter.error(exp.posOpt, GclResolver.toolName, "Unexpected: type checking returned none")
+              }
+            case _ => reporter.error(exp.posOpt, GclResolver.toolName, "Unexpected: type checking returned none")
+          }
         }
       }
 
