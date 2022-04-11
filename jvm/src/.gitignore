@@ -1,0 +1,8 @@
+# ignore everthing except the main and test directories
+
+/**
+
+!/.gitignore
+
+!/main/
+!/test/
