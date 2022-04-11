@@ -18,7 +18,7 @@ exit /B %errorlevel%
 
 import org.sireum._
 import org.sireum.project.ProjectUtil._
-import org.sireum.project.Project
+import org.sireum.project.{Project, ProjectUtil}
 
 val act = "hamr-act"
 
@@ -28,7 +28,7 @@ val codegen = "hamr-codegen"
 
 val homeDir = Os.slashDir.up.canon
 
-val codegenJvm = moduleJvmPub(
+var codegenJvm = moduleJvmPub(
   id = codegen,
   baseDir = homeDir,
   jvmDeps = ISZ(act, arsit),
@@ -40,6 +40,16 @@ val codegenJvm = moduleJvmPub(
     devs = ISZ(jasonBelt)
   )
 )
+
+for(testDir <- (homeDir / "jvm" / "src").list.filter((p: Os.Path) => p.name != "test" && p.name != "main")) {
+  assert ((testDir / "scala").exists, s"'scala' subdirectory missing in ${testDir}")
+  assert ((testDir / "resources").exists, s"'resources' subdirectory missing in ${testDir}")
+
+  codegenJvm = codegenJvm(
+    testSources = codegenJvm.testSources ++ ProjectUtil.dirs(homeDir, ISZ(ISZ("src", testDir.name, "scala"))),
+    testResources = codegenJvm.testResources ++ ProjectUtil.dirs(homeDir, ISZ(ISZ("src", testDir.name, "resources")))
+  )
+}
 
 val project = Project.empty + codegenJvm
 
