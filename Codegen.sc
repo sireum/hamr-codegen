@@ -62,7 +62,9 @@ object Module {
 
     final override def artifactName = s"$subUrl-common"
 
-    final override def deps = Seq(airObject)
+    final override def deps = Seq(airObject, slangFrontendObject)
+
+    def slangFrontendObject: CrossJvmJsPublish
   }
 
   trait Codegen extends Module {
