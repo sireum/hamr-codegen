@@ -43,12 +43,14 @@ var codegenJvm = moduleJvmPub(
 
 for(testDir <- (homeDir / "jvm" / "src").list.filter((p: Os.Path) => p.name != "test" && p.name != "main")) {
   assert ((testDir / "scala").exists, s"'scala' subdirectory missing in ${testDir}")
-  assert ((testDir / "resources").exists, s"'resources' subdirectory missing in ${testDir}")
 
   codegenJvm = codegenJvm(
-    testSources = codegenJvm.testSources ++ ProjectUtil.dirs(homeDir, ISZ(ISZ("src", testDir.name, "scala"))),
-    testResources = codegenJvm.testResources ++ ProjectUtil.dirs(homeDir, ISZ(ISZ("src", testDir.name, "resources")))
-  )
+    testSources = codegenJvm.testSources ++ ProjectUtil.dirs(homeDir, ISZ(ISZ("src", testDir.name, "scala"))))
+
+  if((testDir / "resources").exists) {
+    codegenJvm = codegenJvm(
+      testResources = codegenJvm.testResources ++ ProjectUtil.dirs(homeDir, ISZ(ISZ("src", testDir.name, "resources"))))
+  }
 }
 
 val project = Project.empty + codegenJvm
