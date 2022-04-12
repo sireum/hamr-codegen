@@ -115,30 +115,32 @@ object CodeGen {
         writeOutResources(arsitResources, reporter)
         wroteOutArsitResources = T
 
-        val proyekConfig = ProyekIveConfig(
-          help = "",
-          args = ISZ(slangOutputDir.canon.value),
-          force = F,
-          ultimate = F,
-          ignoreRuntime = F,
-          json = None(),
-          name = None(),
-          outputDirName = Some("out"),
-          project = None(),
-          slice = ISZ(),
-          symlink = F,
-          versions = ISZ(),
-          cache = None(),
-          docs = T,
-          sources = T,
-          repositories = ISZ()
-        )
+        if(!reporter.hasError) {
+          val proyekConfig = ProyekIveConfig(
+            help = "",
+            args = ISZ(slangOutputDir.canon.value),
+            force = F,
+            ultimate = F,
+            ignoreRuntime = F,
+            json = None(),
+            name = None(),
+            outputDirName = Some("out"),
+            project = None(),
+            slice = ISZ(),
+            symlink = F,
+            versions = ISZ(),
+            cache = None(),
+            docs = T,
+            sources = T,
+            repositories = ISZ()
+          )
 
-        reporter.info(None(), toolName, "Generating IVE project via Proyek IVE ...")
-        reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
+          reporter.info(None(), toolName, "Generating IVE project via Proyek IVE ...")
+          reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
 
-        if (proyekIveCallback(proyekConfig) != 0) {
-          reporter.error(None(), toolName, "Proyek IVE did not complete successfully")
+          if (proyekIveCallback(proyekConfig) != 0) {
+            reporter.error(None(), toolName, "Proyek IVE did not complete successfully")
+          }
         }
       }
 
@@ -151,9 +153,11 @@ object CodeGen {
 
         reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
 
-        for (transpilerConfig <- results.transpilerOptions) {
-          if (transpilerCallback(transpilerConfig) != 0) {
-            reporter.error(None(), toolName, s"Transpiler did not complete successfully")
+        if(!reporter.hasError) {
+          for (transpilerConfig <- results.transpilerOptions) {
+            if (transpilerCallback(transpilerConfig) != 0) {
+              reporter.error(None(), toolName, s"Transpiler did not complete successfully")
+            }
           }
         }
       }
@@ -215,18 +219,22 @@ object CodeGen {
       messages = messages.filter(p => p.kind != key)
     }
 
-    for (m <- messages) {
-      val t = if (m.level != org.sireum.message.Level.Info) s"${m.level.name}: " else ""
-      val err = m.level == org.sireum.message.Level.Error
-      val mText: String = m.posOpt match {
-        case Some(pos) =>
-          val uri: String = if (pos.uriOpt.nonEmpty) s" ${pos.uriOpt.get}" else ""
-          s"${m.kind} - ${t}[${pos.beginLine}, ${pos.beginColumn}] ${m.text}. ${uri}"
-        case _ => s"${m.kind} - ${t}${m.text}"
+    var infoWarnings: ISZ[Message] = ISZ()
+    var errors: ISZ[Message] = ISZ()
+    for(m <- messages) {
+      if(m.isError) {
+        errors = errors :+ m
+      } else {
+        infoWarnings = infoWarnings :+ m
       }
-      if(verbose) {
-        cprintln(err, mText)
-      }
+    }
+
+    ReporterImpl(infoWarnings).printMessages()
+
+    if(errors.nonEmpty) {
+      cprintln(T, "")
+      cprintln(T, "Errors:")
+      ReporterImpl(errors).printMessages()
     }
 
     return reporterMessages.size
@@ -312,11 +320,15 @@ object CodeGen {
             val oldSections = StringUtil.collectSections(p.read, toolName, i.markers, reporter)
             val newSections = StringUtil.collectSections(newContent, toolName, i.markers, reporter)
 
-            if(oldSections.size != i.markers.size) {
+            val missingMarkers = i.markers.filter((m: Marker) => !ops.ISZOps(oldSections.keys).contains(m))
+            if(missingMarkers.nonEmpty) {
               val fixme = p.up / s"${p.name}_fixme"
               fixme.writeOver(newContent)
-
-              reporter.error(None(), toolName, s"Existing file did not contain expected markers. Copy the markers found in the following file to the existing file: ${fixme.value}")
+              val msg = st"""Existing file did not contain the following markers. Copy the markers/content found in ${fixme.value}
+                            |to the corresponding locations in ${p.value}
+                            |
+                            |  ${(missingMarkers, "\n")}"""
+              reporter.error(None(), toolName, msg.render)
             } else {
               val replacements: ISZ[(Z, Z, String)] = oldSections.entries.map((oldEntry: (Marker, (Z, Z, String))) =>
                 ((oldEntry._2._1, oldEntry._2._2, newSections.get(oldEntry._1).get._3)))
