@@ -1,5 +1,5 @@
 [submodule "hamr-codegen-test"]
-	path = jvm/src/test/scala
+	path = jvm/src/test_tmp
 	url = https://github.com/sireum/hamr-codegen-test.git
 [submodule "act"]
 	path = act
