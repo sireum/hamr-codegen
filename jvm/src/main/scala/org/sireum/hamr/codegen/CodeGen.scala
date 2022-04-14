@@ -214,29 +214,30 @@ object CodeGen {
 
   def printMessages(reporterMessages: ISZ[Message], verbose: B, messageIndex: Z, kindsToFilterOut: ISZ[String]): Z = {
 
-    var messages = ops.ISZOps(reporterMessages).slice(messageIndex, reporterMessages.size)
-    for(key <- kindsToFilterOut) {
-      messages = messages.filter(p => p.kind != key)
-    }
+    if(verbose) {
+      var messages = ops.ISZOps(reporterMessages).slice(messageIndex, reporterMessages.size)
+      for (key <- kindsToFilterOut) {
+        messages = messages.filter(p => p.kind != key)
+      }
 
-    var infoWarnings: ISZ[Message] = ISZ()
-    var errors: ISZ[Message] = ISZ()
-    for(m <- messages) {
-      if(m.isError) {
-        errors = errors :+ m
-      } else {
-        infoWarnings = infoWarnings :+ m
+      var infoWarnings: ISZ[Message] = ISZ()
+      var errors: ISZ[Message] = ISZ()
+      for (m <- messages) {
+        if (m.isError) {
+          errors = errors :+ m
+        } else {
+          infoWarnings = infoWarnings :+ m
+        }
+      }
+
+      ReporterImpl(infoWarnings).printMessages()
+
+      if (errors.nonEmpty) {
+        cprintln(T, "")
+        cprintln(T, "Errors:")
+        ReporterImpl(errors).printMessages()
       }
     }
-
-    ReporterImpl(infoWarnings).printMessages()
-
-    if(errors.nonEmpty) {
-      cprintln(T, "")
-      cprintln(T, "Errors:")
-      ReporterImpl(errors).printMessages()
-    }
-
     return reporterMessages.size
   }
 

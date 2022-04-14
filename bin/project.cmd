@@ -41,17 +41,17 @@ var codegenJvm = moduleJvmPub(
   )
 )
 
-for(testDir <- (homeDir / "jvm" / "src").list.filter((p: Os.Path) => p.isDir && p.name != "test" && p.name != "main")) {
-  val scalaDir = testDir / "scala"
-  assert (scalaDir.exists && scalaDir.isDir, s"'scala' subdirectory missing in ${testDir}")
-
-  codegenJvm = codegenJvm(
-    testSources = codegenJvm.testSources ++ ProjectUtil.dirs(homeDir, ISZ(ISZ("src", testDir.name, "scala"))))
-
-  val resourcesDir = testDir / "resources"
-  if(resourcesDir.exists && resourcesDir.isDir) {
+val externalTestDir: Os.Path = homeDir / "jvm" / "src" / "external"
+if(externalTestDir.exists) {
+  for (testDir <- externalTestDir.list.filter((p: Os.Path) => p.isDir && (p / "scala").exists && (p / "scala").isDir)) {
     codegenJvm = codegenJvm(
-      testResources = codegenJvm.testResources ++ ProjectUtil.dirs(homeDir, ISZ(ISZ("src", testDir.name, "resources"))))
+      testSources = codegenJvm.testSources ++ ProjectUtil.dirs(homeDir, ISZ(ISZ("jvm", "src", "external", testDir.name, "scala"))))
+
+    val resourcesDir = testDir / "resources"
+    if (resourcesDir.exists && resourcesDir.isDir) {
+      codegenJvm = codegenJvm(
+        testResources = codegenJvm.testResources ++ ProjectUtil.dirs(homeDir, ISZ(ISZ("jvm", "src", "external", testDir.name, "resources"))))
+    }
   }
 }
 
