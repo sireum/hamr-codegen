@@ -1,5 +1,4 @@
-# never check in results
-jvm/src/test/results
+/jvm/src/test-ext
 
 # stuff from build.cmd
 out/

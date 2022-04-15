@@ -260,8 +260,13 @@ def test(): Unit = {
   tipe()
 
   println("Testing ...")
-  //val names: String = "org.sireum.hamr.arsit"
-  val names: String = "org.sireum.hamr"
+
+  val names: String = Os.env("HAMR_TEST_PACKAGE_NAMES") match {
+    case Some(packages) =>
+      val pacakges: ISZ[String] = ops.StringOps(packages).split((c: C) => c == ',')
+      st"${(packages, " ")}".render
+    case _ => "org.sireum.hamr"
+  }
 
   proc"$sireum proyek test --project $project -n $proyekName --par --sha3 . $names".at(home).console.runCheck()
   println()

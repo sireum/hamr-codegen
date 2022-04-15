@@ -41,16 +41,16 @@ var codegenJvm = moduleJvmPub(
   )
 )
 
-val externalTestDir: Os.Path = homeDir / "jvm" / "src" / "external"
+val externalTestDir: Os.Path = homeDir / "jvm" / "src" / "test-ext"
 if(externalTestDir.exists) {
   for (testDir <- externalTestDir.list.filter((p: Os.Path) => p.isDir && (p / "scala").exists && (p / "scala").isDir)) {
     codegenJvm = codegenJvm(
-      testSources = codegenJvm.testSources ++ ProjectUtil.dirs(homeDir, ISZ(ISZ("jvm", "src", "external", testDir.name, "scala"))))
+      testSources = codegenJvm.testSources ++ ProjectUtil.dirs(homeDir, ISZ(ISZ("src", "test-ext", testDir.name, "scala"))))
 
     val resourcesDir = testDir / "resources"
     if (resourcesDir.exists && resourcesDir.isDir) {
       codegenJvm = codegenJvm(
-        testResources = codegenJvm.testResources ++ ProjectUtil.dirs(homeDir, ISZ(ISZ("jvm", "src", "external", testDir.name, "resources"))))
+        testResources = codegenJvm.testResources ++ ProjectUtil.dirs(homeDir, ISZ(ISZ("src", "test-ext", testDir.name, "resources"))))
     }
   }
 }
