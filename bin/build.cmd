@@ -82,17 +82,22 @@ val cache: Os.Path = Os.env("SIREUM_CACHE") match {
   case _ => Os.home / "Downloads" / "sireum"
 }
 
-def clone(repo: String): Unit = {
-  if (!(home / repo).exists) {
-    Os.proc(ISZ("git", "clone", "--depth=1", s"https://github.com/sireum/$repo")).at(home).console.runCheck()
-  } else {
-    Os.proc(ISZ("git", "pull")).at(home / repo).console.runCheck()
+def clone(repo: String, proj: String, location: Option[String]): B = {
+  val loc: Os.Path = location match {
+    case Some(l) => home / l
+    case _ => home / proj
   }
-  println()
+  val ret: B = if (!loc.exists) {
+    val args = ISZ[String]("git", "clone", "--recurse", s"${repo}/$proj") ++ (if (location.nonEmpty) ISZ(location.get) else ISZ[String]())
+    Os.proc(args).at(home).console.run().ok
+  } else {
+    Os.proc(ISZ("git", "pull")).at(loc).console.run().ok
+  }
+  return ret
 }
 
 def cloneProjects(): Unit = {
-  ISZ[String]("air", "runtime", "slang").foreach((p: String) => clone(p))
+  ISZ[String]("air", "runtime", "slang").foreach((p: String) => { clone("https://github.com/sireum", p, None()); println() })
 }
 
 def tipe(): Unit = {
@@ -251,11 +256,35 @@ def getIVE(): B = {
   return destDir.exists
 }
 
+def setupExternalTests(): B = {
+
+  val firstTime = !(home / "jvm/src/test-ext/gumbo").exists
+
+  val extTestRepos: ISZ[(String, String, String)] = ISZ(
+    ("git@gitlab.adventium.com:sirfur", "sireum-osate-tests.git", "jvm/src/test-ext/gumbo")
+  )
+  var success: B = T
+  for(c <- extTestRepos if success) {
+    success = clone(c._1, c._2, Some(c._3)) // may fail (e.g. when run via github actions)
+  }
+
+  if(success && firstTime) {
+    val gumboFeatures = "org.sireum.aadl.gumbo.feature.feature.group=https://raw.githubusercontent.com/sireum/aadl-gumbo-update-site/master;org.sireum.aadl.osate.gumbo2air.feature.feature.group=https://raw.githubusercontent.com/sireum/aadl-gumbo-update-site/master"
+    val p = proc"$sireum hamr phantom -u --features $gumboFeatures"
+
+    p.console.runCheck()
+  }
+
+  return success
+}
+
 def test(): Unit = {
   assert(getIVE(), "IVE doesn't exist")
 
   installZ3(Os.kind)
   installCVC(Os.kind)
+
+  setupExternalTests()
 
   tipe()
 
