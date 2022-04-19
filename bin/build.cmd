@@ -328,6 +328,12 @@ def regenTransformers(): Unit = {
     "-m", "immutable,mutable") ++ asts).at(symbolPackagePath).console.runCheck()
 }
 
+def regenCli4Testing(): Unit = {
+  val cliPackagePath = home / "jvm" / "src" / "main" / "scala" / "org" / "sireum" / "hamr" / "codegen"
+  val utilDir = home /  "jvm" / "src" / "test" / "scala" / "org" / "sireum" / "hamr" / "codegen" / "test" / "util"
+  proc"${sireum} tools cligen -p org.sireum.hamr.codegen.test.util -o ${utilDir.value} ${(utilDir / "testingCli.sc")}".at(cliPackagePath).console.runCheck()
+}
+
 for (i <- 0 until Os.cliArgs.size) {
   Os.cliArgs(i) match {
     case string"clean" => clean()
@@ -342,6 +348,8 @@ for (i <- 0 until Os.cliArgs.size) {
       tipe()
     case string"regen-trans" =>
       regenTransformers()
+    case string"regen-cli" =>
+      regenCli4Testing()
     case string"cvc" => installCVC(Os.kind)
     case string"z3" => installZ3(Os.kind)
     case string"-h" => usage()
