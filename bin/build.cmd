@@ -256,13 +256,16 @@ def getIVE(): B = {
   return destDir.exists
 }
 
+def isCI(): B = {
+  return Os.env("GITLAB_CI").nonEmpty || Os.env("GITHUB_ACTIONS").nonEmpty || Os.env("BUILD_ID").nonEmpty
+}
+
 def setupExternalTests(): B = {
 
-  val firstTime = !(home / "jvm/src/test-ext/gumbo").exists
+  val firstTime = !(home / "jvm/src/test-ext/gumbo").exists || isCI()
 
   val extTestRepos: ISZ[(String, String, String)] = ISZ(
     ("git@gitlab.adventium.com:sirfur", "sireum-osate-tests.git", "jvm/src/test-ext/gumbo"),
-    ("git@gitlab.adventium.com:gumbo", "gumbo_models.git", "jvm/src/test-ext/gumbo/resources/models/gumbo_models"),
     ("git@gitlab.adventium.com:sirfur", "sirfur_omnibus.git", "jvm/src/test-ext/gumbo/resources/models/sirfur_omnibus"),
   )
   var success: B = T
@@ -271,9 +274,9 @@ def setupExternalTests(): B = {
   }
 
   if(success && firstTime) {
+    // codegen testing will install a vanilla/non-gumbo version of OSATE if success is false
     val gumboFeatures = "org.sireum.aadl.gumbo.feature.feature.group=https://raw.githubusercontent.com/sireum/aadl-gumbo-update-site/master;org.sireum.aadl.osate.gumbo2air.feature.feature.group=https://raw.githubusercontent.com/sireum/aadl-gumbo-update-site/master"
     val p = proc"$sireum hamr phantom -u --features $gumboFeatures"
-
     p.console.runCheck()
   }
 
