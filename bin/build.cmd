@@ -4,7 +4,7 @@ export SIREUM_HOME=$(cd -P $(dirname "$0")/.. && pwd -P)                        
 if [ ! -z ${SIREUM_PROVIDED_SCALA++} ]; then                                                                #
   SIREUM_PROVIDED_JAVA=true                                                                                 #
 fi                                                                                                          #
-"${SIREUM_HOME}/bin/init.sh"                                                                                #
+"${SIREUM_HOME}/bin/init.sh" || exit $?                                                                     #
 if [ -n "$COMSPEC" -a -x "$COMSPEC" ]; then                                                                 #
   export SIREUM_HOME=$(cygpath -C OEM -w -a ${SIREUM_HOME})                                                 #
   if [ -z ${SIREUM_PROVIDED_JAVA++} ]; then                                                                 #
@@ -28,12 +28,12 @@ if [ -f "$0.com" ] && [ "$0.com" -nt "$0" ]; then                               
   exec "$0.com" "$@"                                                                                        #
 else                                                                                                        #
   rm -fR "$0.com"                                                                                           #
-  exec "${SIREUM_HOME}/bin/sireum" slang run -n "$0" "$@"                                                #
+  exec "${SIREUM_HOME}/bin/sireum" slang run -n "$0" "$@"                                                   #
 fi                                                                                                          #
 :BOF
 setlocal
 set SIREUM_HOME=%~dp0../
-call "%~dp0init.bat"
+call "%~dp0init.bat" || exit /B %errorlevel%
 if defined SIREUM_PROVIDED_SCALA set SIREUM_PROVIDED_JAVA=true
 if not defined SIREUM_PROVIDED_JAVA set PATH=%~dp0win\java\bin;%~dp0win\z3\bin;%PATH%
 set NEWER=False
