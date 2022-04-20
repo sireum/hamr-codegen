@@ -261,10 +261,12 @@ def setupExternalTests(): B = {
   val firstTime = !(home / "jvm/src/test-ext/gumbo").exists
 
   val extTestRepos: ISZ[(String, String, String)] = ISZ(
-    ("git@gitlab.adventium.com:sirfur", "sireum-osate-tests.git", "jvm/src/test-ext/gumbo")
+    ("git@gitlab.adventium.com:sirfur", "sireum-osate-tests.git", "jvm/src/test-ext/gumbo"),
+    ("git@gitlab.adventium.com:gumbo", "gumbo_models.git", "jvm/src/test-ext/gumbo/resources/models/gumbo_models"),
+    ("git@gitlab.adventium.com:sirfur", "sirfur_omnibus.git", "jvm/src/test-ext/gumbo/resources/models/sirfur_omnibus"),
   )
   var success: B = T
-  for(c <- extTestRepos if success) {
+  for(c <- extTestRepos if success && !(home / c._3).exists) {
     success = clone(c._1, c._2, Some(c._3)) // may fail (e.g. when run via github actions)
   }
 
