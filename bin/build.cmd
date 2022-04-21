@@ -52,7 +52,7 @@ import org.sireum._
 def usage(): Unit = {
   println("HAMR Codegen /build")
   println(
-    st"""Usage: ( clean | compile | test | tipe | regen-trans
+    st"""Usage: ( clean | compile | test | tipe | regen-trans | fetch-gumbo
         |       | cvc   | z3                                  )+""".render)
 }
 
@@ -260,7 +260,7 @@ def isCI(): B = {
   return Os.env("GITLAB_CI").nonEmpty || Os.env("GITHUB_ACTIONS").nonEmpty || Os.env("BUILD_ID").nonEmpty
 }
 
-def setupExternalTests(): B = {
+def setupGumboTesting(): B = {
 
   val firstTime = !(home / "jvm/src/test-ext/gumbo").exists || isCI()
 
@@ -289,7 +289,7 @@ def test(): Unit = {
   installZ3(Os.kind)
   installCVC(Os.kind)
 
-  setupExternalTests()
+  setupGumboTesting()
 
   tipe()
 
@@ -351,10 +351,9 @@ for (i <- 0 until Os.cliArgs.size) {
     case string"tipe" =>
       cloneProjects()
       tipe()
-    case string"regen-trans" =>
-      regenTransformers()
-    case string"regen-cli" =>
-      regenCli4Testing()
+    case string"regen-trans" => regenTransformers()
+    case string"regen-cli" => regenCli4Testing()
+    case string"fetch-gumbo" => setupGumboTesting()
     case string"cvc" => installCVC(Os.kind)
     case string"z3" => installZ3(Os.kind)
     case string"-h" => usage()
