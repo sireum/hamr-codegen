@@ -53,6 +53,7 @@ def usage(): Unit = {
   println("HAMR Codegen /build")
   println(
     st"""Usage: ( clean | compile | test | tipe | regen-trans | fetch-gumbo
+        |       | osate-gumbo
         |       | cvc   | z3                                  )+""".render)
 }
 
@@ -260,24 +261,31 @@ def isCI(): B = {
   return Os.env("GITLAB_CI").nonEmpty || Os.env("GITHUB_ACTIONS").nonEmpty || Os.env("BUILD_ID").nonEmpty
 }
 
+def installOsateGumbo(): B = {
+  println("Installing GUMBO plugins into OSATE ...")
+  val gumboFeatures = "org.sireum.aadl.gumbo.feature.feature.group=https://raw.githubusercontent.com/sireum/aadl-gumbo-update-site/master;org.sireum.aadl.osate.gumbo2air.feature.feature.group=https://raw.githubusercontent.com/sireum/aadl-gumbo-update-site/master"
+  val p = proc"$sireum hamr phantom -u --features $gumboFeatures"
+  return p.console.run().ok
+}
+
 def setupGumboTesting(): B = {
 
   val firstTime = !(home / "jvm/src/test-ext/gumbo").exists || isCI()
+  if(firstTime) {
+    installOsateGumbo()
+  }
 
   val extTestRepos: ISZ[(String, String, String)] = ISZ(
     ("git@gitlab.adventium.com:sirfur", "sireum-osate-tests.git", "jvm/src/test-ext/gumbo"),
     ("git@gitlab.adventium.com:sirfur", "sirfur_omnibus.git", "jvm/src/test-ext/gumbo/resources/models/sirfur_omnibus"),
   )
+
   var success: B = T
   for(c <- extTestRepos if success && !(home / c._3).exists) {
     success = clone(c._1, c._2, Some(c._3)) // may fail (e.g. when run via github actions)
   }
-
-  if(success && firstTime) {
-    // codegen testing will install a vanilla/non-gumbo version of OSATE if success is false
-    val gumboFeatures = "org.sireum.aadl.gumbo.feature.feature.group=https://raw.githubusercontent.com/sireum/aadl-gumbo-update-site/master;org.sireum.aadl.osate.gumbo2air.feature.feature.group=https://raw.githubusercontent.com/sireum/aadl-gumbo-update-site/master"
-    val p = proc"$sireum hamr phantom -u --features $gumboFeatures"
-    p.console.runCheck()
+  if(!success) {
+    cprintln(T, "Failed to clone Adventium repos via SSH")
   }
 
   return success
@@ -354,6 +362,7 @@ for (i <- 0 until Os.cliArgs.size) {
     case string"regen-trans" => regenTransformers()
     case string"regen-cli" => regenCli4Testing()
     case string"fetch-gumbo" => setupGumboTesting()
+    case string"osate-gumbo" => installOsateGumbo()
     case string"cvc" => installCVC(Os.kind)
     case string"z3" => installZ3(Os.kind)
     case string"-h" => usage()
