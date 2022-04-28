@@ -34,7 +34,7 @@ object StringUtil {
   def replaceSections(s: String,
                       replacements: ISZ[(Z, Z, String)], reporter: Reporter): String = {
 
-    val lines = split_PreserveEmptyLines(s, c => c == '\n')
+    val lines = split_PreserveEmptySegments(s, c => c == '\n')
 
     // sanity checks
     var checkIndex = 1
@@ -61,7 +61,7 @@ object StringUtil {
     while(i < lines.size) {
       if(ri < replacements.size &&
          i == replacements(ri)._1) {
-        val rtext = split_PreserveEmptyLines(replacements(ri)._3, c => c == '\n')
+        val rtext = split_PreserveEmptySegments(replacements(ri)._3, c => c == '\n')
         r = r :+ lines(i) // add start marker
         r = r ++ rtext // substitute new section content
         i = replacements(ri)._2 // set index to location of end marker
@@ -90,7 +90,7 @@ object StringUtil {
     }
 
     var r = HashSMap.empty[Marker, (Z, Z, String)]
-    val lines = split_PreserveEmptyLines(s, c => c == '\n')
+    val lines = split_PreserveEmptySegments(s, c => c == '\n')
     val size = lines.size
     var i = 0
 
@@ -130,14 +130,16 @@ object StringUtil {
     return r
   }
 
-  // version of split that preserves empty lines
-  @pure def split_PreserveEmptyLines(s: String, isSep: C => B @pure): ISZ[String] = {
+  // version of split that preserves empty segments
+  // e.g. splitting "||x|" on '|' yields ["", "", "x", ""], whereas
+  //      splitting "||x"  on '|' yields ["", "", "x"]
+  @pure def split_PreserveEmptySegments(s: String, isSep: C => B @pure): ISZ[String] = {
     var r = ISZ[String]()
     val cis = conversions.String.toCis(s)
     var last = 0
     val size = s.size
     while (last < size && isSep(cis(last))) {
-      r = r :+ "" // preserve empty lines at start of s
+      r = r :+ "" // preserve empty segments at start of s
       last = last + 1
     }
     var i = last
@@ -146,7 +148,7 @@ object StringUtil {
         r = r :+ StringOps.substring(cis, last, i)
         i = i + 1
         while (i < size && isSep(cis(i))) {
-          r = r :+ "" // preserve empty lines
+          r = r :+ "" // preserve empty segments
           i = i + 1
         }
         last = i
@@ -154,7 +156,10 @@ object StringUtil {
       i = i + 1
     }
     if (last < size) {
-      r = r :+ StringOps.substring(cis, last, i)
+      r = r :+ StringOps.substring(cis, last, size)
+    }
+    if(isSep(cis(size - 1))) {
+      r = r :+ "" // preserve empty segment at the end of s
     }
     return r
   }
