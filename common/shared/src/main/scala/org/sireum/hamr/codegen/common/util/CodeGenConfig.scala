@@ -34,6 +34,7 @@ import org.sireum.hamr.codegen.common.containers.{Resource, TranspilerConfig}
                               noProyekIve: B,
                               noEmbedArt: B,
                               devicesAsThreads: B,
+                              genSbtMill: B,
 
                               //
                               slangAuxCodeDirs: ISZ[String],

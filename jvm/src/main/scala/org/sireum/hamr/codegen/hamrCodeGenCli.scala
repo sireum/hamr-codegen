@@ -65,7 +65,10 @@ object hamrCodeGenCli {
           description = "Do not embed ART project files"),
         Opt(name = "devicesAsThreads", longKey = "devices-as-thread", shortKey = None(),
           tpe = Type.Flag(F),
-          description = "Treat AADL devices as threads")
+          description = "Treat AADL devices as threads"),
+        Opt(name = "genSbtMill", longKey = "sbt-mill", shortKey = None(),
+          tpe = Type.Flag(F),
+          description = "Generate SBT and Mill projects in addition to Proyek")
       )),
       OptGroup(name = "Transpiler", opts = ISZ(
         Opt(name = "slangAuxCodeDirs", longKey = "aux-code-dirs", shortKey = None(),
