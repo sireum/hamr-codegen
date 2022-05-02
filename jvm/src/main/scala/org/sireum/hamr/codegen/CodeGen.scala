@@ -84,6 +84,7 @@ object CodeGen {
         bless = genBlessEntryPoints,
         verbose = options.verbose,
         devicesAsThreads = options.devicesAsThreads,
+        genSbtMill = options.genSbtMill,
         ipc = ipc,
         auxCodeDirs = options.slangAuxCodeDirs,
         outputSharedCDir = output_shared_C_Directory,

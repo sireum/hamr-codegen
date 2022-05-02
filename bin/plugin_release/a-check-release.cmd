@@ -97,8 +97,11 @@ for(f <- ISZ(sireum, sireumjar) if f.exists) {
 proc"${SIREUM_HOME}/bin/init.sh".at(SIREUM_HOME).env(ISZ(("SIREUM_INIT_V", SIREUM_INIT_V))).console.runCheck()
 
 println(st"""The build will use: SIREUM_INIT_V=${SIREUM_INIT_V}.  If the build fails then do the following:
-            |   1. run Jenkins job: https://jenkins.cs.ksu.edu/job/Sireum-Kekinian-Init-Ver/.  Fetch the new version tag from https://github.com/sireum/init/releases
-            |   2. Once successful, replace SIREUM_INIT_V in ${case_setup} with the version tag from above and then rerun this script
+            |   1. run Jenkins job: https://jenkins.cs.ksu.edu/job/Sireum-Kekinian/.  This will build the
+            |      sireum.jar and then the downstream job will publish it to the Github Init rep.
+            |      Fetch the new version tag from https://github.com/sireum/init/releases
+            |   2. Once successful, replace SIREUM_INIT_V in ${case_setup} with the version tag from above and then
+            |      rerun this script
             |""".render)
 
 def assertResourceExists(p: ISZ[Os.Path]): Unit = { p.foreach((x: Os.Path) => assert(x.exists, s"${x} doesn't exist")) }
