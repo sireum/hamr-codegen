@@ -189,7 +189,7 @@ def installCVC(kind: Os.Kind.Type): Unit = {
   }
 
   val (sub, filename): (String, String) = (gen, kind) match {
-    case (string"5", Os.Kind.Win) => (s"cvc$gen-$version", s"cvc$gen-Windows.exe")
+    case (string"5", Os.Kind.Win) => (s"cvc$gen-$version", s"cvc$gen-Win64.exe")
     case (string"5", Os.Kind.Linux) => (s"cvc$gen-$version", s"cvc$gen-Linux")
     case (string"5", Os.Kind.Mac) => (s"cvc$gen-$version", s"cvc$gen-macOS")
     case (string"4", Os.Kind.Win) => (version, s"cvc$gen-$version-win64-opt.exe")
