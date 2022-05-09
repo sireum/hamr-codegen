@@ -311,8 +311,8 @@ def test(): Unit = {
 
   val names: String = Os.env("HAMR_TEST_PACKAGE_NAMES") match {
     case Some(packages) =>
-      val pacakges: ISZ[String] = ops.StringOps(packages).split((c: C) => c == ',')
-      st"${(packages, " ")}".render
+      val _packages: ISZ[String] = ops.StringOps(packages).split((c: C) => c == ',')
+      st"${(_packages, " ")}".render
     case _ => "org.sireum.hamr"
   }
 
