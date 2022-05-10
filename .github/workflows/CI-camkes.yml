@@ -1,0 +1,67 @@
+name: CAmkES
+
+on: push
+
+jobs:
+  container:
+    runs-on: ubuntu-latest
+    container:
+      image: trustworthysystems/camkes
+      options: --user root
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          path: hamr-codegen
+      - name: Build
+        run: |
+          git config --global user.name fake-user
+          git config --global user.email fake-user@fake.com
+          git config --global color.ui true
+          
+          # github sets HOME to /github/home but some tools (Sireum's Os.home, Haskell) use
+          # the containers /root instead leading to inconsistent installs. Setting HOME
+          # to be root resolves the issue
+          # https://github.com/actions/runner/issues/1474#issuecomment-965805123
+          export HOME=/root
+
+          mv ./hamr-codegen /root/
+          
+          export aptInstall="apt-get install -f -y --no-install-recommends"
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          ${aptInstall} p7zip-full
+          
+          mkdir -p $HOME/.ssh
+          touch $HOME/.ssh/config
+          chmod 700 $HOME/.ssh/config
+          echo -e "Host gitlab.adventium.com\n\tStrictHostKeyChecking no\n" >> $HOME/.ssh/config
+          
+          export CASE_DIR=$HOME/CASE
+          
+          #export CAMKES_DIR=$CASE_DIR/camkes
+          mkdir -p $CAMKES_DIR
+          cd $CAMKES_DIR
+          repo init -u https://github.com/seL4/camkes-manifest.git
+          repo sync
+          
+          #export CAMKES_VM_EXAMPLES_DIR=$CASE_DIR/camkes-vm-examples
+          mkdir -p $CAMKES_VM_EXAMPLES_DIR
+          cd $CAMKES_VM_EXAMPLES_DIR
+          repo init -u https://github.com/seL4/camkes-vm-examples-manifest.git
+          repo sync
+          
+          cd $HOME
+          #git clone --recursive  https://github.com/sireum/hamr-codegen.git
+          
+          # see https://github.com/sireum/hamr-codegen-test/blob/master/scala/org/sireum/hamr/codegen/test/util/TestMode.scala
+          export HamrTestModes=phantom,compile,camkes,generated_unit_tests,smt2
+          echo "HamrTestModes=${HamrTestModes}"
+          
+          export SMT2_TIMEOUT=180000
+          echo "SMT2_TIMEOUT=${SMT2_TIMEOUT}"
+          
+          export ALSO_TRANSPILE_VIA_CALLBACKS=true
+          echo "ALSO_TRANSPILE_VIA_CALLBACKS=${ALSO_TRANSPILE_VIA_CALLBACKS}"
+          
+          $HOME/hamr-codegen/bin/build.cmd test
