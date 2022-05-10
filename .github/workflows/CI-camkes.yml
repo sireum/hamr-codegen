@@ -55,4 +55,5 @@ jobs:
           export ALSO_TRANSPILE_VIA_CALLBACKS=true
           echo "ALSO_TRANSPILE_VIA_CALLBACKS=${ALSO_TRANSPILE_VIA_CALLBACKS}"
           
+          cd $HOME
           $HOME/hamr-codegen/bin/build.cmd test
