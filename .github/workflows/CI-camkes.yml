@@ -27,6 +27,7 @@ jobs:
           export DEBIAN_FRONTEND=noninteractive
           apt-get update
           ${aptInstall} p7zip-full
+          ${aptInstall} emacs
           
           mkdir -p $HOME/.ssh
           touch $HOME/.ssh/config
