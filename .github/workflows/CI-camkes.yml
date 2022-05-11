@@ -7,12 +7,12 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: trustworthysystems/camkes
-      options: --user root
     steps:
       - name: Checkout
         uses: actions/checkout@v2
         with:
           path: hamr-codegen
+          submodules: recursive
       - name: Build
         run: |
           # github sets HOME to /github/home but some tools (Sireum's Os.home, Haskell) use
@@ -20,7 +20,7 @@ jobs:
           # to be root resolves the issue
           # https://github.com/actions/runner/issues/1474#issuecomment-965805123
           export HOME=/root
-
+          
           mv ./hamr-codegen /root/
           
           export aptInstall="apt-get install -f -y --no-install-recommends"
@@ -44,7 +44,7 @@ jobs:
           cd $CASE_DIR/camkes-vm-examples
           repo init -u https://github.com/seL4/camkes-vm-examples-manifest.git
           repo sync
-
+          
           # see https://github.com/sireum/hamr-codegen-test/blob/master/scala/org/sireum/hamr/codegen/test/util/TestMode.scala
           export HamrTestModes=phantom,compile,camkes,generated_unit_tests,smt2
           echo "HamrTestModes=${HamrTestModes}"
@@ -55,5 +55,4 @@ jobs:
           export ALSO_TRANSPILE_VIA_CALLBACKS=true
           echo "ALSO_TRANSPILE_VIA_CALLBACKS=${ALSO_TRANSPILE_VIA_CALLBACKS}"
           
-          cd $HOME
           $HOME/hamr-codegen/bin/build.cmd test
