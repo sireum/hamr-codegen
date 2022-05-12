@@ -27,6 +27,9 @@ jobs:
           export DEBIAN_FRONTEND=noninteractive
           apt-get update
           ${aptInstall} p7zip-full
+          
+          # Installing emacs installs some package(s) that resolve an issue where
+          # the OSATE gumbo parser fails to initialize when used in the docker container.
           ${aptInstall} emacs
           
           mkdir -p $HOME/.ssh
@@ -47,7 +50,7 @@ jobs:
           repo sync
           
           # see https://github.com/sireum/hamr-codegen-test/blob/master/scala/org/sireum/hamr/codegen/test/util/TestMode.scala
-          export HamrTestModes=verbose,phantom,compile,camkes,generated_unit_tests,smt2
+          export HamrTestModes=phantom,compile,camkes,generated_unit_tests,smt2
           echo "HamrTestModes=${HamrTestModes}"
           
           export SMT2_TIMEOUT=180000
