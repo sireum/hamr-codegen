@@ -135,6 +135,11 @@ object CommonUtil {
   }
 }
 
+@enum object ModuleType {
+  "jvm"
+  "js"
+  "shared"
+}
 
 @datatype class Names(c: ir.Component,
                       basePackage: String) {
@@ -153,6 +158,10 @@ object CommonUtil {
     return s"${componentType}_${instanceShortName}"
   }
 
+  def componentSingletonTypeQualifiedName: String = {
+    return s"${packageName}.${componentSingletonType}"
+  }
+
   def api: String = {
     return s"${componentType}_Api"
   }
@@ -161,8 +170,16 @@ object CommonUtil {
     return s"${componentType}_Initialization_Api"
   }
 
+  def apiInitializationQualifiedName: String = {
+    return s"${packageName}.${apiInitialization}"
+  }
+
   def apiOperational: String = {
     return s"${componentType}_Operational_Api"
+  }
+
+  def apiOperationalQualifiedName: String = {
+    return s"${packageName}.${apiOperational}"
   }
 
   def apiInitialization_Id: String = {
@@ -272,5 +289,43 @@ object CommonUtil {
 
   def sel4SlangExtensionQualifiedNameC: String = {
     return s"${cPackageName}_${sel4SlangExtensionName}"
+  }
+
+
+  def modulePath: ISZ[String] = {
+    val o = ops.ISZOps(c.identifier.name)
+    return o.slice(1, c.identifier.name.size - 1)
+  }
+
+  def singleModuleMainPath: ISZ[String] = {
+    return modulePath :+ "main"
+  }
+
+  def moduleMainPath(typ: ModuleType.Type): ISZ[String] = {
+    return modulePath :+ typ.name :+ "main"
+  }
+
+  def componentEntryPointSingletonName: String = {
+    return s"${componentType}_${instanceShortName}_EntryPoints"
+  }
+
+  def componentEntryPointSingletonQualifiedName: String = {
+    return s"${packageName}.${componentEntryPointSingletonName}"
+  }
+
+  def componentEntryPointTraitName: String = {
+    return s"${componentType}_${instanceShortName}_EntryPointsSig"
+  }
+
+  def componentEntryPointTraitQualifiedName: String = {
+    return s"${packageName}.${componentEntryPointTraitName}"
+  }
+
+  def componentEntryPointImplName: String = {
+    return s"${componentType}_${instanceShortName}_EntryPointsImpl"
+  }
+
+  def componentEntryPointStub: String = {
+    return s"${componentType}_${instanceShortName}_EntryPointsStub"
   }
 }
