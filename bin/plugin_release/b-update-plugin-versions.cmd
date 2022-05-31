@@ -56,18 +56,25 @@ def replaceLines(replacements: ISZ[(String, String)], file: Os.Path): Unit = {
 
 val sireumCommit = runGit(ISZ("git", "log", "-n", "1", "--pretty=format:%h"), SIREUM_HOME)
 val sireumVersionFull = runGit(ISZ("git", "log", "-n", "1", "--pretty=format:%H"), SIREUM_HOME)
-val sireumTimestamp = runGit(ISZ("git", "show", "-s", "--format=%cd", "--date=format:%y%m%d%H%M"), SIREUM_HOME)
+//val sireumTimestamp = runGit(ISZ("git", "show", "-s", "--format=%cd", "--date=format:%y%m%d%H%M"), SIREUM_HOME)
+val sireumYear = runGit(ISZ("git", "show", "-s", "--format=%cd", "--date=format:%Y"), SIREUM_HOME)
+val sireumMonthDay = runGit(ISZ("git", "show", "-s", "--format=%cd", "--date=format:%m%d%H%M"), SIREUM_HOME)
 val sireumBuildstamp = ops.StringOps(Os.proc(ISZ(sireum.value)).run().out).split(c => c =='\n')(2) // should be 3rd line
+
+val sireumVersion = s"1.${sireumYear}.${sireumMonthDay}"
+val sireumVersionQualified = s"1.${sireumYear}.${sireumMonthDay}.${sireumCommit}"
 
 println(s"sireumVersion: ${sireumCommit}")
 println(s"sireumBuildstamp: ${sireumBuildstamp}")
-println(s"sireumTimestamp: ${sireumTimestamp}")
+//println(s"sireumTimestamp: ${sireumTimestamp}")
+println(s"sireumVersion: ${sireumVersion}")
+println(s"sireumVersionQualified: ${sireumVersionQualified}")
 
 // TODO figure out how plugin.properties file work, for now just modify the files directly
 
 def updateManfiest(proj: OsateProject): Unit = {
   val a =     "Bundle-Version:"
-  val aMod = s"Bundle-Version: 1.0.${sireumTimestamp}.qualifier"
+  val aMod = s"Bundle-Version: ${sireumVersion}.qualifier"
 
   val manifest = proj.projectDir / proj.projectId / "META-INF" / "MANIFEST.MF"
   assert(manifest.exists, s"${manifest} does not exist")
@@ -92,10 +99,10 @@ ids.foreach((proj: OsateProject) => updateManfiest(proj))
 def updateFeatureXml(project: OsateProject): Unit ={
 
   val a =        "      version="
-  val aMod = st"""      version="1.0.${sireumTimestamp}.qualifier"""".render
+  val aMod = st"""      version="${sireumVersion}.qualifier"""".render
 
   val b =    st"""      <import plugin="org.sireum.aadl.osate""".render
-  val bMod = st"""      <import plugin="org.sireum.aadl.osate" version="1.0.${sireumTimestamp}" match="greaterOrEqual"/>""".render
+  val bMod = st"""      <import plugin="org.sireum.aadl.osate" version="${sireumVersion}" match="greaterOrEqual"/>""".render
 
   val featureXML = project.projectDir / s"${project.projectId}.feature" / "feature.xml"
   assert(featureXML.exists, s"${featureXML} does not exist")
@@ -106,7 +113,7 @@ def updateFeatureXml(project: OsateProject): Unit ={
 ids.foreach((proj: OsateProject) => updateFeatureXml(proj))
 
 
-val releaseDir = updateSiteDir / s"1.0.${sireumTimestamp}.${sireumCommit}"
+val releaseDir = updateSiteDir / sireumVersionQualified
 releaseDir.mkdir()
 
 val dirs = ids.map((proj: OsateProject) => {
