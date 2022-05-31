@@ -21,6 +21,7 @@ exit /B %errorlevel%
 
 import org.sireum._
 
+val fast: B = T
 
 val SIREUM_HOME = Os.path(Os.env("SIREUM_HOME").get)
 val sireum = SIREUM_HOME / "bin" / "sireum"
@@ -30,8 +31,9 @@ val CASE_Env_home: Os.Path = Os.home / "devel" / "sireum" / "case-env"
 
 // TODO get these from env or arguments
 val pluginDir = Os.home / "devel" / "sireum" / "osate-plugin"
-val updateSiteDir = Os.home / "devel" / "sireum" / "osate-plugin-update-site"
-val updateSiteHAMRDir = Os.home / "devel" / "sireum" / "hamr-plugin-update-site"
+val updateSiteDir = Os.home / "devel" / "sireum" / "osate-update-site"
+//val updateSiteDir = Os.home / "devel" / "sireum" / "osate-plugin-update-site"
+//val updateSiteHAMRDir = Os.home / "devel" / "sireum" / "hamr-plugin-update-site"
 
 
 def runGit(args: ISZ[String], path: Os.Path): String = {
@@ -57,13 +59,20 @@ getGitRepos(SIREUM_HOME / "hamr" / "codegen").foreach((repo: Os.Path) => {
     ready = F
   }
   if(uncommitedChanges.out != "") {
-    eprintln(s"Uncommited changes: ${repo}")
-    ready = F
+    var justReleaseScriptMods: B = T
+    for(e <- ops.StringOps(uncommitedChanges.out).split((c: C) => c == '\n') if !ops.StringOps(e).contains("bin/plugin_release")) {
+      justReleaseScriptMods = F
+    }
+    if(!justReleaseScriptMods) {
+      eprintln(s"Uncommited changes: ${repo}")
+      println(uncommitedChanges.out)
+      ready = F
+    }
   }
   if(unpushedCommits.out != "") {
     var onlyReleaseScripts = T
-    for(sha1 <- org.sireum.ops.StringOps(proc"git cherry".at(repo).runCheck().out).split(c => c == '\n').map(m => ops.StringOps(m).replaceAllLiterally("+ ", ""))){
-      for(file <- ops.StringOps(proc"git diff-tree --no-commit-id --name-only -r ${sha1}".at(repo).runCheck().out).split(c => c == '\n').map(p => Os.path(p))){
+    for(sha1 <- org.sireum.ops.StringOps(proc"git cherry".at(repo).runCheck().out).split(c => c == '\n').map((m: String) => ops.StringOps(m).replaceAllLiterally("+ ", ""))){
+      for(file <- ops.StringOps(proc"git diff-tree --no-commit-id --name-only -r ${sha1}".at(repo).runCheck().out).split(c => c == '\n').map((p: String) => Os.path(p))){
         // ignore commits that only contain changes to the release scripts
         onlyReleaseScripts = onlyReleaseScripts && file.up.name == "plugin_release"// && file.up.up == "bin"
       }
@@ -75,38 +84,40 @@ getGitRepos(SIREUM_HOME / "hamr" / "codegen").foreach((repo: Os.Path) => {
   }
   gitStaged = gitStaged && ready
 
-  gitStaged // just need to return somethin
+  gitStaged // just need to return something
 })
 
 if(!gitStaged) { Os.exit(1) }
 
-proc"git -C ${CASE_Env_home} pull".at(CASE_Env_home).console.runCheck()
-val case_setup = CASE_Env_home / "case-setup.sh"
+if(!fast) {
+  proc"git -C ${CASE_Env_home} pull".at(CASE_Env_home).console.runCheck()
+  val case_setup = CASE_Env_home / "case-setup.sh"
 
-// need to download the case-env version of sireum to make
-// sure it can be used to build the rest
-val str = ops.StringOps(case_setup.read)
-val initIndex = str.stringIndexOf("SIREUM_INIT_V:=")
-val SIREUM_INIT_V = str.substring(initIndex + 15, initIndex + 28)
+  // need to download the case-env version of sireum to make
+  // sure it can be used to build the rest
+  val str = ops.StringOps(case_setup.read)
+  val initIndex = str.stringIndexOf("SIREUM_INIT_V:=")
+  val SIREUM_INIT_V = str.substring(initIndex + 15, initIndex + 28)
 
-for(f <- ISZ(sireum, sireumjar) if f.exists) {
-  f.remove()
-  println(s"Removed ${f}")
+  for (f <- ISZ(sireum, sireumjar) if f.exists) {
+    f.remove()
+    println(s"Removed ${f}")
+  }
+
+  proc"${SIREUM_HOME}/bin/init.sh".at(SIREUM_HOME).env(ISZ(("SIREUM_INIT_V", SIREUM_INIT_V))).console.runCheck()
+
+  println(
+    st"""The build will use: SIREUM_INIT_V=${SIREUM_INIT_V}.  If the build fails then do the following:
+        |   1. run Jenkins job: https://jenkins.cs.ksu.edu/job/Sireum-Kekinian/.  This will build the
+        |      sireum.jar and then the downstream job will publish it to the Github Init rep.
+        |      Fetch the new version tag from https://github.com/sireum/init/releases
+        |   2. Once successful, replace SIREUM_INIT_V in ${case_setup} with the version tag from above and then
+        |      rerun this script
+        |""".render)
+
+  def assertResourceExists(p: ISZ[Os.Path]): Unit = { p.foreach((x: Os.Path) => assert(x.exists, s"${x} doesn't exist")) }
+  assertResourceExists(ISZ(SIREUM_HOME, pluginDir, updateSiteDir, case_setup))
 }
-
-proc"${SIREUM_HOME}/bin/init.sh".at(SIREUM_HOME).env(ISZ(("SIREUM_INIT_V", SIREUM_INIT_V))).console.runCheck()
-
-println(st"""The build will use: SIREUM_INIT_V=${SIREUM_INIT_V}.  If the build fails then do the following:
-            |   1. run Jenkins job: https://jenkins.cs.ksu.edu/job/Sireum-Kekinian/.  This will build the
-            |      sireum.jar and then the downstream job will publish it to the Github Init rep.
-            |      Fetch the new version tag from https://github.com/sireum/init/releases
-            |   2. Once successful, replace SIREUM_INIT_V in ${case_setup} with the version tag from above and then
-            |      rerun this script
-            |""".render)
-
-def assertResourceExists(p: ISZ[Os.Path]): Unit = { p.foreach((x: Os.Path) => assert(x.exists, s"${x} doesn't exist")) }
-assertResourceExists(ISZ(SIREUM_HOME, pluginDir, updateSiteDir, updateSiteHAMRDir, case_setup))
-
 
 // clean codegen projects
 val codeGenBuildCmd = SIREUM_HOME / "hamr" / "codegen" / "bin" / "build.cmd"
@@ -135,7 +146,7 @@ val buildsbt = SIREUM_HOME / "hamr" / "codegen" / "arsit" / "resources" / "util"
   }
 }
 
-{ // make sure arsit's ext lib macro are actually triggered
+if(!fast){ // make sure arsit's ext lib macro are actually triggered
   val arsitJson = SIREUM_HOME / "out" / "sireum-proyek" / "modules" / "hamr-arsit.sha3.json"
   arsitJson.remove()
   println(s"removed ${arsitJson}")
@@ -150,7 +161,8 @@ val buildsbt = SIREUM_HOME / "hamr" / "codegen" / "arsit" / "resources" / "util"
 }
 */
 
-{ // build sireum.jar
+
+if(!fast) { // build sireum.jar
   val build_cmd = SIREUM_HOME / "bin" / "build.cmd"
 
   println("Running tipe")
@@ -160,7 +172,7 @@ val buildsbt = SIREUM_HOME / "hamr" / "codegen" / "arsit" / "resources" / "util"
   Os.proc(ISZ(sireum.value, "slang", "run", build_cmd.value)).console.runCheck()
 }
 
-{ // run HAMR transpiler tests using the new sireum
+if(!fast) { // run HAMR transpiler tests using the new sireum
   println("Running HAMR expensive regression tests")
   proc"$sireum proyek test -n sireum-proyek --par --sha3 --ignore-runtime --packages org.sireum.hamr.codegen.test.expensive ."
     .at(SIREUM_HOME).console.runCheck()
