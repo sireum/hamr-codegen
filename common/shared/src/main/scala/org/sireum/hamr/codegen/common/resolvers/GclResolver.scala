@@ -152,13 +152,13 @@ object GclResolver {
     val baseTypeFloat64 = aadlTypes.typeMap.get("Base_Types::Float_64").get
 
     def visitGclSubclause(s: GclSubclause): Unit = {
-      var seenInvariantNames: Set[String] = Set.empty
+      var seenInvariantIds: Set[String] = Set.empty
 
       for (i <- s.invariants) {
-        if (seenInvariantNames.contains(i.name)) {
-          reporter.error(i.exp.posOpt, GclResolver.toolName, s"Duplicate invariant name: ${i.name}")
+        if (seenInvariantIds.contains(i.id)) {
+          reporter.error(i.exp.posOpt, GclResolver.toolName, s"Duplicate invariant id: ${i.id}")
         }
-        seenInvariantNames = seenInvariantNames + i.name
+        seenInvariantIds = seenInvariantIds + i.id
         visitInvariant(i)
       }
 
@@ -168,10 +168,10 @@ object GclResolver {
 
         for (s <- gclIntegration.specs) {
 
-          if (seenSpecNames.contains(s.name)) {
-            reporter.error(s.exp.posOpt, GclResolver.toolName, s"Duplicate spec name: ${s.name}")
+          if (seenSpecNames.contains(s.id)) {
+            reporter.error(s.exp.posOpt, GclResolver.toolName, s"Duplicate spec name: ${s.id}")
           }
-          seenSpecNames = seenSpecNames + s.name
+          seenSpecNames = seenSpecNames + s.id
 
           val rexp: AST.Exp = visitSlangExp(s.exp) match {
             case Some((rexp, roptType)) =>
