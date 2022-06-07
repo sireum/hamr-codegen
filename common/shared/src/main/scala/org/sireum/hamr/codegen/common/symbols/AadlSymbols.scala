@@ -33,6 +33,7 @@ import org.sireum.hamr.ir.{AnnexClause, GclAnnex, BTSBLESSAnnexClause}
 
   def getPorts(): ISZ[AadlPort] = { return features.filter(p => p.isInstanceOf[AadlPort]).map(m => m.asInstanceOf[AadlPort]) }
 
+  def annexes(): ISZ[ir.Annex] = { return component.annexes }
 }
 
 @datatype class AadlSystem(val component: ir.Component,
