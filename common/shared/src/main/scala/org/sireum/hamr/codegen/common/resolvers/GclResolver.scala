@@ -5,15 +5,14 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.CommonUtil.IdPath
 import org.sireum.hamr.codegen.common.resolvers.GclResolver.{AadlSymbolHolder, toolName}
-import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlData, AadlDataPort, AadlEventDataPort, AadlEventPort, AadlFeatureData, AadlPort, AadlSymbol, AadlSystem, AadlThread, AnnexInfo, AnnexVisitor, GclAnnexInfo, GclSymbolTable, SymbolTable}
-import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, ArrayType, BaseType, BitType, EnumType, RecordType, TypeUtil}
-import org.sireum.hamr.ir.{Annex, Classifier, Direction, FeatureCategory, FeatureEnd, GclAnnex, GclAssume, GclGuarantee, GclInvariant, GclSpec, GclStateVar, GclSubclause, Name}
-import org.sireum.lang.ast.{AdtParam, Exp, ResolvedAttr, ResolvedInfo, TypeParam}
+import org.sireum.hamr.codegen.common.symbols._
+import org.sireum.hamr.codegen.common.types._
+import org.sireum.hamr.ir._
+import org.sireum.lang.ast.{Exp, ResolvedAttr, ResolvedInfo, TypeParam}
 import org.sireum.lang.symbol.Resolver.{NameMap, QName, TypeMap}
 import org.sireum.lang.symbol.{Info, Resolver, Scope, TypeInfo}
-import org.sireum.lang.symbol.Scope.Local
-import org.sireum.lang.{ast => AST}
 import org.sireum.lang.tipe.{TypeChecker, TypeHierarchy}
+import org.sireum.lang.{ast => AST}
 import org.sireum.message.{Position, Reporter, ReporterImpl}
 
 object GclResolver {
@@ -73,6 +72,7 @@ object GclResolver {
     override def post_langastExpIdent(o: Exp.Ident): MOption[Exp] = {
       o.attr.resOpt match {
         case Some(e: AST.ResolvedInfo.Enum) => // ignore
+        case Some(e: AST.ResolvedInfo.Package) => // ignore
         case Some(_) =>
           lookup(o.id.value, o.posOpt) match {
             case Some(s) => symbols = symbols + s
@@ -130,7 +130,7 @@ object GclResolver {
     }
 
     return (set.elements ++ sireumImporters).map((m: AST.Stmt.Import.Importer) =>
-      AST.Stmt.Import(importers = ISZ(m), emptyAttr))
+      AST.Stmt.Import(importers = ISZ(m), attr = emptyAttr))
   }
 
   var symbolRecorder: Stack[Set[AadlPort]] = Stack.empty
@@ -340,56 +340,29 @@ object GclResolver {
   var typeMap: TypeMap = HashMap.empty
   var globalNameMap: NameMap = HashMap.empty
 
-  def getPathFromClassifier(s: String): ISZ[String] = {
-    return ops.StringOps(ops.StringOps(s).replaceAllLiterally("::", "|")).split((c: C) => c == '|')
-  }
-
-  def getSimpleNameFromClassifier(c: String): String = {
-    return ops.ISZOps(getPathFromClassifier(c)).last
-  }
-
   @memoize def scope(packageName: IdPath, imports: ISZ[AST.Stmt.Import], enclosingName: IdPath): Scope.Global = {
     return Scope.Global(packageName, imports, enclosingName)
   }
 
-  def addEnumToGlobalNameMap(qualifiedName: ISZ[String], tienum: TypeInfo.Enum): Unit = {
-    if (globalNameMap.contains(qualifiedName)) {
-      return
-    }
-    val elementTypedOpt = AST.Typed.Name(ids = qualifiedName :+ "Type", args = ISZ())
-
-    for (elem <- tienum.elements.entries) {
-      val ee = elem._2.asInstanceOf[AST.ResolvedInfo.EnumElement]
-      globalNameMap = globalNameMap + (qualifiedName :+ ee.name) ~> Info.EnumElement(
-        owner = ee.owner,
-        id = ee.name,
-        typedOpt = Some(elementTypedOpt),
-        resOpt = Some(AST.ResolvedInfo.EnumElement(owner = qualifiedName, name = ee.name, ordinal = ee.ordinal)),
-        posOpt = None())
-    }
-
-    globalNameMap = globalNameMap + qualifiedName ~> Info.Enum(
-      name = qualifiedName,
-      elements = tienum.elements,
-      typedOpt = Some(AST.Typed.Enum(name = qualifiedName)),
-      resOpt = Some(AST.ResolvedInfo.Enum(name = qualifiedName)),
-      elementTypedOpt = Some(elementTypedOpt),
-      posOpt = None())
+  def getPathFromClassifier(s: String): ISZ[String] = {
+    return ops.StringOps(ops.StringOps(s).replaceAllLiterally("::", "|")).split((c: C) => c == '|')
   }
 
   def buildTypeMap(aadlTypes: AadlTypes, symbolTable: SymbolTable, reporter: Reporter): Unit = {
-    var seenTypes: Map[AadlType, TypeInfo] = Map.empty
 
-    def resolveType(aadlType: AadlType): TypeInfo = {
+    def getSimpleNameFromClassifier(c: String): String = {
+      return ops.ISZOps(getPathFromClassifier(c)).last
+    }
 
-      if (seenTypes.contains(aadlType)) {
-        return seenTypes.get(aadlType).get
+    def buildTypeInfo(aadlType: AadlType): TypeInfo = {
+
+      val qualifiedName = getPathFromClassifier(aadlType.name)
+      if (typeMap.contains(qualifiedName)) {
+        return typeMap.get(qualifiedName).get
       }
 
       aadlType match {
         case e: EnumType =>
-          val qualifiedName = getPathFromClassifier(e.name)
-          assert(qualifiedName.nonEmpty)
 
           var elements: Map[String, AST.ResolvedInfo] = Map.empty
           var ordinal: Z = 0
@@ -404,160 +377,47 @@ object GclResolver {
           val enumx: TypeInfo.Enum = TypeInfo.Enum(qualifiedName, elements, posOpt)
 
           typeMap = typeMap + (qualifiedName ~> enumx)
-          seenTypes = seenTypes + (aadlType ~> enumx)
 
-          addEnumToGlobalNameMap(qualifiedName, enumx)
+          if (!globalNameMap.contains(qualifiedName)) {
+            val elementTypedOpt = AST.Typed.Name(ids = qualifiedName :+ "Type", args = ISZ())
+
+            for (elem <- enumx.elements.entries) {
+              val ee = elem._2.asInstanceOf[AST.ResolvedInfo.EnumElement]
+              globalNameMap = globalNameMap + (qualifiedName :+ ee.name) ~> Info.EnumElement(
+                owner = ee.owner,
+                id = ee.name,
+                typedOpt = Some(elementTypedOpt),
+                resOpt = Some(AST.ResolvedInfo.EnumElement(owner = qualifiedName, name = ee.name, ordinal = ee.ordinal)),
+                posOpt = None())
+            }
+
+            globalNameMap = globalNameMap + qualifiedName ~> Info.Enum(
+              name = qualifiedName,
+              elements = enumx.elements,
+              typedOpt = Some(AST.Typed.Enum(name = qualifiedName)),
+              resOpt = Some(AST.ResolvedInfo.Enum(name = qualifiedName)),
+              elementTypedOpt = Some(elementTypedOpt),
+              posOpt = None())
+          }
 
           return enumx
 
         case r: RecordType =>
           val component = r.container.get
 
-          val adtQualifiedName = getPathFromClassifier(component.classifier.get.name)
-          val simpleName = getSimpleNameFromClassifier(component.classifier.get.name)
-          val packageName = ops.ISZOps(adtQualifiedName).dropRight(1)
-          assert(packageName.nonEmpty)
+          val aadlData = symbolTable.componentMap.get(ISZ(component.classifier.get.name)).get
 
-          // enclosingName is the same as the packageName
-          val sc = scope(packageName, globalImports(symbolTable), packageName)
-
-          var paramVars = HashSMap.empty[String, Info.Var]
-          var constructorParamVars = ISZ[String]()
-          val extractParamVars = ISZ[String]() // always empty as there are no @hidden params in AADL
-
-          var adtParams: ISZ[AST.AdtParam] = ISZ()
-          for (param <- r.fields.entries) {
-            val paramId: String = param._1
-            val paramType: AadlType = param._2
-
-            constructorParamVars = constructorParamVars :+ paramId
-
-            if (paramVars.contains(paramId)) {
-              reporter.error(None(), toolName, s"Cannot redeclare parameter '$paramId'.")
-            }
-
-            val paramResInfoOpt = Some[AST.ResolvedInfo](
-              AST.ResolvedInfo.Var(isInObject = F, isSpec = F, isVal = F, owner = adtQualifiedName, id = paramId))
-
-            val paramResolvedType: TypeInfo = resolveType(paramType)
-            val typedOpt: Option[AST.Typed] = paramResolvedType match {
-              case ta: TypeInfo.TypeAlias => ta.ast.tipe.typedOpt
-              case tadt: TypeInfo.Adt => Some(tadt.tpe)
-              case te: TypeInfo.Enum => Some(AST.Typed.Name(ids = te.name, args = ISZ()))
-              case x =>
-                halt(s"TODO ${x}")
-            }
-
-            val varTypeId = AST.Id(value = paramType.name, attr = AST.Attr(None()))
-            val varTypeName = AST.Type.Named(
-              name = AST.Name(ids = ISZ(varTypeId), attr = AST.Attr(None())),
-              typeArgs = ISZ(),
-              attr = AST.TypedAttr(posOpt = None(), typedOpt = None())
-            )
-
-            paramVars = paramVars + paramId ~> Info.Var(
-              owner = adtQualifiedName,
-              isInObject = F,
-              scope = sc,
-              ast = AST.Stmt.Var(
-                isSpec = F,
-                isVal = F,
-                id = AST.Id(value = paramId, attr = AST.Attr(None())),
-                tipeOpt = Some(varTypeName),
-                initOpt = None(),
-                attr = ResolvedAttr(posOpt = None(), resOpt = paramResInfoOpt, typedOpt = typedOpt)
-              )
-            )
-
-            { // build adt param
-              val tipeName: AST.Name = AST.Name(
-                ids = paramResolvedType.name.map((m: String) => AST.Id(m, AST.Attr(None()))),
-                attr = AST.Attr(None()))
-
-              val typedAttr = AST.TypedAttr(
-                posOpt = None(),
-                typedOpt = Some(AST.Typed.Name(
-                  ids = paramResolvedType.name,
-                  args = ISZ()
-                )))
-
-              adtParams = adtParams :+ AST.AdtParam(
-                isHidden = F,
-                isVal = F,
-                id = AST.Id(value = paramId, attr = AST.Attr(None())),
-                tipe = AST.Type.Named(
-                  name = tipeName,
-                  typeArgs = ISZ(),
-                  attr = typedAttr
-                )
-              )
-            }
-          }
-
-          val constructorTypeOpt: Option[AST.Typed] = None()
-          val constructorResOpt: Option[AST.ResolvedInfo] = None()
-          val extractorTypeMap: Map[String, AST.Typed] = Map.empty
-          val extractorResOpt: Option[AST.ResolvedInfo] = None()
-          val ancestors: ISZ[AST.Typed.Name] = ISZ()
-          val specVars: HashSMap[String, Info.SpecVar] = HashSMap.empty
-
-          val specMethods: HashSMap[String, Info.SpecMethod] = HashSMap.empty
-          val methods: HashSMap[String, Info.Method] = HashSMap.empty
-          val refinements: HashSMap[String, TypeInfo.Name] = HashSMap.empty
-          val invariants: HashSMap[String, Info.Inv] = HashSMap.empty
-          val dataRefinements: ISZ[AST.Stmt.DataRefinement] = ISZ()
-
-          val tpe: AST.Typed.Name = {
-            val ids: ISZ[String] = adtQualifiedName
-            val args: ISZ[AST.Typed] = ISZ()
-            AST.Typed.Name(ids, args)
-          }
-
-          val adtAst: AST.Stmt.Adt =
-            AST.Stmt.Adt(
-              isRoot = F,
-              isDatatype = T,
-              id = AST.Id(simpleName, AST.Attr(None())),
-              typeParams = ISZ(),
-              params = adtParams,
-              parents = ISZ(),
-              stmts = ISZ(),
-              attr = AST.Attr(None()))
-
-          val typeInfoAdt = TypeInfo.Adt(
-            owner = packageName,
-            outlined = F,
-            contractOutlined = F,
-            typeChecked = F,
-            tpe = tpe,
-            constructorTypeOpt = constructorTypeOpt,
-            constructorResOpt = constructorResOpt,
-            extractorTypeMap = extractorTypeMap,
-            extractorResOpt = extractorResOpt,
-            ancestors = ancestors,
-            specVars = specVars,
-            vars = paramVars,
-            specMethods = specMethods,
-            methods = methods,
-            refinements = refinements,
-            invariants = invariants,
-            dataRefinements = dataRefinements,
-            scope = sc,
-            ast = adtAst)
-
-          typeMap = typeMap + (adtQualifiedName ~> typeInfoAdt)
-          seenTypes = seenTypes + (aadlType ~> typeInfoAdt)
-
-          return typeInfoAdt
+          return buildAdtTypeInfo(aadlData)
 
         case b: BaseType =>
-          val qualifiedName = getPathFromClassifier(b.name)
+
           val simpleName = getSimpleNameFromClassifier(b.name)
+          val packageName = ops.ISZOps(qualifiedName).dropRight(1)
+          buildPackageInfo(packageName)
 
           val imports: ISZ[AST.Stmt.Import] = ISZ()
-          val enclosingName: ISZ[String] = qualifiedName
 
-          val scope: Scope.Global = Scope.Global(qualifiedName, imports, enclosingName)
+          val scope: Scope.Global = Scope.Global(packageName, imports, packageName)
 
           val ast: AST.Stmt.TypeAlias = {
             val _id = AST.Id(simpleName, AST.Attr(None()))
@@ -614,26 +474,81 @@ object GclResolver {
             ast = ast)
 
           typeMap = typeMap + (qualifiedName ~> ta)
-          seenTypes = seenTypes + (aadlType ~> ta)
 
           return ta
+
+        case TODOType("art::Empty", _, _) =>
+          val adtAst: AST.Stmt.Adt =
+            AST.Stmt.Adt(
+              isRoot = F,
+              isDatatype = T,
+              id = AST.Id("Empty", AST.Attr(None())),
+              typeParams = ISZ(),
+              params = ISZ(),
+              parents = ISZ(),
+              stmts = ISZ(),
+              attr = AST.Attr(None()))
+
+          val typeInfoAdt = TypeInfo.Adt(
+            owner = ISZ("art"),
+            outlined = F,
+            contractOutlined = F,
+            typeChecked = F,
+            tpe = AST.Typed.Name(ISZ("art", "Empty"), ISZ()),
+            constructorTypeOpt = None(),
+            constructorResOpt = None(),
+            extractorTypeMap = Map.empty,
+            extractorResOpt = None(),
+            ancestors = ISZ(),
+            specVars = HashSMap.empty,
+            vars = HashSMap.empty,
+            specMethods = HashSMap.empty,
+            methods = HashSMap.empty,
+            refinements = HashSMap.empty,
+            invariants = HashSMap.empty,
+            dataRefinements = ISZ(),
+            scope = scope(ISZ("art"), globalImports(symbolTable), ISZ("art")),
+            ast = adtAst)
+
+          typeMap = typeMap + (ISZ("art", "Empty") ~> typeInfoAdt)
+
+          return typeInfoAdt
 
         case a: ArrayType => halt(s"Not yet handling: $a")
         case b: BitType => halt(s"Not yet handling: $b")
         case x => halt(s"Not yet handling: $x")
-
       }
+    }
+
+    def buildPackageInfo(packageName: ISZ[String]): Info.Package = {
+      assert(packageName.size == 1, s"TODO: package name has more than one segment ${packageName}")
+
+      if (!globalNameMap.contains(packageName)) {
+        globalNameMap = globalNameMap + packageName ~> Info.Package(
+          name = packageName,
+          typedOpt = Some(AST.Typed.Package(name = packageName)),
+          resOpt = Some(ResolvedInfo.Package(name = packageName))
+        )
+      }
+
+      return globalNameMap.get(packageName).get.asInstanceOf[Info.Package]
     }
 
     def buildAdtTypeInfo(a: AadlComponent): TypeInfo.Adt = {
       assert(a.isInstanceOf[AadlThread] || a.isInstanceOf[AadlData])
 
       val component = a.component
-
       val adtQualifiedName = getPathFromClassifier(component.classifier.get.name)
+
+      if (typeMap.contains(adtQualifiedName)) {
+        return typeMap.get(adtQualifiedName).get.asInstanceOf[TypeInfo.Adt]
+      }
+
       val simpleName = getSimpleNameFromClassifier(component.classifier.get.name)
       val packageName = ops.ISZOps(adtQualifiedName).dropRight(1)
       assert(packageName.nonEmpty)
+
+      buildPackageInfo(packageName)
 
       // enclosingName is the same as the packageName
       val sc = scope(packageName, globalImports(symbolTable), packageName)
@@ -645,39 +560,72 @@ object GclResolver {
       val gclAnnexes = component.annexes.filter((a: Annex) => a.clause.isInstanceOf[GclSubclause]).map((a: Annex) => a.clause.asInstanceOf[GclSubclause])
       assert(gclAnnexes.size <= 1, s"There can be only one")
 
-      // convert stateVars into ports
+      // treat stateVars as if they were features for Tipe
       val stateVars: ISZ[AadlPort] = gclAnnexes.flatMap((g: GclSubclause) => g.state.map((sv: GclStateVar) => {
         val aadlType = aadlTypes.typeMap.get(sv.classifier).get
-        AadlDataPort(feature = FeatureEnd(
-          identifier = Name(adtQualifiedName :+ sv.name, None()),
-          direction = Direction.In,
-          category = FeatureCategory.DataPort,
-          classifier = Some(Classifier(sv.classifier)),
-          properties = ISZ(),
-          uriFrag = ""),
+        AadlDataPort(
+          feature = FeatureEnd(
+            identifier = Name(adtQualifiedName :+ sv.name, sv.posOpt),
+            direction = Direction.Out,
+            category = FeatureCategory.DataPort,
+            classifier = Some(Classifier(sv.classifier)),
+            properties = ISZ(),
+            uriFrag = ""),
           featureGroupIds = ISZ(),
           direction = Direction.In,
           aadlType = aadlType)
       }))
 
+      val features: ISZ[AadlPort] = {
+        a match {
+          case at: AadlThread => at.getPorts()
+          case ad: AadlData =>
+            if (stateVars.nonEmpty) {
+              reporter.error(a.component.identifier.pos, toolName, s"Not expecting a data component to have state vars")
+            }
+            // treat aadl data subcomponents as if they were features for Tipe
+            ad.subComponents.map((sc: AadlComponent) => {
+              val aadlType = aadlTypes.typeMap.get(sc.component.classifier.get.name).get
+              AadlDataPort(feature = FeatureEnd(
+                identifier = Name(sc.path, sc.component.identifier.pos),
+                direction = Direction.Out,
+                category = FeatureCategory.DataPort,
+                classifier = sc.component.classifier,
+                properties = ISZ(),
+                uriFrag = ""),
+                featureGroupIds = ISZ(),
+                direction = Direction.Out,
+                aadlType = aadlType)
+            })
+          case _ =>
+            reporter.error(a.component.identifier.pos, toolName, s"Expecting an AadlThread or AadlData but recevied ${a}")
+            ISZ[AadlPort]()
+        }
+      }
+
       var adtParams: ISZ[AST.AdtParam] = ISZ()
-      for (param <- a.getPorts() ++ stateVars) {
+      for (param <- features ++ stateVars) {
         val paramId: String = param.identifier
         val paramType: AadlType = param match {
           case afd: AadlFeatureData => afd.aadlType
-          case _ => halt("not handling event ports yet")
+          case _ => TypeUtil.EmptyType
         }
 
         constructorParamVars = constructorParamVars :+ paramId
 
         if (paramVars.contains(paramId)) {
-          reporter.error(None(), toolName, s"Cannot redeclare parameter '$paramId'.")
+          val prev: String = paramVars.get(paramId).get.posOpt match {
+            case Some(p) => s". Previously declared at [${p.beginLine},${p.beginColumn}]"
+            case _ => ""
+          }
+          val msg = s"Cannot redeclare feature '$paramId'${prev}"
+          reporter.error(param.feature.identifier.pos, toolName, msg)
         }
 
         val paramResInfoOpt = Some[AST.ResolvedInfo](
           AST.ResolvedInfo.Var(isInObject = F, isSpec = F, isVal = F, owner = adtQualifiedName, id = paramId))
 
-        val paramResolvedType: TypeInfo = resolveType(paramType)
+        val paramResolvedType: TypeInfo = buildTypeInfo(paramType)
         val typedOpt: Option[AST.Typed] = paramResolvedType match {
           case ta: TypeInfo.TypeAlias => ta.ast.tipe.typedOpt
           case tadt: TypeInfo.Adt => Some(tadt.tpe)
@@ -703,7 +651,7 @@ object GclResolver {
             id = AST.Id(value = paramId, attr = AST.Attr(None())),
             tipeOpt = Some(varTypeName),
             initOpt = None(),
-            attr = ResolvedAttr(posOpt = None(), resOpt = paramResInfoOpt, typedOpt = typedOpt)
+            attr = ResolvedAttr(posOpt = param.feature.identifier.pos, resOpt = paramResInfoOpt, typedOpt = typedOpt)
           )
         )
 
@@ -788,194 +736,20 @@ object GclResolver {
       return typeInfoAdt
     }
 
-    def processTypes(): Unit = {
-
-      for (entry <- aadlTypes.typeMap.entries) {
-        val name: String = entry._1
-        val aadlType: AadlType = entry._2
-
-        resolveType(aadlType)
+    { // build type info aadl types
+      for (aadlType <- aadlTypes.typeMap.values) {
+        buildTypeInfo(aadlType)
       }
-
-      typeMap = typeMap + (ISZ("art", "Empty") ~> typeMap.get(ISZ("Base_Types", "Boolean")).get)
     }
 
-    processTypes()
-
-    def processThreads(): Unit = {
-      var seenComponentType: Set[ISZ[String]] = Set.empty
-
+    { // build type info for aadl threads
       val threadComponents = symbolTable.componentMap.values.filter((m: AadlComponent) => m.isInstanceOf[AadlThread]).map((m: AadlComponent) => m.asInstanceOf[AadlThread])
 
       for (component <- threadComponents) {
-        val typeName = getPathFromClassifier(component.component.classifier.get.name)
-        if (!seenComponentType.contains(typeName)) {
-          seenComponentType = seenComponentType + typeName
-
-          buildAdtTypeInfo(component)
-        }
+        buildAdtTypeInfo(component)
       }
     }
-
-    processThreads()
   }
-
-  def buildNameMap(context: AadlComponent): (HashMap[String, Info]) = {
-    var localNameMap: HashMap[String, Info] = HashMap.empty
-
-    val emptyLocalScope: Local = Local(
-      nameMap = HashMap.empty,
-      typeMap = HashMap.empty,
-      localThisOpt = None(),
-      methodReturnOpt = None(),
-      indexMap = HashMap.empty,
-      outerOpt = None()
-    )
-
-    context match {
-      case a: AadlData =>
-        val componentQualifiedName = getPathFromClassifier(a.typ.name)
-        assert(componentQualifiedName.nonEmpty)
-
-        for (sc <- a.subComponents) {
-          sc match {
-            case scA: AadlData =>
-              val qTypeName = getPathFromClassifier(scA.typ.name)
-              val resolvedType = typeMap.get(qTypeName).get
-
-              val tipe = AST.Type.Named(
-                name = AST.Name(
-                  ids = ISZ(AST.Id(value = scA.identifier, attr = AST.Attr(None()))),
-                  attr = AST.Attr(None())),
-                typeArgs = ISZ(),
-                attr = AST.TypedAttr(
-                  posOpt = None(),
-                  typedOpt = Some(AST.Typed.Name(
-                    ids = qTypeName,
-                    args = ISZ()
-                  ))
-                )
-              )
-
-              val astResAttrTyped = AST.Typed.Name(ids = ISZ(scA.identifier), args = ISZ())
-
-              val ast = AST.Stmt.Var(
-                isSpec = F,
-                isVal = T,
-                id = AST.Id(value = sc.identifier, attr = AST.Attr(None())),
-                tipeOpt = Some(tipe),
-                initOpt = None(),
-                attr = AST.ResolvedAttr(posOpt = None(), resOpt = None(), typedOpt = Some(astResAttrTyped))
-              )
-
-              val infoVar = Info.Var(
-                owner = componentQualifiedName,
-                isInObject = T,
-                scope = emptyLocalScope,
-                ast = ast
-              )
-
-              localNameMap = localNameMap + (scA.identifier ~> infoVar)
-
-            case x => halt(s"Not yet handling data subcomponents of type ${x}")
-          }
-        }
-      case a: AadlThread =>
-
-        for (aadlPort <- context.getPorts()) {
-          val portName = aadlPort.identifier
-          val qualifiedName = aadlPort.path
-
-          val (qualifiedTypeName, resolvedType): (ISZ[String], TypeInfo) = aadlPort match {
-            case a: AadlDataPort =>
-              val portType = a.aadlType
-              val _qualifiedTypeName = getPathFromClassifier(portType.name)
-              val typeInfo = typeMap.get(_qualifiedTypeName).get
-
-              (_qualifiedTypeName, typeInfo)
-            case a: AadlEventDataPort =>
-              val portType = a.aadlType
-              val _qualifiedTypeName = getPathFromClassifier(portType.name)
-              val typeInfo = typeMap.get(_qualifiedTypeName).get
-
-              (_qualifiedTypeName, typeInfo)
-
-            case a: AadlEventPort =>
-              val emptyType = TypeUtil.EmptyType
-              val _qualifiedTypeName = getPathFromClassifier(emptyType.name)
-              val typeInfo = typeMap.get(_qualifiedTypeName).get
-
-              (_qualifiedTypeName, typeInfo)
-
-            case x => halt(s"Not currently supported ${x}")
-
-          }
-
-          val infoVar = buildGlobalVar(aadlPort.identifier, qualifiedTypeName, a.path)
-
-          localNameMap = localNameMap + (aadlPort.identifier ~> infoVar)
-        }
-      case x => halt(s"Not expecting ${x}")
-    }
-
-    return (localNameMap)
-  }
-
-  def buildGlobalVar(identifier: String, qualifiedTypeName: ISZ[String], owner: ISZ[String]): Info.Var = {
-    assert(qualifiedTypeName.nonEmpty, s"qualifiedTypeName is empty for $identifier")
-    assert(owner.nonEmpty, s"owner is empty for $identifier")
-
-    val emptyLocalScope: Local = Local(
-      nameMap = HashMap.empty,
-      typeMap = HashMap.empty,
-      localThisOpt = None(),
-      methodReturnOpt = None(),
-      indexMap = HashMap.empty,
-      outerOpt = None()
-    )
-
-    val tipe = AST.Type.Named(
-      name = AST.Name(
-        ids = ISZ(AST.Id(value = identifier, attr = AST.Attr(None()))),
-        attr = AST.Attr(None())),
-      typeArgs = ISZ(),
-      attr = AST.TypedAttr(
-        posOpt = None(),
-        typedOpt = Some(AST.Typed.Name(
-          ids = qualifiedTypeName,
-          args = ISZ()
-        ))
-      )
-    )
-
-    val astResAttrTyped = AST.Typed.Name(ids = qualifiedTypeName, args = ISZ())
-    val astAttrResOpt = ResolvedInfo.Var(
-      isInObject = T,
-      isSpec = F,
-      isVal = F,
-      owner = owner,
-      id = identifier
-    )
-
-    val ast = AST.Stmt.Var(
-      isSpec = F,
-      isVal = T,
-      id = AST.Id(value = identifier, attr = AST.Attr(None())),
-      tipeOpt = Some(tipe),
-      initOpt = None(),
-      attr = AST.ResolvedAttr(posOpt = None(), resOpt = Some(astAttrResOpt), typedOpt = Some(astResAttrTyped))
-    )
-
-    val infoVar = Info.Var(
-      owner = owner,
-      isInObject = T,
-      scope = emptyLocalScope,
-      ast = ast
-    )
-
-    return infoVar
-  }
-
 
   def offer(context: AadlComponent, annex: Annex, symbolTable: SymbolTable, aadlTypes: AadlTypes, reporter: Reporter): Option[AnnexInfo] = {
     if (!seenAnnexes.contains(annex)) {
@@ -1002,7 +776,7 @@ object GclResolver {
                   scope = scope(localThisOpt = Some(info.tpe))
                   scope
                 case x =>
-                  reporter.error(None(), toolName, s"Expecting component to resolve to an ADT but found ${x}")
+                  reporter.error(None(), toolName, s"Expecting ${qualifiedName} to resolve to an ADT but found ${x}")
                   return None()
               }
             case _ =>
