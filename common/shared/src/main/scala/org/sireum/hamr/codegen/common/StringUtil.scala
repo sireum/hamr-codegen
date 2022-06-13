@@ -158,7 +158,7 @@ object StringUtil {
     if (last < size) {
       r = r :+ StringOps.substring(cis, last, size)
     }
-    if(isSep(cis(size - 1))) {
+    if(size > 0 && isSep(cis(size - 1))) {
       r = r :+ "" // preserve empty segment at the end of s
     }
     return r
