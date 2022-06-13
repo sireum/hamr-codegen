@@ -27,7 +27,7 @@ object GclResolver {
 
   val libraryReporter: TypeChecker = org.sireum.lang.FrontEnd.libraryReporter._1
 
-  @record class SymbolFinder(val context: AadlComponent, stateVars: ISZ[GclStateVar], val symbolTable: SymbolTable) extends org.sireum.hamr.ir.MTransformer {
+  @record class SymbolFinder(val rewriteApiCalls: B, val context: AadlComponent, stateVars: ISZ[GclStateVar], val symbolTable: SymbolTable) extends org.sireum.hamr.ir.MTransformer {
     var symbols: Set[SymbolHolder] = Set.empty
     var reporter: Reporter = ReporterImpl(ISZ())
 
@@ -69,30 +69,72 @@ object GclResolver {
       }
     }
 
-    override def post_langastExpIdent(o: Exp.Ident): MOption[Exp] = {
+    def processIdent(o: Exp.Ident): Option[SymbolHolder] = {
       o.attr.resOpt match {
         case Some(e: AST.ResolvedInfo.Enum) => // ignore
         case Some(e: AST.ResolvedInfo.Package) => // ignore
         case Some(_) =>
-          lookup(o.id.value, o.posOpt) match {
-            case Some(s) => symbols = symbols + s
-            case _ =>
-          }
+          return lookup(o.id.value, o.posOpt)
         case _ => reporter.error(o.posOpt, toolName, s"Ident '$o' did not resolve")
+      }
+      return None()
+    }
+
+    override def pre_langastExpSelect(o: Exp.Select): org.sireum.hamr.ir.MTransformer.PreResult[Exp] = {
+      if(rewriteApiCalls) {
+        o.receiverOpt match {
+          case Some(i@Exp.Ident(featureId)) =>
+            processIdent(i) match {
+              case Some(s) =>
+                s match {
+                  case AadlSymbolHolder(symbol) =>
+                    if (symbol.isInstanceOf[AadlPort]) {
+                      symbols = symbols + s
+
+                      val emptyAttr = AST.Attr(posOpt = o.posOpt)
+                      val emptyRAttr = AST.ResolvedAttr(posOpt = o.posOpt, resOpt = None(), typedOpt = None())
+
+                      val apiIdent: Exp = Exp.Ident(id = AST.Id(value = "api", attr = emptyAttr), attr = emptyRAttr)
+                      val apiSelect = Exp.Select(
+                        receiverOpt = Some(apiIdent),
+                        id = featureId, targs = ISZ(), attr = emptyRAttr)
+
+                      val featureSelect = Exp.Select(receiverOpt = Some(apiSelect),
+                        id = o.id, targs = o.targs, attr = o.attr)
+
+                      // don't visit sub children
+                      return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(featureSelect))
+                    }
+                  case _ =>
+                }
+              case _ =>
+            }
+          case _ =>
+        }
+      }
+
+      return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
+    }
+
+    override def post_langastExpIdent(o: Exp.Ident): MOption[Exp] = {
+      processIdent(o) match {
+        case Some(s) => symbols = symbols + s
+        case _ =>
       }
       return MNone()
     }
   }
 
   def collectSymbols(exp: Exp,
+                     rewriteApiCalls: B,
                      context: AadlComponent,
                      stateVars: ISZ[GclStateVar],
                      symbolTable: SymbolTable,
-                     reporter: Reporter): ISZ[SymbolHolder] = {
-    val sf = SymbolFinder(context, stateVars, symbolTable)
-    sf.transform_langastExp(exp)
+                     reporter: Reporter): (MOption[Exp], ISZ[SymbolHolder]) = {
+    val sf = SymbolFinder(rewriteApiCalls, context, stateVars, symbolTable)
+    val rexp = sf.transform_langastExp(exp)
     reporter.reports(sf.reporter.messages)
-    return sf.symbols.elements
+    return (rexp, sf.symbols.elements)
   }
 }
 
@@ -193,8 +235,31 @@ object GclResolver {
     val baseTypeFloat32 = aadlTypes.typeMap.get("Base_Types::Float_32").get
     val baseTypeFloat64 = aadlTypes.typeMap.get("Base_Types::Float_64").get
 
+    val componentPos = context.component.identifier.pos
+
     def visitGclSubclause(s: GclSubclause): Unit = {
       var seenInvariantIds: Set[String] = Set.empty
+
+      def typeCheckBoolExp(exp: Exp): Exp = {
+        val rexp: AST.Exp = visitSlangExp(exp) match {
+          case Some((rexp, roptType)) =>
+            roptType match {
+              case Some(AST.Typed.Name(ISZ("org", "sireum", "B"), _)) =>
+                //rexprs = rexprs + (exp ~> rexp)
+                rexp
+              case Some(x) =>
+                reporter.error(exp.posOpt, GclResolver.toolName, s"Expecting B but found ${x}")
+                exp
+              case _ =>
+                assert(reporter.hasError, "Expression is untyped so Tipe should have reported errors already") // sanity check
+                exp
+            }
+          case _ =>
+            reporter.error(exp.posOpt, GclResolver.toolName, "Unexpected: type checking returned none")
+            exp
+        }
+        return rexp
+      }
 
       for (i <- s.invariants) {
         if (seenInvariantIds.contains(i.id)) {
@@ -215,32 +280,19 @@ object GclResolver {
           }
           seenSpecNames = seenSpecNames + s.id
 
-          val rexp: AST.Exp = visitSlangExp(s.exp) match {
-            case Some((rexp, roptType)) =>
-              roptType match {
-                case Some(AST.Typed.Name(ISZ("org", "sireum", "B"), _)) =>
-                  rexprs = rexprs + (s.exp ~> rexp)
-                  rexp
-                case Some(x) =>
-                  reporter.error(s.exp.posOpt, GclResolver.toolName, s"Expecting B but found ${x}")
-                  s.exp
-                case _ =>
-                  assert(reporter.hasError, "Integration expression is untyped so Tipe should have reported errors already") // sanity check
-                  //reporter.error(s.exp.posOpt, GclResolver.toolName, "Integration expression is untyped")
-                  s.exp
-              }
-            case _ =>
-              reporter.error(s.exp.posOpt, GclResolver.toolName, "Unexpected: type checking returned none")
-              s.exp
-          }
+          val rexp: AST.Exp = typeCheckBoolExp(s.exp)
 
           if (!reporter.hasError) {
-            val symbols = GclResolver.collectSymbols(rexp, context, ISZ(), symbolTable, reporter)
+            val (rexp2, symbols) = GclResolver.collectSymbols(rexp, F, context, ISZ(), symbolTable, reporter)
+            rexprs = rexprs + s.exp ~> rexp
 
             if (!reporter.hasError) {
               if (symbols.size != 1) {
                 reporter.error(s.exp.posOpt, GclResolver.toolName, s"An integration clause must refer to exactly one port")
               } else {
+                if(rexp2.nonEmpty) {
+                  rexprs = rexprs + s.exp ~> rexp2.get
+                }
                 symbols(0) match {
                   case AadlSymbolHolder(sym: AadlPort) =>
                     sym.direction match {
@@ -271,9 +323,16 @@ object GclResolver {
             case e: Exp.Ident =>
               visitSlangExp(e) match {
                 case Some((rexp, roptType)) =>
-                  val symbols = GclResolver.collectSymbols(rexp, context, s.state, symbolTable, reporter)
+                  val (rexp2, symbols) = GclResolver.collectSymbols(rexp, T, context, s.state, symbolTable, reporter)
                   if (symbols.size != 1) {
                     reporter.error(e.posOpt, GclResolver.toolName, s"Modifies should resolve to exactly one symbol, instead resolved to ${symbols.size}")
+                  }
+
+                  if(rexp2.isEmpty) {
+                    rexprs = rexprs + e ~> rexp
+                  }
+                  else {
+                    rexprs = rexprs + e ~> rexp2.get
                   }
                 case _ => halt("TODO")
               }
@@ -282,25 +341,67 @@ object GclResolver {
           }
         }
 
+        var seenGuaranteeIds: Set[String] = Set.empty
         for (guarantees <- s.initializes.get.guarantees) {
-          val exp = guarantees.exp
-          visitSlangExp(exp) match {
-            case Some((rexp, roptType)) =>
-              roptType match {
-                case Some(AST.Typed.Name(ISZ("org", "sireum", "B"), _)) =>
-                  rexprs = rexprs + (exp ~> rexp)
-                  val symbols = GclResolver.collectSymbols(rexp, context, s.state, symbolTable, reporter)
-                case Some(x) => reporter.error(exp.posOpt, GclResolver.toolName, s"Expecting B but found ${x}")
-                case _ =>
-                  assert(reporter.hasError, "Guarantee express is untyped so Tipe should have reported errors already") // sanity check
-                //reporter.error(exp.posOpt, GclResolver.toolName, "Guarantee expression is untyped")
-              }
-            case _ => reporter.error(exp.posOpt, GclResolver.toolName, "Unexpected: type checking returned none")
+          if (seenGuaranteeIds.contains(guarantees.id)) {
+            reporter.error(guarantees.posOpt, GclResolver.toolName, s"Duplicate spec name: ${guarantees.id}")
+          }
+          seenGuaranteeIds = seenGuaranteeIds + guarantees.id
+
+          val rexp = typeCheckBoolExp(guarantees.exp)
+          val (rexp2, symbols) = GclResolver.collectSymbols(rexp, T, context, s.state, symbolTable, reporter)
+
+          if(rexp2.isEmpty) {
+            rexprs = rexprs + guarantees.exp ~> rexp
+          } else {
+            rexprs = rexprs + guarantees.exp ~> rexp2.get
           }
         }
       }
 
-      assert(s.compute.isEmpty, "not yet")
+      s.compute match {
+        case Some(GclCompute(modifies, cases, handlers)) => {
+          for (modify <- modifies) {
+            modify match {
+              case e: Exp.Ident =>
+                visitSlangExp(e) match {
+                  case Some((rexp, roptType)) =>
+                    val (rexp2, symbols) = GclResolver.collectSymbols(rexp, T, context, s.state, symbolTable, reporter)
+                    if (symbols.size != 1) {
+                      reporter.error(e.posOpt, GclResolver.toolName, s"Modifies should resolve to exactly one symbol, instead resolved to ${symbols.size}")
+                    }
+                    if(rexp2.isEmpty) {
+                      rexprs = rexprs + e ~> rexp
+                    }
+                    else {
+                      rexprs = rexprs + e ~> rexp2.get
+                    }
+                  case _ => halt("TODO")
+                }
+              case _ =>
+                reporter.error(modify.posOpt, GclResolver.toolName, s"Expecting modifies to be Idents, found ${modifies}")
+            }
+          }
+
+          var seenCaseStmtIds: Set[String] = Set.empty
+          for(caase <- cases) {
+            if(seenCaseStmtIds.contains(caase.id)) {
+              reporter.error(caase.posOpt, GclResolver.toolName, s"Duplicate spec name: ${caase.id}")
+            }
+            seenCaseStmtIds = seenCaseStmtIds + caase.id
+
+            {
+              val rexp = typeCheckBoolExp(caase.assumes)
+            }
+
+            {
+              val rexp = typeCheckBoolExp(caase.guarantees)
+            }
+          }
+        }
+        case Some(x) => reporter.error(componentPos, toolName, s"Expecting GclCompute but received ${x}")
+        case _ =>
+      }
     }
 
     def visitInvariant(i: GclInvariant): Unit = {
@@ -308,8 +409,12 @@ object GclResolver {
         case Some((rexp, roptType)) =>
           roptType match {
             case Some(AST.Typed.Name(ISZ("org", "sireum", "B"), _)) =>
-              rexprs = rexprs + (i.exp ~> rexp)
-              val symbols = GclResolver.collectSymbols(rexp, context, ISZ(), symbolTable, reporter)
+              val (rexp2, symbols) = GclResolver.collectSymbols(rexp, F, context, ISZ(), symbolTable, reporter)
+              if(rexp2.isEmpty) {
+                rexprs = rexprs + (i.exp ~> rexp)
+              } else {
+                rexprs = rexprs + (i.exp ~> rexp2.get)
+              }
             case Some(x) => reporter.error(i.exp.posOpt, GclResolver.toolName, s"Expecting B but found ${x}")
             case _ =>
               assert(reporter.hasError, "Invariant expression is untyped so Tipe should have reported errors already")
