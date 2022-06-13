@@ -326,8 +326,8 @@ object CodeGen {
             if(missingMarkers.nonEmpty) {
               val fixme = p.up / s"${p.name}_fixme"
               fixme.writeOver(newContent)
-              val msg = st"""Existing file did not contain the following markers. Copy the markers/content found in ${fixme.value}
-                            |to the corresponding locations in ${p.value}
+              val msg = st"""Existing file did not contain the following markers. Copy the markers/content found in ${fixme.toUri}
+                            |to the corresponding locations in ${p.toUri}
                             |
                             |  ${(missingMarkers, "\n")}"""
               reporter.error(None(), toolName, msg.render)
