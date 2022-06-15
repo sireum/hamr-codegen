@@ -82,7 +82,7 @@ object GclResolver {
     }
 
     override def pre_langastExpSelect(o: Exp.Select): org.sireum.hamr.ir.MTransformer.PreResult[Exp] = {
-      if(rewriteApiCalls) {
+      if (rewriteApiCalls) {
         o.receiverOpt match {
           case Some(i@Exp.Ident(featureId)) =>
             processIdent(i) match {
@@ -93,19 +93,19 @@ object GclResolver {
                   case AadlSymbolHolder(p: AadlPort) if rewriteApiCalls =>
                     apiReferences = apiReferences + p
 
-                      val emptyAttr = AST.Attr(posOpt = o.posOpt)
-                      val emptyRAttr = AST.ResolvedAttr(posOpt = o.posOpt, resOpt = None(), typedOpt = None())
+                    val emptyAttr = AST.Attr(posOpt = o.posOpt)
+                    val emptyRAttr = AST.ResolvedAttr(posOpt = o.posOpt, resOpt = None(), typedOpt = None())
 
-                      val apiIdent: Exp = Exp.Ident(id = AST.Id(value = "api", attr = emptyAttr), attr = emptyRAttr)
-                      val apiSelect = Exp.Select(
-                        receiverOpt = Some(apiIdent),
-                        id = featureId, targs = ISZ(), attr = emptyRAttr)
+                    val apiIdent: Exp = Exp.Ident(id = AST.Id(value = "api", attr = emptyAttr), attr = emptyRAttr)
+                    val apiSelect = Exp.Select(
+                      receiverOpt = Some(apiIdent),
+                      id = featureId, targs = ISZ(), attr = emptyRAttr)
 
-                      val featureSelect = Exp.Select(receiverOpt = Some(apiSelect),
-                        id = o.id, targs = o.targs, attr = o.attr)
+                    val featureSelect = Exp.Select(receiverOpt = Some(apiSelect),
+                      id = o.id, targs = o.targs, attr = o.attr)
 
-                      // don't visit sub children
-                      return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(featureSelect))
+                    // don't visit sub children
+                    return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(featureSelect))
 
                   case _ =>
                 }
@@ -293,7 +293,7 @@ object GclResolver {
               if (symbols.size != 1) {
                 reporter.error(s.exp.posOpt, GclResolver.toolName, s"An integration clause must refer to exactly one port")
               } else {
-                if(rexp2.nonEmpty) {
+                if (rexp2.nonEmpty) {
                   rexprs = rexprs + s.exp ~> rexp2.get
                 }
                 symbols(0) match {
@@ -333,7 +333,7 @@ object GclResolver {
                     reporter.error(e.posOpt, GclResolver.toolName, s"Modifies should resolve to exactly one symbol, instead resolved to ${symbols.size}")
                   }
 
-                  if(rexp2.isEmpty) {
+                  if (rexp2.isEmpty) {
                     rexprs = rexprs + e ~> rexp
                   }
                   else {
@@ -357,7 +357,7 @@ object GclResolver {
           val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, T, context, s.state, symbolTable, reporter)
           apiReferences = apiReferences ++ apiRefs
 
-          if(rexp2.isEmpty) {
+          if (rexp2.isEmpty) {
             rexprs = rexprs + guarantees.exp ~> rexp
           } else {
             rexprs = rexprs + guarantees.exp ~> rexp2.get
@@ -467,7 +467,7 @@ object GclResolver {
               val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, T, context, s.state, symbolTable, reporter)
               apiReferences = apiReferences ++ apiRefs
 
-              if(rexp2.isEmpty) {
+              if (rexp2.isEmpty) {
                 rexprs = rexprs + guarantees.exp ~> rexp
               } else {
                 rexprs = rexprs + guarantees.exp ~> rexp2.get
@@ -486,7 +486,7 @@ object GclResolver {
           roptType match {
             case Some(AST.Typed.Name(ISZ("org", "sireum", "B"), _)) =>
               val (rexp2, _, _) = GclResolver.collectSymbols(rexp, F, context, ISZ(), symbolTable, reporter)
-              if(rexp2.isEmpty) {
+              if (rexp2.isEmpty) {
                 rexprs = rexprs + (i.exp ~> rexp)
               } else {
                 rexprs = rexprs + (i.exp ~> rexp2.get)
