@@ -30,6 +30,7 @@ object GclResolver {
   @record class SymbolFinder(val rewriteApiCalls: B, val context: AadlComponent, stateVars: ISZ[GclStateVar], val symbolTable: SymbolTable) extends org.sireum.hamr.ir.MTransformer {
     var symbols: Set[SymbolHolder] = Set.empty
     var reporter: Reporter = ReporterImpl(ISZ())
+    var apiReferences: Set[AadlPort] = Set.empty
 
     def lookup(name: String, optPos: Option[Position]): Option[SymbolHolder] = {
       context match {
@@ -86,10 +87,11 @@ object GclResolver {
           case Some(i@Exp.Ident(featureId)) =>
             processIdent(i) match {
               case Some(s) =>
+                symbols = symbols + s
+
                 s match {
-                  case AadlSymbolHolder(symbol) =>
-                    if (symbol.isInstanceOf[AadlPort]) {
-                      symbols = symbols + s
+                  case AadlSymbolHolder(p: AadlPort) if rewriteApiCalls =>
+                    apiReferences = apiReferences + p
 
                       val emptyAttr = AST.Attr(posOpt = o.posOpt)
                       val emptyRAttr = AST.ResolvedAttr(posOpt = o.posOpt, resOpt = None(), typedOpt = None())
@@ -104,7 +106,7 @@ object GclResolver {
 
                       // don't visit sub children
                       return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(featureSelect))
-                    }
+
                   case _ =>
                 }
               case _ =>
@@ -118,7 +120,25 @@ object GclResolver {
 
     override def post_langastExpIdent(o: Exp.Ident): MOption[Exp] = {
       processIdent(o) match {
-        case Some(s) => symbols = symbols + s
+        case Some(s) =>
+          symbols = symbols + s
+
+          s match {
+            case AadlSymbolHolder(p: AadlPort) if rewriteApiCalls =>
+              apiReferences = apiReferences + p
+
+              val emptyAttr = AST.Attr(posOpt = o.posOpt)
+              val emptyRAttr = AST.ResolvedAttr(posOpt = o.posOpt, resOpt = None(), typedOpt = None())
+
+              val apiIdent: Exp = Exp.Ident(id = AST.Id(value = "api", attr = emptyAttr), attr = emptyRAttr)
+              val apiSelect = Exp.Select(
+                receiverOpt = Some(apiIdent),
+                id = o.id, targs = ISZ(), attr = emptyRAttr)
+
+              return MSome(apiSelect)
+            case _ =>
+          }
+
         case _ =>
       }
       return MNone()
@@ -130,18 +150,20 @@ object GclResolver {
                      context: AadlComponent,
                      stateVars: ISZ[GclStateVar],
                      symbolTable: SymbolTable,
-                     reporter: Reporter): (MOption[Exp], ISZ[SymbolHolder]) = {
+                     reporter: Reporter): (MOption[Exp], ISZ[SymbolHolder], ISZ[AadlPort]) = {
     val sf = SymbolFinder(rewriteApiCalls, context, stateVars, symbolTable)
     val rexp = sf.transform_langastExp(exp)
     reporter.reports(sf.reporter.messages)
-    return (rexp, sf.symbols.elements)
+    return (rexp, sf.symbols.elements, sf.apiReferences.elements)
   }
 }
 
 @record class GclResolver() extends AnnexVisitor {
 
   var rexprs: HashMap[AST.Exp, AST.Exp] = HashMap.empty
-  var specPort: Map[GclSpec, AadlPort] = Map.empty
+  var apiReferences: Set[AadlPort] = Set.empty
+  var computeHandlerPortMap: Map[AST.Exp, AadlPort] = Map.empty
+  var integrationMap: Map[AadlPort, GclSpec] = Map.empty
 
   @memoize def globalImports(symbolTable: SymbolTable): ISZ[AST.Stmt.Import] = {
     // import all AADL package names and org.sireum
@@ -173,26 +195,6 @@ object GclResolver {
 
     return (set.elements ++ sireumImporters).map((m: AST.Stmt.Import.Importer) =>
       AST.Stmt.Import(importers = ISZ(m), attr = emptyAttr))
-  }
-
-  var symbolRecorder: Stack[Set[AadlPort]] = Stack.empty
-
-  def symbolRecorderPush(a: AadlPort): Unit = {
-    if (symbolRecorder.nonEmpty) {
-      val (set, stack) = symbolRecorder.pop.get
-      symbolRecorder = stack.push(set + a)
-    }
-  }
-
-  def symbolRecorderStart(): Z = {
-    symbolRecorder = symbolRecorder.push(Set.empty)
-    return symbolRecorder.size
-  }
-
-  def symbolRecorderStop(): Set[AadlPort] = {
-    val (set, stack) = symbolRecorder.pop.get
-    symbolRecorder = stack
-    return set
   }
 
   def fetchSubcomponent(name: Name, context: AadlComponent): Option[AadlComponent] = {
@@ -283,8 +285,9 @@ object GclResolver {
           val rexp: AST.Exp = typeCheckBoolExp(s.exp)
 
           if (!reporter.hasError) {
-            val (rexp2, symbols) = GclResolver.collectSymbols(rexp, F, context, ISZ(), symbolTable, reporter)
+            val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, F, context, ISZ(), symbolTable, reporter)
             rexprs = rexprs + s.exp ~> rexp
+            apiReferences = apiReferences ++ apiRefs
 
             if (!reporter.hasError) {
               if (symbols.size != 1) {
@@ -295,6 +298,8 @@ object GclResolver {
                 }
                 symbols(0) match {
                   case AadlSymbolHolder(sym: AadlPort) =>
+                    integrationMap = integrationMap + sym ~> s
+
                     sym.direction match {
                       case Direction.Out =>
                         if (!s.isInstanceOf[GclGuarantee]) {
@@ -306,8 +311,6 @@ object GclResolver {
                         }
                       case x => halt(s"Other phase rejects this case: ${x}")
                     }
-
-                    specPort = specPort + (s ~> sym)
 
                   case x => halt(s"Not expecting ${x}")
                 }
@@ -323,7 +326,9 @@ object GclResolver {
             case e: Exp.Ident =>
               visitSlangExp(e) match {
                 case Some((rexp, roptType)) =>
-                  val (rexp2, symbols) = GclResolver.collectSymbols(rexp, T, context, s.state, symbolTable, reporter)
+                  val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, T, context, s.state, symbolTable, reporter)
+                  apiReferences = apiReferences ++ apiRefs
+
                   if (symbols.size != 1) {
                     reporter.error(e.posOpt, GclResolver.toolName, s"Modifies should resolve to exactly one symbol, instead resolved to ${symbols.size}")
                   }
@@ -349,7 +354,8 @@ object GclResolver {
           seenGuaranteeIds = seenGuaranteeIds + guarantees.id
 
           val rexp = typeCheckBoolExp(guarantees.exp)
-          val (rexp2, symbols) = GclResolver.collectSymbols(rexp, T, context, s.state, symbolTable, reporter)
+          val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, T, context, s.state, symbolTable, reporter)
+          apiReferences = apiReferences ++ apiRefs
 
           if(rexp2.isEmpty) {
             rexprs = rexprs + guarantees.exp ~> rexp
@@ -366,11 +372,11 @@ object GclResolver {
               case e: Exp.Ident =>
                 visitSlangExp(e) match {
                   case Some((rexp, roptType)) =>
-                    val (rexp2, symbols) = GclResolver.collectSymbols(rexp, T, context, s.state, symbolTable, reporter)
+                    val (rexp2, symbols, _) = GclResolver.collectSymbols(rexp, F, context, s.state, symbolTable, reporter)
                     if (symbols.size != 1) {
                       reporter.error(e.posOpt, GclResolver.toolName, s"Modifies should resolve to exactly one symbol, instead resolved to ${symbols.size}")
                     }
-                    if(rexp2.isEmpty) {
+                    if (rexp2.isEmpty) {
                       rexprs = rexprs + e ~> rexp
                     }
                     else {
@@ -384,18 +390,88 @@ object GclResolver {
           }
 
           var seenCaseStmtIds: Set[String] = Set.empty
-          for(caase <- cases) {
-            if(seenCaseStmtIds.contains(caase.id)) {
+          for (caase <- cases) {
+            if (seenCaseStmtIds.contains(caase.id)) {
               reporter.error(caase.posOpt, GclResolver.toolName, s"Duplicate spec name: ${caase.id}")
             }
             seenCaseStmtIds = seenCaseStmtIds + caase.id
 
             {
               val rexp = typeCheckBoolExp(caase.assumes)
+              val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, T, context, s.state, symbolTable, reporter)
+              apiReferences = apiReferences ++ apiRefs
+
+              rexprs = rexprs + (caase.assumes ~> rexp)
+              if (rexp2.nonEmpty) {
+                rexprs = rexprs + (caase.assumes ~> rexp2.get)
+              }
             }
 
             {
               val rexp = typeCheckBoolExp(caase.guarantees)
+              val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, T, context, s.state, symbolTable, reporter)
+              apiReferences = apiReferences ++ apiRefs
+
+              rexprs = rexprs + (caase.guarantees ~> rexp)
+              if (rexp2.nonEmpty) {
+                rexprs = rexprs + (caase.guarantees ~> rexp2.get)
+              }
+            }
+          }
+
+          for (handler <- handlers) {
+            visitSlangExp(handler.port) match {
+              case Some((rexp, roptType)) =>
+                val (_, symbols, _) = GclResolver.collectSymbols(rexp, F, context, s.state, symbolTable, reporter)
+                if (symbols.size != 1) {
+                  reporter.error(handler.port.posOpt, GclResolver.toolName, s"Handler should resolve to exactly one symbol, instead resolved to ${symbols.size}")
+                }
+                symbols(0) match {
+                  case AadlSymbolHolder(p: AadlPort) =>
+                    computeHandlerPortMap = computeHandlerPortMap + handler.port ~> p
+                  case x => reporter.error(handler.port.posOpt, GclResolver.toolName, s"Handler should resolve to an AADL port but received $x")
+                }
+              case _ => halt(s"TODO: ${handler.port} failed to type check")
+            }
+
+            for (modify <- handler.modifies) {
+              modify match {
+                case e: Exp.Ident =>
+                  visitSlangExp(e) match {
+                    case Some((rexp, roptType)) =>
+                      val (rexp2, symbols, _) = GclResolver.collectSymbols(rexp, F, context, s.state, symbolTable, reporter)
+                      if (symbols.size != 1) {
+                        reporter.error(e.posOpt, GclResolver.toolName, s"Modifies should resolve to exactly one symbol, instead resolved to ${symbols.size}")
+                      }
+                      if (rexp2.isEmpty) {
+                        rexprs = rexprs + e ~> rexp
+                      }
+                      else {
+                        rexprs = rexprs + e ~> rexp2.get
+                      }
+                    case _ => halt("TODO")
+                  }
+                case _ =>
+                  reporter.error(modify.posOpt, GclResolver.toolName, s"Expecting modifies to be Idents, found ${modifies}")
+              }
+            }
+
+            var seenHanlderGuaranteeIds: Set[String] = Set.empty
+            for (guarantees <- handler.guarantees) {
+              if (seenHanlderGuaranteeIds.contains(guarantees.id)) {
+                reporter.error(guarantees.posOpt, GclResolver.toolName, s"Duplicate spec name: ${guarantees.id}")
+              }
+              seenHanlderGuaranteeIds = seenHanlderGuaranteeIds + guarantees.id
+
+              val rexp = typeCheckBoolExp(guarantees.exp)
+              val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, T, context, s.state, symbolTable, reporter)
+              apiReferences = apiReferences ++ apiRefs
+
+              if(rexp2.isEmpty) {
+                rexprs = rexprs + guarantees.exp ~> rexp
+              } else {
+                rexprs = rexprs + guarantees.exp ~> rexp2.get
+              }
             }
           }
         }
@@ -409,7 +485,7 @@ object GclResolver {
         case Some((rexp, roptType)) =>
           roptType match {
             case Some(AST.Typed.Name(ISZ("org", "sireum", "B"), _)) =>
-              val (rexp2, symbols) = GclResolver.collectSymbols(rexp, F, context, ISZ(), symbolTable, reporter)
+              val (rexp2, _, _) = GclResolver.collectSymbols(rexp, F, context, ISZ(), symbolTable, reporter)
               if(rexp2.isEmpty) {
                 rexprs = rexprs + (i.exp ~> rexp)
               } else {
@@ -435,7 +511,7 @@ object GclResolver {
     annex match {
       case g: GclSubclause =>
         visitGclSubclause(g)
-        return Some(GclSymbolTable(rexprs, specPort))
+        return Some(GclSymbolTable(rexprs, apiReferences.elements, integrationMap, computeHandlerPortMap))
       case x =>
         halt(s"TODO: need to handle gcl annex type: ${x}")
     }
