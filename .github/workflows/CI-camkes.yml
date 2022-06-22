@@ -6,7 +6,7 @@ jobs:
   container:
     runs-on: ubuntu-latest
     container:
-      image: trustworthysystems/camkes:2021_12_08
+      image: trustworthysystems/camkes
     steps:
       - name: Checkout
         uses: actions/checkout@v2
