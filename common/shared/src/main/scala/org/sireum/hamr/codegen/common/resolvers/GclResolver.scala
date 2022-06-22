@@ -366,7 +366,7 @@ object GclResolver {
       }
 
       s.compute match {
-        case Some(GclCompute(modifies, cases, handlers)) => {
+        case Some(GclCompute(modifies, specs, cases, handlers)) => {
           for (modify <- modifies) {
             modify match {
               case e: Exp.Ident =>
@@ -389,12 +389,32 @@ object GclResolver {
             }
           }
 
-          var seenCaseStmtIds: Set[String] = Set.empty
+          var seenSpecIds: Set[String] = Set.empty
+
+          for(spec <- specs) {
+            if(seenSpecIds.contains(spec.id)) {
+              reporter.error(spec.posOpt, GclResolver.toolName, s"Duplicate spec name: ${spec.id}")
+            }
+            seenSpecIds = seenSpecIds + spec.id
+
+            {
+              val rexp = typeCheckBoolExp(spec.exp)
+              val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, T, context, s.state, symbolTable, reporter)
+              apiReferences = apiReferences ++ apiRefs
+
+              rexprs = rexprs + (spec.exp ~> rexp)
+              if (rexp2.nonEmpty) {
+                rexprs = rexprs + (spec.exp ~> rexp2.get)
+              }
+            }
+          }
+
+
           for (caase <- cases) {
-            if (seenCaseStmtIds.contains(caase.id)) {
+            if (seenSpecIds.contains(caase.id)) {
               reporter.error(caase.posOpt, GclResolver.toolName, s"Duplicate spec name: ${caase.id}")
             }
-            seenCaseStmtIds = seenCaseStmtIds + caase.id
+            seenSpecIds = seenSpecIds + caase.id
 
             {
               val rexp = typeCheckBoolExp(caase.assumes)
@@ -429,6 +449,11 @@ object GclResolver {
                 symbols(0) match {
                   case AadlSymbolHolder(p: AadlPort) =>
                     computeHandlerPortMap = computeHandlerPortMap + handler.port ~> p
+
+                    if(p.direction != Direction.In || p.isInstanceOf[AadlDataPort]){
+                      reporter.error(handler.port.posOpt, GclResolver.toolName, s"Compute handlers can only be applied to incoming event or event data ports")
+                    }
+
                   case x => reporter.error(handler.port.posOpt, GclResolver.toolName, s"Handler should resolve to an AADL port but received $x")
                 }
               case _ => halt(s"TODO: ${handler.port} failed to type check")
@@ -456,12 +481,11 @@ object GclResolver {
               }
             }
 
-            var seenHanlderGuaranteeIds: Set[String] = Set.empty
             for (guarantees <- handler.guarantees) {
-              if (seenHanlderGuaranteeIds.contains(guarantees.id)) {
+              if (seenSpecIds.contains(guarantees.id)) {
                 reporter.error(guarantees.posOpt, GclResolver.toolName, s"Duplicate spec name: ${guarantees.id}")
               }
-              seenHanlderGuaranteeIds = seenHanlderGuaranteeIds + guarantees.id
+              seenSpecIds = seenSpecIds + guarantees.id
 
               val rexp = typeCheckBoolExp(guarantees.exp)
               val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, T, context, s.state, symbolTable, reporter)
@@ -472,6 +496,15 @@ object GclResolver {
               } else {
                 rexprs = rexprs + guarantees.exp ~> rexp2.get
               }
+            }
+
+            context match {
+              case a: AadlDispatchableComponent =>
+                if (!a.isSporadic()) {
+                  reporter.error(handler.port.posOpt, GclResolver.toolName, s"Compute handlers can only be used with sporadic components")
+                }
+              case _ =>
+                reporter.error(handler.port.posOpt, GclResolver.toolName, s"Unexpected: Compute handlers can only be used with dispatchable components")
             }
           }
         }
