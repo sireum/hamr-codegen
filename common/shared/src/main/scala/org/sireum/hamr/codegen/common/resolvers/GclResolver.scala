@@ -81,6 +81,125 @@ object GclResolver {
       return None()
     }
 
+    override def pre_langastExpInvoke(o: Exp.Invoke): org.sireum.hamr.ir.MTransformer.PreResult[Exp] = {
+
+      val emptyAttr = AST.Attr(posOpt = o.posOpt)
+      val emptyRAttr = AST.ResolvedAttr(posOpt = o.posOpt, resOpt = None(), typedOpt = None())
+
+      if(o.ident.id.value == "MustSendEvent" || o.ident.id.value == "MustSendEventData") {
+
+        if(o.args.isEmpty) {
+          reporter.error(o.posOpt, toolName, "Invalid MustSend expression. First argument must be outgoing event port")
+          return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
+        }
+
+        (o.args(0)) match {
+          case portIdent: Exp.Ident =>
+            processIdent(portIdent) match {
+              case Some(ash @ AadlSymbolHolder(aadlEventPort: AadlEventPort)) if aadlEventPort.direction == Direction.Out =>
+                symbols = symbols + ash
+                apiReferences = apiReferences + aadlEventPort
+
+                if(o.args.size == 2) {
+                  reporter.error(o.posOpt, toolName, "Invalid MustSend expression. Expected value not supported for event ports")
+                  return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
+                }
+
+                // api.portid
+                val apiIdent: Exp = Exp.Ident(id = AST.Id(value = "api", attr = emptyAttr), attr = emptyRAttr)
+                val apiSelect = Exp.Select(receiverOpt = Some(apiIdent), id = portIdent.id, targs = ISZ(), attr = emptyRAttr)
+
+                // api.portid.nonEmpty
+                val nonEmpty = Exp.Select(receiverOpt = Some(apiSelect),
+                  id = AST.Id("nonEmpty", emptyAttr), targs = o.targs, attr = o.attr)
+
+                return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(nonEmpty))
+
+              case Some(ash @ AadlSymbolHolder(aadlEventDataPort: AadlEventDataPort)) if aadlEventDataPort.direction == Direction.Out =>
+                symbols = symbols + ash
+                apiReferences = apiReferences + aadlEventDataPort
+
+                if(o.args.size != 2) {
+                  reporter.error(o.posOpt, toolName, "Invalid MustSend expression. Expected value required for an outgoing event data port")
+                  return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
+                }
+
+                // TODO: would we ever need to rewrite the expected value expression?
+
+                o.args(1) match {
+                  case valueIdent: Exp.Ident =>
+                    processIdent(valueIdent) match {
+                      case Some(g: GclSymbolHolder) => symbols = symbols + g
+                      case _ => // expected value can be any legal Ident
+                    }
+                  case _ => // expected value can be any legal expression
+                }
+
+                // api.portid
+                val apiIdent: Exp = Exp.Ident(id = AST.Id(value = "api", attr = emptyAttr), attr = emptyRAttr)
+                val apiSelect = Exp.Select(
+                  receiverOpt = Some(apiIdent),
+                  id = portIdent.id, targs = ISZ(), attr = emptyRAttr)
+
+                // api.portid.get
+                val getSelect = Exp.Select(receiverOpt = Some(apiSelect),
+                  id = AST.Id("get", emptyAttr), targs = o.targs, attr = o.attr)
+
+                // api.portid.get == value
+                val be = Exp.Binary(getSelect, "==", o.args(1), o.attr)
+
+                // api.portid.nonempty
+                val nonEmptySel: Exp =
+                    Exp.Select(receiverOpt = Some(apiSelect),
+                      id = AST.Id("nonEmpty", emptyAttr), targs = o.targs, attr = o.attr)
+
+                // (api.portid.nonEmpty && (api.portid.get == value)
+                val rexp = Exp.Binary(nonEmptySel, "&&", be, o.attr)
+
+                return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(rexp))
+              case _ =>
+                reporter.error(o.posOpt, toolName, "Invalid MustSend expression. First argument must be an outgoing event port")
+                return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
+            }
+          case _ =>
+            reporter.error(o.posOpt, toolName, "Invalid MustSend expression. First argument must (currently) be the simple name of an outgoing event port")
+            return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
+        }
+      } else if (o.ident.id.value == "NoSend") {
+        if(o.args.size == 1) {
+          (o.args(0)) match {
+            case portIdent: Exp.Ident =>
+              processIdent(portIdent) match {
+                case Some(ash@AadlSymbolHolder(aadlFeatureEvent: AadlFeatureEvent)) if aadlFeatureEvent.direction == Direction.Out && aadlFeatureEvent.isInstanceOf[AadlPort] =>
+                  symbols = symbols + ash
+                  apiReferences = apiReferences + aadlFeatureEvent.asInstanceOf[AadlPort]
+
+                  // api.portid
+                  val apiIdent: Exp = Exp.Ident(id = AST.Id(value = "api", attr = emptyAttr), attr = emptyRAttr)
+                  val apiSelect = Exp.Select(receiverOpt = Some(apiIdent), id = portIdent.id, targs = ISZ(), attr = emptyRAttr)
+
+                  // api.portid.isEmpty
+                  val isEmpty = Exp.Select(receiverOpt = Some(apiSelect),
+                    id = AST.Id("isEmpty", emptyAttr), targs = o.targs, attr = o.attr)
+
+                  return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(isEmpty))
+                case _ =>
+                  reporter.error(o.posOpt, toolName, "Invalid NoSend expression. Can only be applied to outgoing event ports")
+                  return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
+              }
+            case _ =>
+              reporter.error(o.posOpt, toolName, "Invalid NoSend expression. Argument must (currently) be the simple name of an outgoing event port")
+              return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
+          }
+        } else {
+          reporter.error(o.posOpt, toolName, "Invalid NoSend expression. Requires an outgoing event port")
+          return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
+        }
+      } else {
+        return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
+      }
+    }
+
     override def pre_langastExpSelect(o: Exp.Select): org.sireum.hamr.ir.MTransformer.PreResult[Exp] = {
       if (rewriteApiCalls) {
         o.receiverOpt match {
@@ -104,8 +223,15 @@ object GclResolver {
                     val featureSelect = Exp.Select(receiverOpt = Some(apiSelect),
                       id = o.id, targs = o.targs, attr = o.attr)
 
+                    val sel: Exp = if (p.direction == Direction.Out && p.isInstanceOf[AadlEventDataPort]) {
+                      Exp.Select(receiverOpt = Some(featureSelect),
+                        id = AST.Id("get", emptyAttr), targs = o.targs, attr = o.attr)
+                    } else {
+                      featureSelect
+                    }
+
                     // don't visit sub children
-                    return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(featureSelect))
+                    return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(sel))
 
                   case _ =>
                 }
@@ -135,7 +261,14 @@ object GclResolver {
                 receiverOpt = Some(apiIdent),
                 id = o.id, targs = ISZ(), attr = emptyRAttr)
 
-              return MSome(apiSelect)
+              val sel: Exp = if (p.direction == Direction.Out && p.isInstanceOf[AadlEventDataPort]) {
+                Exp.Select(receiverOpt = Some(apiSelect),
+                  id = AST.Id("get", emptyAttr), targs = o.targs, attr = o.attr)
+              } else {
+                apiSelect
+              }
+
+              return MSome(sel)
             case _ =>
           }
 
@@ -391,8 +524,8 @@ object GclResolver {
 
           var seenSpecIds: Set[String] = Set.empty
 
-          for(spec <- specs) {
-            if(seenSpecIds.contains(spec.id)) {
+          for (spec <- specs) {
+            if (seenSpecIds.contains(spec.id)) {
               reporter.error(spec.posOpt, GclResolver.toolName, s"Duplicate spec name: ${spec.id}")
             }
             seenSpecIds = seenSpecIds + spec.id
@@ -440,6 +573,7 @@ object GclResolver {
           }
 
           for (handler <- handlers) {
+
             visitSlangExp(handler.port) match {
               case Some((rexp, roptType)) =>
                 val (_, symbols, _) = GclResolver.collectSymbols(rexp, F, context, s.state, symbolTable, reporter)
@@ -450,7 +584,7 @@ object GclResolver {
                   case AadlSymbolHolder(p: AadlPort) =>
                     computeHandlerPortMap = computeHandlerPortMap + handler.port ~> p
 
-                    if(p.direction != Direction.In || p.isInstanceOf[AadlDataPort]){
+                    if (p.direction != Direction.In || p.isInstanceOf[AadlDataPort]) {
                       reporter.error(handler.port.posOpt, GclResolver.toolName, s"Compute handlers can only be applied to incoming event or event data ports")
                     }
 
@@ -481,11 +615,12 @@ object GclResolver {
               }
             }
 
+            var handlerSpecIds: Set[String] = Set.empty
             for (guarantees <- handler.guarantees) {
-              if (seenSpecIds.contains(guarantees.id)) {
+              if (seenSpecIds.contains(guarantees.id) || handlerSpecIds.contains(guarantees.id)) {
                 reporter.error(guarantees.posOpt, GclResolver.toolName, s"Duplicate spec name: ${guarantees.id}")
               }
-              seenSpecIds = seenSpecIds + guarantees.id
+              handlerSpecIds = handlerSpecIds + guarantees.id
 
               val rexp = typeCheckBoolExp(guarantees.exp)
               val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, T, context, s.state, symbolTable, reporter)
@@ -535,7 +670,7 @@ object GclResolver {
 
     def visitSlangExp(exp: AST.Exp): Option[(AST.Exp, Option[AST.Typed])] = {
       val scontext: QName = ISZ("???")
-      val mode = TypeChecker.ModeContext.Code
+      val mode = TypeChecker.ModeContext.Spec
       val typeChecker: TypeChecker = TypeChecker(typeHierarchy, scontext, F, mode, F)
 
       return Some(typeChecker.checkExp(None(), scope, exp, reporter))
@@ -894,6 +1029,165 @@ object GclResolver {
         }
       }
 
+      val methods: HashSMap[String, Info.Method] =
+        a match {
+          case at: AadlThread =>
+            val TYPE_VAR__STATE_VAR = "TYPE_VAR__STATE_VAR"
+
+            def createInfoMethod(methodName: String, typeParams: ISZ[AST.TypeParam], params: ISZ[AST.Param], returnType: AST.Type.Named): Info.Method = {
+
+              val methodAst: AST.Stmt.Method = {
+                val methodSig = AST.MethodSig(
+                  isPure = T,
+                  id = AST.Id(methodName, AST.Attr(None())),
+                  typeParams = typeParams,
+                  hasParams = params.nonEmpty,
+                  params = params,
+                  returnType = returnType
+                )
+
+                val typedFun = AST.Typed.Fun(
+                  isPure = T,
+                  isByName = F,
+                  args = params.map((m: AST.Param) => {
+                    val ids = m.tipe.asInstanceOf[AST.Type.Named].name.ids.map((i: AST.Id) => i.value)
+
+                    if(ids == ISZ(TYPE_VAR__STATE_VAR))
+                      AST.Typed.TypeVar(id = TYPE_VAR__STATE_VAR)
+                    else
+                      AST.Typed.Name(ids = ids, args = ISZ())
+                  }),
+                  ret = AST.Typed.Name(ids = returnType.name.ids.map((m: AST.Id) => m.value), args = ISZ())
+                )
+
+                val rInfoMethod = AST.ResolvedInfo.Method(
+                  isInObject = F,
+                  mode = AST.MethodMode.Method,
+                  typeParams = typeParams.map((t: AST.TypeParam) => t.id.value),
+                  owner = adtQualifiedName,
+                  id = methodName,
+                  paramNames = params.map((m: AST.Param) => m.id.value),
+                  tpeOpt = Some(typedFun),
+                  reads = ISZ(),
+                  writes = ISZ()
+                )
+
+                val typedMethod = AST.Typed.Method(
+                  isInObject = F,
+                  mode = AST.MethodMode.Method,
+                  typeParams = typeParams.map((t: AST.TypeParam) => t.id.value),
+                  owner = adtQualifiedName,
+                  name = methodName,
+                  paramNames = params.map((m: AST.Param) => m.id.value),
+                  tpe = typedFun
+                )
+
+                AST.Stmt.Method(
+                  typeChecked = F,
+                  purity = AST.Purity.Pure,
+                  hasOverride = F,
+                  isHelper = F,
+                  sig = methodSig,
+                  mcontract = AST.MethodContract.Simple.empty,
+                  bodyOpt = None(),
+                  attr = AST.ResolvedAttr(posOpt = None(), resOpt = Some(rInfoMethod), typedOpt = Some(typedMethod))
+                )
+              }
+
+              return Info.Method(
+                owner = adtQualifiedName,
+                isInObject = F,
+                scope = sc,
+                hasBody = F,
+                ast = methodAst
+              )
+            }
+
+            def toName(x: ISZ[String]): AST.Name = {
+              return AST.Name(
+                ids = x.map((m: String) => AST.Id(value = m, attr = AST.Attr(None()))),
+                attr = AST.Attr(None()))
+            }
+
+            val expType = AST.Type.Named(
+              name = toName(ISZ("org", "sireum", "lang", "ast", "Exp")),
+              typeArgs = ISZ(),
+              attr = AST.TypedAttr(
+                posOpt = None(),
+                typedOpt = Some(AST.Typed.Name(ids = ISZ("org", "sireum", "lang", "ast", "Exp"), args = ISZ()))
+              )
+            )
+
+            val boolType = AST.Type.Named(
+              name = toName(ISZ("org", "sireum", "B")),
+              typeArgs = ISZ(),
+              attr = AST.TypedAttr(
+                posOpt = None(),
+                typedOpt = Some(AST.Typed.Name(ids = ISZ("org", "sireum", "B"), args = ISZ()))
+              ))
+
+            val portParam = AST.Param(
+              isHidden = F,
+              id = AST.Id("port", AST.Attr(None())),
+              tipe = expType
+            )
+
+            val valueParam = AST.Param(
+              isHidden = F,
+              id = AST.Id("value", AST.Attr(None())),
+              tipe = expType
+            )
+
+
+            val genericType = AST.TypeParam(AST.Id(TYPE_VAR__STATE_VAR, AST.Attr(None())))
+            val genericPortParam = AST.Param(
+              isHidden =  F,
+              id = AST.Id("port", AST.Attr(None())),
+              tipe = AST.Type.Named(
+                name = toName(ISZ(TYPE_VAR__STATE_VAR)),
+                typeArgs = ISZ(),
+                attr = AST.TypedAttr(
+                  posOpt = None(),
+                  typedOpt = Some(AST.Typed.TypeVar(id = TYPE_VAR__STATE_VAR))
+                )
+              )
+            )
+            val genericValueParam = AST.Param(
+              isHidden =  F,
+              id = AST.Id("value", AST.Attr(None())),
+              tipe = AST.Type.Named(
+                name = toName(ISZ(TYPE_VAR__STATE_VAR)),
+                typeArgs = ISZ(),
+                attr = AST.TypedAttr(
+                  posOpt = None(),
+                  typedOpt = Some(AST.Typed.TypeVar(id = TYPE_VAR__STATE_VAR))
+                )
+              )
+            )
+
+            var _methods: HashSMap[String, Info.Method] = HashSMap.empty
+            val sigs = ISZ[(String, ISZ[AST.TypeParam], ISZ[AST.Param], AST.Type.Named)](
+              ("MaySend", ISZ(), ISZ[AST.Param](portParam), boolType),
+              ("NoSend", ISZ(genericType), ISZ[AST.Param](genericPortParam), boolType),
+              ("MustSendEvent", ISZ(genericType), ISZ[AST.Param](genericPortParam), boolType),
+              ("MustSendEventData", ISZ(genericType), ISZ[AST.Param](genericPortParam, genericValueParam), boolType),
+              //("MustSend", ISZ(), ISZ[AST.Param](portParam, valueParam), bType),
+            )
+
+            for (sig <- sigs) {
+              _methods = _methods + sig._1 ~> createInfoMethod(
+                methodName = sig._1,
+                typeParams = sig._2,
+                params = sig._3,
+                returnType = sig._4)
+            }
+
+            _methods
+
+          case ad: AadlData => HashSMap.empty
+          case _ => halt("Expecting a thread or data component")
+        }
+
       val constructorTypeOpt: Option[AST.Typed] = None()
       val constructorResOpt: Option[AST.ResolvedInfo] = None()
       val extractorTypeMap: Map[String, AST.Typed] = Map.empty
@@ -902,7 +1196,6 @@ object GclResolver {
       val specVars: HashSMap[String, Info.SpecVar] = HashSMap.empty
 
       val specMethods: HashSMap[String, Info.SpecMethod] = HashSMap.empty
-      val methods: HashSMap[String, Info.Method] = HashSMap.empty
       val refinements: HashSMap[String, TypeInfo.Name] = HashSMap.empty
       val invariants: HashSMap[String, Info.Inv] = HashSMap.empty
       val dataRefinements: ISZ[AST.Stmt.DataRefinement] = ISZ()
