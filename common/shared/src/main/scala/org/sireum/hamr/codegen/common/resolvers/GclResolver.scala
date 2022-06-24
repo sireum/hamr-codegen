@@ -244,6 +244,21 @@ object GclResolver {
       return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
     }
 
+    override def post_langastExpInput(o: Exp.Input): MOption[Exp] = {
+      o.exp match {
+        case o: Exp.Ident =>
+          processIdent(o) match {
+            case Some(g: GclSymbolHolder) =>
+            case _ =>
+              reporter.error(o.posOpt, toolName, s"Only state vars can be used in In expressions")
+          }
+        case _ =>
+          reporter.error(o.posOpt, toolName, s"Currently only allowing the simple name of state vars to be used in In expressions")
+      }
+
+      return MNone()
+    }
+
     override def post_langastExpIdent(o: Exp.Ident): MOption[Exp] = {
       processIdent(o) match {
         case Some(s) =>
