@@ -96,67 +96,73 @@ object GclResolver {
         (o.args(0)) match {
           case portIdent: Exp.Ident =>
             processIdent(portIdent) match {
-              case Some(ash @ AadlSymbolHolder(aadlEventPort: AadlEventPort)) if aadlEventPort.direction == Direction.Out =>
-                symbols = symbols + ash
-                apiReferences = apiReferences + aadlEventPort
+              case Some(ash @ AadlSymbolHolder(aadlFeatureEvent: AadlFeatureEvent)) if aadlFeatureEvent.direction == Direction.Out =>
 
-                if(o.args.size == 2) {
-                  reporter.error(o.posOpt, toolName, "Invalid MustSend expression. Expected value not supported for event ports")
+                if(!aadlFeatureEvent.isInstanceOf[AadlEventPort] && !aadlFeatureEvent.isInstanceOf[AadlEventDataPort]) {
+                  reporter.error(o.posOpt, toolName, "Invalid MustSend expression. First agrument must an an outgoing event port")
                   return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
                 }
 
-                // api.portid
-                val apiIdent: Exp = Exp.Ident(id = AST.Id(value = "api", attr = emptyAttr), attr = emptyRAttr)
-                val apiSelect = Exp.Select(receiverOpt = Some(apiIdent), id = portIdent.id, targs = ISZ(), attr = emptyRAttr)
-
-                // api.portid.nonEmpty
-                val nonEmpty = Exp.Select(receiverOpt = Some(apiSelect),
-                  id = AST.Id("nonEmpty", emptyAttr), targs = o.targs, attr = o.attr)
-
-                return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(nonEmpty))
-
-              case Some(ash @ AadlSymbolHolder(aadlEventDataPort: AadlEventDataPort)) if aadlEventDataPort.direction == Direction.Out =>
                 symbols = symbols + ash
-                apiReferences = apiReferences + aadlEventDataPort
+                apiReferences = apiReferences + aadlFeatureEvent.asInstanceOf[AadlPort]
 
-                if(o.args.size != 2) {
-                  reporter.error(o.posOpt, toolName, "Invalid MustSend expression. Expected value required for an outgoing event data port")
-                  return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
-                }
+                if(o.args.size == 1) { // MustSend(portIdent)
+                  // api.portid
+                  val apiIdent: Exp = Exp.Ident(id = AST.Id(value = "api", attr = emptyAttr), attr = emptyRAttr)
+                  val apiSelect = Exp.Select(receiverOpt = Some(apiIdent), id = portIdent.id, targs = ISZ(), attr = emptyRAttr)
 
-                // TODO: would we ever need to rewrite the expected value expression?
+                  // api.portid.nonEmpty
+                  val nonEmpty = Exp.Select(receiverOpt = Some(apiSelect),
+                    id = AST.Id("nonEmpty", emptyAttr), targs = o.targs, attr = o.attr)
 
-                o.args(1) match {
-                  case valueIdent: Exp.Ident =>
-                    processIdent(valueIdent) match {
-                      case Some(g: GclSymbolHolder) => symbols = symbols + g
-                      case _ => // expected value can be any legal Ident
-                    }
-                  case _ => // expected value can be any legal expression
-                }
+                  return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(nonEmpty))
 
-                // api.portid
-                val apiIdent: Exp = Exp.Ident(id = AST.Id(value = "api", attr = emptyAttr), attr = emptyRAttr)
-                val apiSelect = Exp.Select(
-                  receiverOpt = Some(apiIdent),
-                  id = portIdent.id, targs = ISZ(), attr = emptyRAttr)
+                } else if (o.args.size == 2) { // MustSend(portIdent, expectedValue)
 
-                // api.portid.get
-                val getSelect = Exp.Select(receiverOpt = Some(apiSelect),
-                  id = AST.Id("get", emptyAttr), targs = o.targs, attr = o.attr)
+                  if(aadlFeatureEvent.isInstanceOf[AadlEventPort]) {
+                    reporter.error(o.posOpt, toolName, "Invalid MustSend expression. Expected value not supported for event ports")
+                    return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
+                  }
 
-                // api.portid.get == value
-                val be = Exp.Binary(getSelect, "==", o.args(1), o.attr)
+                  // TODO: would we ever need to rewrite the expected value expression?
 
-                // api.portid.nonempty
-                val nonEmptySel: Exp =
+                  o.args(1) match {
+                    case valueIdent: Exp.Ident =>
+                      processIdent(valueIdent) match {
+                        case Some(g: GclSymbolHolder) => symbols = symbols + g
+                        case _ => // expected value can be any legal Ident
+                      }
+                    case _ => // expected value can be any legal expression
+                  }
+
+                  // api.portid
+                  val apiIdent: Exp = Exp.Ident(id = AST.Id(value = "api", attr = emptyAttr), attr = emptyRAttr)
+                  val apiSelect = Exp.Select(
+                    receiverOpt = Some(apiIdent),
+                    id = portIdent.id, targs = ISZ(), attr = emptyRAttr)
+
+                  // api.portid.get
+                  val getSelect = Exp.Select(receiverOpt = Some(apiSelect),
+                    id = AST.Id("get", emptyAttr), targs = o.targs, attr = o.attr)
+
+                  // api.portid.get == value
+                  val be = Exp.Binary(getSelect, "==", o.args(1), o.attr)
+
+                  // api.portid.nonempty
+                  val nonEmptySel: Exp =
                     Exp.Select(receiverOpt = Some(apiSelect),
                       id = AST.Id("nonEmpty", emptyAttr), targs = o.targs, attr = o.attr)
 
-                // (api.portid.nonEmpty && (api.portid.get == value)
-                val rexp = Exp.Binary(nonEmptySel, "&&", be, o.attr)
+                  // (api.portid.nonEmpty && (api.portid.get == value)
+                  val rexp = Exp.Binary(nonEmptySel, "&&", be, o.attr)
 
-                return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(rexp))
+                  return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(rexp))
+
+                } else {
+                  reporter.error(o.posOpt, toolName, "Invalid MustSend expression. Too many arguments")
+                  return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
+                }
+
               case _ =>
                 reporter.error(o.posOpt, toolName, "Invalid MustSend expression. First argument must be an outgoing event port")
                 return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
