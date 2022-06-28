@@ -7,7 +7,7 @@ import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.CommonUtil.IdPath
 import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AnnexInfo, AnnexVisitor, BTSAnnexInfo, BTSState, BTSSymbolTable, BTSVariable, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlTypes
-import org.sireum.hamr.ir.{Annex, BLESSAnnex, BTSBLESSAnnexClause, BTSClassifier}
+import org.sireum.hamr.ir.{Annex, AnnexLib, BLESSAnnex, BTSBLESSAnnexClause, BTSClassifier}
 import org.sireum.message.Reporter
 
 @record class BTSResolver extends AnnexVisitor {
@@ -57,7 +57,7 @@ import org.sireum.message.Reporter
   }
 
   var seenAnnexes: Set[Annex] = Set.empty
-  def offer(context: AadlComponent, annex: Annex, symbolTable: SymbolTable, aadlTypes: AadlTypes, reporter: Reporter): Option[AnnexInfo] = {
+  def offer(context: AadlComponent, annex: Annex, annexLibs: ISZ[AnnexLib], symbolTable: SymbolTable, aadlTypes: AadlTypes, reporter: Reporter): Option[AnnexInfo] = {
     if(!seenAnnexes.contains(annex)) {
       seenAnnexes = seenAnnexes + annex
       annex.clause match {

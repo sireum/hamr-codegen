@@ -11,7 +11,7 @@ import org.sireum.hamr.codegen.common.resolvers.{BTSResolver, GclResolver}
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, BaseType, TypeUtil}
 import org.sireum.hamr.codegen.common.util.{CodeGenConfig, CodeGenPlatform, ExperimentalOptions}
 import org.sireum.hamr.ir
-import org.sireum.hamr.ir.{Annex, ComponentCategory}
+import org.sireum.hamr.ir.{Annex, AnnexLib, ComponentCategory}
 import org.sireum.message.{Position, Reporter}
 
 object SymbolResolver {
@@ -40,7 +40,7 @@ object SymbolResolver {
       for(component <- st.componentMap.values) {
         var ais: ISZ[AnnexInfo] = ISZ()
         for(annex <- component.component.annexes) {
-          processAnnex(component, st, aadlTypes, annex, reporter) match {
+          processAnnex(component, st, aadlTypes, annex, model.annexLib, reporter) match {
             case Some(ai) => ais = ais :+ ai
             case _ =>
               assert(reporter.hasError, "No annex info returned so expecting an error")
@@ -942,9 +942,10 @@ object SymbolResolver {
                    symbolTable: SymbolTable,
                    aadlTypes: AadlTypes,
                    annex: Annex,
+                   annexLibs: ISZ[AnnexLib],
                    reporter: Reporter): Option[AnnexInfo] = {
     for(v <- annexVisitors) {
-      v.offer(context, annex, symbolTable, aadlTypes, reporter) match {
+      v.offer(context, annex, annexLibs, symbolTable, aadlTypes, reporter) match {
         case Some(ai) => return Some(ai)
         case None() =>
       }

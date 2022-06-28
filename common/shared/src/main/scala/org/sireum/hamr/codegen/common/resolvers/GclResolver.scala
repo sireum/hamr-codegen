@@ -718,7 +718,7 @@ object GclResolver {
     return ops.StringOps(ops.StringOps(s).replaceAllLiterally("::", "|")).split((c: C) => c == '|')
   }
 
-  def buildTypeMap(aadlTypes: AadlTypes, symbolTable: SymbolTable, reporter: Reporter): Unit = {
+  def buildTypeMap(gclLibs: ISZ[GclLibrary], aadlTypes: AadlTypes, symbolTable: SymbolTable, reporter: Reporter): Unit = {
 
     def getSimpleNameFromClassifier(c: String): String = {
       return ops.ISZOps(getPathFromClassifier(c)).last
@@ -1279,13 +1279,14 @@ object GclResolver {
     }
   }
 
-  def offer(context: AadlComponent, annex: Annex, symbolTable: SymbolTable, aadlTypes: AadlTypes, reporter: Reporter): Option[AnnexInfo] = {
+  def offer(context: AadlComponent, annex: Annex, annexLibs: ISZ[AnnexLib], symbolTable: SymbolTable, aadlTypes: AadlTypes, reporter: Reporter): Option[AnnexInfo] = {
     if (!seenAnnexes.contains(annex)) {
       seenAnnexes = seenAnnexes + annex
 
       annex.clause match {
         case b: GclSubclause =>
-          buildTypeMap(aadlTypes, symbolTable, reporter)
+          val gclLibs: ISZ[GclLibrary] = annexLibs.filter((a: AnnexLib) => a.isInstanceOf[GclLibrary]).map((a: AnnexLib) => a.asInstanceOf[GclLibrary])
+          buildTypeMap(gclLibs, aadlTypes, symbolTable, reporter)
 
           val qualifiedName: IdPath = context match {
             case ad: AadlData => getPathFromClassifier(ad.component.classifier.get.name)
