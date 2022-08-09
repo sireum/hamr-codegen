@@ -3,7 +3,6 @@
 package org.sireum.hamr.codegen.common
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.properties._
 import org.sireum.hamr.codegen.common.symbols.{AadlThreadOrDevice, Dispatch_Protocol}
 import org.sireum.hamr.ir
 import org.sireum.hamr.ir.{Direction, Feature, FeatureEnd}
@@ -13,6 +12,11 @@ object CommonUtil {
   type IdPath = ISZ[String]
 
   val toolName: String = "HAMR Codegen"
+
+  def splitClassifier(c: ir.Classifier): ISZ[String] = {
+    val san = StringUtil.replaceAll(c.name, "::", ":")
+    return ops.StringOps(san).split((char: C) => char == ':')
+  }
 
   def getLastName(n: ir.Name): String = {
     return n.name(n.name.size - 1)
@@ -26,6 +30,10 @@ object CommonUtil {
     assert(ops.StringOps(n.name(0)).endsWith("Instance"))
     val short = ops.ISZOps(n.name).tail
     return st"${(short, "_")}".render
+  }
+
+  def isSystemInstance(f: ir.Component): B = {
+    return isSystem(f) && f.identifier.name.size == 1 && ops.StringOps(f.identifier.name(0)).endsWith("_Instance")
   }
 
   def isSystem(f: ir.Component): B = {
@@ -148,7 +156,9 @@ object CommonUtil {
     ops.StringOps(san).split(char => char == ':')
   }
 
-  def aadlQualifiedName: String = { return CommonUtil.getName(c.identifier) }
+  def aadlQualifiedName: String = {
+    return CommonUtil.getName(c.identifier)
+  }
 
   def componentType: String = {
     return StringUtil.sanitizeName(split(1))

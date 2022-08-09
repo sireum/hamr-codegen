@@ -4,7 +4,7 @@ package org.sireum.hamr.codegen.common.symbols
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
-import org.sireum.hamr.codegen.common.CommonUtil.IdPath
+import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, toolName}
 import org.sireum.hamr.codegen.common.properties.HamrProperties.HAMR__BIT_CODEC_MAX_SIZE
 import org.sireum.hamr.codegen.common.properties.{CasePropertiesProperties, CaseSchedulingProperties, OsateProperties, PropertyUtil}
 import org.sireum.hamr.codegen.common.resolvers.{BTSResolver, GclResolver}
@@ -15,40 +15,50 @@ import org.sireum.hamr.ir.{Annex, AnnexLib, ComponentCategory}
 import org.sireum.message.{Position, Reporter}
 
 object SymbolResolver {
+
+  val defaultAnnexVisitors: MSZ[AnnexVisitor] = MSZ(GclResolver(), BTSResolver())
+
   def resolve(model: ir.Aadl,
               aadlTypes: AadlTypes,
               aadlMaps: AadlMaps,
               options: CodeGenConfig,
               reporter: Reporter): SymbolTable = {
-    return SymbolResolver().resolve(model, aadlTypes, aadlMaps, options, reporter)
+
+    return SymbolResolver().resolve(model, aadlTypes, aadlMaps, options, defaultAnnexVisitors, reporter)
   }
 }
 
 @record class SymbolResolver() {
-  var annexVisitors: MSZ[AnnexVisitor] = MSZ(GclResolver(), BTSResolver())
+
 
   def resolve(model: ir.Aadl,
               aadlTypes: AadlTypes,
               aadlMaps: AadlMaps,
               options: CodeGenConfig,
+              annexVisitors: MSZ[AnnexVisitor],
               reporter: Reporter): SymbolTable = {
+
+    annexVisitors.foreach((f: AnnexVisitor) => f.reset)
+
     val st = buildSymbolTable(model, aadlTypes, aadlMaps, options, reporter)
     if(reporter.hasError) {
       return st
     } else {
-      var annexInfos: HashSMap[AadlComponent, ISZ[AnnexInfo]] = HashSMap.empty
+      val annexLibInfos: ISZ[AnnexLibInfo] = processAnnexLibraries(model.annexLib, st, aadlTypes, annexVisitors, reporter)
+
+      var annexClauseInfos: HashSMap[AadlComponent, ISZ[AnnexClauseInfo]] = HashSMap.empty
       for(component <- st.componentMap.values) {
-        var ais: ISZ[AnnexInfo] = ISZ()
+        var ais: ISZ[AnnexClauseInfo] = ISZ()
         for(annex <- component.component.annexes) {
-          processAnnex(component, st, aadlTypes, annex, model.annexLib, reporter) match {
+          processAnnexSubclauses(component, st, aadlTypes, annex, annexLibInfos, annexVisitors, reporter) match {
             case Some(ai) => ais = ais :+ ai
             case _ =>
               assert(reporter.hasError, "No annex info returned so expecting an error")
           }
         }
-        annexInfos = annexInfos + (component ~> ais)
+        annexClauseInfos = annexClauseInfos + (component ~> ais)
       }
-      return st(annexInfos = annexInfos)
+      return st(annexClauseInfos = annexClauseInfos, annexLibInfos = annexLibInfos)
     }
   }
 
@@ -171,11 +181,11 @@ object SymbolResolver {
     }
 
     var componentMap: HashSMap[IdPath, AadlComponent] = HashSMap.empty
-
+    var classifierMap: HashSMap[IdPath, ISZ[AadlComponent]] = HashSMap.empty
     /** Builds an AadlComponents and AadlFeatures from the passed in AIR component
     */
     def buildAadlComponent(c: ir.Component, parent: IdPath): AadlComponent = {
-      val (identifier, path): (String, IdPath) = c.category match {
+      val (identifier, path, classifierPath): (String, IdPath, IdPath) = c.category match {
         case ComponentCategory.Data =>
           val name: String = if(c.identifier.name.isEmpty) {
             c.classifier.get.name
@@ -184,8 +194,19 @@ object SymbolResolver {
           }
           val path: IdPath = if(parent.isEmpty) ISZ(name)
             else parent :+ name
-          (name, path)
-        case _ => (CommonUtil.getLastName(c.identifier), c.identifier.name)
+          (name, path, CommonUtil.splitClassifier(c.classifier.get))
+        case _ =>
+          val classifierPath: IdPath =
+            c.classifier match {
+              case Some(s) => CommonUtil.splitClassifier(s)
+              case _ =>
+                if (!CommonUtil.isSystemInstance(c)){
+                  reporter.error(c.identifier.pos, toolName, s"Unexpected: only the system instance should be missing a classifier, but it's missing for ${CommonUtil.getName(c.identifier)}")
+                }
+                ISZ()
+            }
+
+          (CommonUtil.getLastName(c.identifier), c.identifier.name, classifierPath)
       }
 
       if (componentMap.contains(path)) {
@@ -555,6 +576,10 @@ object SymbolResolver {
       }
 
       componentMap = componentMap + (path ~> aadlComponent)
+
+      val instances: ISZ[AadlComponent] = if(classifierMap.contains(classifierPath)) classifierMap.get(classifierPath).get else ISZ()
+      classifierMap = classifierMap + (classifierPath ~> (instances :+ aadlComponent))
+
       return aadlComponent
     }
 
@@ -630,17 +655,21 @@ object SymbolResolver {
 
     resolveAadlConnectionInstances()
 
-    val annexInfos: HashSMap[AadlComponent, ISZ[AnnexInfo]] = HashSMap.empty
+    val annexClauseInfos: HashSMap[AadlComponent, ISZ[AnnexClauseInfo]] = HashSMap.empty
+
+    val annexLibInfos: ISZ[AnnexLibInfo] = ISZ()
 
     val symbolTable = SymbolTable(
 
       rootSystem = aadlSystem,
       componentMap = componentMap,
+      classifierMap = classifierMap,
       featureMap = featureMap,
       aadlConnections = aadlConnections,
 
-      annexInfos = annexInfos,
-      
+      annexClauseInfos = annexClauseInfos,
+      annexLibInfos = annexLibInfos,
+
       airComponentMap = airComponentMap,
       airFeatureMap = airFeatureMap,
       airClassifierMap = airClassifierMap,
@@ -938,12 +967,25 @@ object SymbolResolver {
     return ret
   }
 
-  def processAnnex(context: AadlComponent,
-                   symbolTable: SymbolTable,
-                   aadlTypes: AadlTypes,
-                   annex: Annex,
-                   annexLibs: ISZ[AnnexLib],
-                   reporter: Reporter): Option[AnnexInfo] = {
+  def processAnnexLibraries(libs: ISZ[AnnexLib],
+                            symbolTable: SymbolTable,
+                            aadlTypes: AadlTypes,
+                            annexVisitors: MSZ[AnnexVisitor],
+                            reporter: Reporter): ISZ[AnnexLibInfo] = {
+    var ret: ISZ[AnnexLibInfo] = ISZ()
+    for(v <- annexVisitors) {
+      ret = ret ++ v.offerLibraries(libs, symbolTable, aadlTypes, reporter)
+    }
+    return ret
+  }
+
+  def processAnnexSubclauses(context: AadlComponent,
+                             symbolTable: SymbolTable,
+                             aadlTypes: AadlTypes,
+                             annex: Annex,
+                             annexLibs: ISZ[AnnexLibInfo],
+                             annexVisitors: MSZ[AnnexVisitor],
+                             reporter: Reporter): Option[AnnexClauseInfo] = {
     for(v <- annexVisitors) {
       v.offer(context, annex, annexLibs, symbolTable, aadlTypes, reporter) match {
         case Some(ai) => return Some(ai)

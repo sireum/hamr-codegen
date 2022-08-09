@@ -7,7 +7,7 @@ import org.sireum.hamr.codegen.common.CommonUtil.IdPath
 import org.sireum.hamr.codegen.common.properties.{CasePropertiesProperties, CaseSchedulingProperties, OsateProperties, PropertyUtil}
 import org.sireum.hamr.codegen.common.types.AadlType
 import org.sireum.hamr.ir
-import org.sireum.hamr.ir.{AnnexClause, GclAnnex, BTSBLESSAnnexClause}
+import org.sireum.hamr.ir.{AnnexClause, AnnexLib, BTSBLESSAnnexClause, GclLib, GclSubclause}
 
 @sig trait AadlSymbol
 
@@ -473,15 +473,25 @@ import org.sireum.hamr.ir.{AnnexClause, GclAnnex, BTSBLESSAnnexClause}
   'Sporadic
 }
 
-@sig trait AnnexInfo {
+@sig trait AnnexInfo
+
+@sig trait AnnexLibInfo extends AnnexInfo {
+  def annex: AnnexLib
+}
+
+@sig trait AnnexClauseInfo extends AnnexInfo {
   def annex: AnnexClause
 }
 
-@datatype class GclAnnexInfo(val annex: GclAnnex,
-                             val gclSymbolTable: GclSymbolTable) extends AnnexInfo
+@datatype class GclAnnexLibInfo(val annex: GclLib,
+                                val name: IdPath,
+                                val gclSymbolTable: GclSymbolTable) extends AnnexLibInfo
+
+@datatype class GclAnnexClauseInfo(val annex: GclSubclause,
+                                   val gclSymbolTable: GclSymbolTable) extends AnnexClauseInfo
 
 @datatype class BTSAnnexInfo(val annex: BTSBLESSAnnexClause,
-                             val btsSymbolTable: BTSSymbolTable) extends AnnexInfo
+                             val btsSymbolTable: BTSSymbolTable) extends AnnexClauseInfo
 
-@datatype class TodoAnnexInfo(val annex: AnnexClause) extends AnnexInfo
+@datatype class TodoAnnexInfo(val annex: AnnexClause) extends AnnexClauseInfo
 

@@ -4,7 +4,6 @@ package org.sireum.hamr.codegen.common.resolvers
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.CommonUtil.IdPath
-import org.sireum.hamr.codegen.common.resolvers.GclResolver.{AadlSymbolHolder, toolName}
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.types._
 import org.sireum.hamr.ir._
@@ -21,18 +20,30 @@ object GclResolver {
 
   @datatype class AadlSymbolHolder(symbol: AadlSymbol) extends SymbolHolder
 
-  @datatype class GclSymbolHolder(symbol: GclStateVar) extends SymbolHolder
+  @datatype class GclSymbolHolder(symbol: GclSymbol) extends SymbolHolder
 
   val toolName: String = "GCL-Resolver"
 
+  val GUMBO__Library: String = "GUMBO__Library"
+
+  val uif__MaySend: String = "uif__MaySend"
+  val uif__MustSend: String = "uif__MustSend"
+  val uif__MustSendWithExpectedValue: String = "uif__MustSendWithExpectedValue"
+  val uif__NoSend: String = "uif__NoSend"
+
   val libraryReporter: TypeChecker = org.sireum.lang.FrontEnd.libraryReporter._1
 
-  @record class SymbolFinder(val rewriteApiCalls: B, val context: AadlComponent, stateVars: ISZ[GclStateVar], val symbolTable: SymbolTable) extends org.sireum.hamr.ir.MTransformer {
+  @record class SymbolFinder(val rewriteApiCalls: B,
+                             val context: AadlComponent,
+                             stateVars: ISZ[GclStateVar],
+                             specFuncs: ISZ[GclMethod],
+                             val symbolTable: SymbolTable) extends org.sireum.hamr.ir.MTransformer {
     var symbols: Set[SymbolHolder] = Set.empty
     var reporter: Reporter = ReporterImpl(ISZ())
     var apiReferences: Set[AadlPort] = Set.empty
 
-    def lookup(name: String, optPos: Option[Position]): Option[SymbolHolder] = {
+    def lookup(ident: AST.Exp.Ident, optPos: Option[Position]): Option[SymbolHolder] = {
+      val name = ident.id.value
       context match {
         case a: AadlData =>
           val cands = a.subComponents.filter((p: AadlComponent) => p.identifier == name)
@@ -57,6 +68,23 @@ object GclResolver {
           }
 
           if (cands.isEmpty) {
+            cands = specFuncs.filter((sf: GclMethod) => sf.method.sig.id.value == name)
+              .map((m: GclMethod) => GclSymbolHolder(m))
+              .map((m: GclSymbolHolder) => m.asInstanceOf[SymbolHolder]) // make tipe happy
+          }
+
+          if (cands.isEmpty) {
+            ident.attr.resOpt match {
+              case Some(ario: AST.ResolvedInfo.Object) =>
+                // must be a call to a data type constructor
+                return None()
+              case _ =>
+                reporter.error(optPos, toolName, s"Could not find ${name} in thread component ${a.identifier}")
+                return None()
+            }
+          }
+
+          if (cands.isEmpty) {
             reporter.error(optPos, toolName, s"Could not find ${name} in thread component ${a.identifier}")
             return None()
           } else if (cands.size > 1) {
@@ -75,7 +103,7 @@ object GclResolver {
         case Some(e: AST.ResolvedInfo.Enum) => // ignore
         case Some(e: AST.ResolvedInfo.Package) => // ignore
         case Some(_) =>
-          return lookup(o.id.value, o.posOpt)
+          return lookup(o, o.posOpt)
         case _ => reporter.error(o.posOpt, toolName, s"Ident '$o' did not resolve")
       }
       return None()
@@ -86,9 +114,9 @@ object GclResolver {
       val emptyAttr = AST.Attr(posOpt = o.posOpt)
       val emptyRAttr = AST.ResolvedAttr(posOpt = o.posOpt, resOpt = None(), typedOpt = None())
 
-      if(o.ident.id.value == "MustSendEvent" || o.ident.id.value == "MustSendEventData") {
+      if (o.ident.id.value == uif__MustSend || o.ident.id.value == uif__MustSendWithExpectedValue) {
 
-        if(o.args.isEmpty) {
+        if (o.args.isEmpty) {
           reporter.error(o.posOpt, toolName, "Invalid MustSend expression. First argument must be outgoing event port")
           return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
         }
@@ -96,9 +124,9 @@ object GclResolver {
         (o.args(0)) match {
           case portIdent: Exp.Ident =>
             processIdent(portIdent) match {
-              case Some(ash @ AadlSymbolHolder(aadlFeatureEvent: AadlFeatureEvent)) if aadlFeatureEvent.direction == Direction.Out =>
+              case Some(ash@AadlSymbolHolder(aadlFeatureEvent: AadlFeatureEvent)) if aadlFeatureEvent.direction == Direction.Out =>
 
-                if(!aadlFeatureEvent.isInstanceOf[AadlEventPort] && !aadlFeatureEvent.isInstanceOf[AadlEventDataPort]) {
+                if (!aadlFeatureEvent.isInstanceOf[AadlEventPort] && !aadlFeatureEvent.isInstanceOf[AadlEventDataPort]) {
                   reporter.error(o.posOpt, toolName, "Invalid MustSend expression. First agrument must an an outgoing event port")
                   return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
                 }
@@ -106,7 +134,7 @@ object GclResolver {
                 symbols = symbols + ash
                 apiReferences = apiReferences + aadlFeatureEvent.asInstanceOf[AadlPort]
 
-                if(o.args.size == 1) { // MustSend(portIdent)
+                if (o.args.size == 1) { // MustSend(portIdent)
                   // api.portid
                   val apiIdent: Exp = Exp.Ident(id = AST.Id(value = "api", attr = emptyAttr), attr = emptyRAttr)
                   val apiSelect = Exp.Select(receiverOpt = Some(apiIdent), id = portIdent.id, targs = ISZ(), attr = emptyRAttr)
@@ -119,7 +147,7 @@ object GclResolver {
 
                 } else if (o.args.size == 2) { // MustSend(portIdent, expectedValue)
 
-                  if(aadlFeatureEvent.isInstanceOf[AadlEventPort]) {
+                  if (aadlFeatureEvent.isInstanceOf[AadlEventPort]) {
                     reporter.error(o.posOpt, toolName, "Invalid MustSend expression. Expected value not supported for event ports")
                     return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
                   }
@@ -171,8 +199,8 @@ object GclResolver {
             reporter.error(o.posOpt, toolName, "Invalid MustSend expression. First argument must (currently) be the simple name of an outgoing event port")
             return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
         }
-      } else if (o.ident.id.value == "NoSend") {
-        if(o.args.size == 1) {
+      } else if (o.ident.id.value == uif__NoSend) {
+        if (o.args.size == 1) {
           (o.args(0)) match {
             case portIdent: Exp.Ident =>
               processIdent(portIdent) match {
@@ -250,11 +278,64 @@ object GclResolver {
       return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
     }
 
+    override def post_langastExpInvoke(o: Exp.Invoke): MOption[Exp] = {
+      val emptyAttr = AST.Attr(posOpt = o.posOpt)
+      val emptyRAttr = AST.ResolvedAttr(posOpt = o.posOpt, resOpt = None(), typedOpt = None())
+
+      val GUMBO__LibraryId = AST.Id(value = GUMBO__Library, attr = emptyAttr)
+
+      val receiverOpt: Option[Exp] = {
+        o.attr.resOpt.get match {
+          case rim: ResolvedInfo.Method if (rim.mode == AST.MethodMode.Constructor) =>
+            // datatype constructor, no rewrites needed
+            return MNone()
+          case _ =>
+            o.receiverOpt match {
+              case s@Some(AST.Exp.Select(_, rid)) =>
+                if (rid.value != GUMBO__Library) {
+                  reporter.error(o.posOpt, toolName, s"Expecting the method ${rid.value} to be in a synthetic package called ${GUMBO__Library}")
+                }
+                s
+              case _ =>
+                // receiver is empty so must be a call to a subclause specdef
+
+                val owner: ISZ[String] = {
+                  o.attr.resOpt match {
+                    case Some(ri: ResolvedInfo.Method) => ri.owner
+                    case _ =>
+                      reporter.error(o.posOpt, toolName, s"Couldn't resolve owner of ${o}")
+                      ISZ("<INVALID>")
+                  }
+                }
+                val components: ISZ[AadlComponent] = symbolTable.classifierMap.get(owner).get
+                if (components.size > 1) {
+                  reporter.error(None(), toolName, s"There are multiple instances of ${owner}, currently only handling single instances")
+                  None()
+                } else if (components.isEmpty) {
+                  reporter.error(None(), toolName, s"Couldn't find any instances of ${owner}")
+                  None()
+                } else {
+                  val component = components(0)
+                  val objectName = org.sireum.hamr.codegen.common.Names(component.component, "").componentSingletonType
+
+                  Some(Exp.Select(
+                    //rreceiverOpt = Some(Exp.Ident(id = AST.Id(owner(0), emptyAttr), attr = emptyRAttr)),
+                    receiverOpt = None(),
+                    id = AST.Id(value = objectName, attr = AST.Attr(None())),
+                    targs = ISZ(),
+                    attr = emptyRAttr))
+                }
+            }
+        }
+      }
+      return MSome(o(receiverOpt = receiverOpt))
+    }
+
     override def post_langastExpInput(o: Exp.Input): MOption[Exp] = {
       o.exp match {
         case o: Exp.Ident =>
           processIdent(o) match {
-            case Some(g: GclSymbolHolder) =>
+            case Some(GclSymbolHolder(g: GclStateVar)) =>
             case _ =>
               reporter.error(o.posOpt, toolName, s"Only state vars can be used in In expressions")
           }
@@ -303,14 +384,17 @@ object GclResolver {
                      rewriteApiCalls: B,
                      context: AadlComponent,
                      stateVars: ISZ[GclStateVar],
+                     methods: ISZ[GclMethod],
                      symbolTable: SymbolTable,
                      reporter: Reporter): (MOption[Exp], ISZ[SymbolHolder], ISZ[AadlPort]) = {
-    val sf = SymbolFinder(rewriteApiCalls, context, stateVars, symbolTable)
+    val sf = SymbolFinder(rewriteApiCalls, context, stateVars, methods, symbolTable)
     val rexp = sf.transform_langastExp(exp)
     reporter.reports(sf.reporter.messages)
     return (rexp, sf.symbols.elements, sf.apiReferences.elements)
   }
 }
+
+import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
 @record class GclResolver() extends AnnexVisitor {
 
@@ -318,6 +402,29 @@ object GclResolver {
   var apiReferences: Set[AadlPort] = Set.empty
   var computeHandlerPortMap: Map[AST.Exp, AadlPort] = Map.empty
   var integrationMap: Map[AadlPort, GclSpec] = Map.empty
+
+  var seenAnnexes: Set[Annex] = Set.empty
+  var seenLibs: Set[GclLib] = Set.empty
+
+  var typeMap: TypeMap = HashMap.empty
+  var globalNameMap: NameMap = HashMap.empty
+  var resolvedMethods: HashSMap[AST.Stmt.Method, Info.Method] = HashSMap.empty
+  var builtTypeInfo: B = F
+
+  def reset: B = {
+    rexprs = HashMap.empty
+    apiReferences = Set.empty
+    computeHandlerPortMap = Map.empty
+    integrationMap = Map.empty
+    seenAnnexes = Set.empty
+    seenLibs = Set.empty
+    typeMap = HashMap.empty
+    globalNameMap = HashMap.empty
+    resolvedMethods = HashSMap.empty
+    builtTypeInfo = F
+
+    return T
+  }
 
   @memoize def globalImports(symbolTable: SymbolTable): ISZ[AST.Stmt.Import] = {
     // import all AADL package names and org.sireum
@@ -375,9 +482,54 @@ object GclResolver {
     return !fetchPort(name, context).isEmpty
   }
 
+  def typeMethod(m: AST.Stmt.Method): AST.Stmt.Method = {
+    val resolvedMethod = resolvedMethods.get(m).get
+
+    return m(sig = resolvedMethod.ast.sig)
+  }
+
+  def processGclLib(gclLib: GclLib,
+                    symbolTable: SymbolTable,
+                    aadlTypes: AadlTypes,
+                    typeHierarchy: TypeHierarchy,
+                    adtScope: Scope,
+                    reporter: Reporter): Option[GclSymbolTable] = {
+
+    def visitSlangMethod(m: AST.Stmt.Method): AST.Stmt.Method = {
+      val tc = TypeChecker(typeHierarchy, ISZ(m.sig.id.value), F, TypeChecker.ModeContext.Spec, F)
+      val typedMethod = typeMethod(m)
+      val rMethod = tc.checkMethod(adtScope, typedMethod, reporter)
+      return rMethod
+    }
+
+    var resolvedExp: HashMap[AST.Exp, AST.Exp] = HashMap.empty
+
+    for (gclMethod <- gclLib.methods) {
+
+      val rMethod = visitSlangMethod(gclMethod.method)
+
+      (gclMethod.method.bodyOpt, rMethod.bodyOpt) match {
+        case (Some(AST.Body(ISZ(AST.Stmt.Return(Some(exp))))),
+        Some(AST.Body(ISZ(AST.Stmt.Return(Some(rexp)))))) =>
+
+          resolvedExp = resolvedExp + (exp ~> rexp)
+
+        case _ =>
+          reporter.error(gclMethod.method.posOpt, GclResolver.toolName, "Unexpected: method does not have a body")
+      }
+    }
+    val gclSymTable = GclSymbolTable(
+      rexprs = resolvedExp,
+      apiReferences = ISZ(),
+      integrationMap = Map.empty,
+      computeHandlerPortMap = Map.empty)
+
+    return Some(gclSymTable)
+  }
 
   def processGclAnnex(context: AadlComponent,
-                      annex: GclAnnex,
+                      annex: GclSubclause,
+                      libInfos: ISZ[GclAnnexLibInfo],
                       symbolTable: SymbolTable,
                       aadlTypes: AadlTypes,
                       typeHierarchy: TypeHierarchy,
@@ -393,8 +545,20 @@ object GclResolver {
 
     val componentPos = context.component.identifier.pos
 
+    val libMethods = libInfos.flatMap((m: GclAnnexLibInfo) => m.annex.methods)
+
+    def visitSlangMethod(m: AST.Stmt.Method): AST.Stmt.Method = {
+      val tc = TypeChecker(typeHierarchy, ISZ(m.sig.id.value), F, TypeChecker.ModeContext.Spec, F)
+      val typedMethod = typeMethod(m)
+      val rMethod = tc.checkMethod(scope, typedMethod, reporter)
+      return rMethod
+    }
+
     def visitGclSubclause(s: GclSubclause): Unit = {
       var seenInvariantIds: Set[String] = Set.empty
+
+      // hmm, lost imports with AIR translation so assume all glc lib annexes have been imported
+      val gclMethods = s.methods ++ libMethods
 
       def typeCheckBoolExp(exp: Exp): Exp = {
         val rexp: AST.Exp = visitSlangExp(exp) match {
@@ -417,6 +581,20 @@ object GclResolver {
         return rexp
       }
 
+      for (gclMethod <- s.methods) {
+        val rMethod = visitSlangMethod(gclMethod.method)
+
+        (gclMethod.method.bodyOpt, rMethod.bodyOpt) match {
+          case (Some(AST.Body(ISZ(AST.Stmt.Return(Some(exp))))),
+          Some(AST.Body(ISZ(AST.Stmt.Return(Some(rexp)))))) =>
+
+            rexprs = rexprs + (exp ~> rexp)
+
+          case _ =>
+            reporter.error(gclMethod.method.posOpt, GclResolver.toolName, "Unexpected: method does not have a body")
+        }
+      }
+
       for (i <- s.invariants) {
         if (seenInvariantIds.contains(i.id)) {
           reporter.error(i.exp.posOpt, GclResolver.toolName, s"Duplicate invariant id: ${i.id}")
@@ -429,44 +607,56 @@ object GclResolver {
         var seenSpecNames: Set[String] = Set.empty
         val gclIntegration = s.integration.get
 
-        for (s <- gclIntegration.specs) {
+        for (glcIntegSpec <- gclIntegration.specs) {
 
-          if (seenSpecNames.contains(s.id)) {
-            reporter.error(s.exp.posOpt, GclResolver.toolName, s"Duplicate spec name: ${s.id}")
+          if (seenSpecNames.contains(glcIntegSpec.id)) {
+            reporter.error(glcIntegSpec.exp.posOpt, GclResolver.toolName, s"Duplicate spec name: ${glcIntegSpec.id}")
           }
-          seenSpecNames = seenSpecNames + s.id
+          seenSpecNames = seenSpecNames + glcIntegSpec.id
 
-          val rexp: AST.Exp = typeCheckBoolExp(s.exp)
+          val expTipe: AST.Exp = typeCheckBoolExp(glcIntegSpec.exp)
 
           if (!reporter.hasError) {
-            val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, F, context, ISZ(), symbolTable, reporter)
-            rexprs = rexprs + s.exp ~> rexp
+            val (expTrans, symbols, apiRefs) =
+              GclResolver.collectSymbols(expTipe, F, context, ISZ(), gclMethods, symbolTable, reporter)
+            rexprs = rexprs + glcIntegSpec.exp ~> (if (expTrans.nonEmpty) expTrans.get else expTipe)
             apiReferences = apiReferences ++ apiRefs
 
             if (!reporter.hasError) {
-              if (symbols.size != 1) {
-                reporter.error(s.exp.posOpt, GclResolver.toolName, s"An integration clause must refer to exactly one port")
-              } else {
-                if (rexp2.nonEmpty) {
-                  rexprs = rexprs + s.exp ~> rexp2.get
+              val portRef: Option[AadlPort] = {
+                var portRefs: Set[AadlPort] = Set.empty
+                for (s <- symbols) {
+                  s match {
+                    case AadlSymbolHolder(sym: AadlPort) => portRefs = portRefs + sym
+                    case GclSymbolHolder(sym: GclMethod) => // TODO: collect port refs in method args
+                    case x =>
+                      reporter.error(glcIntegSpec.exp.posOpt, toolName, s"Error in integration spce.  Not expecting to encounter ${x}")
+                  }
                 }
-                symbols(0) match {
-                  case AadlSymbolHolder(sym: AadlPort) =>
-                    integrationMap = integrationMap + sym ~> s
+                if (portRefs.size != 1) {
+                  reporter.error(glcIntegSpec.exp.posOpt, GclResolver.toolName, s"An integration clause must refer to exactly one port")
+                  None()
+                } else {
+                  Some(portRefs.elements(0))
+                }
+              }
+              if (portRef.nonEmpty) {
+                if (expTrans.nonEmpty) {
+                  rexprs = rexprs + glcIntegSpec.exp ~> expTrans.get
+                }
+                val sym = portRef.get
+                integrationMap = integrationMap + sym ~> glcIntegSpec
 
-                    sym.direction match {
-                      case Direction.Out =>
-                        if (!s.isInstanceOf[GclGuarantee]) {
-                          reporter.error(s.exp.posOpt, GclResolver.toolName, s"Integration contracts for outgoing ports must be Guarantee statements")
-                        }
-                      case Direction.In =>
-                        if (!s.isInstanceOf[GclAssume]) {
-                          reporter.error(s.exp.posOpt, GclResolver.toolName, s"Integration contracts for incoming ports must be Assume statements")
-                        }
-                      case x => halt(s"Other phase rejects this case: ${x}")
+                sym.direction match {
+                  case Direction.Out =>
+                    if (!glcIntegSpec.isInstanceOf[GclGuarantee]) {
+                      reporter.error(glcIntegSpec.exp.posOpt, GclResolver.toolName, s"Integration contracts for outgoing ports must be Guarantee statements")
                     }
-
-                  case x => halt(s"Not expecting ${x}")
+                  case Direction.In =>
+                    if (!glcIntegSpec.isInstanceOf[GclAssume]) {
+                      reporter.error(glcIntegSpec.exp.posOpt, GclResolver.toolName, s"Integration contracts for incoming ports must be Assume statements")
+                    }
+                  case x => halt(s"Other phase rejects this case: ${x}")
                 }
               }
             }
@@ -480,7 +670,7 @@ object GclResolver {
             case e: Exp.Ident =>
               visitSlangExp(e) match {
                 case Some((rexp, roptType)) =>
-                  val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, T, context, s.state, symbolTable, reporter)
+                  val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, T, context, s.state, gclMethods, symbolTable, reporter)
                   apiReferences = apiReferences ++ apiRefs
 
                   if (symbols.size != 1) {
@@ -508,7 +698,7 @@ object GclResolver {
           seenGuaranteeIds = seenGuaranteeIds + guarantees.id
 
           val rexp = typeCheckBoolExp(guarantees.exp)
-          val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, T, context, s.state, symbolTable, reporter)
+          val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, T, context, s.state, gclMethods, symbolTable, reporter)
           apiReferences = apiReferences ++ apiRefs
 
           if (rexp2.isEmpty) {
@@ -526,7 +716,7 @@ object GclResolver {
               case e: Exp.Ident =>
                 visitSlangExp(e) match {
                   case Some((rexp, roptType)) =>
-                    val (rexp2, symbols, _) = GclResolver.collectSymbols(rexp, F, context, s.state, symbolTable, reporter)
+                    val (rexp2, symbols, _) = GclResolver.collectSymbols(rexp, F, context, s.state, gclMethods, symbolTable, reporter)
                     if (symbols.size != 1) {
                       reporter.error(e.posOpt, GclResolver.toolName, s"Modifies should resolve to exactly one symbol, instead resolved to ${symbols.size}")
                     }
@@ -553,7 +743,7 @@ object GclResolver {
 
             {
               val rexp = typeCheckBoolExp(spec.exp)
-              val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, T, context, s.state, symbolTable, reporter)
+              val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, T, context, s.state, gclMethods, symbolTable, reporter)
               apiReferences = apiReferences ++ apiRefs
 
               rexprs = rexprs + (spec.exp ~> rexp)
@@ -572,7 +762,7 @@ object GclResolver {
 
             {
               val rexp = typeCheckBoolExp(caase.assumes)
-              val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, T, context, s.state, symbolTable, reporter)
+              val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, T, context, s.state, gclMethods, symbolTable, reporter)
               apiReferences = apiReferences ++ apiRefs
 
               rexprs = rexprs + (caase.assumes ~> rexp)
@@ -583,7 +773,7 @@ object GclResolver {
 
             {
               val rexp = typeCheckBoolExp(caase.guarantees)
-              val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, T, context, s.state, symbolTable, reporter)
+              val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, T, context, s.state, gclMethods, symbolTable, reporter)
               apiReferences = apiReferences ++ apiRefs
 
               rexprs = rexprs + (caase.guarantees ~> rexp)
@@ -597,7 +787,7 @@ object GclResolver {
 
             visitSlangExp(handler.port) match {
               case Some((rexp, roptType)) =>
-                val (_, symbols, _) = GclResolver.collectSymbols(rexp, F, context, s.state, symbolTable, reporter)
+                val (_, symbols, _) = GclResolver.collectSymbols(rexp, F, context, s.state, gclMethods, symbolTable, reporter)
                 if (symbols.size != 1) {
                   reporter.error(handler.port.posOpt, GclResolver.toolName, s"Handler should resolve to exactly one symbol, instead resolved to ${symbols.size}")
                 }
@@ -619,7 +809,7 @@ object GclResolver {
                 case e: Exp.Ident =>
                   visitSlangExp(e) match {
                     case Some((rexp, roptType)) =>
-                      val (rexp2, symbols, _) = GclResolver.collectSymbols(rexp, F, context, s.state, symbolTable, reporter)
+                      val (rexp2, symbols, _) = GclResolver.collectSymbols(rexp, F, context, s.state, gclMethods, symbolTable, reporter)
                       if (symbols.size != 1) {
                         reporter.error(e.posOpt, GclResolver.toolName, s"Modifies should resolve to exactly one symbol, instead resolved to ${symbols.size}")
                       }
@@ -644,7 +834,7 @@ object GclResolver {
               handlerSpecIds = handlerSpecIds + guarantees.id
 
               val rexp = typeCheckBoolExp(guarantees.exp)
-              val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, T, context, s.state, symbolTable, reporter)
+              val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, T, context, s.state, gclMethods, symbolTable, reporter)
               apiReferences = apiReferences ++ apiRefs
 
               if (rexp2.isEmpty) {
@@ -674,7 +864,7 @@ object GclResolver {
         case Some((rexp, roptType)) =>
           roptType match {
             case Some(AST.Typed.Name(ISZ("org", "sireum", "B"), _)) =>
-              val (rexp2, _, _) = GclResolver.collectSymbols(rexp, F, context, ISZ(), symbolTable, reporter)
+              val (rexp2, _, _) = GclResolver.collectSymbols(rexp, F, context, ISZ(), libMethods, symbolTable, reporter)
               if (rexp2.isEmpty) {
                 rexprs = rexprs + (i.exp ~> rexp)
               } else {
@@ -691,24 +881,17 @@ object GclResolver {
 
     def visitSlangExp(exp: AST.Exp): Option[(AST.Exp, Option[AST.Typed])] = {
       val scontext: QName = ISZ("???")
+
       val mode = TypeChecker.ModeContext.Spec
       val typeChecker: TypeChecker = TypeChecker(typeHierarchy, scontext, F, mode, F)
 
       return Some(typeChecker.checkExp(None(), scope, exp, reporter))
     }
 
-    annex match {
-      case g: GclSubclause =>
-        visitGclSubclause(g)
-        return Some(GclSymbolTable(rexprs, apiReferences.elements, integrationMap, computeHandlerPortMap))
-      case x =>
-        halt(s"TODO: need to handle gcl annex type: ${x}")
-    }
-  }
+    visitGclSubclause(annex)
 
-  var seenAnnexes: Set[Annex] = Set.empty
-  var typeMap: TypeMap = HashMap.empty
-  var globalNameMap: NameMap = HashMap.empty
+    return Some(GclSymbolTable(rexprs, apiReferences.elements, integrationMap, computeHandlerPortMap))
+  }
 
   @memoize def scope(packageName: IdPath, imports: ISZ[AST.Stmt.Import], enclosingName: IdPath): Scope.Global = {
     return Scope.Global(packageName, imports, enclosingName)
@@ -718,7 +901,83 @@ object GclResolver {
     return ops.StringOps(ops.StringOps(s).replaceAllLiterally("::", "|")).split((c: C) => c == '|')
   }
 
-  def buildTypeMap(gclLibs: ISZ[GclLibrary], aadlTypes: AadlTypes, symbolTable: SymbolTable, reporter: Reporter): Unit = {
+  def buildTypeMap(gclLibs: ISZ[GclLib], aadlTypes: AadlTypes, symbolTable: SymbolTable, reporter: Reporter): Unit = {
+    if (builtTypeInfo) {
+      return
+    }
+    builtTypeInfo = T
+
+    def fromTypetoTyped(value: AST.Type): AST.Typed = {
+      val ret: AST.Typed = value match {
+        case atn: AST.Type.Named =>
+          AST.Typed.Name(ids = atn.name.ids.map((m: AST.Id) => m.value), args = ISZ())
+        case _ => halt(s"Not yet ${value}")
+      }
+      return ret
+    }
+
+    def resolveType(value: AST.Type): AST.Type = {
+      val ret: AST.Type = {
+        value match {
+          case atn: AST.Type.Named =>
+            val fqn = atn.name.ids.map((i: AST.Id) => i.value)
+            val s = st"${(fqn, "::")}".render
+
+            val aadlType = aadlTypes.typeMap.get(s).get
+            val typeInfo = buildTypeInfo(aadlType)
+
+            val name: AST.Name = typeInfo match {
+              case ta: TypeInfo.TypeAlias =>
+                val tn = ta.ast.tipe.asInstanceOf[AST.Type.Named].attr.typedOpt.get.asInstanceOf[AST.Typed.Name]
+                AST.Name(ids = tn.ids.map((s: String) => AST.Id(value = s, attr = AST.Attr(None()))),
+                  attr = AST.Attr(None()))
+
+              case tadt: TypeInfo.Adt =>
+                AST.Name(ids = tadt.tpe.ids.map((s: String) => AST.Id(value = s, attr = AST.Attr(None()))), attr = AST.Attr(None()))
+
+              case te: TypeInfo.Enum => halt("Not yet enums")
+
+              case x =>
+                halt(s"TODO ${x}")
+            }
+
+            val typedName = AST.Typed.Name(ids = name.ids.map((i: AST.Id) => i.value), args = ISZ())
+
+            AST.Type.Named(
+              name = name,
+              typeArgs = ISZ(),
+              attr = AST.TypedAttr(posOpt = None(), typedOpt = Some(typedName))
+            )
+          case _ => halt(s"Not expected ${value}")
+        }
+      }
+      return ret
+    }
+
+    def typeToTyped(t: AST.Type): AST.Typed = {
+      val ret: AST.Typed = t match {
+        case atn: AST.Type.Named => AST.Typed.Name(ids = atn.name.ids.map((i: AST.Id) => i.value), args = ISZ())
+        case _ => halt(s"Not yet ${t}")
+      }
+      return ret
+    }
+
+    def paramToTypedName(p: AST.Param): AST.Typed = {
+      val ids = p.tipe.asInstanceOf[AST.Type.Named].name.ids.map((i: AST.Id) => i.value)
+      return AST.Typed.Name(ids = ids, args = ISZ())
+    }
+
+    def getTypedFromAadlType(aadlType: AadlType): Option[AST.Typed] = {
+      val paramResolvedType: TypeInfo = buildTypeInfo(aadlType)
+      val typedOpt: Option[AST.Typed] = paramResolvedType match {
+        case ta: TypeInfo.TypeAlias => ta.ast.tipe.typedOpt
+        case tadt: TypeInfo.Adt => Some(tadt.tpe)
+        case te: TypeInfo.Enum => Some(AST.Typed.Name(ids = te.name, args = ISZ()))
+        case x =>
+          halt(s"TODO ${x}")
+      }
+      return typedOpt
+    }
 
     def getSimpleNameFromClassifier(c: String): String = {
       return ops.ISZOps(getPathFromClassifier(c)).last
@@ -768,6 +1027,11 @@ object GclResolver {
               resOpt = Some(AST.ResolvedInfo.Enum(name = qualifiedName)),
               elementTypedOpt = Some(elementTypedOpt),
               posOpt = None())
+          }
+
+          val gclAnnexes = e.container.get.annexes.filter((a: Annex) => a.clause.isInstanceOf[GclSubclause]).map((a: Annex) => a.clause.asInstanceOf[GclSubclause])
+          if (gclAnnexes.nonEmpty) {
+            reporter.error(e.container.get.identifier.pos, toolName, "GCL subclauses cannot be attached to enum definitions")
           }
 
           return enumx
@@ -845,6 +1109,11 @@ object GclResolver {
 
           typeMap = typeMap + (qualifiedName ~> ta)
 
+          val gclAnnexes = b.container.get.annexes.filter((a: Annex) => a.clause.isInstanceOf[GclSubclause]).map((a: Annex) => a.clause.asInstanceOf[GclSubclause])
+          if (gclAnnexes.nonEmpty) {
+            reporter.error(b.container.get.identifier.pos, toolName, "GCL subclauses cannot be attached to Base Type definitions")
+          }
+
           return ta
 
         case TODOType("art::Empty", _, _) =>
@@ -904,6 +1173,204 @@ object GclResolver {
       return globalNameMap.get(packageName).get.asInstanceOf[Info.Package]
     }
 
+    def buildGumboLibrary(g: GclLib): TypeInfo.Adt = {
+
+      val packageName: ISZ[String] = g.containingPackage.name
+      buildPackageInfo(packageName)
+
+      val adtQualifiedName: ISZ[String] = packageName :+ GUMBO__Library
+
+      val adtScope = scope(packageName, globalImports(symbolTable), packageName)
+
+      val specDefs: ISZ[(String, Info.Method)] = g.methods.map((gclMethod: GclMethod) => {
+        val infoMethod = buildMethod(gclMethod, adtQualifiedName, adtScope)
+        resolvedMethods = resolvedMethods + (gclMethod.method ~> infoMethod)
+
+        val fqMethodName = (adtQualifiedName :+ gclMethod.method.sig.id.value)
+        globalNameMap = globalNameMap + (fqMethodName ~> infoMethod)
+
+        (gclMethod.method.sig.id.value, infoMethod)
+      })
+
+      val tpe: AST.Typed.Name = AST.Typed.Name(ids = adtQualifiedName, args = ISZ())
+
+      val adtAst: AST.Stmt.Adt =
+        AST.Stmt.Adt(
+          isRoot = F,
+          isDatatype = T,
+          id = AST.Id(GUMBO__Library, AST.Attr(None())),
+          typeParams = ISZ(),
+          params = ISZ(),
+          parents = ISZ(),
+          stmts = ISZ(),
+          attr = AST.Attr(None()))
+
+      val typeInfoAdt = TypeInfo.Adt(
+        owner = packageName,
+        outlined = F,
+        contractOutlined = F,
+        typeChecked = F,
+        tpe = tpe,
+        constructorTypeOpt = None(),
+        constructorResOpt = None(),
+        extractorTypeMap = Map.empty,
+        extractorResOpt = None(),
+        ancestors = ISZ(),
+        specVars = HashSMap.empty,
+        vars = HashSMap.empty,
+        specMethods = HashSMap.empty,
+        methods = HashSMap.empty[String, Info.Method] ++ specDefs,
+        refinements = HashSMap.empty,
+        invariants = HashSMap.empty,
+        dataRefinements = ISZ(),
+        scope = adtScope,
+        ast = adtAst
+      )
+
+      val adtInfo = Info.Object(
+        owner = packageName,
+        isSynthetic = F,
+        scope = adtScope,
+        outlined = F,
+        contractOutlined = F,
+        typeChecked = F,
+        ast = AST.Stmt.Object(
+          isApp = F,
+          extNameOpt = None(),
+          id = AST.Id(value = GUMBO__Library, attr = AST.Attr(None())),
+          stmts = ISZ(),
+          attr = AST.Attr(None())
+        ),
+        typedOpt = Some(AST.Typed.Object(owner = packageName, id = GUMBO__Library)),
+        resOpt = Some(AST.ResolvedInfo.Object(name = adtQualifiedName)),
+        constructorRes = AST.ResolvedInfo.Method(
+          isInObject = T,
+          mode = AST.MethodMode.ObjectConstructor,
+          typeParams = ISZ(),
+          owner = packageName,
+          id = GUMBO__Library,
+          paramNames = ISZ(),
+          tpeOpt = None(),
+          reads = ISZ(),
+          writes = ISZ()
+        )
+      )
+      globalNameMap = globalNameMap + (adtQualifiedName ~> adtInfo)
+
+      typeMap = typeMap + (adtQualifiedName ~> typeInfoAdt)
+
+      return typeInfoAdt
+    }
+
+    def buildMethod(gclMethod: GclMethod, adtQualifiedName: ISZ[String], adtScope: Scope): Info.Method = {
+      val m = gclMethod.method
+
+      val methodName = m.sig.id.value
+
+      val qualifiedMethodName = adtQualifiedName :+ methodName
+
+      val resolvedParams: ISZ[AST.Param] = m.sig.params.map((p: AST.Param) => {
+        val resolvedTipe = resolveType(p.tipe)
+        p(tipe = resolvedTipe)
+      })
+
+      val resolvedReturnType: AST.Type = resolveType(m.sig.returnType)
+
+      val resolvedReturnTyped: AST.Typed = fromTypetoTyped(resolvedReturnType)
+
+      val resolvedTypeParams = m.sig.typeParams
+      assert(resolvedTypeParams.isEmpty, "Not handling type params yet")
+
+      val resolvedMsig = AST.MethodSig(
+        isPure = m.sig.isPure,
+        id = m.sig.id,
+        typeParams = m.sig.typeParams,
+        hasParams = resolvedParams.nonEmpty,
+        params = resolvedParams,
+        returnType = resolvedReturnType)
+
+      val resolvedTypedFun = AST.Typed.Fun(
+        isPure = m.sig.isPure,
+        isByName = F,
+        args = resolvedParams.map((p: AST.Param) => paramToTypedName(p)),
+        ret = resolvedReturnTyped)
+
+      val resolvedInfoMethod = AST.ResolvedInfo.Method(
+        isInObject = F,
+        mode = AST.MethodMode.Method,
+        typeParams = resolvedTypeParams.map((t: AST.TypeParam) => t.id.value),
+        owner = adtQualifiedName,
+        id = methodName,
+        paramNames = resolvedParams.map((p: AST.Param) => p.id.value),
+        tpeOpt = Some(resolvedTypedFun),
+        reads = ISZ(),
+        writes = ISZ())
+
+      val resolvedTypedMethod = AST.Typed.Method(
+        isInObject = F,
+        mode = AST.MethodMode.Method,
+        typeParams = ISZ(),
+        owner = adtQualifiedName,
+        name = methodName,
+        paramNames = resolvedParams.map((p: AST.Param) => p.id.value),
+        tpe = resolvedTypedFun)
+
+      val resolvedAttr = AST.ResolvedAttr(
+        posOpt = m.attr.posOpt,
+        resOpt = Some(resolvedInfoMethod),
+        typedOpt = Some(resolvedTypedMethod))
+
+      val resolvedAstMethod = AST.Stmt.Method(
+        typeChecked = m.typeChecked,
+        purity = m.purity,
+        hasOverride = m.hasOverride,
+        isHelper = m.isHelper,
+        sig = resolvedMsig,
+        mcontract = m.mcontract,
+        bodyOpt = m.bodyOpt,
+        attr = resolvedAttr)
+
+      val scopeNameMap: HashMap[String, Info] = {
+        val entries: ISZ[(String, Info)] = resolvedParams.map((p: AST.Param) => {
+          val lv = Info.LocalVar(
+            name = qualifiedMethodName :+ p.id.value,
+            isVal = T,
+            ast = AST.Id(value = p.id.value, attr = AST.Attr(posOpt = None())),
+            typedOpt = Some(paramToTypedName(p)),
+            resOpt = Some(AST.ResolvedInfo.LocalVar(
+              context = qualifiedMethodName,
+              scope = ResolvedInfo.LocalVar.Scope.Current,
+              isSpec = F,
+              isVal = T,
+              id = p.id.value)
+            )
+          )
+          (p.id.value, lv)
+        })
+
+        HashMap.empty[String, Info] ++ entries
+      }
+
+      val methodScope = Scope.Local(
+        nameMap = scopeNameMap,
+        typeMap = HashMap.empty,
+        localThisOpt = None(),
+        methodReturnOpt = Some(resolvedReturnTyped),
+        indexMap = HashMap.empty,
+        outerOpt = Some(adtScope)
+      )
+
+      val infoMethod = Info.Method(
+        owner = adtQualifiedName,
+        isInObject = F,
+        scope = methodScope,
+        hasBody = T,
+        ast = resolvedAstMethod
+      )
+
+      return infoMethod
+    }
+
     def buildAdtTypeInfo(a: AadlComponent): TypeInfo.Adt = {
       assert(a.isInstanceOf[AadlThread] || a.isInstanceOf[AadlData])
 
@@ -921,14 +1388,17 @@ object GclResolver {
       buildPackageInfo(packageName)
 
       // enclosingName is the same as the packageName
-      val sc = scope(packageName, globalImports(symbolTable), packageName)
+      val adtScope = scope(packageName, globalImports(symbolTable), packageName)
 
       var paramVars = HashSMap.empty[String, Info.Var]
       var constructorParamVars = ISZ[String]()
       val extractParamVars = ISZ[String]() // always empty as there are no @hidden params in AADL
 
       val gclAnnexes = component.annexes.filter((a: Annex) => a.clause.isInstanceOf[GclSubclause]).map((a: Annex) => a.clause.asInstanceOf[GclSubclause])
-      assert(gclAnnexes.size <= 1, s"There can be only one")
+
+      if (gclAnnexes.size > 1) {
+        reporter.error(a.component.identifier.pos, toolName, "Only a single GCL subclause is allowed per component type/implementation")
+      }
 
       // treat stateVars as if they were features for Tipe
       val stateVars: ISZ[AadlPort] = gclAnnexes.flatMap((g: GclSubclause) => g.state.map((sv: GclStateVar) => {
@@ -995,14 +1465,7 @@ object GclResolver {
         val paramResInfoOpt = Some[AST.ResolvedInfo](
           AST.ResolvedInfo.Var(isInObject = F, isSpec = F, isVal = F, owner = adtQualifiedName, id = paramId))
 
-        val paramResolvedType: TypeInfo = buildTypeInfo(paramType)
-        val typedOpt: Option[AST.Typed] = paramResolvedType match {
-          case ta: TypeInfo.TypeAlias => ta.ast.tipe.typedOpt
-          case tadt: TypeInfo.Adt => Some(tadt.tpe)
-          case te: TypeInfo.Enum => Some(AST.Typed.Name(ids = te.name, args = ISZ()))
-          case x =>
-            halt(s"TODO ${x}")
-        }
+        val typedOpt: Option[AST.Typed] = getTypedFromAadlType(paramType)
 
         val varTypeId = AST.Id(value = paramType.name, attr = AST.Attr(None()))
         val varTypeName = AST.Type.Named(
@@ -1014,7 +1477,7 @@ object GclResolver {
         paramVars = paramVars + paramId ~> Info.Var(
           owner = adtQualifiedName,
           isInObject = F,
-          scope = sc,
+          scope = adtScope,
           ast = AST.Stmt.Var(
             isSpec = F,
             isVal = F,
@@ -1026,6 +1489,8 @@ object GclResolver {
         )
 
         { // build adt param
+          val paramResolvedType: TypeInfo = buildTypeInfo(paramType)
+
           val tipeName: AST.Name = AST.Name(
             ids = paramResolvedType.name.map((m: String) => AST.Id(m, AST.Attr(None()))),
             attr = AST.Attr(None()))
@@ -1073,7 +1538,7 @@ object GclResolver {
                   args = params.map((m: AST.Param) => {
                     val ids = m.tipe.asInstanceOf[AST.Type.Named].name.ids.map((i: AST.Id) => i.value)
 
-                    if(ids == ISZ(TYPE_VAR__STATE_VAR))
+                    if (ids == ISZ(TYPE_VAR__STATE_VAR))
                       AST.Typed.TypeVar(id = TYPE_VAR__STATE_VAR)
                     else
                       AST.Typed.Name(ids = ids, args = ISZ())
@@ -1118,7 +1583,7 @@ object GclResolver {
               return Info.Method(
                 owner = adtQualifiedName,
                 isInObject = F,
-                scope = sc,
+                scope = adtScope,
                 hasBody = F,
                 ast = methodAst
               )
@@ -1162,7 +1627,7 @@ object GclResolver {
 
             val genericType = AST.TypeParam(AST.Id(TYPE_VAR__STATE_VAR, AST.Attr(None())))
             val genericPortParam = AST.Param(
-              isHidden =  F,
+              isHidden = F,
               id = AST.Id("port", AST.Attr(None())),
               tipe = AST.Type.Named(
                 name = toName(ISZ(TYPE_VAR__STATE_VAR)),
@@ -1174,7 +1639,7 @@ object GclResolver {
               )
             )
             val genericValueParam = AST.Param(
-              isHidden =  F,
+              isHidden = F,
               id = AST.Id("value", AST.Attr(None())),
               tipe = AST.Type.Named(
                 name = toName(ISZ(TYPE_VAR__STATE_VAR)),
@@ -1188,10 +1653,10 @@ object GclResolver {
 
             var _methods: HashSMap[String, Info.Method] = HashSMap.empty
             val sigs = ISZ[(String, ISZ[AST.TypeParam], ISZ[AST.Param], AST.Type.Named)](
-              ("MaySend", ISZ(), ISZ[AST.Param](portParam), boolType),
-              ("NoSend", ISZ(genericType), ISZ[AST.Param](genericPortParam), boolType),
-              ("MustSendEvent", ISZ(genericType), ISZ[AST.Param](genericPortParam), boolType),
-              ("MustSendEventData", ISZ(genericType), ISZ[AST.Param](genericPortParam, genericValueParam), boolType),
+              (uif__MaySend, ISZ(), ISZ[AST.Param](portParam), boolType),
+              (uif__NoSend, ISZ(genericType), ISZ[AST.Param](genericPortParam), boolType),
+              (uif__MustSend, ISZ(genericType), ISZ[AST.Param](genericPortParam), boolType),
+              (uif__MustSendWithExpectedValue, ISZ(genericType), ISZ[AST.Param](genericPortParam, genericValueParam), boolType),
               //("MustSend", ISZ(), ISZ[AST.Param](portParam, valueParam), bType),
             )
 
@@ -1203,14 +1668,60 @@ object GclResolver {
                 returnType = sig._4)
             }
 
-            _methods
+            val specDefs: ISZ[(String, Info.Method)] = gclAnnexes.flatMap((g: GclSubclause) =>
+              g.methods.map((gclMethod: GclMethod) => {
+
+                val infoMethod = buildMethod(gclMethod, adtQualifiedName, adtScope)
+
+                resolvedMethods = resolvedMethods + (gclMethod.method ~> infoMethod)
+
+                (gclMethod.method.sig.id.value, infoMethod)
+              }))
+
+            _methods ++ specDefs
 
           case ad: AadlData => HashSMap.empty
           case _ => halt("Expecting a thread or data component")
         }
 
-      val constructorTypeOpt: Option[AST.Typed] = None()
-      val constructorResOpt: Option[AST.ResolvedInfo] = None()
+      val constructorInfo: (Option[AST.Typed], Option[AST.ResolvedInfo]) =
+        a match {
+          case aadlData: AadlData =>
+            val tpeFun = AST.Typed.Fun(
+              isPure = T,
+              isByName = F,
+              args = aadlData.subComponents.map((sc: AadlComponent) => {
+                val aadlType = aadlTypes.typeMap.get(sc.component.classifier.get.name).get
+                getTypedFromAadlType(aadlType).get
+              }),
+              ret = AST.Typed.Name(ids = adtQualifiedName, args = ISZ())
+            )
+            val constructorTypeOpt: Option[AST.Typed] = Some(
+              AST.Typed.Method(
+                isInObject = T,
+                mode = AST.MethodMode.Constructor,
+                typeParams = ISZ(),
+                owner = packageName,
+                name = simpleName,
+                paramNames = aadlData.subComponents.map((s: AadlComponent) => s.identifier),
+                tpe = tpeFun)
+            )
+            val constructorResOpt: Option[AST.ResolvedInfo] = Some(
+              AST.ResolvedInfo.Method(
+                isInObject = F,
+                mode = AST.MethodMode.Constructor,
+                typeParams = ISZ(),
+                owner = packageName,
+                id = simpleName,
+                paramNames = aadlData.subComponents.map((s: AadlComponent) => s.identifier),
+                tpeOpt = Some(tpeFun),
+                reads = ISZ(),
+                writes = ISZ())
+            )
+            (constructorTypeOpt, constructorResOpt)
+          case _ => (None(), None())
+        }
+
       val extractorTypeMap: Map[String, AST.Typed] = Map.empty
       val extractorResOpt: Option[AST.ResolvedInfo] = None()
       val ancestors: ISZ[AST.Typed.Name] = ISZ()
@@ -1244,8 +1755,8 @@ object GclResolver {
         contractOutlined = F,
         typeChecked = F,
         tpe = tpe,
-        constructorTypeOpt = constructorTypeOpt,
-        constructorResOpt = constructorResOpt,
+        constructorTypeOpt = constructorInfo._1,
+        constructorResOpt = constructorInfo._2,
         extractorTypeMap = extractorTypeMap,
         extractorResOpt = extractorResOpt,
         ancestors = ancestors,
@@ -1256,10 +1767,48 @@ object GclResolver {
         refinements = refinements,
         invariants = invariants,
         dataRefinements = dataRefinements,
-        scope = sc,
+        scope = adtScope,
         ast = adtAst)
 
       typeMap = typeMap + (adtQualifiedName ~> typeInfoAdt)
+
+      if (a.isInstanceOf[AadlData]) {
+        // build companion object for data type def
+        val constructorRes = AST.ResolvedInfo.Method(
+          isInObject = T,
+          mode = AST.MethodMode.ObjectConstructor,
+          typeParams = ISZ(),
+          owner = packageName,
+          id = simpleName,
+          paramNames = ISZ(),
+          tpeOpt = None(),
+          reads = ISZ(),
+          writes = ISZ()
+        )
+        globalNameMap = globalNameMap + (adtQualifiedName ~>
+          Info.Object(
+            owner = packageName,
+            isSynthetic = F,
+            scope = adtScope,
+            outlined = F,
+            contractOutlined = F,
+            typeChecked = F,
+            ast = AST.Stmt.Object(
+              isApp = F,
+              extNameOpt = None(),
+              id = AST.Id(value = simpleName, attr = AST.Attr(None())),
+              stmts = ISZ(),
+              attr = AST.Attr(posOpt = None())
+            ),
+            typedOpt = Some(
+              AST.Typed.Object(owner = packageName, id = simpleName)
+            ),
+            resOpt = Some(
+              AST.ResolvedInfo.Object(name = adtQualifiedName)
+            ),
+            constructorRes = constructorRes)
+          )
+      }
 
       return typeInfoAdt
     }
@@ -1267,6 +1816,12 @@ object GclResolver {
     { // build type info aadl types
       for (aadlType <- aadlTypes.typeMap.values) {
         buildTypeInfo(aadlType)
+      }
+    }
+
+    { // build type info for the GCL Libraries
+      for (gclLib <- gclLibs) {
+        buildGumboLibrary(gclLib)
       }
     }
 
@@ -1279,14 +1834,14 @@ object GclResolver {
     }
   }
 
-  def offer(context: AadlComponent, annex: Annex, annexLibs: ISZ[AnnexLib], symbolTable: SymbolTable, aadlTypes: AadlTypes, reporter: Reporter): Option[AnnexInfo] = {
+  def offer(context: AadlComponent, annex: Annex, annexLibs: ISZ[AnnexLibInfo], symbolTable: SymbolTable, aadlTypes: AadlTypes, reporter: Reporter): Option[AnnexClauseInfo] = {
     if (!seenAnnexes.contains(annex)) {
       seenAnnexes = seenAnnexes + annex
 
       annex.clause match {
-        case b: GclSubclause =>
-          val gclLibs: ISZ[GclLibrary] = annexLibs.filter((a: AnnexLib) => a.isInstanceOf[GclLibrary]).map((a: AnnexLib) => a.asInstanceOf[GclLibrary])
-          buildTypeMap(gclLibs, aadlTypes, symbolTable, reporter)
+        case gclSubclause: GclSubclause =>
+          val gclLibs: ISZ[GclAnnexLibInfo] = annexLibs.filter((a: AnnexLibInfo) => a.isInstanceOf[GclAnnexLibInfo]).map((a: AnnexLibInfo) => a.asInstanceOf[GclAnnexLibInfo])
+          buildTypeMap(gclLibs.map((g: GclAnnexLibInfo) => g.annex), aadlTypes, symbolTable, reporter)
 
           val qualifiedName: IdPath = context match {
             case ad: AadlData => getPathFromClassifier(ad.component.classifier.get.name)
@@ -1309,7 +1864,7 @@ object GclResolver {
                   return None()
               }
             case _ =>
-              reporter.error(None(), toolName, s"Could not resolve type info for: ${qualifiedName}")
+              reporter.error(None(), toolName, s"Could not resolve type info for GCl Subclause: ${qualifiedName}")
               return None()
           }
 
@@ -1321,11 +1876,53 @@ object GclResolver {
             poset = Poset.empty,
             aliases = HashMap.empty)
 
-          val gclSymbolTable: GclSymbolTable = processGclAnnex(context, b, symbolTable, aadlTypes, typeHierarchy, scope, reporter).get
-          return Some(GclAnnexInfo(b, gclSymbolTable))
+          val gclSymbolTable: GclSymbolTable = processGclAnnex(context, gclSubclause, gclLibs, symbolTable, aadlTypes, typeHierarchy, scope, reporter).get
+          return Some(GclAnnexClauseInfo(gclSubclause, gclSymbolTable))
         case _ =>
       }
     }
     return None()
+  }
+
+  def offerLibraries(annexLibs: ISZ[AnnexLib], symbolTable: SymbolTable, aadlTypes: AadlTypes, reporter: Reporter): ISZ[AnnexLibInfo] = {
+    var ret: ISZ[AnnexLibInfo] = ISZ()
+    val gclLibs: ISZ[GclLib] = annexLibs.filter((al: AnnexLib) => al.isInstanceOf[GclLib]).map((al: AnnexLib) => al.asInstanceOf[GclLib])
+
+    if(gclLibs.nonEmpty) {
+      buildTypeMap(gclLibs, aadlTypes, symbolTable, reporter)
+
+      for (gclLib <- gclLibs if !seenLibs.contains(gclLib)) {
+        val qualifiedName = gclLib.containingPackage.name :+ GUMBO__Library
+        typeMap.get(qualifiedName) match {
+          case Some(o) =>
+            o match {
+              case info: TypeInfo.Adt =>
+                val typeParams = Resolver.typeParamMap(info.ast.typeParams, reporter)
+                var scope = Scope.Local.create(typeParams.map, info.scope)
+                scope = scope(localThisOpt = Some(info.tpe))
+
+                val libReporter = GclResolver.libraryReporter
+
+                val typeHierarchy: TypeHierarchy = TypeHierarchy(
+                  nameMap = globalNameMap ++ libReporter.nameMap.entries,
+                  typeMap = typeMap ++ libReporter.typeMap.entries,
+                  poset = Poset.empty,
+                  aliases = HashMap.empty)
+
+                val gclSymTable: Option[GclSymbolTable] = processGclLib(gclLib, symbolTable, aadlTypes, typeHierarchy, scope, reporter)
+                val gali = GclAnnexLibInfo(
+                  annex = gclLib,
+                  name = qualifiedName,
+                  gclSymbolTable = gclSymTable.get)
+                ret = ret :+ gali
+              case x =>
+                reporter.error(None(), toolName, s"Expecting ${qualifiedName} to resolve to an ADT but found ${x}")
+            }
+          case _ =>
+            reporter.error(None(), toolName, s"Could not resolve type info for GCL Library: ${qualifiedName}")
+        }
+      }
+    }
+    return ret
   }
 }

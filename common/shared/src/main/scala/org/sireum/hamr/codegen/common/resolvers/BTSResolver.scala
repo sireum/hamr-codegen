@@ -5,9 +5,9 @@ package org.sireum.hamr.codegen.common.resolvers
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.CommonUtil.IdPath
-import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AnnexInfo, AnnexVisitor, BTSAnnexInfo, BTSState, BTSSymbolTable, BTSVariable, SymbolTable}
+import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.types.AadlTypes
-import org.sireum.hamr.ir.{Annex, AnnexLib, BLESSAnnex, BTSBLESSAnnexClause, BTSClassifier}
+import org.sireum.hamr.ir._
 import org.sireum.message.Reporter
 
 @record class BTSResolver extends AnnexVisitor {
@@ -24,7 +24,7 @@ import org.sireum.message.Reporter
         }))
 
         var _variables: Map[IdPath, BTSVariable] = Map.empty
-        for(o <- o.variables) {
+        for (o <- o.variables) {
           val path = o.name.name
 
           o.varType match {
@@ -43,7 +43,7 @@ import org.sireum.message.Reporter
           }
         }
 
-        if(reporter.hasError) {
+        if (reporter.hasError) {
           return None()
         } else {
           val bst = BTSExpResolver(symbolTable, aadlTypes, _states, _variables).resolve(o, reporter)
@@ -57,8 +57,14 @@ import org.sireum.message.Reporter
   }
 
   var seenAnnexes: Set[Annex] = Set.empty
-  def offer(context: AadlComponent, annex: Annex, annexLibs: ISZ[AnnexLib], symbolTable: SymbolTable, aadlTypes: AadlTypes, reporter: Reporter): Option[AnnexInfo] = {
-    if(!seenAnnexes.contains(annex)) {
+
+  def reset: B = {
+    seenAnnexes = Set.empty
+    return T
+  }
+
+  def offer(context: AadlComponent, annex: Annex, annexLibs: ISZ[AnnexLibInfo], symbolTable: SymbolTable, aadlTypes: AadlTypes, reporter: Reporter): Option[AnnexClauseInfo] = {
+    if (!seenAnnexes.contains(annex)) {
       seenAnnexes = seenAnnexes + annex
       annex.clause match {
         case b: BTSBLESSAnnexClause =>
@@ -68,5 +74,9 @@ import org.sireum.message.Reporter
       }
     }
     return None()
+  }
+
+  def offerLibraries(annexLibs: ISZ[AnnexLib], symbolTable: SymbolTable, aadlTypes: AadlTypes, reporter: Reporter): ISZ[AnnexLibInfo] = {
+    return ISZ()
   }
 }

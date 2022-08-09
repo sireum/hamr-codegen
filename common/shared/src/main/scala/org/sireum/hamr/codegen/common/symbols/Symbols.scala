@@ -10,14 +10,20 @@ import org.sireum.hamr.ir.FeatureEnd
 
 @datatype class SymbolTable(rootSystem: AadlSystem,
 
+                            // id path to aadl component
                             componentMap: HashSMap[IdPath, AadlComponent],
+
+                            // fully qualified classifier name to instances of that classifier
+                            classifierMap: HashSMap[IdPath, ISZ[AadlComponent]],
 
                             featureMap: HashSMap[IdPath, AadlFeature],
 
                             // all handled connections
                             aadlConnections: ISZ[AadlConnection],
 
-                            annexInfos: HashSMap[AadlComponent, ISZ[AnnexInfo]],
+                            annexClauseInfos: HashSMap[AadlComponent, ISZ[AnnexClauseInfo]],
+
+                            annexLibInfos: ISZ[AnnexLibInfo],
 
                             airComponentMap: HashSMap[IdPath, ir.Component],
                             airFeatureMap: HashSMap[IdPath, ir.Feature],
