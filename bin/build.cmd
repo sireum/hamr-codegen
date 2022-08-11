@@ -268,9 +268,8 @@ def isCI(): B = {
 }
 
 def installOsateGumbo(): B = {
-  println("Installing GUMBO plugins into OSATE ...")
-  val gumboFeatures = "org.sireum.aadl.gumbo.feature.feature.group=https://raw.githubusercontent.com/sireum/aadl-gumbo-update-site/master;org.sireum.aadl.osate.gumbo2air.feature.feature.group=https://raw.githubusercontent.com/sireum/aadl-gumbo-update-site/master"
-  val p = proc"$sireum hamr phantom -u --features $gumboFeatures"
+  println("Installing Sireum plugins into OSATE ...")
+  val p = proc"$sireum hamr phantom -u"
   return p.console.run().ok
 }
 
