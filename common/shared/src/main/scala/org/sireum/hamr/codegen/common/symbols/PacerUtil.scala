@@ -32,11 +32,7 @@ object PacerUtil {
       case CodeGenPlatform.SeL4_TB =>
         mesg = mesg :+ st"Domain scheduling not supported for legacy Trusted Build platform"
         F
-      case CodeGenPlatform.SeL4 => T
-      case CodeGenPlatform.SeL4_Only => T
-      case _ =>
-        // don't emit domain scheduling related messages for JVM/Nix targets
-        return F
+      case _ => T
     }
 
     var processesWithThreads: Set[AadlProcess] = Set.empty
@@ -151,7 +147,8 @@ object PacerUtil {
       }
     }
 
-    if (mesg.nonEmpty) {
+    val sel4Target: B = platform == CodeGenPlatform.SeL4 || platform == CodeGenPlatform.SeL4_Only || platform == CodeGenPlatform.SeL4_TB
+    if (mesg.nonEmpty && sel4Target) {
       assert(!canUseDomainScheduling, "Only expecting messages related to why domain scheduling won't be used") // sanity check
       val m =
         st"""Domain scheduling will not be used due to the following reasons:
