@@ -4,6 +4,7 @@ package org.sireum.hamr.codegen.common.symbols
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
+import org.sireum.hamr.codegen.common.properties.CaseSchedulingProperties
 import org.sireum.hamr.codegen.common.util.CodeGenPlatform
 import org.sireum.message.Reporter
 
@@ -14,6 +15,9 @@ object PacerUtil {
     // - all threads must be in separate processes
     // - each process with a thread must have domain info
     // - every process with a thread must be bound to the same processor
+    // - only processes bound to the same VM can be in the same domain
+    // - must use pacer component if model has VMs
+    // - domain 1 reserved if pacer component is used
     // - the bound processor must have the following annotations
     //      - Frame_Period
     //		  - Clock_Period
@@ -24,9 +28,15 @@ object PacerUtil {
 
     var mesg: ISZ[ST] = ISZ()
 
-    if (platform == CodeGenPlatform.SeL4_TB) {
-      canUseDomainScheduling = F
-      mesg = mesg :+ st"Domain scheduling not supported for legacy Trusted Build platform"
+    canUseDomainScheduling = platform match {
+      case CodeGenPlatform.SeL4_TB =>
+        mesg = mesg :+ st"Domain scheduling not supported for legacy Trusted Build platform"
+        F
+      case CodeGenPlatform.SeL4 => T
+      case CodeGenPlatform.SeL4_Only => T
+      case _ =>
+        // don't emit domain scheduling related messages for JVM/Nix targets
+        return F
     }
 
     var processesWithThreads: Set[AadlProcess] = Set.empty
@@ -45,7 +55,7 @@ object PacerUtil {
     if (canUseDomainScheduling) {
       var withoutDomain: ISZ[AadlProcess] = ISZ()
       for (p <- processesWithThreads.elements) {
-        if (p.getDomain().isEmpty) {
+        if (p.getDomain(symbolTable).isEmpty) {
           withoutDomain = withoutDomain :+ p
         }
       }
@@ -60,13 +70,36 @@ object PacerUtil {
     var boundProcessor: Option[AadlProcessor] = None()
 
     // - each process must be bound to the same processor
+    // - only processes bound to the same VM can be in the same domain
+    // - domain 1 reserved if pacer component is used
     if (canUseDomainScheduling) {
+      var domain1InUse: Option[AadlProcess] = None()
+      var seenNonVMDomains: Set[Z] = Set.empty
+      var vmDomainMapping: Map[Z, AadlVirtualProcessor] = Map.empty
+
       var boundProcessors: Set[AadlProcessor] = Set.empty
       var unboundedProcesses: ISZ[AadlProcess] = ISZ()
+
       for (p <- processesWithThreads.elements) {
+        val domain = p.getDomain(symbolTable).get
+        if(domain == 1) {
+          domain1InUse = Some(p)
+        }
         symbolTable.getBoundProcessor(p) match {
-          case Some(proc: AadlProcessor) => boundProcessors = boundProcessors + proc
-          case Some(proc: AadlVirtualProcessor) => boundProcessors = boundProcessors + symbolTable.getActualBoundProcess(proc).get
+          case Some(proc: AadlProcessor) =>
+            boundProcessors = boundProcessors + proc
+            if(seenNonVMDomains.contains(domain)) {
+              mesg = mesg :+ st"More than one process in domain ${domain}. Only processes bound to the same VM can be in the same domain."
+            }
+            seenNonVMDomains = seenNonVMDomains + domain
+          case Some(proc: AadlVirtualProcessor) =>
+            boundProcessors = boundProcessors + symbolTable.getActualBoundProcess(proc).get
+            vmDomainMapping.get(domain) match {
+              case Some(proc2) if proc != proc2 =>
+                mesg = mesg :+ st"Multiple VM bound processors are in domain ${domain}"
+              case _ =>
+                vmDomainMapping = vmDomainMapping + (domain ~> proc)
+            }
           case _ => unboundedProcesses = unboundedProcesses :+ p
         }
       }
@@ -85,6 +118,18 @@ object PacerUtil {
               |Bind all processes to exactly one of the following: ${x}"""
       } else if (canUseDomainScheduling) {
         boundProcessor = Some(boundProcessors.elements(0))
+        val processorWantsPacer: B = boundProcessor.get.getPacingMethod() match {
+          case Some(CaseSchedulingProperties.PacingMethod.Pacer) => T
+          case Some(CaseSchedulingProperties.PacingMethod.SelfPacing) =>
+            if(symbolTable.hasVM()) {
+              mesg = mesg :+ st"Processor ${boundProcessor.get.path} is annotated as self pacing, but the model contains VMs so it must use the Pacer component"
+            }
+            F
+          case _ => F
+        }
+        if(domain1InUse.nonEmpty && (symbolTable.hasVM() || processorWantsPacer)) {
+          mesg = mesg :+ st"Process ${domain1InUse.get.path} is in domain 1 but that is reserved for the pacer component"
+        }
       }
     }
 

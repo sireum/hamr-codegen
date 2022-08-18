@@ -54,6 +54,10 @@ object CaseSchedulingProperties {
     "SelfPacing"
   }
 
+  val DOMAIN_MAPPING: String = "CASE_Scheduling::Domain_Mapping"
+  val DOMAIN_ENTRY__COMPONENT: String = "CASE_Scheduling::Domain_Entry.Component"
+  val DOMAIN_ENTRY__DOMAIN: String = "CASE_Scheduling::Domain_Entry.Domain"
+
   val DOMAIN: String = "CASE_Scheduling::Domain"
   val MAX_DOMAIN: String = "CASE_Scheduling::Max_Domain"
   val PACING_METHOD: String = "CASE_Scheduling::Pacing_Method"

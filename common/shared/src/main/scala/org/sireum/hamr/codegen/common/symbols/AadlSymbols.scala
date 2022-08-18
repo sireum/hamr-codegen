@@ -50,6 +50,10 @@ import org.sireum.hamr.ir.{AnnexClause, AnnexLib, BTSBLESSAnnexClause, GclLib, G
   def getUseRawConnection(): B = {
     return PropertyUtil.getUseRawConnection(component.properties)
   }
+
+  def getDomainMappings(): Map[IdPath, Z] = {
+    return PropertyUtil.getDomainMappings(component.properties)
+  }
 }
 
 @sig trait Processor extends AadlComponent {
@@ -150,8 +154,16 @@ import org.sireum.hamr.ir.{AnnexClause, AnnexLib, BTSBLESSAnnexClause, GclLib, G
 
                             val boundProcessor: Option[ISZ[String]]) extends AadlComponent {
 
-  def getDomain(): Option[Z] = {
-    return PropertyUtil.getUnitPropZ(component.properties, CaseSchedulingProperties.DOMAIN)
+  def getDomainMapping(symbolTable: SymbolTable): Option[Z] = {
+    return symbolTable.rootSystem.getDomainMappings().get(path)
+  }
+
+  def getDomain(symbolTable: SymbolTable): Option[Z] = {
+    val ret: Option[Z] = symbolTable.rootSystem.getDomainMappings().get(path) match {
+      case Some(z) => Some(z)
+      case _ => PropertyUtil.getUnitPropZ(component.properties, CaseSchedulingProperties.DOMAIN)
+    }
+    return ret
   }
 
   /**
@@ -231,7 +243,7 @@ import org.sireum.hamr.ir.{AnnexClause, AnnexLib, BTSBLESSAnnexClause, GclLib, G
   def getDomain(symbolTable: SymbolTable): Option[Z] = {
     this match {
       case a: AadlDevice => return None()
-      case a: AadlThread => return getParent(symbolTable).getDomain()
+      case a: AadlThread => return getParent(symbolTable).getDomain(symbolTable)
     }
   }
 

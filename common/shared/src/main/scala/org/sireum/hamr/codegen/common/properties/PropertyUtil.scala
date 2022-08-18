@@ -7,9 +7,9 @@ import org.sireum.hamr.codegen.common._
 import org.sireum.hamr.codegen.common.CommonUtil.IdPath
 import org.sireum.hamr.codegen.common.symbols.Dispatch_Protocol
 import org.sireum.hamr.ir
+import org.sireum.hamr.ir.Property
 
 object PropertyUtil {
-
   @pure def hasProperty(properties: ISZ[ir.Property], propertyName: String): B = {
     return properties.filter(p => CommonUtil.getLastName(p.name) == propertyName).nonEmpty
   }
@@ -60,6 +60,46 @@ object PropertyUtil {
       case _ => None[Z]()
     }
     return ret
+  }
+
+  @memoize def getDomainMappings(properties: ISZ[ir.Property]): Map[IdPath, Z] = {
+    def getEntry(e1: Property, e2: Property): (IdPath, Z) = {
+      val idPath: IdPath = e1.propertyValues match {
+        case ISZ(ir.ReferenceProp(name)) => name.name
+        case _ => halt("Invalid entry")
+      }
+
+      val domain: Z = e2.propertyValues match {
+        case ISZ(ir.UnitProp(value, _)) =>
+          R(value) match {
+            case Some(vv) => Some(conversions.R.toZ(vv)).get
+            case _ => halt(s"Invalid Z: ${value}")
+          }
+        case _ => halt("Invalid entry")
+      }
+      return (idPath, domain)
+    }
+
+    val pvs = getPropertyValues(properties, CaseSchedulingProperties.DOMAIN_MAPPING)
+
+    val entries: ISZ[(IdPath, Z)] = pvs.map((p: ir.PropertyValue) => {
+      p match {
+        case ir.RecordProp(ISZ(e1, e2)) =>
+          if (CommonUtil.getLastName(e1.name) == CaseSchedulingProperties.DOMAIN_ENTRY__COMPONENT) {
+            assert(CommonUtil.getLastName(e2.name) == CaseSchedulingProperties.DOMAIN_ENTRY__DOMAIN)
+
+            getEntry(e1, e2)
+          } else {
+            assert(CommonUtil.getLastName(e2.name) == CaseSchedulingProperties.DOMAIN_ENTRY__COMPONENT)
+            assert(CommonUtil.getLastName(e1.name) == CaseSchedulingProperties.DOMAIN_ENTRY__DOMAIN)
+
+            getEntry(e2, e1)
+          }
+        case _ => halt(s"Invalid domain mapping property: ${p}")
+      }
+    })
+
+    return Map.empty[IdPath, Z] ++ entries
   }
 
 
