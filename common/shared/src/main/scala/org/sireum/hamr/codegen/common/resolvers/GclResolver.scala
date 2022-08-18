@@ -32,7 +32,9 @@ object GclResolver {
   val uif__MustSendWithExpectedValue: String = "uif__MustSendWithExpectedValue"
   val uif__NoSend: String = "uif__NoSend"
 
-  val libraryReporter: TypeChecker = org.sireum.lang.FrontEnd.libraryReporter._1
+  @memoize def libraryReporter: TypeChecker = {
+    return org.sireum.lang.FrontEnd.libraryReporter._1
+  }
 
   @record class SymbolFinder(val rewriteApiCalls: B,
                              val context: AadlComponent,
