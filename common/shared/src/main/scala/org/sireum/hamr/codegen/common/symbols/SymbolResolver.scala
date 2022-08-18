@@ -41,15 +41,15 @@ object SymbolResolver {
     annexVisitors.foreach((f: AnnexVisitor) => f.reset)
 
     val st = buildSymbolTable(model, aadlTypes, aadlMaps, options, reporter)
-    if(reporter.hasError) {
+    if (reporter.hasError) {
       return st
     } else {
       val annexLibInfos: ISZ[AnnexLibInfo] = processAnnexLibraries(model.annexLib, st, aadlTypes, annexVisitors, reporter)
 
       var annexClauseInfos: HashSMap[AadlComponent, ISZ[AnnexClauseInfo]] = HashSMap.empty
-      for(component <- st.componentMap.values) {
+      for (component <- st.componentMap.values) {
         var ais: ISZ[AnnexClauseInfo] = ISZ()
-        for(annex <- component.component.annexes) {
+        for (annex <- component.component.annexes) {
           processAnnexSubclauses(component, st, aadlTypes, annex, annexLibInfos, annexVisitors, reporter) match {
             case Some(ai) => ais = ais :+ ai
             case _ =>
@@ -182,25 +182,26 @@ object SymbolResolver {
 
     var componentMap: HashSMap[IdPath, AadlComponent] = HashSMap.empty
     var classifierMap: HashSMap[IdPath, ISZ[AadlComponent]] = HashSMap.empty
+
     /** Builds an AadlComponents and AadlFeatures from the passed in AIR component
     */
     def buildAadlComponent(c: ir.Component, parent: IdPath): AadlComponent = {
       val (identifier, path, classifierPath): (String, IdPath, IdPath) = c.category match {
         case ComponentCategory.Data =>
-          val name: String = if(c.identifier.name.isEmpty) {
+          val name: String = if (c.identifier.name.isEmpty) {
             c.classifier.get.name
           } else {
             CommonUtil.getName(c.identifier)
           }
-          val path: IdPath = if(parent.isEmpty) ISZ(name)
-            else parent :+ name
+          val path: IdPath = if (parent.isEmpty) ISZ(name)
+          else parent :+ name
           (name, path, CommonUtil.splitClassifier(c.classifier.get))
         case _ =>
           val classifierPath: IdPath =
             c.classifier match {
               case Some(s) => CommonUtil.splitClassifier(s)
               case _ =>
-                if (!CommonUtil.isSystemInstance(c)){
+                if (!CommonUtil.isSystemInstance(c)) {
                   reporter.error(c.identifier.pos, toolName, s"Unexpected: only the system instance should be missing a classifier, but it's missing for ${CommonUtil.getName(c.identifier)}")
                 }
                 ISZ()
@@ -225,7 +226,7 @@ object SymbolResolver {
         feature match {
           case fg: ir.FeatureGroup =>
             var ret: ISZ[AadlFeature] = ISZ()
-            for(_f <- fg.features) {
+            for (_f <- fg.features) {
               ret = ret ++ buildAadlFeature(_f, featureGroupIds :+ CommonUtil.getLastName(fg.identifier), parentIsThread)
             }
             return ret
@@ -338,7 +339,7 @@ object SymbolResolver {
           val dispatchProtocol: Dispatch_Protocol.Type = PropertyUtil.getDispatchProtocol(c) match {
             case Some(x) => x
             case _ =>
-              val (protocol, mesg) : (Dispatch_Protocol.Type, String) =c.category match {
+              val (protocol, mesg): (Dispatch_Protocol.Type, String) = c.category match {
                 case ir.ComponentCategory.Thread =>
                   val mesg = s"Dispatch Protocol not specified for thread ${identifier}, assuming Sporadic"
                   (Dispatch_Protocol.Sporadic, mesg)
@@ -577,7 +578,7 @@ object SymbolResolver {
 
       componentMap = componentMap + (path ~> aadlComponent)
 
-      val instances: ISZ[AadlComponent] = if(classifierMap.contains(classifierPath)) classifierMap.get(classifierPath).get else ISZ()
+      val instances: ISZ[AadlComponent] = if (classifierMap.contains(classifierPath)) classifierMap.get(classifierPath).get else ISZ()
       classifierMap = classifierMap + (classifierPath ~> (instances :+ aadlComponent))
 
       return aadlComponent
@@ -586,7 +587,7 @@ object SymbolResolver {
     val aadlSystem = buildAadlComponent(system, ISZ()).asInstanceOf[AadlSystem]
 
     // add data components to componentMap
-    for(c <- model.dataComponents) {
+    for (c <- model.dataComponents) {
       buildAadlComponent(c, ISZ())
     }
 
@@ -681,12 +682,12 @@ object SymbolResolver {
       outConnections = outConnections)
 
     {
-      for(thread <- symbolTable.getThreads()) {
-        if(thread.toVirtualMachine(symbolTable)) {
+      for (thread <- symbolTable.getThreads()) {
+        if (thread.toVirtualMachine(symbolTable)) {
           val parent = thread.getParent(symbolTable)
           parent.getBoundProcessor(symbolTable) match {
             case Some(avp: AadlVirtualProcessor) =>
-              if(avp.dispatchProtocol != Dispatch_Protocol.Periodic) {
+              if (avp.dispatchProtocol != Dispatch_Protocol.Periodic) {
                 val mesg = s"Virtual processor ${avp.identifier} has ${avp.dispatchProtocol.name} dispatching. Only periodic dispatching is supported."
                 reporter.error(avp.component.identifier.pos, CommonUtil.toolName, mesg)
               }
@@ -704,11 +705,15 @@ object SymbolResolver {
     }
 
     { // restrict when wire protocol and CakeML components are allowed
-      if(symbolTable.hasCakeMLComponents() || shouldUseRawConnections) {
-        if(options.platform == CodeGenPlatform.SeL4_Only || options.platform == CodeGenPlatform.SeL4_TB) {
+      if (symbolTable.hasCakeMLComponents() || shouldUseRawConnections) {
+        if (options.platform == CodeGenPlatform.SeL4_Only || options.platform == CodeGenPlatform.SeL4_TB) {
           var reasons: ISZ[String] = ISZ()
-          if(symbolTable.hasCakeMLComponents()) { reasons = reasons :+ "CakeML components" }
-          if(shouldUseRawConnections) { reasons = reasons :+ "wire protocol" }
+          if (symbolTable.hasCakeMLComponents()) {
+            reasons = reasons :+ "CakeML components"
+          }
+          if (shouldUseRawConnections) {
+            reasons = reasons :+ "wire protocol"
+          }
           val mesg = st"${options.platform} platform does not support ${(reasons, ", ")}".render
           reporter.error(None(), CommonUtil.toolName, mesg)
         }
@@ -722,13 +727,13 @@ object SymbolResolver {
 
         var validProcessors: ISZ[AadlProcessor] = ISZ()
         var seenVirtualProcessor: Set[AadlVirtualProcessor] = Set.empty
-        for(process <- symbolTable.getProcesses().filter(p => p.toVirtualMachine(symbolTable))) {
+        for (process <- symbolTable.getProcesses().filter(p => p.toVirtualMachine(symbolTable))) {
           assert(process.boundProcessor.nonEmpty, s"Unexpected: ${process.identifier} is going to a vm but it isn't bound to a processor?")
           assert(symbolTable.componentMap.contains(process.boundProcessor.get), s"Unexpected: unable to resolve ${process.identifier}'s bound processor ${process.boundProcessor.get}")
 
           symbolTable.getBoundProcessor(process) match {
             case Some(avp: AadlVirtualProcessor) =>
-              if(seenVirtualProcessor.contains(avp)) {
+              if (seenVirtualProcessor.contains(avp)) {
                 val msg = s"Multiple processes are bound to the virtual processor ${avp.identifier}. That might be acceptable, but is currently unexpected. Please report"
                 reporter.error(avp.component.identifier.pos, CommonUtil.toolName, msg)
                 validProcessorBindings = F
@@ -775,7 +780,7 @@ object SymbolResolver {
           }
         }
 
-        for(p <- validProcessors){
+        for (p <- validProcessors) {
           p.getPacingMethod() match {
             case Some(CaseSchedulingProperties.PacingMethod.SelfPacing) =>
               val mesg = s"Model has virtual machines so it must use the pacer component style of pacing"
@@ -786,44 +791,19 @@ object SymbolResolver {
       }
     }
 
-    val willUsePacer: B = validProcessorBindings && PacerUtil.canUseDomainScheduling(symbolTable, options.platform, reporter)
+    val willUseDomainScheduling: B = validProcessorBindings && PacerUtil.canUseDomainScheduling(symbolTable, options.platform, reporter)
 
-      if (willUsePacer) {
-        var seenDomains: Set[Z] = Set.empty
-        for (p <- symbolTable.getProcesses()) {
-          p.getDomain() match {
-            case Some(z) =>
-              if (seenDomains.contains(z)) {
-                p.getBoundProcessor(symbolTable) match {
-                  case Some(vp: AadlVirtualProcessor) => // ok
-                  case Some(p: AadlProcessor) =>
-                    val mesg = s"More than one process is in domain ${z}"
-                    reporter.warn(None(), CommonUtil.toolName, mesg)
-                  case _ =>
-                    halt("Should be infeasible")
-                }
-              }
-              seenDomains = seenDomains + z
-            case _ =>
-              if (p.getThreads().nonEmpty) {
-                halt(s"This should be infeasible: process ${p.identifier} contains threads but does not not have a domain")
-              }
-          }
-        }
-      }
-
-      if(symbolTable.hasVM() && !willUsePacer) {
-        val msg = "Model contains VM components so it must use domain scheduling"
-        reporter.error(None(), CommonUtil.toolName, msg)
-      }
-
+    if (symbolTable.hasVM() && !willUseDomainScheduling) {
+      val msg = "Model contains VM components so it must use domain scheduling"
+      reporter.error(None(), CommonUtil.toolName, msg)
+    }
 
 
     {
       if (symbolTable.hasCakeMLComponents()) {
 
-        for(cakemlThread <- symbolTable.getThreads().filter((a: AadlThread) => a.isCakeMLComponent())){
-          if(cakemlThread.dispatchProtocol != Dispatch_Protocol.Periodic) {
+        for (cakemlThread <- symbolTable.getThreads().filter((a: AadlThread) => a.isCakeMLComponent())) {
+          if (cakemlThread.dispatchProtocol != Dispatch_Protocol.Periodic) {
             val mesg = s"CakeML components must be periodic: ${cakemlThread.identifier}"
             reporter.error(cakemlThread.component.identifier.pos, CommonUtil.toolName, mesg)
           }
@@ -833,7 +813,7 @@ object SymbolResolver {
           reporter.error(None(), CommonUtil.toolName, mesg)
         }
 
-        if(!willUsePacer) {
+        if (!willUseDomainScheduling) {
           val mesg = "Model contains CakeML components so it must use domain scheduling."
           reporter.error(None(), CommonUtil.toolName, mesg)
         }
@@ -842,8 +822,8 @@ object SymbolResolver {
 
     { // if raw then all data components used in connectionInstances b/w threads
       // must have bit size specified and it must be greater than 0
-      if(shouldUseRawConnections) {
-        for(conn <- symbolTable.aadlConnections) {
+      if (shouldUseRawConnections) {
+        for (conn <- symbolTable.aadlConnections) {
           conn match {
             case apc: AadlPortConnection =>
               if (!TypeUtil.isEmptyType(apc.connectionDataType)) {
@@ -973,7 +953,7 @@ object SymbolResolver {
                             annexVisitors: MSZ[AnnexVisitor],
                             reporter: Reporter): ISZ[AnnexLibInfo] = {
     var ret: ISZ[AnnexLibInfo] = ISZ()
-    for(v <- annexVisitors) {
+    for (v <- annexVisitors) {
       ret = ret ++ v.offerLibraries(libs, symbolTable, aadlTypes, reporter)
     }
     return ret
@@ -986,7 +966,7 @@ object SymbolResolver {
                              annexLibs: ISZ[AnnexLibInfo],
                              annexVisitors: MSZ[AnnexVisitor],
                              reporter: Reporter): Option[AnnexClauseInfo] = {
-    for(v <- annexVisitors) {
+    for (v <- annexVisitors) {
       v.offer(context, annex, annexLibs, symbolTable, aadlTypes, reporter) match {
         case Some(ai) => return Some(ai)
         case None() =>
