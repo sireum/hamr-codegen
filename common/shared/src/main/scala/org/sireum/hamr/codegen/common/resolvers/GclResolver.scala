@@ -351,7 +351,7 @@ object GclResolver {
     }
 
     override def post_langastExpInput(o: Exp.Input): MOption[Exp] = {
-      o.exp match {
+      o.ref match {
         case o: Exp.Ident =>
           processIdent(o) match {
             case Some(GclSymbolHolder(g: GclStateVar)) =>
@@ -540,7 +540,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       val rscontract = r2Method.mcontract.asInstanceOf[Simple]
 
       for (i <- 0 until scontract.reads.size) {
-        rexprs = rexprs + (scontract.reads(i) ~> rscontract.reads(i))
+        rexprs = rexprs + (scontract.reads(i).asInstanceOf[AST.Exp.Ident] ~> rscontract.reads(i).asInstanceOf[AST.Exp.Ident])
       }
 
       for (i <- 0 until scontract.requires.size) {
@@ -548,7 +548,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       }
 
       for (i <- 0 until scontract.modifies.size) {
-        rexprs = rexprs + (scontract.modifies(i) ~> rscontract.modifies(i))
+        rexprs = rexprs + (scontract.modifies(i).asInstanceOf[AST.Exp.Ident] ~> rscontract.modifies(i).asInstanceOf[AST.Exp.Ident])
       }
 
       for (i <- 0 until scontract.ensures.size) {
