@@ -353,7 +353,7 @@ object GclResolver {
     }
 
     override def post_langastExpInput(o: Exp.Input): MOption[Exp] = {
-      o.ref match {
+      o.exp match {
         case o: Exp.Ident =>
           processIdent(o) match {
             case Some(GclSymbolHolder(g: GclStateVar)) =>
