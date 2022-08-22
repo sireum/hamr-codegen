@@ -43,7 +43,7 @@ def runGit(args: ISZ[String], path: Os.Path): String = {
 
 def getGitRepos(d: Os.Path): ISZ[Os.Path] = {
   assert(d.isDir)
-  val children: ISZ[Os.Path] = d.list.filter(p => p.isDir).flatMap(f => getGitRepos(f))
+  val children: ISZ[Os.Path] = d.list.filter(p => p.isDir && !(ops.StringOps(p.name).contains("-ext"))).flatMap(f => getGitRepos(f))
   if((d / ".git").exists) { return d +: children }
   else { return children }
 }
