@@ -136,7 +136,7 @@ val buildsbt = SIREUM_HOME / "hamr" / "codegen" / "arsit" / "resources" / "util"
   }
 }
 
-{ // check if act's versions properties needs to be updated
+if(!fast) { // check if act's versions properties needs to be updated
   val f = SIREUM_HOME / "hamr" / "codegen" / "act" / "bin" / "updateActVersionsProperties.sc"
   f.chmod("700")
   val p = Os.proc(ISZ(sireum.value, "slang", "run", f.value)).console.run()
