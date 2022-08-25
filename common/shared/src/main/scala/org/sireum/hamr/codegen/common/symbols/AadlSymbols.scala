@@ -2,20 +2,22 @@
 package org.sireum.hamr.codegen.common.symbols
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
 import org.sireum.hamr.codegen.common.CommonUtil.IdPath
 import org.sireum.hamr.codegen.common.properties.{CasePropertiesProperties, CaseSchedulingProperties, OsateProperties, PropertyUtil}
 import org.sireum.hamr.codegen.common.types.AadlType
+import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
 import org.sireum.hamr.ir
-import org.sireum.hamr.ir.{AnnexClause, AnnexLib, BTSBLESSAnnexClause, GclLib, GclSubclause}
+import org.sireum.hamr.ir._
 
 @sig trait AadlSymbol
 
 @sig trait AadlComponent extends AadlSymbol {
   def component: ir.Component
+
   def parent: IdPath
 
   def path: IdPath
+
   def pathAsString(sep: String): String = {
     return st"${(path, sep)}".render
   }
@@ -29,11 +31,17 @@ import org.sireum.hamr.ir.{AnnexClause, AnnexLib, BTSBLESSAnnexClause, GclLib, G
   def connectionInstances: ISZ[ir.ConnectionInstance]
 
 
-  def getFeatureAccesses(): ISZ[AadlAccessFeature] = { return features.filter(p => p.isInstanceOf[AadlAccessFeature]).map(m => m.asInstanceOf[AadlAccessFeature])}
+  def getFeatureAccesses(): ISZ[AadlAccessFeature] = {
+    return features.filter(p => p.isInstanceOf[AadlAccessFeature]).map(m => m.asInstanceOf[AadlAccessFeature])
+  }
 
-  def getPorts(): ISZ[AadlPort] = { return features.filter(p => p.isInstanceOf[AadlPort]).map(m => m.asInstanceOf[AadlPort]) }
+  def getPorts(): ISZ[AadlPort] = {
+    return features.filter(p => p.isInstanceOf[AadlPort]).map(m => m.asInstanceOf[AadlPort])
+  }
 
-  def annexes(): ISZ[ir.Annex] = { return component.annexes }
+  def annexes(): ISZ[ir.Annex] = {
+    return component.annexes
+  }
 }
 
 @datatype class AadlSystem(val component: ir.Component,
@@ -58,10 +66,15 @@ import org.sireum.hamr.ir.{AnnexClause, AnnexLib, BTSBLESSAnnexClause, GclLib, G
 
 @sig trait Processor extends AadlComponent {
   def component: ir.Component
+
   def parent: IdPath
+
   def path: IdPath
+
   def identifier: String
+
   def subComponents: ISZ[AadlComponent]
+
   def connectionInstances: ISZ[ir.ConnectionInstance]
 
   def getFramePeriod(): Option[Z] = {
@@ -118,9 +131,13 @@ import org.sireum.hamr.ir.{AnnexClause, AnnexLib, BTSBLESSAnnexClause, GclLib, G
 
   def period: Option[Z]
 
-  def isPeriodic(): B = { return dispatchProtocol == Dispatch_Protocol.Periodic }
+  def isPeriodic(): B = {
+    return dispatchProtocol == Dispatch_Protocol.Periodic
+  }
 
-  def isSporadic(): B = { return dispatchProtocol == Dispatch_Protocol.Sporadic }
+  def isSporadic(): B = {
+    return dispatchProtocol == Dispatch_Protocol.Sporadic
+  }
 }
 
 @datatype class AadlProcessor(val component: ir.Component,
@@ -376,7 +393,7 @@ import org.sireum.hamr.ir.{AnnexClause, AnnexLib, BTSBLESSAnnexClause, GclLib, G
   def identifier: String = {
     val id = CommonUtil.getLastName(feature.identifier)
     val ret: String =
-      if(featureGroupIds.nonEmpty) st"${(featureGroupIds, "_")}_${id}".render
+      if (featureGroupIds.nonEmpty) st"${(featureGroupIds, "_")}_${id}".render
       else id
     return ret
   }
@@ -428,7 +445,9 @@ import org.sireum.hamr.ir.{AnnexClause, AnnexLib, BTSBLESSAnnexClause, GclLib, G
                               val aadlType: AadlType,
                               val direction: ir.Direction.Type) extends AadlDirectedFeature with AadlFeatureData {
 
-  def getName(): String = { return CommonUtil.getLastName(feature.identifier) }
+  def getName(): String = {
+    return CommonUtil.getLastName(feature.identifier)
+  }
 }
 
 @sig trait AadlAccessFeature extends AadlFeature {
@@ -460,7 +479,6 @@ import org.sireum.hamr.ir.{AnnexClause, AnnexLib, BTSBLESSAnnexClause, GclLib, G
                                 val featureGroupIds: ISZ[String]) extends AadlFeature
 
 
-
 @sig trait AadlConnection extends AadlSymbol
 
 @datatype class AadlPortConnection(val name: String,
@@ -474,8 +492,13 @@ import org.sireum.hamr.ir.{AnnexClause, AnnexLib, BTSBLESSAnnexClause, GclLib, G
 
                                    val connectionInstance: ir.ConnectionInstance) extends AadlConnection {
 
-  def getConnectionKind(): ir.ConnectionKind.Type = { return connectionInstance.kind}
-  def getProperties(): ISZ[ir.Property] = { return connectionInstance.properties}
+  def getConnectionKind(): ir.ConnectionKind.Type = {
+    return connectionInstance.kind
+  }
+
+  def getProperties(): ISZ[ir.Property] = {
+    return connectionInstance.properties
+  }
 }
 
 @datatype class AadlConnectionTODO extends AadlConnection

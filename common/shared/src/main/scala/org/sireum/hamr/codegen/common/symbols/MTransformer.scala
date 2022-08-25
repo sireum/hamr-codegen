@@ -179,7 +179,7 @@ object MTransformer {
 
 }
 
-import MTransformer._
+import org.sireum.hamr.codegen.common.symbols.MTransformer._
 
 @msig trait MTransformer {
 

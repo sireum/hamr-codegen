@@ -18,6 +18,7 @@ if not defined SIREUM_HOME (
 exit /B %errorlevel%
 ::!#
 // #Sireum
+
 import org.sireum._
 
 val home = Os.slashDir

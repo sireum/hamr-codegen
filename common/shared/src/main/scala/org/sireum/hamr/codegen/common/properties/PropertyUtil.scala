@@ -3,8 +3,8 @@
 package org.sireum.hamr.codegen.common.properties
 
 import org.sireum._
-import org.sireum.hamr.codegen.common._
 import org.sireum.hamr.codegen.common.CommonUtil.IdPath
+import org.sireum.hamr.codegen.common._
 import org.sireum.hamr.codegen.common.symbols.Dispatch_Protocol
 import org.sireum.hamr.ir
 import org.sireum.hamr.ir.Property
@@ -199,13 +199,13 @@ object PropertyUtil {
       case Some(v) =>
         val _v = conversions.R.toZ(v)
         val ret: Z = unit match {
-          case "ps"  => _v / (z"1000" * z"1000" * z"1000")
-          case "ns"  => _v / (z"1000" * z"1000")
-          case "us"  => _v / z"1000"
-          case "ms"  => _v
+          case "ps" => _v / (z"1000" * z"1000" * z"1000")
+          case "ns" => _v / (z"1000" * z"1000")
+          case "us" => _v / z"1000"
+          case "ms" => _v
           case "sec" => _v * z"1000"
           case "min" => _v * z"1000" * z"60"
-          case "hr"  => _v * z"1000" * z"60" * z"60"
+          case "hr" => _v * z"1000" * z"60" * z"60"
           case _ =>
             halt(s"Unexpected time unit ${unit}")
         }

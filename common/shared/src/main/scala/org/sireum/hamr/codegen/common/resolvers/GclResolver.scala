@@ -2,10 +2,10 @@
 package org.sireum.hamr.codegen.common.resolvers
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.CommonUtil.IdPath
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.types._
+import org.sireum.hamr.codegen.common.{CommonUtil, DefaultNameProvider}
 import org.sireum.hamr.ir._
 import org.sireum.lang.ast.MethodContract.Simple
 import org.sireum.lang.ast.{Exp, ResolvedAttr, ResolvedInfo, TypeParam}
@@ -337,7 +337,7 @@ object GclResolver {
                   None()
                 } else {
                   val component = components(0)
-                  val objectName = org.sireum.hamr.codegen.common.Names(component.component, "").componentSingletonType
+                  val objectName = DefaultNameProvider(component.component, "").componentSingletonType
 
                   Some(Exp.Select(
                     //rreceiverOpt = Some(Exp.Ident(id = AST.Id(owner(0), emptyAttr), attr = emptyRAttr)),
@@ -526,9 +526,9 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
   }
 
   def visitGclMethod(gclMethod: GclMethod,
-                    typeHierarchy: TypeHierarchy,
-                       scope: Scope,
-                    reporter: Reporter): AST.Stmt.Method = {
+                     typeHierarchy: TypeHierarchy,
+                     scope: Scope,
+                     reporter: Reporter): AST.Stmt.Method = {
     val m = gclMethod.method
     val tc = TypeChecker(typeHierarchy, ISZ(m.sig.id.value), F, TypeChecker.ModeContext.Spec, F)
     val typedMethod = typeMethod(m)
@@ -861,7 +861,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                   visitSlangExp(e) match {
                     case Some((rexp, roptType)) =>
                       val (rexp2, symbols, _) = GclResolver.collectSymbols(rexp, F, context, s.state, gclMethods, symbolTable, reporter)
-                      if(!reporter.hasError) {
+                      if (!reporter.hasError) {
                         if (symbols.size != 1) {
                           reporter.error(e.posOpt, GclResolver.toolName, s"Modifies should resolve to exactly one symbol, instead resolved to ${symbols.size}")
                         }

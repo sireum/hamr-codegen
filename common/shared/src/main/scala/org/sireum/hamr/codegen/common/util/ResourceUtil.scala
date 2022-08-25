@@ -27,8 +27,8 @@ object ResourceUtil {
   }
 
   def createExeCrlfResource(path: String,
-                        content: ST,
-                        overwrite: B): Resource = {
+                            content: ST,
+                            overwrite: B): Resource = {
     return IResource(path, content, ISZ(), overwrite, T, T)
   }
 

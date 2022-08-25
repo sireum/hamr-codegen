@@ -86,7 +86,7 @@ object Transformers {
     val int32: String = "Base_Types::Integer_32"
 
     override def postClassifier(ctx: ISZ[message.Message], o: ir.Classifier): ir.Transformer.TPostResult[ISZ[message.Message], ir.Classifier] = {
-      if(o.name == unboundInt) {
+      if (o.name == unboundInt) {
         val reporter = message.Reporter.create
         reporter.warn(None(), toolName, s"Replacing classifier ${unboundInt} with ${int32}")
         return ir.Transformer.TPostResult(ctx ++ reporter.messages, Some(ir.Classifier(int32)))
@@ -96,7 +96,7 @@ object Transformers {
     }
 
     override def postClassifierProp(ctx: ISZ[message.Message], o: ir.ClassifierProp): ir.Transformer.TPostResult[ISZ[message.Message], ir.PropertyValue] = {
-      if(o.name == unboundInt) {
+      if (o.name == unboundInt) {
         val reporter = message.Reporter.create
         reporter.warn(None(), toolName, s"Replacing classifier ${unboundInt} with ${int32}")
         return ir.Transformer.TPostResult(ctx ++ reporter.messages, Some(ir.ClassifierProp(int32)))
@@ -106,27 +106,28 @@ object Transformers {
     }
   }
 
-  @datatype class VContainer (origProcess: ir.Component,
-                              newProcess: ir.Component,
-                              origThreads : ISZ[ir.Component],
-                              newThread: ir.Component)
+  @datatype class VContainer(origProcess: ir.Component,
+                             newProcess: ir.Component,
+                             origThreads: ISZ[ir.Component],
+                             newThread: ir.Component)
 
   @record class BTSMTransform(val aadlMaps: AadlMaps,
                               val reporter: org.sireum.message.Reporter) extends MAirTransformer {
     var unlabeledCount: Z = 0
 
     override def postBTSTransitionLabel(o: BTSTransitionLabel): MOption[BTSTransitionLabel] = {
-      if(o.id.name.isEmpty){
+      if (o.id.name.isEmpty) {
         val id = s"_unlabeled_transition_${unlabeledCount}"
         unlabeledCount = unlabeledCount + 1
-        return MSome(BTSTransitionLabel(Name(ISZ(id), o.id.pos) , o.priority))
+        return MSome(BTSTransitionLabel(Name(ISZ(id), o.id.pos), o.priority))
       } else {
         return MNone()
       }
     }
+
     override def postBTSAction(o: BTSAction): MOption[BTSAction] = {
       o match {
-        case a @ BTSAssignmentAction(lhs @ BTSNameExp(name, pos), rhs) =>
+        case a@BTSAssignmentAction(lhs@BTSNameExp(name, pos), rhs) =>
           val id = CommonUtil.getName(name)
           aadlMaps.airFeatureMap.get(id) match {
             case Some(f) if CommonUtil.isDataPort(f) =>

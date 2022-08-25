@@ -46,15 +46,15 @@ import org.sireum.hamr.ir.FeatureEnd
   }
 
   def getInConnections(featurePath: IdPath): ISZ[ir.ConnectionInstance] = {
-    return if(inConnections.contains(featurePath)) inConnections.get(featurePath).get
+    return if (inConnections.contains(featurePath)) inConnections.get(featurePath).get
     else ISZ()
   }
 
   def computeMaxDomain(): Z = {
     var max: Z = z"2" // threads start a domain 2
-    for(p <- getThreads()) {
+    for (p <- getThreads()) {
       p.getDomain(this) match {
-        case Some(z) => if((z + z"1") > max) {
+        case Some(z) => if ((z + z"1") > max) {
           max = z + z"1"
         }
         case _ =>
@@ -101,9 +101,13 @@ import org.sireum.hamr.ir.FeatureEnd
   }
 
   def getThreadOrDevices(): ISZ[AadlThreadOrDevice] = {
-    var ret:ISZ[AadlThreadOrDevice] = ISZ()
-    for(t <- getThreads()) { ret = ret :+ t }
-    for(d <- getDevices()) { ret = ret :+ d }
+    var ret: ISZ[AadlThreadOrDevice] = ISZ()
+    for (t <- getThreads()) {
+      ret = ret :+ t
+    }
+    for (d <- getDevices()) {
+      ret = ret :+ d
+    }
     return ret
   }
 
@@ -162,7 +166,7 @@ import org.sireum.hamr.ir.FeatureEnd
   def getAllBoundProcessors(): ISZ[Processor] = {
     var processors: Set[Processor] = Set.empty
 
-    for(process <- getProcesses()){
+    for (process <- getProcesses()) {
       getBoundProcessor(process) match {
         case Some(aadlProcessor) => processors = processors + aadlProcessor
         case _ =>
