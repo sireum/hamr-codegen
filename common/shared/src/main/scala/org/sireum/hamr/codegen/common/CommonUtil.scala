@@ -149,11 +149,24 @@ object CommonUtil {
   "shared"
 }
 
-@datatype class Names(c: ir.Component,
-                      basePackage: String) {
-  val split: ISZ[String] = {
+@datatype class DefaultNameProvider(val c: ir.Component,
+                                    val basePackage: String) extends NameProvider {
+  def apiSuffix: String = {
+    return componentType
+  }
+}
+
+@sig trait NameProvider {
+
+  def c: ir.Component
+
+  def basePackage: String
+
+  def apiSuffix: String
+
+  @memoize def split: ISZ[String] = {
     val san = StringUtil.replaceAll(c.classifier.get.name, "::", ":")
-    ops.StringOps(san).split(char => char == ':')
+    return ops.StringOps(san).split(char => char == ':')
   }
 
   def aadlQualifiedName: String = {
@@ -173,11 +186,11 @@ object CommonUtil {
   }
 
   def api: String = {
-    return s"${componentType}_Api"
+    return s"${apiSuffix}_Api"
   }
 
   def apiInitialization: String = {
-    return s"${componentType}_Initialization_Api"
+    return s"${apiSuffix}_Initialization_Api"
   }
 
   def apiInitializationQualifiedName: String = {
@@ -185,7 +198,7 @@ object CommonUtil {
   }
 
   def apiOperational: String = {
-    return s"${componentType}_Operational_Api"
+    return s"${apiSuffix}_Operational_Api"
   }
 
   def apiOperationalQualifiedName: String = {

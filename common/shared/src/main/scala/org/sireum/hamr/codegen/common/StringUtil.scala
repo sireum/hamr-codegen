@@ -3,7 +3,7 @@
 package org.sireum.hamr.codegen.common
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.containers.{Marker, Resource}
+import org.sireum.hamr.codegen.common.containers.Marker
 import org.sireum.message.Reporter
 import org.sireum.ops.StringOps
 
@@ -38,18 +38,18 @@ object StringUtil {
 
     // sanity checks
     var checkIndex = 1
-    if(replacements(0)._1 >= replacements(0)._2) {
+    if (replacements(0)._1 >= replacements(0)._2) {
       reporter.error(None(), "Error", s"The following replacement is invalid, please report: ${replacements(0)}")
       return s
     }
-    while(checkIndex < replacements.size) {
-      if(replacements(checkIndex - 1)._2 > replacements(checkIndex)._1) {
+    while (checkIndex < replacements.size) {
+      if (replacements(checkIndex - 1)._2 > replacements(checkIndex)._1) {
         reporter.error(None(), "Error", s"Replacements must be sequential, please report: ${replacements(checkIndex - 1)} and ${replacements(checkIndex)}")
         return s
       }
       checkIndex = checkIndex + 1
     }
-    if(replacements(checkIndex - 1)._2 >= lines.size) {
+    if (replacements(checkIndex - 1)._2 >= lines.size) {
       reporter.error(None(), "Error", s"Replacement offset is more than the content size, please report: size=${lines.size}, replacement=${replacements(checkIndex - 1)}")
       return s
     }
@@ -58,9 +58,9 @@ object StringUtil {
 
     var i: Z = 0
     var ri: Z = 0
-    while(i < lines.size) {
-      if(ri < replacements.size &&
-         i == replacements(ri)._1) {
+    while (i < lines.size) {
+      if (ri < replacements.size &&
+        i == replacements(ri)._1) {
         val rtext = split_PreserveEmptySegments(replacements(ri)._3, c => c == '\n')
         r = r :+ lines(i) // add start marker
         r = r ++ rtext // substitute new section content
@@ -80,9 +80,9 @@ object StringUtil {
                       markers: ISZ[Marker],
                       reporter: Reporter): HashSMap[Marker, (Z, Z, String)] = {
     def fetchMarker(so: ops.StringOps, searchBeginMarkers: B): Option[Marker] = {
-      for(marker <- markers) {
-        val m: String = if(searchBeginMarkers) marker.beginMarker else marker.endMarker
-        if(so.startsWith(m)) {
+      for (marker <- markers) {
+        val m: String = if (searchBeginMarkers) marker.beginMarker else marker.endMarker
+        if (so.startsWith(m)) {
           return Some(marker)
         }
       }
@@ -109,7 +109,7 @@ object StringUtil {
           val endMarker = fetchMarker(lOps2, F)
           if (endMarker.nonEmpty) {
             found = T
-            if(beginMarker != endMarker) {
+            if (beginMarker != endMarker) {
               reporter.error(None(), errorKind,
                 s"Mismatch marker at lines ${beginLine + 1} and ${i + 1} (${beginMarker.get} != ${endMarker.get})")
 
@@ -133,7 +133,7 @@ object StringUtil {
   // version of split that preserves empty segments
   // e.g. splitting "||x|" on '|' yields ["", "", "x", ""], whereas
   //      splitting "||x"  on '|' yields ["", "", "x"]
-  @pure def split_PreserveEmptySegments(s: String, isSep: C => B @pure): ISZ[String] = {
+  @pure def split_PreserveEmptySegments(s: String, isSep: C => B@pure): ISZ[String] = {
     var r = ISZ[String]()
     val cis = conversions.String.toCis(s)
     var last = 0
@@ -158,7 +158,7 @@ object StringUtil {
     if (last < size) {
       r = r :+ StringOps.substring(cis, last, size)
     }
-    if(size > 0 && isSep(cis(size - 1))) {
+    if (size > 0 && isSep(cis(size - 1))) {
       r = r :+ "" // preserve empty segment at the end of s
     }
     return r

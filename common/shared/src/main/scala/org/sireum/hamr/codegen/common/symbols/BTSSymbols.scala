@@ -18,7 +18,8 @@ import org.sireum.hamr.ir.{BTSBLESSAnnexClause, BTSExp, BTSStateDeclaration, BTS
 
 
 @sig trait BTSKey
-@datatype class BTSExpKey (exp: BTSExp) extends BTSKey
+
+@datatype class BTSExpKey(exp: BTSExp) extends BTSKey
 
 @datatype class BTSSymbolTable(annex: BTSBLESSAnnexClause,
                                symbols: Map[BTSKey, AadlSymbol],
@@ -26,5 +27,7 @@ import org.sireum.hamr.ir.{BTSBLESSAnnexClause, BTSExp, BTSStateDeclaration, BTS
                                states: Map[String, BTSState],
                                variables: Map[IdPath, BTSVariable]) {
 
-  def lookupExp(k: BTSExp): Option[AadlSymbol] = { return symbols.get(BTSExpKey(k)) }
+  def lookupExp(k: BTSExp): Option[AadlSymbol] = {
+    return symbols.get(BTSExpKey(k))
+  }
 }

@@ -1585,7 +1585,7 @@ object Transformer {
 
 }
 
-import Transformer._
+import org.sireum.hamr.codegen.common.symbols.Transformer._
 
 @datatype class Transformer[Context](val pp: PrePost[Context]) {
 

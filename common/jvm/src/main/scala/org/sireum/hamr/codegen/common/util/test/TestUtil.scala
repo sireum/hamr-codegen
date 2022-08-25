@@ -20,8 +20,12 @@ object TestUtil {
       val nmap: ISZ[(String, TestResource)] = t.map.entries.map(m => {
 
         val dstPath: String =
-          if(Os.isWin) { ops.StringOps(m._1).replaceAllChars('\\', '/') }
-          else { m._1 }
+          if (Os.isWin) {
+            ops.StringOps(m._1).replaceAllChars('\\', '/')
+          }
+          else {
+            m._1
+          }
 
         m._2 match {
           case i: ITestResource =>
@@ -33,8 +37,8 @@ object TestUtil {
             (dstPath, ITestResource(content = content, overwrite = i.overwrite, makeExecutable = i.makeExecutable, makeCRLF = i.makeCRLF, markers = i.markers))
 
           case e: ETestResource =>
-           (dstPath, ETestResource(content = e.content, symlink = e.symlink))
-          }
+            (dstPath, ETestResource(content = e.content, symlink = e.symlink))
+        }
       })
       return TestResult(Map(nmap))
     }
@@ -44,11 +48,11 @@ object TestUtil {
       val results: (String, TestResource) = m match {
         case i: IResource =>
           val testMarkers = i.markers.map((m: Marker) => TestMarker(beginMarker = m.beginMarker, endMarker = m.endMarker))
-          (key, ITestResource (content = i.content.render, overwrite = i.overwrite, makeExecutable = i.makeExecutable, makeCRLF = i.makeCRLF, markers = testMarkers) )
+          (key, ITestResource(content = i.content.render, overwrite = i.overwrite, makeExecutable = i.makeExecutable, makeCRLF = i.makeCRLF, markers = testMarkers))
         case e: EResource =>
           val src = resultsDir.relativize(Os.path(e.srcPath)).value
           val dst = resultsDir.relativize(Os.path(e.dstPath)).value
-          (key, ETestResource (src, e.symlink))
+          (key, ETestResource(src, e.symlink))
       }
       results
     }))))

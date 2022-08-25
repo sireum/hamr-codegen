@@ -39,7 +39,7 @@ object PacerUtil {
     for (t <- threads) {
       val p = t.getParent(symbolTable)
 
-      if(!t.toVirtualMachine(symbolTable) && processesWithThreads.contains(p)) {
+      if (!t.toVirtualMachine(symbolTable) && processesWithThreads.contains(p)) {
         canUseDomainScheduling = F
         mesg = mesg :+ st"More than one thread is in non-VM process ${p.identifier}.  Move ${t.identifier} to a different process."
       }
@@ -78,13 +78,13 @@ object PacerUtil {
 
       for (p <- processesWithThreads.elements) {
         val domain = p.getDomain(symbolTable).get
-        if(domain == 1) {
+        if (domain == 1) {
           domain1InUse = Some(p)
         }
         symbolTable.getBoundProcessor(p) match {
           case Some(proc: AadlProcessor) =>
             boundProcessors = boundProcessors + proc
-            if(seenNonVMDomains.contains(domain)) {
+            if (seenNonVMDomains.contains(domain)) {
               mesg = mesg :+ st"More than one process in domain ${domain}. Only processes bound to the same VM can be in the same domain."
             }
             seenNonVMDomains = seenNonVMDomains + domain
@@ -117,13 +117,13 @@ object PacerUtil {
         val processorWantsPacer: B = boundProcessor.get.getPacingMethod() match {
           case Some(CaseSchedulingProperties.PacingMethod.Pacer) => T
           case Some(CaseSchedulingProperties.PacingMethod.SelfPacing) =>
-            if(symbolTable.hasVM()) {
+            if (symbolTable.hasVM()) {
               mesg = mesg :+ st"Processor ${boundProcessor.get.path} is annotated as self pacing, but the model contains VMs so it must use the Pacer component"
             }
             F
           case _ => F
         }
-        if(domain1InUse.nonEmpty && (symbolTable.hasVM() || processorWantsPacer)) {
+        if (domain1InUse.nonEmpty && (symbolTable.hasVM() || processorWantsPacer)) {
           mesg = mesg :+ st"Process ${domain1InUse.get.path} is in domain 1 but that is reserved for the pacer component"
         }
       }

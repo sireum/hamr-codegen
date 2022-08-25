@@ -4,8 +4,8 @@ package org.sireum.hamr.codegen.common.resolvers
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.CommonUtil.IdPath
-import org.sireum.hamr.codegen.common.symbols.{AadlEventPort, AadlFeatureData, AadlSubprogram, AadlSymbol, BTSKey, BTSState, BTSVariable, SymbolTable}
-import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, EnumType, RecordType, TypeUtil}
+import org.sireum.hamr.codegen.common.symbols._
+import org.sireum.hamr.codegen.common.types._
 import org.sireum.hamr.ir.{BTSAccessExp, BTSAssignmentAction, BTSBLESSAnnexClause, BTSBinaryExp, BTSExp, BTSLiteralExp, BTSLiteralType, BTSNameExp, BTSPortOutAction, BTSSubprogramCallAction, BTSUnaryExp, MTransformer => MAirTransformer}
 import org.sireum.message.Reporter
 
@@ -15,9 +15,9 @@ import org.sireum.message.Reporter
                              variables: Map[IdPath, BTSVariable]) {
 
   def resolve(annex: BTSBLESSAnnexClause, reporter: Reporter):
-    (BTSBLESSAnnexClause, Map[BTSKey, AadlSymbol], HashMap[BTSExp, AadlType]) = {
+  (BTSBLESSAnnexClause, Map[BTSKey, AadlSymbol], HashMap[BTSExp, AadlType]) = {
 
-    var m : Map[BTSKey, AadlSymbol] = Map.empty
+    var m: Map[BTSKey, AadlSymbol] = Map.empty
 
     val expTypes = ExpWalker(symbolTable, aadlTypes, states, variables)
     val results: BTSBLESSAnnexClause = expTypes.transformBTSBLESSAnnexClause(annex) match {
@@ -45,9 +45,9 @@ import org.sireum.message.Reporter
       case Some(exp) =>
         val path = o.name.name
         symbolTable.featureMap.get(path) match {
-          case Some(a : AadlFeatureData) =>
+          case Some(a: AadlFeatureData) =>
             val evalledType = expType.get(exp).get
-            if(a.aadlType != evalledType) {
+            if (a.aadlType != evalledType) {
               val simplePortName = CommonUtil.getLastName(o.name)
               reporter.error(exp.pos, CommonUtil.toolName,
                 s"Expecting type ${a.aadlType.name} for port output on ${simplePortName}, but found ${evalledType.name}"
@@ -64,14 +64,14 @@ import org.sireum.message.Reporter
     return MNone()
   }
 
-  override  def postBTSAssignmentAction(o: BTSAssignmentAction): MOption[BTSAssignmentAction] = {
+  override def postBTSAssignmentAction(o: BTSAssignmentAction): MOption[BTSAssignmentAction] = {
     expType.get(o.lhs) match {
       case Some(lhsType) =>
         expType.get(o.rhs) match {
           case Some(rhsType) =>
-            if(lhsType != rhsType) {
+            if (lhsType != rhsType) {
               reporter.error(o.rhs.pos, CommonUtil.toolName,
-              s"Type mismatch for assignment action: ${lhsType.name} vs ${rhsType.name} for ${o}")
+                s"Type mismatch for assignment action: ${lhsType.name} vs ${rhsType.name} for ${o}")
             }
           case _ =>
             halt(s"Couldn't determine type for rhs of ${o}")
@@ -87,16 +87,16 @@ import org.sireum.message.Reporter
 
     assert(s.parameters.size == o.params.size, s"Sizes don't match ${s.parameters.size} vs ${o.params.size}")
 
-    for(i <- 0 until s.parameters.size) {
+    for (i <- 0 until s.parameters.size) {
       val expectedType = s.parameters(i).aadlType
       val paramPair = o.params(i)
       paramPair.exp match {
         case Some(e) =>
           expType.get(e) match {
             case Some(pType) =>
-              if(expectedType != pType) {
+              if (expectedType != pType) {
                 reporter.error(None(), CommonUtil.toolName,
-                s"Expecting type ${expectedType.name} but found ${pType.name} for ${paramPair}")
+                  s"Expecting type ${expectedType.name} but found ${pType.name} for ${paramPair}")
               }
             case _ =>
               halt(s"no type found for ${paramPair}")
@@ -117,7 +117,7 @@ import org.sireum.message.Reporter
               s"Attribute name ${o.attributeName} not found in ${a.name}")
         }
       case Some(e: EnumType) =>
-        if(!ops.ISZOps(e.values).contains(o.attributeName)) {
+        if (!ops.ISZOps(e.values).contains(o.attributeName)) {
           reporter.error(o.pos, CommonUtil.toolName,
             s"Enum value ${o.attributeName} is not a member of ${e.name}")
         }
@@ -133,7 +133,7 @@ import org.sireum.message.Reporter
     val lhsType = expType.get(o.lhs).get
     val rhsType = expType.get(o.rhs).get
 
-    if(lhsType != rhsType) {
+    if (lhsType != rhsType) {
       reporter.error(o.pos, CommonUtil.toolName,
         s"Types do not match: ${lhsType.name} vs ${rhsType.name} for ${o}")
     }
@@ -153,7 +153,7 @@ import org.sireum.message.Reporter
       case BTSLiteralType.BOOLEAN => aadlTypes.typeMap.get("Base_Types::Boolean").get
       case BTSLiteralType.STRING => {
         val segments = ops.StringOps(o.exp).split(c => c == '$')
-        if(segments.size == 2) {
+        if (segments.size == 2) {
           segments(0) match {
             case "u16" =>
 
@@ -177,10 +177,10 @@ import org.sireum.message.Reporter
   override def postBTSNameExp(o: BTSNameExp): MOption[BTSNameExp] = {
     val path = o.name.name
 
-    if(variables.contains(path)) {
+    if (variables.contains(path)) {
       // bts variable
       expType = expType + (o ~> variables.get(path).get.typ)
-    } else if(symbolTable.featureMap.contains(path)) {
+    } else if (symbolTable.featureMap.contains(path)) {
       // port??
       symbolTable.featureMap.get(path).get match {
         case afd: AadlFeatureData => expType = expType + (o ~> afd.aadlType)

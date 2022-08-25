@@ -71,14 +71,14 @@ object GclUtil {
     }
 
     def mergePos(a: Option[Position], b: Option[Position]): Option[Position] = {
-      if(a.isEmpty) {
+      if (a.isEmpty) {
         return b
       } else if (b.isEmpty) {
         return a
       } else {
         (a, b) match {
           case (Some(afp: FlatPos), Some(bfp: FlatPos)) =>
-            if(!(afp.offset32 <= bfp.offset32)) {
+            if (!(afp.offset32 <= bfp.offset32)) {
               ureporter.error(a, messageKind, s"Offsets must increase but received: ${afp.offset32} vs ${bfp.offset32}")
             }
             val length = (bfp.offset32 - afp.offset32) + bfp.length32

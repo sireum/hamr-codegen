@@ -4,10 +4,9 @@ package org.sireum.hamr.codegen.common.types
 
 import org.sireum._
 import org.sireum.hamr.codegen.common._
-import org.sireum.hamr.codegen.common.properties.{HamrProperties, OsateProperties, PropertyUtil}
+import org.sireum.hamr.codegen.common.properties.{OsateProperties, PropertyUtil}
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.ir
-import org.sireum.message.Reporter
 
 object TypeUtil {
 
@@ -65,11 +64,13 @@ object TypeUtil {
     */
   @pure def getMaxBitsSize(symbolTable: SymbolTable): Option[Z] = {
     var ret = z"-1"
-    for (port <- symbolTable.getThreads().flatMap((t : AadlThread) => t.getPorts())){
+    for (port <- symbolTable.getThreads().flatMap((t: AadlThread) => t.getPorts())) {
       port match {
         case afd: AadlFeatureData =>
           afd.aadlType.bitSize match {
-            case Some(z) => if (z > ret) { ret = z }
+            case Some(z) => if (z > ret) {
+              ret = z
+            }
             case _ =>
           }
         case _ =>
@@ -101,7 +102,9 @@ object TypeUtil {
     halt(s"${c} isn't an array")
   }
 
-  @pure def isEmptyType(t: AadlType): B = { return t == EmptyType }
+  @pure def isEmptyType(t: AadlType): B = {
+    return t == EmptyType
+  }
 
   @pure def isEnumType(c: ir.Component): B = {
     return isEnum(c.properties)
@@ -151,11 +154,11 @@ object TypeUtil {
     return ops.StringOps(c.classifier.get.name).startsWith("Base_Types::")
   }
 
-  def isMissingType(c: ir.Component) : B = {
+  def isMissingType(c: ir.Component): B = {
     return isMissingTypeClassifier(c.classifier.get)
   }
 
-  def isMissingTypeClassifier(c: ir.Classifier) : B = {
+  def isMissingTypeClassifier(c: ir.Classifier): B = {
     return c.name == MISSING_AADL_TYPE
   }
 

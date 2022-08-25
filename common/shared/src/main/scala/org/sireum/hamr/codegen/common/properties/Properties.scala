@@ -12,8 +12,8 @@ object OsateProperties {
 
   val THREAD_PROPERTIES__DISPATCH_PROTOCOL: String = "Thread_Properties::Dispatch_Protocol"
   val THREAD_PROPERTIES__DISPATCH_TRIGGER: String = "Thread_Properties::Dispatch_Trigger"
-  val THREAD_PROPERTIES__PRIORITY: String =  "Thread_Properties::Priority"
-  val THREAD_PROPERTIES__URGENCY: String =  "Thread_Properties::Urgency"
+  val THREAD_PROPERTIES__PRIORITY: String = "Thread_Properties::Priority"
+  val THREAD_PROPERTIES__URGENCY: String = "Thread_Properties::Urgency"
 
   val DEPLOYMENT_PROPERTIES__ACTUAL_PROCESSOR_BINDING: String = "Deployment_Properties::Actual_Processor_Binding"
   val COMMUNICATION_PROPERTIES__QUEUE_SIZE: String = "Communication_Properties::Queue_Size"

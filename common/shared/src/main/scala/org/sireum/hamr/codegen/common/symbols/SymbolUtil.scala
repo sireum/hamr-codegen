@@ -4,35 +4,33 @@ package org.sireum.hamr.codegen.common.symbols
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
-import org.sireum.hamr.codegen.common.CommonUtil.IdPath
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.ir
 import org.sireum.hamr.ir.{Annex, AnnexLib, MTransformer => MAirTransformer}
 import org.sireum.message.Reporter
-import org.sireum.{HashSMap, ISZ, Map, Some, String, ops}
 
 object SymbolUtil {
 
   def buildAadlMaps(aadl: ir.Aadl, reporter: Reporter): AadlMaps = {
     val w = Walker()
-    for(c <- aadl.components) {
+    for (c <- aadl.components) {
       w.transformComponent(c)
     }
     var airClassifierMap: HashSMap[String, ir.Component] = HashSMap.empty
-    for(d <- aadl.dataComponents) {
+    for (d <- aadl.dataComponents) {
       airClassifierMap = airClassifierMap + (d.classifier.get.name ~> d)
     }
     var connInst2Conn: Map[ISZ[String], ISZ[ir.Connection]] = Map.empty
-    for(ci <- w.connectionInstances) {
+    for (ci <- w.connectionInstances) {
       var conns: ISZ[ir.Connection] = ISZ()
-      for(cr <- ci.connectionRefs) {
+      for (cr <- ci.connectionRefs) {
         w.connectionsMap.get(cr.name.name) match {
           case Some(c) => conns = conns :+ c
           case _ =>
             // maybe it's from a feature group?
 
             val crops = ops.ISZOps(cr.name.name)
-            val src: ISZ[String]= {
+            val src: ISZ[String] = {
               val srcops = ops.ISZOps(ci.src.feature.get.name)
               srcops.slice(ci.src.component.name.size, srcops.s.size)
             }
@@ -98,8 +96,8 @@ object SymbolUtil {
                          connectionInstanceToConnectionsMap: Map[ISZ[String], ISZ[ir.Connection]]
                         ) {
   def validate(): Unit = {
-    for(c <- connections) {
-      for(ci <- c.connectionInstances) {
+    for (c <- connections) {
+      for (ci <- c.connectionInstances) {
         assert(altConnectionInstancesMap.contains(ci.name), s"Couldn't find conn instance ${ci.name} for ${c.name.name}")
       }
     }
@@ -122,25 +120,28 @@ object SymbolUtil {
     airComponentMap = airComponentMap + (id ~> o)
     return MNone[ir.Component]()
   }
+
   override def postFeature(o: ir.Feature): MOption[ir.Feature] = {
     val id = CommonUtil.getName(o.identifier)
     airFeatureMap = airFeatureMap + (id ~> o)
     return MNone[ir.Feature]()
   }
+
   override def postConnection(o: ir.Connection): MOption[ir.Connection] = {
     connections = connections :+ o
     connectionsMap = connectionsMap + (o.name.name ~> o)
     return MNone[ir.Connection]()
   }
+
   override def postConnectionInstance(o: ir.ConnectionInstance): MOption[ir.ConnectionInstance] = {
     connectionInstances = connectionInstances :+ o
     connectionInstancesMap = connectionInstancesMap + (o.name.name ~> o)
 
-    var altName:ISZ[String] = ISZ()
-    for(n <- o.name.name) {
+    var altName: ISZ[String] = ISZ()
+    for (n <- o.name.name) {
       val contents = ops.StringOps(n)
       val pos = contents.stringIndexOf(" -> ")
-      if(pos > 0) {
+      if (pos > 0) {
         val src = ops.StringOps(contents.substring(0, pos))
         val dst = ops.StringOps(contents.substring(pos + 4, contents.size))
 

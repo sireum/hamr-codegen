@@ -1,14 +1,14 @@
 package org.sireum.hamr.codegen.common.util.test
 
+import com.zaxxer.nuprocess._
+import org.sireum.$internal.CollectionCompat.Converters._
+import org.sireum._
+
 import java.io.PrintWriter
 import java.nio.charset.{StandardCharsets => SC}
 import java.nio.file.{Path => JPath, Paths => JPaths}
 import java.nio.{ByteBuffer => BB}
 import java.util.concurrent.{TimeUnit => TU}
-
-import com.zaxxer.nuprocess._
-import org.sireum.$internal.CollectionCompat.Converters._
-import org.sireum._
 
 /* Customization of Kekinian's Os.proc functionality meant for
  * HAMR Codegen regression testing.  It optionally scans stdout
@@ -19,19 +19,21 @@ object TestOs {
 
   var isNative: B = NativeUtil.isNative
 
-  def proc(e:  Os.Proc): Os.Proc.Result = {
+  def proc(e: Os.Proc): Os.Proc.Result = {
     return proc2(e, None(), None())
   }
 
-  def proc2(ep:  Os.Proc, timeoutKey: Option[String], textToSendAfterTimeout: Option[String]): Os.Proc.Result = {
+  def proc2(ep: Os.Proc, timeoutKey: Option[String], textToSendAfterTimeout: Option[String]): Os.Proc.Result = {
     val e: Os.Proc =
       if (ep.isScript)
         if (Os.isWin) ep(cmds = ISZ[String]("cmd", "/c") ++ ep.cmds)
         else ep(cmds = "sh" +: ep.cmds)
       else ep
+
     def nativ(): Os.Proc.Result = {
       halt("Native not implemented")
     }
+
     def jvm(): Os.Proc.Result = {
       val commands = new java.util.ArrayList(e.cmds.elements.map(_.value).asJavaCollection)
       val m = scala.collection.mutable.Map[Predef.String, Predef.String]()
@@ -67,7 +69,7 @@ object TestOs {
           println(s"<<<<<<< Starting a 'timer' for ${timeout} ms >>>>>>>>")
           Thread.sleep(timeout)
 
-          if(textToSendAfterTimeout.nonEmpty) {
+          if (textToSendAfterTimeout.nonEmpty) {
             np.wantWrite()
             Thread.sleep(1) // wait for input stream to be flushed
             np.closeStdin(false)
@@ -84,7 +86,7 @@ object TestOs {
               buffer.get(bytes)
               new Predef.String(bytes, SC.UTF_8)
             }
-            if(useTimeoutKey && s.contains(timeoutKey.get.native)) {
+            if (useTimeoutKey && s.contains(timeoutKey.get.native)) {
               stopDemoTimer(p, e.timeoutInMillis.toLong)
             }
             if (isOut) System.out.print(s)
@@ -96,8 +98,8 @@ object TestOs {
           }
         }
 
-        override  def onStdinReady(buffer: BB): Boolean = {
-          if(textToSendAfterTimeout.nonEmpty) {
+        override def onStdinReady(buffer: BB): Boolean = {
+          if (textToSendAfterTimeout.nonEmpty) {
             buffer.put(textToSendAfterTimeout.get.native.getBytes())
           }
           return false
@@ -119,7 +121,7 @@ object TestOs {
           case _ =>
         }
 
-        if(!useTimeoutKey && e.timeoutInMillis > 0) {
+        if (!useTimeoutKey && e.timeoutInMillis > 0) {
           stopDemoTimer(p, e.timeoutInMillis.toLong)
         }
 
@@ -142,6 +144,7 @@ object TestOs {
         Os.Proc.Result.Timeout(out.toString, err.toString)
       } else Os.Proc.Result.Exception(s"Could not execute command: ${e.cmds.elements.mkString(" ")}")
     }
+
     try {
       if (isNative || e.shouldUseStandardLib) {
         nativ()
@@ -161,5 +164,6 @@ object TestOs {
         Os.Proc.Result.Exception(sw.toString)
     }
   }
+
   private def toNIO(path: String): JPath = JPaths.get(path.value)
 }

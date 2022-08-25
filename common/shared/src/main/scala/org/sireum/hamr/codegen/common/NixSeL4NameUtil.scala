@@ -16,19 +16,19 @@ object BitCodecNameUtil {
 
 object NixSeL4NameUtil {
 
-  def apiHelperFilename(names: Names): String = {
+  def apiHelperFilename(names: NameProvider): String = {
     return s"${names.componentSingletonType}_api"
   }
 
-  def apiHelperMethodName(portName: String, names: Names): String = {
+  def apiHelperMethodName(portName: String, names: NameProvider): String = {
     return s"api_${portName}__${names.cComponentType}"
   }
 
-  def apiHelperGetterMethodName(portName: String, names: Names): String = {
+  def apiHelperGetterMethodName(portName: String, names: NameProvider): String = {
     return apiHelperMethodName(s"get_${portName}", names)
   }
 
-  def apiHelperSetterMethodName(portName: String, names: Names): String = {
+  def apiHelperSetterMethodName(portName: String, names: NameProvider): String = {
     return apiHelperMethodName(s"put_${portName}", names)
   }
 
