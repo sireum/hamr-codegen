@@ -23,7 +23,7 @@ object CodeGen {
   def codeGen(model: Aadl,
               options: CodeGenConfig,
               reporter: Reporter,
-              transpilerCallback: (TranspilerConfig) => Z,
+              transpilerCallback: (TranspilerConfig, Reporter) => Z,
               proyekIveCallback: (ProyekIveConfig) => Z): CodeGenResults = {
 
     val targetingSel4 = options.platform == CodeGenPlatform.SeL4
@@ -156,7 +156,10 @@ object CodeGen {
 
         if(!reporter.hasError) {
           for (transpilerConfig <- results.transpilerOptions) {
-            if (transpilerCallback(transpilerConfig) != 0) {
+            // CTranspiler prints all the messages in the passed in reporter so
+            // create a new one for each config
+            val transpilerReporter = Reporter.create
+            if (transpilerCallback(transpilerConfig, transpilerReporter) != 0) {
               reporter.error(None(), toolName, s"Transpiler did not complete successfully")
             }
           }
