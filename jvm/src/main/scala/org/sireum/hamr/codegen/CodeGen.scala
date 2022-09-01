@@ -155,7 +155,7 @@ object CodeGen {
         reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
 
         if(!reporter.hasError) {
-          for (transpilerConfig <- results.transpilerOptions) {
+          for (transpilerConfig <- results.transpilerOptions if !reporter.hasError) {
             // CTranspiler prints all the messages in the passed in reporter so
             // create a new one for each config
             val transpilerReporter = Reporter.create
