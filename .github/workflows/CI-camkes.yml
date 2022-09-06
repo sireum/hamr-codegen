@@ -1,6 +1,8 @@
 name: CAmkES
 
-on: push
+on: 
+  push:
+  workflow_dispatch:
 
 jobs:
   container:
