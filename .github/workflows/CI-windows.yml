@@ -59,7 +59,7 @@ jobs:
           set CHECK_PHANTOM_HAMR_API_COMPATIBILITY=true
           
           echo Need to add back 'compile' mode once github actions issue is resolved
-          set HamrTestModes=phantom,generated_unit_tests,smt2
+          set HamrTestModes=phantom,tipe,ive,generated_unit_tests,smt2
           echo HamrTestModes=%HamrTestModes%
           set SMT2_TIMEOUT=180000
           echo SMT2_TIMEOUT=%SMT2_TIMEOUT%
