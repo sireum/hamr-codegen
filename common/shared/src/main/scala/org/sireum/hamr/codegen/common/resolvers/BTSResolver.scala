@@ -5,6 +5,7 @@ package org.sireum.hamr.codegen.common.resolvers
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.CommonUtil.IdPath
+import org.sireum.hamr.codegen.common.symbols.{BTSVariable => BTSVariableSym}
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.ir._
@@ -23,7 +24,7 @@ import org.sireum.message.Reporter
           (name, BTSState(name, m))
         }))
 
-        var _variables: Map[IdPath, BTSVariable] = Map.empty
+        var _variables: Map[IdPath, BTSVariableSym] = Map.empty
         for (o <- o.variables) {
           val path = o.name.name
 
@@ -31,7 +32,7 @@ import org.sireum.message.Reporter
             case BTSClassifier(classifier) =>
               aadlTypes.typeMap.get(classifier.name) match {
                 case Some(t) =>
-                  _variables = _variables + (path ~> BTSVariable(path, t, o))
+                  _variables = _variables + (path ~> BTSVariableSym(path, t, o))
                 case _ =>
                   reporter.error(o.name.pos, CommonUtil.toolName,
                     s"Couldn't resolve AADL type '${classifier.name}' for variable ${path}")
