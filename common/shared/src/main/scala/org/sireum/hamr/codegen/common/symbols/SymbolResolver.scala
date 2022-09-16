@@ -50,11 +50,7 @@ object SymbolResolver {
       for (component <- st.componentMap.values) {
         var ais: ISZ[AnnexClauseInfo] = ISZ()
         for (annex <- component.component.annexes) {
-          processAnnexSubclauses(component, st, aadlTypes, annex, annexLibInfos, annexVisitors, reporter) match {
-            case Some(ai) => ais = ais :+ ai
-            case _ =>
-              assert(reporter.hasError, "No annex info returned so expecting an error")
-          }
+          ais = ais ++ processAnnexSubclauses(component, st, aadlTypes, annex, annexLibInfos, annexVisitors, reporter)
         }
         annexClauseInfos = annexClauseInfos + (component ~> ais)
       }
@@ -965,13 +961,15 @@ object SymbolResolver {
                              annex: Annex,
                              annexLibs: ISZ[AnnexLibInfo],
                              annexVisitors: MSZ[AnnexVisitor],
-                             reporter: Reporter): Option[AnnexClauseInfo] = {
+                             reporter: Reporter): ISZ[AnnexClauseInfo] = {
+    var ret: ISZ[AnnexClauseInfo] = ISZ()
     for (v <- annexVisitors) {
+      // TODO: what if 2+ visitors can handle the same annex?
       v.offer(context, annex, annexLibs, symbolTable, aadlTypes, reporter) match {
-        case Some(ai) => return Some(ai)
+        case Some(ai) => ret = ret :+ ai
         case None() =>
       }
     }
-    return Some(TodoAnnexInfo(annex.clause))
+    return ret
   }
 }
