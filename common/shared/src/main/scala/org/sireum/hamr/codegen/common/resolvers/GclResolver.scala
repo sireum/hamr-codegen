@@ -5,7 +5,7 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.IdPath
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.types._
-import org.sireum.hamr.codegen.common.{CommonUtil, DefaultNameProvider}
+import org.sireum.hamr.codegen.common.{CommonUtil, NameUtil}
 import org.sireum.hamr.ir._
 import org.sireum.lang.ast.MethodContract.Simple
 import org.sireum.lang.ast.{Exp, ResolvedAttr, ResolvedInfo, TypeParam}
@@ -337,7 +337,7 @@ object GclResolver {
                   None()
                 } else {
                   val component = components(0)
-                  val objectName = DefaultNameProvider(component.component, "").componentSingletonType
+                  val objectName = NameUtil.getAirNameProvider(component.component, "").componentSingletonType
 
                   Some(Exp.Select(
                     //rreceiverOpt = Some(Exp.Ident(id = AST.Id(owner(0), emptyAttr), attr = emptyRAttr)),
