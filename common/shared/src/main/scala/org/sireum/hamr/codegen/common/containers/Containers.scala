@@ -49,10 +49,18 @@ import org.sireum._
                                  val customConstants: ISZ[String],
                                  val forwarding: ISZ[String])
 
+@enum object ProyekIveEdition {
+  "Community"
+  "Ultimate"
+  "Server"
+}
+
 @datatype class ProyekIveConfig(val help: String,
                                 val args: ISZ[String],
                                 val force: B,
-                                val ultimate: B,
+                                val edition: ProyekIveEdition.Type,
+                                val javac: ISZ[String],
+                                val scalac: ISZ[String],
                                 val ignoreRuntime: B,
                                 val json: Option[String],
                                 val name: Option[String],

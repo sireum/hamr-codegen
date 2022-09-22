@@ -7,7 +7,7 @@ import org.sireum.hamr.arsit.Util.ARSIT_INSTRUCTIONS_MESSAGE_KIND
 import org.sireum.hamr.{act, arsit}
 import org.sireum.hamr.codegen.common.util.CodeGenPlatform._
 import org.sireum.hamr.codegen.common.{DirectoryUtil, StringUtil}
-import org.sireum.hamr.codegen.common.containers.{EResource, IResource, Marker, ProyekIveConfig, Resource, TranspilerConfig}
+import org.sireum.hamr.codegen.common.containers.{EResource, IResource, Marker, ProyekIveConfig, ProyekIveEdition, Resource, TranspilerConfig}
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.ModelUtil.ModelElements
@@ -121,7 +121,9 @@ object CodeGen {
             help = "",
             args = ISZ(slangOutputDir.canon.value),
             force = F,
-            ultimate = F,
+            edition = ProyekIveEdition.Community,
+            javac = ISZ(),
+            scalac = ISZ(),
             ignoreRuntime = F,
             json = None(),
             name = None(),
