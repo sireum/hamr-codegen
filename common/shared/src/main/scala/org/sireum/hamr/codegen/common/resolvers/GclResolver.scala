@@ -5,7 +5,8 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.IdPath
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.types._
-import org.sireum.hamr.codegen.common.{CommonUtil, NameUtil}
+import org.sireum.hamr.codegen.common.CommonUtil
+import org.sireum.hamr.codegen.common.util.NameUtil
 import org.sireum.hamr.ir._
 import org.sireum.lang.ast.MethodContract.Simple
 import org.sireum.lang.ast.{Exp, ResolvedAttr, ResolvedInfo, TypeParam}

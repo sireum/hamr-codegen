@@ -3,7 +3,7 @@
 package org.sireum.hamr.codegen.common
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.NameUtil.NameProvider
+import org.sireum.hamr.codegen.common.util.NameUtil.NameProvider
 
 object BitCodecNameUtil {
   def numBytesConstName(qualifiedCTypeName: String): String = {

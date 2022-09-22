@@ -1,8 +1,8 @@
 // #Sireum
-
-package org.sireum.hamr.codegen.common
+package org.sireum.hamr.codegen.common.util
 
 import org.sireum._
+import org.sireum.hamr.codegen.common.{ModuleType, StringUtil}
 import org.sireum.hamr.ir
 
 object NameUtil {
