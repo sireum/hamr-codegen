@@ -313,7 +313,7 @@ object GclResolver {
             return MNone()
           case _ =>
             o.receiverOpt match {
-              case s@Some(AST.Exp.Select(_, rid)) =>
+              case s@Some(AST.Exp.Select(_, rid, _)) =>
                 if (rid.value != GUMBO__Library) {
                   reporter.error(o.posOpt, toolName, s"Expecting the method ${rid.value} to be in a synthetic package called ${GUMBO__Library}")
                 }
