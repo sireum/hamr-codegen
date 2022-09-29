@@ -2,7 +2,7 @@
 package org.sireum.hamr.codegen.common.resolvers
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.CommonUtil.IdPath
+import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, getName}
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.types._
 import org.sireum.hamr.codegen.common.CommonUtil
@@ -430,8 +430,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
   var computeHandlerPortMap: Map[AST.Exp, AadlPort] = Map.empty
   var integrationMap: Map[AadlPort, GclSpec] = Map.empty
 
-  var seenAnnexes: Set[Annex] = Set.empty
-  var seenLibs: Set[GclLib] = Set.empty
+  var processedAnnexes: Map[Annex, Option[AnnexClauseInfo]] = Map.empty
+  var processedLibs: Map[GclLib, AnnexLibInfo] = Map.empty
 
   var typeMap: TypeMap = HashMap.empty
   var globalNameMap: NameMap = HashMap.empty
@@ -443,8 +443,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
     apiReferences = Set.empty
     computeHandlerPortMap = Map.empty
     integrationMap = Map.empty
-    seenAnnexes = Set.empty
-    seenLibs = Set.empty
+    processedAnnexes = Map.empty
+    processedLibs = Map.empty
     typeMap = HashMap.empty
     globalNameMap = HashMap.empty
     resolvedMethods = HashSMap.empty
@@ -1890,10 +1890,10 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
   }
 
   def offer(context: AadlComponent, annex: Annex, annexLibs: ISZ[AnnexLibInfo], symbolTable: SymbolTable, aadlTypes: AadlTypes, reporter: Reporter): Option[AnnexClauseInfo] = {
-    if (!seenAnnexes.contains(annex)) {
-      seenAnnexes = seenAnnexes + annex
-
-      annex.clause match {
+    if (processedAnnexes.contains(annex)) {
+      return processedAnnexes.get(annex).get
+    } else {
+      val result: Option[AnnexClauseInfo] = annex.clause match {
         case gclSubclause: GclSubclause =>
           val gclLibs: ISZ[GclAnnexLibInfo] = annexLibs.filter((a: AnnexLibInfo) => a.isInstanceOf[GclAnnexLibInfo]).map((a: AnnexLibInfo) => a.asInstanceOf[GclAnnexLibInfo])
           buildTypeMap(gclLibs.map((g: GclAnnexLibInfo) => g.annex), aadlTypes, symbolTable, reporter)
@@ -1932,11 +1932,11 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             aliases = HashMap.empty)
 
           val gclSymbolTable: GclSymbolTable = processGclAnnex(context, gclSubclause, gclLibs, symbolTable, aadlTypes, typeHierarchy, scope, reporter).get
-          return Some(GclAnnexClauseInfo(gclSubclause, gclSymbolTable))
-        case _ =>
+          Some(GclAnnexClauseInfo(gclSubclause, gclSymbolTable))
+        case _ => None()
       }
+      return result
     }
-    return None()
   }
 
   def offerLibraries(annexLibs: ISZ[AnnexLib], symbolTable: SymbolTable, aadlTypes: AadlTypes, reporter: Reporter): ISZ[AnnexLibInfo] = {
@@ -1946,35 +1946,42 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
     if (gclLibs.nonEmpty) {
       buildTypeMap(gclLibs, aadlTypes, symbolTable, reporter)
 
-      for (gclLib <- gclLibs if !seenLibs.contains(gclLib)) {
-        val qualifiedName = gclLib.containingPackage.name :+ GUMBO__Library
-        typeMap.get(qualifiedName) match {
-          case Some(o) =>
-            o match {
-              case info: TypeInfo.Adt =>
-                val typeParams = Resolver.typeParamMap(info.ast.typeParams, reporter)
-                var scope = Scope.Local.create(typeParams.map, info.scope)
-                scope = scope(localThisOpt = Some(info.tpe))
+      for (gclLib <- gclLibs) {
+        if(processedLibs.contains(gclLib)) {
+          ret = ret :+ processedLibs.get(gclLib).get
+        } else {
+          val qualifiedName = gclLib.containingPackage.name :+ GUMBO__Library
+          typeMap.get(qualifiedName) match {
+            case Some(o) =>
+              o match {
+                case info: TypeInfo.Adt =>
+                  val typeParams = Resolver.typeParamMap(info.ast.typeParams, reporter)
+                  var scope = Scope.Local.create(typeParams.map, info.scope)
+                  scope = scope(localThisOpt = Some(info.tpe))
 
-                val libReporter = GclResolver.libraryReporter
+                  val libReporter = GclResolver.libraryReporter
 
-                val typeHierarchy: TypeHierarchy = TypeHierarchy(
-                  nameMap = globalNameMap ++ libReporter.nameMap.entries,
-                  typeMap = typeMap ++ libReporter.typeMap.entries,
-                  poset = Poset.empty,
-                  aliases = HashMap.empty)
+                  val typeHierarchy: TypeHierarchy = TypeHierarchy(
+                    nameMap = globalNameMap ++ libReporter.nameMap.entries,
+                    typeMap = typeMap ++ libReporter.typeMap.entries,
+                    poset = Poset.empty,
+                    aliases = HashMap.empty)
 
-                val gclSymTable: Option[GclSymbolTable] = processGclLib(gclLib, symbolTable, aadlTypes, typeHierarchy, scope, reporter)
-                val gali = GclAnnexLibInfo(
-                  annex = gclLib,
-                  name = qualifiedName,
-                  gclSymbolTable = gclSymTable.get)
-                ret = ret :+ gali
-              case x =>
-                reporter.error(None(), toolName, s"Expecting ${qualifiedName} to resolve to an ADT but found ${x}")
-            }
-          case _ =>
-            reporter.error(None(), toolName, s"Could not resolve type info for GCL Library: ${qualifiedName}")
+                  val gclSymTable: Option[GclSymbolTable] = processGclLib(gclLib, symbolTable, aadlTypes, typeHierarchy, scope, reporter)
+                  val gali = GclAnnexLibInfo(
+                    annex = gclLib,
+                    name = qualifiedName,
+                    gclSymbolTable = gclSymTable.get)
+
+                  processedLibs = processedLibs + (gclLib ~> gali)
+
+                  ret = ret :+ gali
+                case x =>
+                  reporter.error(None(), toolName, s"Expecting ${qualifiedName} to resolve to an ADT but found ${x}")
+              }
+            case _ =>
+              reporter.error(None(), toolName, s"Could not resolve type info for GCL Library: ${qualifiedName}")
+          }
         }
       }
     }
