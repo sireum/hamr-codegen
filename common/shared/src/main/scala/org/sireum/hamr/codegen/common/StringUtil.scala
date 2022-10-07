@@ -117,9 +117,9 @@ object StringUtil {
             }
             r = r + (beginMarker.get ~> ((beginLine, i, st"${(code, "\n")}".render)))
           } else {
+            i = i + 1
             code = code :+ ops.StringOps(line2).trimTrailing
           }
-          i = i + 1
         }
         if (!found) {
           reporter.error(None(), errorKind, s"Unclosed marker at line ${beginLine + 1} for ${beginMarker.get}")
