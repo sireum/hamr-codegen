@@ -433,8 +433,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
   var processedAnnexes: Map[Annex, Option[AnnexClauseInfo]] = Map.empty
   var processedLibs: Map[GclLib, AnnexLibInfo] = Map.empty
 
-  var typeMap: TypeMap = HashMap.empty
-  var globalNameMap: NameMap = HashMap.empty
+  var typeMap: TypeMap = HashSMap.empty
+  var globalNameMap: NameMap = HashSMap.empty
   var resolvedMethods: HashSMap[AST.Stmt.Method, Info.Method] = HashSMap.empty
   var builtTypeInfo: B = F
 
@@ -445,8 +445,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
     integrationMap = Map.empty
     processedAnnexes = Map.empty
     processedLibs = Map.empty
-    typeMap = HashMap.empty
-    globalNameMap = HashMap.empty
+    typeMap = HashSMap.empty
+    globalNameMap = HashSMap.empty
     resolvedMethods = HashSMap.empty
     builtTypeInfo = F
 
@@ -1929,7 +1929,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             nameMap = globalNameMap ++ libReporter.nameMap.entries,
             typeMap = typeMap ++ libReporter.typeMap.entries,
             poset = Poset.empty,
-            aliases = HashMap.empty)
+            aliases = HashSMap.empty)
 
           val gclSymbolTable: GclSymbolTable = processGclAnnex(context, gclSubclause, gclLibs, symbolTable, aadlTypes, typeHierarchy, scope, reporter).get
           Some(GclAnnexClauseInfo(gclSubclause, gclSymbolTable))
@@ -1965,7 +1965,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                     nameMap = globalNameMap ++ libReporter.nameMap.entries,
                     typeMap = typeMap ++ libReporter.typeMap.entries,
                     poset = Poset.empty,
-                    aliases = HashMap.empty)
+                    aliases = HashSMap.empty)
 
                   val gclSymTable: Option[GclSymbolTable] = processGclLib(gclLib, symbolTable, aadlTypes, typeHierarchy, scope, reporter)
                   val gali = GclAnnexLibInfo(
