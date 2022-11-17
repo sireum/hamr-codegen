@@ -1,0 +1,72 @@
+name: CAmkES-Stable
+
+# The CAmkES workflow uses the latest camkes image.  In the past that has
+# caused failures due to issues with the tools in the image.  If that
+# workflow fails (due to any reason) then this workflow will be triggered
+# which uses a "stable" image
+
+on:
+  workflow_run:
+    workflows: [CAmkES]
+    types: [completed]
+  workflow_dispatch:
+
+jobs:
+  container:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    container:
+      image: trustworthysystems/camkes:2022_08_18
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          path: hamr-codegen
+          submodules: recursive
+      - name: Build
+        run: |
+          # github sets HOME to /github/home but some tools (Sireum's Os.home, Haskell) use
+          # the containers /root instead leading to inconsistent installs. Setting HOME
+          # to be root resolves the issue
+          # https://github.com/actions/runner/issues/1474#issuecomment-965805123
+          export HOME=/root
+          
+          mv ./hamr-codegen /root/
+          
+          export aptInstall="apt-get install -f -y --no-install-recommends"
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          ${aptInstall} p7zip-full
+          
+          # Installing emacs installs some package(s) that resolve an issue where
+          # the OSATE gumbo parser fails to initialize when used in the docker container.
+          ${aptInstall} emacs
+          
+          mkdir -p $HOME/.ssh
+          touch $HOME/.ssh/config
+          chmod 700 $HOME/.ssh/config
+          (echo "Host gitlab.adventium.com"; echo "StrictHostKeyChecking no") >> $HOME/.ssh/config
+          
+          export CASE_DIR=$HOME/CASE
+          
+          mkdir -p $CASE_DIR/camkes
+          cd $CASE_DIR/camkes
+          repo init -u https://github.com/seL4/camkes-manifest.git
+          repo sync
+          
+          mkdir -p $CASE_DIR/camkes-vm-examples
+          cd $CASE_DIR/camkes-vm-examples
+          repo init -u https://github.com/seL4/camkes-vm-examples-manifest.git
+          repo sync
+          
+          # see https://github.com/sireum/hamr-codegen-test/blob/master/scala/org/sireum/hamr/codegen/test/util/TestMode.scala
+          export HamrTestModes=phantom,tipe,ive,compile,camkes,generated_unit_tests,smt2
+          echo "HamrTestModes=${HamrTestModes}"
+          
+          export SMT2_TIMEOUT=180000
+          echo "SMT2_TIMEOUT=${SMT2_TIMEOUT}"
+          
+          export ALSO_TRANSPILE_VIA_CALLBACKS=true
+          echo "ALSO_TRANSPILE_VIA_CALLBACKS=${ALSO_TRANSPILE_VIA_CALLBACKS}"
+          
+          $HOME/hamr-codegen/bin/build.cmd test
