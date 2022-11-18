@@ -223,8 +223,7 @@ def installToolsViaKekinian(): Unit = {
   }
   val kbuild = homeBin / "kbuild.cmd"
   kbuild.downloadFrom("https://raw.githubusercontent.com/sireum/kekinian/master/bin/build.cmd")
-  kbuild.chmod("700")
-  proc"$kbuild --help".at(homeBin).runCheck()
+  proc"$sireum slang run $kbuild --help".at(homeBin).runCheck()
   kbuild.remove()
   if(builtIn.size == 1) {
     (home / "runtime").removeAll()
