@@ -18,28 +18,6 @@ import org.sireum.hamr.codegen.common.StringUtil
 }
 
 object TypeNameUtil {
-  def getTypeNameProvider(t: AadlType, basePackageName: String): TypeNameProvider = {
-    val enumValues: ISZ[String] = t match {
-      case e: EnumType => e.values
-      case _ => ISZ()
-    }
-    val kind: TypeKind.Type = t match {
-      case e: EnumType => TypeKind.Enum
-      case e: ArrayType => TypeKind.Array
-      case e: RecordType => TypeKind.Record
-      case e: BaseType => TypeKind.Base
-      case e: TODOType if e == TypeUtil.EmptyType => TypeKind.Empty
-      case e: TODOType => TypeKind.Unknown
-      case e: BitType => TypeKind.Bit
-    }
-    val classifier = ops.StringOps(ops.StringOps(t.name).replaceAllLiterally("::", "|")).split(c => c == '|')
-
-    return getAadlNameProvider(basePackageName,
-      classifier,
-      enumValues,
-      kind)
-  }
-
   def getAadlNameProvider(basePackageName: String,
                           classifier: ISZ[String],
                           enumValues: ISZ[String],

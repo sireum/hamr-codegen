@@ -14,22 +14,30 @@ import org.sireum.hamr.ir
 
   def name: String
 
+  def nameProvider: TypeNameProvider
+
   def bitSize: Option[Z]
 }
 
 @datatype class EnumType(val name: String,
+                         val nameProvider: TypeNameProvider,
+
                          val container: Option[ir.Component],
                          val bitSize: Option[Z],
 
                          values: ISZ[String]) extends AadlType
 
 @datatype class ArrayType(val name: String,
+                          val nameProvider: TypeNameProvider,
+
                           val container: Option[ir.Component],
                           val bitSize: Option[Z],
 
                           baseType: AadlType) extends AadlType
 
 @datatype class RecordType(val name: String,
+                           val nameProvider: TypeNameProvider,
+
                            val container: Option[ir.Component],
                            val bitSize: Option[Z],
 
@@ -37,6 +45,8 @@ import org.sireum.hamr.ir
                           ) extends AadlType
 
 @datatype class BaseType(val name: String,
+                         val nameProvider: TypeNameProvider,
+
                          val container: Option[ir.Component],
                          val bitSize: Option[Z],
 
@@ -44,12 +54,16 @@ import org.sireum.hamr.ir
                         ) extends AadlType
 
 @datatype class TODOType(val name: String,
+                         val nameProvider: TypeNameProvider,
+
                          val container: Option[ir.Component],
                          val bitSize: Option[Z]
 
                         ) extends AadlType
 
 @datatype class BitType(val name: String,
+                        val nameProvider: TypeNameProvider,
+
                         val container: Option[ir.Component],
                         val bitSize: Option[Z],
 
@@ -72,7 +86,7 @@ import org.sireum.hamr.ir
 
   // TODO: Base_Types::Natural
 
-  "R" // Base_Types::Float ??
+  "R" // Base_Types::Float
   "F32" // Base_Types::Float_32
   "F64" // Base_Types::Float_64
 

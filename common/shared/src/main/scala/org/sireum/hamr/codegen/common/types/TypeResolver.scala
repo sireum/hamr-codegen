@@ -46,7 +46,7 @@ object TypeResolver {
 
     for (v <- model.dataComponents) {
       typeMap = typeMap + (v.classifier.get.name ~>
-        processType(v, basePackage, maxStringSize, unboundedZRBitWidth, typeMap))
+        processType(v, basePackage, maxStringSize, unboundedZRBitWidth, typeMap, rawConnections))
     }
 
     return AadlTypes(rawConnections, typeMap)
@@ -56,68 +56,91 @@ object TypeResolver {
                   basePackage: String,
                   maxStringSize: Z,
                   unboundedZRBitWidth: Z,
-                  typeMap: Map[String, AadlType]): AadlType = {
-    val cname = c.classifier.get.name
+                  typeMap: Map[String, AadlType],
+                  rawProtocol: B): AadlType = {
 
-    assert(c.category == ir.ComponentCategory.Data, s"Unexpected data type definition ${cname}")
+    def base(): AadlType = {
+      val cname = c.classifier.get.name
 
-    val container = Some(c)
-    val bitCodecSize = PropertyUtil.getUnitPropZ(c.properties, HamrProperties.HAMR__BIT_CODEC_MAX_SIZE)
+      assert(c.category == ir.ComponentCategory.Data, s"Unexpected data type definition ${cname}")
 
-    if (TypeUtil.isEnumType(c)) {
+      val container = Some(c)
+      val bitCodecSize = PropertyUtil.getUnitPropZ(c.properties, HamrProperties.HAMR__BIT_CODEC_MAX_SIZE)
 
-      return EnumType(cname, container, bitCodecSize, TypeUtil.getEnumValues(c))
-    }
-    else if (TypeUtil.isBaseType(c)) {
+      val classifier = ops.StringOps(ops.StringOps(c.classifier.get.name).replaceAllLiterally("::", "|")).split((c: C) => c == '|')
 
-      val aadlType = org.sireum.ops.StringOps(c.classifier.get.name).replaceAllLiterally("Base_Types::", "")
-
-      val t: SlangType.Type = TypeResolver.getSlangType(aadlType)
-
-      val dataSize: Option[Z] =
-        bitCodecSize match {
-          case Some(bitCodec) => Some(bitCodec)
-          case _ => {
-            PropertyUtil.getUnitPropZ(c.properties, OsateProperties.MEMORY_PROPERTIES__DATA_SIZE) match {
-              case Some(bits) => Some(bits)
-              case _ => None()
-            }
-          }
-        }
-
-      return BaseType(cname, container, dataSize, t)
-    }
-    else if (TypeUtil.isArrayType(c)) {
-
-      val baseTypeName = TypeUtil.getArrayBaseType(c)
-      val baseType = typeMap.get(baseTypeName).get
-
-      return ArrayType(cname, container, bitCodecSize, baseType)
-    }
-    else if (TypeUtil.isRecordType(c)) {
-      var fields: Map[String, AadlType] = Map.empty
-
-      for (sc <- c.subComponents) {
-        val fieldName = CommonUtil.getLastName(sc.identifier)
-        fields = fields + (fieldName ~> processType(sc, basePackage, maxStringSize, unboundedZRBitWidth, typeMap))
+      if (TypeUtil.isEnumType(c)) {
+        val nameProvider = AadlTypeNameProvider(basePackage, classifier, TypeUtil.getEnumValues(c), TypeKind.Enum)
+        return EnumType(cname, nameProvider, container, bitCodecSize, TypeUtil.getEnumValues(c))
       }
+      else if (TypeUtil.isBaseType(c)) {
 
-      return RecordType(cname, container, bitCodecSize, fields)
-    }
-    else {
-      val bitCodecOrDataSize: Option[Z] =
-        bitCodecSize match {
-          case Some(bitCodec) => Some(bitCodec)
-          case _ => {
-            // check to see if the component is potentially extending a bound base_type
-            PropertyUtil.getUnitPropZ(c.properties, OsateProperties.MEMORY_PROPERTIES__DATA_SIZE) match {
-              case Some(bits) => Some(bits)
-              case _ => None()
+        val aadlType = org.sireum.ops.StringOps(c.classifier.get.name).replaceAllLiterally("Base_Types::", "")
+
+        val t: SlangType.Type = TypeResolver.getSlangType(aadlType)
+
+        val dataSize: Option[Z] =
+          bitCodecSize match {
+            case Some(bitCodec) => Some(bitCodec)
+            case _ => {
+              PropertyUtil.getUnitPropZ(c.properties, OsateProperties.MEMORY_PROPERTIES__DATA_SIZE) match {
+                case Some(bits) => Some(bits)
+                case _ => None()
+              }
             }
           }
+
+        val nameProvider = AadlTypeNameProvider(basePackage, classifier, ISZ(), TypeKind.Base)
+        return BaseType(cname, nameProvider, container, dataSize, t)
+      }
+      else if (TypeUtil.isArrayType(c)) {
+
+        val baseTypeName = TypeUtil.getArrayBaseType(c)
+        val baseType = typeMap.get(baseTypeName).get
+
+        val nameProvider = AadlTypeNameProvider(basePackage, classifier, ISZ(), TypeKind.Array)
+        return ArrayType(cname, nameProvider, container, bitCodecSize, baseType)
+      }
+      else if (TypeUtil.isRecordType(c)) {
+        var fields: Map[String, AadlType] = Map.empty
+
+        for (sc <- c.subComponents) {
+          val fieldName = CommonUtil.getLastName(sc.identifier)
+          fields = fields + (fieldName ~> processType(sc, basePackage, maxStringSize, unboundedZRBitWidth, typeMap, rawProtocol))
         }
 
-      return TODOType(cname, container, bitCodecOrDataSize)
+        val nameProvider = AadlTypeNameProvider(basePackage, classifier, ISZ(), TypeKind.Record)
+        return RecordType(cname, nameProvider, container, bitCodecSize, fields)
+      }
+      else {
+        val bitCodecOrDataSize: Option[Z] =
+          bitCodecSize match {
+            case Some(bitCodec) => Some(bitCodec)
+            case _ => {
+              // check to see if the component is potentially extending a bound base_type
+              PropertyUtil.getUnitPropZ(c.properties, OsateProperties.MEMORY_PROPERTIES__DATA_SIZE) match {
+                case Some(bits) => Some(bits)
+                case _ => None()
+              }
+            }
+          }
+
+        val nameProvider = AadlTypeNameProvider(basePackage, classifier, ISZ(), TypeKind.Unknown)
+        return TODOType(cname, nameProvider, container, bitCodecOrDataSize)
+      }
+    }
+    val _base = base()
+
+    if (rawProtocol) {
+      val np = AadlTypeNameProvider(
+        basePackageName = _base.nameProvider.basePackageName,
+        classifier = _base.nameProvider.classifier,
+        enumValues = _base.nameProvider.enumValues,
+        kind = TypeKind.Bit
+      )
+      return BitType(TypeUtil.SlangEmbeddedBitTypeName, np, _base.container, _base.bitSize, Some(_base))
+    } else {
+      return _base
     }
   }
 }
