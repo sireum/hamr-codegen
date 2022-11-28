@@ -42,10 +42,9 @@ object TypeUtil {
     def processType(t: AadlType): Unit = {
       t match {
         case a: ArrayType =>
-          val dims = TypeUtil.getArrayDimensions(a)
-          assert(dims.size == 1)
-          if (dims(0) > max) {
-            max = dims(0)
+          assert(a.dimensions.size == 1)
+          if (a.dimensions(0) > max) {
+            max = a.dimensions(0)
           }
           processType(a.baseType)
         case r: RecordType =>
@@ -79,20 +78,15 @@ object TypeUtil {
     return if (ret == -1) None() else Some(ret)
   }
 
-  @pure def getArrayDimensions(a: ArrayType): ISZ[Z] = {
-    val ret: ISZ[Z] = a.container match {
-      case Some(c) =>
-        PropertyUtil.getPropertyValues(c.properties, OsateProperties.DATA_MODEL__DIMENSION)
-          .map((x: ir.PropertyValue) => x.asInstanceOf[ir.UnitProp])
-          .map((m: ir.UnitProp) => {
-            R(m.value) match {
-              case Some(x) => conversions.R.toZ(x)
-              case _ => z"-1"
-            }
-          })
-      case _ => ISZ()
-    }
-    return ret
+  @pure def getArrayDimensions(c: ir.Component): ISZ[Z] = {
+    return PropertyUtil.getPropertyValues(c.properties, OsateProperties.DATA_MODEL__DIMENSION)
+      .map((x: ir.PropertyValue) => x.asInstanceOf[ir.UnitProp])
+      .map((m: ir.UnitProp) => {
+        R(m.value) match {
+          case Some(x) => conversions.R.toZ(x)
+          case _ => z"-1"
+        }
+      })
   }
 
   @pure def getArrayBaseType(c: ir.Component): String = {

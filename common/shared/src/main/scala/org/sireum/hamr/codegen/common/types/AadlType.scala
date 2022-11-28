@@ -3,11 +3,10 @@
 package org.sireum.hamr.codegen.common.types
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.StringUtil
 import org.sireum.hamr.ir
 
-@datatype class AadlTypes(rawConnections: B,
-                          typeMap: Map[String, AadlType])
+@datatype class AadlTypes(val rawConnections: B,
+                          val typeMap: Map[String, AadlType])
 
 @sig trait AadlType {
   def container: Option[ir.Component]
@@ -25,7 +24,7 @@ import org.sireum.hamr.ir
                          val container: Option[ir.Component],
                          val bitSize: Option[Z],
 
-                         values: ISZ[String]) extends AadlType
+                         val values: ISZ[String]) extends AadlType
 
 @datatype class ArrayType(val name: String,
                           val nameProvider: TypeNameProvider,
@@ -33,7 +32,8 @@ import org.sireum.hamr.ir
                           val container: Option[ir.Component],
                           val bitSize: Option[Z],
 
-                          baseType: AadlType) extends AadlType
+                          val dimensions: ISZ[Z],
+                          val baseType: AadlType) extends AadlType
 
 @datatype class RecordType(val name: String,
                            val nameProvider: TypeNameProvider,
@@ -41,7 +41,7 @@ import org.sireum.hamr.ir
                            val container: Option[ir.Component],
                            val bitSize: Option[Z],
 
-                           fields: Map[String, AadlType]
+                           val fields: Map[String, AadlType]
                           ) extends AadlType
 
 @datatype class BaseType(val name: String,
@@ -50,7 +50,7 @@ import org.sireum.hamr.ir
                          val container: Option[ir.Component],
                          val bitSize: Option[Z],
 
-                         slangType: SlangType.Type
+                         val slangType: SlangType.Type
                         ) extends AadlType
 
 @datatype class TODOType(val name: String,
@@ -67,7 +67,7 @@ import org.sireum.hamr.ir
                         val container: Option[ir.Component],
                         val bitSize: Option[Z],
 
-                        originatingType: Option[AadlType]) extends AadlType
+                        val originatingType: Option[AadlType]) extends AadlType
 
 @enum object SlangType {
   "B" // Base_Types::Boolean

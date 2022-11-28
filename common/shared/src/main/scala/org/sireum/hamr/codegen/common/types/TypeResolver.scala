@@ -99,7 +99,7 @@ object TypeResolver {
         val baseType = typeMap.get(baseTypeName).get
 
         val nameProvider = AadlTypeNameProvider(basePackage, classifier, ISZ(), TypeKind.Array)
-        return ArrayType(cname, nameProvider, container, bitCodecSize, baseType)
+        return ArrayType(cname, nameProvider, container, bitCodecSize, TypeUtil.getArrayDimensions(c), baseType)
       }
       else if (TypeUtil.isRecordType(c)) {
         var fields: Map[String, AadlType] = Map.empty
@@ -129,6 +129,7 @@ object TypeResolver {
         return TODOType(cname, nameProvider, container, bitCodecOrDataSize)
       }
     }
+
     val _base = base()
 
     if (rawProtocol) {
