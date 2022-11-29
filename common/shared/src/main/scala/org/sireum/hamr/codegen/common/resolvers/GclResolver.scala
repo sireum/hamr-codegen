@@ -6,7 +6,7 @@ import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, getName}
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.types._
 import org.sireum.hamr.codegen.common.CommonUtil
-import org.sireum.hamr.codegen.common.util.NameUtil
+import org.sireum.hamr.codegen.common.util.{GclUtil, NameUtil}
 import org.sireum.hamr.ir._
 import org.sireum.lang.ast.MethodContract.Simple
 import org.sireum.lang.ast.{Exp, ResolvedAttr, ResolvedInfo, TypeParam}
@@ -466,7 +466,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
     }
 
     val sireumImporters: ISZ[AST.Stmt.Import.Importer] = {
-      ISZ[String]("S8", "S16", "S32", "S64", "U8", "U16", "U32", "U64").map((m: String) =>
+      val keys = GclUtil.interpolatorLookup.keys.map((m: String) => ops.StringOps(m).firstToUpper)
+      keys.map((m: String) =>
         AST.Stmt.Import.Importer(
           name = AST.Name(
             ids = ISZ[AST.Id](AST.Id("org", emptyAttr), AST.Id("sireum", emptyAttr), AST.Id(m, emptyAttr)),

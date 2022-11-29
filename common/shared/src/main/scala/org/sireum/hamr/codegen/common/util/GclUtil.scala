@@ -14,6 +14,14 @@ object GclUtil {
 
   var ureporter: Reporter = Reporter.create
 
+  val interpolatorLookup: Map[String, String] = Map.empty[String, String] ++ (ISZ[String](
+    "z8", "z16", "z32", "z64",
+    "n", "n8", "n16", "n32", "n64",
+    "s8", "s16", "s32", "s64"
+  ) ++ (for (i <- 1 to 64) yield s"u${i}")).map((s: String) => {
+    ((s, s"org.sireum.${ops.StringOps(s).firstToUpper}._"))
+  })
+
   @datatype class BinaryBuilder
 
   @datatype class BinaryExpPrecedenceOps extends BinaryPrecedenceOps[BinaryBuilder, Exp, Exp] {
