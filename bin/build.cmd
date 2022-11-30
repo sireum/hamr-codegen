@@ -230,7 +230,7 @@ def installToolsViaKekinian(): Unit = {
   }
 }
 
-def installSbt(): Unit = {
+def installSbtMill(): Unit = {
   val sbtBin = homeBin / "sbt" / "bin" / (if (Os.isWin) "sbt.bat" else "sbt")
   if (!sbtBin.exists) {
     val versions = (home / "arsit" / "resources" / "util" / "buildSbt.properties").properties
@@ -242,11 +242,19 @@ def installSbt(): Unit = {
     sbtZip.unzipTo(homeBin)
     sbtZip.remove()
     sbtBin.chmod("+x")
+    println()
+  }
+  val millBin = homeBin / "mill"
+  if (!millBin.exists) {
+    println("Downloading mill ...")
+    millBin.downloadFrom("https://github.com/sireum/rolling/releases/download/mill/standalone")
+    millBin.chmod("+x")
+    println()
   }
 }
 
 installToolsViaKekinian()
-installSbt()
+installSbtMill()
 
 for (i <- 0 until Os.cliArgs.size) {
   Os.cliArgs(i) match {

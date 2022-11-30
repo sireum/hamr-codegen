@@ -3,6 +3,7 @@
 # stuff from build.cmd
 out/
 target
+bin/mill*
 bin/sbt*
 bin/mill.bat
 bin/platform.sh
