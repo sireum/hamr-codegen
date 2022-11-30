@@ -230,7 +230,23 @@ def installToolsViaKekinian(): Unit = {
   }
 }
 
+def installSbt(): Unit = {
+  val sbtBin = homeBin / "sbt" / "bin" / (if (Os.isWin) "sbt.bat" else "sbt")
+  if (!sbtBin.exists) {
+    val versions = (home / "arsit" / "resources" / "util" / "buildSbt.properties").properties
+    val sbtV = versions.get("org.sireum.version.sbt").get
+    (homeBin / "sbt").removeAll()
+    val sbtZip = homeBin / "sbt.zip"
+    println("Downloading sbt ...")
+    sbtZip.downloadFrom(s"https://github.com/sbt/sbt/releases/download/v${sbtV}/sbt-${sbtV}.zip")
+    sbtZip.unzipTo(homeBin)
+    sbtZip.remove()
+    sbtBin.chmod("+x")
+  }
+}
+
 installToolsViaKekinian()
+installSbt()
 
 for (i <- 0 until Os.cliArgs.size) {
   Os.cliArgs(i) match {
