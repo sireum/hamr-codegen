@@ -1,0 +1,25 @@
+# the following should usually match the current kekinian release tag
+org.sireum.kekinian.version=4.20221130.c350258
+
+
+# the following should usually be identical to kekinian's version.properties
+org.sireum.version.scalac-plugin=4.20221201.e539ebf
+org.sireum.version.scala=2.13.10
+org.sireum.version.scalatest=3.2.14
+
+
+# art.version is used when user opts to not embed art
+art.version=6c4fc82
+
+
+# the following are used for github actions caching
+org.sireum.aadl.osate.plugins.version=1.2022.08221314.0e4052e
+org.sireum.aadl.gumbo.plugins.version=1.2022.11022102.e599639
+org.osate.version=2.11.0-vfinal
+
+
+# the following are used in arsit generated proyek/sbt/mill project defs
+org.sireum.version.sbt=1.8.0
+sbtassembly.version=0.15.0
+org.sireum.inspector.version=0.6-SNAPSHOT
+com.intellij.forms_rt.version=7.0.3
