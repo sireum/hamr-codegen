@@ -8,7 +8,7 @@ if [ -z ${SIREUM_HOME} ]; then                                #
   echo "Please set SIREUM_HOME env var"                       #
   exit -1                                                     #
 fi                                                            #
-exec ${SIREUM_HOME}/bin/sireum slang run -n "$0" "$@"      #
+exec ${SIREUM_HOME}/bin/sireum slang run -n "$0" "$@"         #
 :BOF
 if not defined SIREUM_HOME (
   echo Please set SIREUM_HOME env var
@@ -24,11 +24,6 @@ import org.sireum._
 val SIREUM_HOME = Os.path(Os.env("SIREUM_HOME").get)
 val versions = (SIREUM_HOME / "versions.properties").properties
 
-val codegenVersionsP = SIREUM_HOME / "hamr" / "codegen" / "jvm" / "src" / "main" / "resources" / "codegen.versions"
-val codegenVersions = codegenVersionsP.properties
-
-val arsitBuildSbtProps = SIREUM_HOME / "hamr" / "codegen" / "arsit" / "resources" / "util" / "buildSbt.properties"
-
 val noUpdate: B = ops.ISZOps(Os.cliArgs).contains("no-update")
 
 def runGit(args: ISZ[String], path: Os.Path): String = {
@@ -36,83 +31,106 @@ def runGit(args: ISZ[String], path: Os.Path): String = {
   return ops.StringOps(p.out).trim
 }
 
-var currentVers: Map[String, String] = Map.empty +
-  ("org.sireum.kekinian.version" ~> runGit(ISZ("git", "describe", "--abbrev=0", "--tags"), SIREUM_HOME)) +
-  ("org.sireum.version.scala" ~> versions.get("org.scala-lang%scala-library%").get) +
-  ("org.sireum.version.scalac-plugin" ~> versions.get("org.sireum%%scalac-plugin%").get) +
-  ("org.sireum.version.scalatest" ~> versions.get("org.scalatest%%scalatest%%").get) +
-  ("art.version" ~> runGit(ISZ("git", "log", "-n", "1", "--pretty=format:%h"), SIREUM_HOME / "hamr" / "codegen" / "art"))
+val codegenVersionsP = SIREUM_HOME / "hamr" / "codegen" / "jvm" / "src" / "main" / "resources" / "codegen.versions"
+val phantomVersionsP = SIREUM_HOME / "hamr" / "codegen" / "jvm" / "src" / "main" / "resources" / "phantom.versions"
 
-{
-  val cli = (SIREUM_HOME / "hamr" / "phantom" / "jvm" / "src" / "main" / "scala" / "org" / "sireum" / "hamr" / "phantom" / "cli.scala").readLines
-  var osateVersion: String = ""
-  for(i <- 0 until cli.size if osateVersion == "" && ops.StringOps(cli(i)).contains("version")) {
-    val o = ops.StringOps(cli(i+1))
-    osateVersion = o.substring(o.indexOf('"') + 1, o.lastIndexOf('"'))
-  }
-  currentVers = currentVers + ("org.osate.version" ~> osateVersion)
-}
+var codegenCurrentVers: Map[String, String] = Map.empty
+var phantomCurrentVers: Map[String, String] = Map.empty
 
-{
-  def parse(url: String): String = {
-    val temp = Os.slashDir / "temp"
-    temp.downloadFrom(url)
-    val lines = temp.readLines
-    var v: String = ""
-    for(i <- lines.size - 1 to 0 by -1 if v == "") {
-      val op = ops.StringOps(lines(i))
-      if(op.contains("child location")) {
-        v = op.substring(op.indexOf('\'') + 1, op.lastIndexOf('\''))
-      }
+{ // build maps containing the current versions
+  codegenCurrentVers = codegenCurrentVers +
+    ("org.sireum.kekinian.version" ~> runGit(ISZ("git", "describe", "--abbrev=0", "--tags"), SIREUM_HOME)) +
+    ("org.sireum.version.scala" ~> versions.get("org.scala-lang%scala-library%").get) +
+    ("org.sireum.version.scalac-plugin" ~> versions.get("org.sireum%%scalac-plugin%").get) +
+    ("org.sireum.version.scalatest" ~> versions.get("org.scalatest%%scalatest%%").get) +
+    ("art.version" ~> runGit(ISZ("git", "log", "-n", "1", "--pretty=format:%h"), SIREUM_HOME / "hamr" / "codegen" / "art"))
+
+  {
+    val cli = (SIREUM_HOME / "hamr" / "phantom" / "jvm" / "src" / "main" / "scala" / "org" / "sireum" / "hamr" / "phantom" / "cli.scala").readLines
+    var osateVersion: String = ""
+    for (i <- 0 until cli.size if osateVersion == "" && ops.StringOps(cli(i)).contains("version")) {
+      val o = ops.StringOps(cli(i + 1))
+      osateVersion = o.substring(o.indexOf('"') + 1, o.lastIndexOf('"'))
     }
-    temp.remove()
-    return v
+    phantomCurrentVers = phantomCurrentVers + ("org.osate.version" ~> osateVersion)
   }
-  currentVers = currentVers +
-    ("org.sireum.aadl.osate.plugins.version" ~>
-      parse("https://raw.githubusercontent.com/sireum/osate-update-site/master/compositeContent.xml")) +
-    ("org.sireum.aadl.gumbo.plugins.version" ~>
-      parse("https://raw.githubusercontent.com/sireum/aadl-gumbo-update-site/master/compositeContent.xml"))
+
+  {
+    def parse(key: String, url: String): Unit = {
+      val temp = Os.slashDir / "temp"
+      temp.downloadFrom(url)
+      val lines = temp.readLines
+      var v: String = ""
+      var v_alt: String = ""
+      for (i <- lines.size - 1 to 0 by -1 if v == "") {
+        val op = ops.StringOps(lines(i))
+        if (op.contains("child location")) {
+          v = op.substring(op.indexOf('\'') + 1, op.lastIndexOf('\''))
+          v_alt = v
+          val vops = ops.StringOps(v).split((c: C) => c == '.')
+          val tops = ops.StringOps(vops(2))
+          if (tops.startsWith("0")) {
+            v_alt = s"${vops(0)}.${vops(1)}.${tops.substring(1, tops.size)}.${vops(3)}"
+          }
+        }
+      }
+      temp.remove()
+      phantomCurrentVers = phantomCurrentVers + (key ~> v)
+      phantomCurrentVers = phantomCurrentVers + (s"${key}_alt" ~> v_alt)
+    }
+
+    parse("org.sireum.aadl.osate.plugins.version", "https://raw.githubusercontent.com/sireum/osate-update-site/master/compositeContent.xml")
+    parse("org.sireum.aadl.gumbo.plugins.version", "https://raw.githubusercontent.com/sireum/aadl-gumbo-update-site/master/compositeContent.xml")
+  }
 }
 
-for(k <- currentVers.keys if !codegenVersions.contains(k)) {
-  halt(s"${codegenVersionsP} doesn't contain $k")
+{ // sanity checks
+  for (k <- codegenCurrentVers.keys if !codegenVersionsP.properties.contains(k)) {
+    halt(s"${codegenVersionsP} doesn't contain $k")
+  }
+  for (k <- phantomCurrentVers.keys if !phantomVersionsP.properties.contains(k)) {
+    halt(s"${phantomVersionsP} doesn't contain $k")
+  }
+
+  val artEmbeddedVersion = runGit(ISZ("git", "log", "-n", "1", "--pretty=format:%h"), SIREUM_HOME / "hamr" / "codegen" / "arsit" / "resources" / "art")
+  if (codegenCurrentVers.get("art.version").get != artEmbeddedVersion) {
+    for (i <- 0 to 10) println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+    println(s"WARNING: ART versions do not match: ${codegenCurrentVers.get("at.version").get} vs ${artEmbeddedVersion}")
+    for (i <- 0 to 10) println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+  }
 }
 
-val artEmbeddedVersion = runGit(ISZ("git", "log", "-n", "1", "--pretty=format:%h"), SIREUM_HOME / "hamr" / "codegen" / "arsit" / "resources" / "art")
-if(currentVers.get("art.version").get != artEmbeddedVersion) {
-  for(i <- 0 to 10) println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-  println(s"WARNING: ART versions do not match: ${currentVers.get("at.version").get} vs ${artEmbeddedVersion}")
-  for(i <- 0 to 10) println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-}
-
-var mod = ISZ[String]()
 var changesDetected = F
 
-for(l <- codegenVersionsP.readLines) {
-  val s = ops.StringOps(l).split((c: C) => c == '=')
-  if(s.size == 2 && currentVers.contains(s(0)) && currentVers.get(s(0)).get != s(1)) {
-    changesDetected = T
-    println(s"${s(0)} changed: ${s(1)} -> ${currentVers.get(s(0)).get}")
-    mod = mod :+ s"${s(0)}=${currentVers.get(s(0)).get}"
-  } else {
-    mod = mod :+ l
+val arsitUtilDir = SIREUM_HOME / "hamr" / "codegen" / "arsit" / "resources" / "util"
+
+def compare(p: Os.Path, currentVersions: Map[String, String]): Unit = {
+  var mod = ISZ[String]()
+  var hasChanges = F
+  for (l <- p.readLines) {
+    val s = ops.StringOps(l).split((c: C) => c == '=')
+    if (s.size == 2 && currentVersions.contains(s(0)) && currentVersions.get(s(0)).get != s(1)) {
+      hasChanges = T
+      println(s"${s(0)} changed: ${s(1)} -> ${currentVersions.get(s(0)).get}")
+      mod = mod :+ s"${s(0)}=${currentVersions.get(s(0)).get}"
+    } else {
+      mod = mod :+ l
+    }
   }
-}
-
-if(changesDetected) {
-  if (!noUpdate) {
-    codegenVersionsP.writeOver(st"${(mod, "\n")}\n".render)
-    codegenVersionsP.copyOverTo(arsitBuildSbtProps)
-
+  if (hasChanges && !noUpdate) {
+    p.writeOver(st"${(mod, "\n")}\n".render)
+    p.copyOverTo(arsitUtilDir / p.name)
     println(s"Updated:")
-    println(s"  ${codegenVersionsP.toUri}")
-    println(s"  ${arsitBuildSbtProps.toUri}")
+    println(s"  ${p.toUri}")
+    println(s"  ${(arsitUtilDir / p.name).toUri}")
   }
-  Os.exit(1)
-} else {
-  Os.exit(0)
+  changesDetected = changesDetected || hasChanges
 }
+
+compare(codegenVersionsP, codegenCurrentVers)
+compare(phantomVersionsP, phantomCurrentVers)
+
+Os.exit(if (changesDetected) 1 else 0)
 
 /*
 

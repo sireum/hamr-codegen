@@ -12,12 +12,6 @@ org.sireum.version.scalatest=3.2.14
 art.version=6c4fc82
 
 
-# the following are used for github actions caching
-org.sireum.aadl.osate.plugins.version=1.2022.08221314.0e4052e
-org.sireum.aadl.gumbo.plugins.version=1.2022.11022102.e599639
-org.osate.version=2.11.0-vfinal
-
-
 # the following are used in arsit generated proyek/sbt/mill project defs
 org.sireum.version.sbt=1.8.0
 sbtassembly.version=0.15.0

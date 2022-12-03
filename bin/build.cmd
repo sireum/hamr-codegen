@@ -105,7 +105,6 @@ def compile(): Unit = {
   println()
 }
 
-
 def getIVE(): B = {
 
   val (suffix, os): (String, String) = {
@@ -150,18 +149,33 @@ def isCI(): B = {
 }
 
 def installOsateGumbo(): B = {
-  println("Installing Sireum plugins into OSATE ...")
-  val p = proc"$sireum hamr phantom -u"
-  return p.console.run().ok
+  val versions = (home / "jvm" / "src" / "main" / "resources" / "phantom.versions").properties
+  val osateVersion = versions.get("org.osate.version").get
+  val hamrJar = s"org.sireum.aadl.osate.hamr_${versions.get("org.sireum.aadl.osate.plugins.version_alt").get}.jar"
+  val gumboJar = s"org.sireum.aadl.gumbo_${versions.get("org.sireum.aadl.gumbo.plugins.version_alt").get}.jar"
+
+  val osateDir = Os.home / ".sireum" / "phantom" / s"osate-$osateVersion${if (Os.isMac) ".app" else ""}"
+  val pluginsDir: Os.Path =
+    if (Os.isMac)  osateDir / "Contents" / "Eclipse" / "plugins"
+    else osateDir / "plugins"
+
+  var alreadyInstalled = F
+  if (pluginsDir.exists) {
+    val files = ops.ISZOps(pluginsDir.list.map((p: Os.Path) => p.name))
+    alreadyInstalled = files.contains(hamrJar) && files.contains(gumboJar)
+  }
+
+  if(alreadyInstalled) {
+    println("OSATE already up to date.")
+    return T
+  } else {
+    println("Installing Sireum plugins into OSATE ...")
+    val p = proc"$sireum hamr phantom -u"
+    return p.console.run().ok
+  }
 }
 
 def setupGumboTesting(): B = {
-
-  val firstTime = !(home / "jvm/src/test-ext/gumbo").exists || isCI()
-  if(firstTime) {
-    installOsateGumbo()
-  }
-
   val extTestRepos: ISZ[(String, String, String)] = ISZ(
     ("git@gitlab.adventium.com:sirfur", "sireum-osate-tests.git", "jvm/src/test-ext/gumbo"),
     ("git@gitlab.adventium.com:sirfur", "sirfur_omnibus.git", "jvm/src/test-ext/gumbo/resources/models/sirfur_omnibus"),
@@ -178,7 +192,9 @@ def setupGumboTesting(): B = {
   return success
 }
 
+
 def test(): Unit = {
+
   assert(getIVE(), "IVE doesn't exist")
 
   setupGumboTesting()
@@ -216,24 +232,10 @@ def regenCli4Testing(): Unit = {
   proc"${sireum} tools cligen -p org.sireum.hamr.codegen.test.util -o ${utilDir.value} ${(utilDir / "testingCli.sc")}".at(cliPackagePath).console.runCheck()
 }
 
-def installToolsViaKekinian(): Unit = {
-  val builtIn = home / "runtime" / "library" / "shared" / "src" / "main" / "scala" / "org" / "sireum" / "BuiltInTypes.slang"
-  if(!builtIn.exists) {
-    builtIn.write(".")
-  }
-  val kbuild = homeBin / "kbuild.cmd"
-  kbuild.downloadFrom("https://raw.githubusercontent.com/sireum/kekinian/master/bin/build.cmd")
-  proc"$sireum slang run $kbuild --help".at(homeBin).runCheck()
-  kbuild.remove()
-  if(builtIn.size == 1) {
-    (home / "runtime").removeAll()
-  }
-}
-
 def installSbtMill(): Unit = {
   val sbtBin = homeBin / "sbt" / "bin" / (if (Os.isWin) "sbt.bat" else "sbt")
   if (!sbtBin.exists) {
-    val versions = (home / "arsit" / "resources" / "util" / "buildSbt.properties").properties
+    val versions = (home / "jvm" / "src" / "main" / "resources" / "codegen.versions").properties
     val sbtV = versions.get("org.sireum.version.sbt").get
     (homeBin / "sbt").removeAll()
     val sbtZip = homeBin / "sbt.zip"
@@ -253,7 +255,7 @@ def installSbtMill(): Unit = {
   }
 }
 
-installToolsViaKekinian()
+installOsateGumbo()
 installSbtMill()
 
 for (i <- 0 until Os.cliArgs.size) {
