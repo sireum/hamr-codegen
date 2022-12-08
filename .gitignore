@@ -3,21 +3,20 @@
 # stuff from build.cmd
 out/
 target
-bin/mill*
-bin/sbt*
-bin/mill.bat
 bin/platform.sh
 bin/prelude.sh
 bin/prelude.ps1
 bin/sireum
 bin/sireum.bat
 bin/sireum.jar
+bin/slang-run.sh
 bin/.sireum-win.jar
 bin/linux
 bin/mac
 bin/win
 bin/scala
 lib
+resources/
 versions.properties
 *.cmd.jar
 *.cmd.com

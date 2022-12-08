@@ -47,28 +47,21 @@ exit /B %errorlevel%
 exit /B %errorlevel%
 ::!#*/
 // #Sireum
+
 import org.sireum._
 
-def usage(): Unit = {
-  println("HAMR Codegen /build")
-  println(
-    st"""Usage: ( compile | test | tipe | regen-trans | fetch-gumbo
-        |       | osate-gumbo)+""".render)
-}
+val homeBin: Os.Path = Os.slashDir
+val home: Os.Path = homeBin.up
+val appDir: Os.Path = homeBin / (if (Os.isMac) "mac" else if (Os.isWin) "win" else "linux")
+val sireum: Os.Path = homeBin / (if (Os.isWin) "sireum.bat" else "sireum")
 
+val proyekName: String = "sireum-proyek"
+val project: Os.Path = homeBin / "project4testing.cmd"
 
 if (Os.cliArgs.isEmpty) {
   usage()
   Os.exit(0)
 }
-
-
-val homeBin: Os.Path = Os.slashDir
-val home: Os.Path = homeBin.up
-val sireum : Os.Path = homeBin / (if (Os.isWin) "sireum.bat" else "sireum")
-
-val proyekName: String = "sireum-proyek"
-val project: Os.Path = homeBin / "project4testing.cmd"
 
 def clone(repo: String, proj: String, location: Option[String]): B = {
   val loc: Os.Path = location match {
@@ -85,7 +78,9 @@ def clone(repo: String, proj: String, location: Option[String]): B = {
 }
 
 def cloneProjects(): Unit = {
-  ISZ[String]("air", "runtime", "slang").foreach((p: String) => { clone("https://github.com/sireum", p, None()); println() })
+  ISZ[String]("air", "runtime", "slang").foreach((p: String) => {
+    clone("https://github.com/sireum", p, None()); println()
+  })
 }
 
 def tipe(): Unit = {
@@ -100,79 +95,8 @@ def compile(): Unit = {
   tipe()
 
   println("Compiling ...")
-  println(home)
   proc"$sireum proyek compile --project $project -n $proyekName --par --sha3 .".at(home).console.runCheck()
   println()
-}
-
-def getIVE(): B = {
-
-  val (suffix, os): (String, String) = {
-    val ret: (String, String) = if (Os.isWin) { ("sireum-dev-win.sfx", "win") }
-    else if (Os.isMac) { ("sireum-dev-mac.sfx", "mac") }
-    else if (Os.isLinux) { ("sireum-dev-linux.sfx", "linux") }
-    else { halt("Os not supported") }
-    ret
-  }
-
-  val destDir = homeBin / os / "idea"
-  val ideaDir: Os.Path =
-    if (Os.envs.contains("GITHUB_ACTIONS")) homeBin / "Sireum-dev" / "bin" / os / "idea"
-    else Os.home / "Applications" / "Sireum-dev" / "bin" / os / "idea"
-
-  if(!destDir.exists) {
-    if (!ideaDir.exists) {
-      val repo = GitHub.repo("sireum", "kekinian")
-      val latest = repo.releases.head
-
-      val candidates = latest.assets.filter((gasset: GitHub.Asset) => ops.StringOps(gasset.url).endsWith(suffix))
-      assert(candidates.count() == 1, s"hmm, so many ${candidates.count()}")
-
-      val sfx = homeBin / suffix
-      val url = candidates.head.url
-      println(s"Downloading ${url} to ${sfx}")
-      sfx.downloadFrom(url)
-
-      println(s"Unzipping ${sfx} to ${ideaDir.up.up.up.up}")
-      proc"7z x -y -o${ideaDir.up.up.up.up} ${sfx}".console.run()
-      sfx.removeAll()
-    }
-    destDir.mkdirAll()
-    println(s"Sym-linking ${destDir} to ${ideaDir}")
-    destDir.mklink(ideaDir)
-  }
-  return destDir.exists
-}
-
-def isCI(): B = {
-  return Os.env("GITLAB_CI").nonEmpty || Os.env("GITHUB_ACTIONS").nonEmpty || Os.env("BUILD_ID").nonEmpty
-}
-
-def installOsateGumbo(): B = {
-  val versions = (home / "jvm" / "src" / "main" / "resources" / "phantom.versions").properties
-  val osateVersion = versions.get("org.osate.version").get
-  val hamrJar = s"org.sireum.aadl.osate.hamr_${versions.get("org.sireum.aadl.osate.plugins.version_alt").get}.jar"
-  val gumboJar = s"org.sireum.aadl.gumbo_${versions.get("org.sireum.aadl.gumbo.plugins.version_alt").get}.jar"
-
-  val osateDir = Os.home / ".sireum" / "phantom" / s"osate-$osateVersion${if (Os.isMac) ".app" else ""}"
-  val pluginsDir: Os.Path =
-    if (Os.isMac)  osateDir / "Contents" / "Eclipse" / "plugins"
-    else osateDir / "plugins"
-
-  var alreadyInstalled = F
-  if (pluginsDir.exists) {
-    val files = ops.ISZOps(pluginsDir.list.map((p: Os.Path) => p.name))
-    alreadyInstalled = files.contains(hamrJar) && files.contains(gumboJar)
-  }
-
-  if(alreadyInstalled) {
-    println("OSATE already up to date.")
-    return T
-  } else {
-    println("Installing Sireum plugins into OSATE ...")
-    val p = proc"$sireum hamr phantom -u"
-    return p.console.run().ok
-  }
 }
 
 def setupGumboTesting(): B = {
@@ -182,35 +106,29 @@ def setupGumboTesting(): B = {
   )
 
   var success: B = T
-  for(c <- extTestRepos if success && !(home / c._3).exists) {
+  for (c <- extTestRepos if success && !(home / c._3).exists) {
     success = clone(c._1, c._2, Some(c._3)) // may fail (e.g. when run via github actions)
   }
-  if(!success) {
+  if (!success) {
     cprintln(T, "Failed to clone Adventium repos via SSH")
   }
 
   return success
 }
 
-
-def test(): Unit = {
-
-  assert(getIVE(), "IVE doesn't exist")
+def test(options: ISZ[String]): Unit = {
 
   setupGumboTesting()
 
   tipe()
 
-  println("Testing ...")
+  val opts: String = if (options.nonEmpty) st"${(options, " ")}".render else ""
 
-  val names: String = Os.env("HAMR_TEST_PACKAGE_NAMES") match {
-    case Some(packages) =>
-      val _packages: ISZ[String] = ops.StringOps(packages).split((c: C) => c == ',')
-      st"${(_packages, " ")}".render
-    case _ => "org.sireum.hamr"
-  }
+  val wildcardPackages: String = (if (ops.ISZOps(options).contains("--packages")) "" else "org.sireum.hamr.codegen")
 
-  proc"$sireum proyek test --project $project -n $proyekName --par --sha3 . $names".at(home).console.runCheck()
+  println(s"Testing ${if(options.nonEmpty) s"with $opts " else ""}...")
+
+  proc"$sireum proyek test --project $project -n $proyekName --par --sha3 $opts . $wildcardPackages".at(home).console.runCheck()
   println()
 }
 
@@ -228,25 +146,62 @@ def regenTransformers(): Unit = {
 
 def regenCli4Testing(): Unit = {
   val cliPackagePath = home / "jvm" / "src" / "main" / "scala" / "org" / "sireum" / "hamr" / "codegen"
-  val utilDir = home /  "jvm" / "src" / "test" / "scala" / "org" / "sireum" / "hamr" / "codegen" / "test" / "util"
+  val utilDir = home / "jvm" / "src" / "test" / "scala" / "org" / "sireum" / "hamr" / "codegen" / "test" / "util"
   proc"${sireum} tools cligen -p org.sireum.hamr.codegen.test.util -o ${utilDir.value} ${(utilDir / "testingCli.sc")}".at(cliPackagePath).console.runCheck()
 }
 
+def isCI(): B = {
+  return Os.env("GITLAB_CI").nonEmpty || Os.env("GITHUB_ACTIONS").nonEmpty || Os.env("BUILD_ID").nonEmpty
+}
+
+def installOsateGumbo(): B = {
+  val versions = (home / "jvm" / "src" / "main" / "resources" / "phantom.versions").properties
+
+  val hamrJar = s"org.sireum.aadl.osate.hamr_${versions.get("org.sireum.aadl.osate.plugins.version_alt").get}.jar"
+  val gumboJar = s"org.sireum.aadl.gumbo_${versions.get("org.sireum.aadl.gumbo.plugins.version_alt").get}.jar"
+
+  val osateDir = appDir / s"osate${if (Os.isMac) ".app" else ""}"
+  val pluginsDir: Os.Path =
+    if (Os.isMac) osateDir / "Contents" / "Eclipse" / "plugins"
+    else osateDir / "plugins"
+
+  var alreadyInstalled = F
+  if (pluginsDir.exists) {
+    val files = ops.ISZOps(pluginsDir.list.map((p: Os.Path) => p.name))
+    alreadyInstalled = files.contains(hamrJar) && files.contains(gumboJar)
+  }
+
+  if (alreadyInstalled) {
+    println("OSATE already up to date.\n")
+    return T
+  } else {
+    println("Installing Sireum plugins into OSATE, this will take a while ...")
+    val result = proc"$sireum hamr phantom -u -o ${osateDir.value}".console.run()
+    if (result.ok) {
+      println(s"OSATE installed at ${osateDir}")
+    } else {
+      eprintln(result.err)
+    }
+    println()
+    return result.ok
+  }
+}
+
 def installSbtMill(): Unit = {
-  val sbtBin = homeBin / "sbt" / "bin" / (if (Os.isWin) "sbt.bat" else "sbt")
+  val sbtBin = appDir / "sbt" / "bin" / (if (Os.isWin) "sbt.bat" else "sbt")
   if (!sbtBin.exists) {
     val versions = (home / "jvm" / "src" / "main" / "resources" / "codegen.versions").properties
     val sbtV = versions.get("org.sireum.version.sbt").get
-    (homeBin / "sbt").removeAll()
-    val sbtZip = homeBin / "sbt.zip"
+    (appDir / "sbt").removeAll()
+    val sbtZip = appDir / "sbt.zip"
     println("Downloading sbt ...")
     sbtZip.downloadFrom(s"https://github.com/sbt/sbt/releases/download/v${sbtV}/sbt-${sbtV}.zip")
-    sbtZip.unzipTo(homeBin)
+    sbtZip.unzipTo(appDir)
     sbtZip.remove()
     sbtBin.chmod("+x")
     println()
   }
-  val millBin = homeBin / "mill"
+  val millBin = appDir / "mill"
   if (!millBin.exists) {
     println("Downloading mill ...")
     millBin.downloadFrom("https://github.com/sireum/rolling/releases/download/mill/standalone")
@@ -258,14 +213,16 @@ def installSbtMill(): Unit = {
 installOsateGumbo()
 installSbtMill()
 
-for (i <- 0 until Os.cliArgs.size) {
+var continue = T
+for (i <- 0 until Os.cliArgs.size if continue) {
   Os.cliArgs(i) match {
     case string"compile" =>
       cloneProjects()
       compile()
     case string"test" =>
       cloneProjects()
-      test()
+      test(ops.ISZOps(Os.cliArgs).slice(i + 1, Os.cliArgs.size))
+      continue = F
     case string"tipe" =>
       cloneProjects()
       tipe()
@@ -281,3 +238,39 @@ for (i <- 0 until Os.cliArgs.size) {
       Os.exit(-1)
   }
 }
+
+def usage(): Unit = {
+  val testModes: ISZ[String] = {
+    val content = (home / "jvm" / "src" / "test" / "scala" / "org" / "sireum" / "hamr" / "codegen" / "test" / "util" / "TestMode.scala").readLines
+    var capture = F
+    var modes: ISZ[String] = ISZ()
+    for (l <- content) {
+      if (!capture && ops.StringOps(l).contains("@enum")) {
+        capture = T
+      } else if (capture && !ops.StringOps(l).contains("}")) {
+        modes = modes :+ ops.StringOps(l).trim
+      } else {
+        capture = F
+      }
+    }
+    modes
+  }
+  println("HAMR Codegen /build")
+  println(
+    st"""Usage: ( compile | test | tipe | regen-trans | fetch-gumbo
+        |       | osate-gumbo)+
+        |
+        |
+        |Anything after 'test' will be treated as test options. Invoke 'sireum proyek test' for its options, e.g.
+        |
+        |   bin/build.cmd test --suffixes Base --classes org.sireum.hamr.codegen.test.gumbo.GumboTest
+        |
+        |
+        |Set test modes via 'testmodes' environment variable, e.g.
+        |
+        |  testmodes=phantom,ive,logika bin/build.cmd test
+        |
+        |  Available Test Modes:
+        |    ${(testModes, "\n")}""".render)
+}
+

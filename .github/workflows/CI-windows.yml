@@ -42,6 +42,12 @@ jobs:
         with:
           path: cache\coursier
           key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-coursier
+      - name: Cache OSATE
+        id: cache-osate
+        uses: actions/cache@v3
+        with:
+          path: bin\win\osate
+          key: ${{ runner.os }}-${{ hashFiles('jvm\src\main\resources\phantom.properties') }}-osate
       - name: Check LongPathsEnabled
         run: |
           (Get-ItemProperty "HKLM:System\CurrentControlSet\Control\FileSystem").LongPathsEnabled
@@ -59,8 +65,8 @@ jobs:
           set CHECK_PHANTOM_HAMR_API_COMPATIBILITY=true
           
           echo Need to add back 'compile' mode once github actions issue is resolved
-          set HamrTestModes=phantom,tipe,ive,generated_unit_tests,smt2
-          echo HamrTestModes=%HamrTestModes%
+          set testmodes=phantom,tipe,ive,generated_unit_tests,smt2
+          echo testmodes=%testmodes%
           set SMT2_TIMEOUT=180000
           echo SMT2_TIMEOUT=%SMT2_TIMEOUT%
           set ALSO_TRANSPILE_VIA_CALLBACKS=true

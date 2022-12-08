@@ -34,6 +34,12 @@ jobs:
         with:
           path: cache/coursier
           key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-coursier
+      - name: Cache OSATE
+        id: cache-osate
+        uses: actions/cache@v3
+        with:
+          path: bin/linux/osate
+          key: ${{ runner.os }}-${{ hashFiles('jvm/src/main/resources/phantom.properties') }}-osate
       - name: Test
         run: |
           export COURSIER_CACHE=$GITHUB_WORKSPACE/cache/coursier
@@ -42,8 +48,8 @@ jobs:
           # see https://github.com/sireum/osate-plugin/blob/57785407d84793cf1f8d5926647e4dc75ab197a9/org.sireum.aadl.osate.cli/src/org/sireum/aadl/osate/cli/Phantom.java#L508-L517
           export CHECK_PHANTOM_HAMR_API_COMPATIBILITY=true
           
-          export HamrTestModes=phantom,tipe,ive,compile,generated_unit_tests,smt2
-          echo "HamrTestModes=${HamrTestModes}"
+          export testmodes=phantom,tipe,ive,compile,generated_unit_tests,smt2
+          echo "testmodes=${testmodes}"
           export SMT2_TIMEOUT=180000
           echo "SMT2_TIMEOUT=${SMT2_TIMEOUT}"
           export ALSO_TRANSPILE_VIA_CALLBACKS=true

@@ -52,8 +52,8 @@ jobs:
           repo sync
           
           # see https://github.com/sireum/hamr-codegen-test/blob/master/scala/org/sireum/hamr/codegen/test/util/TestMode.scala
-          export HamrTestModes=phantom,tipe,ive,compile,camkes,generated_unit_tests,smt2
-          echo "HamrTestModes=${HamrTestModes}"
+          export testmodes=phantom,tipe,ive,compile,camkes,generated_unit_tests,smt2
+          echo "testmodes=${testmodes}"
           
           export SMT2_TIMEOUT=180000
           echo "SMT2_TIMEOUT=${SMT2_TIMEOUT}"
