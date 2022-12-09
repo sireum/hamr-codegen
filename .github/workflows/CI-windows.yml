@@ -47,7 +47,7 @@ jobs:
         uses: actions/cache@v3
         with:
           path: bin\win\osate
-          key: ${{ runner.os }}-${{ hashFiles('jvm\src\main\resources\phantom.properties') }}-osate
+          key: ${{ runner.os }}-${{ hashFiles('jvm\src\main\resources\phantom_versions.properties') }}-osate
       - name: Check LongPathsEnabled
         run: |
           (Get-ItemProperty "HKLM:System\CurrentControlSet\Control\FileSystem").LongPathsEnabled

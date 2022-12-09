@@ -39,8 +39,8 @@ if (url != "https://github.com/sireum/kekinian.git") {
   Os.exit(0)
 }
 
-val codegenVersionsP = SIREUM_HOME / "hamr" / "codegen" / "jvm" / "src" / "main" / "resources" / "codegen.versions"
-val phantomVersionsP = SIREUM_HOME / "hamr" / "codegen" / "jvm" / "src" / "main" / "resources" / "phantom.versions"
+val codegenVersionsP = SIREUM_HOME / "hamr" / "codegen" / "jvm" / "src" / "main" / "resources" / "codegen_versions.properties"
+val phantomVersionsP = SIREUM_HOME / "hamr" / "codegen" / "jvm" / "src" / "main" / "resources" / "phantom_versions.properties"
 
 var codegenCurrentVers: Map[String, String] = Map.empty
 var phantomCurrentVers: Map[String, String] = Map.empty
@@ -138,40 +138,13 @@ def compare(p: Os.Path, currentVersions: Map[String, String]): Unit = {
 compare(codegenVersionsP, codegenCurrentVers)
 compare(phantomVersionsP, phantomCurrentVers)
 
-Os.exit(if (changesDetected) 1 else 0)
-
-/*
-
-def touchePath(path: Os.Path): Unit = {
-  val content = path.read
-  val lineSep: String = if (Os.isWin) "\r\n" else "\n"
-  val sops = ops.StringOps(content)
-  val newContent: String =
-    if (sops.endsWith(lineSep)) ops.StringOps(content).trim
-    else s"$content$lineSep"
-  path.writeOver(newContent)
-  println(s"Touched ${path}")
-}
-
-if(updated) {
+if(changesDetected && !noUpdate) {
+  // force macro expansion
   val artFiles = SIREUM_HOME / "hamr" / "codegen" / "arsit" / "jvm" / "src" / "main" / "scala" / "org" / "sireum" / "hamr" / "arsit" / "util" / "ArsitLibrary_Ext.scala"
-
-  val pst = st"""${(props.entries.map(m => st"${m._1}=${m._2}"), "\n")}""".render
-  buildSbtProps.writeOver(pst)
-  println(s"$buildSbtProps updated")
-  
-  //println("\nRunning bin/build.cmd")
-  touchePath(artFiles)
-  //val build_cmd = SIREUM_HOME / "bin" / "build.cmd"
-  //Os.proc(ISZ(sireum.value, "slang", "run", build_cmd.value)).console.runCheck()
-  touchePath(artFiles)
-
-  //println(s"\n$buildSbtProps updated and Sireum touched/rebuilt -- expect an error to follow")
-  println(s"\n$buildSbtProps updated -- expect an error to follow")
+  val content = ops.StringOps(artFiles.read)
+  artFiles.writeOver(if (content.endsWith(" ")) content.substring(0, content.size - 1) else s"${artFiles.read} ")
 
   Os.exit(1) // return 1 to indicate versions have changed
 } else {
-  println(s"No Arsit updates needed")
   Os.exit(0)
 }
-*/

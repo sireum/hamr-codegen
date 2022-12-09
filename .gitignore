@@ -16,7 +16,7 @@ bin/mac
 bin/win
 bin/scala
 lib
-resources/
+/resources/
 versions.properties
 *.cmd.jar
 *.cmd.com

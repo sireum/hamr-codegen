@@ -39,7 +39,7 @@ jobs:
         uses: actions/cache@v3
         with:
           path: bin/linux/osate
-          key: ${{ runner.os }}-${{ hashFiles('jvm/src/main/resources/phantom.properties') }}-osate
+          key: ${{ runner.os }}-${{ hashFiles('jvm/src/main/resources/phantom_versions.properties') }}-osate
       - name: Test
         run: |
           export COURSIER_CACHE=$GITHUB_WORKSPACE/cache/coursier

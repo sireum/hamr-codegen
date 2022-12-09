@@ -155,7 +155,7 @@ def isCI(): B = {
 }
 
 def installOsateGumbo(): B = {
-  val versions = (home / "jvm" / "src" / "main" / "resources" / "phantom.versions").properties
+  val versions = (home / "jvm" / "src" / "main" / "resources" / "phantom_versions.properties").properties
 
   val hamrJar = s"org.sireum.aadl.osate.hamr_${versions.get("org.sireum.aadl.osate.plugins.version_alt").get}.jar"
   val gumboJar = s"org.sireum.aadl.gumbo_${versions.get("org.sireum.aadl.gumbo.plugins.version_alt").get}.jar"
@@ -190,7 +190,7 @@ def installOsateGumbo(): B = {
 def installSbtMill(): Unit = {
   val sbtBin = appDir / "sbt" / "bin" / (if (Os.isWin) "sbt.bat" else "sbt")
   if (!sbtBin.exists) {
-    val versions = (home / "jvm" / "src" / "main" / "resources" / "codegen.versions").properties
+    val versions = (home / "jvm" / "src" / "main" / "resources" / "codegen_versions.properties").properties
     val sbtV = versions.get("org.sireum.version.sbt").get
     (appDir / "sbt").removeAll()
     val sbtZip = appDir / "sbt.zip"
