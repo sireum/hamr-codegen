@@ -44,13 +44,14 @@ object ModelUtil {
     val rawConnections: B = PropertyUtil.getUseRawConnection(transModel.components(0).properties)
     val aadlTypes = TypeResolver.processDataTypes(transModel, rawConnections, options.maxStringSize, options.bitWidth, packageName)
 
-    val symbolTable = SymbolResolver.resolve(
+    SymbolResolver.resolve(
       model = transModel,
       aadlTypes = aadlTypes,
       aadlMaps = aadlMaps,
       options = options,
-      reporter = reporter)
-
-    return Some(ModelElements(transModel, aadlTypes, symbolTable))
+      reporter = reporter) match {
+      case Some(symbolTable) => return Some(ModelElements(transModel, aadlTypes, symbolTable))
+      case _ => return None()
+    }
   }
 }

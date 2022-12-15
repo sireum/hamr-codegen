@@ -26,16 +26,6 @@ object CommonUtil {
     return st"${(n.name, "_")}".render
   }
 
-  def getShortName(n: ir.Name): String = {
-    assert(ops.StringOps(n.name(0)).endsWith("Instance"))
-    val short = ops.ISZOps(n.name).tail
-    return st"${(short, "_")}".render
-  }
-
-  def isSystemInstance(f: ir.Component): B = {
-    return isSystem(f) && f.identifier.name.size == 1 && ops.StringOps(f.identifier.name(0)).endsWith("_Instance")
-  }
-
   def isSystem(f: ir.Component): B = {
     return f.category == ir.ComponentCategory.System
   }

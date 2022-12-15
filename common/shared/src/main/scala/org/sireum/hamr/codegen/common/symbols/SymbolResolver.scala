@@ -22,7 +22,7 @@ object SymbolResolver {
               aadlTypes: AadlTypes,
               aadlMaps: AadlMaps,
               options: CodeGenConfig,
-              reporter: Reporter): SymbolTable = {
+              reporter: Reporter): Option[SymbolTable] = {
 
     return SymbolResolver().resolve(model, aadlTypes, aadlMaps, options, defaultAnnexVisitors, reporter)
   }
@@ -36,14 +36,16 @@ object SymbolResolver {
               aadlMaps: AadlMaps,
               options: CodeGenConfig,
               annexVisitors: MSZ[AnnexVisitor],
-              reporter: Reporter): SymbolTable = {
+              reporter: Reporter): Option[SymbolTable] = {
 
     annexVisitors.foreach((f: AnnexVisitor) => f.reset)
 
-    val st = buildSymbolTable(model, aadlTypes, aadlMaps, options, reporter)
+    val stOpt = buildSymbolTable(model, aadlTypes, aadlMaps, options, reporter)
     if (reporter.hasError) {
-      return st
+      return stOpt
     } else {
+      val st = stOpt.get
+
       val annexLibInfos: ISZ[AnnexLibInfo] = processAnnexLibraries(model.annexLib, st, aadlTypes, annexVisitors, reporter)
 
       var annexClauseInfos: HashSMap[AadlComponent, ISZ[AnnexClauseInfo]] = HashSMap.empty
@@ -54,7 +56,7 @@ object SymbolResolver {
         }
         annexClauseInfos = annexClauseInfos + (component ~> ais)
       }
-      return st(annexClauseInfos = annexClauseInfos, annexLibInfos = annexLibInfos)
+      return Some(st(annexClauseInfos = annexClauseInfos, annexLibInfos = annexLibInfos))
     }
   }
 
@@ -62,7 +64,7 @@ object SymbolResolver {
                        aadlTypes: AadlTypes,
                        aadlMaps: AadlMaps,
                        options: CodeGenConfig,
-                       reporter: Reporter): SymbolTable = {
+                       reporter: Reporter): Option[SymbolTable] = {
     var featureMap: HashSMap[IdPath, AadlFeature] = HashSMap.empty
 
     var airComponentMap: HashSMap[IdPath, ir.Component] = HashSMap.empty
@@ -77,9 +79,11 @@ object SymbolResolver {
 
 
     val components = model.components
-    if (components.size != z"1" || components(0).category != ir.ComponentCategory.System) {
-      halt(s"Model contains ${components.size} components.  Should only contain a single top-level system")
+    if (components.size != 1 || components(0).category != ir.ComponentCategory.System) {
+      reporter.error(None(), CommonUtil.toolName, s"Model contains ${components.size} root components.  Expecting a single root component that must be a system")
+      return None()
     }
+
     val system = components(0)
 
     { // build airComponent and airClassifier maps
@@ -197,8 +201,8 @@ object SymbolResolver {
             c.classifier match {
               case Some(s) => CommonUtil.splitClassifier(s)
               case _ =>
-                if (!CommonUtil.isSystemInstance(c)) {
-                  reporter.error(c.identifier.pos, toolName, s"Unexpected: only the system instance should be missing a classifier, but it's missing for ${CommonUtil.getName(c.identifier)}")
+                if (CommonUtil.isSystem(c) && c != system) {
+                  reporter.error(c.identifier.pos, toolName, s"Unexpected: only the root component can be missing a classifier, but it's missing for ${CommonUtil.getName(c.identifier)}")
                 }
                 ISZ()
             }
@@ -871,7 +875,7 @@ object SymbolResolver {
       }
     }
 
-    return symbolTable
+    return Some(symbolTable)
   }
 
   def getPortConnectionNames(c: ir.ConnectionInstance,

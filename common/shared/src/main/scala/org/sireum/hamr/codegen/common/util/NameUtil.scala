@@ -11,8 +11,6 @@ object NameUtil {
                       classifier: String,
                       basePackageName: String): NameProvider = {
 
-    assert(ops.StringOps(idPath(0)).endsWith("Instance"), "idPath must start from a system instance")
-
     val splitClassifier: ISZ[String] = {
       val san = StringUtil.replaceAll(classifier, "::", ":")
       ops.StringOps(san).split(char => char == ':')
