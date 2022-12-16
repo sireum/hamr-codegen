@@ -7,6 +7,7 @@ import org.sireum.hamr.codegen.common._
 import org.sireum.hamr.codegen.common.properties.{HamrProperties, OsateProperties, PropertyUtil}
 import org.sireum.hamr.ir
 import org.sireum.hamr.ir.Aadl
+import org.sireum.message.{Position, Reporter}
 
 object TypeResolver {
 
@@ -40,13 +41,14 @@ object TypeResolver {
                        rawConnections: B,
                        maxStringSize: Z,
                        unboundedZRBitWidth: Z,
-                       basePackage: String): AadlTypes = {
+                       basePackage: String,
+                       reporter: Reporter): AadlTypes = {
 
     var typeMap: Map[String, AadlType] = Map.empty
 
     for (v <- model.dataComponents) {
       typeMap = typeMap + (v.classifier.get.name ~>
-        processType(v, basePackage, maxStringSize, unboundedZRBitWidth, typeMap, rawConnections))
+        processType(v, basePackage, maxStringSize, unboundedZRBitWidth, typeMap, rawConnections, reporter))
     }
 
     return AadlTypes(rawConnections, typeMap)
@@ -57,7 +59,8 @@ object TypeResolver {
                   maxStringSize: Z,
                   unboundedZRBitWidth: Z,
                   typeMap: Map[String, AadlType],
-                  rawProtocol: B): AadlType = {
+                  rawProtocol: B,
+                  reporter: Reporter): AadlType = {
 
     def base(): AadlType = {
       val cname = c.classifier.get.name
@@ -95,18 +98,35 @@ object TypeResolver {
       }
       else if (TypeUtil.isArrayType(c)) {
 
-        val baseTypeName = TypeUtil.getArrayBaseType(c)
-        val baseType = typeMap.get(baseTypeName).get
+        // TODO: need to add position info to the classifier field
+        val pos = None[Position]()
+
+        val baseType: AadlType = TypeUtil.getBaseTypes(c) match {
+          case invalid if invalid.isEmpty && !rawProtocol =>
+            val but: String = if (invalid.size > 1) s", but you specified ${invalid.size}" else ""
+            reporter.error(pos, CommonUtil.toolName, s"Must specify exactly one base type for ${cname} via ${OsateProperties.DATA_MODEL__BASE_TYPE}$but")
+            TypeUtil.EmptyType
+          case onlyOne =>
+            if(typeMap.contains(onlyOne(0))) typeMap.get(onlyOne(0)).get
+            else TypeUtil.EmptyType
+        }
+
+        val dimensions: ISZ[Z] = TypeUtil.getArrayDimensions(c) match {
+          case empty if empty.isEmpty && !rawProtocol =>
+            reporter.error(pos, CommonUtil.toolName, s"Array dimensions for ${cname} must be specified via ${OsateProperties.DATA_MODEL__DIMENSION}")
+            empty
+          case dims => dims
+        }
 
         val nameProvider = AadlTypeNameProvider(basePackage, classifier, ISZ(), TypeKind.Array)
-        return ArrayType(cname, nameProvider, container, bitCodecSize, TypeUtil.getArrayDimensions(c), baseType)
+        return ArrayType(cname, nameProvider, container, bitCodecSize, dimensions, baseType)
       }
       else if (TypeUtil.isRecordType(c)) {
         var fields: Map[String, AadlType] = Map.empty
 
         for (sc <- c.subComponents) {
           val fieldName = CommonUtil.getLastName(sc.identifier)
-          fields = fields + (fieldName ~> processType(sc, basePackage, maxStringSize, unboundedZRBitWidth, typeMap, rawProtocol))
+          fields = fields + (fieldName ~> processType(sc, basePackage, maxStringSize, unboundedZRBitWidth, typeMap, rawProtocol, reporter))
         }
 
         val nameProvider = AadlTypeNameProvider(basePackage, classifier, ISZ(), TypeKind.Record)

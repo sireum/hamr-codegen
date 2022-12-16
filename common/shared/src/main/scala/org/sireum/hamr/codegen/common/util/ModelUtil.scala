@@ -42,7 +42,7 @@ object ModelUtil {
     transModel = if (btxResults.nonEmpty) btxResults.get else transModel
 
     val rawConnections: B = PropertyUtil.getUseRawConnection(transModel.components(0).properties)
-    val aadlTypes = TypeResolver.processDataTypes(transModel, rawConnections, options.maxStringSize, options.bitWidth, packageName)
+    val aadlTypes = TypeResolver.processDataTypes(transModel, rawConnections, options.maxStringSize, options.bitWidth, packageName, reporter)
 
     SymbolResolver.resolve(
       model = transModel,

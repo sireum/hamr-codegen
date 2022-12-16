@@ -79,21 +79,24 @@ object TypeUtil {
   }
 
   @pure def getArrayDimensions(c: ir.Component): ISZ[Z] = {
-    return PropertyUtil.getPropertyValues(c.properties, OsateProperties.DATA_MODEL__DIMENSION)
-      .map((x: ir.PropertyValue) => x.asInstanceOf[ir.UnitProp])
-      .map((m: ir.UnitProp) => {
-        R(m.value) match {
-          case Some(x) => conversions.R.toZ(x)
-          case _ => z"-1"
-        }
-      })
+    val dims = PropertyUtil.getPropertyValues(c.properties, OsateProperties.DATA_MODEL__DIMENSION)
+    return (
+      if (dims.isEmpty) ISZ[Z]()
+      else
+        dims.map((x: ir.PropertyValue) => x.asInstanceOf[ir.UnitProp])
+          .map((m: ir.UnitProp) => {
+            R(m.value) match {
+              case Some(x) => conversions.R.toZ(x)
+              case _ => z"-1"
+            }
+          }))
   }
 
-  @pure def getArrayBaseType(c: ir.Component): String = {
-    for (p <- c.properties if CommonUtil.getLastName(p.name) == OsateProperties.DATA_MODEL__BASE_TYPE) {
-      return p.propertyValues(0).asInstanceOf[ir.ClassifierProp].name
-    }
-    halt(s"${c} isn't an array")
+  @pure def getBaseTypes(c: ir.Component): ISZ[String] = {
+    val baseTypes = PropertyUtil.getPropertyValues(c.properties, OsateProperties.DATA_MODEL__BASE_TYPE)
+    return (
+      if (baseTypes.isEmpty) ISZ[String]()
+      else baseTypes.map((x: ir.PropertyValue) => x.asInstanceOf[ir.ClassifierProp].name))
   }
 
   @pure def isEmptyType(t: AadlType): B = {
