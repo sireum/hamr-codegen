@@ -105,11 +105,23 @@ object TypeNameUtil {
     return s"${packageName}.${referencedTypeName}"
   }
 
-  def qualifiedReferencedSergenTypeName: String = {
+  // transpiler and sergen do not support type aliases so need to use the
+  // Slang type name for Base_Type usages in datatype field decls and in
+  // the generated transpiler scripts
+  def referencedSergenTypeName: String = {
     val ret: String = kind match {
       case TypeKind.Bit => "ISZ[B]"
       case TypeKind.Base => TypeResolver.getSlangType(typeName).name
-      case _ => qualifiedReferencedTypeName
+      case _ => s"$packageName.$referencedTypeName"
+    }
+    return ret
+  }
+
+  def qualifiedReferencedSergenTypeName: String = {
+    val ret: String = kind match {
+      case TypeKind.Bit => referencedSergenTypeName
+      case TypeKind.Base => referencedSergenTypeName
+      case _ => s"$basePackageName.$referencedSergenTypeName"
     }
     return ret
   }
