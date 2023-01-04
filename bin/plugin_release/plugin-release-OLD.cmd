@@ -191,7 +191,7 @@ println(s"sireumTimestamp: ${sireumTimestamp}")
   val a =        "      version="
   val aMod = st"""      version="1.0.${sireumTimestamp}.qualifier"""".render
 
-  //val b =     "      Copyright (c) 2017-2022, Kansas State University"
+  //val b =     "      Copyright (c) 2017-2023, Kansas State University"
 
   val feature = pluginDir / "org.sireum.aadl.osate.feature" / "feature.xml"
   replaceLines(ISZ((a, aMod)), feature)
@@ -205,7 +205,7 @@ println(s"sireumTimestamp: ${sireumTimestamp}")
   val b =    st"""      <import plugin="org.sireum.aadl.osate""".render
   val bMod = st"""      <import plugin="org.sireum.aadl.osate" version="1.0.${sireumTimestamp}" match="greaterOrEqual"/>""".render
 
-  //val c =     "      Copyright (c) 2017-2022, Kansas State University"
+  //val c =     "      Copyright (c) 2017-2023, Kansas State University"
 
   val hamrFeature = pluginDir / "org.sireum.aadl.osate.cli.feature" / "feature.xml"
   replaceLines(ISZ((a, aMod), (b, bMod)), hamrFeature)
@@ -219,7 +219,7 @@ println(s"sireumTimestamp: ${sireumTimestamp}")
   val b =    st"""      <import plugin="org.sireum.aadl.osate""".render
   val bMod = st"""      <import plugin="org.sireum.aadl.osate" version="1.0.${sireumTimestamp}" match="greaterOrEqual"/>""".render
 
-  //val c =     "      Copyright (c) 2017-2022, Kansas State University"
+  //val c =     "      Copyright (c) 2017-2023, Kansas State University"
 
   val hamrFeature = pluginDir / "org.sireum.aadl.osate.hamr.feature" / "feature.xml"
   replaceLines(ISZ((a, aMod), (b, bMod)), hamrFeature)
