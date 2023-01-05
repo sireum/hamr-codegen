@@ -102,20 +102,21 @@ object TypeResolver {
         val pos = None[Position]()
 
         val baseType: AadlType = TypeUtil.getBaseTypes(c) match {
-          case invalid if invalid.isEmpty && !rawProtocol =>
-            val but: String = if (invalid.size > 1) s", but you specified ${invalid.size}" else ""
-            reporter.error(pos, CommonUtil.toolName, s"Must specify exactly one base type for ${cname} via ${OsateProperties.DATA_MODEL__BASE_TYPE}$but")
+          case notOne if notOne.size != 1 =>
+            if (!rawProtocol) {
+              val but: String = if (notOne.size > 1) s", but you specified ${notOne.size}" else ""
+              reporter.error(pos, CommonUtil.toolName, s"Must specify exactly one base type for ${cname} via ${OsateProperties.DATA_MODEL__BASE_TYPE}$but")
+            }
             TypeUtil.EmptyType
           case onlyOne =>
             if(typeMap.contains(onlyOne(0))) typeMap.get(onlyOne(0)).get
             else TypeUtil.EmptyType
         }
 
-        val dimensions: ISZ[Z] = TypeUtil.getArrayDimensions(c) match {
-          case empty if empty.isEmpty && !rawProtocol =>
-            reporter.error(pos, CommonUtil.toolName, s"Array dimensions for ${cname} must be specified via ${OsateProperties.DATA_MODEL__DIMENSION}")
-            empty
-          case dims => dims
+        val dimensions: ISZ[Z] = TypeUtil.getArrayDimensions(c)
+        for(d <- dimensions if d < 1) {
+          // a range type will be introduced with min = 0 so it's max (ie. dim - 1) must be at least 0
+          reporter.error(pos, CommonUtil.toolName, s"Dimensions for ${cname} must be greater than 0 rather than ${d}")
         }
 
         val nameProvider = AadlTypeNameProvider(basePackage, classifier, ISZ(), TypeKind.Array)
