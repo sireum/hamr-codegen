@@ -36,28 +36,6 @@ object TypeUtil {
     return ret
   }
 
-  @pure def findMaxAadlArraySize(types: AadlTypes): Z = {
-    var max: Z = 0
-
-    def processType(t: AadlType): Unit = {
-      t match {
-        case a: ArrayType =>
-          assert(a.dimensions.size == 1)
-          if (a.dimensions(0) > max) {
-            max = a.dimensions(0)
-          }
-          processType(a.baseType)
-        case r: RecordType =>
-          r.fields.values.foreach((t: AadlType) => processType(t))
-        case _ =>
-      }
-    }
-
-    types.typeMap.values.foreach((t: AadlType) => processType(t))
-
-    return max
-  }
-
   /** Returns the maximum bit size of all data components that are
     * attached to (event) data ports, even if the port is not connected
     */
