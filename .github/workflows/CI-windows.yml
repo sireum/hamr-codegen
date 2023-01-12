@@ -8,6 +8,10 @@ jobs:
 
   ci:
     runs-on: windows-latest
+    strategy:
+      matrix:
+        testSuffix: fromJSON("['BaseBehaviorTest','HamrTranspileTest,GumboTest','CodeGenTest_Base','CodegenTest_CASE']")
+    name: '${{ matrix.testSuffix }}'
     steps:
       - name: Support longpaths
         run: git config --system core.longpaths true
@@ -71,4 +75,4 @@ jobs:
           echo SMT2_TIMEOUT=%SMT2_TIMEOUT%
           set ALSO_TRANSPILE_VIA_CALLBACKS=true
           echo ALSO_TRANSPILE_VIA_CALLBACKS=%ALSO_TRANSPILE_VIA_CALLBACKS%
-          bin\build.cmd test
+          bin\build.cmd test --suffixes ${{ matrix.testSuffix }}
