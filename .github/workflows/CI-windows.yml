@@ -10,7 +10,7 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        testSuffix: ${{ fromJSON('["BaseBehaviorTest","HamrTranspileTest,GumboTest","CodeGenTest_Base","CodegenTest_CASE"]' }})
+        testSuffix: ${{ fromJSON('["BaseBehaviorTest","HamrTranspileTest,GumboTest","CodeGenTest_Base","CodegenTest_CASE"]') }}
     name: '${{ matrix.testSuffix }}'
     steps:
       - name: Support longpaths
