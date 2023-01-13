@@ -101,8 +101,8 @@ def compile(): Unit = {
 
 def setupGumboTesting(): B = {
   val extTestRepos: ISZ[(String, String, String)] = ISZ(
-    ("git@gitlab.adventium.com:sirfur", "sireum-osate-tests.git", "jvm/src/test-ext/gumbo"),
-    ("git@gitlab.adventium.com:sirfur", "sirfur_omnibus.git", "jvm/src/test-ext/gumbo/resources/models/sirfur_omnibus"),
+    ("git@gitlab-ext.galois.com:sirfur", "sireum-osate-tests.git", "jvm/src/test-ext/gumbo"),
+    ("git@gitlab-ext.galois.com:sirfur", "sirfur_omnibus.git", "jvm/src/test-ext/gumbo/resources/models/sirfur_omnibus"),
   )
 
   var success: B = T
