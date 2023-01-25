@@ -1595,7 +1595,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                     val ids = m.tipe.asInstanceOf[AST.Type.Named].name.ids.map((i: AST.Id) => i.value)
 
                     if (ids == ISZ(TYPE_VAR__STATE_VAR))
-                      AST.Typed.TypeVar(id = TYPE_VAR__STATE_VAR, isImmutable = T)
+                      AST.Typed.TypeVar(id = TYPE_VAR__STATE_VAR, kind = AST.Typed.VarKind.Immutable)
                     else
                       AST.Typed.Name(ids = ids, args = ISZ())
                   }),
@@ -1681,7 +1681,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             )
 
 
-            val genericType = AST.TypeParam(AST.Id(TYPE_VAR__STATE_VAR, AST.Attr(None())), T)
+            val genericType = AST.TypeParam(AST.Id(TYPE_VAR__STATE_VAR, AST.Attr(None())), AST.Typed.VarKind.Immutable)
             val genericPortParam = AST.Param(
               isHidden = F,
               id = AST.Id("port", AST.Attr(None())),
@@ -1690,7 +1690,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 typeArgs = ISZ(),
                 attr = AST.TypedAttr(
                   posOpt = None(),
-                  typedOpt = Some(AST.Typed.TypeVar(id = TYPE_VAR__STATE_VAR, isImmutable = T))
+                  typedOpt = Some(AST.Typed.TypeVar(id = TYPE_VAR__STATE_VAR, kind = AST.Typed.VarKind.Immutable))
                 )
               )
             )
@@ -1702,7 +1702,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 typeArgs = ISZ(),
                 attr = AST.TypedAttr(
                   posOpt = None(),
-                  typedOpt = Some(AST.Typed.TypeVar(id = TYPE_VAR__STATE_VAR, isImmutable = T))
+                  typedOpt = Some(AST.Typed.TypeVar(id = TYPE_VAR__STATE_VAR, kind = AST.Typed.VarKind.Immutable))
                 )
               )
             )
