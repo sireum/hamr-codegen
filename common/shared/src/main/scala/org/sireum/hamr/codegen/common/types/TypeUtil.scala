@@ -39,21 +39,21 @@ object TypeUtil {
   /** Returns the maximum bit size of all data components that are
     * attached to (event) data ports, even if the port is not connected
     */
-  @pure def getMaxBitsSize(symbolTable: SymbolTable): Option[Z] = {
-    var ret = z"-1"
+  @pure def getMaxBitsSize(symbolTable: SymbolTable): Option[(Z, String)] = {
+    var ret: Option[(Z, String)] = None()
     for (port <- symbolTable.getThreads().flatMap((t: AadlThread) => t.getPorts())) {
       port match {
         case afd: AadlFeatureData =>
-          afd.aadlType.bitSize match {
-            case Some(z) => if (z > ret) {
-              ret = z
+          (afd.aadlType.bitSize, ret) match {
+            case (Some(z), r) => if (r.isEmpty || z > r.get._1) {
+              ret = Some((z, st"${(afd.aadlType.nameProvider.classifier, "::")}".render))
             }
             case _ =>
           }
         case _ =>
       }
     }
-    return if (ret == -1) None() else Some(ret)
+    return ret
   }
 
   @pure def getArrayDimensions(c: ir.Component): ISZ[Z] = {
