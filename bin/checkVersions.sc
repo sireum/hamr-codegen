@@ -1,22 +1,3 @@
-::#! 2> /dev/null                                             #
-@ 2>/dev/null # 2>nul & echo off & goto BOF                   #
-if [ -f "$0.com" ] && [ "$0.com" -nt "$0" ]; then             #
-  exec "$0.com" "$@"                                          #
-fi                                                            #
-rm -f "$0.com"                                                #
-if [ -z ${SIREUM_HOME} ]; then                                #
-  echo "Please set SIREUM_HOME env var"                       #
-  exit -1                                                     #
-fi                                                            #
-exec ${SIREUM_HOME}/bin/sireum slang run -n "$0" "$@"         #
-:BOF
-if not defined SIREUM_HOME (
-  echo Please set SIREUM_HOME env var
-  exit /B -1
-)
-%SIREUM_HOME%\bin\sireum.bat slang run -n "%0" %*
-exit /B %errorlevel%
-::!#
 // #Sireum
 
 import org.sireum._
@@ -53,6 +34,8 @@ var phantomCurrentVers: Map[String, String] = Map.empty
     ("org.sireum.version.scalac-plugin" ~> versions.get("org.sireum%%scalac-plugin%").get) +
     ("org.sireum.version.scalatest" ~> versions.get("org.scalatest%%scalatest%%").get) +
     ("art.version" ~> runGit(ISZ("git", "log", "-n", "1", "--pretty=format:%h"), SIREUM_HOME / "hamr" / "codegen" / "art"))
+
+  println(codegenCurrentVers)
 
   {
     val cli = (SIREUM_HOME / "hamr" / "phantom" / "jvm" / "src" / "main" / "scala" / "org" / "sireum" / "hamr" / "phantom" / "cli.scala").readLines
@@ -104,7 +87,7 @@ var phantomCurrentVers: Map[String, String] = Map.empty
   val artEmbeddedVersion = runGit(ISZ("git", "log", "-n", "1", "--pretty=format:%h"), SIREUM_HOME / "hamr" / "codegen" / "arsit" / "resources" / "art")
   if (codegenCurrentVers.get("art.version").get != artEmbeddedVersion) {
     for (i <- 0 to 10) println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-    println(s"WARNING: ART versions do not match: ${codegenCurrentVers.get("at.version").get} vs ${artEmbeddedVersion}")
+    println(s"WARNING: ART versions do not match: ${codegenCurrentVers.get("art.version").get} vs ${artEmbeddedVersion}")
     for (i <- 0 to 10) println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
   }
 }
