@@ -201,7 +201,7 @@ def installSbtMill(): Unit = {
     sbtBin.chmod("+x")
     println()
   }
-  val millBin = appDir / "mill"
+  val millBin = appDir / (if (Os.isWin) "mill.bat" else "mill")
   if (!millBin.exists) {
     println("Downloading mill ...")
     millBin.downloadFrom("https://github.com/sireum/rolling/releases/download/mill/standalone")
