@@ -70,7 +70,7 @@ def clone(repo: String, proj: String, location: Option[String]): B = {
   }
   val ret: B = if (!loc.exists) {
     val args = ISZ[String]("git", "clone", "--recurse", s"${repo}/$proj") ++ (if (location.nonEmpty) ISZ(location.get) else ISZ[String]())
-    Os.proc(args).at(home).console.run().ok
+    Os.proc(args).at(home).console.timeout(10000).run().ok
   } else {
     Os.proc(ISZ("git", "pull")).at(loc).console.run().ok
   }
