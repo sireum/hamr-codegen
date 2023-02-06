@@ -9,6 +9,10 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: trustworthysystems/camkes
+    strategy:
+      matrix:
+        VM_PARTITION: [true, false]
+    name: 'VM Partition=${{ matrix.VM_PARTITION }}'
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -50,6 +54,9 @@ jobs:
           cd $CASE_DIR/camkes-vm-examples
           repo init -u https://github.com/seL4/camkes-vm-examples-manifest.git
           repo sync
+          
+          export VM_PARTITION=${{ matrix.VM_PARTITION }}
+          echo "VM_PARTITION=${VM_PARTITION}"
           
           # see https://github.com/sireum/hamr-codegen-test/blob/master/scala/org/sireum/hamr/codegen/test/util/TestMode.scala
           export testmodes=phantom,tipe,ive,compile,camkes,generated_unit_tests,smt2
