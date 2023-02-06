@@ -140,7 +140,7 @@ def regenTransformers(): Unit = {
 
   val license = home / "license.txt"
 
-  Os.proc(ISZ[String](sireum.value, "tools", "transgen", "-l", license.value,
+  Os.proc(ISZ[String](sireum.value, "tools", "trafo", "-l", license.value,
     "-m", "immutable,mutable") ++ asts).at(symbolPackagePath).console.runCheck()
 }
 
