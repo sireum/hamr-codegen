@@ -10,6 +10,7 @@ jobs:
     container:
       image: trustworthysystems/camkes
     strategy:
+      fail-fast: false
       matrix:
         VM_PARTITION: [true, false]
     name: 'VM Partition=${{ matrix.VM_PARTITION }}'

@@ -18,6 +18,7 @@ jobs:
     container:
       image: trustworthysystems/camkes:2022_08_18
     strategy:
+      fail-fast: false
       matrix:
         VM_PARTITION: [true, false]
     name: 'VM Partition=${{ matrix.VM_PARTITION }}'
