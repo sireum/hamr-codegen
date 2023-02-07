@@ -9,6 +9,7 @@ jobs:
   ci:
     runs-on: windows-latest
     strategy:
+      fail-fast: false
       matrix:
         testSuffix: ${{ fromJSON('["BaseBehaviorTest","HamrTranspileTests,GumboTest","CodeGenTest_Base","CodegenTest_CASE"]') }}
     name: '${{ matrix.testSuffix }}'
