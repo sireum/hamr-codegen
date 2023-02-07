@@ -8,6 +8,11 @@ jobs:
 
   ci:
     runs-on: macOS-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        testSuffix: ${{ fromJSON('["BaseBehaviorTest","HamrTranspileTests,GumboTest","CodeGenTest_Base","CodegenTest_CASE"]') }}
+    name: '${{ matrix.testSuffix }}'
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -54,4 +59,4 @@ jobs:
           echo "SMT2_TIMEOUT=${SMT2_TIMEOUT}"
           export ALSO_TRANSPILE_VIA_CALLBACKS=true
           echo "ALSO_TRANSPILE_VIA_CALLBACKS=${ALSO_TRANSPILE_VIA_CALLBACKS}"
-          bin/build.cmd test
+          bin/build.cmd test --suffixes ${{ matrix.testSuffix }}
