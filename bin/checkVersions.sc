@@ -7,6 +7,8 @@ val versions = (SIREUM_HOME / "versions.properties").properties
 
 val noUpdate: B = ops.ISZOps(Os.cliArgs).contains("no-update")
 
+val useBleedingEdgeSireum: B = T
+
 def runGit(args: ISZ[String], path: Os.Path): String = {
   val p = org.sireum.Os.proc(args).at(path).runCheck()
   return ops.StringOps(p.out).trim
@@ -28,8 +30,10 @@ var phantomCurrentVers: Map[String, String] = Map.empty
 
 { // build maps containing the current versions
   codegenCurrentVers = codegenCurrentVers +
-    ("org.sireum.kekinian.version" ~> runGit(ISZ("git", "describe", "--abbrev=0", "--tags"), SIREUM_HOME)) +
-    //("org.sireum.kekinian.version" ~> runGit(ISZ("git", "log", "-n", "1", "--pretty=format:%h"), SIREUM_HOME)) +
+    (if (useBleedingEdgeSireum)
+      ("org.sireum.kekinian.version" ~> runGit(ISZ("git", "log", "-n", "1", "--pretty=format:%h"), SIREUM_HOME))
+    else
+      ("org.sireum.kekinian.version" ~> runGit(ISZ("git", "describe", "--abbrev=0", "--tags"), SIREUM_HOME))) +
     ("org.sireum.version.scala" ~> versions.get("org.scala-lang%scala-library%").get) +
     ("org.sireum.version.scalac-plugin" ~> versions.get("org.sireum%%scalac-plugin%").get) +
     ("org.sireum.version.scalatest" ~> versions.get("org.scalatest%%scalatest%%").get) +
