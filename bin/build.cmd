@@ -214,7 +214,7 @@ Os.env("GITHUB_WORKFLOW") match {
   case Some(n) if (ops.StringOps(ops.StringOps(n).toLower).contains("camkes")) =>
     val ver = (home / "versions.properties").properties.get("org.sireum.version.z3").get
     println(s"z3 4.12+ requires glibc 2.35 but the camkes container has 2.31 so installing z3 4.11.2 rather than ${ver}")
-    proc"sed -i '' -e s/org.sireum.version.z3=${ver}/org.sireum.version.z3=4.11.2/g ${home / "versions.properties"}".runCheck()
+    proc"sed -i s/org.sireum.version.z3=${ver}/org.sireum.version.z3=4.11.2/g ${home / "versions.properties"}".runCheck()
     proc"cat ${home / "versions.properties"}".console.runCheck()
   case _ =>
 }
