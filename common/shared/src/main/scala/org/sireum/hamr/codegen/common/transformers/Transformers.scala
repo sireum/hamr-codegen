@@ -45,9 +45,9 @@ object Transformers {
 
     override def postAadl(ctx: CTX, o: ir.Aadl): ir.Transformer.TPostResult[CTX, ir.Aadl] = {
       if (ctx.requiresMissingType) {
-        ir.Transformer.TPostResult(ctx, Some(o(dataComponents = o.dataComponents :+ missingType)))
+        return ir.Transformer.TPostResult(ctx, Some(o(dataComponents = o.dataComponents :+ missingType)))
       } else {
-        ir.Transformer.TPostResult(ctx, None[ir.Aadl]())
+        return ir.Transformer.TPostResult(ctx, None[ir.Aadl]())
       }
     }
 
@@ -59,13 +59,13 @@ object Transformers {
             val reporter = message.Reporter.create
             reporter.warn(o.identifier.pos, toolName, s"Classifier not specified for '${CommonUtil.getName(o.identifier)}'.  Substituting ${TypeUtil.MISSING_AADL_TYPE}")
 
-            ir.Transformer.TPostResult(ctx(requiresMissingType = T, messages = ctx.messages ++ reporter.messages),
+            return ir.Transformer.TPostResult(ctx(requiresMissingType = T, messages = ctx.messages ++ reporter.messages),
               Some(o(classifier = Some(ir.Classifier(TypeUtil.MISSING_AADL_TYPE)))))
           }
           else {
-            ir.Transformer.TPostResult(ctx, None[ir.Component]())
+            return ir.Transformer.TPostResult(ctx, None[ir.Component]())
           }
-        case _ => ir.Transformer.TPostResult(ctx, None[ir.Component]())
+        case _ => return ir.Transformer.TPostResult(ctx, None[ir.Component]())
       }
     }
 
@@ -74,9 +74,9 @@ object Transformers {
         val reporter = message.Reporter.create
         reporter.warn(o.identifier.pos, toolName, s"No datatype specified for data port ${CommonUtil.getName(o.identifier)}.  Substituting ${TypeUtil.MISSING_AADL_TYPE} ")
 
-        ir.Transformer.TPostResult(ctx(requiresMissingType = T, messages = ctx.messages ++ reporter.messages), Some(o(classifier = Some(ir.Classifier(TypeUtil.MISSING_AADL_TYPE)))))
+        return ir.Transformer.TPostResult(ctx(requiresMissingType = T, messages = ctx.messages ++ reporter.messages), Some(o(classifier = Some(ir.Classifier(TypeUtil.MISSING_AADL_TYPE)))))
       } else {
-        ir.Transformer.TPostResult(ctx, None[ir.FeatureEnd]())
+        return ir.Transformer.TPostResult(ctx, None[ir.FeatureEnd]())
       }
     }
   }
