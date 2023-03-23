@@ -963,8 +963,10 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                             case _ =>
                               reporter.error(e.posOpt, GclResolver.toolName, s"From/To flow clauses can only contain ports and state vars")
                           }
-                        case GclSymbolHolder(sym) if !sym.isInstanceOf[GclStateVar] =>
-                          reporter.error(e.posOpt, GclResolver.toolName, s"From/To flow clauses can only contain ports and state vars")
+                        case GclSymbolHolder(sym) =>
+                          if (!sym.isInstanceOf[GclStateVar]) {
+                            reporter.error(e.posOpt, GclResolver.toolName, s"From/To flow clauses can only contain ports and state vars")
+                          }
                       }
                       if (rexp2.isEmpty) {
                         rexprs = rexprs + e ~> rexp
@@ -981,6 +983,9 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           }
 
           for (flow <- flows) {
+            if(flow.from.isEmpty && flow.to.isEmpty) {
+              reporter.error(flow.posOpt, GclResolver.toolName, s"At least one of the from/to clauses must be non-empty")
+            }
             for (fromExp <- flow.from) {
               checkFlow(fromExp, T, flow.posOpt)
             }

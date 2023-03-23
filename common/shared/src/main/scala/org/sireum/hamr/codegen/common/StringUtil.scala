@@ -99,6 +99,10 @@ object StringUtil {
       val lOps = ops.StringOps(ops.StringOps(line).trim)
       val beginMarker = fetchMarker(lOps, T)
       if (beginMarker.nonEmpty) {
+        if (r.contains(beginMarker.get)) {
+          reporter.error(None(), errorKind, s"Duplicate use of key detected: ${beginMarker.get}")
+          return r
+        }
         val beginLine = i
         i = i + 1
         var found = F
@@ -112,7 +116,6 @@ object StringUtil {
             if (beginMarker != endMarker) {
               reporter.error(None(), errorKind,
                 s"Mismatch marker at lines ${beginLine + 1} and ${i + 1} (${beginMarker.get} != ${endMarker.get})")
-
               return r
             }
             r = r + (beginMarker.get ~> ((beginLine, i, st"${(code, "\n")}".render)))
