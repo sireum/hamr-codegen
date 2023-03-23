@@ -35,11 +35,17 @@ object GclResolver {
 
   val apiName: String = "api"
 
+  @enum object RewriteMode {
+    "Normal"
+    "Api"
+    "ApiGet"
+  }
+
   @memoize def libraryReporter: TypeChecker = {
     return org.sireum.lang.FrontEnd.libraryReporter._1
   }
 
-  @record class SymbolFinder(val rewriteApiCalls: B,
+  @record class SymbolFinder(val mode: RewriteMode.Type,
                              val context: AadlComponent,
                              stateVars: ISZ[GclStateVar],
                              specFuncs: ISZ[GclMethod],
@@ -47,6 +53,13 @@ object GclResolver {
     var symbols: Set[SymbolHolder] = Set.empty
     var reporter: Reporter = ReporterImpl(ISZ())
     var apiReferences: Set[AadlPort] = Set.empty
+
+    val rewriteApiCalls: B = mode match {
+      case RewriteMode.ApiGet => T
+      case RewriteMode.Api => T
+      case _ => F
+    }
+    val addGetToApiCalls: B = mode == RewriteMode.ApiGet
 
     def lookup(ident: AST.Exp.Ident, optPos: Option[Position]): Option[SymbolHolder] = {
       val name = ident.id.value
@@ -282,7 +295,7 @@ object GclResolver {
                 symbols = symbols + s
 
                 s match {
-                  case AadlSymbolHolder(p: AadlPort) if rewriteApiCalls =>
+                  case AadlSymbolHolder(p: AadlPort) =>
                     apiReferences = apiReferences + p
 
                     val emptyAttr = AST.Attr(posOpt = o.posOpt)
@@ -401,7 +414,7 @@ object GclResolver {
               val apiSelect = Exp.Select(receiverOpt = Some(apiIdent), id = o.id, targs = ISZ(), attr = getPortAttr(p))
 
               val sel: Exp =
-                if (p.direction == Direction.Out && p.isInstanceOf[AadlEventDataPort]) {
+                if (addGetToApiCalls && p.direction == Direction.Out && p.isInstanceOf[AadlEventDataPort]) {
                   // api.portId.get
                   Exp.Select(receiverOpt = Some(apiSelect), id = AST.Id("get", emptyAttr), targs = o.targs, attr = o.attr)
                 } else {
@@ -419,7 +432,7 @@ object GclResolver {
   }
 
   def collectSymbols(exp: Exp,
-                     rewriteApiCalls: B,
+                     mode: RewriteMode.Type,
                      context: AadlComponent,
                      stateVars: ISZ[GclStateVar],
                      methods: ISZ[GclMethod],
@@ -429,7 +442,7 @@ object GclResolver {
       // already in an inconsistent state
       return (MNone(), ISZ(), ISZ())
     } else {
-      val sf = SymbolFinder(rewriteApiCalls, context, stateVars, methods, symbolTable)
+      val sf = SymbolFinder(mode, context, stateVars, methods, symbolTable)
       val rexp = sf.transform_langastExp(exp)
       reporter.reports(sf.reporter.messages)
       return (rexp, sf.symbols.elements, sf.apiReferences.elements)
@@ -684,7 +697,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
           if (!reporter.hasError) {
             val (expTrans, symbols, apiRefs) =
-              GclResolver.collectSymbols(expTipe, F, context, ISZ(), gclMethods, symbolTable, reporter)
+              GclResolver.collectSymbols(expTipe, RewriteMode.Normal, context, ISZ(), gclMethods, symbolTable, reporter)
             rexprs = rexprs + glcIntegSpec.exp ~> (if (expTrans.nonEmpty) expTrans.get else expTipe)
             apiReferences = apiReferences ++ apiRefs
 
@@ -736,7 +749,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             case e: Exp.Ident =>
               visitSlangExp(e) match {
                 case Some((rexp, roptType)) =>
-                  val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, T, context, s.state, gclMethods, symbolTable, reporter)
+                  val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, context, s.state, gclMethods, symbolTable, reporter)
                   apiReferences = apiReferences ++ apiRefs
 
                   if (!reporter.hasError && symbols.size != 1) {
@@ -764,7 +777,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           seenGuaranteeIds = seenGuaranteeIds + guarantees.id
 
           val rexp = typeCheckBoolExp(guarantees.exp)
-          val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, T, context, s.state, gclMethods, symbolTable, reporter)
+          val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, context, s.state, gclMethods, symbolTable, reporter)
           apiReferences = apiReferences ++ apiRefs
 
           if (rexp2.isEmpty) {
@@ -773,16 +786,18 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             rexprs = rexprs + guarantees.exp ~> rexp2.get
           }
         }
+        assert (s.initializes.get.flows.isEmpty, "Not yet")
       }
 
       s.compute match {
-        case Some(GclCompute(modifies, specs, cases, handlers)) => {
+        case Some(GclCompute(modifies, specs, cases, handlers, flows)) => {
+
           for (modify <- modifies) {
             modify match {
               case e: Exp.Ident =>
                 visitSlangExp(e) match {
                   case Some((rexp, roptType)) =>
-                    val (rexp2, symbols, _) = GclResolver.collectSymbols(rexp, F, context, s.state, gclMethods, symbolTable, reporter)
+                    val (rexp2, symbols, _) = GclResolver.collectSymbols(rexp, RewriteMode.Normal, context, s.state, gclMethods, symbolTable, reporter)
 
                     if (!reporter.hasError && symbols.size != 1) {
                       reporter.error(e.posOpt, GclResolver.toolName, s"Modifies should resolve to exactly one symbol, instead resolved to ${symbols.size}")
@@ -810,7 +825,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
             {
               val rexp = typeCheckBoolExp(spec.exp)
-              val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, T, context, s.state, gclMethods, symbolTable, reporter)
+              val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, context, s.state, gclMethods, symbolTable, reporter)
               apiReferences = apiReferences ++ apiRefs
 
               rexprs = rexprs + (spec.exp ~> rexp)
@@ -829,7 +844,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
             {
               val rexp = typeCheckBoolExp(caase.assumes)
-              val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, T, context, s.state, gclMethods, symbolTable, reporter)
+              val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, context, s.state, gclMethods, symbolTable, reporter)
               apiReferences = apiReferences ++ apiRefs
 
               rexprs = rexprs + (caase.assumes ~> rexp)
@@ -840,7 +855,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
             {
               val rexp = typeCheckBoolExp(caase.guarantees)
-              val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, T, context, s.state, gclMethods, symbolTable, reporter)
+              val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, context, s.state, gclMethods, symbolTable, reporter)
               apiReferences = apiReferences ++ apiRefs
 
               rexprs = rexprs + (caase.guarantees ~> rexp)
@@ -854,7 +869,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
             visitSlangExp(handler.port) match {
               case Some((rexp, roptType)) =>
-                val (_, symbols, _) = GclResolver.collectSymbols(rexp, F, context, s.state, gclMethods, symbolTable, reporter)
+                val (_, symbols, _) = GclResolver.collectSymbols(rexp, RewriteMode.Normal, context, s.state, gclMethods, symbolTable, reporter)
                 if (!reporter.hasError) {
                   if (symbols.size != 1) {
                     reporter.error(handler.port.posOpt, GclResolver.toolName, s"Handler should resolve to exactly one symbol, instead resolved to ${symbols.size}")
@@ -878,7 +893,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 case e: Exp.Ident =>
                   visitSlangExp(e) match {
                     case Some((rexp, roptType)) =>
-                      val (rexp2, symbols, _) = GclResolver.collectSymbols(rexp, F, context, s.state, gclMethods, symbolTable, reporter)
+                      val (rexp2, symbols, _) = GclResolver.collectSymbols(rexp, RewriteMode.Normal, context, s.state, gclMethods, symbolTable, reporter)
                       if (!reporter.hasError) {
                         if (symbols.size != 1) {
                           reporter.error(e.posOpt, GclResolver.toolName, s"Modifies should resolve to exactly one symbol, instead resolved to ${symbols.size}")
@@ -905,7 +920,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               handlerSpecIds = handlerSpecIds + guarantees.id
 
               val rexp = typeCheckBoolExp(guarantees.exp)
-              val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, T, context, s.state, gclMethods, symbolTable, reporter)
+              val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, context, s.state, gclMethods, symbolTable, reporter)
               apiReferences = apiReferences ++ apiRefs
 
               if (rexp2.isEmpty) {
@@ -924,6 +939,55 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 reporter.error(handler.port.posOpt, GclResolver.toolName, s"Unexpected: Compute handlers can only be used with dispatchable components")
             }
           }
+
+          def checkFlow(exp: AST.Exp, isFrom: B, posOpt: Option[Position]): Unit = {
+            exp match {
+              case e: Exp.Ident =>
+                visitSlangExp(e) match {
+                  case Some((rexp, roptType)) =>
+                    val (rexp2, symbols, _) = GclResolver.collectSymbols(rexp, RewriteMode.Api, context, s.state, gclMethods, symbolTable, reporter)
+                    if (!reporter.hasError) {
+                      if (symbols.size != 1) {
+                        reporter.error(e.posOpt, GclResolver.toolName, s"From/To expressions should resolve to exactly one symbol, instead resolved to ${symbols.size}")
+                      }
+                      symbols(0) match {
+                        case AadlSymbolHolder(sym) =>
+                          sym match {
+                            case p: AadlPort =>
+                              if (isFrom && p.direction != Direction.In) {
+                                reporter.error(e.posOpt, GclResolver.toolName, s"Only in ports are allowed in From flow clauses")
+                              }
+                              if (!isFrom && p.direction != Direction.Out) {
+                                reporter.error(e.posOpt, GclResolver.toolName, s"Only out ports are allowed in To flow clauses")
+                              }
+                            case _ =>
+                              reporter.error(e.posOpt, GclResolver.toolName, s"From/To flow clauses can only contain ports and state vars")
+                          }
+                        case GclSymbolHolder(sym) if !sym.isInstanceOf[GclStateVar] =>
+                          reporter.error(e.posOpt, GclResolver.toolName, s"From/To flow clauses can only contain ports and state vars")
+                      }
+                      if (rexp2.isEmpty) {
+                        rexprs = rexprs + e ~> rexp
+                      }
+                      else {
+                        rexprs = rexprs + e ~> rexp2.get
+                      }
+                    }
+                  case _ => halt("TODO")
+                }
+              case _ =>
+                reporter.error(posOpt, GclResolver.toolName, s"Expecting from/to expressions to be Idents, found ${exp}")
+            }
+          }
+
+          for (flow <- flows) {
+            for (fromExp <- flow.from) {
+              checkFlow(fromExp, T, flow.posOpt)
+            }
+            for (toExp <- flow.to) {
+              checkFlow(toExp, F, flow.posOpt)
+            }
+          }
         }
         case Some(x) => reporter.error(componentPos, toolName, s"Expecting GclCompute but received ${x}")
         case _ =>
@@ -935,7 +999,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         case Some((rexp, roptType)) =>
           roptType match {
             case Some(AST.Typed.Name(ISZ("org", "sireum", "B"), _)) =>
-              val (rexp2, _, _) = GclResolver.collectSymbols(rexp, F, context, ISZ(), libMethods, symbolTable, reporter)
+              val (rexp2, _, _) = GclResolver.collectSymbols(rexp, RewriteMode.Normal, context, ISZ(), libMethods, symbolTable, reporter)
               if (rexp2.isEmpty) {
                 rexprs = rexprs + (i.exp ~> rexp)
               } else {
