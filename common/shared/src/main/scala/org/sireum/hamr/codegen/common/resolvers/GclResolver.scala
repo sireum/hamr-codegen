@@ -743,6 +743,49 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         }
       }
 
+
+      def checkFlow(exp: AST.Exp, isFrom: B, posOpt: Option[Position]): Unit = {
+        exp match {
+          case e: Exp.Ident =>
+            visitSlangExp(e) match {
+              case Some((rexp, roptType)) =>
+                val (rexp2, symbols, _) = GclResolver.collectSymbols(rexp, RewriteMode.Api, context, s.state, gclMethods, symbolTable, reporter)
+                if (!reporter.hasError) {
+                  if (symbols.size != 1) {
+                    reporter.error(e.posOpt, GclResolver.toolName, s"From/To expressions should resolve to exactly one symbol, instead resolved to ${symbols.size}")
+                  }
+                  symbols(0) match {
+                    case AadlSymbolHolder(sym) =>
+                      sym match {
+                        case p: AadlPort =>
+                          if (isFrom && p.direction != Direction.In) {
+                            reporter.error(e.posOpt, GclResolver.toolName, s"Only in ports are allowed in From flow clauses")
+                          }
+                          if (!isFrom && p.direction != Direction.Out) {
+                            reporter.error(e.posOpt, GclResolver.toolName, s"Only out ports are allowed in To flow clauses")
+                          }
+                        case _ =>
+                          reporter.error(e.posOpt, GclResolver.toolName, s"From/To flow clauses can only contain ports and state vars")
+                      }
+                    case GclSymbolHolder(sym) =>
+                      if (!sym.isInstanceOf[GclStateVar]) {
+                        reporter.error(e.posOpt, GclResolver.toolName, s"From/To flow clauses can only contain ports and state vars")
+                      }
+                  }
+                  if (rexp2.isEmpty) {
+                    rexprs = rexprs + e ~> rexp
+                  }
+                  else {
+                    rexprs = rexprs + e ~> rexp2.get
+                  }
+                }
+              case _ => halt("TODO")
+            }
+          case _ =>
+            reporter.error(posOpt, GclResolver.toolName, s"Expecting from/to expressions to be Idents, found ${exp}")
+        }
+      }
+
       if (s.initializes.nonEmpty) {
         for (modifies <- s.initializes.get.modifies) {
           modifies match {
@@ -786,7 +829,18 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             rexprs = rexprs + guarantees.exp ~> rexp2.get
           }
         }
-        assert (s.initializes.get.flows.isEmpty, "Not yet")
+
+        for (flow <- s.initializes.get.flows) {
+          if (flow.from.nonEmpty) {
+            reporter.error(flow.posOpt, GclResolver.toolName, s"Initialize from clauses must be empty")
+          }
+          if (flow.to.isEmpty) {
+            reporter.error(flow.posOpt, GclResolver.toolName, s"Initialize to clauses cannot be empty")
+          }
+          for (toExp <- flow.to) {
+            checkFlow(toExp, F, flow.posOpt)
+          }
+        }
       }
 
       s.compute match {
@@ -937,48 +991,6 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 }
               case _ =>
                 reporter.error(handler.port.posOpt, GclResolver.toolName, s"Unexpected: Compute handlers can only be used with dispatchable components")
-            }
-          }
-
-          def checkFlow(exp: AST.Exp, isFrom: B, posOpt: Option[Position]): Unit = {
-            exp match {
-              case e: Exp.Ident =>
-                visitSlangExp(e) match {
-                  case Some((rexp, roptType)) =>
-                    val (rexp2, symbols, _) = GclResolver.collectSymbols(rexp, RewriteMode.Api, context, s.state, gclMethods, symbolTable, reporter)
-                    if (!reporter.hasError) {
-                      if (symbols.size != 1) {
-                        reporter.error(e.posOpt, GclResolver.toolName, s"From/To expressions should resolve to exactly one symbol, instead resolved to ${symbols.size}")
-                      }
-                      symbols(0) match {
-                        case AadlSymbolHolder(sym) =>
-                          sym match {
-                            case p: AadlPort =>
-                              if (isFrom && p.direction != Direction.In) {
-                                reporter.error(e.posOpt, GclResolver.toolName, s"Only in ports are allowed in From flow clauses")
-                              }
-                              if (!isFrom && p.direction != Direction.Out) {
-                                reporter.error(e.posOpt, GclResolver.toolName, s"Only out ports are allowed in To flow clauses")
-                              }
-                            case _ =>
-                              reporter.error(e.posOpt, GclResolver.toolName, s"From/To flow clauses can only contain ports and state vars")
-                          }
-                        case GclSymbolHolder(sym) =>
-                          if (!sym.isInstanceOf[GclStateVar]) {
-                            reporter.error(e.posOpt, GclResolver.toolName, s"From/To flow clauses can only contain ports and state vars")
-                          }
-                      }
-                      if (rexp2.isEmpty) {
-                        rexprs = rexprs + e ~> rexp
-                      }
-                      else {
-                        rexprs = rexprs + e ~> rexp2.get
-                      }
-                    }
-                  case _ => halt("TODO")
-                }
-              case _ =>
-                reporter.error(posOpt, GclResolver.toolName, s"Expecting from/to expressions to be Idents, found ${exp}")
             }
           }
 
