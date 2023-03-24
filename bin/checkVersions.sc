@@ -3,6 +3,8 @@
 import org.sireum._
 
 val SIREUM_HOME = Os.path(Os.env("SIREUM_HOME").get)
+val sireum = SIREUM_HOME / "bin" / (if (Os.isWin) "sireum.bat" else "sireum")
+
 val versions = (SIREUM_HOME / "versions.properties").properties
 
 val noUpdate: B = ops.ISZOps(Os.cliArgs).contains("no-update")
@@ -97,6 +99,7 @@ var phantomCurrentVers: Map[String, String] = Map.empty
 }
 
 var changesDetected = F
+var jitpackFetches: ISZ[String] = ISZ()
 
 val arsitUtilDir = SIREUM_HOME / "hamr" / "codegen" / "arsit" / "resources" / "util"
 
@@ -107,8 +110,17 @@ def compare(p: Os.Path, currentVersions: Map[String, String]): Unit = {
     val s = ops.StringOps(l).split((c: C) => c == '=')
     if (s.size == 2 && currentVersions.contains(s(0)) && currentVersions.get(s(0)).get != s(1)) {
       hasChanges = T
-      println(s"${s(0)} changed: ${s(1)} -> ${currentVersions.get(s(0)).get}")
+      val newVersion = currentVersions.get(s(0)).get
+      println(s"${s(0)} changed: ${s(1)} -> $newVersion")
       mod = mod :+ s"${s(0)}=${currentVersions.get(s(0)).get}"
+
+      if (s(0) == "org.sireum.kekinian.version") {
+        jitpackFetches = jitpackFetches :+
+          s"${ops.StringOps(org.sireum.project.DependencyManager.librarySharedKey).replaceAllChars('%', ':')}$newVersion"
+      }
+      if (s(0) == "art.version") {
+        jitpackFetches = jitpackFetches :+ s"org.sireum.slang-embedded-art::slang-embedded-art:$newVersion"
+      }
     } else {
       mod = mod :+ l
     }
@@ -126,11 +138,27 @@ def compare(p: Os.Path, currentVersions: Map[String, String]): Unit = {
 compare(codegenVersionsP, codegenCurrentVers)
 compare(phantomVersionsP, phantomCurrentVers)
 
-if(changesDetected && !noUpdate) {
-  // force macro expansion
-  val artFiles = SIREUM_HOME / "hamr" / "codegen" / "arsit" / "jvm" / "src" / "main" / "scala" / "org" / "sireum" / "hamr" / "arsit" / "util" / "ArsitLibrary_Ext.scala"
-  val content = ops.StringOps(artFiles.read)
-  artFiles.writeOver(if (content.endsWith(" ")) content.substring(0, content.size - 1) else s"${artFiles.read} ")
+if (jitpackFetches.nonEmpty) {
+  val scalaKey = ops.StringOps(org.sireum.project.DependencyManager.scalaKey).replaceAllChars(':', '%')
+  val scalaVer = versions.get(scalaKey).get
+
+  ops.ISZOps(jitpackFetches).parMap(m => {
+    val sc = Os.tempFix(ops.StringOps(m).replaceAllChars(':', '_'), ".sc")
+    sc.writeOver(
+      st"""import org.sireum._
+          |for (cif <- Coursier.fetch("$scalaVer", ISZ("$m"))) {
+          |  println(cif.path)
+          |}""".render
+    )
+    sc.removeOnExit()
+    println(s"Fetching/building $m via jitpack (this may take awhile)")
+    Sireum.procCheck(proc"$sireum slang run $sc".console, message.Reporter.create)
+  })
+}
+
+if (changesDetected && !noUpdate) {
+  val arsitProj = SIREUM_HOME / "hamr" / "codegen" / "arsit" / "jvm"
+  println(s"\nVersion changes detected: rebuild the hamr-arsit module to force macro expansion: ${arsitProj.toUri}")
 
   Os.exit(1) // return 1 to indicate versions have changed
 } else {
