@@ -170,8 +170,6 @@ import org.sireum.hamr.ir.FeatureEnd
       getBoundProcessor(process) match {
         case Some(aadlProcessor) => processors = processors + aadlProcessor
         case _ =>
-          // symbol checking phase should mean this is infeasible
-          halt(s"Unexpected: ${process.path} does not have a bound processor")
       }
     }
     return processors.elements
