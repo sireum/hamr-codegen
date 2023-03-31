@@ -138,7 +138,7 @@ def compare(p: Os.Path, currentVersions: Map[String, String]): Unit = {
 compare(codegenVersionsP, codegenCurrentVers)
 compare(phantomVersionsP, phantomCurrentVers)
 
-if (jitpackFetches.nonEmpty) {
+if (!noUpdate && jitpackFetches.nonEmpty) {
   val scalaKey = ops.StringOps(org.sireum.project.DependencyManager.scalaKey).replaceAllChars(':', '%')
   val scalaVer = versions.get(scalaKey).get
 
