@@ -629,7 +629,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                       symbolTable: SymbolTable,
                       aadlTypes: AadlTypes,
                       typeHierarchy: TypeHierarchy,
-                      scope: Scope,
+                      scope: Scope.Local,
                       reporter: Reporter): Option[GclSymbolTable] = {
 
     val baseTypeBoolean = aadlTypes.typeMap.get("Base_Types::Boolean").get
@@ -2004,7 +2004,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               return None()
           }
 
-          val scope: Scope = typeMap.get(qualifiedName) match {
+          val scope: Scope.Local = typeMap.get(qualifiedName) match {
             case Some(o) =>
               o match {
                 case info: TypeInfo.Adt =>
