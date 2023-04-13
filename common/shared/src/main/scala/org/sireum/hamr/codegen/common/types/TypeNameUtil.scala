@@ -85,11 +85,13 @@ object TypeNameUtil {
     return !isBaseType && !isEmptyType && !isBitsType
   }
 
-  @strictpure def outputDirectory: String =
-    s"$basePackageName/$packageName"
+  @pure def outputDirectory: String = {
+    return s"$basePackageName/$packageName"
+  }
 
-  @strictpure def filePath: String =
-    s"$outputDirectory/$typeName.scala"
+  @pure def filePath: String = {
+    return s"$outputDirectory/$typeName.scala"
+  }
 
   def qualifiedPackageName: String = {
     return s"$basePackageName.$packageName"
