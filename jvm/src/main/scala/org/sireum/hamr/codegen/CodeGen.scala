@@ -1,7 +1,8 @@
+// #Sireum
 package org.sireum.hamr.codegen
 
-import org.sireum.Os.Path
 import org.sireum._
+import org.sireum.Os.Path
 import org.sireum.hamr.act.util.Util.ACT_INSTRUCTIONS_MESSAGE_KIND
 import org.sireum.hamr.arsit.Util.ARSIT_INSTRUCTIONS_MESSAGE_KIND
 import org.sireum.hamr.{act, arsit}
@@ -23,7 +24,7 @@ object CodeGen {
 
   def codeGen(model: Aadl,
               options: CodeGenConfig,
-              plugins: ISZ[Plugin],
+              plugins: MSZ[Plugin],
               reporter: Reporter,
               transpilerCallback: (TranspilerConfig, Reporter) => Z,
               proyekIveCallback: (ProyekIveConfig) => Z): CodeGenResults = {
@@ -50,11 +51,17 @@ object CodeGen {
       cleanupPackageName(slangOutputDir.name)
     }
 
-    val (runArsit, runACT, hamrIntegration, isTranspilerProject, isSlangProject) = options.platform match {
-      case JVM => (T, F, F, F, T)
-      case Linux | Cygwin | MacOS => (T, F, F, T, T)
-      case SeL4 => (T, T, T, T, T)
-      case SeL4_Only | SeL4_TB => (F, T, F, F, F)
+    val (runArsit, runACT, hamrIntegration, isTranspilerProject, isSlangProject): (B, B, B, B, B) = options.platform match {
+      case JVM =>       (T, F, F, F, T)
+
+      case Linux =>     (T, F, F, T, T)
+      case Cygwin =>    (T, F, F, T, T)
+      case MacOS =>     (T, F, F, T, T)
+
+      case SeL4 =>      (T, T, T, T, T)
+
+      case SeL4_Only => (F, T, F, F, F)
+      case SeL4_TB =>   (F, T, F, F, F)
     }
 
     var reporterIndex = z"0"
@@ -254,7 +261,7 @@ object CodeGen {
   }
 
   def cleanupPackageName(s: String): String = {
-    return s.native.replaceAll("[\\-|\\.]", "_")
+    return ops.StringOps(ops.StringOps(s).replaceAllChars('-', '_')).replaceAllChars('.', '_')
   }
 
   def getHeaderFiles(root: Os.Path): ISZ[Os.Path] = {
@@ -263,9 +270,11 @@ object CodeGen {
     var ret: ISZ[Os.Path] = ISZ()
 
     def processDir(dir: Os.Path): Unit = {
-      ret = ret ++ dir.list.filter(p => p.ext == string"h")
+      ret = ret ++ dir.list.filter(p => p.ext == "h")
 
-      dir.list.foreach(d => if (d.isDir) processDir(d))
+      for(d <- dir.list if d.isDir) {
+        processDir(d)
+      }
     }
 
     processDir(root)
@@ -282,18 +291,20 @@ object CodeGen {
       }
 
       def processDir(dir: Os.Path): Unit = {
-        dir.list.filter(p => p.ext == string"c" || p.ext == string"h").foreach((f: Os.Path) => {
+        for(f <- dir.list.filter(p => p.ext == "c" || p.ext == "h")) {
           // make subdir paths relative to the root dir
-          val root = if (includeParentDir) rootDirPath.up else rootDirPath
+          val root: Os.Path = if (includeParentDir) rootDirPath.up else rootDirPath
           val rel = root.relativize(f).value
 
           ret = ret + (rel ~> f.read)
-        })
+        }
 
-        dir.list.foreach(f => if (f.isDir) processDir(f))
+        for(f <- dir.list if f.isDir) {
+          processDir(f)
+        }
       }
 
-      if (rootDirPath.isDir) processDir(rootDirPath)
+      if (rootDirPath.isDir) { processDir(rootDirPath) }
     }
 
     return ret
@@ -302,8 +313,8 @@ object CodeGen {
   def writeOutResources(resources: IS[Z, Resource], reporter: Reporter): Unit = {
     def render(i: IResource): String = {
       val ret: String = {
-        val lineSep = if(Os.isWin) "\r\n" else "\n" // ST render uses System.lineSep
-        val replace = if(i.makeCRLF) "\r\n" else "\n"
+        val lineSep: String = if(Os.isWin) "\r\n" else "\n" // ST render uses System.lineSep
+        val replace: String = if(i.makeCRLF) "\r\n" else "\n"
         ops.StringOps(i.content.render).replaceAllLiterally(lineSep, replace)
       }
       return ret
@@ -361,7 +372,7 @@ object CodeGen {
   }
 
   def removeDuplicates(resources: ISZ[Resource], reporter: Reporter): ISZ[Resource] = {
-    var m: HashSMap[String, Resource] = HashSMap.empty[String, Resource]()
+    var m: HashSMap[String, Resource] = HashSMap.empty[String, Resource]
     for(r <- resources) {
       if(m.contains(r.dstPath)) {
         val entry = m.get(r.dstPath).get
