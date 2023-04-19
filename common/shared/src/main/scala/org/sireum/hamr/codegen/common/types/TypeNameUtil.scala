@@ -45,12 +45,15 @@ object TypeNameUtil {
   def kind: TypeKind.Type
 
   def packageName: String = {
-    val ret: String = kind match {
-      case TypeKind.Empty => "art"
-      case TypeKind.Bit => "Base_Types"
+    return st"${(packageNameI, ".")}".render
+  }
+
+  def packageNameI: ISZ[String] = {
+    val ret: ISZ[String] = kind match {
+      case TypeKind.Empty => ISZ("art")
+      case TypeKind.Bit => ISZ("Base_Types")
       case _ =>
-        val san = ops.ISZOps(classifier).dropRight(1).map((seg: String) => StringUtil.sanitizeName(seg))
-        st"${(san, ".")}".render
+        ops.ISZOps(classifier).dropRight(1).map((seg: String) => StringUtil.sanitizeName(seg))
     }
     return ret
   }
@@ -86,19 +89,35 @@ object TypeNameUtil {
   }
 
   @pure def outputDirectory: String = {
-    return s"$basePackageName/$packageName"
+    return st"${(outputDirectoryI, "/")}".render
+  }
+
+  @pure def outputDirectoryI: ISZ[String] = {
+    return ISZ(basePackageName) ++ packageNameI
   }
 
   @pure def filePath: String = {
-    return s"$outputDirectory/$typeName.scala"
+    return st"${(filePathI, "/")}".render
+  }
+
+  @pure def filePathI: ISZ[String] = {
+    return outputDirectoryI :+ s"$typeName.scala"
   }
 
   def qualifiedPackageName: String = {
-    return s"$basePackageName.$packageName"
+    return st"${(qualifiedPackageNameI, ".")}".render
+  }
+
+  def qualifiedPackageNameI: ISZ[String] = {
+    return ISZ(basePackageName) ++ packageNameI
   }
 
   def qualifiedTypeName: String = {
-    return s"$packageName.$typeName"
+    return st"${(qualifiedTypeNameI, ".")}".render
+  }
+
+  def qualifiedTypeNameI: ISZ[String] = {
+    return packageNameI :+ typeName
   }
 
   def referencedTypeName: String = {
@@ -106,7 +125,11 @@ object TypeNameUtil {
   }
 
   def qualifiedReferencedTypeName: String = {
-    return s"${packageName}.${referencedTypeName}"
+    return st"${(qualifiedReferencedTypeNameI, ".")}".render
+  }
+
+  def qualifiedReferencedTypeNameI: ISZ[String] = {
+    return packageNameI :+ referencedTypeName
   }
 
   // transpiler and sergen do not support type aliases so need to use the
@@ -135,7 +158,11 @@ object TypeNameUtil {
   }
 
   def qualifiedPayloadName: String = {
-    return s"${packageName}.${payloadName}"
+    return st"${(qualifiedPayloadNameI, ".")}".render
+  }
+
+  def qualifiedPayloadNameI: ISZ[String] = {
+    return packageNameI :+ payloadName
   }
 
   def qualifiedCTypeName: String = {
@@ -145,7 +172,8 @@ object TypeNameUtil {
       case TypeKind.Bit => TypeUtil.BIT_FINGERPRINT
       case _ =>
         val enumSuffix: String = if (isEnum) "_Type" else ""
-        val cPackageName = ops.StringOps(packageName).replaceAllChars('.', '_')
+        //val cPackageName = ops.StringOps(packageName).replaceAllChars('.', '_')
+        val cPackageName = st"${(packageNameI, "_")}".render
         StringUtil.sanitizeName(s"${basePackageName}_${cPackageName}_${typeName}${enumSuffix}")
     }
     return ret
@@ -169,7 +197,8 @@ object TypeNameUtil {
     val ret: String = kind match {
       case TypeKind.Enum => s"${qualifiedCTypeName}_${enumValues(0)}"
       case TypeKind.Base =>
-        val cPackageName = ops.StringOps(packageName).replaceAllChars('.', '_')
+        //val cPackageName = ops.StringOps(packageName).replaceAllChars('.', '_')
+        val cPackageName = st"${(packageNameI, "_")}".render
         StringUtil.sanitizeName(s"${basePackageName}_${cPackageName}_${typeName}_example")
       case TypeKind.Bit => s"${qualifiedCTypeName}_example"
       case TypeKind.Array => s"${qualifiedCTypeName}_example"
