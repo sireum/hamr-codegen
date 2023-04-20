@@ -55,7 +55,11 @@ object NameUtil {
     }
 
     @memoize def componentSingletonTypeQualifiedName: String = {
-      return s"${packageName}.${componentSingletonType}"
+      return st"${(componentSingletonTypeQualifiedNameI, ".")}".render
+    }
+
+    @memoize def componentSingletonTypeQualifiedNameI: ISZ[String] = {
+      return packageNameI :+ componentSingletonType
     }
 
     @memoize def api: String = {
@@ -82,6 +86,14 @@ object NameUtil {
       return s"${componentSingletonType}_Bridge"
     }
 
+    @memoize def bridgeQualifiedName: String = {
+      return st"${(bridgeQualifiedNameI, ".")}".render
+    }
+
+    @memoize def bridgeQualifiedNameI: ISZ[String] = {
+      return packageNameI :+ s"${componentSingletonType}_Bridge"
+    }
+
     @memoize def bridgeIdentifier: String = {
       return s"${identifier}Bridge"
     }
@@ -95,14 +107,18 @@ object NameUtil {
     }
 
     @memoize def packageName: String = {
-      return s"${basePackage}.${aadlPackage}"
+      return st"${(packageNameI, ".")}".render
+    }
+
+    @memoize def packageNameI: ISZ[String] = {
+      return ISZ(basePackage, aadlPackage)
     }
 
     @memoize def packagePath: String = {
-      return s"${basePackage}/${aadlPackage}"
+      return st"${(packagePathI, "/")}".render
     }
 
-    @memoize def path: ISZ[String] = {
+    @memoize def packagePathI: ISZ[String] = {
       return ISZ(basePackage, aadlPackage)
     }
 
@@ -140,7 +156,7 @@ object NameUtil {
     }
 
     @memoize def cPackageName: String = {
-      return st"${(path, "_")}".render
+      return st"${(packageNameI, "_")}".render
     }
 
     @memoize def cComponentType: String = {

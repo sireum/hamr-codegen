@@ -709,7 +709,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                     case AadlSymbolHolder(sym: AadlPort) => portRefs = portRefs + sym
                     case GclSymbolHolder(sym: GclMethod) => // TODO: collect port refs in method args
                     case x =>
-                      reporter.error(glcIntegSpec.exp.posOpt, toolName, s"Error in integration spce.  Not expecting to encounter ${x}")
+                      reporter.error(glcIntegSpec.exp.posOpt, toolName, s"Error in integration spec.  Not expecting to encounter ${x}")
                   }
                 }
                 if (portRefs.size != 1) {
