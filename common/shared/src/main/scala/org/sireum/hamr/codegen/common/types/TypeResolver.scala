@@ -37,6 +37,37 @@ object TypeResolver {
     return t
   }
 
+  def getAadlBaseFromSlangType(s: ISZ[String]): String = {
+    if (s.size != 3 || s(0) != "org" || s(1) != "sireum") {
+      halt(s"Infeasible: $s is not a base type")
+    }
+    val t: String = s(2) match {
+      case  "B" => "Base_Types::Boolean"
+
+      case "Z" => "Base_Types::Integer"
+
+      case "S8" => "Base_Types::Integer_8"
+      case "S16" => "Base_Types::Integer_16"
+      case "S32" => "Base_Types::Integer_32"
+      case "S64" => "Base_Types::Integer_64"
+
+      case "U8" => "Base_Types::Unsigned_8"
+      case "U16" => "Base_Types::Unsigned_16"
+      case "U32" => "Base_Types::Unsigned_32"
+      case "U64" => "Base_Types::Unsigned_64"
+
+      case "R" => "Base_Types::Float"
+      case "F32" => "Base_Types::Float_32"
+      case "F64" => "Base_Types::Float_64"
+
+      case "C" => "Base_Types::Character"
+      case "String" => "Base_Types::String"
+
+      case x => halt(s"Infeasible: $x is not a base type")
+    }
+    return t
+  }
+
   def processDataTypes(model: Aadl,
                        rawConnections: B,
                        maxStringSize: Z,
