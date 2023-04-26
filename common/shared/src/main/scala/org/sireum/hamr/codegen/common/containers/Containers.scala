@@ -79,5 +79,4 @@ import org.sireum._
                                 val versions: ISZ[String],
                                 val cache: Option[String],
                                 val docs: B,
-                                val sources: B,
-                                val repositories: ISZ[String])
+                                val sources: B,                                val repositories: ISZ[String])
