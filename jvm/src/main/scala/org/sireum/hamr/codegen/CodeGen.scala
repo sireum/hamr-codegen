@@ -119,11 +119,38 @@ object CodeGen {
 
       arsitResources = removeDuplicates(arsitResources, reporter)
 
+      if (!reporter.hasError && isSlangProject && results.slangCheckOptions.nonEmpty && Os.env("SLANG_CHECK_JAR").nonEmpty) {
+        val slangCheckJar = Os.path(Os.env("SLANG_CHECK_JAR").get)
+        if(slangCheckJar.exists) {
+          // doesn't matter what 'o.writeOutResources' is, slang check needs the
+          // resources to be written out
+          if (!wroteOutArsitResources) {
+            writeOutResources(arsitResources, reporter)
+            wroteOutArsitResources = T
+          }
+
+          val sco = results.slangCheckOptions(0)
+          val outDir = st"${(sco.outputDir, Os.fileSep)}".render
+          val testDir = st"${(sco.testDir :+ "bridge", Os.fileSep)}".render
+          val args = st"${(for (d <- sco.datatypeFiles) yield d.dstPath, " ")}".render
+          //val cmds = s"java -jar $slangCheckJar tools slangcheck -p $packageName -o $outDir -t $testDir $args"
+          val cmds = s"java -jar $slangCheckJar tools slangcheck -p $packageName -o $outDir $args"
+          val slangCheckResults = proc"$cmds".at(slangOutputDir).console.run()
+          if (!slangCheckResults.ok) {
+            reporter.error(None(), toolName, s"SlangCheck exited with errors: ${slangCheckResults.err}")
+          }
+        } else {
+          reporter.error(None(), toolName, s"SLANG_CHECK_JAR is not a file: $slangCheckJar")
+        }
+      }
+
       if (!reporter.hasError && !options.noProyekIve && isSlangProject) {
         // doesn't matter what 'o.writeOutResources' is, proyek ive needs the
         // resources to be written out
-        writeOutResources(arsitResources, reporter)
-        wroteOutArsitResources = T
+        if (!wroteOutArsitResources) {
+          writeOutResources(arsitResources, reporter)
+          wroteOutArsitResources = T
+        }
 
         if(!reporter.hasError) {
           val proyekConfig = ProyekIveConfig(
@@ -160,8 +187,10 @@ object CodeGen {
 
         // doesn't matter what 'o.writeOutResources' is, transpiler needs the
         // resources to be written out
-        writeOutResources(arsitResources, reporter)
-        wroteOutArsitResources = T
+        if (!wroteOutArsitResources) {
+          writeOutResources(arsitResources, reporter)
+          wroteOutArsitResources = T
+        }
 
         reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
 
@@ -204,6 +233,7 @@ object CodeGen {
     if(!reporter.hasError && options.writeOutResources) {
       if(!wroteOutArsitResources) {
         writeOutResources(arsitResources, reporter)
+        wroteOutArsitResources = T
       }
       writeOutResources(actResources, reporter)
     }
