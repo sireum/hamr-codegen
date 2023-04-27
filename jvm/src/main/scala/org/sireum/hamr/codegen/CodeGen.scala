@@ -4,16 +4,16 @@ package org.sireum.hamr.codegen
 import org.sireum._
 import org.sireum.Os.Path
 import org.sireum.hamr.act.util.Util.ACT_INSTRUCTIONS_MESSAGE_KIND
+import org.sireum.hamr.arsit
 import org.sireum.hamr.arsit.Util.ARSIT_INSTRUCTIONS_MESSAGE_KIND
-import org.sireum.hamr.{act, arsit}
-import org.sireum.hamr.codegen.common.util.CodeGenPlatform._
-import org.sireum.hamr.codegen.common.{DirectoryUtil, StringUtil}
-import org.sireum.hamr.codegen.common.containers.{EResource, IResource, Marker, ProyekIveConfig, ProyekIveEdition, Resource, TranspilerConfig}
+import org.sireum.hamr.codegen.common.containers._
 import org.sireum.hamr.codegen.common.plugin.Plugin
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
 import org.sireum.hamr.codegen.common.types.AadlTypes
+import org.sireum.hamr.codegen.common.util.CodeGenPlatform._
 import org.sireum.hamr.codegen.common.util.ModelUtil.ModelElements
 import org.sireum.hamr.codegen.common.util.{CodeGenConfig, CodeGenPlatform, CodeGenResults, ModelUtil}
+import org.sireum.hamr.codegen.common.{DirectoryUtil, StringUtil}
 import org.sireum.hamr.ir.Aadl
 import org.sireum.message._
 import org.sireum.ops.StringOps
@@ -34,11 +34,11 @@ object CodeGen {
     val slangOutputDir: Path = Os.path(options.slangOutputDir.getOrElse("."))
 
     val output_shared_C_Directory: Path =
-      if(options.slangOutputCDir.nonEmpty) Os.path(options.slangOutputCDir.get)
+      if (options.slangOutputCDir.nonEmpty) Os.path(options.slangOutputCDir.get)
       else slangOutputDir / "src" / "c"
 
     val camkesOutputDir: Path =
-      if(options.camkesOutputDir.nonEmpty) Os.path(options.camkesOutputDir.get)
+      if (options.camkesOutputDir.nonEmpty) Os.path(options.camkesOutputDir.get)
       else output_shared_C_Directory / "camkes"
 
     val output_platform_C_Directory: Path =
@@ -52,16 +52,16 @@ object CodeGen {
     }
 
     val (runArsit, runACT, hamrIntegration, isTranspilerProject, isSlangProject): (B, B, B, B, B) = options.platform match {
-      case JVM =>       (T, F, F, F, T)
+      case JVM => (T, F, F, F, T)
 
-      case Linux =>     (T, F, F, T, T)
-      case Cygwin =>    (T, F, F, T, T)
-      case MacOS =>     (T, F, F, T, T)
+      case Linux => (T, F, F, T, T)
+      case Cygwin => (T, F, F, T, T)
+      case MacOS => (T, F, F, T, T)
 
-      case SeL4 =>      (T, T, T, T, T)
+      case SeL4 => (T, T, T, T, T)
 
       case SeL4_Only => (F, T, F, F, F)
-      case SeL4_TB =>   (F, T, F, F, F)
+      case SeL4_TB => (F, T, F, F, F)
     }
 
     var reporterIndex = z"0"
@@ -74,17 +74,32 @@ object CodeGen {
 
     val result: Option[ModelElements] = ModelUtil.resolve(model, packageName, options, reporter)
     reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
-    if(result.isEmpty) {
+    if (result.isEmpty) {
       return CodeGenResults(ISZ(), ISZ())
     }
 
-    val (rmodel, aadlTypes, symbolTable) : (Aadl, AadlTypes, SymbolTable) = (result.get.model, result.get.types, result.get.symbolTable)
+    val (rmodel, aadlTypes, symbolTable): (Aadl, AadlTypes, SymbolTable) = (result.get.model, result.get.types, result.get.symbolTable)
     if (!reporter.hasError && runArsit) {
 
       val genBlessEntryPoints = false
       val ipc = arsit.util.IpcMechanism.byName(options.ipc.name).get
       val platform = arsit.util.ArsitPlatform.byName(options.platform.name).get
       val fileSep = StringOps(org.sireum.Os.fileSep).first
+
+      // TODO: remove once slang check is part of kekinian
+      val slangCheckJar: Option[Os.Path] = {
+        Os.env("SLANG_CHECK_JAR") match {
+          case Some(p) =>
+            val cand = Os.path(p)
+            if (!cand.exists) {
+              reporter.error(None(), toolName, s"SLANG_CHECK_JAR is not a file: $p")
+              None()
+            } else {
+              Some(cand)
+            }
+          case _ => None()
+        }
+      }
 
       val opt = arsit.util.ArsitOptions(
         outputDir = slangOutputDir,
@@ -104,7 +119,9 @@ object CodeGen {
         maxStringSize = options.maxStringSize,
         maxArraySize = options.maxArraySize,
         pathSeparator = fileSep,
-        experimentalOptions = options.experimentalOptions
+        experimentalOptions = options.experimentalOptions,
+
+        slangCheckJarExists = slangCheckJar.nonEmpty
       )
 
       reporter.info(None(), toolName, "Generating Slang artifacts...")
@@ -119,28 +136,24 @@ object CodeGen {
 
       arsitResources = removeDuplicates(arsitResources, reporter)
 
-      if (!reporter.hasError && isSlangProject && results.slangCheckOptions.nonEmpty && Os.env("SLANG_CHECK_JAR").nonEmpty) {
-        val slangCheckJar = Os.path(Os.env("SLANG_CHECK_JAR").get)
-        if(slangCheckJar.exists) {
-          // doesn't matter what 'o.writeOutResources' is, slang check needs the
-          // resources to be written out
-          if (!wroteOutArsitResources) {
-            writeOutResources(arsitResources, reporter)
-            wroteOutArsitResources = T
-          }
+      if (!reporter.hasError && isSlangProject && results.slangCheckOptions.nonEmpty && slangCheckJar.nonEmpty) {
 
-          val sco = results.slangCheckOptions(0)
-          val outDir = st"${(sco.outputDir, Os.fileSep)}".render
-          val testDir = st"${(sco.testDir :+ "bridge", Os.fileSep)}".render
-          val args = st"${(for (d <- sco.datatypeFiles) yield d.dstPath, " ")}".render
-          //val cmds = s"java -jar $slangCheckJar tools slangcheck -p $packageName -o $outDir -t $testDir $args"
-          val cmds = s"java -jar $slangCheckJar tools slangcheck -p $packageName -o $outDir $args"
-          val slangCheckResults = proc"$cmds".at(slangOutputDir).console.run()
-          if (!slangCheckResults.ok) {
-            reporter.error(None(), toolName, s"SlangCheck exited with errors: ${slangCheckResults.err}")
-          }
-        } else {
-          reporter.error(None(), toolName, s"SLANG_CHECK_JAR is not a file: $slangCheckJar")
+        // doesn't matter what 'o.writeOutResources' is, slang check needs the
+        // resources to be written out
+        if (!wroteOutArsitResources) {
+          writeOutResources(arsitResources, reporter)
+          wroteOutArsitResources = T
+        }
+
+        val sco = results.slangCheckOptions(0)
+        val outDir = st"${(sco.outputDir, Os.fileSep)}".render
+        val testDir = st"${(sco.testDir :+ "bridge", Os.fileSep)}".render
+        val args = st"${(for (d <- sco.datatypeFiles) yield d.dstPath, " ")}".render
+        //val cmds = s"java -jar $slangCheckJar tools slangcheck -p $packageName -o $outDir -t $testDir $args"
+        val cmds = s"java -jar ${slangCheckJar.get} tools slangcheck -p $packageName -o $outDir $args"
+        val slangCheckResults = proc"$cmds".at(slangOutputDir).console.run()
+        if (!slangCheckResults.ok) {
+          reporter.error(None(), toolName, s"SlangCheck exited with errors: ${slangCheckResults.err}")
         }
       }
 
@@ -152,7 +165,7 @@ object CodeGen {
           wroteOutArsitResources = T
         }
 
-        if(!reporter.hasError) {
+        if (!reporter.hasError) {
           val proyekConfig = ProyekIveConfig(
             help = "",
             args = ISZ(slangOutputDir.canon.value),
@@ -194,7 +207,7 @@ object CodeGen {
 
         reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
 
-        if(!reporter.hasError) {
+        if (!reporter.hasError) {
           for (transpilerConfig <- results.transpilerOptions if !reporter.hasError) {
             // CTranspiler prints all the messages in the passed in reporter so
             // create a new one for each config
@@ -230,8 +243,8 @@ object CodeGen {
 
     actResources = removeDuplicates(actResources, reporter)
 
-    if(!reporter.hasError && options.writeOutResources) {
-      if(!wroteOutArsitResources) {
+    if (!reporter.hasError && options.writeOutResources) {
+      if (!wroteOutArsitResources) {
         writeOutResources(arsitResources, reporter)
         wroteOutArsitResources = T
       }
@@ -240,7 +253,7 @@ object CodeGen {
 
     reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
 
-    if(!reporter.hasError && options.writeOutResources) {
+    if (!reporter.hasError && options.writeOutResources) {
       // always print out any instructional messages
       val instructions = reporter.messages.filter(p =>
         p.kind == ARSIT_INSTRUCTIONS_MESSAGE_KIND || p.kind == ACT_INSTRUCTIONS_MESSAGE_KIND)
@@ -250,7 +263,7 @@ object CodeGen {
       }
     }
 
-    if(reporter.hasError && !options.verbose) { // at least need to print out the error messages
+    if (reporter.hasError && !options.verbose) { // at least need to print out the error messages
       printMessages(reporter.errors, T, 0, ISZ())
     }
 
@@ -259,7 +272,7 @@ object CodeGen {
 
   def printMessages(reporterMessages: ISZ[Message], verbose: B, messageIndex: Z, kindsToFilterOut: ISZ[String]): Z = {
 
-    if(verbose) {
+    if (verbose) {
       var messages = ops.ISZOps(reporterMessages).slice(messageIndex, reporterMessages.size)
       for (key <- kindsToFilterOut) {
         messages = messages.filter(p => p.kind != key)
@@ -302,7 +315,7 @@ object CodeGen {
     def processDir(dir: Os.Path): Unit = {
       ret = ret ++ dir.list.filter(p => p.ext == "h")
 
-      for(d <- dir.list if d.isDir) {
+      for (d <- dir.list if d.isDir) {
         processDir(d)
       }
     }
@@ -321,7 +334,7 @@ object CodeGen {
       }
 
       def processDir(dir: Os.Path): Unit = {
-        for(f <- dir.list.filter(p => p.ext == "c" || p.ext == "h")) {
+        for (f <- dir.list.filter(p => p.ext == "c" || p.ext == "h")) {
           // make subdir paths relative to the root dir
           val root: Os.Path = if (includeParentDir) rootDirPath.up else rootDirPath
           val rel = root.relativize(f).value
@@ -329,12 +342,14 @@ object CodeGen {
           ret = ret + (rel ~> f.read)
         }
 
-        for(f <- dir.list if f.isDir) {
+        for (f <- dir.list if f.isDir) {
           processDir(f)
         }
       }
 
-      if (rootDirPath.isDir) { processDir(rootDirPath) }
+      if (rootDirPath.isDir) {
+        processDir(rootDirPath)
+      }
     }
 
     return ret
@@ -343,8 +358,8 @@ object CodeGen {
   def writeOutResources(resources: IS[Z, Resource], reporter: Reporter): Unit = {
     def render(i: IResource): String = {
       val ret: String = {
-        val lineSep: String = if(Os.isWin) "\r\n" else "\n" // ST render uses System.lineSep
-        val replace: String = if(i.makeCRLF) "\r\n" else "\n"
+        val lineSep: String = if (Os.isWin) "\r\n" else "\n" // ST render uses System.lineSep
+        val replace: String = if (i.makeCRLF) "\r\n" else "\n"
         ops.StringOps(i.content.render).replaceAllLiterally(lineSep, replace)
       }
       return ret
@@ -371,13 +386,14 @@ object CodeGen {
             val newSections = StringUtil.collectSections(newContent, toolName, i.markers, reporter)
 
             val missingMarkers = i.markers.filter((m: Marker) => !ops.ISZOps(oldSections.keys).contains(m))
-            if(missingMarkers.nonEmpty) {
+            if (missingMarkers.nonEmpty) {
               val fixme = p.up / s"${p.name}_fixme"
               fixme.writeOver(newContent)
-              val msg = st"""Existing file did not contain the following markers. Copy the markers/content found in ${fixme.toUri}
-                            |to the corresponding locations in ${p.toUri}
-                            |
-                            |  ${(missingMarkers, "\n")}"""
+              val msg =
+                st"""Existing file did not contain the following markers. Copy the markers/content found in ${fixme.toUri}
+                    |to the corresponding locations in ${p.toUri}
+                    |
+                    |  ${(missingMarkers, "\n")}"""
               reporter.error(None(), toolName, msg.render)
             } else {
               val replacements: ISZ[(Z, Z, String)] = oldSections.entries.map((oldEntry: (Marker, (Z, Z, String))) =>
@@ -391,7 +407,7 @@ object CodeGen {
             reporter.info(None(), toolName, s"File exists, will not overwrite: ${p}")
           }
         case e: EResource =>
-          if(e.symlink) {
+          if (e.symlink) {
             halt("sym linking not yet supported")
           } else {
             Os.path(e.srcPath).copyOverTo(p)
@@ -403,27 +419,27 @@ object CodeGen {
 
   def removeDuplicates(resources: ISZ[Resource], reporter: Reporter): ISZ[Resource] = {
     var m: HashSMap[String, Resource] = HashSMap.empty[String, Resource]
-    for(r <- resources) {
-      if(m.contains(r.dstPath)) {
+    for (r <- resources) {
+      if (m.contains(r.dstPath)) {
         val entry = m.get(r.dstPath).get
 
         // sanity checks
         (r, entry) match {
           case ((ei: EResource, ci: EResource)) =>
-            if(ei.srcPath != ci.srcPath) {
+            if (ei.srcPath != ci.srcPath) {
               reporter.warn(None(), toolName, s"srcPath for ${r.dstPath} not the same for duplicate entries")
             }
-            if(ei.symlink != ci.symlink) {
+            if (ei.symlink != ci.symlink) {
               reporter.warn(None(), toolName, s"symLink flag for ${r.dstPath} not the same for duplicate entries")
             }
           case ((ri: IResource, ci: IResource)) =>
-            if(ri.content.render != ci.content.render) {
+            if (ri.content.render != ci.content.render) {
               reporter.warn(None(), toolName, s"content of ${r.dstPath} not the same for duplicate entries")
             }
-            if(ri.overwrite != ci.overwrite) {
+            if (ri.overwrite != ci.overwrite) {
               reporter.warn(None(), toolName, s"overwrite flag for ${r.dstPath} not the same for duplicate entries")
             }
-            if(ri.makeExecutable != ci.makeExecutable) {
+            if (ri.makeExecutable != ci.makeExecutable) {
               reporter.warn(None(), toolName, s"makeExecutable flag for ${r.dstPath} not the same for duplicate entries")
             }
 
