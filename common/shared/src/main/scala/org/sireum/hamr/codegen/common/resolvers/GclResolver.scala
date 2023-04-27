@@ -879,9 +879,20 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
             {
               val rexp = typeCheckBoolExp(spec.exp)
-              val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, context, s.state, gclMethods, symbolTable, reporter)
+              val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, context, s.state, gclMethods, symbolTable, reporter)
               apiReferences = apiReferences ++ apiRefs
 
+              spec match {
+                case g: GclAssume =>
+                  for (sym <- symbols) {
+                    sym match {
+                      case AadlSymbolHolder(i: AadlPort) if i.direction == Direction.Out =>
+                        reporter.error(spec.exp.posOpt, toolName, "Assume clauses cannot refer to outgoing ports")
+                      case _ =>
+                    }
+                  }
+                case _ =>
+              }
               rexprs = rexprs + (spec.exp ~> rexp)
               if (rexp2.nonEmpty) {
                 rexprs = rexprs + (spec.exp ~> rexp2.get)
@@ -898,8 +909,16 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
             {
               val rexp = typeCheckBoolExp(caase.assumes)
-              val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, context, s.state, gclMethods, symbolTable, reporter)
+              val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, context, s.state, gclMethods, symbolTable, reporter)
               apiReferences = apiReferences ++ apiRefs
+
+              for (sym <- symbols) {
+                sym match {
+                  case AadlSymbolHolder(i: AadlPort) if i.direction == Direction.Out =>
+                    reporter.error(caase.assumes.posOpt, toolName, "Assume clauses cannot refer to outgoing ports")
+                  case _ =>
+                }
+              }
 
               rexprs = rexprs + (caase.assumes ~> rexp)
               if (rexp2.nonEmpty) {
