@@ -210,6 +210,14 @@ def installSbtMill(): Unit = {
   }
 }
 
+def installSlangCheck(): Unit = {
+  val jarfile = appDir / "slangcheck.jar"
+  if (!jarfile.exists) {
+    println("Downloading SlangCheck ...")
+    jarfile.downloadFrom("https://people.cs.ksu.edu/~belt/SlangCheck/slangcheck.jar")
+  }
+}
+
 Os.env("GITHUB_WORKFLOW") match {
   case Some(n) if (ops.StringOps(ops.StringOps(n).toLower).contains("camkes")) =>
     val ver = (home / "versions.properties").properties.get("org.sireum.version.z3").get
@@ -223,11 +231,13 @@ var continue = T
 for (i <- 0 until Os.cliArgs.size if continue) {
   Os.cliArgs(i) match {
     case string"compile" =>
+      installSlangCheck()
       installOsateGumbo()
       installSbtMill()
       cloneProjects()
       compile()
     case string"test" =>
+      installSlangCheck()
       installOsateGumbo()
       installSbtMill()
       cloneProjects()
