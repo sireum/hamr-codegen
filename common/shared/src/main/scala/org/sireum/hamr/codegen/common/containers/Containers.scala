@@ -17,7 +17,11 @@ import org.sireum._
                           val markers: ISZ[Marker],
                           val overwrite: B,
                           val makeExecutable: B,
-                          val makeCRLF: B) extends Resource
+                          val makeCRLF: B,
+
+                          // isDataype indicates whether resource should be added to sergen/slangcheck
+                          val isDatatype: B
+                         ) extends Resource
 
 // External Resource
 @datatype class EResource(val srcPath: String,
