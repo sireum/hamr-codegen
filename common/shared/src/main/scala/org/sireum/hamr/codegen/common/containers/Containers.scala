@@ -77,8 +77,3 @@ import org.sireum._
                                 val docs: B,
                                 val sources: B,
                                 val repositories: ISZ[String])
-
-
-@datatype class SireumToolsSlangcheckOption(val datatypeFiles: ISZ[Resource],
-                                            val outputDir: ISZ[String],
-                                            val testDir: ISZ[String])

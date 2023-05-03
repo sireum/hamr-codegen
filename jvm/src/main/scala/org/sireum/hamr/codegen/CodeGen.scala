@@ -5,6 +5,7 @@ import org.sireum._
 import org.sireum.Os.Path
 import org.sireum.hamr.act.util.Util.ACT_INSTRUCTIONS_MESSAGE_KIND
 import org.sireum.hamr.arsit
+import org.sireum.hamr.arsit.ProjectDirectories
 import org.sireum.hamr.arsit.Util.ARSIT_INSTRUCTIONS_MESSAGE_KIND
 import org.sireum.hamr.codegen.common.containers._
 import org.sireum.hamr.codegen.common.plugin.Plugin
@@ -136,7 +137,12 @@ object CodeGen {
 
       arsitResources = removeDuplicates(arsitResources, reporter)
 
-      if (!reporter.hasError && isSlangProject && results.slangCheckOptions.nonEmpty && slangCheckJar.nonEmpty) {
+      if (!reporter.hasError && isSlangProject && slangCheckJar.nonEmpty) {
+
+        val datatypeResources: ISZ[Resource] = for(r <- arsitResources.filter(f => f.isInstanceOf[IResource] && f.asInstanceOf[IResource].isDatatype)) yield r.asInstanceOf[IResource]
+
+        val projectDirectories: ProjectDirectories = ProjectDirectories(opt)
+        val outputDir = projectDirectories.dataDir
 
         // doesn't matter what 'o.writeOutResources' is, slang check needs the
         // resources to be written out
@@ -145,12 +151,10 @@ object CodeGen {
           wroteOutArsitResources = T
         }
 
-        val sco = results.slangCheckOptions(0)
-        val outDir = st"${(sco.outputDir, Os.fileSep)}".render
-        val testDir = st"${(sco.testDir :+ "bridge", Os.fileSep)}".render
-        val args = st"${(for (d <- sco.datatypeFiles) yield d.dstPath, " ")}".render
+        //val testDir = s"${projectDirectories.testDir}${Os.fileSep}bridge"
+        val args = st"${(for (d <- datatypeResources) yield d.dstPath, " ")}".render
         //val cmds = s"java -jar $slangCheckJar tools slangcheck -p $packageName -o $outDir -t $testDir $args"
-        val cmds = s"java -jar ${slangCheckJar.get} tools slangcheck -p $packageName -o $outDir $args"
+        val cmds = s"java -jar ${slangCheckJar.get} tools slangcheck -p $packageName -o $outputDir $args"
         val slangCheckResults = proc"$cmds".at(slangOutputDir).console.run()
         if (!slangCheckResults.ok) {
           reporter.error(None(), toolName, s"SlangCheck exited with errors: ${slangCheckResults.err}")
