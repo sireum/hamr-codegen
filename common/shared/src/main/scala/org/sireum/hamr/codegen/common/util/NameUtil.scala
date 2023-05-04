@@ -134,6 +134,10 @@ object NameUtil {
       return st"${(idPath, "_")}".render
     }
 
+    @memoize def archInstanceName: String = {
+      return s"Arch.$instanceName"
+    }
+
     @memoize def testName: String = {
       return s"${componentSingletonType}_Test"
     }
@@ -142,6 +146,9 @@ object NameUtil {
       return s"${componentSingletonType}_TestApi"
     }
 
+    @memoize def testScalaTestName: String = {
+      return s"${componentSingletonType}_ScalaTest"
+    }
 
     @memoize def cApiInitialization_Id: String = {
       return "c_initialization_api"
