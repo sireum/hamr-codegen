@@ -151,6 +151,10 @@ object CodeGen {
           wroteOutArsitResources = T
         }
 
+        // TODO: add sergen option and pass in callback
+        val sergen = slangOutputDir / "bin" / "sergen.cmd"
+        proc"$sergen".run()
+
         //val testDir = s"${projectDirectories.testDir}${Os.fileSep}bridge"
         val args = st"${(for (d <- datatypeResources) yield d.dstPath, " ")}".render
         //val cmds = s"java -jar $slangCheckJar tools slangcheck -p $packageName -o $outDir -t $testDir $args"
