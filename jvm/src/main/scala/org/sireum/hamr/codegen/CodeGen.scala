@@ -5,15 +5,16 @@ import org.sireum._
 import org.sireum.Os.Path
 import org.sireum.hamr.act.util.Util.ACT_INSTRUCTIONS_MESSAGE_KIND
 import org.sireum.hamr.arsit
-import org.sireum.hamr.arsit.ProjectDirectories
+import org.sireum.hamr.arsit.{ProjectDirectories, Util}
 import org.sireum.hamr.arsit.Util.ARSIT_INSTRUCTIONS_MESSAGE_KIND
+import org.sireum.hamr.arsit.templates.ToolsTemplate
 import org.sireum.hamr.codegen.common.containers._
 import org.sireum.hamr.codegen.common.plugin.Plugin
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.CodeGenPlatform._
 import org.sireum.hamr.codegen.common.util.ModelUtil.ModelElements
-import org.sireum.hamr.codegen.common.util.{CodeGenConfig, CodeGenPlatform, CodeGenResults, ModelUtil}
+import org.sireum.hamr.codegen.common.util.{CodeGenConfig, CodeGenPlatform, CodeGenResults, ModelUtil, ResourceUtil}
 import org.sireum.hamr.codegen.common.{DirectoryUtil, StringUtil}
 import org.sireum.hamr.ir.Aadl
 import org.sireum.message._
@@ -142,7 +143,13 @@ object CodeGen {
         val datatypeResources: ISZ[Resource] = for(r <- arsitResources.filter(f => f.isInstanceOf[IResource] && f.asInstanceOf[IResource].isDatatype)) yield r.asInstanceOf[IResource]
 
         val projectDirectories: ProjectDirectories = ProjectDirectories(opt)
-        val outputDir = projectDirectories.dataDir
+
+        // TODO: include slang check containers once slang check supports traits
+        val datatypesMinusContainers = datatypeResources.filter(d => !ops.StringOps(d.name).endsWith("SlangCheckContainer.scala"))
+
+        val slangCheck = ToolsTemplate.slangCheck(datatypesMinusContainers, packageName, projectDirectories.dataDir, projectDirectories.slangBinDir)
+        val slangCheckCmd = ResourceUtil.createExeCrlfResource(Util.pathAppend(projectDirectories.slangBinDir, ISZ("slangcheck.cmd")), slangCheck, T)
+        arsitResources = arsitResources :+ slangCheckCmd
 
         // doesn't matter what 'o.writeOutResources' is, slang check needs the
         // resources to be written out
@@ -155,14 +162,9 @@ object CodeGen {
         val sergen = slangOutputDir / "bin" / "sergen.cmd"
         proc"$sergen".run()
 
-        //val testDir = s"${projectDirectories.testDir}${Os.fileSep}bridge"
-        val args = st"${(for (d <- datatypeResources) yield d.dstPath, " ")}".render
-        //val cmds = s"java -jar $slangCheckJar tools slangcheck -p $packageName -o $outDir -t $testDir $args"
-        val cmds = s"java -jar ${slangCheckJar.get} tools slangcheck -p $packageName -o $outputDir $args"
-        val slangCheckResults = proc"$cmds".at(slangOutputDir).console.run()
-        if (!slangCheckResults.ok) {
-          reporter.error(None(), toolName, s"SlangCheck exited with errors: ${slangCheckResults.err}")
-        }
+        // TODO: add slang check option and pass in callback
+        val slangCheckP = Os.path(slangCheckCmd.dstPath)
+        proc"$slangCheckP".run()
       }
 
       if (!reporter.hasError && !options.noProyekIve && isSlangProject) {

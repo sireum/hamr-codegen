@@ -6,6 +6,10 @@ import org.sireum._
 
 @sig trait Resource {
   def dstPath: String
+
+  @pure def name: String = {
+    return ops.ISZOps(ops.StringOps(dstPath).split(c => c == '/')).last
+  }
 }
 
 @datatype class Marker(val beginMarker: String,
