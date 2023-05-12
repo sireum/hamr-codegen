@@ -10,6 +10,11 @@ object ExperimentalOptions {
   val GENERATE_DOT_GRAPHS: String = "GENERATE_DOT_GRAPHS"
   val GENERATE_REFINEMENT_PROOF: String = "GENERATE_REFINEMENT_PROOF"
   val PROCESS_BTS_NODES: String = "PROCESS_BTS_NODES"
+  val DISABLE_SLANG_CHECK: String = "DISABLE_SLANG_CHECK"
+
+  def disableSlangCheck(experimentalOptions: ISZ[String]): B = {
+    return ops.ISZOps(experimentalOptions).exists(e => e == DISABLE_SLANG_CHECK)
+  }
 
   def processBtsNodes(experimentalOptions: ISZ[String]): B = {
     return ops.ISZOps(experimentalOptions).exists(e => e == PROCESS_BTS_NODES)

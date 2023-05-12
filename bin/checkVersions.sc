@@ -151,7 +151,10 @@ if (!noUpdate && jitpackFetches.nonEmpty) {
           |}""".render
     )
     sc.removeOnExit()
-    println(s"Fetching/building $m via jitpack (this may take awhile)")
+    println(s"Please wait while fetching/building $m via jitpack. You can stop this script if jitpack has to build the resource.")
+    println(s"Refer to the 'Build' links for the following to see the build status:")
+    println(s"  https://jitpack.io/#org.sireum/kekinian")
+    println(s"  https://jitpack.io/#org.sireum/slang-embedded-art")
     Sireum.procCheck(proc"$sireum slang run $sc".console, message.Reporter.create)
   })
 }

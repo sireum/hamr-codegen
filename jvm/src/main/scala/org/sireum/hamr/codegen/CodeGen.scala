@@ -11,10 +11,10 @@ import org.sireum.hamr.arsit.templates.ToolsTemplate
 import org.sireum.hamr.codegen.common.containers._
 import org.sireum.hamr.codegen.common.plugin.Plugin
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
-import org.sireum.hamr.codegen.common.types.AadlTypes
+import org.sireum.hamr.codegen.common.types.{AadlTypes, ArrayType}
 import org.sireum.hamr.codegen.common.util.CodeGenPlatform._
 import org.sireum.hamr.codegen.common.util.ModelUtil.ModelElements
-import org.sireum.hamr.codegen.common.util.{CodeGenConfig, CodeGenPlatform, CodeGenResults, ModelUtil, ResourceUtil}
+import org.sireum.hamr.codegen.common.util.{CodeGenConfig, CodeGenPlatform, CodeGenResults, ExperimentalOptions, ModelUtil, ResourceUtil}
 import org.sireum.hamr.codegen.common.{DirectoryUtil, StringUtil}
 import org.sireum.hamr.ir.Aadl
 import org.sireum.message._
@@ -123,7 +123,7 @@ object CodeGen {
         pathSeparator = fileSep,
         experimentalOptions = options.experimentalOptions,
 
-        slangCheckJarExists = slangCheckJar.nonEmpty
+        runSlangCheck = slangCheckJar.nonEmpty || !ExperimentalOptions.disableSlangCheck(options.experimentalOptions)
       )
 
       reporter.info(None(), toolName, "Generating Slang artifacts...")
@@ -138,33 +138,40 @@ object CodeGen {
 
       arsitResources = removeDuplicates(arsitResources, reporter)
 
-      if (!reporter.hasError && isSlangProject && slangCheckJar.nonEmpty) {
+      if (!reporter.hasError && isSlangProject && slangCheckJar.nonEmpty && !ExperimentalOptions.disableSlangCheck(options.experimentalOptions)) {
+        val noArrayTypes: B = !ops.ISZOps(aadlTypes.typeMap.values).exists(t => t.isInstanceOf[ArrayType])
 
-        val datatypeResources: ISZ[Resource] = for(r <- arsitResources.filter(f => f.isInstanceOf[IResource] && f.asInstanceOf[IResource].isDatatype)) yield r.asInstanceOf[IResource]
+        if (noArrayTypes) {
+          val datatypeResources: ISZ[Resource] = for (r <- arsitResources.filter(f => f.isInstanceOf[IResource] && f.asInstanceOf[IResource].isDatatype)) yield r.asInstanceOf[IResource]
 
-        val projectDirectories: ProjectDirectories = ProjectDirectories(opt)
+          val projectDirectories: ProjectDirectories = ProjectDirectories(opt)
 
-        // TODO: include slang check containers once slang check supports traits
-        val datatypesMinusContainers = datatypeResources.filter(d => !ops.StringOps(d.name).endsWith("SlangCheckContainer.scala"))
+          // TODO: include slang check containers once slang check supports traits
+          val datatypesMinusContainers = datatypeResources.filter(d => !ops.StringOps(d.name).endsWith("SlangCheckContainer.scala"))
 
-        val slangCheck = ToolsTemplate.slangCheck(datatypesMinusContainers, packageName, projectDirectories.dataDir, projectDirectories.slangBinDir)
-        val slangCheckCmd = ResourceUtil.createExeCrlfResource(Util.pathAppend(projectDirectories.slangBinDir, ISZ("slangcheck.cmd")), slangCheck, T)
-        arsitResources = arsitResources :+ slangCheckCmd
+          val slangCheck = ToolsTemplate.slangCheck(datatypesMinusContainers, packageName, projectDirectories.dataDir, projectDirectories.slangBinDir)
+          val slangCheckCmd = ResourceUtil.createExeCrlfResource(Util.pathAppend(projectDirectories.slangBinDir, ISZ("slangcheck.cmd")), slangCheck, T)
+          arsitResources = arsitResources :+ slangCheckCmd
 
-        // doesn't matter what 'o.writeOutResources' is, slang check needs the
-        // resources to be written out
-        if (!wroteOutArsitResources) {
-          writeOutResources(arsitResources, reporter)
-          wroteOutArsitResources = T
+          // doesn't matter what 'o.writeOutResources' is, slang check needs the
+          // resources to be written out
+          if (!wroteOutArsitResources) {
+            writeOutResources(arsitResources, reporter)
+            wroteOutArsitResources = T
+          }
+
+          // TODO: add sergen option and pass in callback
+          val sergen = slangOutputDir / "bin" / "sergen.cmd"
+          proc"$sergen".run()
+
+          // TODO: add slang check option and pass in callback
+          val slangCheckP = Os.path(slangCheckCmd.dstPath)
+          proc"$slangCheckP".run()
+        } else {
+          println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+          println("SlangCheck disabled as model contains array types")
+          println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
         }
-
-        // TODO: add sergen option and pass in callback
-        val sergen = slangOutputDir / "bin" / "sergen.cmd"
-        proc"$sergen".run()
-
-        // TODO: add slang check option and pass in callback
-        val slangCheckP = Os.path(slangCheckCmd.dstPath)
-        proc"$slangCheckP".run()
       }
 
       if (!reporter.hasError && !options.noProyekIve && isSlangProject) {
