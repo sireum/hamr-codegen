@@ -79,5 +79,6 @@ jobs:
           
           # remove the following once slang check is integrated with kekinian
           export SLANG_CHECK_JAR=${HOME}/hamr-codegen/bin/linux/slangcheck.jar
+          echo "SLANG_CHECK_JAR=${SLANG_CHECK_JAR}"
           
           $HOME/hamr-codegen/bin/build.cmd test

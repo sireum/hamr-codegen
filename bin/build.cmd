@@ -214,7 +214,11 @@ def installSlangCheck(): Unit = {
   val jarfile = appDir / "slangcheck.jar"
   if (!jarfile.exists) {
     println("Downloading SlangCheck ...")
-    jarfile.downloadFrom("https://people.cs.ksu.edu/~belt/SlangCheck/slangcheck.jar")
+    if (jarfile.downloadFrom("https://people.cs.ksu.edu/~belt/SlangCheck/slangcheck.jar")) {
+      println(s"SlangCheck downloaded at $jarfile")
+    } else {
+      halt("Unable to download SlangCheck")
+    }
   }
 }
 
