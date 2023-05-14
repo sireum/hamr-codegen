@@ -123,7 +123,7 @@ object CodeGen {
         pathSeparator = fileSep,
         experimentalOptions = options.experimentalOptions,
 
-        runSlangCheck = slangCheckJar.nonEmpty || !ExperimentalOptions.disableSlangCheck(options.experimentalOptions)
+        runSlangCheck = slangCheckJar.nonEmpty && !ExperimentalOptions.disableSlangCheck(options.experimentalOptions)
       )
 
       reporter.info(None(), toolName, "Generating Slang artifacts...")
