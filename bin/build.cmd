@@ -213,7 +213,7 @@ def installSbtMill(): Unit = {
 def installSlangCheck(): Unit = {
   val jarfile = appDir / "slangcheck.jar"
   if (!jarfile.exists) {
-    println("Downloading SlangCheck ...")
+    println("Please wait while downloading SlangCheck ...")
     if (jarfile.downloadFrom("https://people.cs.ksu.edu/~belt/SlangCheck/slangcheck.jar")) {
       println(s"SlangCheck downloaded at $jarfile")
     } else {
