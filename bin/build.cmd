@@ -254,6 +254,7 @@ for (i <- 0 until Os.cliArgs.size if continue) {
     case string"regen-cli" => regenCli4Testing()
     case string"fetch-gumbo" => setupGumboTesting()
     case string"osate-gumbo" => installOsateGumbo()
+    case string"install-slang-check" => installSlangCheck()
     case string"-h" => usage()
     case string"--help" => usage()
     case cmd =>
@@ -282,6 +283,7 @@ def usage(): Unit = {
   println("HAMR Codegen /build")
   println(
     st"""Usage: ( compile | test | tipe | regen-trans | fetch-gumbo
+        |       | install-slang-check
         |       | osate-gumbo)+
         |
         |
