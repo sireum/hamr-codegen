@@ -3,7 +3,7 @@ package org.sireum.hamr.codegen
 
 import org.sireum._
 import org.sireum.Os.Path
-import org.sireum.hamr.act.util.Util.ACT_INSTRUCTIONS_MESSAGE_KIND
+import org.sireum.hamr.act.util.Util.{ACT_INSTRUCTIONS_MESSAGE_KIND}
 import org.sireum.hamr.arsit
 import org.sireum.hamr.arsit.{ProjectDirectories, Util}
 import org.sireum.hamr.arsit.Util.ARSIT_INSTRUCTIONS_MESSAGE_KIND
@@ -139,11 +139,6 @@ object CodeGen {
 
       arsitResources = removeDuplicates(arsitResources, reporter)
 
-      println(s"reporter.hasError ${reporter.hasError}")
-      println(s"isSlangProject ${isSlangProject}")
-      println(s"slangCheckJar.nonEmpty ${slangCheckJar.nonEmpty}")
-      println(s"ExperimentalOptions.disableSlangCheck(options.experimentalOptions ${ExperimentalOptions.disableSlangCheck(options.experimentalOptions)}")
-
       if (!reporter.hasError && isSlangProject && slangCheckJar.nonEmpty && !ExperimentalOptions.disableSlangCheck(options.experimentalOptions)) {
         val noArrayTypes: B = !ops.ISZOps(aadlTypes.typeMap.values).exists(t => t.isInstanceOf[ArrayType])
 
@@ -168,11 +163,23 @@ object CodeGen {
 
           // TODO: add sergen option and pass in callback
           val sergen = slangOutputDir / "bin" / "sergen.cmd"
-          proc"$sergen".console.echo.runCheck()
+          val sergenRes = proc"$sergen".console.echo.redirectErr.run()
+          if (options.verbose) {
+            println(sergenRes.out)
+          }
+          if (!sergenRes.ok) {
+            reporter.error(None(), toolName, "sergen generation failed")
+          }
 
           // TODO: add slang check option and pass in callback
           val slangCheckP = Os.path(slangCheckCmd.dstPath)
-          proc"$slangCheckP".console.echo.runCheck()
+          val slangCheckRes = proc"$slangCheckP".console.echo.redirectErr.run()
+          if (options.verbose) {
+            println(slangCheckRes.out)
+          }
+          if (!slangCheckRes.ok) {
+            reporter.error(None(), toolName, s"SlangCheck generation failed: ${slangCheckRes.err}")
+          }
         } else {
           println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
           println("SlangCheck disabled as model contains array types")

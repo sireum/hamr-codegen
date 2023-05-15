@@ -64,14 +64,12 @@ jobs:
           export SLANG_CHECK_JAR=${GITHUB_WORKSPACE}/bin/linux/slangcheck.jar
           echo "SLANG_CHECK_JAR=${SLANG_CHECK_JAR}"
                     
-          java -version
-          
           bin/init.sh
-          
+          export SIREUM_HOME=$(pwd)
           export JAVA_HOME=$SIREUM_HOME/bin/linux/java
           export PATH=$JAVA_HOME/bin:$PATH
                     
-          java -version
+          java -jar $SLANG_CHECK_JAR
           
           env | sort
           
