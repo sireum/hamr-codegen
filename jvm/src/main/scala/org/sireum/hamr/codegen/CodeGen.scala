@@ -97,6 +97,7 @@ object CodeGen {
               reporter.error(None(), toolName, s"SLANG_CHECK_JAR is not a file: $p")
               None()
             } else {
+              println("SlangCheck found")
               Some(cand)
             }
           case _ => None()
@@ -138,6 +139,11 @@ object CodeGen {
 
       arsitResources = removeDuplicates(arsitResources, reporter)
 
+      println(s"reporter.hasError ${reporter.hasError}")
+      println(s"isSlangProject ${isSlangProject}")
+      println(s"slangCheckJar.nonEmpty ${slangCheckJar.nonEmpty}")
+      println(s"ExperimentalOptions.disableSlangCheck(options.experimentalOptions ${ExperimentalOptions.disableSlangCheck(options.experimentalOptions)}")
+
       if (!reporter.hasError && isSlangProject && slangCheckJar.nonEmpty && !ExperimentalOptions.disableSlangCheck(options.experimentalOptions)) {
         val noArrayTypes: B = !ops.ISZOps(aadlTypes.typeMap.values).exists(t => t.isInstanceOf[ArrayType])
 
@@ -162,11 +168,11 @@ object CodeGen {
 
           // TODO: add sergen option and pass in callback
           val sergen = slangOutputDir / "bin" / "sergen.cmd"
-          proc"$sergen".run()
+          proc"$sergen".console.echo.runCheck()
 
           // TODO: add slang check option and pass in callback
           val slangCheckP = Os.path(slangCheckCmd.dstPath)
-          proc"$slangCheckP".run()
+          proc"$slangCheckP".console.echo.runCheck()
         } else {
           println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
           println("SlangCheck disabled as model contains array types")
