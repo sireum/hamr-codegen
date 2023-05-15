@@ -139,9 +139,18 @@ object CodeGen {
 
       arsitResources = removeDuplicates(arsitResources, reporter)
 
+      val r = !reporter.hasError && isSlangProject && slangCheckJar.nonEmpty && !ExperimentalOptions.disableSlangCheck(options.experimentalOptions)
+      println("-----")
+      println(s"r = $r")
+      println(!reporter.hasError)
+      println(isSlangProject)
+      println(slangCheckJar.nonEmpty)
+      println(!ExperimentalOptions.disableSlangCheck(options.experimentalOptions))
+      println("-----")
       if (!reporter.hasError && isSlangProject && slangCheckJar.nonEmpty && !ExperimentalOptions.disableSlangCheck(options.experimentalOptions)) {
         val noArrayTypes: B = !ops.ISZOps(aadlTypes.typeMap.values).exists(t => t.isInstanceOf[ArrayType])
 
+        println(s"noArrayTypes = $noArrayTypes")
         if (noArrayTypes) {
           val datatypeResources: ISZ[Resource] = for (r <- arsitResources.filter(f => f.isInstanceOf[IResource] && f.asInstanceOf[IResource].isDatatype)) yield r.asInstanceOf[IResource]
 
