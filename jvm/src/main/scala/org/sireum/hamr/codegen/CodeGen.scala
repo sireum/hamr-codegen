@@ -139,18 +139,9 @@ object CodeGen {
 
       arsitResources = removeDuplicates(arsitResources, reporter)
 
-      val r = !reporter.hasError && isSlangProject && slangCheckJar.nonEmpty && !ExperimentalOptions.disableSlangCheck(options.experimentalOptions)
-      println("-----")
-      println(s"r = $r")
-      println(!reporter.hasError)
-      println(isSlangProject)
-      println(slangCheckJar.nonEmpty)
-      println(!ExperimentalOptions.disableSlangCheck(options.experimentalOptions))
-      println("-----")
       if (!reporter.hasError && isSlangProject && slangCheckJar.nonEmpty && !ExperimentalOptions.disableSlangCheck(options.experimentalOptions)) {
         val noArrayTypes: B = !ops.ISZOps(aadlTypes.typeMap.values).exists(t => t.isInstanceOf[ArrayType])
 
-        println(s"noArrayTypes = $noArrayTypes")
         if (noArrayTypes) {
           val datatypeResources: ISZ[Resource] = for (r <- arsitResources.filter(f => f.isInstanceOf[IResource] && f.asInstanceOf[IResource].isDatatype)) yield r.asInstanceOf[IResource]
 
@@ -172,7 +163,7 @@ object CodeGen {
 
           // TODO: add sergen option and pass in callback
           val sergen = slangOutputDir / "bin" / "sergen.cmd"
-          val sergenRes = proc"$sergen".console.echo.redirectErr.run()
+          val sergenRes = proc"$sergen".redirectErr.run()
           if (options.verbose) {
             println(sergenRes.out)
           }
@@ -182,7 +173,7 @@ object CodeGen {
 
           // TODO: add slang check option and pass in callback
           val slangCheckP = Os.path(slangCheckCmd.dstPath)
-          val slangCheckRes = proc"$slangCheckP".console.echo.redirectErr.run()
+          val slangCheckRes = proc"$slangCheckP".redirectErr.run()
           if (options.verbose) {
             println(slangCheckRes.out)
           }
