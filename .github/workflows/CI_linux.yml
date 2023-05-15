@@ -53,7 +53,7 @@ jobs:
           # see https://github.com/sireum/osate-plugin/blob/57785407d84793cf1f8d5926647e4dc75ab197a9/org.sireum.aadl.osate.cli/src/org/sireum/aadl/osate/cli/Phantom.java#L508-L517
           export CHECK_PHANTOM_HAMR_API_COMPATIBILITY=true
           
-          export testmodes=phantom,tipe,ive,compile,generated_unit_tests,smt2
+          export testmodes=phantom,tipe,ive,compile,generated_unit_tests,smt2,verbose
           echo "testmodes=${testmodes}"
           export SMT2_TIMEOUT=180000
           echo "SMT2_TIMEOUT=${SMT2_TIMEOUT}"
@@ -63,5 +63,16 @@ jobs:
           # remove the following once slang check is integrated with kekinian
           export SLANG_CHECK_JAR=${GITHUB_WORKSPACE}/bin/linux/slangcheck.jar
           echo "SLANG_CHECK_JAR=${SLANG_CHECK_JAR}"
+                    
+          java -version
+          
+          bin/init.sh
+          
+          export JAVA_HOME=$SIREUM_HOME/bin/linux/java
+          export PATH=$JAVA_HOME/bin:$PATH
+                    
+          java -version
+          
+          env | sort
           
           bin/build.cmd test --suffixes ${{ matrix. testSuffix }}
