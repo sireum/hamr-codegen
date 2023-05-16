@@ -70,7 +70,9 @@ jobs:
           echo "ALSO_TRANSPILE_VIA_CALLBACKS=${ALSO_TRANSPILE_VIA_CALLBACKS}"
           
           # remove the following once slang check is integrated with kekinian
+          bin/build.cmd install-slang-check
           export SLANG_CHECK_JAR=${HOME}/hamr-codegen/bin/linux/slangcheck.jar
           echo "SLANG_CHECK_JAR=${SLANG_CHECK_JAR}"
+          java -jar ${SLANG_CHECK_JAR}
           
           $HOME/hamr-codegen/bin/build.cmd test

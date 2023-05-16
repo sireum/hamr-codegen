@@ -3,7 +3,8 @@ package org.sireum.hamr.codegen
 
 import org.sireum._
 import org.sireum.Os.Path
-import org.sireum.hamr.act.util.Util.{ACT_INSTRUCTIONS_MESSAGE_KIND}
+import org.sireum.hamr.act.util
+import org.sireum.hamr.act.util.Util.ACT_INSTRUCTIONS_MESSAGE_KIND
 import org.sireum.hamr.arsit
 import org.sireum.hamr.arsit.{ProjectDirectories, Util}
 import org.sireum.hamr.arsit.Util.ARSIT_INSTRUCTIONS_MESSAGE_KIND
@@ -139,7 +140,10 @@ object CodeGen {
 
       arsitResources = removeDuplicates(arsitResources, reporter)
 
-      if (!reporter.hasError && isSlangProject && slangCheckJar.nonEmpty && !ExperimentalOptions.disableSlangCheck(options.experimentalOptions)) {
+      if (!reporter.hasError && isSlangProject &&
+        !options.noEmbedArt // only run sergen and slangcheck when art is embedded
+        && slangCheckJar.nonEmpty && !ExperimentalOptions.disableSlangCheck(options.experimentalOptions)) {
+
         val noArrayTypes: B = !ops.ISZOps(aadlTypes.typeMap.values).exists(t => t.isInstanceOf[ArrayType])
 
         if (noArrayTypes) {
@@ -161,6 +165,7 @@ object CodeGen {
             wroteOutArsitResources = T
           }
 
+          reporter.info(None(), util.Util.toolName, "Running sergen ...")
           // TODO: add sergen option and pass in callback
           val sergen = slangOutputDir / "bin" / "sergen.cmd"
           val sergenRes = proc"$sergen".redirectErr.run()
@@ -168,9 +173,10 @@ object CodeGen {
             println(sergenRes.out)
           }
           if (!sergenRes.ok) {
-            reporter.error(None(), toolName, "sergen generation failed")
+            reporter.error(None(), toolName, s"sergen generation failed: ${sergenRes.err}")
           }
 
+          reporter.info(None(), util.Util.toolName, "Running SlangCheck ...")
           // TODO: add slang check option and pass in callback
           val slangCheckP = Os.path(slangCheckCmd.dstPath)
           val slangCheckRes = proc"$slangCheckP".redirectErr.run()
