@@ -2,10 +2,10 @@
 package org.sireum.hamr.codegen.common.resolvers
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, getName}
+import org.sireum.hamr.codegen.common.CommonUtil
+import org.sireum.hamr.codegen.common.CommonUtil.IdPath
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.types._
-import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.util.{GclUtil, NameUtil}
 import org.sireum.hamr.ir._
 import org.sireum.lang.ast.MethodContract.Simple
@@ -61,8 +61,7 @@ object GclResolver {
     }
     val addGetToApiCalls: B = mode == RewriteMode.ApiGet
 
-    def lookup(ident: AST.Exp.Ident, optPos: Option[Position]): Option[SymbolHolder] = {
-      val name = ident.id.value
+    def lookup(name: String, resOpt: Option[ResolvedInfo], optPos: Option[Position]): Option[SymbolHolder] = {
       context match {
         case a: AadlData =>
           var cands: ISZ[SymbolHolder] = a.subComponents.filter((p: AadlComponent) => p.identifier == name)
@@ -76,7 +75,7 @@ object GclResolver {
           }
 
           if (cands.isEmpty) {
-            ident.attr.resOpt match {
+            resOpt match {
               case Some(ario: AST.ResolvedInfo.Object) =>
                 // must be a call to a data type constructor
                 return None()
@@ -113,7 +112,7 @@ object GclResolver {
           }
 
           if (cands.isEmpty) {
-            ident.attr.resOpt match {
+            resOpt match {
               case Some(ario: AST.ResolvedInfo.Object) =>
                 // must be a call to a data type constructor
                 return None()
@@ -146,7 +145,7 @@ object GclResolver {
       val typedName = AST.Typed.Name(ids = ids, args = ISZ())
 
       var typedOpt: Option[AST.Typed] = Some(typedName)
-      if(p.direction == Direction.Out && p.isInstanceOf[AadlFeatureEvent]) {
+      if (p.direction == Direction.Out && p.isInstanceOf[AadlFeatureEvent]) {
         typedOpt = Some(AST.Typed.Name(ids = AST.Typed.optionName, args = ISZ(typedName)))
       }
 
@@ -158,7 +157,7 @@ object GclResolver {
         case Some(e: AST.ResolvedInfo.Enum) => // ignore
         case Some(e: AST.ResolvedInfo.Package) => // ignore
         case Some(_) =>
-          return lookup(o, o.posOpt)
+          return lookup(o.id.value, o.resOpt, o.posOpt)
         case _ => reporter.error(o.posOpt, toolName, s"Ident '$o' did not resolve")
       }
       return None()
@@ -176,108 +175,122 @@ object GclResolver {
           return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
         }
 
-        (o.args(0)) match {
-          case portIdent: Exp.Ident =>
-            processIdent(portIdent) match {
-              case Some(ash@AadlSymbolHolder(aadlFeatureEvent: AadlFeatureEvent)) if aadlFeatureEvent.direction == Direction.Out =>
-
-                if (!aadlFeatureEvent.isInstanceOf[AadlEventPort] && !aadlFeatureEvent.isInstanceOf[AadlEventDataPort]) {
-                  reporter.error(o.posOpt, toolName, "Invalid MustSend expression. First argument must an an outgoing event port")
-                  return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
-                }
-
-                val p = aadlFeatureEvent.asInstanceOf[AadlPort]
-
-                symbols = symbols + ash
-                apiReferences = apiReferences + p
-
-                if (o.args.size == 1) { // MustSend(portIdent)
-                  // api.portid
-                  val apiIdent: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = emptyAttr), attr = emptyRAttr)
-                  val apiSelect = Exp.Select(receiverOpt = Some(apiIdent), id = portIdent.id, targs = ISZ(), attr = getPortAttr(p))
-
-                  // api.portid.nonEmpty
-                  val nonEmpty = Exp.Select(receiverOpt = Some(apiSelect), id = AST.Id("nonEmpty", emptyAttr), targs = o.targs, attr = o.attr)
-
-                  return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(nonEmpty))
-
-                } else if (o.args.size == 2) { // MustSend(portIdent, expectedValue)
-
-                  if (aadlFeatureEvent.isInstanceOf[AadlEventPort]) {
-                    reporter.error(o.posOpt, toolName, "Invalid MustSend expression. Expected value not supported for event ports")
-                    return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
-                  }
-
-                  // TODO: would we ever need to rewrite the expected value expression?
-
-                  o.args(1) match {
-                    case valueIdent: Exp.Ident =>
-                      processIdent(valueIdent) match {
-                        case Some(g: GclSymbolHolder) => symbols = symbols + g
-                        case _ => // expected value can be any legal Ident
-                      }
-                    case _ => // expected value can be any legal expression
-                  }
-
-                  // api.portid
-                  val apiIdent: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = emptyAttr), attr = emptyRAttr)
-                  val apiSelect = Exp.Select(receiverOpt = Some(apiIdent), id = portIdent.id, targs = ISZ(), attr = getPortAttr(p))
-
-                  // api.portid.get
-                  val getSelect = Exp.Select(receiverOpt = Some(apiSelect), id = AST.Id("get", emptyAttr), targs = o.targs, attr = o.attr)
-
-                  // api.portid.get == value
-                  val be = Exp.Binary(getSelect, "==", o.args(1), o.attr)
-
-                  // api.portid.nonempty
-                  val nonEmptySel: Exp = Exp.Select(receiverOpt = Some(apiSelect), id = AST.Id("nonEmpty", emptyAttr), targs = o.targs, attr = o.attr)
-
-                  // (api.portid.nonEmpty && (api.portid.get == value)
-                  val rexp = Exp.Binary(nonEmptySel, "&&", be, o.attr)
-
-                  return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(rexp))
-
-                } else {
-                  reporter.error(o.posOpt, toolName, "Invalid MustSend expression. Too many arguments")
-                  return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
-                }
-
-              case _ =>
-                reporter.error(o.posOpt, toolName, "Invalid MustSend expression. First argument must be an outgoing event port")
-                return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
-            }
+        val onlyIdent: Exp.Ident = o.args(0) match {
+          case Exp.Select(Some(t: Exp.This), id, _) =>
+            // strip 'this' off that's added by tipe
+            Exp.Ident(id, o.attr)
+          case i: Exp.Ident => i
           case _ =>
             reporter.error(o.posOpt, toolName, "Invalid MustSend expression. First argument must (currently) be the simple name of an outgoing event port")
             return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
         }
+
+        processIdent(onlyIdent) match {
+          case Some(ash@AadlSymbolHolder(aadlFeatureEvent: AadlFeatureEvent)) if aadlFeatureEvent.direction == Direction.Out =>
+
+            if (!aadlFeatureEvent.isInstanceOf[AadlEventPort] && !aadlFeatureEvent.isInstanceOf[AadlEventDataPort]) {
+              reporter.error(o.posOpt, toolName, "Invalid MustSend expression. First argument must an an outgoing event port")
+              return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
+            }
+
+            val p = aadlFeatureEvent.asInstanceOf[AadlPort]
+
+            symbols = symbols + ash
+            apiReferences = apiReferences + p
+
+            if (o.args.size == 1) { // MustSend(portIdent)
+              // api.portid
+              val apiIdent: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = emptyAttr), attr = emptyRAttr)
+              val apiSelect = Exp.Select(receiverOpt = Some(apiIdent), id = onlyIdent.id, targs = ISZ(), attr = getPortAttr(p))
+
+              // api.portid.nonEmpty
+              val nonEmpty = Exp.Select(receiverOpt = Some(apiSelect), id = AST.Id("nonEmpty", emptyAttr), targs = o.targs, attr = o.attr)
+
+              return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(nonEmpty))
+
+            } else if (o.args.size == 2) { // MustSend(portIdent, expectedValue)
+
+              if (aadlFeatureEvent.isInstanceOf[AadlEventPort]) {
+                reporter.error(o.posOpt, toolName, "Invalid MustSend expression. Expected value not supported for event ports")
+                return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
+              }
+
+              val expectedValue: Exp = o.args(1) match {
+                case s@Exp.Select(Some(t: Exp.This), id, _) => Exp.Ident(id, s.attr) // strip off 'this'
+                case x => x
+              }
+
+              expectedValue match {
+                case valueIdent: Exp.Ident =>
+                  processIdent(valueIdent) match {
+                    case Some(g: GclSymbolHolder) => symbols = symbols + g
+                    case _ => // expected value can be any legal Ident
+                  }
+                case _ => // expected value can be any legal Ident
+              }
+
+              // api.portid
+              val apiIdent: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = emptyAttr), attr = emptyRAttr)
+              val apiSelect = Exp.Select(receiverOpt = Some(apiIdent), id = onlyIdent.id, targs = ISZ(), attr = getPortAttr(p))
+
+              // api.portid.get
+              val getSelect = Exp.Select(receiverOpt = Some(apiSelect), id = AST.Id("get", emptyAttr), targs = o.targs, attr = o.attr)
+
+              // api.portid.get == expectedValue
+              val be = Exp.Binary(getSelect, "==", expectedValue, o.attr)
+
+              // api.portid.nonempty
+              val nonEmptySel: Exp = Exp.Select(receiverOpt = Some(apiSelect), id = AST.Id("nonEmpty", emptyAttr), targs = o.targs, attr = o.attr)
+
+              // (api.portid.nonEmpty && (api.portid.get == expectedValue)
+              val rexp = Exp.Binary(nonEmptySel, "&&", be, o.attr)
+
+              return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(rexp))
+
+            } else {
+              reporter.error(o.posOpt, toolName, "Invalid MustSend expression. Too many arguments")
+              return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
+            }
+
+          case _ =>
+            reporter.error(o.posOpt, toolName, "Invalid MustSend expression. First argument must be an outgoing event port")
+            return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
+        }
+
       } else if (o.ident.id.value == uif__NoSend) {
         if (o.args.size == 1) {
-          (o.args(0)) match {
-            case portIdent: Exp.Ident =>
-              processIdent(portIdent) match {
-                case Some(ash@AadlSymbolHolder(aadlFeatureEvent: AadlFeatureEvent)) if aadlFeatureEvent.direction == Direction.Out && aadlFeatureEvent.isInstanceOf[AadlPort] =>
-                  val p = aadlFeatureEvent.asInstanceOf[AadlPort]
 
-                  symbols = symbols + ash
-                  apiReferences = apiReferences + p
-
-                  // api.portid
-                  val apiIdent: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = emptyAttr), attr = emptyRAttr)
-                  val apiSelect = Exp.Select(receiverOpt = Some(apiIdent), id = portIdent.id, targs = ISZ(), attr = getPortAttr(p))
-
-                  // api.portid.isEmpty
-                  val isEmpty = Exp.Select(receiverOpt = Some(apiSelect), id = AST.Id("isEmpty", emptyAttr), targs = o.targs, attr = o.attr)
-
-                  return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(isEmpty))
-                case _ =>
-                  reporter.error(o.posOpt, toolName, "Invalid NoSend expression. Can only be applied to outgoing event ports")
-                  return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
-              }
+          val onlyIdent: Exp.Ident = o.args(0) match {
+            case Exp.Select(Some(t: Exp.This), id, _) =>
+              // strip 'this' off that's added by tipe
+              Exp.Ident(id, o.attr)
+            case i: Exp.Ident => i
             case _ =>
               reporter.error(o.posOpt, toolName, "Invalid NoSend expression. Argument must (currently) be the simple name of an outgoing event port")
               return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
           }
-        } else {
+
+          processIdent(onlyIdent) match {
+            case Some(ash@AadlSymbolHolder(aadlFeatureEvent: AadlFeatureEvent)) if aadlFeatureEvent.direction == Direction.Out && aadlFeatureEvent.isInstanceOf[AadlPort] =>
+              val p = aadlFeatureEvent.asInstanceOf[AadlPort]
+
+              symbols = symbols + ash
+              apiReferences = apiReferences + p
+
+              // api.portid
+              val apiIdent: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = emptyAttr), attr = emptyRAttr)
+              val apiSelect = Exp.Select(receiverOpt = Some(apiIdent), id = onlyIdent.id, targs = ISZ(), attr = getPortAttr(p))
+
+              // api.portid.isEmpty
+              val isEmpty = Exp.Select(receiverOpt = Some(apiSelect), id = AST.Id("isEmpty", emptyAttr), targs = o.targs, attr = o.attr)
+
+              return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(isEmpty))
+            case _ =>
+              reporter.error(o.posOpt, toolName, "Invalid NoSend expression. Can only be applied to outgoing event ports")
+              return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
+          }
+        }
+        else {
           reporter.error(o.posOpt, toolName, "Invalid NoSend expression. Requires an outgoing event port")
           return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
         }
@@ -287,45 +300,53 @@ object GclResolver {
     }
 
     override def pre_langastExpSelect(o: Exp.Select): org.sireum.hamr.ir.MTransformer.PreResult[Exp] = {
-      if (rewriteApiCalls) {
-        o.receiverOpt match {
-          case Some(i@Exp.Ident(featureId)) =>
-            processIdent(i) match {
-              case Some(s) =>
-                symbols = symbols + s
+      o.receiverOpt match {
+        case Some(i: Exp.This) =>
+          lookup(o.id.value, o.resOpt, o.posOpt) match {
+            case Some(s) => symbols = symbols + s
+            case _ =>
+          }
+          // strip 'this' off that's added by tipe
+          val ident = Exp.Ident(o.id, o.attr)
+          return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(ident))
 
-                s match {
-                  case AadlSymbolHolder(p: AadlPort) =>
-                    apiReferences = apiReferences + p
+        case Some(i@Exp.Ident(featureId)) if (rewriteApiCalls) =>
+          processIdent(i) match {
+            case Some(s) =>
+              symbols = symbols + s
 
-                    val emptyAttr = AST.Attr(posOpt = o.posOpt)
-                    val emptyRAttr = AST.ResolvedAttr(posOpt = o.posOpt, resOpt = None(), typedOpt = None())
+              s match {
+                case AadlSymbolHolder(p: AadlPort) =>
+                  apiReferences = apiReferences + p
 
-                    // api.portid
-                    val apiIdent: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = emptyAttr), attr = emptyRAttr)
-                    val apiSelect = Exp.Select(receiverOpt = Some(apiIdent), id = featureId, targs = ISZ(), attr = getPortAttr(p))
+                  val emptyAttr = AST.Attr(posOpt = o.posOpt)
+                  val emptyRAttr = AST.ResolvedAttr(posOpt = o.posOpt, resOpt = None(), typedOpt = None())
 
-                    val sel: Exp =
-                      if (p.direction == Direction.Out && p.isInstanceOf[AadlEventDataPort]) {
-                        // api.portid.get
-                        val getSelect = Exp.Select(receiverOpt = Some(apiSelect), id = AST.Id("get", emptyAttr), targs = o.targs, attr = o.attr)
+                  // api.portid
+                  val apiIdent: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = emptyAttr), attr = emptyRAttr)
+                  val apiSelect = Exp.Select(receiverOpt = Some(apiIdent), id = featureId, targs = ISZ(), attr = getPortAttr(p))
 
-                        // api.portid.get.fieldName
-                        Exp.Select(receiverOpt = Some(getSelect), id = o.id, targs = o.targs, attr = o.attr)
-                      } else {
-                        // api.portid.fieldName
-                        Exp.Select(receiverOpt = Some(apiSelect), id = o.id, targs = o.targs, attr = o.attr)
-                      }
+                  val sel: Exp =
+                    if (p.direction == Direction.Out && p.isInstanceOf[AadlEventDataPort]) {
+                      // api.portid.get
+                      val getSelect = Exp.Select(receiverOpt = Some(apiSelect), id = AST.Id("get", emptyAttr), targs = o.targs, attr = o.attr)
 
-                    // don't visit sub children
-                    return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(sel))
+                      // api.portid.get.fieldName
+                      Exp.Select(receiverOpt = Some(getSelect), id = o.id, targs = o.targs, attr = o.attr)
+                    } else {
+                      // api.portid.fieldName
+                      Exp.Select(receiverOpt = Some(apiSelect), id = o.id, targs = o.targs, attr = o.attr)
+                    }
 
-                  case _ =>
-                }
-              case _ =>
-            }
-          case _ =>
-        }
+                  // don't visit sub children
+                  return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(sel))
+
+                case _ =>
+              }
+            case _ =>
+          }
+        case _ =>
+
       }
 
       return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
@@ -1014,7 +1035,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           }
 
           for (flow <- flows) {
-            if(flow.from.isEmpty && flow.to.isEmpty) {
+            if (flow.from.isEmpty && flow.to.isEmpty) {
               reporter.error(flow.posOpt, GclResolver.toolName, s"At least one of the from/to clauses must be non-empty")
             }
             for (fromExp <- flow.from) {
@@ -1288,7 +1309,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
           return ta
 
-        case TODOType("art::Empty", _, _,  _) =>
+        case TODOType("art::Empty", _, _, _) =>
           val adtAst: AST.Stmt.Adt =
             AST.Stmt.Adt(
               isRoot = F,
@@ -2064,7 +2085,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       buildTypeMap(gclLibs, aadlTypes, symbolTable, reporter)
 
       for (gclLib <- gclLibs) {
-        if(processedLibs.contains(gclLib)) {
+        if (processedLibs.contains(gclLib)) {
           ret = ret :+ processedLibs.get(gclLib).get
         } else {
           val qualifiedName = gclLib.containingPackage.name :+ GUMBO__Library
