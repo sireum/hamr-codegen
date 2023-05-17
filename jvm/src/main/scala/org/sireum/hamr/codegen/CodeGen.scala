@@ -98,7 +98,6 @@ object CodeGen {
               reporter.error(None(), toolName, s"SLANG_CHECK_JAR is not a file: $p")
               None()
             } else {
-              println("SlangCheck found")
               Some(cand)
             }
           case _ => None()

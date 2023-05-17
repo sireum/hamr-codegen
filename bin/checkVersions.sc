@@ -54,9 +54,9 @@ var phantomCurrentVers: Map[String, String] = Map.empty
   }
 
   {
-    def parse(key: String, url: String): Unit = {
+    def parse(key: String, urlx: String): Unit = {
       val temp = Os.slashDir / "temp"
-      temp.downloadFrom(url)
+      temp.downloadFrom(urlx)
       val lines = temp.readLines
       var v: String = ""
       var v_alt: String = ""
@@ -92,9 +92,13 @@ var phantomCurrentVers: Map[String, String] = Map.empty
 
   val artEmbeddedVersion = runGit(ISZ("git", "log", "-n", "1", "--pretty=format:%h"), SIREUM_HOME / "hamr" / "codegen" / "arsit" / "resources" / "art")
   if (codegenCurrentVers.get("art.version").get != artEmbeddedVersion) {
-    for (i <- 0 to 10) println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+    for (i <- 0 to 10) {
+      println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+    }
     println(s"WARNING: ART versions do not match: ${codegenCurrentVers.get("art.version").get} vs ${artEmbeddedVersion}")
-    for (i <- 0 to 10) println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+    for (i <- 0 to 10) {
+      println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+    }
   }
 }
 
@@ -142,7 +146,7 @@ if (!noUpdate && jitpackFetches.nonEmpty) {
   val scalaKey = ops.StringOps(org.sireum.project.DependencyManager.scalaKey).replaceAllChars(':', '%')
   val scalaVer = versions.get(scalaKey).get
 
-  ops.ISZOps(jitpackFetches).parMap(m => {
+  ops.ISZOps(jitpackFetches).parMap((m: String) => {
     val sc = Os.tempFix(ops.StringOps(m).replaceAllChars(':', '_'), ".sc")
     sc.writeOver(
       st"""import org.sireum._

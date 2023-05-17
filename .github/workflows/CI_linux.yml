@@ -53,7 +53,7 @@ jobs:
           # see https://github.com/sireum/osate-plugin/blob/57785407d84793cf1f8d5926647e4dc75ab197a9/org.sireum.aadl.osate.cli/src/org/sireum/aadl/osate/cli/Phantom.java#L508-L517
           export CHECK_PHANTOM_HAMR_API_COMPATIBILITY=true
           
-          export testmodes=phantom,tipe,ive,compile,generated_unit_tests,smt2,verbose
+          export testmodes=phantom,tipe,ive,compile,generated_unit_tests,smt2
           echo "testmodes=${testmodes}"
           export SMT2_TIMEOUT=180000
           echo "SMT2_TIMEOUT=${SMT2_TIMEOUT}"
