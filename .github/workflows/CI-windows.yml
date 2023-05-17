@@ -78,7 +78,7 @@ jobs:
           
           rem remove the following once slang check is integrated with kekinian
           bin\build.cmd install-slang-check
-          export SLANG_CHECK_JAR=%GITHUB_WORKSPACE%\bin\win\slangcheck.jar
+          set SLANG_CHECK_JAR=%GITHUB_WORKSPACE%\bin\win\slangcheck.jar
           echo SLANG_CHECK_JAR=%SLANG_CHECK_JAR%
           java -jar %SLANG_CHECK_JAR%
           
