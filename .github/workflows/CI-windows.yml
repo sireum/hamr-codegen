@@ -77,12 +77,13 @@ jobs:
           echo ALSO_TRANSPILE_VIA_CALLBACKS=%ALSO_TRANSPILE_VIA_CALLBACKS%
           
           rem remove the following once slang check is integrated with kekinian
-          bin\build.cmd install-slang-check
-          echo a
+          call bin\build.cmd install-slang-check || goto :error
           set SLANG_CHECK_JAR=%GITHUB_WORKSPACE%\bin\win\slangcheck.jar
-          echo b
           echo SLANG_CHECK_JAR=%SLANG_CHECK_JAR%
-          bin\win\java\bin\java.exe -jar %SLANG_CHECK_JAR%
-          echo c
+          call bin\win\java\bin\java.exe -jar %SLANG_CHECK_JAR% || goto :error
 
-          bin\build.cmd test --suffixes ${{ matrix.testSuffix }}
+          call bin\build.cmd test --suffixes ${{ matrix.testSuffix }} || goto :error
+          
+          goto :EOF
+          :error
+          exit /b %errorlevel%
