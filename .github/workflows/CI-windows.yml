@@ -78,8 +78,11 @@ jobs:
           
           rem remove the following once slang check is integrated with kekinian
           bin\build.cmd install-slang-check
+          echo a
           set SLANG_CHECK_JAR=%GITHUB_WORKSPACE%\bin\win\slangcheck.jar
+          echo b
           echo SLANG_CHECK_JAR=%SLANG_CHECK_JAR%
-          java -jar %SLANG_CHECK_JAR%
-          
+          bin\win\java\bin\java.exe -jar %SLANG_CHECK_JAR%
+          echo c
+
           bin\build.cmd test --suffixes ${{ matrix.testSuffix }}
