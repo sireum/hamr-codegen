@@ -31,6 +31,7 @@ object StringUtil {
     return toUpperCase(sanitizeName(str))
   }
 
+  // @return returned string wil contain LF style line endings
   def replaceSections(s: String,
                       replacements: ISZ[(Z, Z, String)], reporter: Reporter): String = {
 
@@ -72,7 +73,8 @@ object StringUtil {
         i = i + 1
       }
     }
-    return st"${(r, "\n")}".render
+    // Note: ST uses CRLF on windows so always normalize to LF
+    return ops.StringOps(st"${(r, "\n")}".render).replaceAllLiterally("\r\n", "\n")
   }
 
   def collectSections(s: String,
