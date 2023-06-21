@@ -8,6 +8,7 @@ import org.sireum.hamr.act.util.Util.ACT_INSTRUCTIONS_MESSAGE_KIND
 import org.sireum.hamr.arsit
 import org.sireum.hamr.arsit.{ProjectDirectories, Util}
 import org.sireum.hamr.arsit.Util.ARSIT_INSTRUCTIONS_MESSAGE_KIND
+import org.sireum.hamr.arsit.gcl.DSCTemplate
 import org.sireum.hamr.arsit.templates.ToolsTemplate
 import org.sireum.hamr.codegen.common.containers._
 import org.sireum.hamr.codegen.common.plugin.Plugin
@@ -151,7 +152,7 @@ object CodeGen {
           val projectDirectories: ProjectDirectories = ProjectDirectories(opt)
 
           // TODO: include slang check containers once slang check supports traits
-          val datatypesMinusContainers = datatypeResources.filter(d => !ops.StringOps(d.name).endsWith("SlangCheckContainer.scala"))
+          val datatypesMinusContainers = datatypeResources.filter(d => !ops.StringOps(d.name).contains(DSCTemplate.dscContainerSuffix))
 
           val slangCheck = ToolsTemplate.slangCheck(datatypesMinusContainers, packageName, projectDirectories.dataDir, projectDirectories.slangBinDir)
           val slangCheckCmd = ResourceUtil.createExeCrlfResource(Util.pathAppend(projectDirectories.slangBinDir, ISZ("slangcheck.cmd")), slangCheck, T)
