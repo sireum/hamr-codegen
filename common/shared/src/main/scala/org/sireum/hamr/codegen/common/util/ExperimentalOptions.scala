@@ -3,6 +3,7 @@
 package org.sireum.hamr.codegen.common.util
 
 import org.sireum._
+import org.sireum.N._
 
 object ExperimentalOptions {
 
@@ -16,43 +17,43 @@ object ExperimentalOptions {
   val ADD_COMPONENT_IDS: String = "ADD_COMPONENT_IDS"
   val ADD_PORT_IDS: String = "ADD_PORT_IDS"
 
-  def addConnectionIds(maxConnections: Z, experimentalOptions: ISZ[String]): Z = {
+  def addConnectionIds(experimentalOptions: ISZ[String]): N = {
     for (e <- experimentalOptions) {
       val o = ops.StringOps(e)
       if (o.startsWith(s"${ADD_CONNECTION_IDS}=")) {
-        Z(o.split(c => c == '=')(1)) match {
-          case Some(c) => return maxConnections + c
-          case _ => return maxConnections
+        N(o.split(c => c == '=')(1)) match {
+          case Some(c) => return c
+          case _ => return n"0"
         }
       }
     }
-    return maxConnections
+    return n"0"
   }
 
-  def addPortIds(maxPorts: Z, experimentalOptions: ISZ[String]): Z = {
+  def addPortIds(experimentalOptions: ISZ[String]): N = {
     for (e <- experimentalOptions) {
       val o = ops.StringOps(e)
       if (o.startsWith(s"${ADD_PORT_IDS}=")) {
-        Z(o.split(c => c == '=')(1)) match {
-          case Some(c) => return maxPorts + c
-          case _ => return maxPorts
+        N(o.split(c => c == '=')(1)) match {
+          case Some(c) => return c
+          case _ => return n"0"
         }
       }
     }
-    return maxPorts
+    return n"0"
   }
 
-  def addComponentIds(maxComponents: Z, experimentalOptions: ISZ[String]): Z = {
+  def addComponentIds(experimentalOptions: ISZ[String]): N = {
     for (e <- experimentalOptions) {
       val o = ops.StringOps(e)
       if (o.startsWith(s"${ADD_COMPONENT_IDS}=")) {
-        Z(o.split(c => c == '=')(1)) match {
-          case Some(c) => return maxComponents + c
-          case _ => return maxComponents
+        N(o.split(c => c == '=')(1)) match {
+          case Some(c) => return c
+          case _ => return n"0"
         }
       }
     }
-    return maxComponents
+    return n"0"
   }
 
   def disableSlangCheck(experimentalOptions: ISZ[String]): B = {
