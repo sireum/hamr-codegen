@@ -127,15 +127,16 @@ object Resource {
 }
 
 @datatype class SireumToolsSergenOption(val help: String,
-                                         val args: ISZ[String],
-                                         val modes: ISZ[SireumToolsSergenSerializerMode.Type],
-                                         val packageName: ISZ[String],
-                                         val name: Option[String],
-                                         val license: Option[String],
-                                         val outputDir: Option[String]
-                                       ) extends ConfigResource
+                                        val args: ISZ[String],
+                                        val modes: ISZ[SireumToolsSergenSerializerMode.Type],
+                                        val packageName: ISZ[String],
+                                        val name: Option[String],
+                                        val license: Option[String],
+                                        val outputDir: Option[String]) extends ConfigResource
 
 @datatype class SireumToolsSlangcheckGeneratorOption(val help: String,
-                                                      val args: ISZ[String],
-                                                      val outputDir: Option[String],
-                                                      val testDir: Option[String]) extends ConfigResource
+                                                     val args: ISZ[String],
+                                                     val license: Option[String],
+                                                     val packageName: ISZ[String],
+                                                     val outputDir: Option[String],
+                                                     val testDir: Option[String]) extends ConfigResource

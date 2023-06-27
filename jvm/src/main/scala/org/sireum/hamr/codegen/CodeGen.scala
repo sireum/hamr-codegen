@@ -155,11 +155,15 @@ object CodeGen {
         }
 
         for (sc <- sergenConfigs if !reporter.hasError) {
-          sergenCallback(sc, reporter)
+          if (sergenCallback(sc, reporter) != 0) {
+            reporter.error(None(), toolName, "sergen did not complete successfully")
+          }
         }
 
         for (sc <- slangCheckConfigs if !reporter.hasError) {
-          slangCheckCallback(sc, reporter)
+          if (slangCheckCallback(sc, reporter) != 0) {
+            reporter.error(None(), toolName, "SlangCheck did not complete successfully")
+          }
         }
       }
 
