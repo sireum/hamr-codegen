@@ -3,7 +3,7 @@
 package org.sireum.hamr.codegen.common.util.test
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.containers.{EResource, IResource, Marker, Resource}
+import org.sireum.hamr.codegen.common.containers.{EResource, IResource, Marker, FileResource}
 
 object TestUtil {
 
@@ -15,7 +15,7 @@ object TestUtil {
     return TestJSON.toTestResult(expected.read).left
   }
 
-  def convertToTestResult(resources: ISZ[Resource], resultsDir: Os.Path): TestResult = {
+  def convertToTestResult(resources: ISZ[FileResource], resultsDir: Os.Path): TestResult = {
     def normalize(t: TestResult): TestResult = {
       val nmap: ISZ[(String, TestResource)] = t.map.entries.map(m => {
 
@@ -43,7 +43,7 @@ object TestUtil {
       return TestResult(Map(nmap))
     }
 
-    return normalize(TestResult(Map.empty[String, TestResource] ++ (resources.map((m: Resource) => {
+    return normalize(TestResult(Map.empty[String, TestResource] ++ (resources.map((m: FileResource) => {
       val key = resultsDir.relativize(Os.path(m.dstPath)).value
       val results: (String, TestResource) = m match {
         case i: IResource =>

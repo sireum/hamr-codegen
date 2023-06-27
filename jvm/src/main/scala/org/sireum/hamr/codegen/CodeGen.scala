@@ -30,8 +30,10 @@ object CodeGen {
               options: CodeGenConfig,
               plugins: MSZ[Plugin],
               reporter: Reporter,
-              transpilerCallback: (TranspilerConfig, Reporter) => Z,
-              proyekIveCallback: (ProyekIveConfig) => Z): CodeGenResults = {
+              transpilerCallback: (SireumSlangTranspilersCOption, Reporter) => Z,
+              proyekIveCallback: SireumProyekIveOption => Z,
+              sergenCallback: (SireumToolsSergenOption, Reporter) => Z,
+              slangCheckCallback: (SireumToolsSlangcheckGeneratorOption, Reporter) => Z): CodeGenResults = {
 
     val targetingSel4 = options.platform == CodeGenPlatform.SeL4
 
@@ -70,9 +72,8 @@ object CodeGen {
 
     var reporterIndex = z"0"
 
-    var transpilerConfigs: ISZ[TranspilerConfig] = ISZ()
-
-    var arsitResources: ISZ[Resource] = ISZ()
+    var arsitResources: ISZ[FileResource] = ISZ()
+    var arsitAuxResources: ISZ[Resource] = ISZ()
 
     var wroteOutArsitResources: B = F
 
@@ -134,62 +135,31 @@ object CodeGen {
       val results = arsit.Arsit.run(rmodel, opt, aadlTypes, symbolTable, plugins, reporter)
 
       arsitResources = arsitResources ++ results.resources
-      transpilerConfigs = transpilerConfigs ++ results.transpilerOptions
+      arsitAuxResources = arsitAuxResources ++ results.auxResources
 
       reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ(ARSIT_INSTRUCTIONS_MESSAGE_KIND))
 
       arsitResources = removeDuplicates(arsitResources, reporter)
 
-      if (!reporter.hasError && isSlangProject &&
+      val sergenConfigs = Resource.projectSergenConfigs(arsitAuxResources)
+      val slangCheckConfigs = Resource.projectSlangCheckConfigs(arsitAuxResources)
+      if (!reporter.hasError && isSlangProject && (sergenConfigs.nonEmpty || slangCheckConfigs.nonEmpty) &&
         !options.noEmbedArt // only run sergen and slangcheck when art is embedded
-        && slangCheckJar.nonEmpty && !ExperimentalOptions.disableSlangCheck(options.experimentalOptions)) {
+      ) {
 
-        val noArrayTypes: B = !ops.ISZOps(aadlTypes.typeMap.values).exists(t => t.isInstanceOf[ArrayType])
+        // doesn't matter what 'o.writeOutResources' is, sergen/slangcheck needs the
+        // resources to be written out
+        if (!wroteOutArsitResources) {
+          writeOutResources(arsitResources, reporter)
+          wroteOutArsitResources = T
+        }
 
-        if (noArrayTypes) {
-          val datatypeResources: ISZ[Resource] = for (r <- arsitResources.filter(f => f.isInstanceOf[IResource] && f.asInstanceOf[IResource].isDatatype)) yield r.asInstanceOf[IResource]
+        for (sc <- sergenConfigs if !reporter.hasError) {
+          sergenCallback(sc, reporter)
+        }
 
-          val projectDirectories: ProjectDirectories = ProjectDirectories(opt)
-
-          // TODO: include slang check containers once slang check supports traits
-          val datatypesMinusContainers = datatypeResources.filter(d => !ops.StringOps(d.name).contains(DSCTemplate.dscContainerSuffix))
-
-          val slangCheck = ToolsTemplate.slangCheck(datatypesMinusContainers, packageName, projectDirectories.dataDir, projectDirectories.slangBinDir)
-          val slangCheckCmd = ResourceUtil.createExeCrlfResource(Util.pathAppend(projectDirectories.slangBinDir, ISZ("slangcheck.cmd")), slangCheck, T)
-          arsitResources = arsitResources :+ slangCheckCmd
-
-          // doesn't matter what 'o.writeOutResources' is, slang check needs the
-          // resources to be written out
-          if (!wroteOutArsitResources) {
-            writeOutResources(arsitResources, reporter)
-            wroteOutArsitResources = T
-          }
-
-          reporter.info(None(), util.Util.toolName, "Running sergen ...")
-          // TODO: add sergen option and pass in callback
-          val sergen = slangOutputDir / "bin" / "sergen.cmd"
-          val sergenRes = proc"$sergen".redirectErr.run()
-          if (options.verbose) {
-            println(sergenRes.out)
-          }
-          if (!sergenRes.ok) {
-            reporter.error(None(), toolName, s"sergen generation failed: ${sergenRes.err}")
-          }
-
-          reporter.info(None(), util.Util.toolName, "Running SlangCheck ...")
-          // TODO: add slang check option and pass in callback
-          val slangCheckP = Os.path(slangCheckCmd.dstPath)
-          val slangCheckRes = proc"$slangCheckP".redirectErr.run()
-          if (options.verbose) {
-            println(slangCheckRes.out)
-          }
-          if (!slangCheckRes.ok) {
-            reporter.error(None(), toolName, s"SlangCheck generation failed: ${slangCheckRes.err}")
-          }
-        } else {
-          println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-          println("SlangCheck disabled as model contains array types")
-          println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        for (sc <- slangCheckConfigs if !reporter.hasError) {
+          slangCheckCallback(sc, reporter)
         }
       }
 
@@ -202,11 +172,11 @@ object CodeGen {
         }
 
         if (!reporter.hasError) {
-          val proyekConfig = ProyekIveConfig(
+          val proyekConfig = SireumProyekIveOption(
             help = "",
             args = ISZ(slangOutputDir.canon.value),
             force = F,
-            edition = ProyekIveEdition.Community,
+            edition = SireumProyekIveEdition.Community,
             javac = ISZ(),
             scalac = ISZ(),
             ignoreRuntime = F,
@@ -244,7 +214,7 @@ object CodeGen {
         reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
 
         if (!reporter.hasError) {
-          for (transpilerConfig <- results.transpilerOptions if !reporter.hasError) {
+          for (transpilerConfig <- Resource.projectTranspilerConfigs(results.auxResources) if !reporter.hasError) {
             // CTranspiler prints all the messages in the passed in reporter so
             // create a new one for each config
             val transpilerReporter = Reporter.create
@@ -256,7 +226,9 @@ object CodeGen {
       }
     }
 
-    var actResources: ISZ[Resource] = ISZ()
+    var actResources: ISZ[FileResource] = ISZ()
+    var actAuxResources: ISZ[Resource] = ISZ()
+
     if (!reporter.hasError && runACT) {
 
       val platform = org.sireum.hamr.act.util.ActPlatform.byName(options.platform.name).get
@@ -303,7 +275,9 @@ object CodeGen {
       printMessages(reporter.errors, T, 0, ISZ())
     }
 
-    return CodeGenResults(arsitResources ++ actResources, transpilerConfigs)
+    return CodeGenResults(
+      resources = arsitResources ++ actResources,
+      auxResources = arsitAuxResources ++ actAuxResources)
   }
 
   def printMessages(reporterMessages: ISZ[Message], verbose: B, messageIndex: Z, kindsToFilterOut: ISZ[String]): Z = {
@@ -391,7 +365,7 @@ object CodeGen {
     return ret
   }
 
-  def writeOutResources(resources: IS[Z, Resource], reporter: Reporter): Unit = {
+  def writeOutResources(resources: IS[Z, FileResource], reporter: Reporter): Unit = {
     def render(i: IResource): String = {
       val ret: String = {
         val lineSep: String = if (Os.isWin) "\r\n" else "\n" // ST render uses System.lineSep
@@ -453,8 +427,8 @@ object CodeGen {
     }
   }
 
-  def removeDuplicates(resources: ISZ[Resource], reporter: Reporter): ISZ[Resource] = {
-    var m: HashSMap[String, Resource] = HashSMap.empty[String, Resource]
+  def removeDuplicates(resources: ISZ[FileResource], reporter: Reporter): ISZ[FileResource] = {
+    var m: HashSMap[String, FileResource] = HashSMap.empty[String, FileResource]
     for (r <- resources) {
       if (m.contains(r.dstPath)) {
         val entry = m.get(r.dstPath).get

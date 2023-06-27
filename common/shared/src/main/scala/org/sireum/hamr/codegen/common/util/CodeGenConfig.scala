@@ -3,7 +3,7 @@
 package org.sireum.hamr.codegen.common.util
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.containers.{Resource, TranspilerConfig}
+import org.sireum.hamr.codegen.common.containers.{FileResource, Resource, SireumSlangTranspilersCOption}
 
 @enum object CodeGenPlatform {
   'JVM
@@ -53,5 +53,5 @@ import org.sireum.hamr.codegen.common.containers.{Resource, TranspilerConfig}
                               experimentalOptions: ISZ[String])
 
 
-@datatype class CodeGenResults(resources: ISZ[Resource],
-                               transpilerConfigs: ISZ[TranspilerConfig])
+@datatype class CodeGenResults(resources: ISZ[FileResource],
+                               auxResources: ISZ[Resource])

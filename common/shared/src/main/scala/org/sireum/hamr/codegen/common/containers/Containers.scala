@@ -4,7 +4,44 @@ package org.sireum.hamr.codegen.common.containers
 
 import org.sireum._
 
-@sig trait Resource {
+object Resource {
+  @pure def projectTranspilerConfigs(auxResources: ISZ[Resource]): ISZ[SireumSlangTranspilersCOption] = {
+    var ret: ISZ[SireumSlangTranspilersCOption] = ISZ()
+    for (r <- auxResources) {
+      r match {
+        case t: SireumSlangTranspilersCOption => ret = ret :+ t
+        case _ =>
+      }
+    }
+    return ret
+  }
+
+  @pure def projectSergenConfigs(auxResources: ISZ[Resource]): ISZ[SireumToolsSergenOption] = {
+    var ret: ISZ[SireumToolsSergenOption] = ISZ()
+    for (r <- auxResources) {
+      r match {
+        case t: SireumToolsSergenOption => ret = ret :+ t
+        case _ =>
+      }
+    }
+    return ret
+  }
+
+  @pure def projectSlangCheckConfigs(auxResources: ISZ[Resource]): ISZ[SireumToolsSlangcheckGeneratorOption] = {
+    var ret: ISZ[SireumToolsSlangcheckGeneratorOption] = ISZ()
+    for (r <- auxResources) {
+      r match {
+        case t: SireumToolsSlangcheckGeneratorOption => ret = ret :+ t
+        case _ =>
+      }
+    }
+    return ret
+  }
+}
+
+@sig trait Resource
+
+@sig trait FileResource extends Resource {
   def dstPath: String
 
   @pure def name: String = {
@@ -25,59 +62,80 @@ import org.sireum._
 
                           // isDataype indicates whether resource should be added to sergen/slangcheck
                           val isDatatype: B
-                         ) extends Resource
+                         ) extends FileResource
 
 // External Resource
 @datatype class EResource(val srcPath: String,
                           val dstPath: String,
-                          val symlink: B) extends Resource
+                          val symlink: B) extends FileResource
 
-@datatype class TranspilerConfig(val help: String,
-                                 val args: ISZ[String],
-                                 val sourcepath: ISZ[String],
-                                 val output: Option[String],
-                                 val verbose: B,
-                                 val apps: ISZ[String],
-                                 val bitWidth: Z,
-                                 val projectName: Option[String],
-                                 val stackSize: Option[String],
-                                 val customArraySizes: ISZ[String],
-                                 val maxArraySize: Z,
-                                 val maxStringSize: Z,
-                                 val cmakeIncludes: ISZ[String],
-                                 val exts: ISZ[String],
-                                 val libOnly: B,
-                                 val excludeBuild: ISZ[String],
-                                 val plugins: ISZ[String],
-                                 val fingerprint: Z,
-                                 val stableTypeId: B,
-                                 val unroll: B,
-                                 val save: Option[String],
-                                 val load: Option[String],
-                                 val customConstants: ISZ[String],
-                                 val forwarding: ISZ[String])
+@sig trait ConfigResource extends Resource
 
-@enum object ProyekIveEdition {
+@datatype class SireumSlangTranspilersCOption(val help: String,
+                                              val args: ISZ[String],
+                                              val sourcepath: ISZ[String],
+                                              val output: Option[String],
+                                              val verbose: B,
+                                              val apps: ISZ[String],
+                                              val bitWidth: Z,
+                                              val projectName: Option[String],
+                                              val stackSize: Option[String],
+                                              val customArraySizes: ISZ[String],
+                                              val maxArraySize: Z,
+                                              val maxStringSize: Z,
+                                              val cmakeIncludes: ISZ[String],
+                                              val exts: ISZ[String],
+                                              val libOnly: B,
+                                              val excludeBuild: ISZ[String],
+                                              val plugins: ISZ[String],
+                                              val fingerprint: Z,
+                                              val stableTypeId: B,
+                                              val unroll: B,
+                                              val save: Option[String],
+                                              val load: Option[String],
+                                              val customConstants: ISZ[String],
+                                              val forwarding: ISZ[String]) extends ConfigResource
+
+@enum object SireumProyekIveEdition {
   "Community"
   "Ultimate"
   "Server"
 }
 
-@datatype class ProyekIveConfig(val help: String,
-                                val args: ISZ[String],
-                                val force: B,
-                                val edition: ProyekIveEdition.Type,
-                                val javac: ISZ[String],
-                                val scalac: ISZ[String],
-                                val ignoreRuntime: B,
-                                val json: Option[String],
-                                val name: Option[String],
-                                val outputDirName: Option[String],
-                                val project: Option[String],
-                                val slice: ISZ[String],
-                                val symlink: B,
-                                val versions: ISZ[String],
-                                val cache: Option[String],
-                                val docs: B,
-                                val sources: B,
-                                val repositories: ISZ[String])
+@datatype class SireumProyekIveOption(val help: String,
+                                      val args: ISZ[String],
+                                      val force: B,
+                                      val edition: SireumProyekIveEdition.Type,
+                                      val javac: ISZ[String],
+                                      val scalac: ISZ[String],
+                                      val ignoreRuntime: B,
+                                      val json: Option[String],
+                                      val name: Option[String],
+                                      val outputDirName: Option[String],
+                                      val project: Option[String],
+                                      val slice: ISZ[String],
+                                      val symlink: B,
+                                      val versions: ISZ[String],
+                                      val cache: Option[String],
+                                      val docs: B,
+                                      val sources: B,
+                                      val repositories: ISZ[String]) extends ConfigResource
+
+@enum object SireumToolsSergenSerializerMode {
+  'Json
+  'Msgpack
+}
+
+@datatype class SireumToolsSergenOption(val help: String,
+                                         val args: ISZ[String],
+                                         val modes: ISZ[SireumToolsSergenSerializerMode.Type],
+                                         val packageName: ISZ[String],
+                                         val name: Option[String],
+                                         val license: Option[String],
+                                         val outputDir: Option[String]
+                                       ) extends ConfigResource
+
+@datatype class SireumToolsSlangcheckGeneratorOption(val help: String,
+                                                      val args: ISZ[String],
+                                                      val outputDir: Option[String],
+                                                      val testDir: Option[String]) extends ConfigResource
