@@ -68,7 +68,7 @@ jobs:
           echo "VM_PARTITION=${VM_PARTITION}"
           
           # see https://github.com/sireum/hamr-codegen-test/blob/master/scala/org/sireum/hamr/codegen/test/util/TestMode.scala
-          export testmodes=phantom,tipe,ive,compile,camkes,generated_unit_tests,smt2
+          export testmodes=phantom,sergen,slangcheck,tipe,ive,compile,camkes,generated_unit_tests,smt2
           echo "testmodes=${testmodes}"
           
           export SMT2_TIMEOUT=180000
