@@ -91,21 +91,6 @@ object CodeGen {
       val platform = arsit.util.ArsitPlatform.byName(options.platform.name).get
       val fileSep = StringOps(org.sireum.Os.fileSep).first
 
-      // TODO: remove once slang check is part of kekinian
-      val slangCheckJar: Option[Os.Path] = {
-        Os.env("SLANG_CHECK_JAR") match {
-          case Some(p) =>
-            val cand = Os.path(p)
-            if (!cand.exists) {
-              reporter.error(None(), toolName, s"SLANG_CHECK_JAR is not a file: $p")
-              None()
-            } else {
-              Some(cand)
-            }
-          case _ => None()
-        }
-      }
-
       val opt = arsit.util.ArsitOptions(
         outputDir = slangOutputDir,
         packageName = packageName,
@@ -126,7 +111,7 @@ object CodeGen {
         pathSeparator = fileSep,
         experimentalOptions = options.experimentalOptions,
 
-        runSlangCheck = slangCheckJar.nonEmpty && !ExperimentalOptions.disableSlangCheck(options.experimentalOptions)
+        runSlangCheck = !ExperimentalOptions.disableSlangCheck(options.experimentalOptions)
       )
 
       reporter.info(None(), toolName, "Generating Slang artifacts...")

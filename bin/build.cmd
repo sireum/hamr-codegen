@@ -210,18 +210,6 @@ def installSbtMill(): Unit = {
   }
 }
 
-def installSlangCheck(): Unit = {
-  val jarfile = appDir / "slangcheck.jar"
-  if (!jarfile.exists) {
-    println("Please wait while downloading SlangCheck ...")
-    if (jarfile.downloadFrom("https://people.cs.ksu.edu/~belt/SlangCheck/slangcheck.jar")) {
-      println(s"SlangCheck downloaded at $jarfile")
-    } else {
-      halt("Unable to download SlangCheck")
-    }
-  }
-}
-
 Os.env("GITHUB_WORKFLOW") match {
   case Some(n) if (ops.StringOps(ops.StringOps(n).toLower).contains("camkes")) =>
     val ver = (home / "versions.properties").properties.get("org.sireum.version.z3").get
@@ -235,13 +223,11 @@ var continue = T
 for (i <- 0 until Os.cliArgs.size if continue) {
   Os.cliArgs(i) match {
     case string"compile" =>
-      installSlangCheck()
       installOsateGumbo()
       installSbtMill()
       cloneProjects()
       compile()
     case string"test" =>
-      installSlangCheck()
       installOsateGumbo()
       installSbtMill()
       cloneProjects()
@@ -254,7 +240,6 @@ for (i <- 0 until Os.cliArgs.size if continue) {
     case string"regen-cli" => regenCli4Testing()
     case string"fetch-gumbo" => setupGumboTesting()
     case string"osate-gumbo" => installOsateGumbo()
-    case string"install-slang-check" => installSlangCheck()
     case string"-h" => usage()
     case string"--help" => usage()
     case cmd =>
@@ -283,7 +268,6 @@ def usage(): Unit = {
   println("HAMR Codegen /build")
   println(
     st"""Usage: ( compile | test | tipe | regen-trans | fetch-gumbo
-        |       | install-slang-check
         |       | osate-gumbo)+
         |
         |

@@ -75,12 +75,6 @@ jobs:
           echo SMT2_TIMEOUT=%SMT2_TIMEOUT%
           set ALSO_TRANSPILE_VIA_CALLBACKS=true
           echo ALSO_TRANSPILE_VIA_CALLBACKS=%ALSO_TRANSPILE_VIA_CALLBACKS%
-          
-          rem remove the following once slang check is integrated with kekinian
-          call bin\build.cmd install-slang-check || goto :error
-          set SLANG_CHECK_JAR=%GITHUB_WORKSPACE%\bin\win\slangcheck.jar
-          echo SLANG_CHECK_JAR=%SLANG_CHECK_JAR%
-          call bin\win\java\bin\java.exe -jar %SLANG_CHECK_JAR% || goto :error
 
           call bin\build.cmd test --suffixes ${{ matrix.testSuffix }} || goto :error
           
