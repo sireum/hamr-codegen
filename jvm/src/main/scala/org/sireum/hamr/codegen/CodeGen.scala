@@ -139,15 +139,21 @@ object CodeGen {
           wroteOutArsitResources = T
         }
 
-        for (sc <- sergenConfigs if !reporter.hasError) {
-          if (sergenCallback(sc, reporter) != 0) {
-            reporter.error(None(), toolName, "sergen did not complete successfully")
+        if (!reporter.hasError) {
+          reporter.info(None(), toolName, "Generating serializer/deserializers for data types via sergen ...")
+          reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
+
+          for (sc <- sergenConfigs if !reporter.hasError) {
+            sergenCallback(sc, reporter)
           }
         }
 
-        for (sc <- slangCheckConfigs if !reporter.hasError) {
-          if (slangCheckCallback(sc, reporter) != 0) {
-            reporter.error(None(), toolName, "SlangCheck did not complete successfully")
+        if (!reporter.hasError) {
+          reporter.info(None(), toolName, "Generating SlangCheck artifacts ...")
+          reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
+
+          for (sc <- slangCheckConfigs if !reporter.hasError) {
+            slangCheckCallback(sc, reporter)
           }
         }
       }
@@ -200,9 +206,10 @@ object CodeGen {
           wroteOutArsitResources = T
         }
 
-        reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
-
         if (!reporter.hasError) {
+          reporter.info(None(), toolName, "Transpiling project ...")
+          reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
+
           for (transpilerConfig <- Resource.projectTranspilerConfigs(results.auxResources) if !reporter.hasError) {
             // CTranspiler prints all the messages in the passed in reporter so
             // create a new one for each config
