@@ -1177,6 +1177,39 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
     }
 
     def buildTypeInfo(aadlType: AadlType): TypeInfo = {
+      val TODO_TYPE: TypeInfo.Adt = {
+        val adtAst: AST.Stmt.Adt =
+          AST.Stmt.Adt(
+            isRoot = F,
+            isDatatype = T,
+            id = AST.Id("TODO", AST.Attr(None())),
+            typeParams = ISZ(),
+            params = ISZ(),
+            parents = ISZ(),
+            stmts = ISZ(),
+            attr = AST.Attr(None()))
+
+        TypeInfo.Adt(
+          owner = ISZ("TODO"),
+          outlined = F,
+          contractOutlined = F,
+          typeChecked = F,
+          tpe = AST.Typed.Name(ISZ("TODO"), ISZ()),
+          constructorTypeOpt = None(),
+          constructorResOpt = None(),
+          extractorTypeMap = Map.empty,
+          extractorResOpt = None(),
+          ancestors = ISZ(),
+          specVars = HashSMap.empty,
+          vars = HashSMap.empty,
+          specMethods = HashSMap.empty,
+          methods = HashSMap.empty,
+          refinements = HashSMap.empty,
+          invariants = HashSMap.empty,
+          dataRefinements = ISZ(),
+          scope = scope(ISZ("TODO"), globalImports(symbolTable), ISZ("TODO")),
+          ast = adtAst)
+      }
 
       val qualifiedName = getPathFromClassifier(aadlType.name)
       if (typeMap.contains(qualifiedName)) {
@@ -1346,9 +1379,9 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
           return typeInfoAdt
 
-        case a: ArrayType => halt(s"Not yet handling: $a")
-        case b: BitType => halt(s"Not yet handling: $b")
-        case x => halt(s"Not yet handling: $x")
+        case a: ArrayType => return TODO_TYPE
+        case b: BitType => return TODO_TYPE
+        case x => return TODO_TYPE
       }
     }
 
