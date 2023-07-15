@@ -11,6 +11,7 @@ object ExperimentalOptions {
   val GENERATE_DOT_GRAPHS: String = "GENERATE_DOT_GRAPHS"
   val GENERATE_REFINEMENT_PROOF: String = "GENERATE_REFINEMENT_PROOF"
   val PROCESS_BTS_NODES: String = "PROCESS_BTS_NODES"
+  val DISABLE_SERGEN: String = "DISABLE_SERGEN"
   val DISABLE_SLANG_CHECK: String = "DISABLE_SLANG_CHECK"
 
   val ADD_CONNECTION_IDS: String = "ADD_CONNECTION_IDS"
@@ -54,6 +55,10 @@ object ExperimentalOptions {
       }
     }
     return n"0"
+  }
+
+  def disableSergen(experimentalOptions: ISZ[String]): B = {
+    return ops.ISZOps(experimentalOptions).exists(e => e == DISABLE_SERGEN)
   }
 
   def disableSlangCheck(experimentalOptions: ISZ[String]): B = {

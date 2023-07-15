@@ -127,11 +127,10 @@ object CodeGen {
       arsitResources = removeDuplicates(arsitResources, reporter)
 
       val sergenConfigs = Resource.projectSergenConfigs(arsitAuxResources)
-      val slangCheckConfigs = Resource.projectSlangCheckConfigs(arsitAuxResources)
-      if (!reporter.hasError && isSlangProject && (sergenConfigs.nonEmpty || slangCheckConfigs.nonEmpty) &&
+      if (!reporter.hasError && isSlangProject && sergenConfigs.nonEmpty &&
+        !ExperimentalOptions.disableSergen(options.experimentalOptions) &&
         !options.noEmbedArt // only run sergen and slangcheck when art is embedded
       ) {
-
         // doesn't matter what 'o.writeOutResources' is, sergen/slangcheck needs the
         // resources to be written out
         if (!wroteOutArsitResources) {
@@ -146,6 +145,19 @@ object CodeGen {
           for (sc <- sergenConfigs if !reporter.hasError) {
             sergenCallback(sc, reporter)
           }
+        }
+      }
+
+      val slangCheckConfigs = Resource.projectSlangCheckConfigs(arsitAuxResources)
+      if (!reporter.hasError && isSlangProject && slangCheckConfigs.nonEmpty &&
+        !ExperimentalOptions.disableSlangCheck(options.experimentalOptions) &&
+        !options.noEmbedArt // only run sergen and slangcheck when art is embedded
+      ) {
+        // doesn't matter what 'o.writeOutResources' is, sergen/slangcheck needs the
+        // resources to be written out
+        if (!wroteOutArsitResources) {
+          writeOutResources(arsitResources, reporter)
+          wroteOutArsitResources = T
         }
 
         if (!reporter.hasError) {
