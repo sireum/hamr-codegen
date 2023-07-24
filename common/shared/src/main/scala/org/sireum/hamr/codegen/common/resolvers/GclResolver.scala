@@ -48,6 +48,7 @@ object GclResolver {
 
   @record class SymbolFinder(val mode: RewriteMode.Type,
                              val context: AadlComponent,
+                             val optHandledPort: Option[AadlPort],
                              stateVars: ISZ[GclStateVar],
                              specFuncs: ISZ[GclMethod],
                              val symbolTable: SymbolTable) extends org.sireum.hamr.ir.MTransformer {
@@ -146,7 +147,7 @@ object GclResolver {
       val typedName = AST.Typed.Name(ids = ids, args = ISZ())
 
       var typedOpt: Option[AST.Typed] = Some(typedName)
-      if (p.direction == Direction.Out && p.isInstanceOf[AadlFeatureEvent]) {
+      if (p.isInstanceOf[AadlFeatureEvent]) {
         typedOpt = Some(AST.Typed.Name(ids = AST.Typed.optionName, args = ISZ(typedName)))
       }
 
@@ -309,7 +310,7 @@ object GclResolver {
           }
 
           processIdent(onlyIdent) match {
-            case Some(ash@AadlSymbolHolder(aadlFeatureEvent: AadlFeatureEvent)) if aadlFeatureEvent.direction == Direction.In && aadlFeatureEvent.isInstanceOf[AadlPort] =>
+            case Some(ash@AadlSymbolHolder(aadlFeatureEvent: AadlFeatureEvent)) if aadlFeatureEvent.isInstanceOf[AadlPort] =>
               val p = aadlFeatureEvent.asInstanceOf[AadlPort]
 
               symbols = symbols + ash
@@ -366,7 +367,7 @@ object GclResolver {
                   val apiSelect = Exp.Select(receiverOpt = Some(apiIdent), id = featureId, targs = ISZ(), attr = getPortAttr(p))
 
                   val sel: Exp =
-                    if (p.direction == Direction.Out && p.isInstanceOf[AadlEventDataPort]) {
+                    if (p.isInstanceOf[AadlEventDataPort]) {
                       // api.portid.get
                       val getSelect = Exp.Select(receiverOpt = Some(apiSelect), id = AST.Id("get", emptyAttr), targs = o.targs, attr = o.attr)
 
@@ -469,19 +470,28 @@ object GclResolver {
               val emptyAttr = AST.Attr(posOpt = o.posOpt)
               val emptyRAttr = AST.ResolvedAttr(posOpt = o.posOpt, resOpt = None(), typedOpt = None())
 
-              // api.portId
-              val apiIdent: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = emptyAttr), attr = emptyRAttr)
-              val apiSelect = Exp.Select(receiverOpt = Some(apiIdent), id = o.id, targs = ISZ(), attr = getPortAttr(p))
+              if (optHandledPort.nonEmpty && optHandledPort.get == p) {
+                // the ident is referring to the handled event port so use the passed
+                // in param instead (e.g. api.setPoint --> value)
 
-              val sel: Exp =
-                if (addGetToApiCalls && p.direction == Direction.Out && p.isInstanceOf[AadlEventDataPort]) {
-                  // api.portId.get
-                  Exp.Select(receiverOpt = Some(apiSelect), id = AST.Id("get", emptyAttr), targs = o.targs, attr = o.attr)
-                } else {
-                  apiSelect
-                }
+                return MSome(Exp.Ident(id = AST.Id(value = "value", attr = emptyAttr), attr = emptyRAttr))
 
-              return MSome(sel)
+              } else {
+
+                // api.portId
+                val apiIdent: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = emptyAttr), attr = emptyRAttr)
+                val apiSelect = Exp.Select(receiverOpt = Some(apiIdent), id = o.id, targs = ISZ(), attr = getPortAttr(p))
+
+                val sel: Exp =
+                  if (addGetToApiCalls && p.isInstanceOf[AadlEventDataPort]) {
+                    // api.portId.get
+                    Exp.Select(receiverOpt = Some(apiSelect), id = AST.Id("get", emptyAttr), targs = o.targs, attr = o.attr)
+                  } else {
+                    apiSelect
+                  }
+
+                return MSome(sel)
+              }
             case _ =>
           }
 
@@ -498,11 +508,22 @@ object GclResolver {
                      methods: ISZ[GclMethod],
                      symbolTable: SymbolTable,
                      reporter: Reporter): (MOption[Exp], ISZ[SymbolHolder], ISZ[AadlPort]) = {
+    return collectSymbolsH(exp, mode, context, None(), stateVars, methods, symbolTable, reporter)
+  }
+
+  def collectSymbolsH(exp: Exp,
+                      mode: RewriteMode.Type,
+                      context: AadlComponent,
+                      optHandledPort: Option[AadlPort],
+                      stateVars: ISZ[GclStateVar],
+                      methods: ISZ[GclMethod],
+                      symbolTable: SymbolTable,
+                      reporter: Reporter): (MOption[Exp], ISZ[SymbolHolder], ISZ[AadlPort]) = {
     if (reporter.hasError) {
       // already in an inconsistent state
       return (MNone(), ISZ(), ISZ())
     } else {
-      val sf = SymbolFinder(mode, context, stateVars, methods, symbolTable)
+      val sf = SymbolFinder(mode, context, optHandledPort, stateVars, methods, symbolTable)
       val rexp = sf.transform_langastExp(exp)
       reporter.reports(sf.reporter.messages)
       return (rexp, sf.symbols.elements, sf.apiReferences.elements)
@@ -1053,7 +1074,9 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               handlerSpecIds = handlerSpecIds + guarantees.id
 
               val rexp = typeCheckBoolExp(guarantees.exp)
-              val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, context, s.state, gclMethods, symbolTable, reporter)
+              val (rexp2, _, apiRefs) = GclResolver.collectSymbolsH(rexp, RewriteMode.ApiGet, context,
+                computeHandlerPortMap.get(handler.port), // rewrite handled port references to the passed in param
+                s.state, gclMethods, symbolTable, reporter)
               apiReferences = apiReferences ++ apiRefs
 
               if (rexp2.isEmpty) {
