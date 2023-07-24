@@ -28,6 +28,7 @@ object GclResolver {
 
   val GUMBO__Library: String = "GUMBO__Library"
 
+  val uif__HasEvent: String = "uif__HasEvent"
   val uif__MaySend: String = "uif__MaySend"
   val uif__MustSend: String = "uif__MustSend"
   val uif__MustSendWithExpectedValue: String = "uif__MustSendWithExpectedValue"
@@ -294,7 +295,45 @@ object GclResolver {
           reporter.error(o.posOpt, toolName, "Invalid NoSend expression. Requires an outgoing event port")
           return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
         }
-      } else {
+      } else if (o.ident.id.value == uif__HasEvent) {
+        if (o.args.size == 1) {
+
+          val onlyIdent: Exp.Ident = o.args(0) match {
+            case Exp.Select(Some(t: Exp.This), id, _) =>
+              // strip 'this' off that's added by tipe
+              Exp.Ident(id, o.attr)
+            case i: Exp.Ident => i
+            case _ =>
+              reporter.error(o.posOpt, toolName, "Invalid HasEvent expression. Argument must (currently) be the simple name of an incoming event port")
+              return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
+          }
+
+          processIdent(onlyIdent) match {
+            case Some(ash@AadlSymbolHolder(aadlFeatureEvent: AadlFeatureEvent)) if aadlFeatureEvent.direction == Direction.In && aadlFeatureEvent.isInstanceOf[AadlPort] =>
+              val p = aadlFeatureEvent.asInstanceOf[AadlPort]
+
+              symbols = symbols + ash
+              apiReferences = apiReferences + p
+
+              // api.portid
+              val apiIdent: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = emptyAttr), attr = emptyRAttr)
+              val apiSelect = Exp.Select(receiverOpt = Some(apiIdent), id = onlyIdent.id, targs = ISZ(), attr = getPortAttr(p))
+
+              // api.portid.nonEmpty
+              val isEmpty = Exp.Select(receiverOpt = Some(apiSelect), id = AST.Id("nonEmpty", emptyAttr), targs = o.targs, attr = o.attr)
+
+              return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(isEmpty))
+            case _ =>
+              reporter.error(o.posOpt, toolName, "Invalid HasEvent expression. Can only be applied to incoming event ports")
+              return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
+          }
+        }
+        else {
+          reporter.error(o.posOpt, toolName, "Invalid HasEvent expression. Requires an incoming event port")
+          return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
+        }
+      }
+      else {
         return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
       }
     }
@@ -1879,11 +1918,11 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
             var _methods: HashSMap[String, Info.Method] = HashSMap.empty
             val sigs = ISZ[(String, ISZ[AST.TypeParam], ISZ[AST.Param], AST.Type.Named)](
+              (uif__HasEvent, ISZ(genericType), ISZ[AST.Param](genericPortParam), boolType),
               (uif__MaySend, ISZ(), ISZ[AST.Param](portParam), boolType),
               (uif__NoSend, ISZ(genericType), ISZ[AST.Param](genericPortParam), boolType),
               (uif__MustSend, ISZ(genericType), ISZ[AST.Param](genericPortParam), boolType),
               (uif__MustSendWithExpectedValue, ISZ(genericType), ISZ[AST.Param](genericPortParam, genericValueParam), boolType),
-              //("MustSend", ISZ(), ISZ[AST.Param](portParam, valueParam), bType),
             )
 
             for (sig <- sigs) {
