@@ -563,7 +563,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
     return T
   }
 
-  @memoize def globalImports(symbolTable: SymbolTable): ISZ[AST.Stmt.Import] = {
+  def globalImports(symbolTable: SymbolTable): ISZ[AST.Stmt.Import] = {
     // import all AADL package names and org.sireum
 
     val emptyAttr = AST.Attr(None())
@@ -1147,7 +1147,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
     return Some(GclSymbolTable(rexprs, apiReferences.elements, integrationMap, computeHandlerPortMap))
   }
 
-  @memoize def scope(packageName: IdPath, imports: ISZ[AST.Stmt.Import], enclosingName: IdPath): Scope.Global = {
+  def scope(packageName: IdPath, imports: ISZ[AST.Stmt.Import], enclosingName: IdPath): Scope.Global = {
     return Scope.Global(packageName, imports, enclosingName)
   }
 
