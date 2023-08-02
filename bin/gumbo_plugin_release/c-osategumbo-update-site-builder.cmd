@@ -263,25 +263,51 @@ object Templates {
   def rootUpdateSiteReadme(dirs: ISZ[Os.Path]) : ST = {
     val _dirs = dirs.map((m: Os.Path) => s"- [${m.name}](${m.name})")
     val ret =
-      st"""# Sireum OSATE Plugins Releases
+      st"""# AADL GUMBO Update Site
           |
-          |This update site contains releases of Sireum's OSATE plugins and is only
-          |intended to be used with [Sireum's Phantom tool](https://github.com/sireum/phantom)
-          |or the FMIDE install script (see the
-          |[CASE](https://github.com/sireum/case-env#setting-up-fmide-and-hamr-only)
-          |setup instructions for more information). No other support is offered.
+          |## How to Install
           |
-          |## How to Install the Latest Sireum OSATE Plugins Using Phantom
+          |Install [Sireum](https://github.com/sireum/kekinian#installing) (or update an existing installation, see below) and then execute the following on Mac/Linux
           |
-          |Install [Sireum](https://github.com/sireum/kekinian#installing) and then run the following:
-          |
-          |```batch
+          |```
           |$$SIREUM_HOME/bin/sireum hamr phantom -u
           |```
           |
-          |## Installing a Specific Version of the Plugins
+          |or the following on Windows
           |
-          |Refer to the readme of a particular release for specific installation instructions.
+          |```
+          |%SIREUM_HOME%\bin\sireum.bat hamr phantom -u
+          |```
+          |
+          |**NOTE**: the ``-u`` phantom option also installs/updates the following Sireum OSATE plugins:
+          |* Base - transforms core AADL to [AIR](https://github.com/sireum/air)
+          |* CLI - provides a CLI for Sireum based OSATE plugins ***(documentation forthcoming)***
+          |* [AWAS](https://awas.sireum.org/) - information flow analyzer and visualizer for component-based systems
+          |* [HAMR](https://hamr.sireum.org) - code generation from AADL models
+          |
+          |Pass phantom's ``--help`` option for more information (e.g. how to install plugins into an existing OSATE installation)
+          |
+          |## How to Install into FMIDE
+          |
+          |```
+          |$$SIREUM_HOME/bin/install/fmide.cmd
+          |```
+          |
+          |## How to Update
+          |
+          |First close OSATE if open, then update HAMR Codegen by updating Sireum
+          |
+          |```
+          |cd $$SIREUM_HOME
+          |git pull --recurse
+          |bin/build.cmd
+          |```
+          |
+          |This will update ``$$SIREUM_HOME/bin/sireum.jar`` which will be used by the AADL GUMBO plugins when OSATE is relaunched.
+          |
+          |To update the OSATE plugins themselves simply rerun the ``hamr phantom`` command from the
+          |[How to Install](#how-to-install) section (only needed when new versions of the plugin are released)
+          |
           |
           |**Releases**
           |
@@ -297,62 +323,14 @@ object Templates {
     val features = st"${(_features, ";")}"
     val bt: String = "\\"
     val ret =
-      st"""# Sireum OSATE Plugins ${version} Release
+      st"""
+          |# Sireum OSATE GUMBO Plugins $version Release
           |
-          |This update site contains the ${version} release of Sireum's OSATE plugins and is only
+          |This update site contains the $version release of Sireum's OSATE GUMBO plugins and is only
           |intended to be used with [Sireum's Phantom tool](https://github.com/sireum/phantom)
           |or the FMIDE install script (see the
           |[CASE](https://github.com/sireum/case-env#setting-up-fmide-and-hamr-only)
           |setup instructions for more information). No other support is offered.
-          |
-          |## How to Install the ${version} Sireum OSATE Plugins Using Phantom
-          |
-          |Install [Sireum](https://github.com/sireum/kekinian#installing) and then run the following:
-          |
-          |```batch
-          |$$SIREUM_HOME/bin/sireum hamr phantom -u --features "${features}"
-          |```
-          |
-          |## Resolving Potential Version Issues
-          |
-          |The Sireum OSATE plugins use the version of Sireum installed at ``$$SIREUM_HOME/bin/sireum.jar``
-          |which may no longer be compatible with this version of the plugins. If that is the case and
-          |you still want to use this version of the plugins then you will need to build the
-          |${sireumVersion} version of Sireum and then run Phantom as follows:
-          |
-          |* Windows:
-          |
-          |  ```batch
-          |  git clone https://github.com/sireum/kekinian Sireum
-          |  cd Sireum
-          |  git checkout ${sireumVersion}
-          |  git submodule update --init --recursive
-          |  bin${bt}build.cmd
-          |  bin${bt}sireum hamr phantom -u --features "${features}"
-          |  ```
-          |
-          |* Linux:
-          |
-          |  ```bash
-          |  git clone https://github.com/sireum/kekinian Sireum
-          |  cd Sireum
-          |  git checkout ${sireumVersion}
-          |  git submodule update --init --recursive
-          |  bin/build.cmd
-          |  bin/sireum hamr phantom -u --features "${features}"
-          |  ```
-          |
-          |* macOS:
-          |
-          |  ```bash
-          |  git clone https://github.com/sireum/kekinian Sireum
-          |  cd Sireum
-          |  git checkout ${sireumVersion}
-          |  git submodule update --init --recursive
-          |  bin/build.cmd
-          |  bin/sireum hamr phantom -u --features "${features}"
-          |  ```
-          |
           |"""
     return ret
   }
