@@ -37,9 +37,9 @@ object GclResolver {
   val apiName: String = "api"
 
   @enum object RewriteMode {
-    "Normal"
-    "Api"
-    "ApiGet"
+    "Normal" // no rewrites of api calls
+    "Api" // add api calls
+    "ApiGet" // add get to api calls
   }
 
   @memoize def libraryReporter: TypeChecker = {
@@ -867,31 +867,45 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         }
       }
 
-      if (s.initializes.nonEmpty) {
-        for (modifies <- s.initializes.get.modifies) {
+      def processModifiesClause(lmodifies: ISZ[Exp]): Unit = {
+        for (modifies <- lmodifies) {
           modifies match {
             case e: Exp.Ident =>
               visitSlangExp(e) match {
                 case Some((rexp, roptType)) =>
-                  val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, context, s.state, gclMethods, symbolTable, reporter)
+                  val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.Normal, context, s.state, gclMethods, symbolTable, reporter)
                   apiReferences = apiReferences ++ apiRefs
 
-                  if (!reporter.hasError && symbols.size != 1) {
-                    reporter.error(e.posOpt, GclResolver.toolName, s"Modifies should resolve to exactly one symbol, instead resolved to ${symbols.size}")
-                  }
-
-                  if (rexp2.isEmpty) {
-                    rexprs = rexprs + e ~> rexp
-                  }
-                  else {
-                    rexprs = rexprs + e ~> rexp2.get
+                  if (!reporter.hasError) {
+                    if (symbols.size != 1) {
+                      reporter.error(e.posOpt, GclResolver.toolName, s"Modifies should resolve to exactly one symbol, instead resolved to ${symbols.size}")
+                    } else if (rexp2.isEmpty) {
+                      reporter.error(e.posOpt, GclResolver.toolName, s"Unexpected rewrite failure on modifies clause: ${e}")
+                    } else {
+                      symbols(0) match {
+                        case AadlSymbolHolder(p: AadlPort) if p.direction == Direction.Out =>
+                          // modifies clause should just be "api" rather than "portName"
+                          val apiIdent: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = AST.Attr(posOpt = e.posOpt)),
+                            attr = AST.ResolvedAttr(posOpt = e.posOpt, resOpt = None(), typedOpt = None()))
+                          rexprs = rexprs + e ~> apiIdent
+                        case GclSymbolHolder(GclStateVar(_, _, _)) =>
+                          rexprs = rexprs + e ~> rexp2.get
+                        case x =>
+                          reporter.error(modifies.posOpt, GclResolver.toolName, s"Modifies expressions must be the simple name of an outgoing port or a state variable, found ${x}.")
+                      }
+                    }
                   }
                 case _ => halt("TODO")
               }
             case _ =>
-              reporter.error(modifies.posOpt, GclResolver.toolName, s"Expecting modifies to be Idents, found ${modifies}")
+              reporter.error(modifies.posOpt, GclResolver.toolName, s"Modifies expressions must be the simple name of an outgoing port or a state variable, found ${modifies}")
           }
         }
+      }
+
+      if (s.initializes.nonEmpty) {
+
+        processModifiesClause(s.initializes.get.modifies)
 
         var seenGuaranteeIds: Set[String] = Set.empty
         for (guarantees <- s.initializes.get.guarantees) {
@@ -927,28 +941,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       s.compute match {
         case Some(GclCompute(modifies, specs, cases, handlers, flows)) => {
 
-          for (modify <- modifies) {
-            modify match {
-              case e: Exp.Ident =>
-                visitSlangExp(e) match {
-                  case Some((rexp, roptType)) =>
-                    val (rexp2, symbols, _) = GclResolver.collectSymbols(rexp, RewriteMode.Normal, context, s.state, gclMethods, symbolTable, reporter)
-
-                    if (!reporter.hasError && symbols.size != 1) {
-                      reporter.error(e.posOpt, GclResolver.toolName, s"Modifies should resolve to exactly one symbol, instead resolved to ${symbols.size}")
-                    }
-                    if (rexp2.isEmpty) {
-                      rexprs = rexprs + e ~> rexp
-                    }
-                    else {
-                      rexprs = rexprs + e ~> rexp2.get
-                    }
-                  case _ => halt("TODO")
-                }
-              case _ =>
-                reporter.error(modify.posOpt, GclResolver.toolName, s"Expecting modifies to be Idents, found ${modifies}")
-            }
-          }
+          processModifiesClause(modifies)
 
           var seenSpecIds: Set[String] = Set.empty
 
@@ -1042,29 +1035,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               case _ => halt(s"TODO: ${handler.port} failed to type check")
             }
 
-            for (modify <- handler.modifies) {
-              modify match {
-                case e: Exp.Ident =>
-                  visitSlangExp(e) match {
-                    case Some((rexp, roptType)) =>
-                      val (rexp2, symbols, _) = GclResolver.collectSymbols(rexp, RewriteMode.Normal, context, s.state, gclMethods, symbolTable, reporter)
-                      if (!reporter.hasError) {
-                        if (symbols.size != 1) {
-                          reporter.error(e.posOpt, GclResolver.toolName, s"Modifies should resolve to exactly one symbol, instead resolved to ${symbols.size}")
-                        }
-                        if (rexp2.isEmpty) {
-                          rexprs = rexprs + e ~> rexp
-                        }
-                        else {
-                          rexprs = rexprs + e ~> rexp2.get
-                        }
-                      }
-                    case _ => halt("TODO")
-                  }
-                case _ =>
-                  reporter.error(modify.posOpt, GclResolver.toolName, s"Expecting modifies to be Idents, found ${modifies}")
-              }
-            }
+            processModifiesClause(handler.modifies)
 
             var handlerSpecIds: Set[String] = Set.empty
             for (guarantees <- handler.guarantees) {
