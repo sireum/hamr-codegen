@@ -120,10 +120,21 @@ object StringUtil {
                 s"Mismatch marker at lines ${beginLine + 1} and ${i + 1} (${beginMarker.get} != ${endMarker.get})")
               return r
             }
-            r = r + (beginMarker.get ~> ((beginLine, i, st"${(code, "\n")}".render)))
+            val str: String =
+              if (code.nonEmpty && code(0) == "") {
+                // ST hack.  ST's sequence expansion will drop entries until if finds one
+                // that is not the empty string "".  To preserve these lines, replace the
+                // first entry with a space if the first entry is the empty string
+                val _code = " " +: ops.ISZOps(code).drop(1)
+                st"${(_code, "\n")}".render
+              } else {
+                st"${(code, "\n")}".render
+              }
+            r = r + (beginMarker.get ~> ((beginLine, i, str)))
           } else {
             i = i + 1
-            code = code :+ ops.StringOps(line2).trimTrailing
+            //code = code :+ ops.StringOps(line2).trimTrailing
+            code = code :+ line2
           }
         }
         if (!found) {
