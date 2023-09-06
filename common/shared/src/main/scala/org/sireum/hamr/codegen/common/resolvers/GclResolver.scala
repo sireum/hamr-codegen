@@ -630,7 +630,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                           typeHierarchy: TypeHierarchy,
                           scope: Scope,
                           reporter: Reporter): AST.Stmt.Method = {
-    val tc = TypeChecker(typeHierarchy, ISZ(m.sig.id.value), F, TypeChecker.ModeContext.Spec, F)
+    val tc = TypeChecker(typeHierarchy, ISZ(m.sig.id.value), F, TypeChecker.ModeContext.Spec, F, None())
 
     val newStmt = TypeChecker.checkMethodContractSequent(F, typeHierarchy, ISZ(m.sig.id.value), scope, F, m, reporter)
 
@@ -642,7 +642,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                      scope: Scope,
                      reporter: Reporter): AST.Stmt.Method = {
     val m = gclMethod.method
-    val tc = TypeChecker(typeHierarchy, ISZ(m.sig.id.value), F, TypeChecker.ModeContext.Spec, F)
+    val tc = TypeChecker(typeHierarchy, ISZ(m.sig.id.value), F, TypeChecker.ModeContext.Spec, F, None())
     val typedMethod = typeMethod(m)
     val rMethod = tc.checkMethod(scope, typedMethod, reporter)
 
@@ -1108,7 +1108,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       val scontext: QName = ISZ("???")
 
       val mode = TypeChecker.ModeContext.Spec
-      val typeChecker: TypeChecker = TypeChecker(typeHierarchy, scontext, F, mode, F)
+      val typeChecker: TypeChecker = TypeChecker(typeHierarchy, scontext, F, mode, F, None())
 
       return Some(typeChecker.checkExp(None(), scope, exp, reporter))
     }
