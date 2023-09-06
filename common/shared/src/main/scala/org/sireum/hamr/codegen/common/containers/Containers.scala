@@ -49,6 +49,14 @@ object Resource {
   }
 }
 
+object Marker {
+  val beginMarkerPrefix: String = "// BEGIN MARKER"
+  val endMarkerPrefix: String = "// END MARKER"
+
+  @strictpure def createMarker(id: String): Marker =
+    Marker(s"$beginMarkerPrefix $id", s"$endMarkerPrefix $id")
+}
+
 @datatype class Marker(val beginMarker: String,
                        val endMarker: String)
 

@@ -21,6 +21,7 @@ versions.properties
 *.cmd.jar
 *.cmd.com
 air/
+etc/
 runtime/
 slang/
 project.json
