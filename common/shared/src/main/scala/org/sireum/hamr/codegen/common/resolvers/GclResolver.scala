@@ -1596,6 +1596,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             isVal = T,
             ast = AST.Id(value = p.id.value, attr = AST.Attr(posOpt = None())),
             typedOpt = Some(paramToTypedName(p)),
+            initOpt = None(),
             resOpt = Some(AST.ResolvedInfo.LocalVar(
               context = qualifiedMethodName,
               scope = ResolvedInfo.LocalVar.Scope.Current,
