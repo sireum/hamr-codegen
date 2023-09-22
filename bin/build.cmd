@@ -239,7 +239,8 @@ for (i <- 0 until Os.cliArgs.size if continue) {
     case string"regen-trans" => regenTransformers()
     case string"regen-cli" => regenCli4Testing()
     case string"fetch-gumbo" => setupGumboTesting()
-    case string"osate-gumbo" => installOsateGumbo()
+    case string"install-osate-gumbo" => installOsateGumbo()
+    case string"install-sbt-mill" => installSbtMill()
     case string"-h" => usage()
     case string"--help" => usage()
     case cmd =>
@@ -267,8 +268,9 @@ def usage(): Unit = {
   }
   println("HAMR Codegen /build")
   println(
-    st"""Usage: ( compile | test | tipe | regen-trans | fetch-gumbo
-        |       | osate-gumbo)+
+    st"""Usage: ( compile | test | tipe
+        |       | regen-trans | fetch-gumbo
+        |       | install-osate-gumbo | install-sbt-mill )+
         |
         |
         |Anything after 'test' will be treated as test options. Invoke 'sireum proyek test' for its options, e.g.
