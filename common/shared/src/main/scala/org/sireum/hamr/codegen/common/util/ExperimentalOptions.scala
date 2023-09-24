@@ -18,43 +18,43 @@ object ExperimentalOptions {
   val ADD_COMPONENT_IDS: String = "ADD_COMPONENT_IDS"
   val ADD_PORT_IDS: String = "ADD_PORT_IDS"
 
-  def addConnectionIds(experimentalOptions: ISZ[String]): N = {
+  def addConnectionIds(experimentalOptions: ISZ[String]): Z = {
     for (e <- experimentalOptions) {
       val o = ops.StringOps(e)
       if (o.startsWith(s"${ADD_CONNECTION_IDS}=")) {
-        N(o.split(c => c == '=')(1)) match {
+        Z(o.split(c => c == '=')(1)) match {
           case Some(c) => return c
-          case _ => return n"0"
+          case _ => return z"0"
         }
       }
     }
-    return n"0"
+    return z"0"
   }
 
-  def addPortIds(experimentalOptions: ISZ[String]): N = {
+  def addPortIds(experimentalOptions: ISZ[String]): Z = {
     for (e <- experimentalOptions) {
       val o = ops.StringOps(e)
       if (o.startsWith(s"${ADD_PORT_IDS}=")) {
-        N(o.split(c => c == '=')(1)) match {
+        Z(o.split(c => c == '=')(1)) match {
           case Some(c) => return c
-          case _ => return n"0"
+          case _ => return z"0"
         }
       }
     }
-    return n"0"
+    return z"0"
   }
 
-  def addComponentIds(experimentalOptions: ISZ[String]): N = {
+  def addComponentIds(experimentalOptions: ISZ[String]): Z = {
     for (e <- experimentalOptions) {
       val o = ops.StringOps(e)
       if (o.startsWith(s"${ADD_COMPONENT_IDS}=")) {
-        N(o.split(c => c == '=')(1)) match {
+        Z(o.split(c => c == '=')(1)) match {
           case Some(c) => return c
-          case _ => return n"0"
+          case _ => return z"0"
         }
       }
     }
-    return n"0"
+    return z"0"
   }
 
   def disableSergen(experimentalOptions: ISZ[String]): B = {
