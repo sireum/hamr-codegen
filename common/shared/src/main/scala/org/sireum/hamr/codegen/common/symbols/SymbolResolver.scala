@@ -48,13 +48,13 @@ object SymbolResolver {
 
       val annexLibInfos: ISZ[AnnexLibInfo] = processAnnexLibraries(model.annexLib, st, aadlTypes, annexVisitors, reporter)
 
-      var annexClauseInfos: HashSMap[AadlComponent, ISZ[AnnexClauseInfo]] = HashSMap.empty
+      var annexClauseInfos: HashSMap[IdPath, ISZ[AnnexClauseInfo]] = HashSMap.empty
       for (component <- st.componentMap.values) {
         var ais: ISZ[AnnexClauseInfo] = ISZ()
         for (annex <- component.component.annexes) {
           ais = ais ++ processAnnexSubclauses(component, st, aadlTypes, annex, annexLibInfos, annexVisitors, reporter)
         }
-        annexClauseInfos = annexClauseInfos + (component ~> ais)
+        annexClauseInfos = annexClauseInfos + (component.path ~> ais)
       }
       return Some(st(annexClauseInfos = annexClauseInfos, annexLibInfos = annexLibInfos))
     }
@@ -656,7 +656,7 @@ object SymbolResolver {
 
     resolveAadlConnectionInstances()
 
-    val annexClauseInfos: HashSMap[AadlComponent, ISZ[AnnexClauseInfo]] = HashSMap.empty
+    val annexClauseInfos: HashSMap[IdPath, ISZ[AnnexClauseInfo]] = HashSMap.empty
 
     val annexLibInfos: ISZ[AnnexLibInfo] = ISZ()
 

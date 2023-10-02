@@ -21,7 +21,7 @@ import org.sireum.hamr.ir.FeatureEnd
                             // all handled connections
                             aadlConnections: ISZ[AadlConnection],
 
-                            annexClauseInfos: HashSMap[AadlComponent, ISZ[AnnexClauseInfo]],
+                            annexClauseInfos: HashSMap[IdPath, ISZ[AnnexClauseInfo]],
 
                             annexLibInfos: ISZ[AnnexLibInfo],
 
