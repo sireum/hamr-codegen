@@ -56,7 +56,7 @@ val appDir: Os.Path = homeBin / (if (Os.isMac) "mac" else if (Os.isWin) "win" el
 val sireum: Os.Path = homeBin / (if (Os.isWin) "sireum.bat" else "sireum")
 
 val proyekName: String = "sireum-proyek"
-val project: Os.Path = homeBin / "project4testing.cmd"
+val project: Os.Path = homeBin / "project-standalone.cmd"
 
 if (Os.cliArgs.isEmpty) {
   usage()
@@ -99,6 +99,7 @@ def compile(): Unit = {
   println()
 }
 
+/*
 def setupGumboTesting(): B = {
   val extTestRepos: ISZ[(String, String, String)] = ISZ(
     ("git@gitlab-ext.galois.com:sirfur", "sireum-osate-tests.git", "jvm/src/test-ext/gumbo"),
@@ -115,10 +116,11 @@ def setupGumboTesting(): B = {
 
   return success
 }
+*/
 
 def test(options: ISZ[String]): Unit = {
 
-  setupGumboTesting()
+  //setupGumboTesting()
 
   tipe()
 
@@ -238,7 +240,7 @@ for (i <- 0 until Os.cliArgs.size if continue) {
       tipe()
     case string"regen-trans" => regenTransformers()
     case string"regen-cli" => regenCli4Testing()
-    case string"fetch-gumbo" => setupGumboTesting()
+    //case string"fetch-gumbo" => setupGumboTesting()
     case string"install-osate-gumbo" => installOsateGumbo()
     case string"install-sbt-mill" => installSbtMill()
     case string"-h" => usage()
@@ -269,7 +271,7 @@ def usage(): Unit = {
   println("HAMR Codegen /build")
   println(
     st"""Usage: ( compile | test | tipe
-        |       | regen-trans | fetch-gumbo
+        |       | regen-trans
         |       | install-osate-gumbo | install-sbt-mill )+
         |
         |
