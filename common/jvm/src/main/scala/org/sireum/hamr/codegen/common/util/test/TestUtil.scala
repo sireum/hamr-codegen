@@ -34,7 +34,7 @@ object TestUtil {
               val replace: String = if (i.makeCRLF) "\r\n" else "\n"
               ops.StringOps(i.content).replaceAllLiterally(lineSep, replace)
             }
-            (dstPath, ITestResource(content = content, overwrite = i.overwrite, makeExecutable = i.makeExecutable, makeCRLF = i.makeCRLF, markers = i.markers))
+            (dstPath, ITestResource(content = content, overwrite = i.overwrite, makeExecutable = i.makeExecutable, makeCRLF = i.makeCRLF, markers = i.markers, isDatatype = i.isDatatype))
 
           case e: ETestResource =>
             (dstPath, ETestResource(content = e.content, symlink = e.symlink))
@@ -48,7 +48,7 @@ object TestUtil {
       val results: (String, TestResource) = m match {
         case i: IResource =>
           val testMarkers = i.markers.map((m: Marker) => TestMarker(beginMarker = m.beginMarker, endMarker = m.endMarker))
-          (key, ITestResource(content = i.content.render, overwrite = i.overwrite, makeExecutable = i.makeExecutable, makeCRLF = i.makeCRLF, markers = testMarkers))
+          (key, ITestResource(content = i.content.render, overwrite = i.overwrite, makeExecutable = i.makeExecutable, makeCRLF = i.makeCRLF, markers = testMarkers, isDatatype = i.isDatatype))
         case e: EResource =>
           val src = resultsDir.relativize(Os.path(e.srcPath)).value
           val dst = resultsDir.relativize(Os.path(e.dstPath)).value

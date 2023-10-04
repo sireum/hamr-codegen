@@ -7,6 +7,11 @@ package org.sireum.hamr.codegen.common.util.test
 
 import org.sireum._
 import org.sireum.Json.Printer._
+import org.sireum.hamr.codegen.common.util.test.TestResource
+import org.sireum.hamr.codegen.common.util.test.TestMarker
+import org.sireum.hamr.codegen.common.util.test.ITestResource
+import org.sireum.hamr.codegen.common.util.test.ETestResource
+import org.sireum.hamr.codegen.common.util.test.TestResult
 
 object TestJSON {
 
@@ -31,10 +36,11 @@ object TestJSON {
       return printObject(ISZ(
         ("type", st""""ITestResource""""),
         ("content", printString(o.content)),
+        ("markers", printISZ(F, o.markers, printTestMarker _)),
         ("overwrite", printB(o.overwrite)),
         ("makeExecutable", printB(o.makeExecutable)),
         ("makeCRLF", printB(o.makeCRLF)),
-        ("markers", printISZ(F, o.markers, printTestMarker _))
+        ("isDatatype", printB(o.isDatatype))
       ))
     }
 
@@ -101,6 +107,9 @@ object TestJSON {
       parser.parseObjectKey("content")
       val content = parser.parseString()
       parser.parseObjectNext()
+      parser.parseObjectKey("markers")
+      val markers = parser.parseISZ(parseTestMarker _)
+      parser.parseObjectNext()
       parser.parseObjectKey("overwrite")
       val overwrite = parser.parseB()
       parser.parseObjectNext()
@@ -110,10 +119,10 @@ object TestJSON {
       parser.parseObjectKey("makeCRLF")
       val makeCRLF = parser.parseB()
       parser.parseObjectNext()
-      parser.parseObjectKey("markers")
-      val markers = parser.parseISZ(parseTestMarker _)
+      parser.parseObjectKey("isDatatype")
+      val isDatatype = parser.parseB()
       parser.parseObjectNext()
-      return ITestResource(content, overwrite, makeExecutable, makeCRLF, markers)
+      return ITestResource(content, markers, overwrite, makeExecutable, makeCRLF, isDatatype)
     }
 
     def parseETestResource(): ETestResource = {

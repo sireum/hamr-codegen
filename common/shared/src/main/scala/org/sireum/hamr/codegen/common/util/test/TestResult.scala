@@ -12,10 +12,11 @@ import org.sireum._
                            val endMarker: String)
 
 @datatype class ITestResource(val content: String,
+                              val markers: ISZ[TestMarker],
                               val overwrite: B,
                               val makeExecutable: B,
                               val makeCRLF: B,
-                              val markers: ISZ[TestMarker]) extends TestResource
+                              val isDatatype: B) extends TestResource
 
 @datatype class ETestResource(val content: String,
                               val symlink: B) extends TestResource

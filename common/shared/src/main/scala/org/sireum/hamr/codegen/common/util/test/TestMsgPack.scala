@@ -6,6 +6,11 @@
 package org.sireum.hamr.codegen.common.util.test
 
 import org.sireum._
+import org.sireum.hamr.codegen.common.util.test.TestResource
+import org.sireum.hamr.codegen.common.util.test.TestMarker
+import org.sireum.hamr.codegen.common.util.test.ITestResource
+import org.sireum.hamr.codegen.common.util.test.ETestResource
+import org.sireum.hamr.codegen.common.util.test.TestResult
 
 object TestMsgPack {
 
@@ -47,10 +52,11 @@ object TestMsgPack {
     def writeITestResource(o: ITestResource): Unit = {
       writer.writeZ(Constants.ITestResource)
       writer.writeString(o.content)
+      writer.writeISZ(o.markers, writeTestMarker _)
       writer.writeB(o.overwrite)
       writer.writeB(o.makeExecutable)
       writer.writeB(o.makeCRLF)
-      writer.writeISZ(o.markers, writeTestMarker _)
+      writer.writeB(o.isDatatype)
     }
 
     def writeETestResource(o: ETestResource): Unit = {
@@ -121,11 +127,12 @@ object TestMsgPack {
         reader.expectZ(Constants.ITestResource)
       }
       val content = reader.readString()
+      val markers = reader.readISZ(readTestMarker _)
       val overwrite = reader.readB()
       val makeExecutable = reader.readB()
       val makeCRLF = reader.readB()
-      val markers = reader.readISZ(readTestMarker _)
-      return ITestResource(content, overwrite, makeExecutable, makeCRLF, markers)
+      val isDatatype = reader.readB()
+      return ITestResource(content, markers, overwrite, makeExecutable, makeCRLF, isDatatype)
     }
 
     def readETestResource(): ETestResource = {
