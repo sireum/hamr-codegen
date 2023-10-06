@@ -1582,8 +1582,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       val resolvedAstMethod = AST.Stmt.Method(
         typeChecked = m.typeChecked,
         purity = m.purity,
-        hasOverride = m.hasOverride,
-        isHelper = m.isHelper,
+        modifiers = m.modifiers,
         sig = resolvedMsig,
         mcontract = m.mcontract,
         bodyOpt = m.bodyOpt,
@@ -1831,8 +1830,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 AST.Stmt.Method(
                   typeChecked = F,
                   purity = AST.Purity.Pure,
-                  hasOverride = F,
-                  isHelper = F,
+                  modifiers = ISZ(),
                   sig = methodSig,
                   mcontract = AST.MethodContract.Simple.empty,
                   bodyOpt = None(),
