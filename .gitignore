@@ -26,3 +26,4 @@ runtime/
 slang/
 project.json
 *.dot
+bin/install/

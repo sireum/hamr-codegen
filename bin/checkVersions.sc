@@ -17,7 +17,7 @@ def runGit(args: ISZ[String], path: Os.Path): String = {
 }
 
 val url = runGit(ISZ("git", "config", "--get", "remote.origin.url"), SIREUM_HOME)
-if (url != "https://github.com/sireum/kekinian.git") {
+if (url != "https://github.com/sireum/kekinian.git" && url != "https://github.com/sireum/kekinian") {
   if (Os.env("GITLAB_CI").isEmpty && Os.env("GITHUB_ACTIONS").isEmpty) {
     println(s"Script requires SIREUM_HOME to point to a kekinian checkout rather than ${url}: ${(Os.slashDir / "checkVersions.sc").toUri}")
   }
