@@ -78,7 +78,7 @@ def clone(repo: String, proj: String, location: Option[String]): B = {
 }
 
 def cloneProjects(): Unit = {
-  ISZ[String]("air", "runtime", "slang").foreach((p: String) => {
+  ISZ[String]("air", "runtime", "slang", "parser", "sysml").foreach((p: String) => {
     clone("https://github.com/sireum", p, None()); println()
   })
 }

@@ -22,6 +22,8 @@ import org.sireum.project.Project
 
 val air = "hamr-air"
 
+val sysmlParser = "hamr-sysml-parser"
+
 val common = "hamr-common"
 
 val slangFrontEnd = "slang-frontend"
@@ -33,7 +35,7 @@ val (commonShared, commonJvm) = moduleSharedJvmPub(
   baseDir = homeDir,
   sharedDeps = sharedId(air) :+ slangFrontEnd,
   sharedIvyDeps = ISZ(),
-  jvmDeps = ISZ(air),
+  jvmDeps = ISZ(sysmlParser),
   jvmIvyDeps = ISZ(),
   pubOpt = pub(
     desc = "HAMR AADL Code Generator Common Library",

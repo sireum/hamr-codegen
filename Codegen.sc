@@ -33,7 +33,7 @@ trait Module extends CrossJvmJsJitPack {
 
   final override def developers = Seq(Developers.jason)
 
-  final override def jvmDeps = Seq()
+  override def jvmDeps = Seq[JvmPublish]()
 
   final override def jsDeps = Seq()
 
@@ -54,6 +54,8 @@ trait Module extends CrossJvmJsJitPack {
   final override def ivyDeps = Agg.empty
 
   def airObject: CrossJvmJsJitPack
+
+  def sysmlParserObject: JvmPublishOnly
 }
 
 object Module {
@@ -63,6 +65,8 @@ object Module {
     final override def artifactName = s"$subUrl-common"
 
     final override def deps = Seq(airObject, slangFrontendObject)
+
+    final override def jvmDeps = Seq(sysmlParserObject)
 
     def slangFrontendObject: CrossJvmJsPublish
   }
@@ -80,5 +84,6 @@ object Module {
     def arsitObject: CrossJvmJsJitPack
 
     def testObject: CrossJvmJsPublish
+
   }
 }
