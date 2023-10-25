@@ -81,7 +81,7 @@ def cloneProjects(): Unit = {
   ISZ[String]("air", "runtime", "slang", "parser", "hamr-sysml").foreach((p: String) => {
     clone("https://github.com/sireum", p, None()); println()
   })
-  Os.path("hamr-sysml").moveTo("sysml")
+  Os.path("hamr-sysml").moveTo(Os.path("sysml"))
 }
 
 def tipe(): Unit = {
