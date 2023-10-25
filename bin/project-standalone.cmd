@@ -46,6 +46,7 @@ val projects = ISZ(
   homeDir / "air",
   homeDir / "arsit",
   homeDir / "common",
+  homeDir / "sysml",
   homeDir / "runtime",
   homeDir / "slang"
 )
