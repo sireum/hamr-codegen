@@ -22,8 +22,10 @@ versions.properties
 *.cmd.com
 air/
 etc/
+parser/
 runtime/
 slang/
+sysml/
 project.json
 *.dot
 bin/install/
