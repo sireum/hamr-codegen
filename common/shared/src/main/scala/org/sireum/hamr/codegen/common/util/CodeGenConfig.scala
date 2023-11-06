@@ -23,9 +23,10 @@ import org.sireum.hamr.codegen.common.containers.{FileResource, Resource, Sireum
                               ipc: CodeGenIpcMechanism.Type,
 
                               // the following is effectively a copy of the globals in
-                              // org.sireum.Cli.HamrCodeGenOption
+                              // org.sireum.Cli.SireumHamrCodeGenOption
 
                               verbose: B,
+                              runtimeMonitoring: B,
                               platform: CodeGenPlatform.Type,
 
                               // arsit options

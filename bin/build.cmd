@@ -81,7 +81,7 @@ def cloneProjects(): Unit = {
   ISZ[String]("air", "runtime", "slang", "parser", "hamr-sysml").foreach((p: String) => {
     clone("https://github.com/sireum", p, None()); println()
   })
-  Os.path("hamr-sysml").moveTo(Os.path("sysml"))
+  Os.path("hamr-sysml").moveOverTo(Os.path("sysml"))
 }
 
 def tipe(): Unit = {
@@ -272,7 +272,7 @@ def usage(): Unit = {
   println("HAMR Codegen /build")
   println(
     st"""Usage: ( compile | test | tipe
-        |       | regen-trans
+        |       | regen-trans | regen-cli
         |       | install-osate-gumbo | install-sbt-mill )+
         |
         |
