@@ -97,6 +97,7 @@ object CodeGen {
         noEmbedArt = options.noEmbedArt,
         bless = genBlessEntryPoints,
         verbose = options.verbose,
+        runtimeMonitoring = options.runtimeMonitoring,
         devicesAsThreads = options.devicesAsThreads,
         genSbtMill = options.genSbtMill,
         ipc = ipc,

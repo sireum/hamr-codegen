@@ -150,6 +150,8 @@ def regenTransformers(): Unit = {
 def regenCli4Testing(): Unit = {
   val cliPackagePath = home / "jvm" / "src" / "main" / "scala" / "org" / "sireum" / "hamr" / "codegen"
   val utilDir = home / "jvm" / "src" / "test" / "scala" / "org" / "sireum" / "hamr" / "codegen" / "test" / "util"
+  // NOTE: testingCli.sc emits what's in $SIREUM_HOME/bin/sireum.jar's version of
+  //       hamr's cli so regen that first, rebuild sireum.jar, then call this method
   proc"${sireum} tools cligen -p org.sireum.hamr.codegen.test.util -o ${utilDir.value} ${(utilDir / "testingCli.sc")}".at(cliPackagePath).console.runCheck()
 }
 
