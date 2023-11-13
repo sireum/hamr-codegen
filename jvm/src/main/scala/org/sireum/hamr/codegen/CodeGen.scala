@@ -72,6 +72,12 @@ object CodeGen {
 
     var reporterIndex = z"0"
 
+    if (options.runtimeMonitoring && isTranspilerProject) {
+      reporter.error(None(), toolName, "Runtime monitoring support for transpiled projects has not been added yet. Disable runtime-monitoring before transpiling")
+      reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
+      return CodeGenResults(ISZ(), ISZ())
+    }
+
     var arsitResources: ISZ[FileResource] = ISZ()
     var arsitAuxResources: ISZ[Resource] = ISZ()
 
