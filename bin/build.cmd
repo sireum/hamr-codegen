@@ -52,8 +52,15 @@ import org.sireum._
 
 val homeBin: Os.Path = Os.slashDir
 val home: Os.Path = homeBin.up
-val appDir: Os.Path = homeBin / (if (Os.isMac) "mac" else if (Os.isWin) "win" else "linux")
 val sireum: Os.Path = homeBin / (if (Os.isWin) "sireum.bat" else "sireum")
+val appDir: Os.Path = homeBin / (if (Os.isMac) "mac" else if (Os.isWin) "win" else "linux")
+
+val osateDir = {
+  Os.env("OSATE_HOME") match {
+    case Some(s) => Os.path(s)
+    case _ => appDir / s"osate${if (Os.isMac) ".app" else ""}"
+  }
+}
 
 val proyekName: String = "sireum-proyek"
 val project: Os.Path = homeBin / "project-standalone.cmd"
@@ -81,7 +88,7 @@ def cloneProjects(): Unit = {
   ISZ[String]("air", "runtime", "slang", "parser", "hamr-sysml").foreach((p: String) => {
     clone("https://github.com/sireum", p, None()); println()
   })
-  Os.path("hamr-sysml").moveOverTo(Os.path("sysml"))
+  (home / "hamr-sysml").moveOverTo(home / "sysml")
 }
 
 def tipe(): Unit = {
@@ -165,7 +172,6 @@ def installOsateGumbo(): B = {
   val hamrJar = s"org.sireum.aadl.osate.hamr_${versions.get("org.sireum.aadl.osate.plugins.version_alt").get}.jar"
   val gumboJar = s"org.sireum.aadl.gumbo_${versions.get("org.sireum.aadl.gumbo.plugins.version_alt").get}.jar"
 
-  val osateDir = appDir / s"osate${if (Os.isMac) ".app" else ""}"
   val pluginsDir: Os.Path =
     if (Os.isMac) osateDir / "Contents" / "Eclipse" / "plugins"
     else osateDir / "plugins"
@@ -177,7 +183,7 @@ def installOsateGumbo(): B = {
   }
 
   if (alreadyInstalled) {
-    println("OSATE already up to date.\n")
+    println(s"OSATE already up to date: $osateDir\n")
     return T
   } else {
     println("Installing Sireum plugins into OSATE, this will take a while ...")
