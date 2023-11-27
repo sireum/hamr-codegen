@@ -82,6 +82,8 @@ var phantomCurrentVers: Map[String, String] = Map.empty
   }
 }
 
+def exclamations(): Unit = { for (i <- 0 to 5) { println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!") } }
+
 { // sanity checks
   for (k <- codegenCurrentVers.keys if !codegenVersionsP.properties.contains(k)) {
     halt(s"${codegenVersionsP} doesn't contain $k")
@@ -92,13 +94,9 @@ var phantomCurrentVers: Map[String, String] = Map.empty
 
   val artEmbeddedVersion = runGit(ISZ("git", "log", "-n", "1", "--pretty=format:%h"), SIREUM_HOME / "hamr" / "codegen" / "arsit" / "resources" / "art")
   if (codegenCurrentVers.get("art.version").get != artEmbeddedVersion) {
-    for (i <- 0 to 10) {
-      println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-    }
+    exclamations()
     println(s"WARNING: ART versions do not match: ${codegenCurrentVers.get("art.version").get} vs ${artEmbeddedVersion}")
-    for (i <- 0 to 10) {
-      println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-    }
+    exclamations()
   }
 }
 
@@ -141,6 +139,25 @@ def compare(p: Os.Path, currentVersions: Map[String, String]): Unit = {
 
 compare(codegenVersionsP, codegenCurrentVers)
 compare(phantomVersionsP, phantomCurrentVers)
+
+{
+  val fmidecli = SIREUM_HOME / "bin" / "install" / "fmide-cli.sc"
+  val cli = proc"$sireum slang run $fmidecli".run().out
+  val tool = org.sireum.cli.JSON.toCliOpt(cli).left.asInstanceOf[org.sireum.cli.CliOpt.Tool]
+
+  def fcompare(name: String, expected: String): Unit = {
+    val actual = ops.ISZOps(tool.opts).filter(p => p.name == name)(0).tpe.asInstanceOf[org.sireum.cli.CliOpt.Type.Str].default.get
+    if (actual != expected) {
+      exclamations()
+      println(s"WARNING: FMIDE version for ${name} does not match: ${actual} vs ${expected}: ${fmidecli.toUri}")
+      exclamations()
+    }
+  }
+
+  fcompare("awas", phantomCurrentVers.get("org.sireum.aadl.osate.plugins.version").get)
+  fcompare("gumbo", phantomCurrentVers.get("org.sireum.aadl.gumbo.plugins.version").get)
+  fcompare("hamr", phantomCurrentVers.get("org.sireum.aadl.osate.plugins.version").get)
+}
 
 if (!noUpdate && jitpackFetches.nonEmpty) {
   val scalaKey = ops.StringOps(org.sireum.project.DependencyManager.scalaKey).replaceAllChars(':', '%')
