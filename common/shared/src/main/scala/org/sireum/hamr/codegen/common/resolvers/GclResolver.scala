@@ -48,9 +48,10 @@ object GclResolver {
 
   @record class SymbolFinder(val mode: RewriteMode.Type,
                              val context: AadlComponent,
+                             val isContextGeneralAssumeClause: B,
                              val optHandledPort: Option[AadlPort],
-                             stateVars: ISZ[GclStateVar],
-                             specFuncs: ISZ[GclMethod],
+                             val stateVars: ISZ[GclStateVar],
+                             val specFuncs: ISZ[GclMethod],
                              val symbolTable: SymbolTable) extends org.sireum.hamr.ir.MTransformer {
     var symbols: Set[SymbolHolder] = Set.empty
     var reporter: Reporter = ReporterImpl(ISZ())
@@ -492,6 +493,9 @@ object GclResolver {
 
                 return MSome(sel)
               }
+            case GclSymbolHolder(s : GclStateVar) if isContextGeneralAssumeClause =>
+              // In(s)
+              return MSome(Exp.Input(o, AST.Attr(o.posOpt)))
             case _ =>
           }
 
@@ -504,16 +508,18 @@ object GclResolver {
   def collectSymbols(exp: Exp,
                      mode: RewriteMode.Type,
                      context: AadlComponent,
+                     isContextGeneralAssumeClause: B,
                      stateVars: ISZ[GclStateVar],
                      methods: ISZ[GclMethod],
                      symbolTable: SymbolTable,
                      reporter: Reporter): (MOption[Exp], ISZ[SymbolHolder], ISZ[AadlPort]) = {
-    return collectSymbolsH(exp, mode, context, None(), stateVars, methods, symbolTable, reporter)
+    return collectSymbolsH(exp, mode, context, isContextGeneralAssumeClause, None(), stateVars, methods, symbolTable, reporter)
   }
 
   def collectSymbolsH(exp: Exp,
                       mode: RewriteMode.Type,
                       context: AadlComponent,
+                      isContextGeneralAssumeClause: B,
                       optHandledPort: Option[AadlPort],
                       stateVars: ISZ[GclStateVar],
                       methods: ISZ[GclMethod],
@@ -523,7 +529,7 @@ object GclResolver {
       // already in an inconsistent state
       return (MNone(), ISZ(), ISZ())
     } else {
-      val sf = SymbolFinder(mode, context, optHandledPort, stateVars, methods, symbolTable)
+      val sf = SymbolFinder(mode, context, isContextGeneralAssumeClause, optHandledPort, stateVars, methods, symbolTable)
       val rexp = sf.transform_langastExp(exp)
       reporter.reports(sf.reporter.messages)
       return (rexp, sf.symbols.elements, sf.apiReferences.elements)
@@ -535,7 +541,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
 @record class GclResolver() extends AnnexVisitor {
 
-  var rexprs: HashMap[AST.Exp, AST.Exp] = HashMap.empty
+  var rexprs: HashMap[SymTableKey, AST.Exp] = HashMap.empty
   var apiReferences: Set[AadlPort] = Set.empty
   var computeHandlerPortMap: Map[AST.Exp, AadlPort] = Map.empty
   var integrationMap: Map[AadlPort, GclSpec] = Map.empty
@@ -637,6 +643,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
     return newStmt
   }
 
+  @strictpure def toKey(e: AST.Exp): SymTableKey = SymTableKey(e, e.posOpt)
+
   def visitGclMethod(gclMethod: GclMethod,
                      typeHierarchy: TypeHierarchy,
                      scope: Scope,
@@ -654,19 +662,19 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       val rscontract = r2Method.mcontract.asInstanceOf[Simple]
 
       for (i <- 0 until scontract.reads.size) {
-        rexprs = rexprs + (scontract.reads(i).asInstanceOf[AST.Exp.Ident] ~> rscontract.reads(i).asInstanceOf[AST.Exp.Ident])
+        rexprs = rexprs + (toKey(scontract.reads(i).asInstanceOf[AST.Exp.Ident]) ~> rscontract.reads(i).asInstanceOf[AST.Exp.Ident])
       }
 
       for (i <- 0 until scontract.requires.size) {
-        rexprs = rexprs + (scontract.requires(i) ~> rscontract.requires(i))
+        rexprs = rexprs + (toKey(scontract.requires(i)) ~> rscontract.requires(i))
       }
 
       for (i <- 0 until scontract.modifies.size) {
-        rexprs = rexprs + (scontract.modifies(i).asInstanceOf[AST.Exp.Ident] ~> rscontract.modifies(i).asInstanceOf[AST.Exp.Ident])
+        rexprs = rexprs + (toKey(scontract.modifies(i).asInstanceOf[AST.Exp.Ident]) ~> rscontract.modifies(i).asInstanceOf[AST.Exp.Ident])
       }
 
       for (i <- 0 until scontract.ensures.size) {
-        rexprs = rexprs + (scontract.ensures(i) ~> rscontract.ensures(i))
+        rexprs = rexprs + (toKey(scontract.ensures(i)) ~> rscontract.ensures(i))
       }
     }
 
@@ -674,7 +682,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       case (Some(AST.Body(ISZ(AST.Stmt.Return(Some(exp))))),
       Some(AST.Body(ISZ(AST.Stmt.Return(Some(rexp)))))) =>
 
-        rexprs = rexprs + (exp ~> rexp)
+        rexprs = rexprs + (toKey(exp) ~> rexp)
 
       case _ =>
         reporter.error(gclMethod.method.posOpt, GclResolver.toolName, "Unexpected: method does not have a body")
@@ -778,8 +786,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
           if (!reporter.hasError) {
             val (expTrans, symbols, apiRefs) =
-              GclResolver.collectSymbols(expTipe, RewriteMode.Normal, context, ISZ(), gclMethods, symbolTable, reporter)
-            rexprs = rexprs + glcIntegSpec.exp ~> (if (expTrans.nonEmpty) expTrans.get else expTipe)
+              GclResolver.collectSymbols(expTipe, RewriteMode.Normal, context, F, ISZ(), gclMethods, symbolTable, reporter)
+            rexprs = rexprs + toKey(glcIntegSpec.exp) ~> (if (expTrans.nonEmpty) expTrans.get else expTipe)
             apiReferences = apiReferences ++ apiRefs
 
             if (!reporter.hasError) {
@@ -802,7 +810,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               }
               if (portRef.nonEmpty) {
                 if (expTrans.nonEmpty) {
-                  rexprs = rexprs + glcIntegSpec.exp ~> expTrans.get
+                  rexprs = rexprs + toKey(glcIntegSpec.exp) ~> expTrans.get
                 }
                 val sym = portRef.get
                 integrationMap = integrationMap + sym ~> glcIntegSpec
@@ -830,7 +838,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           case e: Exp.Ident =>
             visitSlangExp(e) match {
               case Some((rexp, roptType)) =>
-                val (rexp2, symbols, _) = GclResolver.collectSymbols(rexp, RewriteMode.Api, context, s.state, gclMethods, symbolTable, reporter)
+                val (rexp2, symbols, _) = GclResolver.collectSymbols(rexp, RewriteMode.Api, context, F, s.state, gclMethods, symbolTable, reporter)
                 if (!reporter.hasError) {
                   if (symbols.size != 1) {
                     reporter.error(e.posOpt, GclResolver.toolName, s"From/To expressions should resolve to exactly one symbol, instead resolved to ${symbols.size}")
@@ -854,10 +862,10 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                       }
                   }
                   if (rexp2.isEmpty) {
-                    rexprs = rexprs + e ~> rexp
+                    rexprs = rexprs + toKey(e) ~> rexp
                   }
                   else {
-                    rexprs = rexprs + e ~> rexp2.get
+                    rexprs = rexprs + toKey(e) ~> rexp2.get
                   }
                 }
               case _ => halt("TODO")
@@ -873,7 +881,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             case e: Exp.Ident =>
               visitSlangExp(e) match {
                 case Some((rexp, roptType)) =>
-                  val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.Normal, context, s.state, gclMethods, symbolTable, reporter)
+                  val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.Normal, context, F, s.state, gclMethods, symbolTable, reporter)
                   apiReferences = apiReferences ++ apiRefs
 
                   if (!reporter.hasError) {
@@ -887,9 +895,9 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                           // modifies clause should just be "api" rather than "portName"
                           val apiIdent: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = AST.Attr(posOpt = e.posOpt)),
                             attr = AST.ResolvedAttr(posOpt = e.posOpt, resOpt = None(), typedOpt = None()))
-                          rexprs = rexprs + e ~> apiIdent
+                          rexprs = rexprs + toKey(e) ~> apiIdent
                         case GclSymbolHolder(GclStateVar(_, _, _)) =>
-                          rexprs = rexprs + e ~> rexp2.get
+                          rexprs = rexprs + toKey(e) ~> rexp2.get
                         case x =>
                           reporter.error(modifies.posOpt, GclResolver.toolName, s"Modifies expressions must be the simple name of an outgoing port or a state variable, found ${x}.")
                       }
@@ -915,13 +923,13 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           seenGuaranteeIds = seenGuaranteeIds + guarantees.id
 
           val rexp = typeCheckBoolExp(guarantees.exp)
-          val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, context, s.state, gclMethods, symbolTable, reporter)
+          val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, context, F, s.state, gclMethods, symbolTable, reporter)
           apiReferences = apiReferences ++ apiRefs
 
           if (rexp2.isEmpty) {
-            rexprs = rexprs + guarantees.exp ~> rexp
+            rexprs = rexprs + toKey(guarantees.exp) ~> rexp
           } else {
-            rexprs = rexprs + guarantees.exp ~> rexp2.get
+            rexprs = rexprs + toKey(guarantees.exp) ~> rexp2.get
           }
         }
 
@@ -953,7 +961,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
             {
               val rexp = typeCheckBoolExp(spec.exp)
-              val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, context, s.state, gclMethods, symbolTable, reporter)
+              val isContextGeneralAssumeClause = spec.isInstanceOf[GclAssume]
+              val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, context, isContextGeneralAssumeClause, s.state, gclMethods, symbolTable, reporter)
               apiReferences = apiReferences ++ apiRefs
 
               spec match {
@@ -967,9 +976,11 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                   }
                 case _ =>
               }
-              rexprs = rexprs + (spec.exp ~> rexp)
-              if (rexp2.nonEmpty) {
-                rexprs = rexprs + (spec.exp ~> rexp2.get)
+
+              if (rexp2.isEmpty) {
+                rexprs = rexprs + (toKey(spec.exp) ~> rexp)
+              } else {
+                rexprs = rexprs + (toKey(spec.exp) ~> rexp2.get)
               }
             }
           }
@@ -983,7 +994,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
             {
               val rexp = typeCheckBoolExp(caase.assumes)
-              val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, context, s.state, gclMethods, symbolTable, reporter)
+              val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, context, F, s.state, gclMethods, symbolTable, reporter)
               apiReferences = apiReferences ++ apiRefs
 
               for (sym <- symbols) {
@@ -993,21 +1004,22 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                   case _ =>
                 }
               }
-
-              rexprs = rexprs + (caase.assumes ~> rexp)
-              if (rexp2.nonEmpty) {
-                rexprs = rexprs + (caase.assumes ~> rexp2.get)
+              if (rexp2.isEmpty) {
+                rexprs = rexprs + (toKey(caase.assumes) ~> rexp)
+              } else {
+                rexprs = rexprs + (toKey(caase.assumes) ~> rexp2.get)
               }
             }
 
             {
               val rexp = typeCheckBoolExp(caase.guarantees)
-              val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, context, s.state, gclMethods, symbolTable, reporter)
+              val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, context, F, s.state, gclMethods, symbolTable, reporter)
               apiReferences = apiReferences ++ apiRefs
 
-              rexprs = rexprs + (caase.guarantees ~> rexp)
-              if (rexp2.nonEmpty) {
-                rexprs = rexprs + (caase.guarantees ~> rexp2.get)
+              if (rexp2.isEmpty) {
+                rexprs = rexprs + (toKey(caase.guarantees) ~> rexp)
+              } else {
+                rexprs = rexprs + (toKey(caase.guarantees) ~> rexp2.get)
               }
             }
           }
@@ -1016,7 +1028,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
             visitSlangExp(handler.port) match {
               case Some((rexp, roptType)) =>
-                val (_, symbols, _) = GclResolver.collectSymbols(rexp, RewriteMode.Normal, context, s.state, gclMethods, symbolTable, reporter)
+                val (_, symbols, _) = GclResolver.collectSymbols(rexp, RewriteMode.Normal, context, F, s.state, gclMethods, symbolTable, reporter)
                 if (!reporter.hasError) {
                   if (symbols.size != 1) {
                     reporter.error(handler.port.posOpt, GclResolver.toolName, s"Handler should resolve to exactly one symbol, instead resolved to ${symbols.size}")
@@ -1045,15 +1057,15 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               handlerSpecIds = handlerSpecIds + guarantees.id
 
               val rexp = typeCheckBoolExp(guarantees.exp)
-              val (rexp2, _, apiRefs) = GclResolver.collectSymbolsH(rexp, RewriteMode.ApiGet, context,
+              val (rexp2, _, apiRefs) = GclResolver.collectSymbolsH(rexp, RewriteMode.ApiGet, context, F,
                 computeHandlerPortMap.get(handler.port), // rewrite handled port references to the passed in param
                 s.state, gclMethods, symbolTable, reporter)
               apiReferences = apiReferences ++ apiRefs
 
               if (rexp2.isEmpty) {
-                rexprs = rexprs + guarantees.exp ~> rexp
+                rexprs = rexprs + toKey(guarantees.exp) ~> rexp
               } else {
-                rexprs = rexprs + guarantees.exp ~> rexp2.get
+                rexprs = rexprs + toKey(guarantees.exp) ~> rexp2.get
               }
             }
 
@@ -1089,11 +1101,11 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         case Some((rexp, roptType)) =>
           roptType match {
             case Some(AST.Typed.Name(ISZ("org", "sireum", "B"), _)) =>
-              val (rexp2, _, _) = GclResolver.collectSymbols(rexp, RewriteMode.Normal, context, ISZ(), libMethods, symbolTable, reporter)
+              val (rexp2, _, _) = GclResolver.collectSymbols(rexp, RewriteMode.Normal, context, F, ISZ(), libMethods, symbolTable, reporter)
               if (rexp2.isEmpty) {
-                rexprs = rexprs + (i.exp ~> rexp)
+                rexprs = rexprs + (toKey(i.exp) ~> rexp)
               } else {
-                rexprs = rexprs + (i.exp ~> rexp2.get)
+                rexprs = rexprs + (toKey(i.exp) ~> rexp2.get)
               }
             case Some(x) => reporter.error(i.exp.posOpt, GclResolver.toolName, s"Expecting B but found ${x}")
             case _ =>
