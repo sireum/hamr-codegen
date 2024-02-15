@@ -55,7 +55,7 @@ val home: Os.Path = homeBin.up
 val sireum: Os.Path = homeBin / (if (Os.isWin) "sireum.bat" else "sireum")
 val appDir: Os.Path = homeBin / (if (Os.isMac) "mac" else if (Os.isWin) "win" else "linux")
 
-val osateDir = {
+val osateDir: Os.Path = {
   Os.env("OSATE_HOME") match {
     case Some(s) => Os.path(s)
     case _ => appDir / s"osate${if (Os.isMac) ".app" else ""}"
