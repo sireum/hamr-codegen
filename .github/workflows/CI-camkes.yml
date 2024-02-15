@@ -3,12 +3,21 @@ name: CAmkES
 on: 
   push:
   workflow_dispatch:
-
+    inputs:
+      docker_image:
+        type: string
+        description: Docker image to fetch
+        default: trustworthysystems/camkes
+      verbose:
+        type: boolean
+        description: Enable verbose testing output
+        default: false
+        
 jobs:
   container:
     runs-on: ubuntu-latest
     container:
-      image: trustworthysystems/camkes
+      image: ${{ inputs.docker_image != '' && inputs.docker_image || 'trustworthysystems/camkes' }}
     strategy:
       fail-fast: false
       matrix:
@@ -22,15 +31,16 @@ jobs:
           submodules: recursive
       - name: Build
         env:
-          # add verbose flag if workflow is restarted with "enable debug loggin" checked
-          VERBOSE_DEBUG: ${{ runner.debug == '1' && ',verbose' || '' }}
+          # add verbose flag if workflow is restarted with "enable debug logging" checked or if requested
+          # via workflow dispatch
+          VERBOSE_DEBUG: ${{ ( runner.debug == '1' || inputs.verbose == '1' ) && ',verbose' || '' }}
         run: |
           # github sets HOME to /github/home but some tools (Sireum's Os.home, Haskell) use
           # the containers /root instead leading to inconsistent installs. Setting HOME
           # to be root resolves the issue
           # https://github.com/actions/runner/issues/1474#issuecomment-965805123
           export HOME=/root
-          
+
           mv ./hamr-codegen /root/
           
           export aptInstall="apt-get install -f -y --no-install-recommends"
