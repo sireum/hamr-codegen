@@ -10,7 +10,11 @@ on:
     workflows: [CAmkES]
     types: [completed]
   workflow_dispatch:
-
+    inputs:
+      verbose:
+        type: boolean
+        description: Enable verbose testing output
+        default: false
 jobs:
   container:
     runs-on: ubuntu-latest
@@ -29,6 +33,10 @@ jobs:
           path: hamr-codegen
           submodules: recursive
       - name: Build
+        env:
+          # add verbose flag if workflow is restarted with "enable debug logging" checked or if requested
+          # via workflow dispatch
+          VERBOSE_DEBUG: ${{ ( runner.debug == '1' || inputs.verbose == '1' ) && ',verbose' || '' }}
         run: |
           # github sets HOME to /github/home but some tools (Sireum's Os.home, Haskell) use
           # the containers /root instead leading to inconsistent installs. Setting HOME
@@ -68,7 +76,7 @@ jobs:
           echo "VM_PARTITION=${VM_PARTITION}"
           
           # see https://github.com/sireum/hamr-codegen-test/blob/master/scala/org/sireum/hamr/codegen/test/util/TestMode.scala
-          export testmodes=phantom,sergen,slangcheck,tipe,ive,compile,camkes,generated_unit_tests,smt2
+          export testmodes=phantom,sergen,slangcheck,tipe,ive,compile,camkes,generated_unit_tests,smt2${VERBOSE_DEBUG}
           echo "testmodes=${testmodes}"
           
           export SMT2_TIMEOUT=180000
