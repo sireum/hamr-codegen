@@ -1553,7 +1553,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       assert(resolvedTypeParams.isEmpty, "Not handling type params yet")
 
       val resolvedMsig = AST.MethodSig(
-        isPure = m.sig.isPure,
+        purity = m.sig.purity,
         id = m.sig.id,
         typeParams = m.sig.typeParams,
         hasParams = resolvedParams.nonEmpty,
@@ -1561,7 +1561,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         returnType = resolvedReturnType)
 
       val resolvedTypedFun = AST.Typed.Fun(
-        isPure = m.sig.isPure,
+        purity = m.sig.purity,
         isByName = F,
         args = resolvedParams.map((p: AST.Param) => paramToTypedName(p)),
         ret = resolvedReturnTyped)
@@ -1795,7 +1795,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
               val methodAst: AST.Stmt.Method = {
                 val methodSig = AST.MethodSig(
-                  isPure = T,
+                  purity = AST.Purity.Pure,
                   id = AST.Id(methodName, AST.Attr(None())),
                   typeParams = typeParams,
                   hasParams = params.nonEmpty,
@@ -1804,7 +1804,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 )
 
                 val typedFun = AST.Typed.Fun(
-                  isPure = T,
+                  purity = AST.Purity.Pure,
                   isByName = F,
                   args = params.map((m: AST.Param) => {
                     val ids = m.tipe.asInstanceOf[AST.Type.Named].name.ids.map((i: AST.Id) => i.value)
@@ -1958,7 +1958,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         a match {
           case aadlData: AadlData =>
             val tpeFun = AST.Typed.Fun(
-              isPure = T,
+              purity = AST.Purity.Pure,
               isByName = F,
               args = aadlData.subComponents.map((sc: AadlComponent) => {
                 val aadlType = aadlTypes.typeMap.get(sc.component.classifier.get.name).get
