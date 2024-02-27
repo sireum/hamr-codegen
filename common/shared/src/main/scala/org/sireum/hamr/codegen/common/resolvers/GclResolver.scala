@@ -240,13 +240,13 @@ object GclResolver {
               val getSelect = Exp.Select(receiverOpt = Some(apiSelect), id = AST.Id("get", emptyAttr), targs = o.targs, attr = o.attr)
 
               // api.portid.get == expectedValue
-              val be = Exp.Binary(getSelect, "==", expectedValue, o.attr)
+              val be = Exp.Binary(getSelect, "==", expectedValue, o.attr, o.attr.posOpt)
 
               // api.portid.nonempty
               val nonEmptySel: Exp = Exp.Select(receiverOpt = Some(apiSelect), id = AST.Id("nonEmpty", emptyAttr), targs = o.targs, attr = o.attr)
 
               // (api.portid.nonEmpty && (api.portid.get == expectedValue)
-              val rexp = Exp.Binary(nonEmptySel, "&&", be, o.attr)
+              val rexp = Exp.Binary(nonEmptySel, "&&", be, o.attr, o.attr.posOpt)
 
               return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(rexp))
 

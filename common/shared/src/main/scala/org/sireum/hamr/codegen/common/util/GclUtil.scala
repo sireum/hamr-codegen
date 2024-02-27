@@ -115,7 +115,7 @@ object GclUtil {
           "???"
       }
       val posOpt = mergePos(left.posOpt, right.posOpt)
-      return AST.Exp.Binary(left, o, right, AST.ResolvedAttr(posOpt = posOpt, resOpt = None(), typedOpt = None()))
+      return AST.Exp.Binary(left, o, right, AST.ResolvedAttr(posOpt = posOpt, resOpt = None(), typedOpt = None()), None())
     }
 
     override def transform(builder: BinaryBuilder, tree: Exp): Exp = {
