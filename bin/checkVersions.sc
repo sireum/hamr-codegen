@@ -154,9 +154,9 @@ compare(phantomVersionsP, phantomCurrentVers)
     }
   }
 
-  fcompare("awas", phantomCurrentVers.get("org.sireum.aadl.osate.plugins.version").get)
-  fcompare("gumbo", phantomCurrentVers.get("org.sireum.aadl.gumbo.plugins.version").get)
-  fcompare("hamr", phantomCurrentVers.get("org.sireum.aadl.osate.plugins.version").get)
+  fcompare("awas", phantomCurrentVers.get("org.sireum.aadl.osate.plugins.version_alt").get)
+  fcompare("gumbo", phantomCurrentVers.get("org.sireum.aadl.gumbo.plugins.version_alt").get)
+  fcompare("hamr", phantomCurrentVers.get("org.sireum.aadl.osate.plugins.version_alt").get)
 }
 
 if (!noUpdate && jitpackFetches.nonEmpty) {
