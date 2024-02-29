@@ -15,6 +15,7 @@ on:
         type: boolean
         description: Enable verbose testing output
         default: false
+
 jobs:
   container:
     runs-on: ubuntu-latest
@@ -32,6 +33,33 @@ jobs:
         with:
           path: hamr-codegen
           submodules: recursive
+      - name: Retrieve versions.properties
+        run: |
+          wget -q https://raw.githubusercontent.com/sireum/kekinian/master/versions.properties
+      - name: Cache Java
+        id: cache-java
+        uses: actions/cache@v3
+        with:
+          path: bin/linux/java
+          key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-java
+      - name: Cache Scala
+        id: cache-scala
+        uses: actions/cache@v3
+        with:
+          path: bin/scala
+          key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-scala
+      - name: Cache Coursier
+        id: cache-coursier
+        uses: actions/cache@v3
+        with:
+          path: cache/coursier
+          key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-coursier
+      - name: Cache OSATE
+        id: cache-osate
+        uses: actions/cache@v3
+        with:
+          path: bin/linux/osate
+          key: ${{ runner.os }}-${{ hashFiles('jvm/src/main/resources/phantom_versions.properties') }}-osate
       - name: Build
         env:
           # add verbose flag if workflow is restarted with "enable debug logging" checked or if requested
@@ -43,7 +71,7 @@ jobs:
           # to be root resolves the issue
           # https://github.com/actions/runner/issues/1474#issuecomment-965805123
           export HOME=/root
-          
+
           mv ./hamr-codegen /root/
           
           export aptInstall="apt-get install -f -y --no-install-recommends"
@@ -71,7 +99,7 @@ jobs:
           cd $CASE_DIR/camkes-vm-examples
           repo init -u https://github.com/seL4/camkes-vm-examples-manifest.git
           repo sync
-                    
+          
           export VM_PARTITION=${{ matrix.VM_PARTITION }}
           echo "VM_PARTITION=${VM_PARTITION}"
           
