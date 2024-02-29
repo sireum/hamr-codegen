@@ -160,21 +160,21 @@ object GclResolver {
         case Some(e: AST.ResolvedInfo.Enum) => // ignore
         case Some(e: AST.ResolvedInfo.Package) => // ignore
         case Some(_) =>
-          return lookup(o.id.value, o.resOpt, o.posOpt)
-        case _ => reporter.error(o.posOpt, toolName, s"Ident '$o' did not resolve")
+          return lookup(o.id.value, o.resOpt, o.fullPosOpt)
+        case _ => reporter.error(o.fullPosOpt, toolName, s"Ident '$o' did not resolve")
       }
       return None()
     }
 
     override def pre_langastExpInvoke(o: Exp.Invoke): org.sireum.hamr.ir.MTransformer.PreResult[Exp] = {
 
-      val emptyAttr = AST.Attr(posOpt = o.posOpt)
-      val emptyRAttr = AST.ResolvedAttr(posOpt = o.posOpt, resOpt = None(), typedOpt = None())
+      val emptyAttr = AST.Attr(posOpt = o.fullPosOpt)
+      val emptyRAttr = AST.ResolvedAttr(posOpt = o.fullPosOpt, resOpt = None(), typedOpt = None())
 
       if (o.ident.id.value == uif__MustSend || o.ident.id.value == uif__MustSendWithExpectedValue) {
 
         if (o.args.isEmpty) {
-          reporter.error(o.posOpt, toolName, "Invalid MustSend expression. First argument must be outgoing event port")
+          reporter.error(o.fullPosOpt, toolName, "Invalid MustSend expression. First argument must be outgoing event port")
           return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
         }
 
@@ -184,7 +184,7 @@ object GclResolver {
             Exp.Ident(id, o.attr)
           case i: Exp.Ident => i
           case _ =>
-            reporter.error(o.posOpt, toolName, "Invalid MustSend expression. First argument must (currently) be the simple name of an outgoing event port")
+            reporter.error(o.fullPosOpt, toolName, "Invalid MustSend expression. First argument must (currently) be the simple name of an outgoing event port")
             return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
         }
 
@@ -192,7 +192,7 @@ object GclResolver {
           case Some(ash@AadlSymbolHolder(aadlFeatureEvent: AadlFeatureEvent)) if aadlFeatureEvent.direction == Direction.Out =>
 
             if (!aadlFeatureEvent.isInstanceOf[AadlEventPort] && !aadlFeatureEvent.isInstanceOf[AadlEventDataPort]) {
-              reporter.error(o.posOpt, toolName, "Invalid MustSend expression. First argument must an an outgoing event port")
+              reporter.error(o.fullPosOpt, toolName, "Invalid MustSend expression. First argument must an an outgoing event port")
               return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
             }
 
@@ -214,7 +214,7 @@ object GclResolver {
             } else if (o.args.size == 2) { // MustSend(portIdent, expectedValue)
 
               if (aadlFeatureEvent.isInstanceOf[AadlEventPort]) {
-                reporter.error(o.posOpt, toolName, "Invalid MustSend expression. Expected value not supported for event ports")
+                reporter.error(o.fullPosOpt, toolName, "Invalid MustSend expression. Expected value not supported for event ports")
                 return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
               }
 
@@ -251,12 +251,12 @@ object GclResolver {
               return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(rexp))
 
             } else {
-              reporter.error(o.posOpt, toolName, "Invalid MustSend expression. Too many arguments")
+              reporter.error(o.fullPosOpt, toolName, "Invalid MustSend expression. Too many arguments")
               return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
             }
 
           case _ =>
-            reporter.error(o.posOpt, toolName, "Invalid MustSend expression. First argument must be an outgoing event port")
+            reporter.error(o.fullPosOpt, toolName, "Invalid MustSend expression. First argument must be an outgoing event port")
             return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
         }
 
@@ -269,7 +269,7 @@ object GclResolver {
               Exp.Ident(id, o.attr)
             case i: Exp.Ident => i
             case _ =>
-              reporter.error(o.posOpt, toolName, "Invalid NoSend expression. Argument must (currently) be the simple name of an outgoing event port")
+              reporter.error(o.fullPosOpt, toolName, "Invalid NoSend expression. Argument must (currently) be the simple name of an outgoing event port")
               return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
           }
 
@@ -289,12 +289,12 @@ object GclResolver {
 
               return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(isEmpty))
             case _ =>
-              reporter.error(o.posOpt, toolName, "Invalid NoSend expression. Can only be applied to outgoing event ports")
+              reporter.error(o.fullPosOpt, toolName, "Invalid NoSend expression. Can only be applied to outgoing event ports")
               return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
           }
         }
         else {
-          reporter.error(o.posOpt, toolName, "Invalid NoSend expression. Requires an outgoing event port")
+          reporter.error(o.fullPosOpt, toolName, "Invalid NoSend expression. Requires an outgoing event port")
           return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
         }
       } else if (o.ident.id.value == uif__HasEvent) {
@@ -306,7 +306,7 @@ object GclResolver {
               Exp.Ident(id, o.attr)
             case i: Exp.Ident => i
             case _ =>
-              reporter.error(o.posOpt, toolName, "Invalid HasEvent expression. Argument must (currently) be the simple name of an incoming event port")
+              reporter.error(o.fullPosOpt, toolName, "Invalid HasEvent expression. Argument must (currently) be the simple name of an incoming event port")
               return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
           }
 
@@ -326,12 +326,12 @@ object GclResolver {
 
               return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(isEmpty))
             case _ =>
-              reporter.error(o.posOpt, toolName, "Invalid HasEvent expression. Can only be applied to incoming event ports")
+              reporter.error(o.fullPosOpt, toolName, "Invalid HasEvent expression. Can only be applied to incoming event ports")
               return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
           }
         }
         else {
-          reporter.error(o.posOpt, toolName, "Invalid HasEvent expression. Requires an incoming event port")
+          reporter.error(o.fullPosOpt, toolName, "Invalid HasEvent expression. Requires an incoming event port")
           return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
         }
       }
@@ -343,7 +343,7 @@ object GclResolver {
     override def pre_langastExpSelect(o: Exp.Select): org.sireum.hamr.ir.MTransformer.PreResult[Exp] = {
       o.receiverOpt match {
         case Some(i: Exp.This) =>
-          lookup(o.id.value, o.resOpt, o.posOpt) match {
+          lookup(o.id.value, o.resOpt, o.fullPosOpt) match {
             case Some(s) => symbols = symbols + s
             case _ =>
           }
@@ -360,8 +360,8 @@ object GclResolver {
                 case AadlSymbolHolder(p: AadlPort) =>
                   apiReferences = apiReferences + p
 
-                  val emptyAttr = AST.Attr(posOpt = o.posOpt)
-                  val emptyRAttr = AST.ResolvedAttr(posOpt = o.posOpt, resOpt = None(), typedOpt = None())
+                  val emptyAttr = AST.Attr(posOpt = o.fullPosOpt)
+                  val emptyRAttr = AST.ResolvedAttr(posOpt = o.fullPosOpt, resOpt = None(), typedOpt = None())
 
                   // api.portid
                   val apiIdent: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = emptyAttr), attr = emptyRAttr)
@@ -394,8 +394,8 @@ object GclResolver {
     }
 
     override def post_langastExpInvoke(o: Exp.Invoke): MOption[Exp] = {
-      val emptyAttr = AST.Attr(posOpt = o.posOpt)
-      val emptyRAttr = AST.ResolvedAttr(posOpt = o.posOpt, resOpt = None(), typedOpt = None())
+      val emptyAttr = AST.Attr(posOpt = o.fullPosOpt)
+      val emptyRAttr = AST.ResolvedAttr(posOpt = o.fullPosOpt, resOpt = None(), typedOpt = None())
 
       val receiverOpt: Option[Exp] = {
         o.attr.resOpt.get match {
@@ -406,7 +406,7 @@ object GclResolver {
             o.receiverOpt match {
               case s@Some(AST.Exp.Select(_, rid, _)) =>
                 if (rid.value != GUMBO__Library) {
-                  reporter.error(o.posOpt, toolName, s"Expecting the method ${rid.value} to be in a synthetic package called ${GUMBO__Library}")
+                  reporter.error(o.fullPosOpt, toolName, s"Expecting the method ${rid.value} to be in a synthetic package called ${GUMBO__Library}")
                 }
                 s
               case _ =>
@@ -416,7 +416,7 @@ object GclResolver {
                   o.attr.resOpt match {
                     case Some(ri: ResolvedInfo.Method) => ri.owner
                     case _ =>
-                      reporter.error(o.posOpt, toolName, s"Couldn't resolve owner of ${o}")
+                      reporter.error(o.fullPosOpt, toolName, s"Couldn't resolve owner of ${o}")
                       ISZ("<INVALID>")
                   }
                 }
@@ -450,10 +450,10 @@ object GclResolver {
           processIdent(o) match {
             case Some(GclSymbolHolder(g: GclStateVar)) =>
             case _ =>
-              reporter.error(o.posOpt, toolName, s"Only state vars can be used in In expressions")
+              reporter.error(o.fullPosOpt, toolName, s"Only state vars can be used in In expressions")
           }
         case _ =>
-          reporter.error(o.posOpt, toolName, s"Currently only allowing the simple name of state vars to be used in In expressions")
+          reporter.error(o.fullPosOpt, toolName, s"Currently only allowing the simple name of state vars to be used in In expressions")
       }
 
       return MNone()
@@ -468,8 +468,8 @@ object GclResolver {
             case AadlSymbolHolder(p: AadlPort) if rewriteApiCalls =>
               apiReferences = apiReferences + p
 
-              val emptyAttr = AST.Attr(posOpt = o.posOpt)
-              val emptyRAttr = AST.ResolvedAttr(posOpt = o.posOpt, resOpt = None(), typedOpt = None())
+              val emptyAttr = AST.Attr(posOpt = o.fullPosOpt)
+              val emptyRAttr = AST.ResolvedAttr(posOpt = o.fullPosOpt, resOpt = None(), typedOpt = None())
 
               if (optHandledPort.nonEmpty && optHandledPort.get == p) {
                 // the ident is referring to the handled event port so use the passed
@@ -493,9 +493,9 @@ object GclResolver {
 
                 return MSome(sel)
               }
-            case GclSymbolHolder(s : GclStateVar) if isContextGeneralAssumeClause =>
+            case GclSymbolHolder(s: GclStateVar) if isContextGeneralAssumeClause =>
               // In(s)
-              return MSome(Exp.Input(o, AST.Attr(o.posOpt)))
+              return MSome(Exp.Input(o, AST.Attr(o.fullPosOpt)))
             case _ =>
           }
 
@@ -643,7 +643,10 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
     return newStmt
   }
 
-  @strictpure def toKey(e: AST.Exp): SymTableKey = SymTableKey(e, e.posOpt)
+  @pure def toKey(e: AST.Exp): SymTableKey = {
+    assert(e.fullPosOpt.nonEmpty, e.string)
+    return SymTableKey(e, e.fullPosOpt)
+  }
 
   def visitGclMethod(gclMethod: GclMethod,
                      typeHierarchy: TypeHierarchy,
@@ -746,14 +749,14 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 //rexprs = rexprs + (exp ~> rexp)
                 rexp
               case Some(x) =>
-                reporter.error(exp.posOpt, GclResolver.toolName, s"Expecting B but found ${x}")
+                reporter.error(exp.fullPosOpt, GclResolver.toolName, s"Expecting B but found ${x}")
                 exp
               case _ =>
                 assert(reporter.hasError, "Expression is untyped so Tipe should have reported errors already") // sanity check
                 exp
             }
           case _ =>
-            reporter.error(exp.posOpt, GclResolver.toolName, "Unexpected: type checking returned none")
+            reporter.error(exp.fullPosOpt, GclResolver.toolName, "Unexpected: type checking returned none")
             exp
         }
         return rexp
@@ -765,7 +768,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
       for (i <- s.invariants) {
         if (seenInvariantIds.contains(i.id)) {
-          reporter.error(i.exp.posOpt, GclResolver.toolName, s"Duplicate invariant id: ${i.id}")
+          reporter.error(i.exp.fullPosOpt, GclResolver.toolName, s"Duplicate invariant id: ${i.id}")
         }
         seenInvariantIds = seenInvariantIds + i.id
         visitInvariant(i)
@@ -778,7 +781,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         for (glcIntegSpec <- gclIntegration.specs) {
 
           if (seenSpecNames.contains(glcIntegSpec.id)) {
-            reporter.error(glcIntegSpec.exp.posOpt, GclResolver.toolName, s"Duplicate spec name: ${glcIntegSpec.id}")
+            reporter.error(glcIntegSpec.exp.fullPosOpt, GclResolver.toolName, s"Duplicate spec name: ${glcIntegSpec.id}")
           }
           seenSpecNames = seenSpecNames + glcIntegSpec.id
 
@@ -798,11 +801,11 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                     case AadlSymbolHolder(sym: AadlPort) => portRefs = portRefs + sym
                     case GclSymbolHolder(sym: GclMethod) => // TODO: collect port refs in method args
                     case x =>
-                      reporter.error(glcIntegSpec.exp.posOpt, toolName, s"Error in integration spec.  Not expecting to encounter ${x}")
+                      reporter.error(glcIntegSpec.exp.fullPosOpt, toolName, s"Error in integration spec.  Not expecting to encounter ${x}")
                   }
                 }
                 if (portRefs.size != 1) {
-                  reporter.error(glcIntegSpec.exp.posOpt, GclResolver.toolName, s"An integration clause must refer to exactly one port")
+                  reporter.error(glcIntegSpec.exp.fullPosOpt, GclResolver.toolName, s"An integration clause must refer to exactly one port")
                   None()
                 } else {
                   Some(portRefs.elements(0))
@@ -818,11 +821,11 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 sym.direction match {
                   case Direction.Out =>
                     if (!glcIntegSpec.isInstanceOf[GclGuarantee]) {
-                      reporter.error(glcIntegSpec.exp.posOpt, GclResolver.toolName, s"Integration contracts for outgoing ports must be Guarantee statements")
+                      reporter.error(glcIntegSpec.exp.fullPosOpt, GclResolver.toolName, s"Integration contracts for outgoing ports must be Guarantee statements")
                     }
                   case Direction.In =>
                     if (!glcIntegSpec.isInstanceOf[GclAssume]) {
-                      reporter.error(glcIntegSpec.exp.posOpt, GclResolver.toolName, s"Integration contracts for incoming ports must be Assume statements")
+                      reporter.error(glcIntegSpec.exp.fullPosOpt, GclResolver.toolName, s"Integration contracts for incoming ports must be Assume statements")
                     }
                   case x => halt(s"Other phase rejects this case: ${x}")
                 }
@@ -841,24 +844,24 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 val (rexp2, symbols, _) = GclResolver.collectSymbols(rexp, RewriteMode.Api, context, F, s.state, gclMethods, symbolTable, reporter)
                 if (!reporter.hasError) {
                   if (symbols.size != 1) {
-                    reporter.error(e.posOpt, GclResolver.toolName, s"From/To expressions should resolve to exactly one symbol, instead resolved to ${symbols.size}")
+                    reporter.error(e.fullPosOpt, GclResolver.toolName, s"From/To expressions should resolve to exactly one symbol, instead resolved to ${symbols.size}")
                   }
                   symbols(0) match {
                     case AadlSymbolHolder(sym) =>
                       sym match {
                         case p: AadlPort =>
                           if (isFrom && p.direction != Direction.In) {
-                            reporter.error(e.posOpt, GclResolver.toolName, s"Only in ports are allowed in From flow clauses")
+                            reporter.error(e.fullPosOpt, GclResolver.toolName, s"Only in ports are allowed in From flow clauses")
                           }
                           if (!isFrom && p.direction != Direction.Out) {
-                            reporter.error(e.posOpt, GclResolver.toolName, s"Only out ports are allowed in To flow clauses")
+                            reporter.error(e.fullPosOpt, GclResolver.toolName, s"Only out ports are allowed in To flow clauses")
                           }
                         case _ =>
-                          reporter.error(e.posOpt, GclResolver.toolName, s"From/To flow clauses can only contain ports and state vars")
+                          reporter.error(e.fullPosOpt, GclResolver.toolName, s"From/To flow clauses can only contain ports and state vars")
                       }
                     case GclSymbolHolder(sym) =>
                       if (!sym.isInstanceOf[GclStateVar]) {
-                        reporter.error(e.posOpt, GclResolver.toolName, s"From/To flow clauses can only contain ports and state vars")
+                        reporter.error(e.fullPosOpt, GclResolver.toolName, s"From/To flow clauses can only contain ports and state vars")
                       }
                   }
                   if (rexp2.isEmpty) {
@@ -886,27 +889,27 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
                   if (!reporter.hasError) {
                     if (symbols.size != 1) {
-                      reporter.error(e.posOpt, GclResolver.toolName, s"Modifies should resolve to exactly one symbol, instead resolved to ${symbols.size}")
+                      reporter.error(e.fullPosOpt, GclResolver.toolName, s"Modifies should resolve to exactly one symbol, instead resolved to ${symbols.size}")
                     } else if (rexp2.isEmpty) {
-                      reporter.error(e.posOpt, GclResolver.toolName, s"Unexpected rewrite failure on modifies clause: ${e}")
+                      reporter.error(e.fullPosOpt, GclResolver.toolName, s"Unexpected rewrite failure on modifies clause: ${e}")
                     } else {
                       symbols(0) match {
                         case AadlSymbolHolder(p: AadlPort) if p.direction == Direction.Out =>
                           // modifies clause should just be "api" rather than "portName"
-                          val apiIdent: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = AST.Attr(posOpt = e.posOpt)),
-                            attr = AST.ResolvedAttr(posOpt = e.posOpt, resOpt = None(), typedOpt = None()))
+                          val apiIdent: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = AST.Attr(posOpt = e.fullPosOpt)),
+                            attr = AST.ResolvedAttr(posOpt = e.fullPosOpt, resOpt = None(), typedOpt = None()))
                           rexprs = rexprs + toKey(e) ~> apiIdent
                         case GclSymbolHolder(GclStateVar(_, _, _)) =>
                           rexprs = rexprs + toKey(e) ~> rexp2.get
                         case x =>
-                          reporter.error(modifies.posOpt, GclResolver.toolName, s"Modifies expressions must be the simple name of an outgoing port or a state variable, found ${x}.")
+                          reporter.error(modifies.fullPosOpt, GclResolver.toolName, s"Modifies expressions must be the simple name of an outgoing port or a state variable, found ${x}.")
                       }
                     }
                   }
                 case _ => halt("TODO")
               }
             case _ =>
-              reporter.error(modifies.posOpt, GclResolver.toolName, s"Modifies expressions must be the simple name of an outgoing port or a state variable, found ${modifies}")
+              reporter.error(modifies.fullPosOpt, GclResolver.toolName, s"Modifies expressions must be the simple name of an outgoing port or a state variable, found ${modifies}")
           }
         }
       }
@@ -970,7 +973,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                   for (sym <- symbols) {
                     sym match {
                       case AadlSymbolHolder(i: AadlPort) if i.direction == Direction.Out =>
-                        reporter.error(spec.exp.posOpt, toolName, "Assume clauses cannot refer to outgoing ports")
+                        reporter.error(spec.exp.fullPosOpt, toolName, "Assume clauses cannot refer to outgoing ports")
                       case _ =>
                     }
                   }
@@ -1000,7 +1003,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               for (sym <- symbols) {
                 sym match {
                   case AadlSymbolHolder(i: AadlPort) if i.direction == Direction.Out =>
-                    reporter.error(caase.assumes.posOpt, toolName, "Assume clauses cannot refer to outgoing ports")
+                    reporter.error(caase.assumes.fullPosOpt, toolName, "Assume clauses cannot refer to outgoing ports")
                   case _ =>
                 }
               }
@@ -1031,17 +1034,17 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 val (_, symbols, _) = GclResolver.collectSymbols(rexp, RewriteMode.Normal, context, F, s.state, gclMethods, symbolTable, reporter)
                 if (!reporter.hasError) {
                   if (symbols.size != 1) {
-                    reporter.error(handler.port.posOpt, GclResolver.toolName, s"Handler should resolve to exactly one symbol, instead resolved to ${symbols.size}")
+                    reporter.error(handler.port.fullPosOpt, GclResolver.toolName, s"Handler should resolve to exactly one symbol, instead resolved to ${symbols.size}")
                   }
                   symbols(0) match {
                     case AadlSymbolHolder(p: AadlPort) =>
                       computeHandlerPortMap = computeHandlerPortMap + handler.port ~> p
 
                       if (p.direction != Direction.In || p.isInstanceOf[AadlDataPort]) {
-                        reporter.error(handler.port.posOpt, GclResolver.toolName, s"Compute handlers can only be applied to incoming event or event data ports")
+                        reporter.error(handler.port.fullPosOpt, GclResolver.toolName, s"Compute handlers can only be applied to incoming event or event data ports")
                       }
 
-                    case x => reporter.error(handler.port.posOpt, GclResolver.toolName, s"Handler should resolve to an AADL port but received $x")
+                    case x => reporter.error(handler.port.fullPosOpt, GclResolver.toolName, s"Handler should resolve to an AADL port but received $x")
                   }
                 }
               case _ => halt(s"TODO: ${handler.port} failed to type check")
@@ -1072,10 +1075,10 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             context match {
               case a: AadlDispatchableComponent =>
                 if (!a.isSporadic()) {
-                  reporter.error(handler.port.posOpt, GclResolver.toolName, s"Compute handlers can only be used with sporadic components")
+                  reporter.error(handler.port.fullPosOpt, GclResolver.toolName, s"Compute handlers can only be used with sporadic components")
                 }
               case _ =>
-                reporter.error(handler.port.posOpt, GclResolver.toolName, s"Unexpected: Compute handlers can only be used with dispatchable components")
+                reporter.error(handler.port.fullPosOpt, GclResolver.toolName, s"Unexpected: Compute handlers can only be used with dispatchable components")
             }
           }
 
@@ -1107,12 +1110,12 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               } else {
                 rexprs = rexprs + (toKey(i.exp) ~> rexp2.get)
               }
-            case Some(x) => reporter.error(i.exp.posOpt, GclResolver.toolName, s"Expecting B but found ${x}")
+            case Some(x) => reporter.error(i.exp.fullPosOpt, GclResolver.toolName, s"Expecting B but found ${x}")
             case _ =>
               assert(reporter.hasError, "Invariant expression is untyped so Tipe should have reported errors already")
-            //reporter.error(i.exp.posOpt, GclResolver.toolName, "Invariant expression is untyped")
+            //reporter.error(i.exp.fullPosOpt, GclResolver.toolName, "Invariant expression is untyped")
           }
-        case _ => reporter.error(i.exp.posOpt, GclResolver.toolName, "Unexpected: type checking returned none")
+        case _ => reporter.error(i.exp.fullPosOpt, GclResolver.toolName, "Unexpected: type checking returned none")
       }
     }
 

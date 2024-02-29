@@ -114,7 +114,7 @@ object GclUtil {
           ureporter.error(op.posOpt, messageKind, s"binary: Was expecting a LitString holding a binary operator but received $op")
           "???"
       }
-      val posOpt = mergePos(left.posOpt, right.posOpt)
+      val posOpt = mergePos(left.fullPosOpt, right.fullPosOpt)
       return AST.Exp.Binary(left, o, right, AST.ResolvedAttr(posOpt = posOpt, resOpt = None(), typedOpt = None()), None())
     }
 
