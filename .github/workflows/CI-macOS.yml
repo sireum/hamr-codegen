@@ -20,7 +20,7 @@ jobs:
     name: '${{ matrix.testSuffix }}'
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: recursive
       - name: Retrieve versions.properties

@@ -28,7 +28,7 @@ jobs:
     name: 'VM Partition=${{ matrix.VM_PARTITION }}'
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           path: hamr-codegen
           submodules: recursive
