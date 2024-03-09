@@ -644,7 +644,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
   }
 
   @pure def toKey(e: AST.Exp): SymTableKey = {
-    assert(e.fullPosOpt.nonEmpty, e.string)
+    //assert(e.fullPosOpt.nonEmpty, e.string)
     return SymTableKey(e, e.fullPosOpt)
   }
 
