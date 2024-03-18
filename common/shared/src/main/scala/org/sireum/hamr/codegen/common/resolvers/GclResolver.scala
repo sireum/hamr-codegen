@@ -1603,7 +1603,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         bodyOpt = m.bodyOpt,
         attr = resolvedAttr)
 
-      val scopeNameMap: HashMap[String, Info] = {
+      val scopeNameMap: HashSMap[String, Info] = {
         val entries: ISZ[(String, Info)] = resolvedParams.map((p: AST.Param) => {
           val lv = Info.LocalVar(
             name = qualifiedMethodName :+ p.id.value,
@@ -1622,7 +1622,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           (p.id.value, lv)
         })
 
-        HashMap.empty[String, Info] ++ entries
+        HashSMap.empty[String, Info] ++ entries
       }
 
       val methodScope = Scope.Local(
