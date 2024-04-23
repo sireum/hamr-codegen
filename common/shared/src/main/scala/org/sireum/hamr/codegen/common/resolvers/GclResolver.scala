@@ -471,28 +471,20 @@ object GclResolver {
               val emptyAttr = AST.Attr(posOpt = o.fullPosOpt)
               val emptyRAttr = AST.ResolvedAttr(posOpt = o.fullPosOpt, resOpt = None(), typedOpt = None())
 
-              if (optHandledPort.nonEmpty && optHandledPort.get == p) {
-                // the ident is referring to the handled event port so use the passed
-                // in param instead (e.g. api.setPoint --> value)
+              // api.portId
+              val apiIdent: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = emptyAttr), attr = emptyRAttr)
+              val apiSelect = Exp.Select(receiverOpt = Some(apiIdent), id = o.id, targs = ISZ(), attr = getPortAttr(p))
 
-                return MSome(Exp.Ident(id = AST.Id(value = "value", attr = emptyAttr), attr = emptyRAttr))
+              val sel: Exp =
+                if (addGetToApiCalls && p.isInstanceOf[AadlEventDataPort]) {
+                  // api.portId.get
+                  Exp.Select(receiverOpt = Some(apiSelect), id = AST.Id("get", emptyAttr), targs = o.targs, attr = o.attr)
+                } else {
+                  apiSelect
+                }
 
-              } else {
+              return MSome(sel)
 
-                // api.portId
-                val apiIdent: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = emptyAttr), attr = emptyRAttr)
-                val apiSelect = Exp.Select(receiverOpt = Some(apiIdent), id = o.id, targs = ISZ(), attr = getPortAttr(p))
-
-                val sel: Exp =
-                  if (addGetToApiCalls && p.isInstanceOf[AadlEventDataPort]) {
-                    // api.portId.get
-                    Exp.Select(receiverOpt = Some(apiSelect), id = AST.Id("get", emptyAttr), targs = o.targs, attr = o.attr)
-                  } else {
-                    apiSelect
-                  }
-
-                return MSome(sel)
-              }
             case GclSymbolHolder(s: GclStateVar) if isContextGeneralAssumeClause =>
               // In(s)
               return MSome(Exp.Input(o, AST.Attr(o.fullPosOpt)))
@@ -1031,7 +1023,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
             visitSlangExp(handler.port) match {
               case Some((rexp, roptType)) =>
-                val (_, symbols, _) = GclResolver.collectSymbols(rexp, RewriteMode.Normal, context, F, s.state, gclMethods, symbolTable, reporter)
+                val (hexp, symbols, _) = GclResolver.collectSymbols(rexp, RewriteMode.Normal, context, F, s.state, gclMethods, symbolTable, reporter)
                 if (!reporter.hasError) {
                   if (symbols.size != 1) {
                     reporter.error(handler.port.fullPosOpt, GclResolver.toolName, s"Handler should resolve to exactly one symbol, instead resolved to ${symbols.size}")
@@ -1044,6 +1036,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                         reporter.error(handler.port.fullPosOpt, GclResolver.toolName, s"Compute handlers can only be applied to incoming event or event data ports")
                       }
 
+                      assert (hexp.nonEmpty, s"Infeasible that port ${handler.port} does not have a type")
+                      rexprs = rexprs + toKey(handler.port) ~> hexp.get
                     case x => reporter.error(handler.port.fullPosOpt, GclResolver.toolName, s"Handler should resolve to an AADL port but received $x")
                   }
                 }
