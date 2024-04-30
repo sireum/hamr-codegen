@@ -21,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        VM_PARTITION: [false]
+        VM_PARTITION: [false, true]
     name: 'VM Partition=${{ matrix.VM_PARTITION }}'
     steps:
       - name: Checkout
