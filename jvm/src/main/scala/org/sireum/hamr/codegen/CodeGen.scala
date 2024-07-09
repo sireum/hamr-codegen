@@ -21,6 +21,7 @@ import org.sireum.hamr.codegen.common.{DirectoryUtil, StringUtil}
 import org.sireum.hamr.ir.Aadl
 import org.sireum.message._
 import org.sireum.ops.StringOps
+import org.sireum.hamr.codegen.ros2.Ros2Codegen
 
 object CodeGen {
 
@@ -57,17 +58,19 @@ object CodeGen {
       cleanupPackageName(slangOutputDir.name)
     }
 
-    val (runArsit, runACT, hamrIntegration, isTranspilerProject, isSlangProject): (B, B, B, B, B) = options.platform match {
-      case JVM => (T, F, F, F, T)
+    val (runArsit, runACT, hamrIntegration, runRos2, isTranspilerProject, isSlangProject): (B, B, B, B, B, B) = options.platform match {
+      case JVM => (T, F, F, F, F, T)
 
-      case Linux => (T, F, F, T, T)
-      case Cygwin => (T, F, F, T, T)
-      case MacOS => (T, F, F, T, T)
+      case Linux => (T, F, F, F, T, T)
+      case Cygwin => (T, F, F, F, T, T)
+      case MacOS => (T, F, F, F, T, T)
 
-      case SeL4 => (T, T, T, T, T)
+      case SeL4 => (T, T, T, F, T, T)
 
-      case SeL4_Only => (F, T, F, F, F)
-      case SeL4_TB => (F, T, F, F, F)
+      case SeL4_Only => (F, T, F, F, F, F)
+      case SeL4_TB => (F, T, F, F, F, F)
+
+      case Ros2 => (F, F, F, T, F, F)
     }
 
     var reporterIndex = z"0"
@@ -90,6 +93,12 @@ object CodeGen {
     }
 
     val (rmodel, aadlTypes, symbolTable): (Aadl, AadlTypes, SymbolTable) = (result.get.model, result.get.types, result.get.symbolTable)
+
+    if (~reporter.hasError && runRos2) {
+      val results = Ros2Codegen().run(rmodel, options, aadlTypes, symbolTable, plugins, reporter)
+      return CodeGenResults(resources = results.fileResources, auxResources = ISZ())
+    }
+
     if (!reporter.hasError && runArsit) {
 
       val genBlessEntryPoints = false

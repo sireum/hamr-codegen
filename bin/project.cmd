@@ -17,6 +17,7 @@ exit /B %errorlevel%
 // #Sireum
 
 import org.sireum._
+import org.sireum.project.Module
 import org.sireum.project.ProjectUtil._
 import org.sireum.project.{Project, ProjectUtil}
 
@@ -28,11 +29,13 @@ val codegen = "hamr-codegen"
 
 val homeDir = Os.slashDir.up.canon
 
-var codegenJvm = moduleJvmPub(
-  id = codegen,
+var (codegenShared, codegenJvm): (Module, Module) = moduleSharedJvmPub(
+  baseId = codegen,
   baseDir = homeDir,
   jvmDeps = ISZ(act, arsit),
   jvmIvyDeps = ISZ(),
+  sharedDeps = ISZ("library-shared", "hamr-common-shared"),
+  sharedIvyDeps = ISZ(),
   pubOpt = pub(
     desc = "HAMR AADL Code Generator",
     url = "github.com/sireum/hamr-codegen",
@@ -55,6 +58,6 @@ if(externalTestDir.exists) {
   }
 }
 
-val project = Project.empty + codegenJvm
+val project = Project.empty + codegenShared + codegenJvm
 
 projectCli(Os.cliArgs, project)

@@ -13,6 +13,7 @@ import org.sireum.hamr.codegen.common.containers.{FileResource, Resource, Sireum
   'SeL4
   'SeL4_Only
   'SeL4_TB
+  'Ros2
 }
 
 @enum object CodeGenIpcMechanism {
