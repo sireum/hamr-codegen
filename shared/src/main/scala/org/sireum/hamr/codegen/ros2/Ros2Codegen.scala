@@ -6,7 +6,7 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.containers.FileResource
 import org.sireum.hamr.codegen.common.plugin.Plugin
-import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlDataPort, AadlEventDataPort, AadlEventPort, AadlThread, SymbolTable}
+import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlDataPort, AadlEventDataPort, AadlEventPort, AadlPort, AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.{CodeGenConfig, ResourceUtil}
 import org.sireum.hamr.ir
@@ -16,90 +16,65 @@ import org.sireum.ops.ISZOps
 
 @datatype class Ros2Results(val fileResources: ISZ[FileResource])
 
+
 @record class Ros2Codegen {
 
   val toolName: String = "Ros2Codegen"
 
   var resources: ISZ[FileResource] = ISZ()
-  var connections: ISZ[ST] = ISZ()
-  var seenConnections: HashMap[ISZ[String], ISZ[ISZ[String]]] = HashMap.empty
+  var threadComponents: ISZ[AadlThread] = ISZ()
+  var connectionMap: Map[ISZ[String], ISZ[ISZ[String]]] = Map.empty
 
-  def run(model: Aadl, options: CodeGenConfig, aadlTypes: AadlTypes, symbolTable: SymbolTable, plugins: MSZ[Plugin], reporter: Reporter): Ros2Results = {
-
-    for (t <- aadlTypes.typeMap.entries) {
-      resources = resources :+ ResourceUtil.createResourceH(
-        path = s"types/${t._2.nameProvider.packageName}/${t._2.nameProvider.typeName}.cpp",
-        content = st"// ${t._2.nameProvider.qualifiedTypeName} is a ${t._2.nameProvider.kind}",
-        overwrite = T, isDatatype = T)
-    }
-
+  // TODO: Implement ros2Options (python stuff and switching launch file stuff)
+  def run(model: Aadl, options: CodeGenConfig, ros2Options: (String, String), aadlTypes: AadlTypes, symbolTable: SymbolTable, plugins: MSZ[Plugin], reporter: Reporter): Ros2Results = {
     assert(model.components.size == 1)
 
-    processComponent(symbolTable.rootSystem, symbolTable, reporter)
+    mapConnections(symbolTable.rootSystem, symbolTable, reporter)
 
-    resources = resources :+ ResourceUtil.createResource(
-      path = s"arch/connections.cpp",
-      content =
-        st"""// Connections
-            |  ${(connections, "\n")}""",
-      overwrite = T
-    )
+    // TODO: Change pkg name..?
+    var files: ISZ[(ISZ[String], ST)] = IS()
+
+    // TODO: Maybe repeat this for xml and py launch files, add to files, remove the calls from genCpp and genPy?
+    ros2Options._1 match {
+      case "cpp" => files = Generator.genCppFiles(symbolTable.rootSystem.identifier, threadComponents, connectionMap, F)
+      case "py" => files = Generator.genPyFiles(symbolTable.rootSystem.identifier, threadComponents, connectionMap, F)
+      case _ => reporter.error(None(), toolName, s"Unknown code type: ${ros2Options._1}")
+    }
+
+    for (file <- files) {
+      var filePath: String = ""
+      for (s <- file._1) {
+        filePath = filePath.toString + s.toString + "/"
+      }
+      filePath = filePath.toString.stripSuffix("/".toString)
+
+      resources = resources :+ ResourceUtil.createResource(
+        path = filePath,
+        content = file._2,
+        overwrite = T
+      )
+    }
 
     return Ros2Results(fileResources = resources)
   }
 
-  def processComponent(c: AadlComponent, symbolTable: SymbolTable, reporter: Reporter): Unit = {
-    for(ci <- c.connectionInstances if allowConnection(ci, c.component, symbolTable, reporter)) {
-      processConnection(ci, symbolTable)
+  // Also adds threads to threadComponents
+  def mapConnections(c: AadlComponent, symbolTable: SymbolTable, reporter: Reporter): Unit = {
+    for(ci <- c.connectionInstances) {
+      processConnection(ci, c.component, symbolTable, reporter)
     }
 
-    c match {
-      case s: AadlThread => processThread(s)
-      case _ =>
+    if (c.isInstanceOf[AadlThread]) {
+      threadComponents = threadComponents :+ c.asInstanceOf[AadlThread]
     }
 
     for (sc <- c.subComponents) {
-      processComponent(sc, symbolTable, reporter)
+      mapConnections(sc, symbolTable, reporter)
     }
   }
 
-  def processThread(s: AadlThread): Unit = {
-    var ports: ISZ[ST] = ISZ()
-    for (p <- s.getPorts()) {
-      p match {
-        case a: AadlDataPort =>
-          ports = ports :+ st"// ${a.identifier} is a data port with payload ${a.aadlType.nameProvider.qualifiedTypeName}"
-        case a: AadlEventPort =>
-          ports = ports :+ st"// ${a.identifier} is an event port"
-        case a: AadlEventDataPort =>
-          ports = ports :+ st"// ${a.identifier} is an event data port with payload ${a.aadlType.nameProvider.qualifiedTypeName}"
-      }
-    }
-
-    resources = resources :+ ResourceUtil.createResource(
-      path = s"components/${s.identifier}.cpp",
-      content = st"""// ${s.identifier} is an ${if (s.isSporadic()) "sporadic" else "periodic"} AADL Thread
-                    |
-                    |// Ports:
-                    |  ${(ports, "\n")}""",
-      overwrite = T
-    )
-  }
-
-  def processConnection(ci: ConnectionInstance, symbolTable: SymbolTable): Unit = {
-    val srcComponentId = CommonUtil.getName(ci.src.component)
-    val srcFeatureId = ci.src.feature.get.name
-    val srcComponentFeatureId = symbolTable.featureMap.get(srcFeatureId).get.identifier
-
-    val dstComponentId = CommonUtil.getName(ci.dst.component)
-    val dstFeatureId = ci.dst.feature.get.name
-    val dstComponentFeatureId = symbolTable.featureMap.get(dstFeatureId).get.identifier
-
-    connections = connections :+ st"""// Connection(from = s"${srcComponentId}.${srcComponentFeatureId}",
-                                     |//              to = s"${dstComponentId}.${dstComponentFeatureId}")"""
-  }
-
-  def allowConnection(c: ConnectionInstance, srcComponent: Component, symbolTable: SymbolTable, reporter: Reporter): B = {
+  // Checks if a connection is allowed, and if so, processes it
+  def processConnection(c: ConnectionInstance, srcComponent: Component, symbolTable: SymbolTable, reporter: Reporter): B = {
     val str = s"${CommonUtil.getName(c.name)}  from  ${CommonUtil.getName(srcComponent.identifier)}"
 
     if (c.src.component == c.dst.component) {
@@ -128,16 +103,16 @@ import org.sireum.ops.ISZOps
     val srcName = c.src.feature.get.name
     val dstName = c.dst.feature.get.name
 
-    if (seenConnections.contains(srcName) && ISZOps(seenConnections.get(srcName).get).contains(dstName)) {
+    if (connectionMap.contains(srcName) && ISZOps(connectionMap.get(srcName).get).contains(dstName)) {
       reporter.info(None(), toolName, s"Skipping: already handled connection: ${srcName} to ${dstName}")
       return F
     }
 
     val seq: ISZ[ISZ[String]] =
-      if (!seenConnections.contains(srcName)) ISZ(dstName)
-      else seenConnections.get(srcName).get :+ dstName
+      if (!connectionMap.contains(srcName)) ISZ(dstName)
+      else connectionMap.get(srcName).get :+ dstName
 
-    seenConnections = seenConnections + (srcName ~> seq)
+    connectionMap = connectionMap + (srcName ~> seq)
 
     return T
   }

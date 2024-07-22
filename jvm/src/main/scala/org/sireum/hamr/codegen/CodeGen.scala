@@ -95,7 +95,8 @@ object CodeGen {
     val (rmodel, aadlTypes, symbolTable): (Aadl, AadlTypes, SymbolTable) = (result.get.model, result.get.types, result.get.symbolTable)
 
     if (~reporter.hasError && runRos2) {
-      val results = Ros2Codegen().run(rmodel, options, aadlTypes, symbolTable, plugins, reporter)
+      val ros2Options: (String, String) = ("cpp", "xml") // TODO: Replace this later
+      val results = Ros2Codegen().run(rmodel, options, ros2Options, aadlTypes, symbolTable, plugins, reporter)
       return CodeGenResults(resources = results.fileResources, auxResources = ISZ())
     }
 
