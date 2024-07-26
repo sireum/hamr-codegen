@@ -547,7 +547,7 @@ object Generator {
   // Example:
   //  temp_control_currentTemp_subscription_ = this->create_subscription<example_interfaces::msg::Int32>(
   //    "temp_control_currentTemp",
-  //     10,
+  //     1,
   //     std::bind(&TempControl::handle_currentTemp, this, std::placeholders::_1));
   def genCppTopicSubscription(inPort: AadlPort, nodeName: String, strictAADLMode: B): ST = {
     val portName = seqToString(inPort.path, "_")
@@ -563,7 +563,7 @@ object Generator {
     val portCode: ST =
       st"""${portName}_subscription_ = this->create_subscription<example_interfaces::msg::Int32>(
           |    "${portName}",
-          |    10,
+          |    1,
           |    std::bind(&${nodeName}::handle_${handlerName}, this, std::placeholders::_1), ${subscription_options_name});
         """
     return portCode
@@ -572,7 +572,7 @@ object Generator {
   // Example:
   //  temp_control_currentTemp_publisher_ = this->create_publisher<example_interfaces::msg::Int32>(
   //    "operator_interface_currentTemp",
-  //     10);
+  //     1);
   def genCppTopicPublisher(outPort: AadlPort, nodeName: String, inPortNames: ISZ[String]): ST = {
     val portName = seqToString(outPort.path, "_")
 
@@ -583,7 +583,7 @@ object Generator {
       val portCode: ST =
         st"""${portName}_publisher_ = this->create_publisher<example_interfaces::msg::Int32>(
             |    "${inPortName}",
-            |    10);
+            |    1);
           """
       return portCode
     }
@@ -596,7 +596,7 @@ object Generator {
       outputInstances = outputInstances :+
         st"""${portName}_publisher_${counter} = this->create_publisher<example_interfaces::msg::Int32>(
             |    "${inPortName}",
-            |    10);
+            |    1);
           """
       counter = counter + 1
     }

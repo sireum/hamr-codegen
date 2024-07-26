@@ -29,6 +29,8 @@ import org.sireum.ops.ISZOps
   def run(model: Aadl, options: CodeGenConfig, ros2Options: (String, String), aadlTypes: AadlTypes, symbolTable: SymbolTable, plugins: MSZ[Plugin], reporter: Reporter): Ros2Results = {
     assert(model.components.size == 1)
 
+    val modelName = getModelName(symbolTable)
+
     mapConnections(symbolTable.rootSystem, symbolTable, reporter)
 
     // TODO: Change pkg name..?
@@ -36,8 +38,8 @@ import org.sireum.ops.ISZOps
 
     // TODO: Maybe repeat this for xml and py launch files, add to files, remove the calls from genCpp and genPy?
     ros2Options._1 match {
-      case "cpp" => files = Generator.genCppFiles(symbolTable.rootSystem.identifier, threadComponents, connectionMap, F)
-      case "py" => files = Generator.genPyFiles(symbolTable.rootSystem.identifier, threadComponents, connectionMap, F)
+      case "cpp" => files = Generator.genCppFiles(modelName, threadComponents, connectionMap, F)
+      case "py" => files = Generator.genPyFiles(modelName, threadComponents, connectionMap, F)
       case _ => reporter.error(None(), toolName, s"Unknown code type: ${ros2Options._1}")
     }
 
@@ -115,6 +117,35 @@ import org.sireum.ops.ISZOps
     connectionMap = connectionMap + (srcName ~> seq)
 
     return T
+  }
+
+  def getModelName(symbolTable: SymbolTable): String = {
+    val name = symbolTable.rootSystem.component.classifier.get.name.toString
+    val cutoffIndex = name.indexOf("::".toString)
+    var ret = "".toString
+
+    if (name.charAt(0.toInt).isUpper) {
+      ret = s"${name.charAt(0.toInt).toLower}".toString
+    }
+
+    for (i <- 1 until cutoffIndex) {
+      val c = name.charAt(i.toInt)
+      if (c.isUpper) {
+        // if _ already?
+        // if multiple caps?
+        if (name.charAt((i-1).toInt).toString == "_".toString ||
+            name.charAt((i-1).toInt).isUpper) {
+          ret = ret.appended(c.toLower)
+        }
+        else {
+          ret = ret.appendedAll(s"_${c.toLower}".toString)
+        }
+      }
+      else {
+        ret = ret.appended(c)
+      }
+    }
+    return ret
   }
 
 }
