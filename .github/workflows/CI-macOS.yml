@@ -2,6 +2,8 @@ name: macOS
 
 on:
   push:
+  schedule:
+    - cron: "0 2 * * 6" # every sunday at 2am
   workflow_dispatch:
     inputs:
       verbose:
