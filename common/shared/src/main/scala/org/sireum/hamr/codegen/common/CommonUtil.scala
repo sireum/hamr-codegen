@@ -19,7 +19,7 @@ object CommonUtil {
   }
 
   def getLastName(n: ir.Name): String = {
-    return n.name(n.name.size - 1)
+    return n.name(n.name.lastIndex)
   }
 
   def getName(n: ir.Name): String = {

@@ -29,7 +29,7 @@ val codegen = "hamr-codegen"
 
 val homeDir = Os.slashDir.up.canon
 
-var (codegenShared, codegenJvm): (Module, Module) = moduleSharedJvmPub(
+var (codegenShared, codegenJvm) = moduleSharedJvmPub(
   baseId = codegen,
   baseDir = homeDir,
   jvmDeps = ISZ(act, arsit),

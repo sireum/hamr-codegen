@@ -891,7 +891,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                           val apiIdent: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = AST.Attr(posOpt = e.fullPosOpt)),
                             attr = AST.ResolvedAttr(posOpt = e.fullPosOpt, resOpt = None(), typedOpt = None()))
                           rexprs = rexprs + toKey(e) ~> apiIdent
-                        case GclSymbolHolder(GclStateVar(_, _, _)) =>
+                        case GclSymbolHolder(GclStateVar(_, _)) =>
                           rexprs = rexprs + toKey(e) ~> rexp2.get
                         case x =>
                           reporter.error(modifies.fullPosOpt, GclResolver.toolName, s"Modifies expressions must be the simple name of an outgoing port or a state variable, found ${x}.")
@@ -1157,7 +1157,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             val fqn = atn.name.ids.map((i: AST.Id) => i.value)
             val s = st"${(fqn, "::")}".render
 
-            val aadlType = aadlTypes.typeMap.get(s).get
+            val aadlType: AadlType = getAadlType(s, aadlTypes, value.posOpt, reporter)
             val typeInfo = buildTypeInfo(aadlType)
 
             val name: AST.Name = typeInfo match {
@@ -1236,7 +1236,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           outlined = F,
           contractOutlined = F,
           typeChecked = F,
-          tpe = AST.Typed.Name(ISZ("TODO"), ISZ()),
+          tpe = AST.Typed.Name(ISZ(s"TODO_${aadlType.name}"), ISZ()),
           constructorTypeOpt = None(),
           constructorResOpt = None(),
           extractorTypeMap = Map.empty,
@@ -1428,7 +1428,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
     }
 
     def buildPackageInfo(packageName: ISZ[String]): Info.Package = {
-      assert(packageName.size == 1, s"TODO: package name has more than one segment ${packageName}")
+      assert(packageName.size == 1, s"TODO: only expecting a single package name segment: ${packageName}")
 
       if (!globalNameMap.contains(packageName)) {
         globalNameMap = globalNameMap + packageName ~> Info.Package(
@@ -1670,7 +1670,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
       // treat stateVars as if they were features for Tipe
       val stateVars: ISZ[AadlPort] = gclAnnexes.flatMap((g: GclSubclause) => g.state.map((sv: GclStateVar) => {
-        val aadlType = aadlTypes.typeMap.get(sv.classifier).get
+        val aadlType = getAadlType(sv.classifier, aadlTypes, sv.posOpt, reporter)
         AadlDataPort(
           feature = FeatureEnd(
             identifier = Name(adtQualifiedName :+ sv.name, sv.posOpt),
@@ -2198,5 +2198,25 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       }
     }
     return ret
+  }
+
+  def getAadlType(s: String, aadlTypes: AadlTypes, posOpt: Option[Position], reporter: Reporter): AadlType = {
+    aadlTypes.typeMap.get(s) match {
+      case Some(t) => return t
+      case _ =>
+        val cands = aadlTypes.typeMap.keys.filter(k => ops.StringOps(k).endsWith(s))
+        if (cands.size == 1) {
+          return aadlTypes.typeMap.get(cands(0)).get
+        } else if (cands.size == 0) {
+          reporter.error(posOpt, GclResolver.toolName, "Could not resolve type")
+          println(s)
+          println(aadlTypes.typeMap.keys)
+          halt("")
+        } else {
+          reporter.error(posOpt, GclResolver.toolName, s"Too many candidate types for $s: $cands")
+          halt("")
+        }
+    }
+
   }
 }

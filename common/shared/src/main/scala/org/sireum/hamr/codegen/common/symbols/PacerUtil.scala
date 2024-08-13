@@ -47,6 +47,11 @@ object PacerUtil {
       processesWithThreads = processesWithThreads + p
     }
 
+    if (processesWithThreads.isEmpty) {
+      canUseDomainScheduling = F
+      mesg = mesg :+ st"No processes found."
+    }
+
     // - each process with a thread must have domain info
     if (canUseDomainScheduling) {
       var withoutDomain: ISZ[AadlProcess] = ISZ()
