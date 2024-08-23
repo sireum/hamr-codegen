@@ -110,6 +110,14 @@ object hamrCodeGenCli {
           description = "Root directory containing the AADL project"
         )
       )),
+      OptGroup(name = "SysML v2", opts = ISZ(
+        Opt(name = "systemRoot", longKey = "system", shortKey = None(),
+          tpe = Type.Str(sep = None(), default = None()),
+          description = "Fully qualified name of the system to instantiate"),
+        Opt(name = "sourcePaths", longKey = "source-paths", shortKey = None(),
+          tpe = Type.Path(multiple = T, default = None()),
+          description = "Source paths of SysML v2 .sysml files")
+      )),
       OptGroup(name = "Experimental", opts = ISZ(
         Opt(name = "experimentalOptions", longKey = "experimental-options", shortKey = Some('x'),
           tpe = Type.Str(sep = Some(';'), default = None()),

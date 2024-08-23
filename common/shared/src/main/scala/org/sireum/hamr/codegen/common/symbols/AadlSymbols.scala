@@ -62,6 +62,10 @@ import org.sireum.hamr.ir._
   def getDomainMappings(): Map[IdPath, Z] = {
     return PropertyUtil.getDomainMappings(component.properties)
   }
+
+  def classifier: String = {
+    return component.classifier.get.name
+  }
 }
 
 @sig trait Processor extends AadlComponent {

@@ -527,6 +527,26 @@ object GclResolver {
       return (rexp, sf.symbols.elements, sf.apiReferences.elements)
     }
   }
+
+  def getAadlType(s: String, aadlTypes: AadlTypes, posOpt: Option[Position], reporter: Reporter): AadlType = {
+    aadlTypes.typeMap.get(s) match {
+      case Some(t) => return t
+      case _ =>
+        val cands = aadlTypes.typeMap.keys.filter(k => ops.StringOps(k).endsWith(s))
+        if (cands.size == 1) {
+          return aadlTypes.typeMap.get(cands(0)).get
+        } else if (cands.size == 0) {
+          reporter.error(posOpt, GclResolver.toolName, "Could not resolve type")
+          println(s)
+          println(aadlTypes.typeMap.keys)
+          halt("")
+        } else {
+          reporter.error(posOpt, GclResolver.toolName, s"Too many candidate types for $s: $cands")
+          halt("")
+        }
+    }
+
+  }
 }
 
 import org.sireum.hamr.codegen.common.resolvers.GclResolver._
@@ -2200,23 +2220,4 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
     return ret
   }
 
-  def getAadlType(s: String, aadlTypes: AadlTypes, posOpt: Option[Position], reporter: Reporter): AadlType = {
-    aadlTypes.typeMap.get(s) match {
-      case Some(t) => return t
-      case _ =>
-        val cands = aadlTypes.typeMap.keys.filter(k => ops.StringOps(k).endsWith(s))
-        if (cands.size == 1) {
-          return aadlTypes.typeMap.get(cands(0)).get
-        } else if (cands.size == 0) {
-          reporter.error(posOpt, GclResolver.toolName, "Could not resolve type")
-          println(s)
-          println(aadlTypes.typeMap.keys)
-          halt("")
-        } else {
-          reporter.error(posOpt, GclResolver.toolName, s"Too many candidate types for $s: $cands")
-          halt("")
-        }
-    }
-
-  }
 }
