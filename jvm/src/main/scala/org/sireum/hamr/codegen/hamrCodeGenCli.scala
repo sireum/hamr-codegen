@@ -50,7 +50,10 @@ object hamrCodeGenCli {
       Opt(name = "platform", longKey = "platform", shortKey = Some('p'),
         tpe = Type.Choice(name = "HamrPlatform", sep = None(),
           elements = ISZ("JVM", "Linux", "Cygwin", "MacOS", "seL4", "seL4_Only", "seL4_TB", "ros2")),
-        description = "Target platform")
+        description = "Target platform"),
+      Opt(name = "parseableMessages", longKey = "parseable-messages", shortKey = None(),
+        tpe = Type.Flag(F),
+        description = "Print parseable file messages")
     ),
     groups = ISZ(
       OptGroup(name = "Slang", opts = ISZ(
