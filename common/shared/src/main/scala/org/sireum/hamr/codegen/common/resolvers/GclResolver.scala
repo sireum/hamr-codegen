@@ -532,20 +532,8 @@ object GclResolver {
     aadlTypes.typeMap.get(s) match {
       case Some(t) => return t
       case _ =>
-        val cands = aadlTypes.typeMap.keys.filter(k => ops.StringOps(k).endsWith(s))
-        if (cands.size == 1) {
-          return aadlTypes.typeMap.get(cands(0)).get
-        } else if (cands.size == 0) {
-          reporter.error(posOpt, GclResolver.toolName, "Could not resolve type")
-          println(s)
-          println(aadlTypes.typeMap.keys)
-          halt("")
-        } else {
-          reporter.error(posOpt, GclResolver.toolName, s"Too many candidate types for $s: $cands")
-          halt("")
-        }
+        halt(s"Unexpected: couldn't resolve an AADL type for $s")
     }
-
   }
 }
 

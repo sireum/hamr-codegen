@@ -11,6 +11,7 @@ import org.sireum.hamr.codegen.common.resolvers.{BTSResolver, GclResolver}
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, BaseType, TypeUtil}
 import org.sireum.hamr.codegen.common.util.{CodeGenConfig, CodeGenPlatform, ExperimentalOptions}
 import org.sireum.hamr.ir
+import org.sireum.hamr.ir.util.AadlUtil
 import org.sireum.hamr.ir.{Annex, AnnexLib, ComponentCategory}
 import org.sireum.message.{Position, Reporter}
 
@@ -357,7 +358,7 @@ object SymbolResolver {
           val period = PropertyUtil.getPeriod(c)
 
           val ret: AadlThreadOrDevice = if (c.category == ir.ComponentCategory.Device) {
-            AadlDevice(
+            val dev = AadlDevice(
               component = c,
               parent = parent,
               path = path,
@@ -367,11 +368,15 @@ object SymbolResolver {
               features = aadlFeatures,
               subComponents = subComponents,
               connectionInstances = c.connectionInstances)
+
+            checkSubcomponents(dev, subComponents)
+
+            dev
 
           } else {
             assert(c.category == ir.ComponentCategory.Thread)
 
-            AadlThread(
+            val thr = AadlThread(
               component = c,
               parent = parent,
               path = path,
@@ -381,6 +386,11 @@ object SymbolResolver {
               features = aadlFeatures,
               subComponents = subComponents,
               connectionInstances = c.connectionInstances)
+
+            checkSubcomponents(thr, subComponents)
+
+            thr
+
           }
           return ret
         }
@@ -399,6 +409,8 @@ object SymbolResolver {
           features = aadlFeatures,
           connectionInstances = ISZ())
 
+        checkSubcomponents(ret, ISZ())
+
         return ret
       }
 
@@ -406,7 +418,7 @@ object SymbolResolver {
         case ir.ComponentCategory.System => {
           val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, path)
 
-          AadlSystem(
+          val sys = AadlSystem(
             component = c,
             parent = parent,
             path = path,
@@ -414,10 +426,14 @@ object SymbolResolver {
             features = aadlFeatures,
             subComponents = subComponents,
             connectionInstances = c.connectionInstances)
+
+          checkSubcomponents(sys, subComponents)
+
+          sys
         }
         case ir.ComponentCategory.Processor => {
           assert(c.subComponents.isEmpty, s"Need to handle subcomponents of ${c.category}: ${identifier}")
-          AadlProcessor(
+          val proc = AadlProcessor(
             component = c,
             parent = ISZ(),
             path = path,
@@ -425,6 +441,10 @@ object SymbolResolver {
             features = aadlFeatures,
             subComponents = ISZ(),
             connectionInstances = c.connectionInstances)
+
+          checkSubcomponents(proc, ISZ())
+
+          proc
         }
         case ir.ComponentCategory.VirtualProcessor => {
           assert(c.subComponents.isEmpty, s"Need to handle subcomponents of ${c.category}? ${identifier}")
@@ -443,7 +463,7 @@ object SymbolResolver {
 
           val period = PropertyUtil.getPeriod(c)
 
-          AadlVirtualProcessor(
+          val vproc = AadlVirtualProcessor(
             component = c,
             parent = ISZ(),
             path = path,
@@ -455,6 +475,10 @@ object SymbolResolver {
             period = period,
             boundProcessor = boundProcessor
           )
+
+          checkSubcomponents(vproc, ISZ())
+
+          vproc
         }
         case ir.ComponentCategory.Process => {
           val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, path)
@@ -468,7 +492,7 @@ object SymbolResolver {
             case _ =>
           }
 
-          AadlProcess(
+          val proc = AadlProcess(
             component = c,
             parent = parent,
             path = path,
@@ -477,6 +501,10 @@ object SymbolResolver {
             subComponents = subComponents,
             features = aadlFeatures,
             connectionInstances = c.connectionInstances)
+
+          checkSubcomponents(proc, subComponents)
+
+          proc
         }
 
         case ir.ComponentCategory.Device => handleDeviceOrThread()
@@ -486,7 +514,7 @@ object SymbolResolver {
         case ir.ComponentCategory.ThreadGroup =>
           val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, path)
 
-          AadlThreadGroup(
+          val tgroup = AadlThreadGroup(
             component = c,
             parent = parent,
             path = path,
@@ -494,13 +522,17 @@ object SymbolResolver {
             features = aadlFeatures,
             subComponents = subComponents,
             connectionInstances = c.connectionInstances)
+
+          checkSubcomponents(tgroup, subComponents)
+
+          tgroup
 
         case ir.ComponentCategory.Subprogram => handleSubprogram()
 
         case ir.ComponentCategory.SubprogramGroup =>
           val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, path)
 
-          AadlSubprogramGroup(
+          val sub = AadlSubprogramGroup(
             component = c,
             parent = parent,
             path = path,
@@ -508,6 +540,10 @@ object SymbolResolver {
             features = aadlFeatures,
             subComponents = subComponents,
             connectionInstances = c.connectionInstances)
+
+          checkSubcomponents(sub, subComponents)
+
+          sub
 
         case ir.ComponentCategory.Data =>
           val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, path)
@@ -517,7 +553,7 @@ object SymbolResolver {
             case _ => None()
           }
 
-          AadlData(
+          val data = AadlData(
             component = c,
             parent = parent,
             path = path,
@@ -527,10 +563,14 @@ object SymbolResolver {
             subComponents = subComponents,
             connectionInstances = c.connectionInstances)
 
+          checkSubcomponents(data, subComponents)
+
+          data
+
         case ir.ComponentCategory.Bus =>
           val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, path)
 
-          AadlBus(
+          val bus = AadlBus(
             component = c,
             parent = parent,
             path = path,
@@ -538,11 +578,15 @@ object SymbolResolver {
             features = aadlFeatures,
             subComponents = subComponents,
             connectionInstances = c.connectionInstances)
+
+          checkSubcomponents(bus, subComponents)
+
+          bus
 
         case ir.ComponentCategory.VirtualBus =>
           val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, path)
 
-          AadlVirtualBus(
+          val vbus = AadlVirtualBus(
             component = c,
             parent = parent,
             path = path,
@@ -550,11 +594,15 @@ object SymbolResolver {
             features = aadlFeatures,
             subComponents = subComponents,
             connectionInstances = c.connectionInstances)
+
+          checkSubcomponents(vbus, subComponents)
+
+          vbus
 
         case ir.ComponentCategory.Memory =>
           val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, path)
 
-          AadlMemory(
+          val mem = AadlMemory(
             component = c,
             parent = parent,
             path = path,
@@ -562,11 +610,15 @@ object SymbolResolver {
             features = aadlFeatures,
             subComponents = subComponents,
             connectionInstances = c.connectionInstances)
+
+          checkSubcomponents(mem, subComponents)
+
+          mem
 
         case ir.ComponentCategory.Abstract =>
           val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, path)
 
-          AadlAbstract(
+          val abs = AadlAbstract(
             component = c,
             parent = parent,
             path = path,
@@ -574,6 +626,10 @@ object SymbolResolver {
             features = aadlFeatures,
             subComponents = subComponents,
             connectionInstances = c.connectionInstances)
+
+          checkSubcomponents(abs, subComponents)
+
+          abs
       }
 
       componentMap = componentMap + (path ~> aadlComponent)
@@ -582,6 +638,18 @@ object SymbolResolver {
       classifierMap = classifierMap + (classifierPath ~> (instances :+ aadlComponent))
 
       return aadlComponent
+    }
+
+    def checkSubcomponents(c: AadlComponent, subcomponents: ISZ[AadlComponent]): B = {
+
+      var allValid = T
+      for (sc <- subcomponents) {
+        if (!AadlUtil.isValidSubcomponent(c.component.category, sc.component.category)) {
+          reporter.error(c.component.identifier.pos, CommonUtil.toolName, s"A ${sc.component.category} cannot be a subcomponent of a ${c.component.category}")
+          allValid = F
+        }
+      }
+      return allValid
     }
 
     val aadlSystem = buildAadlComponent(system, ISZ()).asInstanceOf[AadlSystem]
@@ -659,6 +727,10 @@ object SymbolResolver {
     val annexClauseInfos: HashSMap[IdPath, ISZ[AnnexClauseInfo]] = HashSMap.empty
 
     val annexLibInfos: ISZ[AnnexLibInfo] = ISZ()
+
+    if (reporter.hasError) {
+      return None()
+    }
 
     val symbolTable = SymbolTable(
 
