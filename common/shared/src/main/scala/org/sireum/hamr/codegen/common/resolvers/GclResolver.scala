@@ -815,13 +815,15 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               if (portRef.nonEmpty) {
                 val sym = portRef.get
                 if (expTrans.nonEmpty) {
-                  rexprs = rexprs + toKey(glcIntegSpec.exp) ~> expTrans.get
+                  // update the spec here as well as its expression will be handed off
+                  // to tipe for integration constraint checking
                   glcIntegSpec match {
                     case a: GclAssume =>
                       integrationMap = integrationMap + sym ~> a(exp = expTrans.get)
                     case g: GclGuarantee =>
                       integrationMap = integrationMap + sym ~> g(exp = expTrans.get)
                   }
+                  rexprs = rexprs + toKey(expTrans.get) ~> expTrans.get
                 } else {
                   integrationMap = integrationMap + sym ~> glcIntegSpec
                 }
