@@ -3,6 +3,7 @@ package org.sireum.hamr.codegen.common.symbols
 
 import org.sireum._
 import org.sireum.hamr.ir.GclSpec
+import org.sireum.lang.tipe.TypeHierarchy
 import org.sireum.lang.{ast => AST}
 import org.sireum.message.Position
 
@@ -10,6 +11,7 @@ import org.sireum.message.Position
                             val posOpt: Option[Position])
 
 @datatype class GclSymbolTable(val rexprs: HashMap[SymTableKey, AST.Exp], // tipe resolved exprs
+                               val slangTypeHierarchy: TypeHierarchy,
 
                                val apiReferences: ISZ[AadlPort], // all ports referenced in exprs
                                val integrationMap: Map[AadlPort, GclSpec],

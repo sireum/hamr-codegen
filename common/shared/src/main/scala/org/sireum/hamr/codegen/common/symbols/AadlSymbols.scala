@@ -39,6 +39,13 @@ import org.sireum.hamr.ir._
     return features.filter(p => p.isInstanceOf[AadlPort]).map(m => m.asInstanceOf[AadlPort])
   }
 
+  def getPortByPath(path: ISZ[String]): Option[AadlPort] = {
+    getPorts().filter(p => p.path == path) match {
+      case ISZ(p) => return Some(p)
+      case _ => return None()
+    }
+  }
+
   def annexes(): ISZ[ir.Annex] = {
     return component.annexes
   }

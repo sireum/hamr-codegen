@@ -708,6 +708,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
     val gclSymTable = GclSymbolTable(
       rexprs = rexprs,
+      slangTypeHierarchy = typeHierarchy,
       apiReferences = ISZ(),
       integrationMap = Map.empty,
       computeHandlerPortMap = Map.empty)
@@ -812,11 +813,18 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 }
               }
               if (portRef.nonEmpty) {
+                val sym = portRef.get
                 if (expTrans.nonEmpty) {
                   rexprs = rexprs + toKey(glcIntegSpec.exp) ~> expTrans.get
+                  glcIntegSpec match {
+                    case a: GclAssume =>
+                      integrationMap = integrationMap + sym ~> a(exp = expTrans.get)
+                    case g: GclGuarantee =>
+                      integrationMap = integrationMap + sym ~> g(exp = expTrans.get)
+                  }
+                } else {
+                  integrationMap = integrationMap + sym ~> glcIntegSpec
                 }
-                val sym = portRef.get
-                integrationMap = integrationMap + sym ~> glcIntegSpec
 
                 sym.direction match {
                   case Direction.Out =>
@@ -1132,7 +1140,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
     visitGclSubclause(annex)
 
-    return Some(GclSymbolTable(rexprs, apiReferences.elements, integrationMap, computeHandlerPortMap))
+    return Some(GclSymbolTable(rexprs, typeHierarchy, apiReferences.elements, integrationMap, computeHandlerPortMap))
   }
 
   def scope(packageName: IdPath, imports: ISZ[AST.Stmt.Import], enclosingName: IdPath): Scope.Global = {
