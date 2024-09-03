@@ -900,8 +900,6 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                   if (!reporter.hasError) {
                     if (symbols.size != 1) {
                       reporter.error(e.fullPosOpt, GclResolver.toolName, s"Modifies should resolve to exactly one symbol, instead resolved to ${symbols.size}")
-                    } else if (rexp2.isEmpty) {
-                      reporter.error(e.fullPosOpt, GclResolver.toolName, s"Unexpected rewrite failure on modifies clause: ${e}")
                     } else {
                       symbols(0) match {
                         case AadlSymbolHolder(p: AadlPort) if p.direction == Direction.Out =>
@@ -910,7 +908,10 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                             attr = AST.ResolvedAttr(posOpt = e.fullPosOpt, resOpt = None(), typedOpt = None()))
                           rexprs = rexprs + toKey(e) ~> apiIdent
                         case GclSymbolHolder(GclStateVar(_, _)) =>
-                          rexprs = rexprs + toKey(e) ~> rexp2.get
+                          rexp2 match {
+                            case MSome(re2) => rexprs = rexprs + toKey(e) ~> re2
+                            case _ => rexprs = rexprs + toKey(e) ~> rexp
+                          }
                         case x =>
                           reporter.error(modifies.fullPosOpt, GclResolver.toolName, s"Modifies expressions must be the simple name of an outgoing port or a state variable, found ${x}.")
                       }
@@ -1054,8 +1055,10 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                         reporter.error(handler.port.fullPosOpt, GclResolver.toolName, s"Compute handlers can only be applied to incoming event or event data ports")
                       }
 
-                      assert (hexp.nonEmpty, s"Infeasible that port ${handler.port} does not have a type")
-                      rexprs = rexprs + toKey(handler.port) ~> hexp.get
+                      hexp match {
+                        case MSome(hexpresolved) => rexprs = rexprs + toKey(handler.port) ~> hexpresolved
+                        case _ => rexprs = rexprs + toKey(handler.port) ~> rexp
+                      }
                     case x => reporter.error(handler.port.fullPosOpt, GclResolver.toolName, s"Handler should resolve to an AADL port but received $x")
                   }
                 }
@@ -1137,7 +1140,11 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       val mode = TypeChecker.ModeContext.Spec
       val typeChecker: TypeChecker = TypeChecker(typeHierarchy, scontext, F, mode, F)
 
-      return Some(typeChecker.checkExp(None(), scope, exp, reporter))
+      val typeChecked = typeChecker.checkExp(None(), scope, exp, reporter)
+
+      assert(typeChecked._2.nonEmpty, s"Could not resolve type of ${exp}")
+
+      return Some(typeChecked)
     }
 
     visitGclSubclause(annex)
@@ -1152,6 +1159,17 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
   def getPathFromClassifier(s: String): ISZ[String] = {
     return ops.StringOps(ops.StringOps(s).replaceAllLiterally("::", "|")).split((c: C) => c == '|')
   }
+
+  def declareName(entity: String, name: QName, info: Info, posOpt: Option[Position], reporter: Reporter): Unit = {
+    assert(name == info.name)
+    globalNameMap.get(name) match {
+      case Some(_) =>
+        reporter
+          .error(posOpt, GclResolver.toolName, s"Cannot declare $entity because the name has already been declared previously.")
+      case _ => globalNameMap = globalNameMap + name ~> info
+    }
+  }
+
 
   def buildTypeMap(gclLibs: ISZ[GclLib], aadlTypes: AadlTypes, symbolTable: SymbolTable, reporter: Reporter): Unit = {
     if (builtTypeInfo) {
@@ -1325,7 +1343,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         case r: RecordType =>
           val component = r.container.get
 
-          val aadlData = symbolTable.componentMap.get(ISZ(component.classifier.get.name)).get
+          val aadlData = symbolTable.componentMap.get(ISZ(component.classifier.get.name)).get.asInstanceOf[AadlData]
 
           return buildAdtTypeInfo(aadlData)
 
@@ -1657,8 +1675,296 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       return infoMethod
     }
 
-    def buildAdtTypeInfo(a: AadlComponent): TypeInfo.Adt = {
-      assert(a.isInstanceOf[AadlThread] || a.isInstanceOf[AadlData])
+    def buildInfoObject(a: AadlThread): Info.Object = {
+
+      val component = a.component
+      val threadsName = getPathFromClassifier(component.classifier.get.name)
+
+      val threadsOwner = ops.ISZOps(threadsName).dropRight(1)
+      val currentName = threadsOwner
+      val threadsPackageName = threadsOwner
+
+      if (globalNameMap.contains(threadsName)) {
+        return globalNameMap.get(threadsName).get.asInstanceOf[Info.Object]
+      }
+
+      val threadsSimpleName = getSimpleNameFromClassifier(component.classifier.get.name)
+
+      val threadsId = AST.Id(
+        value = threadsSimpleName,
+        attr = AST.Attr(component.identifier.pos))
+
+      // build Slang package from AADL package
+      buildPackageInfo(threadsOwner)
+
+      // enclosingName is the same as the packageName
+      val threadsScope = scope(threadsOwner, globalImports(symbolTable), threadsOwner)
+
+      val gclAnnexes = component.annexes.filter((a: Annex) => a.clause.isInstanceOf[GclSubclause]).map((a: Annex) => a.clause.asInstanceOf[GclSubclause])
+
+      if (gclAnnexes.size > 1) {
+        reporter.error(a.component.identifier.pos, toolName, "Only a single GCL subclause is allowed per component type/implementation")
+      }
+
+      // treat stateVars as if they were features for Tipe
+      val stateVars: ISZ[AadlPort] = gclAnnexes.flatMap((g: GclSubclause) => g.state.map((sv: GclStateVar) => {
+        val aadlType = getAadlType(sv.classifier, aadlTypes, sv.posOpt, reporter)
+        AadlDataPort(
+          feature = FeatureEnd(
+            identifier = Name(threadsName :+ sv.name, sv.posOpt),
+            direction = Direction.Out,
+            category = FeatureCategory.DataPort,
+            classifier = Some(Classifier(sv.classifier)),
+            properties = ISZ(),
+            uriFrag = ""),
+          featureGroupIds = ISZ(),
+          direction = Direction.In,
+          aadlType = aadlType)
+      }))
+
+      val features: ISZ[AadlPort] = a.getPorts()
+
+      for (field <- features ++ stateVars) {
+        val fieldId: String = field.identifier
+        val fieldType: AadlType = field match {
+          case afd: AadlFeatureData => afd.aadlType
+          case _ => TypeUtil.EmptyType
+        }
+
+        //constructorParamVars = constructorParamVars :+ fieldId
+        val qualifiedFieldName = threadsName :+ fieldId
+
+        val fieldResInfoOpt = Some[AST.ResolvedInfo](
+          AST.ResolvedInfo.Var(isInObject = T, isSpec = F, isVal = F, owner = threadsName, id = fieldId))
+
+        val typedOpt: Option[AST.Typed] = getTypedFromAadlType(fieldType)
+
+        val varTypeId = AST.Id(value = fieldType.name, attr = AST.Attr(None()))
+        val varTypeName = AST.Type.Named(
+          name = AST.Name(ids = ISZ(varTypeId), attr = AST.Attr(None())),
+          typeArgs = ISZ(),
+          attr = AST.TypedAttr(posOpt = None(), typedOpt = None())
+        )
+
+        val infoVar = Info.Var(
+          owner = threadsName,
+          isInObject = F,
+          scope = scope(
+            packageName = threadsPackageName,
+            imports = globalImports(symbolTable),
+            enclosingName = threadsName),
+          ast = AST.Stmt.Var(
+            isSpec = F,
+            isVal = F,
+            id = AST.Id(value = fieldId, attr = AST.Attr(None())),
+            tipeOpt = Some(varTypeName),
+            initOpt = None(),
+            attr = ResolvedAttr(posOpt = field.feature.identifier.pos, resOpt = fieldResInfoOpt, typedOpt = typedOpt)
+          )
+        )
+
+        declareName(fieldId, qualifiedFieldName, infoVar, field.feature.identifier.pos, reporter)
+      }
+
+      val methods: HashSMap[String, Info.Method] = {
+
+        val TYPE_VAR__STATE_VAR = "TYPE_VAR__STATE_VAR"
+
+        def createInfoMethod(methodName: String, typeParams: ISZ[AST.TypeParam], params: ISZ[AST.Param], returnType: AST.Type.Named): Info.Method = {
+
+          val methodAst: AST.Stmt.Method = {
+            val methodSig = AST.MethodSig(
+              purity = AST.Purity.Pure,
+              id = AST.Id(methodName, AST.Attr(None())),
+              typeParams = typeParams,
+              hasParams = params.nonEmpty,
+              params = params,
+              returnType = returnType
+            )
+
+            val typedFun = AST.Typed.Fun(
+              purity = AST.Purity.Pure,
+              isByName = F,
+              args = params.map((m: AST.Param) => {
+                val ids = m.tipe.asInstanceOf[AST.Type.Named].name.ids.map((i: AST.Id) => i.value)
+
+                if (ids == ISZ(TYPE_VAR__STATE_VAR))
+                  AST.Typed.TypeVar(id = TYPE_VAR__STATE_VAR, kind = AST.Typed.VarKind.Immutable)
+                else
+                  AST.Typed.Name(ids = ids, args = ISZ())
+              }),
+              ret = AST.Typed.Name(ids = returnType.name.ids.map((m: AST.Id) => m.value), args = ISZ())
+            )
+
+            val rInfoMethod = AST.ResolvedInfo.Method(
+              isInObject = F,
+              mode = AST.MethodMode.Method,
+              typeParams = typeParams.map((t: AST.TypeParam) => t.id.value),
+              owner = threadsName,
+              id = methodName,
+              paramNames = params.map((m: AST.Param) => m.id.value),
+              tpeOpt = Some(typedFun),
+              reads = ISZ(),
+              writes = ISZ()
+            )
+
+            val typedMethod = AST.Typed.Method(
+              isInObject = F,
+              mode = AST.MethodMode.Method,
+              typeParams = typeParams.map((t: AST.TypeParam) => t.id.value),
+              owner = threadsName,
+              name = methodName,
+              paramNames = params.map((m: AST.Param) => m.id.value),
+              tpe = typedFun
+            )
+
+            AST.Stmt.Method(
+              typeChecked = F,
+              purity = AST.Purity.Pure,
+              modifiers = ISZ(),
+              sig = methodSig,
+              mcontract = AST.MethodContract.Simple.empty,
+              bodyOpt = None(),
+              attr = AST.ResolvedAttr(posOpt = None(), resOpt = Some(rInfoMethod), typedOpt = Some(typedMethod))
+            )
+          }
+
+          return Info.Method(
+            owner = threadsName,
+            isInObject = F,
+            scope = scope(
+              packageName = threadsPackageName,
+              imports = threadsScope.imports,
+              enclosingName = threadsName),
+            hasBody = F,
+            ast = methodAst
+          )
+        }
+
+        def toName(x: ISZ[String]): AST.Name = {
+          return AST.Name(
+            ids = x.map((m: String) => AST.Id(value = m, attr = AST.Attr(None()))),
+            attr = AST.Attr(None()))
+        }
+
+        val expType = AST.Type.Named(
+          name = toName(ISZ("org", "sireum", "lang", "ast", "Exp")),
+          typeArgs = ISZ(),
+          attr = AST.TypedAttr(
+            posOpt = None(),
+            typedOpt = Some(AST.Typed.Name(ids = ISZ("org", "sireum", "lang", "ast", "Exp"), args = ISZ()))
+          )
+        )
+
+        val boolType = AST.Type.Named(
+          name = toName(ISZ("org", "sireum", "B")),
+          typeArgs = ISZ(),
+          attr = AST.TypedAttr(
+            posOpt = None(),
+            typedOpt = Some(AST.Typed.Name(ids = ISZ("org", "sireum", "B"), args = ISZ()))
+          ))
+
+        val portParam = AST.Param(
+          isHidden = F,
+          id = AST.Id("port", AST.Attr(None())),
+          tipe = expType
+        )
+
+
+        val genericType = AST.TypeParam(AST.Id(TYPE_VAR__STATE_VAR, AST.Attr(None())), AST.Typed.VarKind.Immutable)
+        val genericPortParam = AST.Param(
+          isHidden = F,
+          id = AST.Id("port", AST.Attr(None())),
+          tipe = AST.Type.Named(
+            name = toName(ISZ(TYPE_VAR__STATE_VAR)),
+            typeArgs = ISZ(),
+            attr = AST.TypedAttr(
+              posOpt = None(),
+              typedOpt = Some(AST.Typed.TypeVar(id = TYPE_VAR__STATE_VAR, kind = AST.Typed.VarKind.Immutable))
+            )
+          )
+        )
+        val genericValueParam = AST.Param(
+          isHidden = F,
+          id = AST.Id("value", AST.Attr(None())),
+          tipe = AST.Type.Named(
+            name = toName(ISZ(TYPE_VAR__STATE_VAR)),
+            typeArgs = ISZ(),
+            attr = AST.TypedAttr(
+              posOpt = None(),
+              typedOpt = Some(AST.Typed.TypeVar(id = TYPE_VAR__STATE_VAR, kind = AST.Typed.VarKind.Immutable))
+            )
+          )
+        )
+
+        var _methods: HashSMap[String, Info.Method] = HashSMap.empty
+        val sigs = ISZ[(String, ISZ[AST.TypeParam], ISZ[AST.Param], AST.Type.Named)](
+          (uif__HasEvent, ISZ(genericType), ISZ[AST.Param](genericPortParam), boolType),
+          (uif__MaySend, ISZ(), ISZ[AST.Param](portParam), boolType),
+          (uif__NoSend, ISZ(genericType), ISZ[AST.Param](genericPortParam), boolType),
+          (uif__MustSend, ISZ(genericType), ISZ[AST.Param](genericPortParam), boolType),
+          (uif__MustSendWithExpectedValue, ISZ(genericType), ISZ[AST.Param](genericPortParam, genericValueParam), boolType),
+        )
+
+        for (sig <- sigs) {
+          _methods = _methods + sig._1 ~> createInfoMethod(
+            methodName = sig._1,
+            typeParams = sig._2,
+            params = sig._3,
+            returnType = sig._4)
+        }
+
+        val specDefs: ISZ[(String, Info.Method)] = gclAnnexes.flatMap((g: GclSubclause) =>
+          g.methods.map((gclMethod: GclMethod) => {
+
+            val infoMethod = buildMethod(gclMethod, threadsName, threadsScope)
+
+            resolvedMethods = resolvedMethods + (gclMethod.method ~> infoMethod)
+
+            (gclMethod.method.sig.id.value, infoMethod)
+          }))
+
+        _methods ++ specDefs
+
+      }
+      for (m <- methods.values) {
+        declareName(
+          entity = "method",
+          name = m.name,
+          info = m,
+          posOpt = m.posOpt,
+          reporter = reporter)
+      }
+
+      val infoObject = Info.Object(
+        owner = threadsOwner,
+        isSynthetic = F,
+        scope = threadsScope,
+        outlined = T,
+        contractOutlined = T,
+        typeChecked = T,
+        ast = AST.Stmt.Object(
+          isApp = F,
+          extNameOpt = None(),
+          id = threadsId,
+          stmts = ISZ(), // TODO add fields and methods?
+          attr = AST.Attr(component.identifier.pos)),
+        typedOpt = Some(AST.Typed.Object(currentName, threadsSimpleName)),
+        resOpt = Some(AST.ResolvedInfo.Object(threadsName)),
+        constructorRes = AST.ResolvedInfo.Method(F, AST.MethodMode.ObjectConstructor, ISZ(), threadsName, threadsSimpleName, ISZ(), None(), ISZ(), ISZ())
+      )
+
+      declareName(
+        entity = "object",
+        name = threadsName,
+        info = infoObject,
+        posOpt = infoObject.posOpt,
+        reporter = reporter)
+
+      return infoObject
+    }
+
+    def buildAdtTypeInfo(a: AadlData): TypeInfo.Adt = {
 
       val component = a.component
       val adtQualifiedName = getPathFromClassifier(component.classifier.get.name)
@@ -1671,6 +1977,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       val packageName = ops.ISZOps(adtQualifiedName).dropRight(1)
       assert(packageName.nonEmpty)
 
+      // build Slang package from AADL package
       buildPackageInfo(packageName)
 
       // enclosingName is the same as the packageName
@@ -1703,30 +2010,23 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       }))
 
       val features: ISZ[AadlPort] = {
-        a match {
-          case at: AadlThread => at.getPorts()
-          case ad: AadlData =>
-            if (stateVars.nonEmpty) {
-              reporter.error(a.component.identifier.pos, toolName, s"Not expecting a data component to have state vars")
-            }
-            // treat aadl data subcomponents as if they were features for Tipe
-            ad.subComponents.map((sc: AadlComponent) => {
-              val aadlType = aadlTypes.typeMap.get(sc.component.classifier.get.name).get
-              AadlDataPort(feature = FeatureEnd(
-                identifier = Name(sc.path, sc.component.identifier.pos),
-                direction = Direction.Out,
-                category = FeatureCategory.DataPort,
-                classifier = sc.component.classifier,
-                properties = ISZ(),
-                uriFrag = ""),
-                featureGroupIds = ISZ(),
-                direction = Direction.Out,
-                aadlType = aadlType)
-            })
-          case _ =>
-            reporter.error(a.component.identifier.pos, toolName, s"Expecting an AadlThread or AadlData but recevied ${a}")
-            ISZ[AadlPort]()
+        if (stateVars.nonEmpty) {
+          reporter.error(a.component.identifier.pos, toolName, s"Not expecting a data component to have state vars")
         }
+        // treat aadl data subcomponents as if they were features for Tipe
+        a.subComponents.map((sc: AadlComponent) => {
+          val aadlType = aadlTypes.typeMap.get(sc.component.classifier.get.name).get
+          AadlDataPort(feature = FeatureEnd(
+            identifier = Name(sc.path, sc.component.identifier.pos),
+            direction = Direction.Out,
+            category = FeatureCategory.DataPort,
+            classifier = sc.component.classifier,
+            properties = ISZ(),
+            uriFrag = ""),
+            featureGroupIds = ISZ(),
+            direction = Direction.Out,
+            aadlType = aadlType)
+        })
       }
 
       var adtParams: ISZ[AST.AdtParam] = ISZ()
@@ -1801,211 +2101,43 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         }
       }
 
-      val methods: HashSMap[String, Info.Method] =
-        a match {
-          case at: AadlThread =>
-            val TYPE_VAR__STATE_VAR = "TYPE_VAR__STATE_VAR"
+      val methods: HashSMap[String, Info.Method] = HashSMap.empty
 
-            def createInfoMethod(methodName: String, typeParams: ISZ[AST.TypeParam], params: ISZ[AST.Param], returnType: AST.Type.Named): Info.Method = {
+      val constructorInfo: (Option[AST.Typed], Option[AST.ResolvedInfo]) = {
 
-              val methodAst: AST.Stmt.Method = {
-                val methodSig = AST.MethodSig(
-                  purity = AST.Purity.Pure,
-                  id = AST.Id(methodName, AST.Attr(None())),
-                  typeParams = typeParams,
-                  hasParams = params.nonEmpty,
-                  params = params,
-                  returnType = returnType
-                )
-
-                val typedFun = AST.Typed.Fun(
-                  purity = AST.Purity.Pure,
-                  isByName = F,
-                  args = params.map((m: AST.Param) => {
-                    val ids = m.tipe.asInstanceOf[AST.Type.Named].name.ids.map((i: AST.Id) => i.value)
-
-                    if (ids == ISZ(TYPE_VAR__STATE_VAR))
-                      AST.Typed.TypeVar(id = TYPE_VAR__STATE_VAR, kind = AST.Typed.VarKind.Immutable)
-                    else
-                      AST.Typed.Name(ids = ids, args = ISZ())
-                  }),
-                  ret = AST.Typed.Name(ids = returnType.name.ids.map((m: AST.Id) => m.value), args = ISZ())
-                )
-
-                val rInfoMethod = AST.ResolvedInfo.Method(
-                  isInObject = F,
-                  mode = AST.MethodMode.Method,
-                  typeParams = typeParams.map((t: AST.TypeParam) => t.id.value),
-                  owner = adtQualifiedName,
-                  id = methodName,
-                  paramNames = params.map((m: AST.Param) => m.id.value),
-                  tpeOpt = Some(typedFun),
-                  reads = ISZ(),
-                  writes = ISZ()
-                )
-
-                val typedMethod = AST.Typed.Method(
-                  isInObject = F,
-                  mode = AST.MethodMode.Method,
-                  typeParams = typeParams.map((t: AST.TypeParam) => t.id.value),
-                  owner = adtQualifiedName,
-                  name = methodName,
-                  paramNames = params.map((m: AST.Param) => m.id.value),
-                  tpe = typedFun
-                )
-
-                AST.Stmt.Method(
-                  typeChecked = F,
-                  purity = AST.Purity.Pure,
-                  modifiers = ISZ(),
-                  sig = methodSig,
-                  mcontract = AST.MethodContract.Simple.empty,
-                  bodyOpt = None(),
-                  attr = AST.ResolvedAttr(posOpt = None(), resOpt = Some(rInfoMethod), typedOpt = Some(typedMethod))
-                )
-              }
-
-              return Info.Method(
-                owner = adtQualifiedName,
-                isInObject = F,
-                scope = adtScope,
-                hasBody = F,
-                ast = methodAst
-              )
-            }
-
-            def toName(x: ISZ[String]): AST.Name = {
-              return AST.Name(
-                ids = x.map((m: String) => AST.Id(value = m, attr = AST.Attr(None()))),
-                attr = AST.Attr(None()))
-            }
-
-            val expType = AST.Type.Named(
-              name = toName(ISZ("org", "sireum", "lang", "ast", "Exp")),
-              typeArgs = ISZ(),
-              attr = AST.TypedAttr(
-                posOpt = None(),
-                typedOpt = Some(AST.Typed.Name(ids = ISZ("org", "sireum", "lang", "ast", "Exp"), args = ISZ()))
-              )
-            )
-
-            val boolType = AST.Type.Named(
-              name = toName(ISZ("org", "sireum", "B")),
-              typeArgs = ISZ(),
-              attr = AST.TypedAttr(
-                posOpt = None(),
-                typedOpt = Some(AST.Typed.Name(ids = ISZ("org", "sireum", "B"), args = ISZ()))
-              ))
-
-            val portParam = AST.Param(
-              isHidden = F,
-              id = AST.Id("port", AST.Attr(None())),
-              tipe = expType
-            )
-
-            val valueParam = AST.Param(
-              isHidden = F,
-              id = AST.Id("value", AST.Attr(None())),
-              tipe = expType
-            )
-
-
-            val genericType = AST.TypeParam(AST.Id(TYPE_VAR__STATE_VAR, AST.Attr(None())), AST.Typed.VarKind.Immutable)
-            val genericPortParam = AST.Param(
-              isHidden = F,
-              id = AST.Id("port", AST.Attr(None())),
-              tipe = AST.Type.Named(
-                name = toName(ISZ(TYPE_VAR__STATE_VAR)),
-                typeArgs = ISZ(),
-                attr = AST.TypedAttr(
-                  posOpt = None(),
-                  typedOpt = Some(AST.Typed.TypeVar(id = TYPE_VAR__STATE_VAR, kind = AST.Typed.VarKind.Immutable))
-                )
-              )
-            )
-            val genericValueParam = AST.Param(
-              isHidden = F,
-              id = AST.Id("value", AST.Attr(None())),
-              tipe = AST.Type.Named(
-                name = toName(ISZ(TYPE_VAR__STATE_VAR)),
-                typeArgs = ISZ(),
-                attr = AST.TypedAttr(
-                  posOpt = None(),
-                  typedOpt = Some(AST.Typed.TypeVar(id = TYPE_VAR__STATE_VAR, kind = AST.Typed.VarKind.Immutable))
-                )
-              )
-            )
-
-            var _methods: HashSMap[String, Info.Method] = HashSMap.empty
-            val sigs = ISZ[(String, ISZ[AST.TypeParam], ISZ[AST.Param], AST.Type.Named)](
-              (uif__HasEvent, ISZ(genericType), ISZ[AST.Param](genericPortParam), boolType),
-              (uif__MaySend, ISZ(), ISZ[AST.Param](portParam), boolType),
-              (uif__NoSend, ISZ(genericType), ISZ[AST.Param](genericPortParam), boolType),
-              (uif__MustSend, ISZ(genericType), ISZ[AST.Param](genericPortParam), boolType),
-              (uif__MustSendWithExpectedValue, ISZ(genericType), ISZ[AST.Param](genericPortParam, genericValueParam), boolType),
-            )
-
-            for (sig <- sigs) {
-              _methods = _methods + sig._1 ~> createInfoMethod(
-                methodName = sig._1,
-                typeParams = sig._2,
-                params = sig._3,
-                returnType = sig._4)
-            }
-
-            val specDefs: ISZ[(String, Info.Method)] = gclAnnexes.flatMap((g: GclSubclause) =>
-              g.methods.map((gclMethod: GclMethod) => {
-
-                val infoMethod = buildMethod(gclMethod, adtQualifiedName, adtScope)
-
-                resolvedMethods = resolvedMethods + (gclMethod.method ~> infoMethod)
-
-                (gclMethod.method.sig.id.value, infoMethod)
-              }))
-
-            _methods ++ specDefs
-
-          case ad: AadlData => HashSMap.empty
-          case _ => halt("Expecting a thread or data component")
-        }
-
-      val constructorInfo: (Option[AST.Typed], Option[AST.ResolvedInfo]) =
-        a match {
-          case aadlData: AadlData =>
-            val tpeFun = AST.Typed.Fun(
-              purity = AST.Purity.Pure,
-              isByName = F,
-              args = aadlData.subComponents.map((sc: AadlComponent) => {
-                val aadlType = aadlTypes.typeMap.get(sc.component.classifier.get.name).get
-                getTypedFromAadlType(aadlType).get
-              }),
-              ret = AST.Typed.Name(ids = adtQualifiedName, args = ISZ())
-            )
-            val constructorTypeOpt: Option[AST.Typed] = Some(
-              AST.Typed.Method(
-                isInObject = T,
-                mode = AST.MethodMode.Constructor,
-                typeParams = ISZ(),
-                owner = packageName,
-                name = simpleName,
-                paramNames = aadlData.subComponents.map((s: AadlComponent) => s.identifier),
-                tpe = tpeFun)
-            )
-            val constructorResOpt: Option[AST.ResolvedInfo] = Some(
-              AST.ResolvedInfo.Method(
-                isInObject = F,
-                mode = AST.MethodMode.Constructor,
-                typeParams = ISZ(),
-                owner = packageName,
-                id = simpleName,
-                paramNames = aadlData.subComponents.map((s: AadlComponent) => s.identifier),
-                tpeOpt = Some(tpeFun),
-                reads = ISZ(),
-                writes = ISZ())
-            )
-            (constructorTypeOpt, constructorResOpt)
-          case _ => (None(), None())
-        }
+        val tpeFun = AST.Typed.Fun(
+          purity = AST.Purity.Pure,
+          isByName = F,
+          args = a.subComponents.map((sc: AadlComponent) => {
+            val aadlType = aadlTypes.typeMap.get(sc.component.classifier.get.name).get
+            getTypedFromAadlType(aadlType).get
+          }),
+          ret = AST.Typed.Name(ids = adtQualifiedName, args = ISZ())
+        )
+        val constructorTypeOpt: Option[AST.Typed] = Some(
+          AST.Typed.Method(
+            isInObject = T,
+            mode = AST.MethodMode.Constructor,
+            typeParams = ISZ(),
+            owner = packageName,
+            name = simpleName,
+            paramNames = a.subComponents.map((s: AadlComponent) => s.identifier),
+            tpe = tpeFun)
+        )
+        val constructorResOpt: Option[AST.ResolvedInfo] = Some(
+          AST.ResolvedInfo.Method(
+            isInObject = F,
+            mode = AST.MethodMode.Constructor,
+            typeParams = ISZ(),
+            owner = packageName,
+            id = simpleName,
+            paramNames = a.subComponents.map((s: AadlComponent) => s.identifier),
+            tpeOpt = Some(tpeFun),
+            reads = ISZ(),
+            writes = ISZ())
+        )
+        (constructorTypeOpt, constructorResOpt)
+      }
 
       val extractorTypeMap: Map[String, AST.Typed] = Map.empty
       val extractorResOpt: Option[AST.ResolvedInfo] = None()
@@ -2057,43 +2189,41 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
       typeMap = typeMap + (adtQualifiedName ~> typeInfoAdt)
 
-      if (a.isInstanceOf[AadlData]) {
-        // build companion object for data type def
-        val constructorRes = AST.ResolvedInfo.Method(
-          isInObject = T,
-          mode = AST.MethodMode.ObjectConstructor,
-          typeParams = ISZ(),
+      // build companion object for data type def
+      val constructorRes = AST.ResolvedInfo.Method(
+        isInObject = T,
+        mode = AST.MethodMode.ObjectConstructor,
+        typeParams = ISZ(),
+        owner = packageName,
+        id = simpleName,
+        paramNames = ISZ(),
+        tpeOpt = None(),
+        reads = ISZ(),
+        writes = ISZ()
+      )
+      globalNameMap = globalNameMap + (adtQualifiedName ~>
+        Info.Object(
           owner = packageName,
-          id = simpleName,
-          paramNames = ISZ(),
-          tpeOpt = None(),
-          reads = ISZ(),
-          writes = ISZ()
+          isSynthetic = F,
+          scope = adtScope,
+          outlined = F,
+          contractOutlined = F,
+          typeChecked = F,
+          ast = AST.Stmt.Object(
+            isApp = F,
+            extNameOpt = None(),
+            id = AST.Id(value = simpleName, attr = AST.Attr(None())),
+            stmts = ISZ(),
+            attr = AST.Attr(posOpt = None())
+          ),
+          typedOpt = Some(
+            AST.Typed.Object(owner = packageName, id = simpleName)
+          ),
+          resOpt = Some(
+            AST.ResolvedInfo.Object(name = adtQualifiedName)
+          ),
+          constructorRes = constructorRes)
         )
-        globalNameMap = globalNameMap + (adtQualifiedName ~>
-          Info.Object(
-            owner = packageName,
-            isSynthetic = F,
-            scope = adtScope,
-            outlined = F,
-            contractOutlined = F,
-            typeChecked = F,
-            ast = AST.Stmt.Object(
-              isApp = F,
-              extNameOpt = None(),
-              id = AST.Id(value = simpleName, attr = AST.Attr(None())),
-              stmts = ISZ(),
-              attr = AST.Attr(posOpt = None())
-            ),
-            typedOpt = Some(
-              AST.Typed.Object(owner = packageName, id = simpleName)
-            ),
-            resOpt = Some(
-              AST.ResolvedInfo.Object(name = adtQualifiedName)
-            ),
-            constructorRes = constructorRes)
-          )
-      }
 
       return typeInfoAdt
     }
@@ -2114,7 +2244,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       val threadComponents = symbolTable.componentMap.values.filter((m: AadlComponent) => m.isInstanceOf[AadlThread]).map((m: AadlComponent) => m.asInstanceOf[AadlThread])
 
       for (component <- threadComponents) {
-        buildAdtTypeInfo(component)
+        //buildAdtTypeInfo(component)
+        buildInfoObject(component)
       }
     }
   }
@@ -2136,22 +2267,50 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               return None()
           }
 
-          val scope: Scope.Local = typeMap.get(qualifiedName) match {
-            case Some(o) =>
-              o match {
-                case info: TypeInfo.Adt =>
-                  val typeParams = Resolver.typeParamMap(info.ast.typeParams, reporter)
-                  var scope = Scope.Local.create(typeParams.map, info.scope)
-                  scope = scope(localThisOpt = Some(info.tpe))
-                  scope
-                case x =>
-                  reporter.error(None(), toolName, s"Expecting ${qualifiedName} to resolve to an ADT but found ${x}")
+          val scope: Scope.Local = context match {
+            case ad: AadlData =>
+              typeMap.get(qualifiedName) match {
+                case Some(o) =>
+                  o match {
+                    case info: TypeInfo.Adt =>
+                      val typeParams = Resolver.typeParamMap(info.ast.typeParams, reporter)
+                      var scope = Scope.Local.create(typeParams.map, info.scope)
+                      scope = scope(localThisOpt = Some(info.tpe))
+                      scope
+                    case x =>
+                      reporter.error(None(), toolName, s"Expecting ${qualifiedName} to resolve to an ADT but found ${x}")
+                      return None()
+                  }
+                case _ =>
+                  reporter.error(None(), toolName, s"Could not resolve type info for GCl Subclause: ${qualifiedName}")
+                  return None()
+              }
+            case ac: AadlThread =>
+              /*
+              println(qualifiedName)
+              println("-----")
+              println(st"${(globalNameMap.keys, "\n")}".render)
+              println("****")
+               */
+              globalNameMap.get(qualifiedName) match {
+                case Some(o: Info.Object) =>
+                  val packageName = ops.ISZOps(o.name).dropRight(1)
+                  val global = Scope.Global(
+                    packageName = packageName,
+                    imports = globalImports(symbolTable),
+                    enclosingName = o.name
+                  )
+                  Scope.Local.create(HashMap.empty, global)
+
+                case _ =>
+                  reporter.error(None(), toolName, s"Could not resolve name for GCL Subclause: ${qualifiedName}")
                   return None()
               }
             case _ =>
-              reporter.error(None(), toolName, s"Could not resolve type info for GCl Subclause: ${qualifiedName}")
+              reporter.error(None(), toolName, s"Expecting AadlData or AadlThread but passed ${context}")
               return None()
           }
+
 
           val libReporter = GclResolver.libraryReporter
 
@@ -2161,7 +2320,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             poset = Poset.empty,
             aliases = HashSMap.empty)
 
-          val gclSymbolTable: GclSymbolTable = processGclAnnex(context, gclSubclause, gclLibs, symbolTable, aadlTypes, typeHierarchy, scope, reporter).get
+          val gclSymbolTable: GclSymbolTable =
+            processGclAnnex(context, gclSubclause, gclLibs, symbolTable, aadlTypes, typeHierarchy, scope, reporter).get
           Some(GclAnnexClauseInfo(gclSubclause, gclSymbolTable))
         case _ => None()
       }
