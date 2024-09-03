@@ -791,7 +791,12 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           if (!reporter.hasError) {
             val (expTrans, symbols, apiRefs) =
               GclResolver.collectSymbols(expTipe, RewriteMode.Normal, context, F, ISZ(), gclMethods, symbolTable, reporter)
-            rexprs = rexprs + toKey(glcIntegSpec.exp) ~> (if (expTrans.nonEmpty) expTrans.get else expTipe)
+
+            val resolvedExpr: AST.Exp = expTrans match {
+              case MSome(et2) => et2
+              case _ => expTipe
+            }
+            rexprs = rexprs + toKey(glcIntegSpec.exp) ~> resolvedExpr
             apiReferences = apiReferences ++ apiRefs
 
             if (!reporter.hasError) {
@@ -814,19 +819,17 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               }
               if (portRef.nonEmpty) {
                 val sym = portRef.get
-                if (expTrans.nonEmpty) {
-                  // update the spec here as well as its expression will be handed off
-                  // to tipe for integration constraint checking
-                  glcIntegSpec match {
-                    case a: GclAssume =>
-                      integrationMap = integrationMap + sym ~> a(exp = expTrans.get)
-                    case g: GclGuarantee =>
-                      integrationMap = integrationMap + sym ~> g(exp = expTrans.get)
-                  }
-                  rexprs = rexprs + toKey(expTrans.get) ~> expTrans.get
-                } else {
-                  integrationMap = integrationMap + sym ~> glcIntegSpec
+                // update the spec here as well as its expression will be handed off
+                // to tipe for integration constraint checking
+                glcIntegSpec match {
+                  case a: GclAssume =>
+                    integrationMap = integrationMap + sym ~> a(exp = resolvedExpr)
+                  case g: GclGuarantee =>
+                    integrationMap = integrationMap + sym ~> g(exp = resolvedExpr)
                 }
+                rexprs = rexprs - toKey(glcIntegSpec.exp) ~> resolvedExpr // remove the old entry
+
+                rexprs = rexprs + toKey(resolvedExpr) ~> resolvedExpr
 
                 sym.direction match {
                   case Direction.Out =>
@@ -1289,9 +1292,16 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           ast = adtAst)
       }
 
-      val qualifiedName = getPathFromClassifier(aadlType.name)
-      if (typeMap.contains(qualifiedName)) {
-        return typeMap.get(qualifiedName).get
+      val qualifiedName = getPathFromClassifier (aadlType.name)
+
+      val qualifiedTypeName: ISZ[String] =
+        aadlType match {
+          case e: EnumType => qualifiedName :+ Info.Enum.elementTypeSuffix
+          case _ => qualifiedName
+        }
+
+      if (typeMap.contains(qualifiedTypeName)) {
+        return typeMap.get(qualifiedTypeName).get
       }
 
       aadlType match {
@@ -1300,7 +1310,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           var elements: Map[String, AST.ResolvedInfo] = Map.empty
           var ordinal: Z = 0
           for (value <- e.values) {
-            val ri: ResolvedInfo.EnumElement = ResolvedInfo.EnumElement(qualifiedName, value, ordinal)
+            val ri: ResolvedInfo.EnumElement = ResolvedInfo.EnumElement(qualifiedTypeName, value, ordinal)
             ordinal = ordinal + 1
             elements = elements + (value ~> ri)
           }
@@ -1309,10 +1319,10 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
           val enumx: TypeInfo.Enum = TypeInfo.Enum(qualifiedName, elements, posOpt)
 
-          typeMap = typeMap + (qualifiedName ~> enumx)
+          typeMap = typeMap + (qualifiedTypeName ~> enumx)
 
           if (!globalNameMap.contains(qualifiedName)) {
-            val elementTypedOpt = AST.Typed.Name(ids = qualifiedName :+ "Type", args = ISZ())
+            val elementTypedOpt = AST.Typed.Name(ids = qualifiedTypeName, args = ISZ())
 
             for (elem <- enumx.elements.entries) {
               val ee = elem._2.asInstanceOf[AST.ResolvedInfo.EnumElement]
@@ -1350,7 +1360,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         case b: BaseType =>
 
           val simpleName = getSimpleNameFromClassifier(b.name)
-          val packageName = ops.ISZOps(qualifiedName).dropRight(1)
+          val packageName = ops.ISZOps(qualifiedTypeName).dropRight(1)
           buildPackageInfo(packageName)
 
           val imports: ISZ[AST.Stmt.Import] = ISZ()
@@ -1407,11 +1417,11 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           }
 
           val ta = TypeInfo.TypeAlias(
-            name = qualifiedName,
+            name = qualifiedTypeName,
             scope = scope,
             ast = ast)
 
-          typeMap = typeMap + (qualifiedName ~> ta)
+          typeMap = typeMap + (qualifiedTypeName ~> ta)
 
           val gclAnnexes = b.container.get.annexes.filter((a: Annex) => a.clause.isInstanceOf[GclSubclause]).map((a: Annex) => a.clause.asInstanceOf[GclSubclause])
           if (gclAnnexes.nonEmpty) {
