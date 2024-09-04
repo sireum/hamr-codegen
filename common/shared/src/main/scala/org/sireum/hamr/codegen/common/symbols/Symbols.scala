@@ -184,7 +184,7 @@ import org.sireum.message.Position
     return ops.ISZOps(getThreads()).exists(t => t.isCakeMLComponent())
   }
 
-  def getConnectionInstancePos(ci: ConnectionInstance): Option[Position] = {
+  def getConnectionInstancePos(ci: ConnectionInstance): (ISZ[String], Option[Position]) = {
     var dir: ir.Direction.Type = ir.Direction.None
 
     for (ref <- ci.connectionRefs) {
@@ -194,16 +194,16 @@ import org.sireum.message.Position
           (srcDir, dstDir) match {
             case (ir.Direction.In, ir.Direction.In) => dir = ir.Direction.In
             case (ir.Direction.Out, ir.Direction.Out) => dir = ir.Direction.Out
-            case (ir.Direction.Out, ir.Direction.In) => return n.pos
+            case (ir.Direction.Out, ir.Direction.In) => return (n.name, n.pos)
             case _ => halt("Infeasible")
           }
         case _ =>
-          return None()
+          halt("Infeasible")
       }
     }
     dir match {
-      case ir.Direction.In => return ci.connectionRefs(0).name.pos
-      case ir.Direction.Out => return ci.connectionRefs(ci.connectionRefs.lastIndex).name.pos
+      case ir.Direction.In => return (ci.connectionRefs(0).name.name, ci.connectionRefs(0).name.pos)
+      case ir.Direction.Out => return (ci.connectionRefs(ci.connectionRefs.lastIndex).name.name, ci.connectionRefs(ci.connectionRefs.lastIndex).name.pos)
       case _ => halt("Infeasible")
     }
   }
