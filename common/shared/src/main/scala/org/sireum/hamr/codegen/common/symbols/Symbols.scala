@@ -6,7 +6,8 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.CommonUtil.IdPath
 import org.sireum.hamr.ir
-import org.sireum.hamr.ir.FeatureEnd
+import org.sireum.hamr.ir.{ConnectionInstance, FeatureEnd}
+import org.sireum.message.Position
 
 @datatype class SymbolTable(rootSystem: AadlSystem,
 
@@ -181,5 +182,29 @@ import org.sireum.hamr.ir.FeatureEnd
 
   def hasCakeMLComponents(): B = {
     return ops.ISZOps(getThreads()).exists(t => t.isCakeMLComponent())
+  }
+
+  def getConnectionInstancePos(ci: ConnectionInstance): Option[Position] = {
+    var dir: ir.Direction.Type = ir.Direction.None
+
+    for (ref <- ci.connectionRefs) {
+      val component = airComponentMap.get(ref.context.name).get
+      component.connections.filter(c => c.name == ref.name) match {
+        case ISZ(ir.Connection(n, ISZ(ir.EndPoint(_, _, Some(srcDir))), ISZ(ir.EndPoint(_, _, Some(dstDir))), _, _, _, _, _)) =>
+          (srcDir, dstDir) match {
+            case (ir.Direction.In, ir.Direction.In) => dir = ir.Direction.In
+            case (ir.Direction.Out, ir.Direction.Out) => dir = ir.Direction.Out
+            case (ir.Direction.Out, ir.Direction.In) => return n.pos
+            case _ => halt("Infeasible")
+          }
+        case _ =>
+          return None()
+      }
+    }
+    dir match {
+      case ir.Direction.In => return ci.connectionRefs(0).name.pos
+      case ir.Direction.Out => return ci.connectionRefs(ci.connectionRefs.lastIndex).name.pos
+      case _ => halt("Infeasible")
+    }
   }
 }

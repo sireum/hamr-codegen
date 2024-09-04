@@ -2296,12 +2296,6 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                   return None()
               }
             case ac: AadlThread =>
-              /*
-              println(qualifiedName)
-              println("-----")
-              println(st"${(globalNameMap.keys, "\n")}".render)
-              println("****")
-               */
               globalNameMap.get(qualifiedName) match {
                 case Some(o: Info.Object) =>
                   val packageName = ops.ISZOps(o.name).dropRight(1)

@@ -49,6 +49,14 @@ import org.sireum.hamr.ir._
   def annexes(): ISZ[ir.Annex] = {
     return component.annexes
   }
+
+  def classifierAsString: String = {
+    return component.classifier.get.name
+  }
+
+  def classifier: ISZ[String] = {
+    return ops.StringOps(ops.StringOps(classifierAsString).replaceAllLiterally("::", "^")).split(c => c == '^')
+  }
 }
 
 @datatype class AadlSystem(val component: ir.Component,
@@ -68,10 +76,6 @@ import org.sireum.hamr.ir._
 
   def getDomainMappings(): Map[IdPath, Z] = {
     return PropertyUtil.getDomainMappings(component.properties)
-  }
-
-  def classifier: String = {
-    return component.classifier.get.name
   }
 }
 
