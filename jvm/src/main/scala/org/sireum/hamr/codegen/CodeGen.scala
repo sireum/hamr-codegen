@@ -338,7 +338,12 @@ object CodeGen {
   }
 
   def cleanupPackageName(s: String): String = {
-    return ops.StringOps(ops.StringOps(s).replaceAllChars('-', '_')).replaceAllChars('.', '_')
+    val o = ops.StringOps(ops.StringOps(ops.StringOps(s).replaceAllChars('-', '_')).replaceAllChars('.', '_'))
+    if (o.startsWith("_")) {
+      return "base"
+    } else {
+      return o.s
+    }
   }
 
   def getHeaderFiles(root: Os.Path): ISZ[Os.Path] = {
