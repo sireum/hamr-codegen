@@ -1145,7 +1145,9 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
       val typeChecked = typeChecker.checkExp(None(), scope, exp, reporter)
 
-      assert(typeChecked._2.nonEmpty, s"Could not resolve type of ${exp}")
+      if (typeChecked._2.isEmpty) {
+        reporter.error(exp.posOpt, toolName, s"Could not resolve expression's type")
+      }
 
       return Some(typeChecked)
     }
