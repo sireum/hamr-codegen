@@ -8,14 +8,16 @@ import org.sireum.hamr.codegen.common.symbols.{SymbolResolver, SymbolTable, Symb
 import org.sireum.hamr.codegen.common.transformers.Transformers
 import org.sireum.hamr.codegen.common.types.{AadlTypes, TODOType, TypeResolver}
 import org.sireum.hamr.ir.{Aadl, Transformer => AirTransformer}
-import org.sireum.message.Reporter
+import org.sireum.message.{Position, Reporter}
 
 object ModelUtil {
   @datatype class ModelElements(model: Aadl,
+                                modelPosOpt: Option[Position],
                                 types: AadlTypes,
                                 symbolTable: SymbolTable)
 
   def resolve(origModel: Aadl,
+              modelPosOpt: Option[Position],
               packageName: String,
               options: CodeGenConfig,
               reporter: Reporter): Option[ModelElements] = {
@@ -50,7 +52,7 @@ object ModelUtil {
       aadlMaps = aadlMaps,
       options = options,
       reporter = reporter) match {
-      case Some(symbolTable) => return Some(ModelElements(transModel, aadlTypes, symbolTable))
+      case Some(symbolTable) => return Some(ModelElements(transModel, modelPosOpt, aadlTypes, symbolTable))
       case _ => return None()
     }
   }

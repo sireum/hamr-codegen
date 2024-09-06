@@ -86,7 +86,7 @@ object CodeGen {
 
     var wroteOutArsitResources: B = F
 
-    val result: Option[ModelElements] = ModelUtil.resolve(model, packageName, options, reporter)
+    val result: Option[ModelElements] = ModelUtil.resolve(model, model.components(0).identifier.pos, packageName, options, reporter)
     reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
     if (result.isEmpty) {
       return CodeGenResults(ISZ(), ISZ())
