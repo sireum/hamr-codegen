@@ -50,7 +50,7 @@ import org.sireum.hamr.codegen.common.containers.{FileResource, Resource, Sireum
                               // act options
                               camkesOutputDir: Option[String],
                               camkesAuxCodeDirs: ISZ[String],
-                              aadlRootDir: Option[String],
+                              workspaceRootDir: Option[String],
 
                               experimentalOptions: ISZ[String])
 

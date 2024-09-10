@@ -107,7 +107,7 @@ object CodeGen {
       val fileSep = StringOps(org.sireum.Os.fileSep).first
 
       val opt = arsit.util.ArsitOptions(
-        outputDir = slangOutputDir,
+        slangOutputDir = slangOutputDir,
         packageName = packageName,
         noEmbedArt = options.noEmbedArt,
         bless = genBlessEntryPoints,
@@ -259,9 +259,9 @@ object CodeGen {
       reporter.info(None(), toolName, "Generating CAmkES artifacts...")
 
       val actOptions = org.sireum.hamr.act.util.ActOptions(
-        outputDir = camkesOutputDir.value,
+        camkesOutputDir = camkesOutputDir.value,
         auxFiles = getAuxFiles(options.camkesAuxCodeDirs, F, reporter),
-        aadlRootDirectory = options.aadlRootDir,
+        workspaceRootDir = options.workspaceRootDir,
         platform = platform,
         hamrBasePackageName = Some(packageName),
         experimentalOptions = options.experimentalOptions

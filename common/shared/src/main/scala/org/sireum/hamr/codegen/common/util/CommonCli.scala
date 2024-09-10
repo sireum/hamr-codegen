@@ -49,7 +49,7 @@ object CommonCli {
 
   val commonGroups: ISZ[OptGroup] = ISZ(
     OptGroup(name = "Slang", opts = ISZ(
-      Opt(name = "outputDir", longKey = "output-dir", shortKey = Some('o'),
+      Opt(name = "slangOutputDir", longKey = "slang-output-dir", shortKey = Some('o'),
         tpe = Type.Path(multiple = F, default = Some(".")),
         description = "Output directory for the generated project files"),
       Opt(name = "packageName", longKey = "package-name", shortKey = Some('n'),
@@ -100,9 +100,9 @@ object CommonCli {
         tpe = Type.Path(multiple = T, default = None()),
         description = "Directories containing C files to be included in CAmkES build"
       ),
-      Opt(name = "aadlRootDir", longKey = "aadl-root-dir", shortKey = Some('r'),
+      Opt(name = "workspaceRootDir", longKey = "workspace-root-dir", shortKey = Some('r'),
         tpe = Type.Path(multiple = F, default = None()),
-        description = "Root directory containing the AADL project"
+        description = "Root directory containing the architectural model project"
       )
     )),
     OptGroup(name = "Experimental", opts = ISZ(
