@@ -96,6 +96,7 @@ object CodeGen {
 
     if (~reporter.hasError && runRos2) {
       val results = Ros2Codegen().run(rmodel, options, aadlTypes, symbolTable, plugins, reporter)
+      writeOutResources(results.fileResources, reporter)
       return CodeGenResults(resources = results.fileResources, auxResources = ISZ())
     }
 

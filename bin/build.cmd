@@ -53,6 +53,7 @@ import org.sireum._
 val homeBin: Os.Path = Os.slashDir
 val home: Os.Path = homeBin.up
 val sireum: Os.Path = homeBin / (if (Os.isWin) "sireum.bat" else "sireum")
+val sireumJar: Os.Path = homeBin / "sireum.jar"
 val appDir: Os.Path = homeBin / (if (Os.isMac) "mac" else if (Os.isWin) "win" else "linux")
 
 val osateDir: Os.Path = {
@@ -154,11 +155,89 @@ def regenTransformers(): Unit = {
 }
 
 def regenCli4Testing(): Unit = {
-  val cliPackagePath = home / "jvm" / "src" / "main" / "scala" / "org" / "sireum" / "hamr" / "codegen"
+  val ksireumJar = home.up.up / "bin" / "sireum.jar"
+  if (!ksireumJar.exists) {
+    println(s"${ksireumJar} does not exists")
+    Os.exit(1)
+  }
+  if (!sireumJar.isSymLink) {
+    sireumJar.remove()
+    sireumJar.mklink(ksireumJar)
+    println(
+      st"""Need to rerun command as sireum.jar has been symlinked to $ksireumJar.
+          |
+          |After making changes to codegen's cli, do the following
+          |  1) $$SIREUM_HOME/bin/build.cmd           # get the new options into sireum.jar
+          |  2) $$SIREUM_HOME/bin/build.cmd regen-cli # regen sireum's cli
+          |  3) $$SIREUM_HOME/bin/build.cmd           # build again to include the updated cli
+          |
+          |You can then run '$$SIREUM_HOME/hamr/codegen/bin/build.cmd regen-cli' in order to
+          |update codegen's testing cli and also update CliKeys.scala""".render)
+    Os.exit(0)
+  }
+
   val utilDir = home / "jvm" / "src" / "test" / "scala" / "org" / "sireum" / "hamr" / "codegen" / "test" / "util"
   // NOTE: testingCli.sc emits what's in $SIREUM_HOME/bin/sireum.jar's version of
   //       hamr's cli so regen that first, rebuild sireum.jar, then call this method
-  proc"${sireum} tools cligen -p org.sireum.hamr.codegen.test.util -o ${utilDir.value} ${(utilDir / "testingCli.sc")}".at(cliPackagePath).console.runCheck()
+  proc"${sireum} tools cligen -p org.sireum.hamr.codegen.test.util -o ${utilDir.value} ${(utilDir / "testingCli.sc")}".console.runCheck()
+
+
+  var shorts : ISZ[ST] = ISZ()
+  var longs : ISZ[ST] = ISZ()
+  var allLongs: ISZ[ST] = ISZ()
+  def addOptions(opts: ISZ[org.sireum.cli.CliOpt.Opt], optGroup: String): Unit = {
+    for (o <- opts) {
+      longs = longs :+ st"""val $optGroup${o.name}: String = "--${o.longKey}""""
+      allLongs = allLongs :+ st""""${o.longKey}""""
+      if (o.shortKey.nonEmpty) {
+        shorts = shorts :+ st"""val $optGroup${o.name}: String = "-${o.shortKey.get}""""
+      }
+    }
+  }
+  addOptions(org.sireum.hamr.codegen.HamrCodegenCli.codeGenTool.opts, "")
+  for (g <- org.sireum.hamr.codegen.HamrCodegenCli.codeGenTool.groups) {
+    addOptions(g.opts, s"${g.name}_")
+  }
+
+  val entries: ISZ[ST] = for (l <- allLongs) yield st".$$colon$$plus(new org.sireum.String($l))"
+
+  val content =
+    st"""// #Sireum
+        |
+        |package org.sireum.hamr.codegen
+        |
+        |import org.sireum._
+        |
+        |// the following can be used when constructing HAMR codegen command line arguments
+        |// from an external tool (e.g. OSATE).
+        |
+        |object LongKeys {
+        |  ${(longs, "\n")}
+        |}
+        |
+        |object ShortKeys {
+        |  ${(shorts, "\n")}
+        |}
+        |
+        |object KeyUtil {
+        |  val allLongKeys: ISZ[String] = ISZ(
+        |    ${(allLongs, ",\n")})
+        |
+        |  // Paste the following into a java program if you want to ensure the known keys match.
+        |  // To regenerate this, run '$$SIREUM_HOME/hamr/codegen/build.cmd regen-cli'.
+        |  // If this does fail then the CLI arguments being constructed for codegen will need
+        |  // to be updated (that could be delayed if only new options were added).
+        |
+        |  // scala.collection.Seq<org.sireum.String> seq = scala.jdk.javaapi.CollectionConverters.asScala(new java.util.ArrayList<org.sireum.String>());
+        |  // scala.collection.immutable.Seq<org.sireum.String> iseq = ((scala.collection.IterableOnceOps<org.sireum.String, ?, ?>) seq).toSeq();
+        |  // org.sireum.IS<org.sireum.Z, org.sireum.String> knownKeys = org.sireum.IS$$.MODULE$$.apply(iseq, org.sireum.Z$$.MODULE$$)${(entries, "")};
+        |  // boolean sameKeys = org.sireum.hamr.codegen.KeyUtil.allLongKeys().equals(knownKeys);
+        |}
+        |"""
+
+  val cliPackagePath = home / "shared" / "src" / "main" / "scala" / "org" / "sireum" / "hamr" / "codegen" / "CliKeys.scala"
+  cliPackagePath.writeOver(content.render)
+  println(s"Wrote: $cliPackagePath")
 }
 
 def isCI(): B = {

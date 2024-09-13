@@ -90,7 +90,7 @@ val ids: ISZ[OsateProject] = ISZ(
   OsateProject(pluginDir, "org.sireum.aadl.osate.awas", T),
   OsateProject(pluginDir, "org.sireum.aadl.osate.cli", T),
   OsateProject(pluginDir, "org.sireum.aadl.osate.hamr", T),
-  OsateProject(pluginDir / "aadl-security", "org.sireum.aadl.osate.securitymodel", F)
+  //OsateProject(pluginDir / "aadl-security", "org.sireum.aadl.osate.securitymodel", F)
 )
 
 ids.foreach((proj: OsateProject) => updateManfiest(proj))

@@ -20,6 +20,16 @@ import org.sireum.hamr.codegen.common.containers.{FileResource, Resource, Sireum
   'SharedMemory
 }
 
+@enum object CodegenNodesCodeLanguage {
+  'Python
+  'Cpp
+}
+
+@enum object CodegenLaunchCodeLanguage {
+  'Python
+  'Xml
+}
+
 @datatype class CodeGenConfig(writeOutResources: B,
                               ipc: CodeGenIpcMechanism.Type,
 
@@ -52,6 +62,14 @@ import org.sireum.hamr.codegen.common.containers.{FileResource, Resource, Sireum
                               camkesAuxCodeDirs: ISZ[String],
                               workspaceRootDir: Option[String],
 
+                              // ros options
+                              strictAadlMode: B,
+                              ros2OutputWorkspaceDir: Option[String],
+                              ros2Dir: Option[String],
+                              ros2NodesLanguage: CodegenNodesCodeLanguage.Type,
+                              ros2LaunchLanguage: CodegenLaunchCodeLanguage.Type,
+
+                              //
                               experimentalOptions: ISZ[String])
 
 

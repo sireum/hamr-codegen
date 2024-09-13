@@ -1,6 +1,6 @@
 package org.sireum.hamr.codegen
 
-import org.sireum.{ST, halt}
+import org.sireum.{ISZ, ST, halt}
 
 object CodeGenFactory {
 
@@ -10,5 +10,10 @@ object CodeGenFactory {
     }
     import org.sireum._
     return st"$s"
+  }
+
+  def iszToST[T](elements: ISZ[T], sep: String): ST = {
+    import org.sireum._
+    return st"${(elements, sep)}"
   }
 }

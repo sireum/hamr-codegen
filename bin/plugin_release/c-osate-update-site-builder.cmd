@@ -58,15 +58,16 @@ val knownProjects: Map[String, Os.Path] = Map(ISZ(
   ("org.sireum.aadl.osate.awas", osate_plugin_dir),
   ("org.sireum.aadl.osate.cli", osate_plugin_dir),
   ("org.sireum.aadl.osate.hamr", osate_plugin_dir),
-  ("org.sireum.aadl.osate.securitymodel", osate_plugin_dir / "aadl-security"),
+  ("org.sireum.aadl.osate.securitymodel", osate_plugin_dir / "aadl-security")
 ))
 
+val archivedFeatures: Set[String] = Set.empty[String] + "org.sireum.aadl.osate.securitymodel"
+
 for(releaseDir <- releases) {
-  println(s"Processing: ${releaseDir.name}")
   val features = getSortedDirs(releaseDir)
 
   var previousVersion: String = ""
-  for(featureUpdateDir <- features) {
+  for(featureUpdateDir <- features if !archivedFeatures.contains(featureUpdateDir.name)) {
     println(s"Processing ${featureUpdateDir}")
 
     val projDir = knownProjects.get(featureUpdateDir.name).get
