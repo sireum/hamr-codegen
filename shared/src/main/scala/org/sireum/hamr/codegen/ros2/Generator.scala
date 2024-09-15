@@ -623,40 +623,6 @@ object Generator {
     return portCode
   }
 
-  // TODO: Remove
-  // This method generates a handler to use for all ports, in the case of a periodic component, or data-ports, in the
-  // case of a sporadic component.  If the component is sporadic, it also generates a sporadic event-port handler.
-  def genCppSubscriptionHandlerStrict(nodeName: String, isSporadic: B): ST = {
-    // Handles all ports in periodic components, or data-ports in sporadic components
-    var portCode: ST =
-      st"""void ${nodeName}::dataSubscriptionHandler(MsgType msg, std::queue<MsgType>& queue)
-          |{
-          |    enqueue(queue, msg);
-          |}
-      """
-
-    // Event-port handler for sporadic components
-    if (isSporadic) {
-      portCode =
-        st"""${portCode}
-            |void ${nodeName}::eventSubscriptionHandler(MsgType msg, std::queue<MsgType>& infrastructureQueue, std::queue<MsgType>& applicationQueue, void (${nodeName}::*handleMsg)(MsgType))
-            |{
-            |    enqueue(infrastructureQueue, msg);
-            |    std::thread([this, &infrastructureQueue, &applicationQueue, &handleMsg]() {
-            |        std::lock_guard<std::mutex> lock(mutex_);
-            |        receiveInputs(infrastructureQueue, applicationQueue);
-            |        if (applicationQueue.empty()) return;
-            |        (this->*handleMsg)(applicationQueue.front());
-            |        applicationQueue.pop();
-            |        sendOutputs();
-            |    }).detach();
-            |}
-          """
-    }
-
-    return portCode
-  }
-
   // Example:
   //  rclcpp::Publisher<example_interfaces::msg::Int32>::SharedPtr temp_control_currentTemp_publisher;
   def genCppTopicPublisherVarHeader(outPort: AadlPort, inputPortCount: Z): ST = {
@@ -870,7 +836,7 @@ object Generator {
     return subscriptionHandlerHeader
   }
 
-  // TODO: Don't use for lax?
+  // Only used for strict mode currently
   def genCppSubscriptionHandlerBaseSporadicHeader(inPort: AadlPort): ST = {
     val handlerName = inPort.identifier
 
@@ -1258,7 +1224,7 @@ object Generator {
     return vector
   }
 
-  // TODO: Strict
+  // TODO: Datatypes
   def genCppBaseNodeHeaderFile(packageName: String, component: AadlThread, connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
                                strictAADLMode: B): (ISZ[String], ST) = {
     val nodeName = s"${component.pathAsString("_")}_base"
@@ -1308,8 +1274,6 @@ object Generator {
           if (isSporadic(component) && !p.isInstanceOf[AadlDataPort]) {
             subscriptionHandlerHeaders = subscriptionHandlerHeaders :+
               genCppSubscriptionHandlerVirtualHeader(p)
-            /*subscriptionHandlerHeaders = subscriptionHandlerHeaders :+
-              genCppSubscriptionHandlerBaseSporadicHeader(p)*/
           }
           else {
             subscriptionHandlerHeaders = subscriptionHandlerHeaders :+
@@ -1509,7 +1473,7 @@ object Generator {
     return (filePath, fileBody)
   }
 
-  // TODO: Strict
+  // TODO: Datatypes
   def genCppBaseNodeCppFile(packageName: String, component: AadlThread, connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
                             strictAADLMode: B): (ISZ[String], ST) = {
     val nodeName = s"${component.pathAsString("_")}_base"
@@ -1700,7 +1664,7 @@ object Generator {
     return (filePath, fileBody)
   }
 
-  // TODO: Strict
+  // TODO: Datatypes
   def genCppUserNodeHeaderFile(packageName: String, component: AadlThread, strictAADLMode: B): (ISZ[String], ST) = {
     val nodeName = component.pathAsString("_")
     val fileName = genCppNodeSourceHeaderName(nodeName)
@@ -1762,7 +1726,7 @@ object Generator {
     return (filePath, fileBody)
   }
 
-  // TODO: Strict
+  // TODO: Datatypes
   def genCppUserNodeCppFile(packageName: String, component: AadlThread, strictAADLMode: B): (ISZ[String], ST) = {
     val nodeName = component.pathAsString("_")
     val fileName = genCppNodeSourceName(nodeName)
