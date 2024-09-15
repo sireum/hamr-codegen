@@ -150,6 +150,7 @@ compare(phantomVersionsP, phantomCurrentVers)
     if (actual != expected) {
       exclamations()
       println(s"WARNING: FMIDE version for ${name} does not match: ${actual} vs ${expected}: ${fmidecli.toUri}")
+      println(s"  NOTE: eclipse will drop the leading zero for months 01-09")
       exclamations()
     }
   }
