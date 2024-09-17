@@ -3,20 +3,16 @@ package org.sireum.hamr.codegen
 
 import org.sireum._
 import org.sireum.Os.Path
-import org.sireum.hamr.act.util
 import org.sireum.hamr.act.util.Util.ACT_INSTRUCTIONS_MESSAGE_KIND
 import org.sireum.hamr.arsit
-import org.sireum.hamr.arsit.{ProjectDirectories, Util}
 import org.sireum.hamr.arsit.Util.ARSIT_INSTRUCTIONS_MESSAGE_KIND
-import org.sireum.hamr.arsit.gcl.DSCTemplate
-import org.sireum.hamr.arsit.templates.ToolsTemplate
 import org.sireum.hamr.codegen.common.containers._
 import org.sireum.hamr.codegen.common.plugin.Plugin
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
-import org.sireum.hamr.codegen.common.types.{AadlTypes, ArrayType}
-import org.sireum.hamr.codegen.common.util.CodeGenPlatform._
+import org.sireum.hamr.codegen.common.types.AadlTypes
+import org.sireum.hamr.codegen.common.util.HamrCli.{CodegenHamrPlatform, CodegenOption}
 import org.sireum.hamr.codegen.common.util.ModelUtil.ModelElements
-import org.sireum.hamr.codegen.common.util.{CodeGenConfig, CodeGenPlatform, CodeGenResults, ExperimentalOptions, ModelUtil, ResourceUtil}
+import org.sireum.hamr.codegen.common.util.{CodegenResults, ExperimentalOptions, ModelUtil}
 import org.sireum.hamr.codegen.common.{DirectoryUtil, StringUtil}
 import org.sireum.hamr.ir.Aadl
 import org.sireum.message._
@@ -28,15 +24,16 @@ object CodeGen {
   val toolName: String = "HAMR CodeGen"
 
   def codeGen(model: Aadl,
-              options: CodeGenConfig,
+              shouldWriteOutResources: B,
+              options: CodegenOption,
               plugins: MSZ[Plugin],
               reporter: Reporter,
               transpilerCallback: (SireumSlangTranspilersCOption, Reporter) => Z,
               proyekIveCallback: SireumProyekIveOption => Z,
               sergenCallback: (SireumToolsSergenOption, Reporter) => Z,
-              slangCheckCallback: (SireumToolsSlangcheckGeneratorOption, Reporter) => Z): CodeGenResults = {
+              slangCheckCallback: (SireumToolsSlangcheckGeneratorOption, Reporter) => Z): CodegenResults = {
 
-    val targetingSel4 = options.platform == CodeGenPlatform.SeL4
+    val targetingSel4 = options.platform == CodegenHamrPlatform.SeL4
 
     val slangOutputDir: Path = Os.path(options.slangOutputDir.getOrElse("."))
 
@@ -58,19 +55,22 @@ object CodeGen {
       cleanupPackageName(slangOutputDir.name)
     }
 
-    val (runArsit, runACT, hamrIntegration, runRos2, isTranspilerProject, isSlangProject): (B, B, B, B, B, B) = options.platform match {
-      case JVM => (T, F, F, F, F, T)
+    val (runArsit, runACT, hamrIntegration, runMicrokit, runRos2, isTranspilerProject, isSlangProject): (B, B, B, B, B, B, B) =
+      options.platform match {
+        case CodegenHamrPlatform.JVM => (T, F, F, F, F, F, T)
 
-      case Linux => (T, F, F, F, T, T)
-      case Cygwin => (T, F, F, F, T, T)
-      case MacOS => (T, F, F, F, T, T)
+        case CodegenHamrPlatform.Linux => (T, F, F, F, F, T, T)
+        case CodegenHamrPlatform.Cygwin => (T, F, F, F, F, T, T)
+        case CodegenHamrPlatform.MacOS => (T, F, F, F, F, T, T)
 
-      case SeL4 => (T, T, T, F, T, T)
+        case CodegenHamrPlatform.SeL4 => (T, T, T, F, F, T, T)
 
-      case SeL4_Only => (F, T, F, F, F, F)
-      case SeL4_TB => (F, T, F, F, F, F)
+        case CodegenHamrPlatform.SeL4_Only => (F, T, F, F, F, F, F)
+        case CodegenHamrPlatform.SeL4_TB => (F, T, F, F, F, F, F)
 
-      case Ros2 => (F, F, F, T, F, F)
+        case CodegenHamrPlatform.Microkit => (F, T, F, F, F, F, F)
+
+        case CodegenHamrPlatform.Ros2 => (F, F, F, F, T, F, F)
     }
 
     var reporterIndex = z"0"
@@ -78,7 +78,7 @@ object CodeGen {
     if (options.runtimeMonitoring && isTranspilerProject) {
       reporter.error(None(), toolName, "Runtime monitoring support for transpiled projects has not been added yet. Disable runtime-monitoring before transpiling")
       reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
-      return CodeGenResults(ISZ(), ISZ())
+      return CodegenResults(ISZ(), ISZ())
     }
 
     var arsitResources: ISZ[FileResource] = ISZ()
@@ -89,7 +89,7 @@ object CodeGen {
     val result: Option[ModelElements] = ModelUtil.resolve(model, model.components(0).identifier.pos, packageName, options, reporter)
     reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
     if (result.isEmpty) {
-      return CodeGenResults(ISZ(), ISZ())
+      return CodegenResults(ISZ(), ISZ())
     }
 
     val (rmodel, aadlTypes, symbolTable): (Aadl, AadlTypes, SymbolTable) = (result.get.model, result.get.types, result.get.symbolTable)
@@ -97,13 +97,13 @@ object CodeGen {
     if (~reporter.hasError && runRos2) {
       val results = Ros2Codegen().run(rmodel, options, aadlTypes, symbolTable, plugins, reporter)
       writeOutResources(results.fileResources, reporter)
-      return CodeGenResults(resources = results.fileResources, auxResources = ISZ())
+      return CodegenResults(resources = results.fileResources, auxResources = ISZ())
     }
 
     if (!reporter.hasError && runArsit) {
 
       val genBlessEntryPoints = false
-      val ipc = arsit.util.IpcMechanism.byName(options.ipc.name).get
+      val ipc = arsit.util.IpcMechanism.SharedMemory
       val platform = arsit.util.ArsitPlatform.byName(options.platform.name).get
       val fileSep = StringOps(org.sireum.Os.fileSep).first
 
@@ -276,7 +276,7 @@ object CodeGen {
 
     actResources = removeDuplicates(actResources, reporter)
 
-    if (!reporter.hasError && options.writeOutResources) {
+    if (!reporter.hasError && shouldWriteOutResources) {
       if (!wroteOutArsitResources) {
         writeOutResources(arsitResources, reporter)
         wroteOutArsitResources = T
@@ -286,7 +286,7 @@ object CodeGen {
 
     reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
 
-    if (!reporter.hasError && options.writeOutResources) {
+    if (!reporter.hasError && shouldWriteOutResources) {
       // always print out any instructional messages
       val instructions = reporter.messages.filter(p =>
         p.kind == ARSIT_INSTRUCTIONS_MESSAGE_KIND || p.kind == ACT_INSTRUCTIONS_MESSAGE_KIND)
@@ -300,7 +300,7 @@ object CodeGen {
       printMessages(reporter.errors, T, 0, ISZ())
     }
 
-    return CodeGenResults(
+    return CodegenResults(
       resources = arsitResources ++ actResources,
       auxResources = arsitAuxResources ++ actAuxResources)
   }

@@ -3,16 +3,8 @@
 package org.sireum.hamr.codegen.ros2
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.CommonUtil
-import org.sireum.hamr.codegen.common.containers.FileResource
-import org.sireum.hamr.codegen.common.plugin.Plugin
-import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlDataPort, AadlEventDataPort, AadlEventPort, AadlPort, AadlThread, Dispatch_Protocol, SymbolTable}
-import org.sireum.hamr.codegen.common.types.AadlTypes
-import org.sireum.hamr.codegen.common.util.{CodeGenConfig, ResourceUtil}
-import org.sireum.hamr.ir
-import org.sireum.hamr.ir.{Aadl, Component, ConnectionInstance, Direction, UnitProp, ValueProp}
-import org.sireum.message.Reporter
-import org.sireum.ops.ISZOps
+import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlPort, AadlThread, Dispatch_Protocol}
+import org.sireum.hamr.ir.Direction
 
 object Generator {
 

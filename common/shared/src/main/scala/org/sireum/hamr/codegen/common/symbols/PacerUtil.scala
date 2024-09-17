@@ -5,12 +5,12 @@ package org.sireum.hamr.codegen.common.symbols
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.properties.CaseSchedulingProperties
-import org.sireum.hamr.codegen.common.util.CodeGenPlatform
+import org.sireum.hamr.codegen.common.util.HamrCli.CodegenHamrPlatform
 import org.sireum.message.Reporter
 
 object PacerUtil {
 
-  def canUseDomainScheduling(symbolTable: SymbolTable, platform: CodeGenPlatform.Type, reporter: Reporter): B = {
+  def canUseDomainScheduling(symbolTable: SymbolTable, platform: CodegenHamrPlatform.Type, reporter: Reporter): B = {
     // - platform is seL4 or seL4_Only (or JVM and any nix)
     // - all threads must be in separate processes
     // - each process with a thread must have domain info
@@ -29,7 +29,7 @@ object PacerUtil {
     var mesg: ISZ[ST] = ISZ()
 
     canUseDomainScheduling = platform match {
-      case CodeGenPlatform.SeL4_TB =>
+      case CodegenHamrPlatform.SeL4_TB =>
         mesg = mesg :+ st"Domain scheduling not supported for legacy Trusted Build platform"
         F
       case _ => T
@@ -152,7 +152,7 @@ object PacerUtil {
       }
     }
 
-    val sel4Target: B = platform == CodeGenPlatform.SeL4 || platform == CodeGenPlatform.SeL4_Only || platform == CodeGenPlatform.SeL4_TB
+    val sel4Target: B = platform == CodegenHamrPlatform.SeL4 || platform == CodegenHamrPlatform.SeL4_Only || platform == CodegenHamrPlatform.SeL4_TB
     if (mesg.nonEmpty && sel4Target) {
       assert(!canUseDomainScheduling, "Only expecting messages related to why domain scheduling won't be used") // sanity check
       val m =

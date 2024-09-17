@@ -6,9 +6,10 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.containers.FileResource
 import org.sireum.hamr.codegen.common.plugin.Plugin
-import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlDataPort, AadlEventDataPort, AadlEventPort, AadlPort, AadlThread, SymbolTable}
+import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlTypes
-import org.sireum.hamr.codegen.common.util.{CodeGenConfig, ResourceUtil}
+import org.sireum.hamr.codegen.common.util.HamrCli.CodegenOption
+import org.sireum.hamr.codegen.common.util.ResourceUtil
 import org.sireum.hamr.ir
 import org.sireum.hamr.ir.{Aadl, Component, ConnectionInstance}
 import org.sireum.message.Reporter
@@ -25,7 +26,7 @@ import org.sireum.ops.ISZOps
   var threadComponents: ISZ[AadlThread] = ISZ()
   var connectionMap: Map[ISZ[String], ISZ[ISZ[String]]] = Map.empty
 
-  def run(model: Aadl, options: CodeGenConfig, aadlTypes: AadlTypes, symbolTable: SymbolTable, plugins: MSZ[Plugin], reporter: Reporter): Ros2Results = {
+  def run(model: Aadl, options: CodegenOption, aadlTypes: AadlTypes, symbolTable: SymbolTable, plugins: MSZ[Plugin], reporter: Reporter): Ros2Results = {
     assert(model.components.size == 1)
 
     val modelName = getModelName(symbolTable)

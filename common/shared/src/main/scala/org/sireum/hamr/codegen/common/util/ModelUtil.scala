@@ -6,7 +6,8 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.properties.PropertyUtil
 import org.sireum.hamr.codegen.common.symbols.{SymbolResolver, SymbolTable, SymbolUtil}
 import org.sireum.hamr.codegen.common.transformers.Transformers
-import org.sireum.hamr.codegen.common.types.{AadlTypes, TODOType, TypeResolver}
+import org.sireum.hamr.codegen.common.types.{AadlTypes, TypeResolver}
+import org.sireum.hamr.codegen.common.util.HamrCli.CodegenOption
 import org.sireum.hamr.ir.{Aadl, Transformer => AirTransformer}
 import org.sireum.message.{Position, Reporter}
 
@@ -19,7 +20,7 @@ object ModelUtil {
   def resolve(origModel: Aadl,
               modelPosOpt: Option[Position],
               packageName: String,
-              options: CodeGenConfig,
+              options: CodegenOption,
               reporter: Reporter): Option[ModelElements] = {
 
     var transModel = origModel

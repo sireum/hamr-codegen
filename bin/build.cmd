@@ -154,7 +154,7 @@ def regenTransformers(): Unit = {
     "-m", "immutable,mutable") ++ asts).at(symbolPackagePath).console.runCheck()
 }
 
-def regenCli4Testing(): Unit = {
+def regenClis(): Unit = {
   val ksireumJar = home.up.up / "bin" / "sireum.jar"
   if (!ksireumJar.exists) {
     println(s"${ksireumJar} does not exists")
@@ -176,10 +176,10 @@ def regenCli4Testing(): Unit = {
     Os.exit(0)
   }
 
-  val utilDir = home / "jvm" / "src" / "test" / "scala" / "org" / "sireum" / "hamr" / "codegen" / "test" / "util"
-  // NOTE: testingCli.sc emits what's in $SIREUM_HOME/bin/sireum.jar's version of
+  val commonUtilDir = home / "common" / "shared" / "src" / "main" / "scala" / "org" / "sireum" / "hamr" / "codegen" / "common" / "util"
+  // NOTE: cliJson.sc emits what's in $SIREUM_HOME/bin/sireum.jar's version of
   //       hamr's cli so regen that first, rebuild sireum.jar, then call this method
-  proc"${sireum} tools cligen -p org.sireum.hamr.codegen.test.util -o ${utilDir.value} ${(utilDir / "testingCli.sc")}".console.runCheck()
+  proc"${sireum} tools cligen -p org.sireum.hamr.codegen.common.util -n HamrCli -o ${commonUtilDir.value} ${(commonUtilDir / "cliJson.sc")}".console.runCheck()
 
 
   var shorts : ISZ[ST] = ISZ()
@@ -194,6 +194,7 @@ def regenCli4Testing(): Unit = {
       }
     }
   }
+  // Ignore the Tipe error "'hamr' is not a member of package 'org.sireum'"
   addOptions(org.sireum.hamr.codegen.HamrCodegenCli.codeGenTool.opts, "")
   for (g <- org.sireum.hamr.codegen.HamrCodegenCli.codeGenTool.groups) {
     addOptions(g.opts, s"${g.name}_")
@@ -326,7 +327,7 @@ for (i <- 0 until Os.cliArgs.size if continue) {
       cloneProjects()
       tipe()
     case string"regen-trans" => regenTransformers()
-    case string"regen-cli" => regenCli4Testing()
+    case string"regen-cli" => regenClis()
     //case string"fetch-gumbo" => setupGumboTesting()
     case string"install-osate-gumbo" => installOsateGumbo()
     case string"install-sbt-mill" => installSbtMill()

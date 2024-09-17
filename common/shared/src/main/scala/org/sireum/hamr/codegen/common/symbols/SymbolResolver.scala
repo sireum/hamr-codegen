@@ -9,7 +9,8 @@ import org.sireum.hamr.codegen.common.properties.HamrProperties.HAMR__BIT_CODEC_
 import org.sireum.hamr.codegen.common.properties.{CasePropertiesProperties, CaseSchedulingProperties, OsateProperties, PropertyUtil}
 import org.sireum.hamr.codegen.common.resolvers.{BTSResolver, GclResolver}
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, BaseType, TypeUtil}
-import org.sireum.hamr.codegen.common.util.{CodeGenConfig, CodeGenPlatform, ExperimentalOptions}
+import org.sireum.hamr.codegen.common.util.ExperimentalOptions
+import org.sireum.hamr.codegen.common.util.HamrCli.{CodegenHamrPlatform, CodegenOption}
 import org.sireum.hamr.ir
 import org.sireum.hamr.ir.util.AadlUtil
 import org.sireum.hamr.ir.{Annex, AnnexLib, ComponentCategory}
@@ -22,7 +23,7 @@ object SymbolResolver {
   def resolve(model: ir.Aadl,
               aadlTypes: AadlTypes,
               aadlMaps: AadlMaps,
-              options: CodeGenConfig,
+              options: CodegenOption,
               reporter: Reporter): Option[SymbolTable] = {
 
     return SymbolResolver().resolve(model, aadlTypes, aadlMaps, options, defaultAnnexVisitors, reporter)
@@ -35,7 +36,7 @@ object SymbolResolver {
   def resolve(model: ir.Aadl,
               aadlTypes: AadlTypes,
               aadlMaps: AadlMaps,
-              options: CodeGenConfig,
+              options: CodegenOption,
               annexVisitors: MSZ[AnnexVisitor],
               reporter: Reporter): Option[SymbolTable] = {
 
@@ -64,7 +65,7 @@ object SymbolResolver {
   def buildSymbolTable(model: ir.Aadl,
                        aadlTypes: AadlTypes,
                        aadlMaps: AadlMaps,
-                       options: CodeGenConfig,
+                       options: CodegenOption,
                        reporter: Reporter): Option[SymbolTable] = {
     var featureMap: HashSMap[IdPath, AadlFeature] = HashSMap.empty
 
@@ -778,7 +779,7 @@ object SymbolResolver {
 
     { // restrict when wire protocol and CakeML components are allowed
       if (symbolTable.hasCakeMLComponents() || shouldUseRawConnections) {
-        if (options.platform == CodeGenPlatform.SeL4_Only || options.platform == CodeGenPlatform.SeL4_TB) {
+        if (options.platform == CodegenHamrPlatform.SeL4_Only || options.platform == CodegenHamrPlatform.SeL4_TB) {
           var reasons: ISZ[String] = ISZ()
           if (symbolTable.hasCakeMLComponents()) {
             reasons = reasons :+ "CakeML components"
