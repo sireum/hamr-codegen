@@ -14,6 +14,7 @@ import org.sireum.hamr.codegen.common.util.HamrCli.{CodegenHamrPlatform, Codegen
 import org.sireum.hamr.codegen.common.util.ModelUtil.ModelElements
 import org.sireum.hamr.codegen.common.util.{CodegenResults, ExperimentalOptions, ModelUtil}
 import org.sireum.hamr.codegen.common.{DirectoryUtil, StringUtil}
+import org.sireum.hamr.codegen.microkit.MicrokitCodegen
 import org.sireum.hamr.ir.Aadl
 import org.sireum.message._
 import org.sireum.ops.StringOps
@@ -68,7 +69,7 @@ object CodeGen {
         case CodegenHamrPlatform.SeL4_Only => (F, T, F, F, F, F, F)
         case CodegenHamrPlatform.SeL4_TB => (F, T, F, F, F, F, F)
 
-        case CodegenHamrPlatform.Microkit => (F, T, F, F, F, F, F)
+        case CodegenHamrPlatform.Microkit => (F, F, F, T, F, F, F)
 
         case CodegenHamrPlatform.Ros2 => (F, F, F, F, T, F, F)
     }
@@ -98,6 +99,12 @@ object CodeGen {
       val results = Ros2Codegen().run(rmodel, options, aadlTypes, symbolTable, plugins, reporter)
       writeOutResources(results.fileResources, reporter)
       return CodegenResults(resources = results.fileResources, auxResources = ISZ())
+    }
+
+    if (!reporter.hasError && runMicrokit) {
+      val results = MicrokitCodegen().run(rmodel, options, aadlTypes, symbolTable, plugins, reporter)
+      writeOutResources(results.resources, reporter)
+      return results
     }
 
     if (!reporter.hasError && runArsit) {

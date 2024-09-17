@@ -18,10 +18,10 @@ object HamrCli {
     "Linux"
     "Cygwin"
     "MacOS"
-    "Microkit"
     "SeL4"
     "SeL4_Only"
     "SeL4_TB"
+    "Microkit"
     "Ros2"
   }
 
@@ -78,20 +78,20 @@ import HamrCli._
       case "Linux" => return Some(CodegenHamrPlatform.Linux)
       case "Cygwin" => return Some(CodegenHamrPlatform.Cygwin)
       case "MacOS" => return Some(CodegenHamrPlatform.MacOS)
-      case "Microkit" => return Some(CodegenHamrPlatform.Microkit)
       case "seL4" => return Some(CodegenHamrPlatform.SeL4)
       case "seL4_Only" => return Some(CodegenHamrPlatform.SeL4_Only)
       case "seL4_TB" => return Some(CodegenHamrPlatform.SeL4_TB)
+      case "Microkit" => return Some(CodegenHamrPlatform.Microkit)
       case "ros2" => return Some(CodegenHamrPlatform.Ros2)
       case s =>
-        eprintln(s"Expecting one of the following: { JVM, Linux, Cygwin, MacOS, Microkit, seL4, seL4_Only, seL4_TB, ros2 }, but found '$s'.")
+        eprintln(s"Expecting one of the following: { JVM, Linux, Cygwin, MacOS, seL4, seL4_Only, seL4_TB, Microkit, ros2 }, but found '$s'.")
         return None()
     }
   }
 
   def parseCodegenHamrPlatform(args: ISZ[String], i: Z): Option[CodegenHamrPlatform.Type] = {
     if (i >= args.size) {
-      eprintln("Expecting one of the following: { JVM, Linux, Cygwin, MacOS, Microkit, seL4, seL4_Only, seL4_TB, ros2 }, but none found.")
+      eprintln("Expecting one of the following: { JVM, Linux, Cygwin, MacOS, seL4, seL4_Only, seL4_TB, Microkit, ros2 }, but none found.")
       return None()
     }
     val r = parseCodegenHamrPlatformH(args(i))
@@ -149,7 +149,7 @@ import HamrCli._
           |-m, --runtime-monitoring    
           |                          Enable runtime monitoring
           |-p, --platform           Target platform (expects one of { JVM, Linux, Cygwin,
-          |                           MacOS, Microkit, seL4, seL4_Only, seL4_TB, ros2 };
+          |                           MacOS, seL4, seL4_Only, seL4_TB, Microkit, ros2 };
           |                           default: JVM)
           |    --parseable-messages Print parseable file messages
           |-h, --help               Display this information

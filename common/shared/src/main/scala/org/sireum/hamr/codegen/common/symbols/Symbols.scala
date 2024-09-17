@@ -51,6 +51,11 @@ import org.sireum.message.Position
     else ISZ()
   }
 
+  def getOutConnections(featurePath: IdPath): ISZ[ir.ConnectionInstance] = {
+    return if (outConnections.contains(featurePath)) outConnections.get(featurePath).get
+    else ISZ()
+  }
+
   def computeMaxDomain(): Z = {
     var max: Z = z"2" // threads start a domain 2
     for (p <- getThreads()) {

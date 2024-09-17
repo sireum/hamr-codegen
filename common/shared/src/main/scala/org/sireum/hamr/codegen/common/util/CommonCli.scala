@@ -40,7 +40,7 @@ object CommonCli {
       description = "Enable runtime monitoring"),
     Opt(name = "platform", longKey = "platform", shortKey = Some('p'),
       tpe = Type.Choice(name = "HamrPlatform", sep = None(),
-        elements = ISZ("JVM", "Linux", "Cygwin", "MacOS", "seL4", "seL4_Only", "seL4_TB", "ros2")),
+        elements = ISZ("JVM", "Linux", "Cygwin", "MacOS", "seL4", "seL4_Only", "seL4_TB", "Microkit", "ros2")),
       description = "Target platform"),
     Opt(name = "parseableMessages", longKey = "parseable-messages", shortKey = None(),
       tpe = Type.Flag(F),

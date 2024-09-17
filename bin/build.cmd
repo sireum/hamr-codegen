@@ -49,6 +49,7 @@ exit /B %errorlevel%
 // #Sireum
 
 import org.sireum._
+import org.sireum.cli.CliOpt
 
 val homeBin: Os.Path = Os.slashDir
 val home: Os.Path = homeBin.up
@@ -182,63 +183,85 @@ def regenClis(): Unit = {
   proc"${sireum} tools cligen -p org.sireum.hamr.codegen.common.util -n HamrCli -o ${commonUtilDir.value} ${(commonUtilDir / "cliJson.sc")}".console.runCheck()
 
 
-  var shorts : ISZ[ST] = ISZ()
-  var longs : ISZ[ST] = ISZ()
-  var allLongs: ISZ[ST] = ISZ()
-  def addOptions(opts: ISZ[org.sireum.cli.CliOpt.Opt], optGroup: String): Unit = {
-    for (o <- opts) {
-      longs = longs :+ st"""val $optGroup${o.name}: String = "--${o.longKey}""""
-      allLongs = allLongs :+ st""""${o.longKey}""""
-      if (o.shortKey.nonEmpty) {
-        shorts = shorts :+ st"""val $optGroup${o.name}: String = "-${o.shortKey.get}""""
+  def process(tool: CliOpt.Tool, packageName: String, output: Os.Path): Unit = {
+
+    var shorts: ISZ[ST] = ISZ()
+    var longs: ISZ[ST] = ISZ()
+    var allLongs: ISZ[ST] = ISZ()
+    var allShorts: ISZ[ST] = ISZ()
+
+    def addOptions(opts: ISZ[org.sireum.cli.CliOpt.Opt], optGroup: String): Unit = {
+      for (o <- opts) {
+        longs = longs :+ st"""val $optGroup${o.name}: String = "--${o.longKey}""""
+        allLongs = allLongs :+ st"$optGroup${o.name}"
+        if (o.shortKey.nonEmpty) {
+          shorts = shorts :+ st"""val $optGroup${o.name}: String = "-${o.shortKey.get}""""
+          allShorts = allShorts :+ st"$optGroup${o.name}"
+        }
       }
     }
+    // Ignore the Tipe error "'hamr' is not a member of package 'org.sireum'"
+    addOptions(tool.opts, "")
+    for (g <- tool.groups) {
+      addOptions(g.opts, s"${g.name}_")
+    }
+
+    val allLongKeysEntries: ISZ[ST] = for (l <- allLongs) yield st".$$colon$$plus(new org.sireum.String($packageName.LongKeys.$l()))"
+    val allShortKeysEntries: ISZ[ST] = for (l <- allShorts) yield st".$$colon$$plus(new org.sireum.String($packageName.ShortKeys.$l()))"
+
+    val content =
+      st"""// #Sireum
+          |
+          |package $packageName
+          |
+          |import org.sireum._
+          |
+          |// the following can be used when constructing command line arguments for ${tool.name}
+          |// from an external tool (e.g. OSATE).
+          |
+          |object LongKeys {
+          |  ${(longs, "\n")}
+          |
+          |  val allKeys: Set[String] = Set.empty[String] ++ ISZ(${(allLongs, ", ")})
+          |
+          |  @strictpure def sameKeys(keys: ISZ[String]): B = allKeys.elements == keys
+          |
+          |  // Paste the following into a java program if you want to ensure the known keys match.
+          |  // To regenerate this, run '$$SIREUM_HOME/hamr/codegen/build.cmd regen-cli'.
+          |  // If this does fail then the CLI arguments being constructed for codegen will need
+          |  // to be updated (that could be delayed if only new options were added).
+          |
+          |  // scala.collection.Seq<org.sireum.String> seq = scala.jdk.javaapi.CollectionConverters.asScala(new java.util.ArrayList<org.sireum.String>());
+          |  // scala.collection.immutable.Seq<org.sireum.String> iseq = ((scala.collection.IterableOnceOps<org.sireum.String, ?, ?>) seq).toSeq();
+          |  // org.sireum.IS<org.sireum.Z, org.sireum.String> knownKeys = org.sireum.IS$$.MODULE$$.apply(iseq, org.sireum.Z$$.MODULE$$)${(allLongKeysEntries, "")};
+          |  // boolean sameKeys = org.sireum.hamr.codegen.LongKeys.sameKeys(knownKeys);
+          |
+          |}
+          |
+          |object ShortKeys {
+          |  ${(shorts, "\n")}
+          |
+          |  val allKeys: Set[String] = Set.empty[String] ++ ISZ(${(allShorts, ", ")})
+          |
+          |  @strictpure def sameKeys(keys: ISZ[String]): B = allKeys.elements == keys
+          |
+          |  // Paste the following into a java program if you want to ensure the known keys match.
+          |  // To regenerate this, run '$$SIREUM_HOME/hamr/codegen/build.cmd regen-cli'.
+          |  // If this does fail then the CLI arguments being constructed for codegen will need
+          |  // to be updated (that could be delayed if only new options were added).
+          |
+          |  // scala.collection.Seq<org.sireum.String> seq = scala.jdk.javaapi.CollectionConverters.asScala(new java.util.ArrayList<org.sireum.String>());
+          |  // scala.collection.immutable.Seq<org.sireum.String> iseq = ((scala.collection.IterableOnceOps<org.sireum.String, ?, ?>) seq).toSeq();
+          |  // org.sireum.IS<org.sireum.Z, org.sireum.String> knownKeys = org.sireum.IS$$.MODULE$$.apply(iseq, org.sireum.Z$$.MODULE$$)${(allShortKeysEntries, "")};
+          |  // boolean sameKeys = org.sireum.hamr.codegen.ShortKeys.sameKeys(knownKeys);
+          |}
+          |"""
+    output.writeOver(content.render)
+    println(s"Wrote: $output")
   }
-  // Ignore the Tipe error "'hamr' is not a member of package 'org.sireum'"
-  addOptions(org.sireum.hamr.codegen.HamrCodegenCli.codeGenTool.opts, "")
-  for (g <- org.sireum.hamr.codegen.HamrCodegenCli.codeGenTool.groups) {
-    addOptions(g.opts, s"${g.name}_")
-  }
 
-  val entries: ISZ[ST] = for (l <- allLongs) yield st".$$colon$$plus(new org.sireum.String($l))"
-
-  val content =
-    st"""// #Sireum
-        |
-        |package org.sireum.hamr.codegen
-        |
-        |import org.sireum._
-        |
-        |// the following can be used when constructing HAMR codegen command line arguments
-        |// from an external tool (e.g. OSATE).
-        |
-        |object LongKeys {
-        |  ${(longs, "\n")}
-        |}
-        |
-        |object ShortKeys {
-        |  ${(shorts, "\n")}
-        |}
-        |
-        |object KeyUtil {
-        |  val allLongKeys: ISZ[String] = ISZ(
-        |    ${(allLongs, ",\n")})
-        |
-        |  // Paste the following into a java program if you want to ensure the known keys match.
-        |  // To regenerate this, run '$$SIREUM_HOME/hamr/codegen/build.cmd regen-cli'.
-        |  // If this does fail then the CLI arguments being constructed for codegen will need
-        |  // to be updated (that could be delayed if only new options were added).
-        |
-        |  // scala.collection.Seq<org.sireum.String> seq = scala.jdk.javaapi.CollectionConverters.asScala(new java.util.ArrayList<org.sireum.String>());
-        |  // scala.collection.immutable.Seq<org.sireum.String> iseq = ((scala.collection.IterableOnceOps<org.sireum.String, ?, ?>) seq).toSeq();
-        |  // org.sireum.IS<org.sireum.Z, org.sireum.String> knownKeys = org.sireum.IS$$.MODULE$$.apply(iseq, org.sireum.Z$$.MODULE$$)${(entries, "")};
-        |  // boolean sameKeys = org.sireum.hamr.codegen.KeyUtil.allLongKeys().equals(knownKeys);
-        |}
-        |"""
-
-  val cliPackagePath = home / "shared" / "src" / "main" / "scala" / "org" / "sireum" / "hamr" / "codegen" / "CliKeys.scala"
-  cliPackagePath.writeOver(content.render)
-  println(s"Wrote: $cliPackagePath")
+  process(org.sireum.hamr.codegen.HamrCodegenCli.codeGenTool, "org.sireum.hamr.codegen", home / "shared" / "src" / "main" / "scala" / "org" / "sireum" / "hamr" / "codegen" / "CliKeys.scala")
+  process(org.sireum.hamr.sysml.cli.sysmlCodegen, "org.sireum.hamr.sysml", home.up / "sysml"/ "frontend" / "jvm" / "src" / "main" / "scala" / "org" / "sireum" / "hamr" / "sysml" / "CliKeys.scala")
 }
 
 def isCI(): B = {
