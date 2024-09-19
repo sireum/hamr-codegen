@@ -44,7 +44,7 @@ object TestOs {
           m(key) = value
         }
       }
-      for ((k, v) <- e.envMap.entries.elements) {
+      for ((k, v) <- e.envMap) {
         val key = k.toString
         val value = v.toString
         m(key) = value
