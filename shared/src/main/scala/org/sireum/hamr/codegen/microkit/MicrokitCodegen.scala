@@ -71,6 +71,9 @@ object MicrokitCodegen {
 
   val dirComponents: String = "components"
 
+  val pacerComputeExecutionTime: Z = 10
+  val endOfFrameComputExecutionTime: Z = 10
+
   @pure def hexFormat(z: Z): String = {
     val s = conversions.String.toCis(z.string)
     var ret: ISZ[C] = ISZ(s(s.lastIndex))
@@ -86,7 +89,7 @@ object MicrokitCodegen {
 
 @record class MicrokitCodegen {
   var resources: ISZ[FileResource] = ISZ()
-  var makefileContainers: ISZ[MakefileContainer]= ISZ()
+  var makefileContainers: ISZ[MakefileContainer] = ISZ()
 
   var xmlProtectionDomains: ISZ[ST] = ISZ()
   var xmlSchedulingDomains: ISZ[ST] = ISZ()
@@ -115,7 +118,7 @@ object MicrokitCodegen {
                                  |  <program_image path="${MicrokitCodegen.pacerName}.elf" />
                                  |</protection_domain>""" +:  xmlProtectionDomains
 
-      xmlSchedulingDomains = st"""<domain name="${MicrokitCodegen.pacerSchedulingDomain}" length="100" />""" +: xmlSchedulingDomains
+      xmlSchedulingDomains = st"""<domain name="${MicrokitCodegen.pacerSchedulingDomain}" length="${MicrokitCodegen.pacerComputeExecutionTime}" />""" +: xmlSchedulingDomains
 
       portPacerToEndOfFrame = getNextPacerChannelId
       portEndOfFrameToPacer = getNextPacerChannelId
@@ -167,7 +170,7 @@ object MicrokitCodegen {
       xmlProtectionDomains = xmlProtectionDomains :+ st"""<protection_domain name="${MicrokitCodegen.endOfFrameComponentName}" domain="domain${domain}" >
                                                    |  <program_image path="${MicrokitCodegen.endOfFrameComponentName}.elf" />
                                                    |</protection_domain>"""
-      xmlSchedulingDomains = xmlSchedulingDomains :+ st"""<domain name="domain$domain" length="100" />"""
+      xmlSchedulingDomains = xmlSchedulingDomains :+ st"""<domain name="domain$domain" length="${MicrokitCodegen.endOfFrameComputExecutionTime}" />"""
 
       val mk = MakefileContainer(resourceSuffix = MicrokitCodegen.endOfFrameComponentName, relativePath = Some(s"${MicrokitCodegen.dirComponents}/${ops.StringOps(MicrokitCodegen.endOfFrameComponentName).toLower}"), hasHeader = F, hasUserContent = F)
       makefileContainers = makefileContainers :+ mk
@@ -221,6 +224,7 @@ object MicrokitCodegen {
           halt("Infeasible")
       }
     }
+
     def processThread(t: AadlThread): ST = {
       assert (t.dispatchProtocol == Dispatch_Protocol.Periodic, "Only processing periodic threads currently")
 
@@ -376,13 +380,35 @@ object MicrokitCodegen {
       return CodegenResults(ISZ(), ISZ())
     }
 
+    val boundProcessors = symbolTable.getAllBoundProcessors()
+    if (boundProcessors.size != 1) {
+      reporter.error(None(), toolName, "Currently handling models with exactly one bound processor")
+      return CodegenResults(ISZ(), ISZ())
+    }
+    var framePeriod: Z = 0
+    boundProcessors(0).getFramePeriod() match {
+      case Some(z) => framePeriod = z
+      case _ => halt("Infeasible") // linter should have ensured bound processor has frame period
+    }
+
+    var usedBudget = 0
     for(t <- symbolTable.getThreads()) {
+      usedBudget = usedBudget + 100
       processThread(t)
     }
+
     addPacerComponent()
 
     addEndOfFrameComponent()
 
+    usedBudget = usedBudget + MicrokitCodegen.pacerComputeExecutionTime + MicrokitCodegen.endOfFrameComputExecutionTime
+
+    if (usedBudget > framePeriod) {
+      reporter.error(None(), toolName, s"Frame period ${framePeriod} is too small for the used budget ${usedBudget}")
+      return CodegenResults(ISZ(), ISZ())
+    }
+
+    xmlSchedulingDomains = xmlSchedulingDomains :+ st"""<domain name="domain0" length="${framePeriod - usedBudget}" />"""
    val xmlDesc = st"""<?xml version="1.0" encoding="UTF-8"?>
                                 |<system>
                                 |
