@@ -5,9 +5,8 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.containers.FileResource
 import org.sireum.hamr.codegen.common.plugin.Plugin
 import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlPort, AadlThread, Dispatch_Protocol, SymbolTable}
-import org.sireum.hamr.codegen.common.types.AadlTypes
-import org.sireum.hamr.codegen.common.types.{TypeUtil => CommonTypeUtil}
-import org.sireum.hamr.codegen.common.util.{CodegenResults, ResourceUtil}
+import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, ArrayType, TypeUtil => CommonTypeUtil}
+import org.sireum.hamr.codegen.common.util.{CodeGenResults, ResourceUtil}
 import org.sireum.hamr.codegen.common.util.HamrCli.CodegenOption
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen.toolName
 import org.sireum.hamr.codegen.microkit.lint.Linter
@@ -121,7 +120,7 @@ object MicrokitCodegen {
 
   var cFileSuffixes: ISZ[String] = ISZ()
 
-  def run(model: Aadl, options: CodegenOption, types: AadlTypes, symbolTable: SymbolTable, plugins: MSZ[Plugin], reporter: Reporter): CodegenResults = {
+  def run(model: Aadl, options: CodegenOption, types: AadlTypes, symbolTable: SymbolTable, plugins: MSZ[Plugin], reporter: Reporter): CodeGenResults = {
 
     def addPacerComponent(): Unit = {
       xmlProtectionDomains =
@@ -226,14 +225,11 @@ object MicrokitCodegen {
       return name.render
     }
 
-    def getType(p: AadlPort): ST = {
+    def getType(p: AadlPort): AadlType = {
       p match {
-        case p: AadlDataPort =>
-          return st"${p.aadlType.nameProvider.qualifiedCTypeName}"
-        case p: AadlEventDataPort =>
-          return st"${p.aadlType.nameProvider.qualifiedCTypeName}"
-        case _ =>
-          halt("Infeasible")
+        case p: AadlDataPort => return p.aadlType
+        case p: AadlEventDataPort => return p.aadlType
+        case _ => halt("Infeasible")
       }
     }
 
@@ -277,14 +273,14 @@ object MicrokitCodegen {
       val threadId = getName(t.path)
       var xmlEntries: ISZ[ST] = ISZ()
       var codeDefinePortEntries: ISZ[(ST, ST)] = ISZ()
-      var vaddrs: ISZ[(ST, ST)] = ISZ() // probably (vaddrName, type)
+      var vaddrs: ISZ[(ST, String)] = ISZ() // probably (vaddrName, type)
       var codeApiMethodSigs: ISZ[ST] = ISZ()
       var codeApiMethods: ISZ[ST] = ISZ()
       var nextMemAddress = 10000000
       for (port <- t.getPorts()) {
         port match {
           case d: AadlDataPort =>
-            val portType = getType(d)
+            val portType: AadlType = getType(d)
             port.direction match {
               case Direction.In =>
                 for (inConn <- symbolTable.getInConnections(port.path)) {
@@ -292,40 +288,75 @@ object MicrokitCodegen {
                   val regionName = createMemoryRegion(inConn.src.feature.get.name)
                   xmlEntries = xmlEntries :+ st"""<map mr="$regionName" vaddr="${MicrokitCodegen.hexFormat(nextMemAddress)}" perms="r" setvar_vaddr="$vaddrName" />"""
                   nextMemAddress = nextMemAddress + 1000
-                  vaddrs = vaddrs :+ (vaddrName, portType)
+                  val portTypeName = TypeUtil.getTypeName(portType, reporter)
+                  vaddrs = vaddrs :+ (vaddrName, portTypeName)
                   val methodSig: ST =
-                    if (TypeUtil.isPrimitive(d.aadlType)) st"$portType get${ops.StringOps(port.identifier).firstToUpper}()"
-                    else st"void get${ops.StringOps(port.identifier).firstToUpper}($portType *value)"
+                    if (TypeUtil.isPrimitive(d.aadlType)) st"$portTypeName get${ops.StringOps(port.identifier).firstToUpper}()"
+                    else st"void get${ops.StringOps(port.identifier).firstToUpper}($portTypeName *value)"
                   codeApiMethodSigs = codeApiMethodSigs :+ methodSig
-                  codeApiMethods = codeApiMethods :+
-                    (if (TypeUtil.isPrimitive(d.aadlType))
+                  val api: ST =
+                    (if (TypeUtil.isPrimitive(d.aadlType)) {
                       st"""$methodSig {
                           |  return *$vaddrName;
                           |}"""
-                    else
+                    } else if (CommonTypeUtil.isArrayTypeH(d.aadlType)) {
+                      val arr = d.aadlType.asInstanceOf[ArrayType]
+                      //val bitsize: Z = arr.bitSize match {
+                      //  case Some(b) => b
+                      //  case _ =>
+                      //    reporter.error(None(), MicrokitCodegen.toolName, "Bit size must be specified")
+                      //    0
+                      //}
+                      st"""$methodSig {
+                          |  // TODO need memmove or memcpy
+                          |  for (int i = 0; i < ${TypeUtil.getArrayDefinedSize(arr)}; i++){
+                          |    value[i] = $vaddrName[i];
+                          |  }
+                          |}"""
+                    }
+                    else {
                       st"""$methodSig {
                           |  *value = *$vaddrName;
-                          |}""")
+                          |}"""
+                    })
+                  codeApiMethods = codeApiMethods :+ api
                 }
               case Direction.Out =>
                 val vaddrName = st"${port.identifier}"
                 val regionName = createMemoryRegion(port.feature.identifier.name)
                 xmlEntries = xmlEntries :+ st"""<map mr="$regionName" vaddr="${MicrokitCodegen.hexFormat(nextMemAddress)}" perms="wr" setvar_vaddr="$vaddrName" />"""
                 nextMemAddress = nextMemAddress + 1000
-                vaddrs = vaddrs :+ (vaddrName, portType)
+                val portTypeName = TypeUtil.getTypeName(portType, reporter)
+                vaddrs = vaddrs :+ (vaddrName, portTypeName)
                 val methodSig: ST =
-                  if (TypeUtil.isPrimitive(d.aadlType)) st"void put${ops.StringOps(port.identifier).firstToUpper}($portType value)"
-                  else st"void put${ops.StringOps(port.identifier).firstToUpper}($portType *value)"
+                  if (TypeUtil.isPrimitive(d.aadlType)) st"void put${ops.StringOps(port.identifier).firstToUpper}($portTypeName value)"
+                  else st"void put${ops.StringOps(port.identifier).firstToUpper}($portTypeName *value)"
                 codeApiMethodSigs = codeApiMethodSigs :+ methodSig
-                codeApiMethods = codeApiMethods :+
-                  (if (TypeUtil.isPrimitive(d.aadlType))
+                val api: ST =
+                  (if (TypeUtil.isPrimitive(d.aadlType)) {
                     st"""$methodSig {
                         |  *$vaddrName = value;
                         |}"""
-                  else
+                  } else if (CommonTypeUtil.isArrayTypeH(d.aadlType)) {
+                    val arr = d.aadlType.asInstanceOf[ArrayType]
+                    val bitsize: Z = arr.bitSize match {
+                      case Some(b) => b
+                      case _ =>
+                        reporter.error(None(), MicrokitCodegen.toolName, "Bit size must be specified")
+                        0
+                    }
+                    st"""$methodSig {
+                        |  // TODO need memmove or memcpy
+                        |  for (int i = 0; i < ${TypeUtil.getArrayDefinedSize(arr)}; i++){
+                        |    $vaddrName[i] = value[i];
+                        |  }
+                        |}"""
+                  } else {
                     st"""$methodSig {
                         |  *$vaddrName = *value;
-                        |}""")
+                        |}"""
+                  })
+                codeApiMethods = codeApiMethods :+ api
               case _ =>
                 halt("Infeasible: codegen only supports in and out connections")
             }
@@ -415,7 +446,7 @@ object MicrokitCodegen {
       resources = resources :+ ResourceUtil.createResource(implPath, implSource, T)
 
       val userImplSource =
-        st"""#include "../../../include/printf.h"
+        st"""#include <printf.h>
             |#include "$headerFileName"
             |
             |void ${initializeMethodName}(void) {
@@ -445,13 +476,13 @@ object MicrokitCodegen {
     }
 
     if (!Linter.lint(model, options, types, symbolTable, reporter)) {
-      return CodegenResults(ISZ(), ISZ())
+      return CodeGenResults(ISZ(), ISZ())
     }
 
     val boundProcessors = symbolTable.getAllBoundProcessors()
     if (boundProcessors.size != 1) {
       reporter.error(None(), toolName, "Currently handling models with exactly one bound processor")
-      return CodegenResults(ISZ(), ISZ())
+      return CodeGenResults(ISZ(), ISZ())
     }
     var framePeriod: Z = 0
     boundProcessors(0).getFramePeriod() match {
@@ -475,7 +506,7 @@ object MicrokitCodegen {
 
     if (usedBudget > framePeriod) {
       reporter.error(None(), toolName, s"Frame period ${framePeriod} is too small for the used budget ${usedBudget}")
-      return CodegenResults(ISZ(), ISZ())
+      return CodeGenResults(ISZ(), ISZ())
     }
 
     xmlSchedulingDomains = xmlSchedulingDomains :+ st"""<domain name="domain0" length="${framePeriod - usedBudget}" />"""
@@ -642,6 +673,6 @@ object MicrokitCodegen {
     resources = resources :+ ResourceUtil.createResource(s"${includePath}/util.h", Util.utilh, T)
     resources = resources :+ ResourceUtil.createResource(s"${srcPath}/util.c", Util.utilc, T)
 
-    return CodegenResults(resources = resources, auxResources = ISZ())
+    return CodeGenResults(resources = resources, auxResources = ISZ())
   }
 }

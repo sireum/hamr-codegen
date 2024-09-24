@@ -39,11 +39,24 @@ object TypeUtil {
     } else if (CommonTypeUtil.isArrayTypeH(t)) {
       val a = t.asInstanceOf[ArrayType]
 
-      val name = t.nameProvider.qualifiedTypeName
+      val name = t.nameProvider.qualifiedCTypeName
       val container = s"${name}_container"
+
+      val baseType: String = getTypeName(a, reporter)
+
+      val bitsize: Z = a.bitSize match {
+        case Some(b) => b / 8
+        case _ =>
+          reporter.error(None(), MicrokitCodegen.toolName, "Bit size must be specified")
+          0
+      }
+
+      val sizeName = getArrayDefinedSize(a)
       return (
         None(),
-        st"""typedef ${a.baseType.name} $name [];
+        st"""#define ${name}_SIZE $bitsize
+            |
+            |typedef $baseType $name [$sizeName];
             |
             |typedef
             |  struct $container{
@@ -55,12 +68,26 @@ object TypeUtil {
     }
   }
 
+  @pure def getArrayDefinedSize(a: ArrayType): String = {
+    return s"${a.nameProvider.qualifiedCTypeName}_SIZE"
+  }
+
   @pure def isPrimitive(a: AadlType): B = {
     a match {
       case a: EnumType => return T
       case b: BaseType => return T
       case _ => return F
     }
+  }
+
+  def getTypeName(a: AadlType, reporter: Reporter): String = {
+    val t: AadlType = a match {
+      case a: ArrayType => a.baseType
+      case _ => a
+    }
+    return (
+      if (isPrimitive(t)) translateBaseType(t.name, reporter).get
+      else t.nameProvider.qualifiedCTypeName)
   }
 
   def translateBaseType(c: String, reporter: Reporter): Option[String] = {
