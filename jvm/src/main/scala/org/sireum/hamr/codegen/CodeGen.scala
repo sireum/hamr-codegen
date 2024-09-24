@@ -12,7 +12,7 @@ import org.sireum.hamr.codegen.common.symbols.SymbolTable
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.HamrCli.{CodegenHamrPlatform, CodegenOption}
 import org.sireum.hamr.codegen.common.util.ModelUtil.ModelElements
-import org.sireum.hamr.codegen.common.util.{CodegenResults, ExperimentalOptions, ModelUtil}
+import org.sireum.hamr.codegen.common.util.{CodeGenResults, ExperimentalOptions, ModelUtil}
 import org.sireum.hamr.codegen.common.{DirectoryUtil, StringUtil}
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen
 import org.sireum.hamr.ir.Aadl
@@ -32,7 +32,7 @@ object CodeGen {
               transpilerCallback: (SireumSlangTranspilersCOption, Reporter) => Z,
               proyekIveCallback: SireumProyekIveOption => Z,
               sergenCallback: (SireumToolsSergenOption, Reporter) => Z,
-              slangCheckCallback: (SireumToolsSlangcheckGeneratorOption, Reporter) => Z): CodegenResults = {
+              slangCheckCallback: (SireumToolsSlangcheckGeneratorOption, Reporter) => Z): CodeGenResults = {
 
     val targetingSel4 = options.platform == CodegenHamrPlatform.SeL4
 
@@ -79,7 +79,7 @@ object CodeGen {
     if (options.runtimeMonitoring && isTranspilerProject) {
       reporter.error(None(), toolName, "Runtime monitoring support for transpiled projects has not been added yet. Disable runtime-monitoring before transpiling")
       reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
-      return CodegenResults(ISZ(), ISZ())
+      return CodeGenResults(ISZ(), ISZ())
     }
 
     var arsitResources: ISZ[FileResource] = ISZ()
@@ -90,7 +90,7 @@ object CodeGen {
     val result: Option[ModelElements] = ModelUtil.resolve(model, model.components(0).identifier.pos, packageName, options, reporter)
     reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
     if (result.isEmpty) {
-      return CodegenResults(ISZ(), ISZ())
+      return CodeGenResults(ISZ(), ISZ())
     }
 
     val (rmodel, aadlTypes, symbolTable): (Aadl, AadlTypes, SymbolTable) = (result.get.model, result.get.types, result.get.symbolTable)
@@ -98,12 +98,18 @@ object CodeGen {
     if (~reporter.hasError && runRos2) {
       val results = Ros2Codegen().run(rmodel, options, aadlTypes, symbolTable, plugins, reporter)
       writeOutResources(results.fileResources, reporter)
-      return CodegenResults(resources = results.fileResources, auxResources = ISZ())
+      if (!options.parseableMessages) {
+        reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
+      }
+      return CodeGenResults(resources = results.fileResources, auxResources = ISZ())
     }
 
     if (!reporter.hasError && runMicrokit) {
       val results = MicrokitCodegen().run(rmodel, options, aadlTypes, symbolTable, plugins, reporter)
       writeOutResources(results.resources, reporter)
+      if (!options.parseableMessages) {
+        reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
+      }
       return results
     }
 
@@ -307,7 +313,7 @@ object CodeGen {
       printMessages(reporter.errors, T, 0, ISZ())
     }
 
-    return CodegenResults(
+    return CodeGenResults(
       resources = arsitResources ++ actResources,
       auxResources = arsitAuxResources ++ actAuxResources)
   }

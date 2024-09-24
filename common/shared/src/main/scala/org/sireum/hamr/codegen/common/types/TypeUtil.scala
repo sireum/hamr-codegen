@@ -93,6 +93,10 @@ object TypeUtil {
     return isEnum(c.properties)
   }
 
+  @pure def isEnumTypeH(t: AadlType): B = {
+    return t.isInstanceOf[EnumType]
+  }
+
   @pure def isEnum(props: ISZ[ir.Property]): B = {
     for (p <- props if CommonUtil.getLastName(p.name) == OsateProperties.DATA_MODEL__DATA_REPRESENTATION &&
       ops.ISZOps(p.propertyValues).contains(ir.ValueProp("Enum"))) {
@@ -124,6 +128,9 @@ object TypeUtil {
   @pure def isRecordType(c: ir.Component): B = {
     return c.category == ir.ComponentCategory.Data && c.subComponents.nonEmpty
   }
+  @pure def isRecordTypeH(r: AadlType): B = {
+    return r.isInstanceOf[RecordType]
+  }
 
   @pure def isArrayType(c: ir.Component): B = {
     for (p <- c.properties if CommonUtil.getLastName(p.name) == OsateProperties.DATA_MODEL__DATA_REPRESENTATION &&
@@ -133,8 +140,16 @@ object TypeUtil {
     return F
   }
 
+  @pure def isArrayTypeH(a: AadlType): B = {
+    return a.isInstanceOf[ArrayType]
+  }
+
   @pure def isBaseType(c: ir.Component): B = {
     return ops.StringOps(c.classifier.get.name).startsWith("Base_Types::")
+  }
+
+  @pure def isBaseTypeH(a: AadlType): B = {
+    return a.isInstanceOf[BaseType]
   }
 
   def isMissingType(c: ir.Component): B = {

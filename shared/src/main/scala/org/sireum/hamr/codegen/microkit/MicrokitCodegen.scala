@@ -6,28 +6,34 @@ import org.sireum.hamr.codegen.common.containers.FileResource
 import org.sireum.hamr.codegen.common.plugin.Plugin
 import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlPort, AadlThread, Dispatch_Protocol, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlTypes
+import org.sireum.hamr.codegen.common.types.{TypeUtil => CommonTypeUtil}
 import org.sireum.hamr.codegen.common.util.{CodegenResults, ResourceUtil}
 import org.sireum.hamr.codegen.common.util.HamrCli.CodegenOption
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen.toolName
 import org.sireum.hamr.codegen.microkit.lint.Linter
-import org.sireum.hamr.codegen.microkit.util.Util
-import org.sireum.hamr.ir.{Aadl, ConnectionInstance, Direction}
+import org.sireum.hamr.codegen.microkit.util.{TypeUtil, Util}
+import org.sireum.hamr.ir.{Aadl, Direction}
 import org.sireum.message.Reporter
 
-@datatype class MakefileContainer (val resourceSuffix: String,
-                                   val relativePath: Option[String],
-                                   val hasHeader: B,
-                                   val hasUserContent: B) {
+@datatype class MakefileContainer(val resourceSuffix: String,
+                                  val relativePath: Option[String],
+                                  val hasHeader: B,
+                                  val hasUserContent: B) {
 
   @strictpure def cHeaderFilename: String = s"$resourceSuffix.h"
+
   @strictpure def cImplFilename: String = s"$resourceSuffix.c"
+
   @strictpure def cUserImplFilename: String = s"${resourceSuffix}_user.c"
 
   @strictpure def oName: String = s"$resourceSuffix.o"
+
   @strictpure def userOName: String = s"${resourceSuffix}_user.o"
+
   @strictpure def elfName: String = s"$resourceSuffix.elf"
 
   @strictpure def relativePathSrcDir: String = if (relativePath.nonEmpty) s"${relativePath.get}/src" else ""
+
   @strictpure def relativePathIncludeDir: String = if (relativePath.nonEmpty) s"${relativePath.get}/include" else ""
 
   @strictpure def OBJSEntry: ST = st"${ops.StringOps(resourceSuffix).toUpper}_OBJS := $$(PRINTF_OBJS) $oName"
@@ -35,16 +41,17 @@ import org.sireum.message.Reporter
   @pure def buildEntry: ST = {
     val TAB: String = "\t"
     // FIXME spilt output into include and src directories
-    val header: Option[String] = None()//if (hasHeader) Some(s"$${TOP}/$relativePathIncludeDir/$cHeaderFilename ") else None()
+    val header: Option[String] = if (hasHeader) Some(s" -I$${TOP}/$relativePathIncludeDir") else None()
     val userContributions: Option[ST] =
       if (hasUserContent)
-        Some(st"""$userOName: $header$${TOP}/$relativePathSrcDir/$cUserImplFilename Makefile
-                 |${TAB}$$(CC) -c $$(CFLAGS) $$< -o $$@""")
+        Some(
+          st"""$userOName: $${TOP}/$relativePathSrcDir/$cUserImplFilename Makefile
+              |${TAB}$$(CC) -c $$(CFLAGS) $$< -o $$@ -I$${TOP}/include$header""")
       else None()
     val ret =
       st"""$userContributions
-          |$oName: $header$${TOP}/$relativePathSrcDir/$cImplFilename Makefile
-          |${TAB}$$(CC) -c $$(CFLAGS) $$< -o $$@"""
+          |$oName: $${TOP}/$relativePathSrcDir/$cImplFilename Makefile
+          |${TAB}$$(CC) -c $$(CFLAGS) $$< -o $$@ -I$${TOP}/include$header"""
     return ret
   }
 
@@ -53,7 +60,7 @@ import org.sireum.message.Reporter
     val ret =
       st"""$elfName: $$(PRINTF_OBJS) ${if (hasUserContent) userOName else ""} $oName
           |${TAB}$$(LD) $$(LDFLAGS) $$^ $$(LIBS) -o $$@"""
-        return ret
+    return ret
   }
 }
 
@@ -70,6 +77,8 @@ object MicrokitCodegen {
   val endOfFrameComponentName: String = "end_of_frame_component"
 
   val dirComponents: String = "components"
+  val dirInclude: String = "include"
+  val dirSrc: String = "src"
 
   val pacerComputeExecutionTime: Z = 10
   val endOfFrameComputExecutionTime: Z = 10
@@ -77,7 +86,7 @@ object MicrokitCodegen {
   @pure def hexFormat(z: Z): String = {
     val s = conversions.String.toCis(z.string)
     var ret: ISZ[C] = ISZ(s(s.lastIndex))
-    for(i <- 1 until s.size) {
+    for (i <- 1 until s.size) {
       if (i % 3 == 0) {
         ret = '_' +: ret
       }
@@ -104,6 +113,7 @@ object MicrokitCodegen {
   var portEndOfFrameToPacer: Z = -1
 
   var nextPacerChannelId: Z = 61 // FIXME document indicates < 63, but build indicates < 62
+
   def getNextPacerChannelId: Z = {
     nextPacerChannelId = nextPacerChannelId - 1
     return nextPacerChannelId + 1
@@ -114,24 +124,27 @@ object MicrokitCodegen {
   def run(model: Aadl, options: CodegenOption, types: AadlTypes, symbolTable: SymbolTable, plugins: MSZ[Plugin], reporter: Reporter): CodegenResults = {
 
     def addPacerComponent(): Unit = {
-      xmlProtectionDomains = st"""<protection_domain name="${MicrokitCodegen.pacerName}" domain="domain1" >
-                                 |  <program_image path="${MicrokitCodegen.pacerName}.elf" />
-                                 |</protection_domain>""" +:  xmlProtectionDomains
+      xmlProtectionDomains =
+        st"""<protection_domain name="${MicrokitCodegen.pacerName}" domain="domain1" >
+            |  <program_image path="${MicrokitCodegen.pacerName}.elf" />
+            |</protection_domain>""" +: xmlProtectionDomains
 
       xmlSchedulingDomains = st"""<domain name="${MicrokitCodegen.pacerSchedulingDomain}" length="${MicrokitCodegen.pacerComputeExecutionTime}" />""" +: xmlSchedulingDomains
 
       portPacerToEndOfFrame = getNextPacerChannelId
       portEndOfFrameToPacer = getNextPacerChannelId
 
-      xmlPacerChannels = xmlPacerChannels :+ st"""<channel>
-                                                 |  <end pd="${MicrokitCodegen.pacerName}" id="$portPacerToEndOfFrame" />
-                                                 |  <end pd="${MicrokitCodegen.endOfFrameComponentName}" id="$portPacerToEndOfFrame" />
-                                                 |</channel>"""
+      xmlPacerChannels = xmlPacerChannels :+
+        st"""<channel>
+            |  <end pd="${MicrokitCodegen.pacerName}" id="$portPacerToEndOfFrame" />
+            |  <end pd="${MicrokitCodegen.endOfFrameComponentName}" id="$portPacerToEndOfFrame" />
+            |</channel>"""
 
-      xmlPacerChannels = xmlPacerChannels :+ st"""<channel>
-                                                 |  <end pd="${MicrokitCodegen.endOfFrameComponentName}" id="$portEndOfFrameToPacer" />
-                                                 |  <end pd="${MicrokitCodegen.pacerName}" id="$portEndOfFrameToPacer" />
-                                                 |</channel>"""
+      xmlPacerChannels = xmlPacerChannels :+
+        st"""<channel>
+            |  <end pd="${MicrokitCodegen.endOfFrameComponentName}" id="$portEndOfFrameToPacer" />
+            |  <end pd="${MicrokitCodegen.pacerName}" id="$portEndOfFrameToPacer" />
+            |</channel>"""
 
       val mk = MakefileContainer(resourceSuffix = MicrokitCodegen.pacerName, relativePath = Some(s"${MicrokitCodegen.dirComponents}/${ops.StringOps(MicrokitCodegen.pacerName).toLower}"), hasHeader = F, hasUserContent = F)
       makefileContainers = makefileContainers :+ mk
@@ -167,9 +180,10 @@ object MicrokitCodegen {
 
     def addEndOfFrameComponent(): Unit = {
       val domain = largestSchedulingDomain + 1
-      xmlProtectionDomains = xmlProtectionDomains :+ st"""<protection_domain name="${MicrokitCodegen.endOfFrameComponentName}" domain="domain${domain}" >
-                                                   |  <program_image path="${MicrokitCodegen.endOfFrameComponentName}.elf" />
-                                                   |</protection_domain>"""
+      xmlProtectionDomains = xmlProtectionDomains :+
+        st"""<protection_domain name="${MicrokitCodegen.endOfFrameComponentName}" domain="domain${domain}" >
+            |  <program_image path="${MicrokitCodegen.endOfFrameComponentName}.elf" />
+            |</protection_domain>"""
       xmlSchedulingDomains = xmlSchedulingDomains :+ st"""<domain name="domain$domain" length="${MicrokitCodegen.endOfFrameComputExecutionTime}" />"""
 
       val mk = MakefileContainer(resourceSuffix = MicrokitCodegen.endOfFrameComponentName, relativePath = Some(s"${MicrokitCodegen.dirComponents}/${ops.StringOps(MicrokitCodegen.endOfFrameComponentName).toLower}"), hasHeader = F, hasUserContent = F)
@@ -208,25 +222,57 @@ object MicrokitCodegen {
       if (xmlMemoryRegions.contains(name.render)) {
         return name.render
       }
-      xmlMemoryRegions = xmlMemoryRegions + name.render~> st"""<memory_region name="$name" size="${MicrokitCodegen.hexFormat(1000)}" />"""
+      xmlMemoryRegions = xmlMemoryRegions + name.render ~> st"""<memory_region name="$name" size="${MicrokitCodegen.hexFormat(1000)}" />"""
       return name.render
     }
 
     def getType(p: AadlPort): ST = {
       p match {
         case p: AadlDataPort =>
-          //p.aadlType
-          return st"int"
+          return st"${p.aadlType.nameProvider.qualifiedCTypeName}"
         case p: AadlEventDataPort =>
-          //p.aadlType
-          return st"int"
+          return st"${p.aadlType.nameProvider.qualifiedCTypeName}"
         case _ =>
           halt("Infeasible")
       }
     }
 
-    def processThread(t: AadlThread): ST = {
-      assert (t.dispatchProtocol == Dispatch_Protocol.Periodic, "Only processing periodic threads currently")
+    def processTypes(): Unit = {
+      if (types.rawConnections) {
+        reporter.error(None(), MicrokitCodegen.toolName, "Raw connections are not currently supported")
+        return
+      }
+
+      var forwardDefs: ISZ[ST] = ISZ()
+      var defs: ISZ[ST] = ISZ()
+      for (t <- ops.ISZOps(types.typeMap.values).sortWith((a, b) => CommonTypeUtil.isEnumTypeH(a)) if !CommonTypeUtil.isBaseTypeH(t)) {
+        val r = TypeUtil.processDatatype(t, reporter)
+        if (r._1.nonEmpty) {
+          forwardDefs = forwardDefs :+ r._1.get
+        }
+        defs = defs :+ r._2
+      }
+
+      val content =
+        st"""#ifndef TYPES_H
+            |#define TYPES_H
+            |
+            |#include <stdint.h>
+            |
+            |${(forwardDefs, "\n\n")}
+            |
+            |${(defs, "\n\n")}
+            |
+            |#endif
+            |"""
+
+      val outputdir = s"${options.camkesOutputDir.get}/${MicrokitCodegen.dirInclude}"
+      val path = s"$outputdir/types.h"
+      resources = resources :+ ResourceUtil.createResourceH(path, content, T, T)
+    }
+
+    def processThread(t: AadlThread): (ST, Z) = {
+      assert(t.dispatchProtocol == Dispatch_Protocol.Periodic, "Only processing periodic threads currently")
 
       val threadId = getName(t.path)
       var xmlEntries: ISZ[ST] = ISZ()
@@ -235,7 +281,7 @@ object MicrokitCodegen {
       var codeApiMethodSigs: ISZ[ST] = ISZ()
       var codeApiMethods: ISZ[ST] = ISZ()
       var nextMemAddress = 10000000
-      for(port <- t.getPorts()) {
+      for (port <- t.getPorts()) {
         port match {
           case d: AadlDataPort =>
             val portType = getType(d)
@@ -247,12 +293,19 @@ object MicrokitCodegen {
                   xmlEntries = xmlEntries :+ st"""<map mr="$regionName" vaddr="${MicrokitCodegen.hexFormat(nextMemAddress)}" perms="r" setvar_vaddr="$vaddrName" />"""
                   nextMemAddress = nextMemAddress + 1000
                   vaddrs = vaddrs :+ (vaddrName, portType)
-                  val methodSig = st"void get${ops.StringOps(port.identifier).firstToUpper}($portType *value)"
+                  val methodSig: ST =
+                    if (TypeUtil.isPrimitive(d.aadlType)) st"$portType get${ops.StringOps(port.identifier).firstToUpper}()"
+                    else st"void get${ops.StringOps(port.identifier).firstToUpper}($portType *value)"
                   codeApiMethodSigs = codeApiMethodSigs :+ methodSig
                   codeApiMethods = codeApiMethods :+
-                    st"""$methodSig {
-                        |  *value = *$vaddrName;
-                        |}"""
+                    (if (TypeUtil.isPrimitive(d.aadlType))
+                      st"""$methodSig {
+                          |  return *$vaddrName;
+                          |}"""
+                    else
+                      st"""$methodSig {
+                          |  *value = *$vaddrName;
+                          |}""")
                 }
               case Direction.Out =>
                 val vaddrName = st"${port.identifier}"
@@ -260,12 +313,19 @@ object MicrokitCodegen {
                 xmlEntries = xmlEntries :+ st"""<map mr="$regionName" vaddr="${MicrokitCodegen.hexFormat(nextMemAddress)}" perms="wr" setvar_vaddr="$vaddrName" />"""
                 nextMemAddress = nextMemAddress + 1000
                 vaddrs = vaddrs :+ (vaddrName, portType)
-                val methodSig = st"void put${ops.StringOps(port.identifier).firstToUpper}($portType *value)"
+                val methodSig: ST =
+                  if (TypeUtil.isPrimitive(d.aadlType)) st"void put${ops.StringOps(port.identifier).firstToUpper}($portType value)"
+                  else st"void put${ops.StringOps(port.identifier).firstToUpper}($portType *value)"
                 codeApiMethodSigs = codeApiMethodSigs :+ methodSig
                 codeApiMethods = codeApiMethods :+
-                  st"""$methodSig {
-                      |  *$vaddrName = *value;
-                      |}"""
+                  (if (TypeUtil.isPrimitive(d.aadlType))
+                    st"""$methodSig {
+                        |  *$vaddrName = value;
+                        |}"""
+                  else
+                    st"""$methodSig {
+                        |  *$vaddrName = *value;
+                        |}""")
               case _ =>
                 halt("Infeasible: codegen only supports in and out connections")
             }
@@ -289,21 +349,30 @@ object MicrokitCodegen {
       val mk = MakefileContainer(resourceSuffix = threadId.render, relativePath = Some(s"${MicrokitCodegen.dirComponents}/${threadId.render}"), hasHeader = T, hasUserContent = T)
       makefileContainers = makefileContainers :+ mk
 
-      xmlSchedulingDomains = xmlSchedulingDomains :+ st"""<domain name="$schedulingDomain" length="100" />"""
+      val computeExecutionTime: Z = t.getComputeExecutionTime() match {
+        case Some((l, h)) =>
+          assert (l <= h, s"low must be <= high: $l <= $h")
+          h
+        case _ => 100
+      }
+
+      xmlSchedulingDomains = xmlSchedulingDomains :+ st"""<domain name="$schedulingDomain" length="$computeExecutionTime" />"""
 
       xmlEntries = xmlEntries :+ st"""<program_image path="${mk.elfName}" />"""
 
-      val ret = st"""<protection_domain name="$threadId" domain="$schedulingDomain" >
-                    |  ${(xmlEntries, "\n")}
-                    |</protection_domain>"""
+      val ret =
+        st"""<protection_domain name="$threadId" domain="$schedulingDomain" >
+            |  ${(xmlEntries, "\n")}
+            |</protection_domain>"""
 
       xmlProtectionDomains = xmlProtectionDomains :+ ret
 
       val pacerChannelId = getNextPacerChannelId
-      xmlPacerChannels = xmlPacerChannels :+ st"""<channel>
-                                           |  <end pd="${MicrokitCodegen.pacerName}" id="$pacerChannelId" />
-                                           |  <end pd="$threadId" id="$pacerChannelId" />
-                                           |</channel>"""
+      xmlPacerChannels = xmlPacerChannels :+
+        st"""<channel>
+            |  <end pd="${MicrokitCodegen.pacerName}" id="$pacerChannelId" />
+            |  <end pd="$threadId" id="$pacerChannelId" />
+            |</channel>"""
       val threadCaps = s"PORT_TO_${ops.StringOps(threadId.render).toUpper}"
       val connFromPacer = st"PORT_FROM_PACER"
       codePacerDefines = codePacerDefines :+ st"""#define $threadCaps $pacerChannelId"""
@@ -311,12 +380,12 @@ object MicrokitCodegen {
       codeDefinePortEntries = codeDefinePortEntries :+ (connFromPacer, st"${pacerChannelId}")
 
 
-      val vaddrEntries: ISZ[ST] = for(v <- vaddrs) yield st"volatile ${v._2} *${v._1};"
+      val vaddrEntries: ISZ[ST] = for (v <- vaddrs) yield st"volatile ${v._2} *${v._1};"
 
       val headerFileName = s"${threadId.render}.h"
       val initializeMethodName = st"${threadId}_initialize"
       val timeTriggeredMethodName = st"${threadId}_timeTriggered"
-      val portDefines: ISZ[ST] = for(p <- codeDefinePortEntries) yield st"#define ${p._1} ${p._2}"
+      val portDefines: ISZ[ST] = for (p <- codeDefinePortEntries) yield st"#define ${p._1} ${p._2}"
       val implSource =
         st"""#include "$headerFileName"
             |
@@ -365,15 +434,14 @@ object MicrokitCodegen {
       val headerSource =
         st"""#include <stdint.h>
             |#include <microkit.h>
+            |#include <types.h>
             |
             |${(codeApiMethodSigs, ";\n")};
             |"""
-      // FIXME: split output into include and src directories
-      //val headerPath = s"${options.camkesOutputDir.get}/${mk.relativePathIncludeDir}/${mk.cHeaderFilename}"
-      val headerPath = s"${options.camkesOutputDir.get}/${mk.relativePathSrcDir}/${mk.cHeaderFilename}"
+      val headerPath = s"${options.camkesOutputDir.get}/${mk.relativePathIncludeDir}/${mk.cHeaderFilename}"
       resources = resources :+ ResourceUtil.createResource(headerPath, headerSource, T)
 
-      return ret
+      return (ret, computeExecutionTime)
     }
 
     if (!Linter.lint(model, options, types, symbolTable, reporter)) {
@@ -391,10 +459,12 @@ object MicrokitCodegen {
       case _ => halt("Infeasible") // linter should have ensured bound processor has frame period
     }
 
-    var usedBudget = 0
-    for(t <- symbolTable.getThreads()) {
-      usedBudget = usedBudget + 100
-      processThread(t)
+    processTypes()
+
+    var usedBudget: Z = 0
+    for (t <- symbolTable.getThreads()) {
+      val results = processThread(t)
+      usedBudget = usedBudget + results._2
     }
 
     addPacerComponent()
@@ -409,19 +479,20 @@ object MicrokitCodegen {
     }
 
     xmlSchedulingDomains = xmlSchedulingDomains :+ st"""<domain name="domain0" length="${framePeriod - usedBudget}" />"""
-   val xmlDesc = st"""<?xml version="1.0" encoding="UTF-8"?>
-                                |<system>
-                                |
-                                |  <domain_schedule>
-                                |    ${(xmlSchedulingDomains, "\n")}
-                                |  </domain_schedule>
-                                |
-                                |  ${(xmlProtectionDomains, "\n\n")}
-                                |
-                                |  ${(xmlMemoryRegions.values, "\n\n")}
-                                |
-                                |  ${(xmlPacerChannels, "\n\n")}
-                                |</system>
+    val xmlDesc =
+      st"""<?xml version="1.0" encoding="UTF-8"?>
+          |<system>
+          |
+          |  <domain_schedule>
+          |    ${(xmlSchedulingDomains, "\n")}
+          |  </domain_schedule>
+          |
+          |  ${(xmlProtectionDomains, "\n\n")}
+          |
+          |  ${(xmlMemoryRegions.values, "\n\n")}
+          |
+          |  ${(xmlPacerChannels, "\n\n")}
+          |</system>
                                 """
 
     val xmlPath = s"${options.camkesOutputDir.get}/${MicrokitCodegen.microkitSystemXmlFilename}"
@@ -429,136 +500,147 @@ object MicrokitCodegen {
 
     val TAB: String = "\t"
 
-    val makefileContents = st"""ifeq ($$(strip $$(MICROKIT_SDK)),)
-                               |$$(error MICROKIT_SDK must be specified)
-                               |endif
-                               |override MICROKIT_SDK := $$(abspath $${MICROKIT_SDK})
-                               |
-                               |BUILD_DIR ?= build
-                               |# By default we make a debug build so that the client debug prints can be seen.
-                               |MICROKIT_CONFIG ?= debug
-                               |
-                               |export CPU := cortex-a53
-                               |QEMU := qemu-system-aarch64
-                               |
-                               |CC := clang
-                               |LD := ld.lld
-                               |export MICROKIT_TOOL ?= $$(abspath $$(MICROKIT_SDK)/bin/microkit)
-                               |
-                               |export BOARD_DIR := $$(abspath $$(MICROKIT_SDK)/board/qemu_virt_aarch64/debug)
-                               |export TOP:= $$(abspath $$(dir $${MAKEFILE_LIST}))
-                               |IMAGE_FILE := $$(BUILD_DIR)/loader.img
-                               |REPORT_FILE := $$(BUILD_DIR)/report.txt
-                               |
-                               |all: $${IMAGE_FILE}
-                               |
-                               |qemu $${IMAGE_FILE} $${REPORT_FILE} clean clobber: $$(IMAGE_FILE) $${BUILD_DIR}/Makefile FORCE
-                               |${TAB}$${MAKE} -C $${BUILD_DIR} MICROKIT_SDK=$${MICROKIT_SDK} $$(notdir $$@)
-                               |
-                               |$${BUILD_DIR}/Makefile: ${MicrokitCodegen.systemMakeFilename}
-                               |${TAB}mkdir -p $${BUILD_DIR}
-                               |${TAB}cp ${MicrokitCodegen.systemMakeFilename} $${BUILD_DIR}/Makefile
-                               |
-                               |FORCE:
-                               |"""
+    val makefileContents =
+      st"""ifeq ($$(strip $$(MICROKIT_SDK)),)
+          |$$(error MICROKIT_SDK must be specified)
+          |endif
+          |override MICROKIT_SDK := $$(abspath $${MICROKIT_SDK})
+          |
+          |BUILD_DIR ?= build
+          |# By default we make a debug build so that the client debug prints can be seen.
+          |MICROKIT_CONFIG ?= debug
+          |
+          |export CPU := cortex-a53
+          |QEMU := qemu-system-aarch64
+          |
+          |CC := clang
+          |LD := ld.lld
+          |export MICROKIT_TOOL ?= $$(abspath $$(MICROKIT_SDK)/bin/microkit)
+          |
+          |export BOARD_DIR := $$(abspath $$(MICROKIT_SDK)/board/qemu_virt_aarch64/debug)
+          |export TOP:= $$(abspath $$(dir $${MAKEFILE_LIST}))
+          |IMAGE_FILE := $$(BUILD_DIR)/loader.img
+          |REPORT_FILE := $$(BUILD_DIR)/report.txt
+          |
+          |all: $${IMAGE_FILE}
+          |
+          |qemu $${IMAGE_FILE} $${REPORT_FILE} clean clobber: $$(IMAGE_FILE) $${BUILD_DIR}/Makefile FORCE
+          |${TAB}$${MAKE} -C $${BUILD_DIR} MICROKIT_SDK=$${MICROKIT_SDK} $$(notdir $$@)
+          |
+          |$${BUILD_DIR}/Makefile: ${MicrokitCodegen.systemMakeFilename}
+          |${TAB}mkdir -p $${BUILD_DIR}
+          |${TAB}cp ${MicrokitCodegen.systemMakeFilename} $${BUILD_DIR}/Makefile
+          |
+          |FORCE:
+          |"""
     val makefilePath = s"${options.camkesOutputDir.get}/Makefile"
     resources = resources :+ ResourceUtil.createResource(makefilePath, makefileContents, T)
 
     val objs: ISZ[ST] = for (mk <- makefileContainers) yield mk.OBJSEntry
     val buildEntries: ISZ[ST] = for (mk <- makefileContainers) yield mk.buildEntry
 
-    val elfFiles: ISZ[String] = (for(mk <- makefileContainers) yield mk.elfName)
-    val oFiles: ISZ[String] = for(f <- cFileSuffixes) yield s"$f.o"
+    val elfFiles: ISZ[String] = (for (mk <- makefileContainers) yield mk.elfName)
+    val oFiles: ISZ[String] = for (f <- cFileSuffixes) yield s"$f.o"
 
-    val elfEntries: ISZ[ST] = for( mk <- makefileContainers) yield mk.elfEntry
+    val elfEntries: ISZ[ST] = for (mk <- makefileContainers) yield mk.elfEntry
 
-    val systemmkContents = st"""ifeq ($$(strip $$(MICROKIT_SDK)),)
-                               |$$(error MICROKIT_SDK must be specified)
-                               |endif
-                               |
-                               |BUILD_DIR ?= build
-                               |# By default we make a debug build so that the client debug prints can be seen.
-                               |MICROKIT_CONFIG ?= debug
-                               |
-                               |QEMU := qemu-system-aarch64
-                               |
-                               |CC := clang
-                               |LD := ld.lld
-                               |AR := llvm-ar
-                               |RANLIB := llvm-ranlib
-                               |
-                               |MICROKIT_TOOL ?= $$(MICROKIT_SDK)/bin/microkit
-                               |
-                               |CFLAGS := -mcpu=$$(CPU) \
-                               |${TAB}-mstrict-align \
-                               |${TAB}-nostdlib \
-                               |${TAB}-ffreestanding \
-                               |${TAB}-g3 \
-                               |${TAB}-O3 \
-                               |${TAB}-Wall -Wno-unused-function -Werror -Wno-unused-command-line-argument \
-                               |${TAB}-target aarch64-none-elf \
-                               |${TAB}-I$$(BOARD_DIR)/include
-                               |LDFLAGS := -L$$(BOARD_DIR)/lib
-                               |LIBS := --start-group -lmicrokit -Tmicrokit.ld --end-group
-                               |
-                               |
-                               |PRINTF_OBJS := printf.o util.o
-                               |${(objs, "\n")}
-                               |
-                               |SYSTEM_FILE := $${TOP}/${MicrokitCodegen.microkitSystemXmlFilename}
-                               |
-                               |IMAGES := ${(elfFiles, " ")}
-                               |IMAGE_FILE_DATAPORT = microkit.img
-                               |IMAGE_FILE = loader.img
-                               |REPORT_FILE = /report.txt
-                               |
-                               |all: $$(IMAGE_FILE)
-                               |${TAB}CHECK_FLAGS_BOARD_MD5:=.board_cflags-$$(shell echo -- $${CFLAGS} $${BOARD} $${MICROKIT_CONFIG}| shasum | sed 's/ *-//')
-                               |
-                               |$${CHECK_FLAGS_BOARD_MD5}:
-                               |${TAB}-rm -f .board_cflags-*
-                               |${TAB}touch $$@
-                               |
-                               |%.o: $${TOP}/%.c Makefile
-                               |${TAB}$$(CC) -c $$(CFLAGS) $$< -o $$@
-                               |
-                               |printf.o: $${TOP}/include/printf.c Makefile
-                               |${TAB}$$(CC) -c $$(CFLAGS) $$< -o $$@
-                               |
-                               |util.o: $${TOP}/include/util.c Makefile
-                               |${TAB}$$(CC) -c $$(CFLAGS) $$< -o $$@
-                               |
-                               |${(buildEntries, "\n\n")}
-                               |
-                               |${(elfEntries, "\n\n")}
-                               |
-                               |$$(IMAGE_FILE): $$(IMAGES) $$(SYSTEM_FILE)
-                               |${TAB}$$(MICROKIT_TOOL) $$(SYSTEM_FILE) --search-path $$(BUILD_DIR) --board $$(MICROKIT_BOARD) --config $$(MICROKIT_CONFIG) -o $$(IMAGE_FILE) -r $$(REPORT_FILE)
-                               |
-                               |
-                               |qemu: $$(IMAGE_FILE)
-                               |${TAB}$$(QEMU) -machine virt,virtualization=on \
-                               |${TAB}${TAB}${TAB}-cpu cortex-a53 \
-                               |${TAB}${TAB}${TAB}-serial mon:stdio \
-                               |${TAB}${TAB}${TAB}-device loader,file=$$(IMAGE_FILE),addr=0x70000000,cpu-num=0 \
-                               |${TAB}${TAB}${TAB}-m size=2G \
-                               |${TAB}${TAB}${TAB}-nographic
-                               |
-                               |clean::
-                               |${TAB}rm -f ${(oFiles, " ")}
-                               |
-                               |clobber:: clean
-                               |${TAB}rm -f ${(elfFiles, " ")} $${IMAGE_FILE} $${REPORT_FILE}
-                               |"""
+    val systemmkContents =
+      st"""ifeq ($$(strip $$(MICROKIT_SDK)),)
+          |$$(error MICROKIT_SDK must be specified)
+          |endif
+          |
+          |MICROKIT_TOOL ?= $$(MICROKIT_SDK)/bin/microkit
+          |
+          |ifeq ("$$(wildcard $$(MICROKIT_TOOL))","")
+          |$$(error Microkit tool not found at $${MICROKIT_TOOL})
+          |endif
+          |
+          |ifeq ($$(strip $$(MICROKIT_BOARD)),)
+          |$$(error MICROKIT_BOARD must be specified)
+          |endif
+          |
+          |BUILD_DIR ?= build
+          |# By default we make a debug build so that the client debug prints can be seen.
+          |MICROKIT_CONFIG ?= debug
+          |
+          |QEMU := qemu-system-aarch64
+          |
+          |CC := clang
+          |LD := ld.lld
+          |AR := llvm-ar
+          |RANLIB := llvm-ranlib
+          |
+          |CFLAGS := -mcpu=$$(CPU) \
+          |${TAB}-mstrict-align \
+          |${TAB}-nostdlib \
+          |${TAB}-ffreestanding \
+          |${TAB}-g3 \
+          |${TAB}-O3 \
+          |${TAB}-Wall -Wno-unused-function -Werror -Wno-unused-command-line-argument \
+          |${TAB}-target aarch64-none-elf \
+          |${TAB}-I$$(BOARD_DIR)/include
+          |LDFLAGS := -L$$(BOARD_DIR)/lib
+          |LIBS := --start-group -lmicrokit -Tmicrokit.ld --end-group
+          |
+          |
+          |PRINTF_OBJS := printf.o util.o
+          |${(objs, "\n")}
+          |
+          |SYSTEM_FILE := $${TOP}/${MicrokitCodegen.microkitSystemXmlFilename}
+          |
+          |IMAGES := ${(elfFiles, " ")}
+          |IMAGE_FILE_DATAPORT = microkit.img
+          |IMAGE_FILE = loader.img
+          |REPORT_FILE = /report.txt
+          |
+          |all: $$(IMAGE_FILE)
+          |${TAB}CHECK_FLAGS_BOARD_MD5:=.board_cflags-$$(shell echo -- $${CFLAGS} $${BOARD} $${MICROKIT_CONFIG}| shasum | sed 's/ *-//')
+          |
+          |$${CHECK_FLAGS_BOARD_MD5}:
+          |${TAB}-rm -f .board_cflags-*
+          |${TAB}touch $$@
+          |
+          |%.o: $${TOP}/%.c Makefile
+          |${TAB}$$(CC) -c $$(CFLAGS) $$< -o $$@ -I$${TOP}/include
+          |
+          |printf.o: $${TOP}/${MicrokitCodegen.dirSrc}/printf.c Makefile
+          |${TAB}$$(CC) -c $$(CFLAGS) $$< -o $$@ -I$${TOP}/include
+          |
+          |util.o: $${TOP}/${MicrokitCodegen.dirSrc}/util.c Makefile
+          |${TAB}$$(CC) -c $$(CFLAGS) $$< -o $$@ -I$${TOP}/include
+          |
+          |${(buildEntries, "\n\n")}
+          |
+          |${(elfEntries, "\n\n")}
+          |
+          |$$(IMAGE_FILE): $$(IMAGES) $$(SYSTEM_FILE)
+          |${TAB}$$(MICROKIT_TOOL) $$(SYSTEM_FILE) --search-path $$(BUILD_DIR) --board $$(MICROKIT_BOARD) --config $$(MICROKIT_CONFIG) -o $$(IMAGE_FILE) -r $$(REPORT_FILE)
+          |
+          |
+          |qemu: $$(IMAGE_FILE)
+          |${TAB}$$(QEMU) -machine virt,virtualization=on \
+          |${TAB}${TAB}${TAB}-cpu cortex-a53 \
+          |${TAB}${TAB}${TAB}-serial mon:stdio \
+          |${TAB}${TAB}${TAB}-device loader,file=$$(IMAGE_FILE),addr=0x70000000,cpu-num=0 \
+          |${TAB}${TAB}${TAB}-m size=2G \
+          |${TAB}${TAB}${TAB}-nographic
+          |
+          |clean::
+          |${TAB}rm -f ${(oFiles, " ")}
+          |
+          |clobber:: clean
+          |${TAB}rm -f ${(elfFiles, " ")} $${IMAGE_FILE} $${REPORT_FILE}
+          |"""
     val systemmkPath = s"${options.camkesOutputDir.get}/${MicrokitCodegen.systemMakeFilename}"
     resources = resources :+ ResourceUtil.createResource(systemmkPath, systemmkContents, T)
 
 
-    val includePath = s"${options.camkesOutputDir.get}/include"
+    val includePath = s"${options.camkesOutputDir.get}/${MicrokitCodegen.dirInclude}"
+    val srcPath = s"${options.camkesOutputDir.get}/${MicrokitCodegen.dirSrc}"
     resources = resources :+ ResourceUtil.createResource(s"${includePath}/printf.h", Util.printfh, T)
-    resources = resources :+ ResourceUtil.createResource(s"${includePath}/printf.c", Util.printfc, T)
+    resources = resources :+ ResourceUtil.createResource(s"${srcPath}/printf.c", Util.printfc, T)
     resources = resources :+ ResourceUtil.createResource(s"${includePath}/util.h", Util.utilh, T)
-    resources = resources :+ ResourceUtil.createResource(s"${includePath}/util.c", Util.utilc, T)
+    resources = resources :+ ResourceUtil.createResource(s"${srcPath}/util.c", Util.utilc, T)
 
     return CodegenResults(resources = resources, auxResources = ISZ())
   }
