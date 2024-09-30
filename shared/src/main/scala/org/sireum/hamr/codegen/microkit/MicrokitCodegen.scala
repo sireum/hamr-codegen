@@ -10,58 +10,11 @@ import org.sireum.hamr.codegen.common.util.{CodeGenResults, ResourceUtil}
 import org.sireum.hamr.codegen.common.util.HamrCli.CodegenOption
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen.toolName
 import org.sireum.hamr.codegen.microkit.lint.Linter
-import org.sireum.hamr.codegen.microkit.util.{TypeUtil, Util}
+import org.sireum.hamr.codegen.microkit.util.{SystemDescription, Channel, MakefileContainer, MemoryMap, MemoryRegion, Perm, ProtectionDomain, SchedulingDomain, TypeUtil, Util}
 import org.sireum.hamr.ir.{Aadl, Direction}
 import org.sireum.message.Reporter
 
-@datatype class MakefileContainer(val resourceSuffix: String,
-                                  val relativePath: Option[String],
-                                  val hasHeader: B,
-                                  val hasUserContent: B) {
-
-  @strictpure def cHeaderFilename: String = s"$resourceSuffix.h"
-
-  @strictpure def cImplFilename: String = s"$resourceSuffix.c"
-
-  @strictpure def cUserImplFilename: String = s"${resourceSuffix}_user.c"
-
-  @strictpure def oName: String = s"$resourceSuffix.o"
-
-  @strictpure def userOName: String = s"${resourceSuffix}_user.o"
-
-  @strictpure def elfName: String = s"$resourceSuffix.elf"
-
-  @strictpure def relativePathSrcDir: String = if (relativePath.nonEmpty) s"${relativePath.get}/src" else ""
-
-  @strictpure def relativePathIncludeDir: String = if (relativePath.nonEmpty) s"${relativePath.get}/include" else ""
-
-  @strictpure def OBJSEntry: ST = st"${ops.StringOps(resourceSuffix).toUpper}_OBJS := $$(PRINTF_OBJS) $oName"
-
-  @pure def buildEntry: ST = {
-    val TAB: String = "\t"
-    // FIXME spilt output into include and src directories
-    val header: Option[String] = if (hasHeader) Some(s" -I$${TOP}/$relativePathIncludeDir") else None()
-    val userContributions: Option[ST] =
-      if (hasUserContent)
-        Some(
-          st"""$userOName: $${TOP}/$relativePathSrcDir/$cUserImplFilename Makefile
-              |${TAB}$$(CC) -c $$(CFLAGS) $$< -o $$@ -I$${TOP}/include$header""")
-      else None()
-    val ret =
-      st"""$userContributions
-          |$oName: $${TOP}/$relativePathSrcDir/$cImplFilename Makefile
-          |${TAB}$$(CC) -c $$(CFLAGS) $$< -o $$@ -I$${TOP}/include$header"""
-    return ret
-  }
-
-  @pure def elfEntry: ST = {
-    val TAB: String = "\t"
-    val ret =
-      st"""$elfName: $$(PRINTF_OBJS) ${if (hasUserContent) userOName else ""} $oName
-          |${TAB}$$(LD) $$(LDFLAGS) $$^ $$(LIBS) -o $$@"""
-    return ret
-  }
-}
+import scala.:+
 
 object MicrokitCodegen {
   val toolName: String = "Mircokit Codegen"
@@ -72,8 +25,6 @@ object MicrokitCodegen {
   val pacerName: String = "pacer"
 
   val pacerSchedulingDomain: String = "domain1"
-
-  val endOfFrameComponentName: String = "end_of_frame_component"
 
   val dirComponents: String = "components"
   val dirInclude: String = "include"
@@ -99,10 +50,10 @@ object MicrokitCodegen {
   var resources: ISZ[FileResource] = ISZ()
   var makefileContainers: ISZ[MakefileContainer] = ISZ()
 
-  var xmlProtectionDomains: ISZ[ST] = ISZ()
-  var xmlSchedulingDomains: ISZ[ST] = ISZ()
-  var xmlMemoryRegions: HashSMap[String, ST] = HashSMap.empty
-  var xmlPacerChannels: ISZ[ST] = ISZ()
+  var xmlSchedulingDomains: ISZ[SchedulingDomain] = ISZ()
+  var xmlProtectionDomains: ISZ[ProtectionDomain] = ISZ()
+  var xmlMemoryRegions: HashSMap[String, MemoryRegion] = HashSMap.empty
+  var xmlChannels: ISZ[Channel] = ISZ()
 
   var codePacerDefines: ISZ[ST] = ISZ()
   var codePacerPings: ISZ[ST] = ISZ()
@@ -123,53 +74,33 @@ object MicrokitCodegen {
   def run(model: Aadl, options: CodegenOption, types: AadlTypes, symbolTable: SymbolTable, plugins: MSZ[Plugin], reporter: Reporter): CodeGenResults = {
 
     def addPacerComponent(): Unit = {
-      xmlProtectionDomains =
-        st"""<protection_domain name="${MicrokitCodegen.pacerName}" domain="domain1" >
-            |  <program_image path="${MicrokitCodegen.pacerName}.elf" />
-            |</protection_domain>""" +: xmlProtectionDomains
-
-      xmlSchedulingDomains = st"""<domain name="${MicrokitCodegen.pacerSchedulingDomain}" length="${MicrokitCodegen.pacerComputeExecutionTime}" />""" +: xmlSchedulingDomains
+      xmlProtectionDomains = xmlProtectionDomains :+
+        ProtectionDomain(
+          name = MicrokitCodegen.pacerName,
+          schedulingDomain = Some("domain1"),
+          id = None(),
+          stackSize = None(),
+          memMaps = ISZ(),
+          programImage = s"${MicrokitCodegen.pacerName}.elf",
+          children = ISZ())
 
       portPacerToEndOfFrame = getNextPacerChannelId
       portEndOfFrameToPacer = getNextPacerChannelId
 
-      xmlPacerChannels = xmlPacerChannels :+
-        st"""<channel>
-            |  <end pd="${MicrokitCodegen.pacerName}" id="$portPacerToEndOfFrame" />
-            |  <end pd="${MicrokitCodegen.endOfFrameComponentName}" id="$portPacerToEndOfFrame" />
-            |</channel>"""
-
-      xmlPacerChannels = xmlPacerChannels :+
-        st"""<channel>
-            |  <end pd="${MicrokitCodegen.endOfFrameComponentName}" id="$portEndOfFrameToPacer" />
-            |  <end pd="${MicrokitCodegen.pacerName}" id="$portEndOfFrameToPacer" />
-            |</channel>"""
-
       val mk = MakefileContainer(resourceSuffix = MicrokitCodegen.pacerName, relativePath = Some(s"${MicrokitCodegen.dirComponents}/${ops.StringOps(MicrokitCodegen.pacerName).toLower}"), hasHeader = F, hasUserContent = F)
       makefileContainers = makefileContainers :+ mk
 
-      val PORT_TO = s"PORT_TO_${ops.StringOps(MicrokitCodegen.endOfFrameComponentName).toUpper}"
-      val PORT_FROM = s"PORT_FROM_${ops.StringOps(MicrokitCodegen.endOfFrameComponentName).toUpper}"
-      codePacerDefines = codePacerDefines :+ st"#define $PORT_TO $portPacerToEndOfFrame"
-      codePacerDefines = codePacerDefines :+ st"#define $PORT_FROM $portEndOfFrameToPacer"
-      codePacerPings = codePacerPings :+ st"microkit_notify($PORT_TO)"
       val content =
         st"""#include <stdint.h>
             |#include <microkit.h>
             |
             |${(codePacerDefines, "\n")}
             |
-            |void paceComponents(){
-            |  ${(codePacerPings, ";\n")};
-            |}
-            |
             |void init(void) {}
             |
             |void notified(microkit_channel channel) {
             |  switch(channel) {
-            |    case $PORT_FROM:
-            |      paceComponents();
-            |      break;
+            |    ${(codePacerPings, "\n")}
             |  }
             |}
             |"""
@@ -177,52 +108,19 @@ object MicrokitCodegen {
       resources = resources :+ ResourceUtil.createResource(path, content, T)
     }
 
-    def addEndOfFrameComponent(): Unit = {
-      val domain = largestSchedulingDomain + 1
-      xmlProtectionDomains = xmlProtectionDomains :+
-        st"""<protection_domain name="${MicrokitCodegen.endOfFrameComponentName}" domain="domain${domain}" >
-            |  <program_image path="${MicrokitCodegen.endOfFrameComponentName}.elf" />
-            |</protection_domain>"""
-      xmlSchedulingDomains = xmlSchedulingDomains :+ st"""<domain name="domain$domain" length="${MicrokitCodegen.endOfFrameComputExecutionTime}" />"""
-
-      val mk = MakefileContainer(resourceSuffix = MicrokitCodegen.endOfFrameComponentName, relativePath = Some(s"${MicrokitCodegen.dirComponents}/${ops.StringOps(MicrokitCodegen.endOfFrameComponentName).toLower}"), hasHeader = F, hasUserContent = F)
-      makefileContainers = makefileContainers :+ mk
-
-      val portFrom = s"PORT_FROM_${ops.StringOps(MicrokitCodegen.pacerName).toUpper}"
-      val portTo = s"PORT_TO_${ops.StringOps(MicrokitCodegen.pacerName).toUpper}"
-      val content =
-        st"""#include <stdint.h>
-            |#include <microkit.h>
-            |
-            |#define $portTo $portEndOfFrameToPacer
-            |#define $portFrom $portPacerToEndOfFrame
-            |
-            |void init(void) {
-            |  microkit_notify($portTo);
-            |}
-            |
-            |void notified(microkit_channel channel) {
-            |  switch (channel) {
-            |    case $portFrom:
-            |      microkit_notify($portTo);
-            |      break;
-            |  }
-            |}"""
-      val path = s"${options.camkesOutputDir.get}/${mk.relativePathSrcDir}/${mk.cImplFilename}"
-      resources = resources :+ ResourceUtil.createResource(path, content, T)
-    }
 
     @pure def getName(ids: ISZ[String]): ST = {
       return st"${(ops.ISZOps(ids).drop(1), "_")}"
     }
 
-    def createMemoryRegion(senderIdPath: ISZ[String]): String = {
+    def createMemoryRegion(senderIdPath: ISZ[String]): MemoryRegion = {
       val name = getName(senderIdPath)
       if (xmlMemoryRegions.contains(name.render)) {
-        return name.render
+        return xmlMemoryRegions.get(name.render).get
       }
-      xmlMemoryRegions = xmlMemoryRegions + name.render ~> st"""<memory_region name="$name" size="${MicrokitCodegen.hexFormat(1000)}" />"""
-      return name.render
+      val mr = MemoryRegion(name = name.render, size = MicrokitCodegen.hexFormat(1000))
+      xmlMemoryRegions = xmlMemoryRegions + name.render ~> mr
+      return mr
     }
 
     def getType(p: AadlPort): AadlType = {
@@ -267,12 +165,13 @@ object MicrokitCodegen {
       resources = resources :+ ResourceUtil.createResourceH(path, content, T, T)
     }
 
-    def processThread(t: AadlThread): (ST, Z) = {
+    def processThread(t: AadlThread): (ProtectionDomain, Z) = {
       assert(t.dispatchProtocol == Dispatch_Protocol.Periodic, "Only processing periodic threads currently")
 
       val threadId = getName(t.path)
-      var xmlEntries: ISZ[ST] = ISZ()
-      var codeDefinePortEntries: ISZ[(ST, ST)] = ISZ()
+      val threadMonId = st"${getName(t.path)}_MON"
+      var childMemMaps: ISZ[MemoryMap] = ISZ()
+
       var vaddrs: ISZ[(ST, String)] = ISZ() // probably (vaddrName, type)
       var codeApiMethodSigs: ISZ[ST] = ISZ()
       var codeApiMethods: ISZ[ST] = ISZ()
@@ -285,8 +184,10 @@ object MicrokitCodegen {
               case Direction.In =>
                 for (inConn <- symbolTable.getInConnections(port.path)) {
                   val vaddrName = st"${port.identifier}"
-                  val regionName = createMemoryRegion(inConn.src.feature.get.name)
-                  xmlEntries = xmlEntries :+ st"""<map mr="$regionName" vaddr="${MicrokitCodegen.hexFormat(nextMemAddress)}" perms="r" setvar_vaddr="$vaddrName" />"""
+                  val region = createMemoryRegion(inConn.src.feature.get.name)
+                  childMemMaps = childMemMaps :+ MemoryMap(
+                    memoryRegion = region.name, vaddr = s"${MicrokitCodegen.hexFormat(nextMemAddress)}",
+                    perms = ISZ(Perm.READ), varAddr = vaddrName.render)
                   nextMemAddress = nextMemAddress + 1000
                   val portTypeName = TypeUtil.getTypeName(portType, reporter)
                   vaddrs = vaddrs :+ (vaddrName, portTypeName)
@@ -301,12 +202,6 @@ object MicrokitCodegen {
                           |}"""
                     } else if (CommonTypeUtil.isArrayTypeH(d.aadlType)) {
                       val arr = d.aadlType.asInstanceOf[ArrayType]
-                      //val bitsize: Z = arr.bitSize match {
-                      //  case Some(b) => b
-                      //  case _ =>
-                      //    reporter.error(None(), MicrokitCodegen.toolName, "Bit size must be specified")
-                      //    0
-                      //}
                       st"""$methodSig {
                           |  // TODO need memmove or memcpy
                           |  for (int i = 0; i < ${TypeUtil.getArrayDefinedSize(arr)}; i++){
@@ -323,8 +218,10 @@ object MicrokitCodegen {
                 }
               case Direction.Out =>
                 val vaddrName = st"${port.identifier}"
-                val regionName = createMemoryRegion(port.feature.identifier.name)
-                xmlEntries = xmlEntries :+ st"""<map mr="$regionName" vaddr="${MicrokitCodegen.hexFormat(nextMemAddress)}" perms="wr" setvar_vaddr="$vaddrName" />"""
+                val region = createMemoryRegion(port.feature.identifier.name)
+                childMemMaps = childMemMaps :+ MemoryMap(
+                  memoryRegion = region.name, vaddr = s"${MicrokitCodegen.hexFormat(nextMemAddress)}",
+                  perms = ISZ(Perm.READ, Perm.WRITE), varAddr = vaddrName.render)
                 nextMemAddress = nextMemAddress + 1000
                 val portTypeName = TypeUtil.getTypeName(portType, reporter)
                 vaddrs = vaddrs :+ (vaddrName, portTypeName)
@@ -387,36 +284,70 @@ object MicrokitCodegen {
         case _ => 100
       }
 
-      xmlSchedulingDomains = xmlSchedulingDomains :+ st"""<domain name="$schedulingDomain" length="$computeExecutionTime" />"""
+      xmlSchedulingDomains = xmlSchedulingDomains :+
+        SchedulingDomain(name = schedulingDomain, length = computeExecutionTime)
 
-      xmlEntries = xmlEntries :+ st"""<program_image path="${mk.elfName}" />"""
+      val child = ProtectionDomain(name = threadId.render, schedulingDomain = Some(schedulingDomain), id = Some(s"1"),
+        stackSize = None(), memMaps = childMemMaps, programImage = mk.elfName, children = ISZ())
 
-      val ret =
-        st"""<protection_domain name="$threadId" domain="$schedulingDomain" >
-            |  ${(xmlEntries, "\n")}
-            |</protection_domain>"""
-
-      xmlProtectionDomains = xmlProtectionDomains :+ ret
+      xmlProtectionDomains = xmlProtectionDomains :+
+        ProtectionDomain(
+          name = threadMonId.render, schedulingDomain = Some(schedulingDomain), id = None(), stackSize = None(),
+          memMaps = ISZ(), programImage = mk.monElfName, children = ISZ(child))
 
       val pacerChannelId = getNextPacerChannelId
-      xmlPacerChannels = xmlPacerChannels :+
-        st"""<channel>
-            |  <end pd="${MicrokitCodegen.pacerName}" id="$pacerChannelId" />
-            |  <end pd="$threadId" id="$pacerChannelId" />
-            |</channel>"""
-      val threadCaps = s"PORT_TO_${ops.StringOps(threadId.render).toUpper}"
-      val connFromPacer = st"PORT_FROM_PACER"
-      codePacerDefines = codePacerDefines :+ st"""#define $threadCaps $pacerChannelId"""
-      codePacerPings = codePacerPings :+ st"""microkit_notify($threadCaps)"""
-      codeDefinePortEntries = codeDefinePortEntries :+ (connFromPacer, st"${pacerChannelId}")
+
+      xmlChannels = xmlChannels :+ Channel(
+        firstPD = MicrokitCodegen.pacerName, firstId = pacerChannelId,
+        secondPD = threadMonId.render, secondId = pacerChannelId)
+      val threadMonCaps = s"PORT_TO_${ops.StringOps(threadMonId.render).toUpper}"
+
+      codePacerDefines = codePacerDefines :+ st"""#define $threadMonCaps $pacerChannelId"""
+      codePacerPings = codePacerPings :+
+        st"""case ${threadMonCaps}:
+            |  microkit_notify($threadMonCaps);
+            |  break;"""
+
+      val monChannelId = getNextPacerChannelId
+
+      xmlChannels = xmlChannels :+ Channel(
+        firstPD = threadMonId.render, firstId = monChannelId,
+        secondPD = threadId.render, secondId = monChannelId)
+
+      val headerFileName = s"${threadId.render}.h"
+
+      val monImplSource =
+        st"""#include "$headerFileName"
+            |
+            |#define PORT_PACER $pacerChannelId
+            |
+            |#define PORT_TO_CHILD $monChannelId
+            |
+            |void init(void) {
+            |  microkit_notify(PORT_PACER);
+            |}
+            |
+            |void notified(microkit_channel channel) {
+            |  switch (channel) {
+            |    case PORT_PACER:
+            |      // notify child
+            |      microkit_notify(PORT_TO_CHILD);
+            |
+            |      // send response back to pacer
+            |      microkit_notify(PORT_PACER);
+            |      break;
+            |  }
+            |}"""
+
+      val monImplPath = s"${options.camkesOutputDir.get}/${mk.relativePathSrcDir}/${mk.monImplFilename}"
+      resources = resources :+ ResourceUtil.createResource(monImplPath, monImplSource, T)
+
 
 
       val vaddrEntries: ISZ[ST] = for (v <- vaddrs) yield st"volatile ${v._2} *${v._1};"
 
-      val headerFileName = s"${threadId.render}.h"
       val initializeMethodName = st"${threadId}_initialize"
       val timeTriggeredMethodName = st"${threadId}_timeTriggered"
-      val portDefines: ISZ[ST] = for (p <- codeDefinePortEntries) yield st"#define ${p._1} ${p._2}"
       val implSource =
         st"""#include "$headerFileName"
             |
@@ -425,7 +356,7 @@ object MicrokitCodegen {
             |
             |${(vaddrEntries, "\n")}
             |
-            |${(portDefines, "\n")}
+            |#define PORT_FROM_MON $monChannelId
             |
             |${(codeApiMethods, "\n\n")}
             |
@@ -435,7 +366,7 @@ object MicrokitCodegen {
             |
             |void notified(microkit_channel channel) {
             |  switch (channel) {
-            |    case $connFromPacer:
+            |    case PORT_FROM_MON:
             |      ${timeTriggeredMethodName}();
             |      break;
             |  }
@@ -446,8 +377,7 @@ object MicrokitCodegen {
       resources = resources :+ ResourceUtil.createResource(implPath, implSource, T)
 
       val userImplSource =
-        st"""#include <printf.h>
-            |#include "$headerFileName"
+        st"""#include "$headerFileName"
             |
             |void ${initializeMethodName}(void) {
             |  // add initialization code here
@@ -463,7 +393,8 @@ object MicrokitCodegen {
       resources = resources :+ ResourceUtil.createResource(userImplPath, userImplSource, F)
 
       val headerSource =
-        st"""#include <stdint.h>
+        st"""#include <printf.h>
+            |#include <stdint.h>
             |#include <microkit.h>
             |#include <types.h>
             |
@@ -472,7 +403,7 @@ object MicrokitCodegen {
       val headerPath = s"${options.camkesOutputDir.get}/${mk.relativePathIncludeDir}/${mk.cHeaderFilename}"
       resources = resources :+ ResourceUtil.createResource(headerPath, headerSource, T)
 
-      return (ret, computeExecutionTime)
+      return (child, computeExecutionTime)
     }
 
     if (!Linter.lint(model, options, types, symbolTable, reporter)) {
@@ -500,34 +431,35 @@ object MicrokitCodegen {
 
     addPacerComponent()
 
-    addEndOfFrameComponent()
 
-    usedBudget = usedBudget + MicrokitCodegen.pacerComputeExecutionTime + MicrokitCodegen.endOfFrameComputExecutionTime
+
+    val pacerSlot = SchedulingDomain(name = MicrokitCodegen.pacerSchedulingDomain, length = MicrokitCodegen.pacerComputeExecutionTime)
+    val currentScheduleSize = xmlSchedulingDomains.size
+    usedBudget = usedBudget + (currentScheduleSize * MicrokitCodegen.pacerComputeExecutionTime)
 
     if (usedBudget > framePeriod) {
       reporter.error(None(), toolName, s"Frame period ${framePeriod} is too small for the used budget ${usedBudget}")
       return CodeGenResults(ISZ(), ISZ())
     }
 
-    xmlSchedulingDomains = xmlSchedulingDomains :+ st"""<domain name="domain0" length="${framePeriod - usedBudget}" />"""
-    val xmlDesc =
-      st"""<?xml version="1.0" encoding="UTF-8"?>
-          |<system>
-          |
-          |  <domain_schedule>
-          |    ${(xmlSchedulingDomains, "\n")}
-          |  </domain_schedule>
-          |
-          |  ${(xmlProtectionDomains, "\n\n")}
-          |
-          |  ${(xmlMemoryRegions.values, "\n\n")}
-          |
-          |  ${(xmlPacerChannels, "\n\n")}
-          |</system>
-                                """
+    var xmlScheds: ISZ[SchedulingDomain] = ISZ()
+    for (x <- xmlSchedulingDomains) {
+      xmlScheds = xmlScheds :+ pacerSlot :+ x
+    }
+    xmlScheds = xmlScheds :+ SchedulingDomain(name = "domain0", length = framePeriod - usedBudget)
+
+    val sd = SystemDescription(
+      schedulingDomains = xmlScheds,
+      protectionDomains = xmlProtectionDomains,
+      memoryRegions = xmlMemoryRegions.values,
+      channels = xmlChannels)
 
     val xmlPath = s"${options.camkesOutputDir.get}/${MicrokitCodegen.microkitSystemXmlFilename}"
-    resources = resources :+ ResourceUtil.createResource(path = xmlPath, content = xmlDesc, overwrite = T)
+    resources = resources :+ ResourceUtil.createResource(path = xmlPath, content = sd.prettyST, overwrite = T)
+
+    val sysDot = sd.toDot
+    val dotPath = s"${options.camkesOutputDir.get}/microkit.dot"
+    resources = resources :+ ResourceUtil.createResource(path = dotPath, content = sysDot, overwrite = T)
 
     val TAB: String = "\t"
 
@@ -570,8 +502,12 @@ object MicrokitCodegen {
     val objs: ISZ[ST] = for (mk <- makefileContainers) yield mk.OBJSEntry
     val buildEntries: ISZ[ST] = for (mk <- makefileContainers) yield mk.buildEntry
 
-    val elfFiles: ISZ[String] = (for (mk <- makefileContainers) yield mk.elfName)
-    val oFiles: ISZ[String] = for (f <- cFileSuffixes) yield s"$f.o"
+    var elfFiles: ISZ[String] = ISZ()
+    var oFiles: ISZ[String] = ISZ()
+    for (mk <- makefileContainers) {
+      elfFiles = elfFiles ++ mk.getElfNames
+      oFiles = oFiles ++ mk.getObjNames
+    }
 
     val elfEntries: ISZ[ST] = for (mk <- makefileContainers) yield mk.elfEntry
 
