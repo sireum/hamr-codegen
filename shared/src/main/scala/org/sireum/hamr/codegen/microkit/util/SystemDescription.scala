@@ -143,7 +143,7 @@ import org.sireum._
         |</channel>"""
 
   @strictpure def toDot: ST = {
-    st"${firstPD}_INVIS -> ${secondPD}_INVIS [lhead=cluster_${secondPD}, minlen=2]"
+    st"${firstPD}_INVIS -> ${secondPD}_INVIS [lhead=cluster_${secondPD}, minlen=2, dir=both]"
   }
 }
 
@@ -163,7 +163,7 @@ import org.sireum._
         Some(st"dir=both,")
       } else if (perms.size == 1) {
         assert (perms(0) == Perm.READ)
-        None()
+        Some(st"dir=back,")
       }
       else {
         halt("Infeasible")
