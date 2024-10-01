@@ -18,6 +18,18 @@ object ExperimentalOptions {
   val ADD_COMPONENT_IDS: String = "ADD_COMPONENT_IDS"
   val ADD_PORT_IDS: String = "ADD_PORT_IDS"
 
+  val PROYEK_IVE_OPTIONS: String = "PROYEK_IVE_OPTIONS"
+
+  def proyekIveOptions(experimentalOptions: ISZ[String]): Option[ISZ[String]] = {
+    for (e <- experimentalOptions) {
+      val o = ops.StringOps(e)
+      if (o.startsWith(s"${PROYEK_IVE_OPTIONS}=")) {
+        return Some(ops.StringOps(o.split(c => c == '=')(1)).split(c => c == ' '))
+      }
+    }
+    return None()
+  }
+
   def addConnectionIds(experimentalOptions: ISZ[String]): Z = {
     for (e <- experimentalOptions) {
       val o = ops.StringOps(e)
