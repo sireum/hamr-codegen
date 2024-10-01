@@ -42,8 +42,8 @@ object GclResolver {
     "ApiGet" // add get to api calls
   }
 
-  @memoize def libraryReporter: TypeChecker = {
-    return org.sireum.lang.FrontEnd.libraryReporter._1
+  @pure def libraryReporter: TypeChecker = {
+    return org.sireum.lang.FrontEnd.checkedLibraryReporter._1
   }
 
   @record class SymbolFinder(val mode: RewriteMode.Type,
