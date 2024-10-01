@@ -95,6 +95,11 @@ object CodeGen {
 
     val (rmodel, aadlTypes, symbolTable): (Aadl, AadlTypes, SymbolTable) = (result.get.model, result.get.types, result.get.symbolTable)
 
+    if (options.runtimeMonitoring && symbolTable.getThreads().isEmpty) {
+      reporter.error(None(), toolName, "Model must contain threads in order to enable runtime monitoring")
+      return CodeGenResults(ISZ(), ISZ())
+    }
+
     if (~reporter.hasError && runRos2) {
       val results = Ros2Codegen().run(rmodel, options, aadlTypes, symbolTable, plugins, reporter)
       writeOutResources(results.fileResources, reporter)
