@@ -168,7 +168,7 @@ if (!noUpdate && jitpackFetches.nonEmpty) {
     val sc = Os.tempFix(ops.StringOps(m).replaceAllChars(':', '_'), ".sc")
     sc.writeOver(
       st"""import org.sireum._
-          |for (cif <- Coursier.fetch("$scalaVer", ISZ("$m"))) {
+          |for (cif <- Coursier.fetch("$scalaVer", ISZ("$m"), Proxy.empty)) {
           |  println(cif.path)
           |}""".render
     )
