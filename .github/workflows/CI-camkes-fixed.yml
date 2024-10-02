@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'failure' }}
     container:
-      image: trustworthysystems/camkes:2022_08_18
+      image: trustworthysystems/camkes:2024_09_05
     strategy:
       fail-fast: false
       matrix:
