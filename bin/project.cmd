@@ -17,22 +17,27 @@ exit /B %errorlevel%
 // #Sireum
 
 import org.sireum._
-import org.sireum.project.Module
 import org.sireum.project.ProjectUtil._
 import org.sireum.project.{Project, ProjectUtil}
 
-val arsit = "hamr-arsit"
-
 val codegen = "hamr-codegen"
+
+val library = "library"
+
+val library_shared = s"${library}-shared"
+
+val slang_frontend_shared = "slang-frontend-shared"
+
+val air_shared = "hamr-air-shared"
 
 val homeDir = Os.slashDir.up.canon
 
 var (codegenShared, codegenJvm) = moduleSharedJvmPub(
   baseId = codegen,
   baseDir = homeDir,
-  jvmDeps = ISZ(arsit),
+  jvmDeps = ISZ(library),
   jvmIvyDeps = ISZ(),
-  sharedDeps = ISZ("library-shared", "hamr-common-shared"),
+  sharedDeps = ISZ(library_shared, slang_frontend_shared, air_shared),
   sharedIvyDeps = ISZ(),
   pubOpt = pub(
     desc = "HAMR AADL Code Generator",

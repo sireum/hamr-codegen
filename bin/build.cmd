@@ -144,8 +144,7 @@ def test(options: ISZ[String]): Unit = {
 }
 
 def regenTransformers(): Unit = {
-  val commonRootPath = home / "common"
-  val symbolPackagePath = commonRootPath / "shared" / "src" / "main" / "scala" / "org" / "sireum" / "hamr" / "codegen" / "common" / "symbols"
+  val symbolPackagePath = home / "shared" / "src" / "main" / "scala" / "org" / "sireum" / "hamr" / "codegen" / "common" / "symbols"
 
   val asts: ISZ[String] = ISZ("AadlSymbols.scala", "BTSSymbols.scala").map(m => (symbolPackagePath / m).value)
 
@@ -177,10 +176,10 @@ def regenClis(): Unit = {
     Os.exit(0)
   }
 
-  val commonUtilDir = home / "common" / "shared" / "src" / "main" / "scala" / "org" / "sireum" / "hamr" / "codegen" / "common" / "util"
+  val utilDir = home / "shared" / "src" / "main" / "scala" / "org" / "sireum" / "hamr" / "codegen" / "common" / "util"
   // NOTE: cliJson.sc emits what's in $SIREUM_HOME/bin/sireum.jar's version of
   //       hamr's cli so regen that first, rebuild sireum.jar, then call this method
-  proc"${sireum} tools cligen -p org.sireum.hamr.codegen.common.util -n HamrCli -o ${commonUtilDir.value} ${(commonUtilDir / "cliJson.sc")}".console.runCheck()
+  proc"${sireum} tools cligen -p org.sireum.hamr.codegen.common.util -n HamrCli -o ${utilDir.value} ${(utilDir / "cliJson.sc")}".console.runCheck()
 
 
   def process(tool: CliOpt.Tool, packageName: String, output: Os.Path): Unit = {
