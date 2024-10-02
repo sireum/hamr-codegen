@@ -42,7 +42,6 @@ val homeDir = Os.slashDir.up.canon
 
 val projects = ISZ(
   homeDir,
-  homeDir / "act",
   homeDir / "air",
   homeDir / "arsit",
   homeDir / "common",

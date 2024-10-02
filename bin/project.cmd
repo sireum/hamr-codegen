@@ -21,8 +21,6 @@ import org.sireum.project.Module
 import org.sireum.project.ProjectUtil._
 import org.sireum.project.{Project, ProjectUtil}
 
-val act = "hamr-act"
-
 val arsit = "hamr-arsit"
 
 val codegen = "hamr-codegen"
@@ -32,7 +30,7 @@ val homeDir = Os.slashDir.up.canon
 var (codegenShared, codegenJvm) = moduleSharedJvmPub(
   baseId = codegen,
   baseDir = homeDir,
-  jvmDeps = ISZ(act, arsit),
+  jvmDeps = ISZ(arsit),
   jvmIvyDeps = ISZ(),
   sharedDeps = ISZ("library-shared", "hamr-common-shared"),
   sharedIvyDeps = ISZ(),
