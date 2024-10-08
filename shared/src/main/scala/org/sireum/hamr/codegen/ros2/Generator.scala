@@ -3,10 +3,15 @@
 package org.sireum.hamr.codegen.ros2
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlPort, AadlThread, Dispatch_Protocol}
+import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlPort, AadlThread, Dispatch_Protocol}
+import org.sireum.hamr.codegen.common.types.{AadlType, ArrayType, BaseType, EnumType, RecordType}
 import org.sireum.hamr.ir.Direction
+import org.sireum.message.Reporter
+import org.sireum.ops.ISZOps
 
 object Generator {
+
+  val toolName: String = "Ros2Codegen"
 
   val node_executable_filename_suffix: String = "_exe"
   val launch_node_decl_suffix: String = "_node"
@@ -95,6 +100,55 @@ object Generator {
     return names
   }
 
+  def genPortDatatype(port: AadlPort, packageName: String, datatypeMap: Map[AadlType, (String, ISZ[String])], reporter: Reporter): String = {
+    val s: String = port match {
+      case dp: AadlDataPort =>
+        val dtype = datatypeMap.get(dp.aadlType)
+        if (dtype.nonEmpty) {
+          s"${packageName}_interfaces::msg::${dtype.get._1}"
+        }
+        else {
+          reporter.error(None(), toolName, s"Port ${port.identifier}: datatype unknown, setting datatype to Empty")
+          s"${packageName}_interfaces::msg::Empty"
+        }
+      case edp: AadlEventDataPort =>
+        val dtype = datatypeMap.get(edp.aadlType)
+        if (dtype.nonEmpty) {
+          s"${packageName}_interfaces::msg::${dtype.get._1}"
+        }
+        else {
+          reporter.error(None(), toolName, s"Port ${port.identifier}: datatype unknown, setting datatype to Empty")
+          s"${packageName}_interfaces::msg::Empty"
+        }
+      case _ => s"${packageName}_interfaces::msg::Empty"
+    }
+    return s
+  }
+
+  def formatDatatypeForInclude(datatype: String): String = {
+    var prefix = ops.StringOps(datatype).substring(0, ops.StringOps(datatype).lastIndexOf(':') + 1)
+    prefix = ops.StringOps(prefix).replaceAllLiterally("::", "/")
+    var msg = ops.StringOps(datatype).substring(ops.StringOps(datatype).lastIndexOf(':') + 1, datatype.size)
+
+    var char: C = 'A'
+    while (char <= 'Z') {
+      var index = ops.StringOps(msg).indexOf(char)
+      while (index != -1) {
+        msg = s"${ops.StringOps(msg).substring(0, index)}_${char + '\u0020'}${ops.StringOps(msg).substring(index + 1, msg.size)}"
+        index = ops.StringOps(msg).indexOf(char)
+      }
+      char = char + '\u0001'
+    }
+
+    if (ops.StringOps(msg).startsWith("_")) {
+      msg = ops.StringOps(msg).substring(1, msg.size)
+    }
+
+    msg = ops.StringOps(msg).replaceAllLiterally("__", "_")
+
+    return s"${prefix}${msg}"
+  }
+
   def seqToString(seq: ISZ[String], separator: String): String = {
     var str = ""
     for (s <- seq) {
@@ -181,10 +235,6 @@ object Generator {
   //             https://github.com/santoslab/ros-examples/blob/main/tempControlcpp_ws/src/tc_cpp_pkg/package.xml
   //================================================
 
-  // TODO: Datatype stuff
-  //  Example:
-  //   "add_executable(ts_exe src/ts_src.cpp)
-  //    ament_target_dependencies(ts_exe rclcpp example_interfaces)"
   def genCppCMakeListsEntryPointDecl(modelName: String,
                                      componentName: String): ST = {
     val node_executable_file_nameT = genExecutableFileName(componentName)
@@ -194,18 +244,14 @@ object Generator {
     source_files = source_files :+ s"src/user_code/${componentName}_src.cpp"
     source_files = source_files :+ s"src/base_code/${componentName}_base_src.cpp"
 
-    // TODO: This list of message types is currently just a placeholder
-    // It should probably be built up (into a map, component as key?) while looping through each port
-    val packages: ISZ[String] = IS("example_interfaces")
+    val packages: ISZ[String] = IS(s"${genCppPackageName(modelName)}_interfaces")
 
-    // TODO: Add interface type packages after rclcpp
     val entryPointDecl: ST =
       st"""add_executable(${node_executable_file_nameT} ${(source_files, " ")})
           |ament_target_dependencies(${node_executable_file_nameT} rclcpp ${(packages, " ")})"""
     return entryPointDecl
   }
 
-  // TODO: Datatype stuff
   //  Setup file for node source package
   //    Example: https://github.com/santoslab/ros-examples/blob/main/tempControlcpp_ws/src/tc_cpp_pkg/CMakeLists.txt
   def genCppCMakeListsFile(modelName: String, threadComponents: ISZ[AadlThread]): (ISZ[String], ST) = {
@@ -222,12 +268,9 @@ object Generator {
         entry_point_executables :+ genExecutableFileName(comp.pathAsString("_"))
     }
 
-    // TODO: This list of message types is currently just a placeholder
-    // It should probably be built up while looping through each port
-    val packages: ISZ[String] = IS("example_interfaces")
+    val packages: ISZ[String] = IS(s"${top_level_package_nameT}_interfaces")
     val pkgRequirements: ISZ[ST] = genCMakeListsPkgRequirements(packages)
 
-    // TODO: Add 'find interface type packages' under rclcpp
     val setupFileBody =
       st"""cmake_minimum_required(VERSION 3.8)
           |project(${top_level_package_nameT})
@@ -263,12 +306,9 @@ object Generator {
     val top_level_package_nameT: String = genCppPackageName(modelName)
     val fileName: String = "package.xml"
 
-    // TODO: This list of message types is currently just a placeholder
-    // It should probably be built up while looping through each port
-    val packages: ISZ[String] = IS("example_interfaces")
+    val packages: ISZ[String] = IS(s"${top_level_package_nameT}_interfaces")
     val pkgDependencies: ISZ[ST] = genPackageFilePkgDependencies(packages)
 
-    // TODO: Add interface type package dependencies under rclcpp
     val setupFileBody =
       st"""<?xml version="1.0"?>
           |<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
@@ -307,7 +347,6 @@ object Generator {
     val top_level_package_nameT: String = genCppPackageName(modelName)
     val fileName: String = "CMakeLists.txt"
 
-    // TODO: Add 'find interface type packages' under rclcpp
     val setupFileBody =
       st"""cmake_minimum_required(VERSION 3.8)
           |project(${top_level_package_nameT}_bringup)
@@ -335,12 +374,6 @@ object Generator {
     val top_level_package_nameT: String = genCppPackageName(modelName)
     val fileName: String = "package.xml"
 
-    // TODO: This list of message types is currently just a placeholder
-    // It should probably be built up while looping through each port
-    val packages: ISZ[String] = IS("example_interfaces")
-    val pkgDependencies: ISZ[ST] = genPackageFilePkgDependencies(packages)
-
-    // TODO: Add interface type package dependencies under rclcpp
     val setupFileBody =
       st"""<?xml version="1.0"?>
           |<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
@@ -488,6 +521,101 @@ object Generator {
 
 
   //================================================
+  //  I n t e r f a c e s  Setup Files
+  //================================================
+  // ROS2 data/message types are defined in a "{package_name}_interfaces" package according to convention
+  // The "Empty" datatype, which has no data fields, is used for event ports
+
+  def genMsgFiles(modelName: String, datatypeMap: Map[AadlType, (String, ISZ[String])]): ISZ[(ISZ[String], ST)] = {
+    var msg_files: ISZ[(ISZ[String], ST)] = IS()
+    for (datatype <- datatypeMap.entries) {
+      msg_files = msg_files :+ genMsgFile(modelName, datatype._2._1, datatype._2._2)
+    }
+    msg_files = msg_files :+ (ISZ("src", s"${genCppPackageName(modelName)}_interfaces", "msg", "Empty.msg"), st"")
+    return msg_files
+  }
+
+  def genMsgFile(modelName: String, datatypeName: String, datatypeContent: ISZ[String]): (ISZ[String], ST) = {
+    val top_level_package_nameT: String = genCppPackageName(modelName)
+
+    val fileBody = st"${(datatypeContent, "\n")}"
+
+    val filePath: ISZ[String] = IS("src", s"${top_level_package_nameT}_interfaces", "msg", s"${datatypeName}.msg")
+
+    return (filePath, fileBody)
+  }
+
+  def genInterfacesCMakeListsFile(modelName: String, datatypeMap: Map[AadlType, (String, ISZ[String])]): (ISZ[String], ST) = {
+    val top_level_package_nameT: String = genCppPackageName(modelName)
+    val fileName: String = "CMakeLists.txt"
+    var msgTypes: ISZ[String] = IS()
+    for (msg <- datatypeMap.valueSet.elements) {
+      msgTypes = msgTypes :+ s"msg/${msg._1}.msg"
+    }
+    msgTypes = msgTypes :+ s"msg/Empty.msg"
+
+    val setupFileBody =
+      st"""cmake_minimum_required(VERSION 3.8)
+          |project(${top_level_package_nameT}_interfaces)
+          |
+          |if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+          |    add_compile_options(-Wall -Wextra -Wpedantic)
+          |endif()
+          |
+          |find_package(ament_cmake REQUIRED)
+          |
+          |find_package(rosidl_default_generators REQUIRED)
+          |
+          |rosidl_generate_interfaces($${PROJECT_NAME}
+          |  ${(msgTypes, "\n")}
+          |)
+          |
+          |ament_export_dependencies(rosidl_default_runtime)
+          |
+          |ament_package()
+        """
+
+    val filePath: ISZ[String] = IS("src", s"${top_level_package_nameT}_interfaces", fileName)
+
+    return (filePath, setupFileBody)
+  }
+
+  def genInterfacesPackageFile(modelName: String): (ISZ[String], ST) = {
+    val top_level_package_nameT: String = genCppPackageName(modelName)
+    val fileName: String = "package.xml"
+
+    val setupFileBody =
+      st"""<?xml version="1.0"?>
+          |<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+          |<package format="3">
+          |    <name>${top_level_package_nameT}_interfaces</name>
+          |    <version>0.0.0</version>
+          |    <description>TODO: Package description</description>
+          |    <maintainer email="sireum@todo.todo">sireum</maintainer>
+          |    <license>TODO: License declaration</license>
+          |
+          |    <buildtool_depend>ament_cmake</buildtool_depend>
+          |
+          |    <build_depend>rosidl_default_generators</build_depend>
+          |    <exec_depend>rosidl_default_runtime</exec_depend>
+          |    <member_of_group>rosidl_interface_packages</member_of_group>
+          |
+          |    <test_depend>ament_lint_auto</test_depend>
+          |    <test_depend>ament_lint_common</test_depend>
+          |
+          |    <export>
+          |        <build_type>ament_cmake</build_type>
+          |    </export>
+          |</package>
+        """
+
+    val filePath: ISZ[String] = IS("src", s"${top_level_package_nameT}_interfaces", fileName)
+
+    return (filePath, setupFileBody)
+  }
+
+
+  //================================================
   //  Node files (C++)
   //    Example: https://github.com/santoslab/ros-examples/tree/main/tempControlcpp_ws/src/tc_cpp_pkg/src
   //================================================
@@ -512,7 +640,8 @@ object Generator {
     var includes: ISZ[ST] = IS()
 
     for (msgType <- msgTypes) {
-      includes = includes :+ st"#include \"${msgType}\""
+      val formattedInclude = formatDatatypeForInclude(msgType)
+      includes = includes :+ st"#include \"${formattedInclude}.hpp\""
     }
 
     return includes
@@ -540,12 +669,11 @@ object Generator {
 
   // Example:
   //  rclcpp::Subscription<example_interfaces::msg::Int32>::SharedPtr temp_control_currentTemp_subscription;
-  def genCppTopicSubscriptionVarHeader(inPort: AadlPort): ST = {
+  def genCppTopicSubscriptionVarHeader(inPort: AadlPort, portType: String): ST = {
     val portName = seqToString(inPort.path, "_")
 
-    // Int32 is a placeholder message value
     val varHeader: ST =
-      st"rclcpp::Subscription<example_interfaces::msg::Int32>::SharedPtr ${portName}_subscription_;"
+      st"rclcpp::Subscription<${portType}>::SharedPtr ${portName}_subscription_;"
     return varHeader
   }
 
@@ -554,13 +682,12 @@ object Generator {
   //    "temp_control_currentTemp",
   //     1,
   //     std::bind(&TempControl::handle_currentTemp, this, std::placeholders::_1));
-  def genCppTopicSubscription(inPort: AadlPort, nodeName: String): ST = {
+  def genCppTopicSubscription(inPort: AadlPort, nodeName: String, portType: String): ST = {
     val topicName = seqToString(inPort.path, "_")
     val portName = inPort.identifier
 
-    // Int32 is a placeholder message value
     val portCode: ST =
-      st"""${topicName}_subscription_ = this->create_subscription<example_interfaces::msg::Int32>(
+      st"""${topicName}_subscription_ = this->create_subscription<${portType}>(
           |    "${topicName}",
           |    1,
           |    std::bind(&${nodeName}::handle_${portName}, this, std::placeholders::_1), ${subscription_options_name});
@@ -568,7 +695,7 @@ object Generator {
     return portCode
   }
 
-  def genCppTopicSubscriptionStrict(inPort: AadlPort, nodeName: String, isSporadic: B): ST = {
+  def genCppTopicSubscriptionStrict(inPort: AadlPort, isSporadic: B, portType: String): ST = {
     val topicName = seqToString(inPort.path, "_")
     val portName = inPort.identifier
 
@@ -585,12 +712,11 @@ object Generator {
             |    sendOutputs();
             |}).detach();"""
 
-    // Int32 is a placeholder message value
     val portCode: ST =
-      st"""${topicName}_subscription_ = this->create_subscription<example_interfaces::msg::Int32>(
+      st"""${topicName}_subscription_ = this->create_subscription<${portType}>(
           |    "${topicName}",
           |    1,
-          |    [this](example_interfaces::msg::Int32 msg) {
+          |    [this](${portType} msg) {
           |        ${handler}
           |    },
           |    ${subscription_options_name});
@@ -617,13 +743,12 @@ object Generator {
 
   // Example:
   //  rclcpp::Publisher<example_interfaces::msg::Int32>::SharedPtr temp_control_currentTemp_publisher;
-  def genCppTopicPublisherVarHeader(outPort: AadlPort, inputPortCount: Z): ST = {
+  def genCppTopicPublisherVarHeader(outPort: AadlPort, portType: String, inputPortCount: Z): ST = {
     val portName = seqToString(outPort.path, "_")
 
     if (inputPortCount == 1) {
-      // Int32 is a placeholder message value
       val varHeader: ST =
-        st"rclcpp::Publisher<example_interfaces::msg::Int32>::SharedPtr ${portName}_publisher_;"
+        st"rclcpp::Publisher<${portType}>::SharedPtr ${portName}_publisher_;"
 
       return varHeader
     }
@@ -631,9 +756,8 @@ object Generator {
     // If the port is a fan out port
     var outPortHeaders: ISZ[ST] = IS()
     for (i <- 1 to inputPortCount) {
-      // Int32 is a placeholder message value
       outPortHeaders = outPortHeaders :+
-        st"rclcpp::Publisher<example_interfaces::msg::Int32>::SharedPtr ${portName}_publisher_${i};"
+        st"rclcpp::Publisher<${portType}>::SharedPtr ${portName}_publisher_${i};"
     }
 
     val varHeader: ST =
@@ -646,15 +770,14 @@ object Generator {
   //  temp_control_currentTemp_publisher_ = this->create_publisher<example_interfaces::msg::Int32>(
   //    "operator_interface_currentTemp",
   //     1);
-  def genCppTopicPublisher(outPort: AadlPort, inPortNames: ISZ[String]): ST = {
+  def genCppTopicPublisher(outPort: AadlPort, portType: String, inPortNames: ISZ[String]): ST = {
     val portName = seqToString(outPort.path, "_")
 
     if (inPortNames.size == 1) {
       val inPortName = inPortNames.apply(0)
 
-      // Int32 is a placeholder message value
       val portCode: ST =
-        st"""${portName}_publisher_ = this->create_publisher<example_interfaces::msg::Int32>(
+        st"""${portName}_publisher_ = this->create_publisher<${portType}>(
             |    "${inPortName}",
             |    1);
           """
@@ -667,7 +790,7 @@ object Generator {
 
     for (inPortName <- inPortNames) {
       outputInstances = outputInstances :+
-        st"""${portName}_publisher_${counter} = this->create_publisher<example_interfaces::msg::Int32>(
+        st"""${portName}_publisher_${counter} = this->create_publisher<${portType}>(
             |    "${inPortName}",
             |    1);
           """
@@ -683,12 +806,11 @@ object Generator {
   // TODO: Probably use MsgType if strict....?
   // Example:
   //  void put_currentTemp(example_interfaces::msg::Int32 msg);
-  def genCppPutMsgMethodHeader(outPort: AadlPort): ST = {
+  def genCppPutMsgMethodHeader(outPort: AadlPort, portType: String): ST = {
     val handlerName = outPort.identifier
 
-    // Int32 is a placeholder message value
     val publisherHeader: ST =
-      st"void put_${handlerName}(example_interfaces::msg::Int32 msg);"
+      st"void put_${handlerName}(${portType} msg);"
     return publisherHeader
   }
 
@@ -696,7 +818,6 @@ object Generator {
   def genCppTopicPublishMethodHeaderStrict(outPort: AadlPort): ST = {
     val handlerName = outPort.identifier
 
-    // Int32 is a placeholder message value
     val publisherHeaders: ST =
       st"void sendOut_${handlerName}(MsgType msg);"
 
@@ -708,7 +829,7 @@ object Generator {
   //  {
   //    temp_control_currentTemp_publisher->publish(msg);
   //  }
-  def genCppTopicPublishMethod(outPort: AadlPort, nodeName: String, inputPortCount: Z): ST = {
+  def genCppTopicPublishMethod(outPort: AadlPort, nodeName: String, portType: String, inputPortCount: Z): ST = {
     val portName = seqToString(outPort.path, "_")
     val handlerName = outPort.identifier
 
@@ -724,9 +845,8 @@ object Generator {
       }
     }
 
-    // Int32 is a placeholder message value
     val publisherCode: ST =
-      st"""void ${nodeName}::put_${handlerName}(example_interfaces::msg::Int32 msg)
+      st"""void ${nodeName}::put_${handlerName}(${portType} msg)
           |{
           |    ${(publishers, "\n")}
           |}
@@ -735,7 +855,7 @@ object Generator {
     return publisherCode
   }
 
-  def genCppTopicPublishMethodStrict(outPort: AadlPort, nodeName: String, inputPortCount: Z): ST = {
+  def genCppTopicPublishMethodStrict(outPort: AadlPort, nodeName: String, portType: String, inputPortCount: Z): ST = {
     val portName = seqToString(outPort.path, "_")
     val handlerName = outPort.identifier
 
@@ -751,11 +871,10 @@ object Generator {
       }
     }
 
-    // Int32 is a placeholder message value
     val publisherCode: ST =
       st"""void ${nodeName}::sendOut_${handlerName}(MsgType msg)
           |{
-          |    if (auto typedMsg = std::get_if<example_interfaces::msg::Int32>(&msg)) {
+          |    if (auto typedMsg = std::get_if<${portType}>(&msg)) {
           |        ${(publishers, "\n")}
           |    } else {
           |        PRINT_ERROR("Sending out wrong type of variable on port ${handlerName}.\nThis shouldn't be possible.  If you are seeing this message, please notify this tool's current maintainer.");
@@ -767,12 +886,11 @@ object Generator {
   }
 
   // This method is called by the user, and it puts a message into a port's outApplication queue
-  def genCppPutMsgMethodStrict(outPort: AadlPort, nodeName: String): ST = {
+  def genCppPutMsgMethodStrict(outPort: AadlPort, nodeName: String, portType: String): ST = {
     val handlerName = outPort.identifier
 
-    // Int32 is a placeholder message value
     val putMsgCode: ST =
-      st"""void ${nodeName}::put_${handlerName}(example_interfaces::msg::Int32 msg)
+      st"""void ${nodeName}::put_${handlerName}(${portType} msg)
           |{
           |    enqueue(applicationOut_${handlerName}, msg);
           |}
@@ -782,32 +900,29 @@ object Generator {
 
   // Example:
   //  virtual void handle_currentTemp(const example_interfaces::msg::Int32::SharedPtr currentTempMsg) = 0;
-  def genCppSubscriptionHandlerVirtualHeader(inPort: AadlPort): ST = {
+  def genCppSubscriptionHandlerVirtualHeader(inPort: AadlPort, portType: String): ST = {
     val handlerName = inPort.identifier
 
-    // Int32 is a placeholder message value
     val subscriptionHandlerHeader: ST =
-      st"virtual void handle_${handlerName}(const example_interfaces::msg::Int32::SharedPtr msg) = 0;"
+      st"virtual void handle_${handlerName}(const ${portType}::SharedPtr msg) = 0;"
     return subscriptionHandlerHeader
   }
 
-  def genCppSubscriptionHandlerVirtualHeaderStrict(inPort: AadlPort): ST = {
+  def genCppSubscriptionHandlerVirtualHeaderStrict(inPort: AadlPort, portType: String): ST = {
     val handlerName = inPort.identifier
 
-    // Int32 is a placeholder message value
     val subscriptionHandlerHeader: ST =
-      st"virtual void handle_${handlerName}(const example_interfaces::msg::Int32 msg) = 0;"
+      st"virtual void handle_${handlerName}(const ${portType} msg) = 0;"
     return subscriptionHandlerHeader
   }
 
   // Example:
   //  void handle_currentTemp(const example_interfaces::msg::Int32::SharedPtr currentTempMsg) {}
-  def genCppSubscriptionHandlerSporadic(inPort: AadlPort, nodeName: String): ST = {
+  def genCppSubscriptionHandlerSporadic(inPort: AadlPort, nodeName: String, portType: String): ST = {
     val handlerName = inPort.identifier
 
-    // Int32 is a placeholder message value
     val subscriptionHandlerHeader: ST =
-      st"""void ${nodeName}::handle_${handlerName}(const example_interfaces::msg::Int32::SharedPtr msg)
+      st"""void ${nodeName}::handle_${handlerName}(const ${portType}::SharedPtr msg)
           |{
           |    // Handle ${handlerName} msg
           |}
@@ -815,12 +930,11 @@ object Generator {
     return subscriptionHandlerHeader
   }
 
-  def genCppSubscriptionHandlerSporadicStrict(inPort: AadlPort, nodeName: String): ST = {
+  def genCppSubscriptionHandlerSporadicStrict(inPort: AadlPort, nodeName: String, portType: String): ST = {
     val handlerName = inPort.identifier
 
-    // Int32 is a placeholder message value
     val subscriptionHandlerHeader: ST =
-      st"""void ${nodeName}::handle_${handlerName}(const example_interfaces::msg::Int32 msg)
+      st"""void ${nodeName}::handle_${handlerName}(const ${portType} msg)
           |{
           |    // Handle ${handlerName} msg
           |}
@@ -832,7 +946,6 @@ object Generator {
   def genCppSubscriptionHandlerBaseSporadicHeader(inPort: AadlPort): ST = {
     val handlerName = inPort.identifier
 
-    // Int32 is a placeholder message value
     val handlerCode: ST =
       st"""void handle_${handlerName}_base(MsgType msg);"""
 
@@ -840,14 +953,13 @@ object Generator {
   }
 
   // Used to convert the type of the msg from MsgType to the intended type before calling the user-defined handler
-  def genCppSubscriptionHandlerBaseSporadic(inPort: AadlPort, nodeName: String): ST = {
+  def genCppSubscriptionHandlerBaseSporadic(inPort: AadlPort, nodeName: String, portType: String): ST = {
     val handlerName = inPort.identifier
 
-    // Int32 is a placeholder message value
     val handlerCode: ST =
       st"""void ${nodeName}::handle_${handlerName}_base(MsgType msg)
           |{
-          |    if (auto typedMsg = std::get_if<example_interfaces::msg::Int32>(&msg)) {
+          |    if (auto typedMsg = std::get_if<${portType}>(&msg)) {
           |        handle_${handlerName}(*typedMsg);
           |    } else {
           |        PRINT_ERROR("Sending out wrong type of variable on port ${handlerName}.\nThis shouldn't be possible.  If you are seeing this message, please notify this tool's current maintainer.");
@@ -860,30 +972,27 @@ object Generator {
 
   // Example:
   //  void handle_currentTemp(const example_interfaces::msg::Int32::SharedPtr currentTempMsg);
-  def genCppSubscriptionHandlerHeader(inPort: AadlPort): ST = {
+  def genCppSubscriptionHandlerHeader(inPort: AadlPort, portType: String): ST = {
     val handlerName = inPort.identifier
 
-    // Int32 is a placeholder message value
     val subscriptionHandlerHeader: ST =
-      st"void handle_${handlerName}(const example_interfaces::msg::Int32::SharedPtr msg);"
+      st"void handle_${handlerName}(const ${portType}::SharedPtr msg);"
     return subscriptionHandlerHeader
   }
 
-  def genCppSubscriptionHandlerHeaderStrict(inPort: AadlPort): ST = {
+  def genCppSubscriptionHandlerHeaderStrict(inPort: AadlPort, portType: String): ST = {
     val handlerName = inPort.identifier
 
-    // Int32 is a placeholder message value
     val subscriptionHandlerHeader: ST =
-      st"void handle_${handlerName}(const example_interfaces::msg::Int32 msg);"
+      st"void handle_${handlerName}(const ${portType} msg);"
     return subscriptionHandlerHeader
   }
 
-  def genCppSubscriptionHandlerPeriodic(inPort: AadlPort, nodeName: String): ST = {
+  def genCppSubscriptionHandlerPeriodic(inPort: AadlPort, nodeName: String, portType: String): ST = {
     val handlerName = inPort.identifier
 
-    // Int32 is a placeholder message value
     val subscriptionHandlerHeader: ST =
-      st"""void ${nodeName}::handle_${handlerName}(const example_interfaces::msg::Int32::SharedPtr msg)
+      st"""void ${nodeName}::handle_${handlerName}(const ${portType}::SharedPtr msg)
           |{
           |    ${handlerName}_msg_holder = msg;
           |}
@@ -893,19 +1002,17 @@ object Generator {
 
   // Example:
   // example_interfaces::msg::Int32::SharedPtr currentTemp_msg_holder;
-  def genCppSubscriptionMessageVar(inPort: AadlPort): ST = {
+  def genCppSubscriptionMessageVar(inPort: AadlPort, portType: String): ST = {
     val portName = inPort.identifier
 
-    // Int32 is a placeholder message value
     val subscriptionMessageVar: ST =
-      st"example_interfaces::msg::Int32::SharedPtr ${portName}_msg_holder;"
+      st"${portType}::SharedPtr ${portName}_msg_holder;"
     return subscriptionMessageVar
   }
 
   def genCppInfrastructureInQueue(inPort: AadlPort): ST = {
     val portName = inPort.identifier
 
-    // Int32 is a placeholder message value
     val inMsgQueue: ST =
       st"std::queue<MsgType> infrastructureIn_${portName};"
     return inMsgQueue
@@ -914,7 +1021,6 @@ object Generator {
   def genCppApplicationInQueue(inPort: AadlPort): ST = {
     val portName = inPort.identifier
 
-    // Int32 is a placeholder message value
     val inMsgQueue: ST =
       st"std::queue<MsgType> applicationIn_${portName};"
     return inMsgQueue
@@ -923,7 +1029,6 @@ object Generator {
   def genCppInfrastructureOutQueue(inPort: AadlPort): ST = {
     val portName = inPort.identifier
 
-    // Int32 is a placeholder message value
     val outMsgQueue: ST =
       st"std::queue<MsgType> infrastructureOut_${portName};"
     return outMsgQueue
@@ -932,38 +1037,34 @@ object Generator {
   def genCppApplicationOutQueue(inPort: AadlPort): ST = {
     val portName = inPort.identifier
 
-    // Int32 is a placeholder message value
     val outMsgQueue: ST =
       st"std::queue<MsgType> applicationOut_${portName};"
     return outMsgQueue
   }
 
-  def genCppGetSubscriptionMessageHeader(inPort: AadlPort): ST = {
+  def genCppGetSubscriptionMessageHeader(inPort: AadlPort, portType: String): ST = {
     val portName = inPort.identifier
 
-    // Int32 is a placeholder message value
     val subscriptionMessageHeader: ST =
-      st"example_interfaces::msg::Int32::SharedPtr get_${portName}();"
+      st"${portType}::SharedPtr get_${portName}();"
     return subscriptionMessageHeader
   }
 
-  def genCppGetApplicationInValueHeader(inPort: AadlPort): ST = {
+  def genCppGetApplicationInValueHeader(inPort: AadlPort, portType: String): ST = {
     val portName = inPort.identifier
 
-    // Int32 is a placeholder message value
     val subscriptionMessageHeader: ST =
-      st"example_interfaces::msg::Int32 get_${portName}();"
+      st"${portType} get_${portName}();"
     return subscriptionMessageHeader
   }
 
-  def genCppGetApplicationInValue(inPort: AadlPort, nodeName: String): ST = {
+  def genCppGetApplicationInValue(inPort: AadlPort, nodeName: String, portType: String): ST = {
     val portName = inPort.identifier
 
-    // Int32 is a placeholder message value
     val subscriptionMessageHeader: ST =
-      st"""example_interfaces::msg::Int32 ${nodeName}::get_${portName}() {
+      st"""${portType} ${nodeName}::get_${portName}() {
           |    MsgType msg = applicationIn_${portName}.front();
-          |    return std::get<example_interfaces::msg::Int32>(msg);
+          |    return std::get<${portType}>(msg);
           |}"""
     return subscriptionMessageHeader
   }
@@ -1077,12 +1178,11 @@ object Generator {
     return method
   }
 
-  def genCppGetSubscriptionMessage(inPort: AadlPort, nodeName: String): ST = {
+  def genCppGetSubscriptionMessage(inPort: AadlPort, nodeName: String, portType: String): ST = {
     val portName = inPort.identifier
 
-    // Int32 is a placeholder message value
     val subscriptionMessage: ST =
-      st"""example_interfaces::msg::Int32::SharedPtr ${nodeName}::get_${portName}() {
+      st"""${portType}::SharedPtr ${nodeName}::get_${portName}() {
           |    return ${portName}_msg_holder;
           |}
         """
@@ -1216,9 +1316,8 @@ object Generator {
     return vector
   }
 
-  // TODO: Datatypes
   def genCppBaseNodeHeaderFile(packageName: String, component: AadlThread, connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
-                               strictAADLMode: B): (ISZ[String], ST) = {
+                               datatypeMap: Map[AadlType, (String, ISZ[String])], strictAADLMode: B, reporter: Reporter): (ISZ[String], ST) = {
     val nodeName = s"${component.pathAsString("_")}_base"
     val fileName = genCppNodeSourceHeaderName(nodeName)
 
@@ -1230,22 +1329,26 @@ object Generator {
     var outMsgVars: ISZ[ST] = IS()
     var subscriptionMessageGetterHeaders: ISZ[ST] = IS()
     var strictPublisherHeaders: ISZ[ST] = IS()
+    var msgTypes: ISZ[String] = IS()
 
     for (p <- component.getPorts()) {
-      // TODO: Datatypes
+      val portDatatype: String = genPortDatatype(p, packageName, datatypeMap, reporter)
+      if (!ISZOps(msgTypes).contains(portDatatype)) {
+        msgTypes = msgTypes :+ portDatatype
+      }
       if (strictAADLMode) {
         if (p.direction == Direction.In) {
-          subscriptionHeaders = subscriptionHeaders :+ genCppTopicSubscriptionVarHeader(p)
+          subscriptionHeaders = subscriptionHeaders :+ genCppTopicSubscriptionVarHeader(p, portDatatype)
           inMsgVars = inMsgVars :+ genCppInfrastructureInQueue(p)
           inMsgVars = inMsgVars :+ genCppApplicationInQueue(p)
           if (!p.isInstanceOf[AadlDataPort] && isSporadic(component)) {
             subscriptionHandlerHeaders = subscriptionHandlerHeaders :+
-              genCppSubscriptionHandlerVirtualHeaderStrict(p)
+              genCppSubscriptionHandlerVirtualHeaderStrict(p, portDatatype)
             subscriptionHandlerHeaders = subscriptionHandlerHeaders :+
               genCppSubscriptionHandlerBaseSporadicHeader(p)
           }
           else {
-            subscriptionMessageGetterHeaders = subscriptionMessageGetterHeaders :+ genCppGetApplicationInValueHeader(p)
+            subscriptionMessageGetterHeaders = subscriptionMessageGetterHeaders :+ genCppGetApplicationInValueHeader(p, portDatatype)
           }
         }
         else {
@@ -1253,33 +1356,33 @@ object Generator {
           outMsgVars = outMsgVars :+ genCppApplicationOutQueue(p)
           strictPublisherHeaders = strictPublisherHeaders :+ genCppTopicPublishMethodHeaderStrict(p)
           putMethodHeaders = putMethodHeaders :+
-            genCppPutMsgMethodHeader(p)
+            genCppPutMsgMethodHeader(p, portDatatype)
           if (connectionMap.get(p.path).nonEmpty) {
             val inputPorts = connectionMap.get(p.path).get
-            publisherHeaders = publisherHeaders :+ genCppTopicPublisherVarHeader(p, inputPorts.size)
+            publisherHeaders = publisherHeaders :+ genCppTopicPublisherVarHeader(p, portDatatype, inputPorts.size)
           }
         }
       }
       else {
         if (p.direction == Direction.In) {
-          subscriptionHeaders = subscriptionHeaders :+ genCppTopicSubscriptionVarHeader(p)
+          subscriptionHeaders = subscriptionHeaders :+ genCppTopicSubscriptionVarHeader(p, genPortDatatype(p, packageName, datatypeMap, reporter))
           if (isSporadic(component) && !p.isInstanceOf[AadlDataPort]) {
             subscriptionHandlerHeaders = subscriptionHandlerHeaders :+
-              genCppSubscriptionHandlerVirtualHeader(p)
+              genCppSubscriptionHandlerVirtualHeader(p, portDatatype)
           }
           else {
             subscriptionHandlerHeaders = subscriptionHandlerHeaders :+
-              genCppSubscriptionHandlerHeader(p)
-            inMsgVars = inMsgVars :+ genCppSubscriptionMessageVar(p)
-            subscriptionMessageGetterHeaders = subscriptionMessageGetterHeaders :+ genCppGetSubscriptionMessageHeader(p)
+              genCppSubscriptionHandlerHeader(p, portDatatype)
+            inMsgVars = inMsgVars :+ genCppSubscriptionMessageVar(p, portDatatype)
+            subscriptionMessageGetterHeaders = subscriptionMessageGetterHeaders :+ genCppGetSubscriptionMessageHeader(p, portDatatype)
           }
         }
         else {
           if (connectionMap.get(p.path).nonEmpty) {
             val inputPorts = connectionMap.get(p.path).get
-            publisherHeaders = publisherHeaders :+ genCppTopicPublisherVarHeader(p, inputPorts.size)
+            publisherHeaders = publisherHeaders :+ genCppTopicPublisherVarHeader(p, portDatatype, inputPorts.size)
             putMethodHeaders = putMethodHeaders :+
-              genCppPutMsgMethodHeader(p)
+              genCppPutMsgMethodHeader(p, portDatatype)
           }
         }
       }
@@ -1289,9 +1392,6 @@ object Generator {
       subscriptionHeaders = subscriptionHeaders :+ st""
     }
 
-    // TODO: This list of message types is currently just a placeholder
-    // It should probably be built up while looping through each port
-    val msgTypes: ISZ[String] = IS("example_interfaces/msg/int32.hpp")
     val typeIncludes: ISZ[ST] = genCppHeaderFileMsgTypeIncludes(msgTypes)
     var stdIncludes: ST =
       st"""#include <queue>"""
@@ -1304,7 +1404,6 @@ object Generator {
             |#include <mutex>"""
     }
 
-    // TODO: datatypes for variant (also remove variant if lax?)
     var fileBody =
       st"""#include "rclcpp/rclcpp.hpp"
           |${(typeIncludes, "\n")}
@@ -1321,7 +1420,7 @@ object Generator {
     if (strictAADLMode) {
       fileBody =
         st"""${fileBody}
-            |    using MsgType = std::variant<example_interfaces::msg::Int32>;
+            |    using MsgType = std::variant<${(msgTypes, ", ")}>;
           """
     }
 
@@ -1465,9 +1564,8 @@ object Generator {
     return (filePath, fileBody)
   }
 
-  // TODO: Datatypes
   def genCppBaseNodeCppFile(packageName: String, component: AadlThread, connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
-                            strictAADLMode: B): (ISZ[String], ST) = {
+                            datatypeMap: Map[AadlType, (String, ISZ[String])], strictAADLMode: B, reporter: Reporter): (ISZ[String], ST) = {
     val nodeName = s"${component.pathAsString("_")}_base"
     val fileName = genCppNodeSourceName(nodeName)
 
@@ -1484,17 +1582,17 @@ object Generator {
 
     var hasInPorts = F
     for (p <- component.getPorts()) {
-      // TODO: Datatypes
+      val portDatatype: String = genPortDatatype(p, packageName, datatypeMap, reporter)
       if (strictAADLMode) {
         if (p.direction == Direction.In) {
-          subscribers = subscribers :+ genCppTopicSubscriptionStrict(p, nodeName, isSporadic(component))
+          subscribers = subscribers :+ genCppTopicSubscriptionStrict(p, isSporadic(component), portDatatype)
           if (!isSporadic(component) || p.isInstanceOf[AadlDataPort]) {
             inTuplePortNames = inTuplePortNames :+ p.identifier
-            subscriptionMessageGetters = subscriptionMessageGetters :+ genCppGetApplicationInValue(p, nodeName)
+            subscriptionMessageGetters = subscriptionMessageGetters :+ genCppGetApplicationInValue(p, nodeName, portDatatype)
           }
           else {
             strictSubscriptionHandlerBaseMethods = strictSubscriptionHandlerBaseMethods :+
-              genCppSubscriptionHandlerBaseSporadic(p, nodeName)
+              genCppSubscriptionHandlerBaseSporadic(p, nodeName, portDatatype)
           }
           hasInPorts = T
         }
@@ -1503,24 +1601,25 @@ object Generator {
           if (connectionMap.get(p.path).nonEmpty) {
             val inputPorts = connectionMap.get(p.path).get
             val inputPortNames = getPortNames(inputPorts)
-            publishers = publishers :+ genCppTopicPublisher(p, inputPortNames)
+            publishers = publishers :+ genCppTopicPublisher(p, portDatatype, inputPortNames)
             publisherMethods = publisherMethods :+
-              genCppTopicPublishMethodStrict(p, nodeName, inputPortNames.size)
+              genCppTopicPublishMethodStrict(p, nodeName, portDatatype, inputPortNames.size)
           }
           else {
+            // TODO: Why is this 0?  It should probably be 1
             publisherMethods = publisherMethods :+
-              genCppTopicPublishMethodStrict(p, nodeName, 0)
+              genCppTopicPublishMethodStrict(p, nodeName, portDatatype, 0)
           }
-          strictPutMsgMethods = strictPutMsgMethods :+ genCppPutMsgMethodStrict(p, nodeName)
+          strictPutMsgMethods = strictPutMsgMethods :+ genCppPutMsgMethodStrict(p, nodeName, portDatatype)
         }
       }
       else {
         if (p.direction == Direction.In) {
-          subscribers = subscribers :+ genCppTopicSubscription(p, nodeName)
+          subscribers = subscribers :+ genCppTopicSubscription(p, nodeName, portDatatype)
           if (!isSporadic(component) || p.isInstanceOf[AadlDataPort]) {
             subscriberMethods = subscriberMethods :+
-              genCppSubscriptionHandlerPeriodic(p, nodeName)
-            subscriptionMessageGetters = subscriptionMessageGetters :+ genCppGetSubscriptionMessage(p, nodeName)
+              genCppSubscriptionHandlerPeriodic(p, nodeName, portDatatype)
+            subscriptionMessageGetters = subscriptionMessageGetters :+ genCppGetSubscriptionMessage(p, nodeName, portDatatype)
           }
           hasInPorts = T
         }
@@ -1528,9 +1627,9 @@ object Generator {
           if (connectionMap.get(p.path).nonEmpty) {
             val inputPorts = connectionMap.get(p.path).get
             val inputPortNames = getPortNames(inputPorts)
-            publishers = publishers :+ genCppTopicPublisher(p, inputPortNames)
+            publishers = publishers :+ genCppTopicPublisher(p, portDatatype, inputPortNames)
             publisherMethods = publisherMethods :+
-              genCppTopicPublishMethod(p, nodeName, inputPortNames.size)
+              genCppTopicPublishMethod(p, nodeName, portDatatype, inputPortNames.size)
           }
         }
       }
@@ -1600,7 +1699,7 @@ object Generator {
           |}
         """
 
-    if (subscriberMethods.size > 0 || publisherMethods.size > 0) {
+    if (subscriberMethods.size > 0 || publisherMethods.size > 0 || (strictAADLMode && subscribers.size > 0)) {
       fileBody =
         st"""${fileBody}
             |//=================================================
@@ -1656,21 +1755,21 @@ object Generator {
     return (filePath, fileBody)
   }
 
-  // TODO: Datatypes
-  def genCppUserNodeHeaderFile(packageName: String, component: AadlThread, strictAADLMode: B): (ISZ[String], ST) = {
+  def genCppUserNodeHeaderFile(packageName: String, component: AadlThread, datatypeMap: Map[AadlType, (String, ISZ[String])],
+                               strictAADLMode: B, reporter: Reporter): (ISZ[String], ST) = {
     val nodeName = component.pathAsString("_")
     val fileName = genCppNodeSourceHeaderName(nodeName)
 
     var subscriptionHandlers: ISZ[ST] = IS()
     if (isSporadic(component)) {
       for (p <- component.getPorts()) {
-        // TODO: Datatypes
+        val portDatatype: String = genPortDatatype(p, packageName, datatypeMap, reporter)
         if (p.direction == Direction.In && !p.isInstanceOf[AadlDataPort]) {
           if (strictAADLMode) {
-            subscriptionHandlers = subscriptionHandlers :+ genCppSubscriptionHandlerHeaderStrict(p)
+            subscriptionHandlers = subscriptionHandlers :+ genCppSubscriptionHandlerHeaderStrict(p, portDatatype)
           }
           else {
-            subscriptionHandlers = subscriptionHandlers :+ genCppSubscriptionHandlerHeader(p)
+            subscriptionHandlers = subscriptionHandlers :+ genCppSubscriptionHandlerHeader(p, portDatatype)
           }
         }
       }
@@ -1718,23 +1817,23 @@ object Generator {
     return (filePath, fileBody)
   }
 
-  // TODO: Datatypes
-  def genCppUserNodeCppFile(packageName: String, component: AadlThread, strictAADLMode: B): (ISZ[String], ST) = {
+  def genCppUserNodeCppFile(packageName: String, component: AadlThread, datatypeMap: Map[AadlType, (String, ISZ[String])],
+                            strictAADLMode: B, reporter: Reporter): (ISZ[String], ST) = {
     val nodeName = component.pathAsString("_")
     val fileName = genCppNodeSourceName(nodeName)
 
     var subscriptionHandlers: ISZ[ST] = IS()
     if (isSporadic(component)) {
       for (p <- component.getPorts()) {
-        // TODO: Datatypes
+        val portDatatype: String = genPortDatatype(p, packageName, datatypeMap, reporter)
         if (p.direction == Direction.In && !p.isInstanceOf[AadlDataPort]) {
           if (strictAADLMode) {
             subscriptionHandlers = subscriptionHandlers :+
-              genCppSubscriptionHandlerSporadicStrict(p, nodeName)
+              genCppSubscriptionHandlerSporadicStrict(p, nodeName, portDatatype)
           }
           else {
             subscriptionHandlers = subscriptionHandlers :+
-              genCppSubscriptionHandlerSporadic(p, nodeName)
+              genCppSubscriptionHandlerSporadic(p, nodeName, portDatatype)
           }
         }
       }
@@ -1804,19 +1903,19 @@ object Generator {
   }
 
   def genCppNodeFiles(modelName: String, threadComponents: ISZ[AadlThread], connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
-                      strictAADLMode: B): ISZ[(ISZ[String], ST)] = {
+                      datatypeMap: Map[AadlType, (String, ISZ[String])], strictAADLMode: B, reporter: Reporter): ISZ[(ISZ[String], ST)] = {
     val top_level_package_nameT: String = genCppPackageName(modelName)
 
     var cpp_files: ISZ[(ISZ[String], ST)] = IS()
     for (comp <- threadComponents) {
       cpp_files =
-        cpp_files :+ genCppBaseNodeHeaderFile(top_level_package_nameT, comp, connectionMap, strictAADLMode)
+        cpp_files :+ genCppBaseNodeHeaderFile(top_level_package_nameT, comp, connectionMap, datatypeMap, strictAADLMode, reporter: Reporter)
       cpp_files =
-        cpp_files :+ genCppBaseNodeCppFile(top_level_package_nameT, comp, connectionMap, strictAADLMode)
+        cpp_files :+ genCppBaseNodeCppFile(top_level_package_nameT, comp, connectionMap, datatypeMap, strictAADLMode, reporter: Reporter)
       cpp_files =
-        cpp_files :+ genCppUserNodeHeaderFile(top_level_package_nameT, comp, strictAADLMode)
+        cpp_files :+ genCppUserNodeHeaderFile(top_level_package_nameT, comp, datatypeMap, strictAADLMode, reporter: Reporter)
       cpp_files =
-        cpp_files :+ genCppUserNodeCppFile(top_level_package_nameT, comp, strictAADLMode)
+        cpp_files :+ genCppUserNodeCppFile(top_level_package_nameT, comp, datatypeMap, strictAADLMode, reporter: Reporter)
       cpp_files =
         cpp_files :+ genCppNodeRunnerFile(top_level_package_nameT, comp)
     }
@@ -1852,10 +1951,10 @@ object Generator {
   }
 
   def genCppNodePkg(modelName: String, threadComponents: ISZ[AadlThread], connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
-                  strictAADLMode: B): ISZ[(ISZ[String], ST)] = {
+                    datatypeMap: Map[AadlType, (String, ISZ[String])], strictAADLMode: B, reporter: Reporter): ISZ[(ISZ[String], ST)] = {
     var files: ISZ[(ISZ[String], ST)] = ISZ()
 
-    files = files ++ genCppNodeFiles(modelName, threadComponents, connectionMap, strictAADLMode)
+    files = files ++ genCppNodeFiles(modelName, threadComponents, connectionMap, datatypeMap, strictAADLMode, reporter: Reporter)
     files = files :+ genCppCMakeListsFile(modelName, threadComponents)
     files = files :+ genCppPackageFile(modelName)
 
@@ -1868,6 +1967,18 @@ object Generator {
     files = files :+ genXmlFormatLaunchFile(modelName, threadComponents)
     files = files :+ genLaunchCMakeListsFile(modelName)
     files = files :+ genLaunchPackageFile(modelName)
+
+    return files
+  }
+
+  // The same datatype package will work regardless of other packages' types
+  // ROS2 data/message types are defined in a "{package_name}_interfaces" package according to convention
+  def genInterfacesPkg(modelName: String, datatypeMap: Map[AadlType, (String, ISZ[String])]): ISZ[(ISZ[String], ST)] = {
+    var files: ISZ[(ISZ[String], ST)] = IS()
+
+    files = files ++ genMsgFiles(modelName, datatypeMap)
+    files = files :+ genInterfacesCMakeListsFile(modelName, datatypeMap)
+    files = files :+ genInterfacesPackageFile(modelName)
 
     return files
   }
