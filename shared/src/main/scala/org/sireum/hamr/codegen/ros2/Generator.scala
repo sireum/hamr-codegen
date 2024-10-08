@@ -1909,13 +1909,13 @@ object Generator {
     var cpp_files: ISZ[(ISZ[String], ST)] = IS()
     for (comp <- threadComponents) {
       cpp_files =
-        cpp_files :+ genCppBaseNodeHeaderFile(top_level_package_nameT, comp, connectionMap, datatypeMap, strictAADLMode, reporter: Reporter)
+        cpp_files :+ genCppBaseNodeHeaderFile(top_level_package_nameT, comp, connectionMap, datatypeMap, strictAADLMode, reporter)
       cpp_files =
-        cpp_files :+ genCppBaseNodeCppFile(top_level_package_nameT, comp, connectionMap, datatypeMap, strictAADLMode, reporter: Reporter)
+        cpp_files :+ genCppBaseNodeCppFile(top_level_package_nameT, comp, connectionMap, datatypeMap, strictAADLMode, reporter)
       cpp_files =
-        cpp_files :+ genCppUserNodeHeaderFile(top_level_package_nameT, comp, datatypeMap, strictAADLMode, reporter: Reporter)
+        cpp_files :+ genCppUserNodeHeaderFile(top_level_package_nameT, comp, datatypeMap, strictAADLMode, reporter)
       cpp_files =
-        cpp_files :+ genCppUserNodeCppFile(top_level_package_nameT, comp, datatypeMap, strictAADLMode, reporter: Reporter)
+        cpp_files :+ genCppUserNodeCppFile(top_level_package_nameT, comp, datatypeMap, strictAADLMode, reporter)
       cpp_files =
         cpp_files :+ genCppNodeRunnerFile(top_level_package_nameT, comp)
     }
@@ -1954,7 +1954,7 @@ object Generator {
                     datatypeMap: Map[AadlType, (String, ISZ[String])], strictAADLMode: B, reporter: Reporter): ISZ[(ISZ[String], ST)] = {
     var files: ISZ[(ISZ[String], ST)] = ISZ()
 
-    files = files ++ genCppNodeFiles(modelName, threadComponents, connectionMap, datatypeMap, strictAADLMode, reporter: Reporter)
+    files = files ++ genCppNodeFiles(modelName, threadComponents, connectionMap, datatypeMap, strictAADLMode, reporter)
     files = files :+ genCppCMakeListsFile(modelName, threadComponents)
     files = files :+ genCppPackageFile(modelName)
 

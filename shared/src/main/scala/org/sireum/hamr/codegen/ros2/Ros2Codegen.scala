@@ -39,7 +39,7 @@ import org.sireum.ops.ISZOps
     var files: ISZ[(ISZ[String], ST)] = IS()
 
     options.ros2NodesLanguage.name match {
-      case "Cpp" => files = Generator.genCppNodePkg(modelName, threadComponents, connectionMap, datatypeMap, options.strictAadlMode, reporter: Reporter)
+      case "Cpp" => files = Generator.genCppNodePkg(modelName, threadComponents, connectionMap, datatypeMap, options.strictAadlMode, reporter)
       case "Python" => files = Generator.genPyNodePkg(modelName, threadComponents, connectionMap, options.strictAadlMode)
       case _ => reporter.error(None(), toolName, s"Unknown code type: ${options.ros2NodesLanguage.name}")
     }
@@ -225,8 +225,8 @@ import org.sireum.ops.ISZOps
         length = length * dim
         msg = s"${msg}${dim},"
       }
-      msg = ops.StringOps(msg).substring(0, msg.value.length - 1)
-      msg = s"${msg}]\n${baseType}[${length}] arr".toString
+      msg = ops.StringOps(msg).substring(0, msg.size - 1)
+      msg = s"${msg}]\n${baseType}[${length}] arr"
     }
 
     datatypeMap = datatypeMap + (t ~> (s, ISZ(msg)))
