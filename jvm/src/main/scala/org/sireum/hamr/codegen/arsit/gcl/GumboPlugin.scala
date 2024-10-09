@@ -130,7 +130,9 @@ import org.sireum.message.Reporter
           case _ => // gumbo contracts cannot currently be placed on the other entrypoints
         }
 
-        optSubclauseContractBlock = Some(NonCaseContractBlock(imports, reads, requires, modifies, ensures, flows))
+        if (imports.nonEmpty || reads.nonEmpty || requires.nonEmpty || modifies.nonEmpty || ensures.nonEmpty || flows.nonEmpty) {
+          optSubclauseContractBlock = Some(NonCaseContractBlock(imports, reads, requires, modifies, ensures, flows))
+        }
 
       case _ =>
         if (!getAnnexLibraries(symbolTable).nonEmpty) {
