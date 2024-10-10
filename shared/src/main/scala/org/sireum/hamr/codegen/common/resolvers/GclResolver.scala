@@ -574,16 +574,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
   }
 
   def globalImports(symbolTable: SymbolTable): ISZ[AST.Stmt.Import] = {
-    // import all AADL package names and org.sireum
 
     val emptyAttr = AST.Attr(None())
-
-    var set: Set[AST.Stmt.Import.Importer] = Set.empty
-    for (a <- symbolTable.componentMap.values if !a.isInstanceOf[AadlSystem]) {
-      val classifier = ops.ISZOps(a.classifier).dropRight(1)
-      val packageName = AST.Name(classifier.map((m: String) => AST.Id(m, emptyAttr)), emptyAttr)
-      set = set + AST.Stmt.Import.Importer(packageName, Some(AST.Stmt.Import.WildcardSelector()))
-    }
 
     val sireumImporters: ISZ[AST.Stmt.Import.Importer] = {
       val keys = GclUtil.interpolatorLookup.keys.map((m: String) => ops.StringOps(m).firstToUpper)
@@ -602,7 +594,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       )
     }
 
-    return (set.elements ++ sireumImporters).map((m: AST.Stmt.Import.Importer) =>
+    return sireumImporters.map((m: AST.Stmt.Import.Importer) =>
       AST.Stmt.Import(importers = ISZ(m), attr = emptyAttr))
   }
 
