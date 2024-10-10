@@ -51,7 +51,7 @@ object GclResolver {
                              val isContextGeneralAssumeClause: B,
                              val optHandledPort: Option[AadlPort],
                              val stateVars: ISZ[GclStateVar],
-                             val specFuncs: ISZ[GclMethod],
+                             val specFuncs: Map[ISZ[String], GclMethod],
                              val symbolTable: SymbolTable) extends org.sireum.hamr.ir.MTransformer {
     var symbols: Set[SymbolHolder] = Set.empty
     var reporter: Reporter = ReporterImpl(ISZ())
@@ -64,7 +64,7 @@ object GclResolver {
     }
     val addGetToApiCalls: B = mode == RewriteMode.ApiGet
 
-    def lookup(name: String, resOpt: Option[ResolvedInfo], optPos: Option[Position]): Option[SymbolHolder] = {
+    def lookup(name: String, fqn: ISZ[String], resOpt: Option[ResolvedInfo], optPos: Option[Position]): Option[SymbolHolder] = {
       context match {
         case a: AadlData =>
           var cands: ISZ[SymbolHolder] = a.subComponents.filter((p: AadlComponent) => p.identifier == name)
@@ -72,9 +72,9 @@ object GclResolver {
             .map((s: AadlSymbolHolder) => s.asInstanceOf[SymbolHolder]) // make tipe happy
 
           if (cands.isEmpty) {
-            cands = specFuncs.filter((sf: GclMethod) => sf.method.sig.id.value == name)
-              .map((m: GclMethod) => GclSymbolHolder(m))
-              .map((m: GclSymbolHolder) => m.asInstanceOf[SymbolHolder]) // make tipe happy
+            if (specFuncs.contains(fqn)) {
+              cands = cands :+ GclSymbolHolder(specFuncs.get(fqn).get)
+            }
           }
 
           if (cands.isEmpty) {
@@ -92,7 +92,7 @@ object GclResolver {
             reporter.error(optPos, toolName, s"Could not find ${name} in data component ${a.identifier}")
             return None()
           } else if (cands.size > 1) {
-            reporter.error(optPos, toolName, s"Found ${cands.size} number of ${name} in data component ${a.identifier}")
+            reporter.error(optPos, toolName, s"Found ${cands.size} instances of ${name} in data component ${a.identifier}")
             return None()
           } else {
             return Some(cands(0))
@@ -109,9 +109,9 @@ object GclResolver {
           }
 
           if (cands.isEmpty) {
-            cands = specFuncs.filter((sf: GclMethod) => sf.method.sig.id.value == name)
-              .map((m: GclMethod) => GclSymbolHolder(m))
-              .map((m: GclSymbolHolder) => m.asInstanceOf[SymbolHolder]) // make tipe happy
+            if (specFuncs.contains(fqn)) {
+              cands = cands :+ GclSymbolHolder(specFuncs.get(fqn).get)
+            }
           }
 
           if (cands.isEmpty) {
@@ -125,11 +125,8 @@ object GclResolver {
             }
           }
 
-          if (cands.isEmpty) {
-            reporter.error(optPos, toolName, s"Could not find ${name} in thread component ${a.identifier}")
-            return None()
-          } else if (cands.size > 1) {
-            reporter.error(optPos, toolName, s"Found ${cands.size} number of ${name} in thread component ${a.identifier}")
+          if (cands.size > 1) {
+            reporter.error(optPos, toolName, s"Found ${cands.size} instances of ${name} in thread component ${a.identifier}")
             return None()
           } else {
             return Some(cands(0))
@@ -159,8 +156,15 @@ object GclResolver {
       o.attr.resOpt match {
         case Some(e: AST.ResolvedInfo.Enum) => // ignore
         case Some(e: AST.ResolvedInfo.Package) => // ignore
-        case Some(_) =>
-          return lookup(o.id.value, o.resOpt, o.fullPosOpt)
+        case Some(x) =>
+          val fqName: ISZ[String] = x match {
+            case e: AST.ResolvedInfo.Var => e.owner :+ e.id
+            case e: AST.ResolvedInfo.Method => e.owner :+ e.id
+            case e: AST.ResolvedInfo.Object => e.name
+            case x =>
+              halt(s"Need to handle $x")
+          }
+          return lookup(o.id.value, fqName, o.resOpt, o.fullPosOpt)
         case _ => reporter.error(o.fullPosOpt, toolName, s"Ident '$o' did not resolve")
       }
       return None()
@@ -343,7 +347,7 @@ object GclResolver {
     override def pre_langastExpSelect(o: Exp.Select): org.sireum.hamr.ir.MTransformer.PreResult[Exp] = {
       o.receiverOpt match {
         case Some(i: Exp.This) =>
-          lookup(o.id.value, o.resOpt, o.fullPosOpt) match {
+          lookup(o.id.value, ISZ(), o.resOpt, o.fullPosOpt) match {
             case Some(s) => symbols = symbols + s
             case _ =>
           }
@@ -502,7 +506,7 @@ object GclResolver {
                      context: AadlComponent,
                      isContextGeneralAssumeClause: B,
                      stateVars: ISZ[GclStateVar],
-                     methods: ISZ[GclMethod],
+                     methods: Map[ISZ[String], GclMethod],
                      symbolTable: SymbolTable,
                      reporter: Reporter): (MOption[Exp], ISZ[SymbolHolder], ISZ[AadlPort]) = {
     return collectSymbolsH(exp, mode, context, isContextGeneralAssumeClause, None(), stateVars, methods, symbolTable, reporter)
@@ -514,7 +518,7 @@ object GclResolver {
                       isContextGeneralAssumeClause: B,
                       optHandledPort: Option[AadlPort],
                       stateVars: ISZ[GclStateVar],
-                      methods: ISZ[GclMethod],
+                      methods: Map[ISZ[String], GclMethod],
                       symbolTable: SymbolTable,
                       reporter: Reporter): (MOption[Exp], ISZ[SymbolHolder], ISZ[AadlPort]) = {
     if (reporter.hasError) {
@@ -551,7 +555,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
   var globalTypeMap: TypeMap = HashSMap.empty
   var globalNameMap: NameMap = HashSMap.empty
-  var resolvedMethods: HashSMap[AST.Stmt.Method, Info.Method] = HashSMap.empty
+  var resolvedMethods: HashSMap[ISZ[String], Info.Method] = HashSMap.empty
   var builtTypeInfo: B = F
 
   def reset: B = {
@@ -576,7 +580,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
     var set: Set[AST.Stmt.Import.Importer] = Set.empty
     for (a <- symbolTable.componentMap.values if !a.isInstanceOf[AadlSystem]) {
-      val classifier = ops.ISZOps(getPathFromClassifier(a.component.classifier.get.name)).dropRight(1)
+      val classifier = ops.ISZOps(a.classifier).dropRight(1)
       val packageName = AST.Name(classifier.map((m: String) => AST.Id(m, emptyAttr)), emptyAttr)
       set = set + AST.Stmt.Import.Importer(packageName, Some(AST.Stmt.Import.WildcardSelector()))
     }
@@ -626,10 +630,14 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
     return !fetchPort(name, context).isEmpty
   }
 
-  def typeMethod(m: AST.Stmt.Method): AST.Stmt.Method = {
-    val resolvedMethod = resolvedMethods.get(m).get
-    val attr = resolvedMethod.ast.attr
-    return m(sig = resolvedMethod.ast.sig, attr = attr)
+  def typeMethod(fqn: ISZ[String], m: AST.Stmt.Method, reporter: Reporter): AST.Stmt.Method = {
+    resolvedMethods.get(fqn) match {
+      case Some(resolvedMethod) =>
+        return m(sig = resolvedMethod.ast.sig, attr = resolvedMethod.ast.attr)
+      case _ =>
+        reporter.error(m.posOpt, toolName, st"Could not resolve method '${(fqn, "::")}'".render)
+        return m
+    }
   }
 
   def visitMethodContract(m: AST.Stmt.Method,
@@ -648,13 +656,14 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
     return SymTableKey(e, e.fullPosOpt)
   }
 
-  def visitGclMethod(gclMethod: GclMethod,
+  def visitGclMethod(context: ISZ[String],
+                     gclMethod: GclMethod,
                      typeHierarchy: TypeHierarchy,
                      scope: Scope,
                      reporter: Reporter): AST.Stmt.Method = {
-    val m = gclMethod.method
-    val tc = TypeChecker(typeHierarchy, ISZ(m.sig.id.value), F, TypeChecker.ModeContext.Spec, F)
-    val typedMethod: AST.Stmt.Method = typeMethod(m)
+    val fqn = context :+ gclMethod.method.sig.id.value
+    val tc = TypeChecker(typeHierarchy, fqn, F, TypeChecker.ModeContext.Spec, F)
+    val typedMethod: AST.Stmt.Method = typeMethod(fqn, gclMethod.method, reporter)
     var rMethod: AST.Stmt.Method = tc.checkMethod(scope, typedMethod, reporter)
 
     if (gclMethod.method.mcontract.nonEmpty) {
@@ -681,7 +690,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       }
     }
 
-    (m.bodyOpt, rMethod.bodyOpt) match {
+    (gclMethod.method.bodyOpt, rMethod.bodyOpt) match {
       case (Some(AST.Body(ISZ(AST.Stmt.Return(Some(exp))))),
       Some(AST.Body(ISZ(AST.Stmt.Return(Some(rexp)))))) =>
 
@@ -695,7 +704,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
   }
 
-  def processGclLib(libQualifiedName: ISZ[String],
+  def processGclLib(context: ISZ[String],
                     gclLib: GclLib,
                     symbolTable: SymbolTable,
                     aadlTypes: AadlTypes,
@@ -704,10 +713,10 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                     reporter: Reporter): Option[GclSymbolTable] = {
 
     for (gclMethod <- gclLib.methods) {
-      val rMethod = visitGclMethod(gclMethod, typeHierarchy, scope, reporter)
-      val methodQualifiedName = libQualifiedName :+ rMethod.sig.id.value
+      val rMethod = visitGclMethod(context, gclMethod, typeHierarchy, scope, reporter)
+      val methodQualifiedName = context :+ gclMethod.method.sig.id.value
       replaceName(methodQualifiedName, Info.Method(
-        owner = libQualifiedName,
+        owner = context,
         isInObject = T,
         scope = scope,
         hasBody = rMethod.bodyOpt.nonEmpty,
@@ -726,7 +735,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
     return Some(gclSymTable)
   }
 
-  def processGclAnnex(context: AadlComponent,
+  def processGclAnnex(component: AadlComponent,
                       annex: GclSubclause,
                       libInfos: ISZ[GclAnnexLibInfo],
                       symbolTable: SymbolTable,
@@ -742,15 +751,25 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
     val baseTypeFloat32 = aadlTypes.typeMap.get("Base_Types::Float_32").get
     val baseTypeFloat64 = aadlTypes.typeMap.get("Base_Types::Float_64").get
 
-    val componentPos = context.component.identifier.pos
+    val componentPos = component.component.identifier.pos
 
-    val libMethods = libInfos.flatMap((m: GclAnnexLibInfo) => m.annex.methods)
+    var libMethods: Map[ISZ[String], GclMethod] = Map.empty
+    for (lib <- libInfos) {
+      libMethods = libMethods ++ (for (m <- lib.annex.methods) yield (lib.name :+ m.method.sig.id.value) ~> m)
+    }
 
     def visitGclSubclause(s: GclSubclause): Unit = {
       var seenInvariantIds: Set[String] = Set.empty
 
+      val context = component.classifier
+      if (reporter.hasError) {
+        return
+      }
+
+      val threadMethods: Map[ISZ[String], GclMethod] = Map.empty[ISZ[String], GclMethod] ++ (for(m <- s.methods) yield (context :+ m.method.sig.id.value) ~> m)
+
       // hmm, lost imports with AIR translation so assume all glc lib annexes have been imported
-      val gclMethods = s.methods ++ libMethods
+      val gclMethods = threadMethods ++ libMethods.entries
 
       def typeCheckBoolExp(exp: Exp): Exp = {
         val rexp: AST.Exp = visitSlangExp(exp) match {
@@ -774,7 +793,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       }
 
       for (gclMethod <- s.methods) {
-        visitGclMethod(gclMethod, typeHierarchy, scope, reporter)
+        visitGclMethod(context, gclMethod, typeHierarchy, scope, reporter)
       }
 
       for (i <- s.invariants) {
@@ -800,7 +819,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
           if (!reporter.hasError) {
             val (expTrans, symbols, apiRefs) =
-              GclResolver.collectSymbols(expTipe, RewriteMode.Normal, context, F, ISZ(), gclMethods, symbolTable, reporter)
+              GclResolver.collectSymbols(expTipe, RewriteMode.Normal, component, F, ISZ(), gclMethods, symbolTable, reporter)
 
             val resolvedExpr: AST.Exp = expTrans match {
               case MSome(et2) => et2
@@ -864,7 +883,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           case e: Exp.Ident =>
             visitSlangExp(e) match {
               case Some((rexp, roptType)) =>
-                val (rexp2, symbols, _) = GclResolver.collectSymbols(rexp, RewriteMode.Api, context, F, s.state, gclMethods, symbolTable, reporter)
+                val (rexp2, symbols, _) = GclResolver.collectSymbols(rexp, RewriteMode.Api, component, F, s.state, gclMethods, symbolTable, reporter)
                 if (!reporter.hasError) {
                   if (symbols.size != 1) {
                     reporter.error(e.fullPosOpt, GclResolver.toolName, s"From/To expressions should resolve to exactly one symbol, instead resolved to ${symbols.size}")
@@ -907,7 +926,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             case e: Exp.Ident =>
               visitSlangExp(e) match {
                 case Some((rexp, roptType)) =>
-                  val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.Normal, context, F, s.state, gclMethods, symbolTable, reporter)
+                  val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.Normal, component, F, s.state, gclMethods, symbolTable, reporter)
                   apiReferences = apiReferences ++ apiRefs
 
                   if (!reporter.hasError) {
@@ -950,7 +969,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           seenGuaranteeIds = seenGuaranteeIds + guarantees.id
 
           val rexp = typeCheckBoolExp(guarantees.exp)
-          val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, context, F, s.state, gclMethods, symbolTable, reporter)
+          val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, F, s.state, gclMethods, symbolTable, reporter)
           apiReferences = apiReferences ++ apiRefs
 
           if (rexp2.isEmpty) {
@@ -989,7 +1008,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             {
               val rexp = typeCheckBoolExp(spec.exp)
               val isContextGeneralAssumeClause = spec.isInstanceOf[GclAssume]
-              val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, context, isContextGeneralAssumeClause, s.state, gclMethods, symbolTable, reporter)
+              val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, isContextGeneralAssumeClause, s.state, gclMethods, symbolTable, reporter)
               apiReferences = apiReferences ++ apiRefs
 
               spec match {
@@ -1021,7 +1040,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
             {
               val rexp = typeCheckBoolExp(caase.assumes)
-              val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, context, F, s.state, gclMethods, symbolTable, reporter)
+              val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, F, s.state, gclMethods, symbolTable, reporter)
               apiReferences = apiReferences ++ apiRefs
 
               for (sym <- symbols) {
@@ -1040,7 +1059,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
             {
               val rexp = typeCheckBoolExp(caase.guarantees)
-              val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, context, F, s.state, gclMethods, symbolTable, reporter)
+              val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, F, s.state, gclMethods, symbolTable, reporter)
               apiReferences = apiReferences ++ apiRefs
 
               if (rexp2.isEmpty) {
@@ -1055,7 +1074,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
             visitSlangExp(handler.port) match {
               case Some((rexp, roptType)) =>
-                val (hexp, symbols, _) = GclResolver.collectSymbols(rexp, RewriteMode.Normal, context, F, s.state, gclMethods, symbolTable, reporter)
+                val (hexp, symbols, _) = GclResolver.collectSymbols(rexp, RewriteMode.Normal, component, F, s.state, gclMethods, symbolTable, reporter)
                 if (!reporter.hasError) {
                   if (symbols.size != 1) {
                     reporter.error(handler.port.fullPosOpt, GclResolver.toolName, s"Handler should resolve to exactly one symbol, instead resolved to ${symbols.size}")
@@ -1088,7 +1107,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               handlerSpecIds = handlerSpecIds + guarantees.id
 
               val rexp = typeCheckBoolExp(guarantees.exp)
-              val (rexp2, _, apiRefs) = GclResolver.collectSymbolsH(rexp, RewriteMode.ApiGet, context, F,
+              val (rexp2, _, apiRefs) = GclResolver.collectSymbolsH(rexp, RewriteMode.ApiGet, component, F,
                 computeHandlerPortMap.get(handler.port), // rewrite handled port references to the passed in param
                 s.state, gclMethods, symbolTable, reporter)
               apiReferences = apiReferences ++ apiRefs
@@ -1100,7 +1119,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               }
             }
 
-            context match {
+            component match {
               case a: AadlDispatchableComponent =>
                 if (!a.isSporadic()) {
                   reporter.error(handler.port.fullPosOpt, GclResolver.toolName, s"Compute handlers can only be used with sporadic components")
@@ -1132,7 +1151,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         case Some((rexp, roptType)) =>
           roptType match {
             case Some(AST.Typed.Name(ISZ("org", "sireum", "B"), _)) =>
-              val (rexp2, _, _) = GclResolver.collectSymbols(rexp, RewriteMode.Normal, context, F, ISZ(), libMethods, symbolTable, reporter)
+              val (rexp2, _, _) = GclResolver.collectSymbols(rexp, RewriteMode.Normal, component, F, ISZ(), libMethods, symbolTable, reporter)
               if (rexp2.isEmpty) {
                 rexprs = rexprs + (toKey(i.exp) ~> rexp)
               } else {
@@ -1147,7 +1166,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
     }
 
     def visitSlangExp(exp: AST.Exp): Option[(AST.Exp, Option[AST.Typed])] = {
-      val scontext: QName = ISZ("???")
+      val scontext: QName = component.classifier
 
       val mode = TypeChecker.ModeContext.Spec
       val typeChecker: TypeChecker = TypeChecker(typeHierarchy, scontext, F, mode, F)
@@ -1175,10 +1194,6 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
   def scope(packageName: IdPath, imports: ISZ[AST.Stmt.Import], enclosingName: IdPath): Scope.Global = {
     return Scope.Global(packageName, imports, enclosingName)
-  }
-
-  def getPathFromClassifier(s: String): ISZ[String] = {
-    return ops.StringOps(ops.StringOps(s).replaceAllLiterally("::", "|")).split((c: C) => c == '|')
   }
 
   def replaceName(name: QName, info: Info): Unit = {
@@ -1273,10 +1288,6 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       return typedOpt
     }
 
-    def getSimpleNameFromClassifier(c: String): String = {
-      return ops.ISZOps(getPathFromClassifier(c)).last
-    }
-
     def buildTypeInfo(aadlType: AadlType): TypeInfo = {
       val TODO_TYPE: TypeInfo.Adt = {
         val adtAst: AST.Stmt.Adt =
@@ -1312,7 +1323,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           ast = adtAst)
       }
 
-      val qualifiedName = getPathFromClassifier (aadlType.name)
+      val qualifiedName = aadlType.classifier
 
       val qualifiedTypeName: ISZ[String] =
         aadlType match {
@@ -1354,13 +1365,14 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 posOpt = None()), None(), reporter)
             }
 
-            declareName(e.name, qualifiedName, Info.Enum(
-              name = qualifiedName,
-              elements = enumx.elements,
-              typedOpt = Some(AST.Typed.Enum(name = qualifiedName)),
-              resOpt = Some(AST.ResolvedInfo.Enum(name = qualifiedName)),
-              elementTypedOpt = Some(elementTypedOpt),
-              posOpt = None()), None(), reporter)
+            declareName(e.name, qualifiedName,
+              Info.Enum(
+                name = qualifiedName,
+                elements = enumx.elements,
+                typedOpt = Some(AST.Typed.Enum(name = qualifiedName)),
+                resOpt = Some(AST.ResolvedInfo.Enum(name = qualifiedName)),
+                elementTypedOpt = Some(elementTypedOpt),
+                posOpt = None()), None(), reporter)
           }
 
           val gclAnnexes = e.container.get.annexes.filter((a: Annex) => a.clause.isInstanceOf[GclSubclause]).map((a: Annex) => a.clause.asInstanceOf[GclSubclause])
@@ -1379,7 +1391,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
         case b: BaseType =>
 
-          val simpleName = getSimpleNameFromClassifier(b.name)
+          val simpleName = b.simpleName
           val packageName = ops.ISZOps(qualifiedTypeName).dropRight(1)
           buildPackageInfo(packageName)
 
@@ -1450,7 +1462,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
           return ta
 
-        case TODOType("art::Empty", _, _, _) =>
+        case TODOType(ISZ("art", "Empty"), _, _, _) =>
           val adtAst: AST.Stmt.Adt =
             AST.Stmt.Adt(
               isRoot = F,
@@ -1526,7 +1538,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
         if (!globalNameMap.contains(fqMethodName)) {
           val infoMethod = buildInfoMethod(gclMethod, adtQualifiedName, adtScope)
-          resolvedMethods = resolvedMethods + (gclMethod.method ~> infoMethod)
+          resolvedMethods = resolvedMethods + (fqMethodName ~> infoMethod)
           declareName(gclMethod.method.sig.id.value, fqMethodName, infoMethod, None(), reporter)
         }
       }
@@ -1678,7 +1690,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
     def buildInfoObject(a: AadlThread): Info.Object = {
 
       val component = a.component
-      val threadsName = getPathFromClassifier(component.classifier.get.name)
+      val threadsName = a.classifier
 
       if (globalNameMap.contains(threadsName)) {
         return globalNameMap.get(threadsName).get.asInstanceOf[Info.Object]
@@ -1688,7 +1700,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       val currentName = threadsOwner
       val threadsPackageName = threadsOwner
 
-      val threadsSimpleName = getSimpleNameFromClassifier(component.classifier.get.name)
+      val threadsSimpleName = a.classifier(a.classifier.lastIndex)
 
       val threadsId = AST.Id(
         value = threadsSimpleName,
@@ -1919,14 +1931,15 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
             val infoMethod = buildInfoMethod(gclMethod, threadsName, threadsScope)
 
-            resolvedMethods = resolvedMethods + (gclMethod.method ~> infoMethod)
+            val fqMethodName = threadsName :+ gclMethod.method.sig.id.value
+            resolvedMethods = resolvedMethods + (fqMethodName ~> infoMethod)
 
             (gclMethod.method.sig.id.value, infoMethod)
           }))
 
         _methods ++ specDefs
-
       }
+
       for (m <- methods.values) {
         declareName(
           entity = "method",
@@ -1966,14 +1979,13 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
     def buildAdtTypeInfo(a: AadlData): TypeInfo.Adt = {
 
-      val component = a.component
-      val adtQualifiedName = getPathFromClassifier(component.classifier.get.name)
+      val adtQualifiedName = a.classifier
 
       if (globalTypeMap.contains(adtQualifiedName)) {
         return globalTypeMap.get(adtQualifiedName).get.asInstanceOf[TypeInfo.Adt]
       }
 
-      val simpleName = getSimpleNameFromClassifier(component.classifier.get.name)
+      val simpleName = a.classifier(a.classifier.lastIndex)
       val packageName = ops.ISZOps(adtQualifiedName).dropRight(1)
       assert(packageName.nonEmpty)
 
@@ -1987,7 +1999,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       var constructorParamVars = ISZ[String]()
       val extractParamVars = ISZ[String]() // always empty as there are no @hidden params in AADL
 
-      val gclAnnexes = component.annexes.filter((a: Annex) => a.clause.isInstanceOf[GclSubclause]).map((a: Annex) => a.clause.asInstanceOf[GclSubclause])
+      val gclAnnexes = a.component.annexes.filter((a: Annex) => a.clause.isInstanceOf[GclSubclause]).map((a: Annex) => a.clause.asInstanceOf[GclSubclause])
 
       if (gclAnnexes.size > 1) {
         reporter.error(a.component.identifier.pos, toolName, "Only a single GCL subclause is allowed per component type/implementation")
@@ -2248,7 +2260,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
     }
   }
 
-  def offer(context: AadlComponent, annex: Annex, annexLibs: ISZ[AnnexLibInfo], symbolTable: SymbolTable, aadlTypes: AadlTypes, reporter: Reporter): Option[AnnexClauseInfo] = {
+  def offer(component: AadlComponent, annex: Annex, annexLibs: ISZ[AnnexLibInfo], symbolTable: SymbolTable, aadlTypes: AadlTypes, reporter: Reporter): Option[AnnexClauseInfo] = {
     if (processedAnnexes.contains(annex)) {
       return processedAnnexes.get(annex).get
     } else {
@@ -2257,15 +2269,12 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           val gclLibs: ISZ[GclAnnexLibInfo] = annexLibs.filter((a: AnnexLibInfo) => a.isInstanceOf[GclAnnexLibInfo]).map((a: AnnexLibInfo) => a.asInstanceOf[GclAnnexLibInfo])
           buildTypeMap(gclLibs.map((g: GclAnnexLibInfo) => g.annex), aadlTypes, symbolTable, reporter)
 
-          val qualifiedName: IdPath = context match {
-            case ad: AadlData => getPathFromClassifier(ad.component.classifier.get.name)
-            case ac: AadlThread => getPathFromClassifier(ac.component.classifier.get.name)
-            case _ =>
-              reporter.error(None(), toolName, s"Expecting AadlData or AadlThread but passed ${context}")
-              return None()
+          val qualifiedName: IdPath = component.classifier
+          if (reporter.hasError) {
+            return None()
           }
 
-          val scope: Scope.Local = context match {
+          val scope: Scope.Local = component match {
             case ad: AadlData =>
               globalTypeMap.get(qualifiedName) match {
                 case Some(o) =>
@@ -2299,7 +2308,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                   return None()
               }
             case _ =>
-              reporter.error(None(), toolName, s"Expecting AadlData or AadlThread but passed ${context}")
+              reporter.error(None(), toolName, s"Expecting AadlData or AadlThread but passed ${component}")
               return None()
           }
 
@@ -2310,7 +2319,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             aliases = HashSMap.empty)
 
           val gclSymbolTable: GclSymbolTable =
-            processGclAnnex(context, gclSubclause, gclLibs, symbolTable, aadlTypes, typeHierarchy, scope, reporter).get
+            processGclAnnex(component, gclSubclause, gclLibs, symbolTable, aadlTypes, typeHierarchy, scope, reporter).get
           Some(GclAnnexClauseInfo(gclSubclause, gclSymbolTable))
         case _ => None()
       }
