@@ -1365,7 +1365,7 @@ object Generator {
       }
       else {
         if (p.direction == Direction.In) {
-          subscriptionHeaders = subscriptionHeaders :+ genCppTopicSubscriptionVarHeader(p, genPortDatatype(p, packageName, datatypeMap, reporter))
+          subscriptionHeaders = subscriptionHeaders :+ genCppTopicSubscriptionVarHeader(p, portDatatype)
           if (isSporadic(component) && !p.isInstanceOf[AadlDataPort]) {
             subscriptionHandlerHeaders = subscriptionHandlerHeaders :+
               genCppSubscriptionHandlerVirtualHeader(p, portDatatype)
