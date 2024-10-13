@@ -15,7 +15,7 @@ object TypeUtil {
   val MISSING_AADL_TYPE: String = "Missing::MISSING_AADL_TYPE"
 
   val EmptyType: TODOType = TODOType(
-    name = "art::Empty",
+    classifier = ISZ("art", "Empty"),
     nameProvider = AadlTypeNameProvider(
       basePackageName = "",
       classifier = ISZ("art", "Empty"),
@@ -24,7 +24,7 @@ object TypeUtil {
     container = None(),
     bitSize = None())
 
-  val SlangEmbeddedBitTypeName: String = "Base_Types.Bits"
+  val SlangEmbeddedBitTypeName: ISZ[String] = ISZ("Base_Types" , "Bits")
 
   val BIT_SIG: String = "IS[Z, B]"
 

@@ -91,19 +91,10 @@ def exclamations(): Unit = { for (i <- 0 to 5) { println("!!!!!!!!!!!!!!!!!!!!!!
   for (k <- phantomCurrentVers.keys if !phantomVersionsP.properties.contains(k)) {
     halt(s"${phantomVersionsP} doesn't contain $k")
   }
-
-  val artEmbeddedVersion = runGit(ISZ("git", "log", "-n", "1", "--pretty=format:%h"), SIREUM_HOME / "hamr" / "codegen" / "arsit" / "resources" / "art")
-  if (codegenCurrentVers.get("art.version").get != artEmbeddedVersion) {
-    exclamations()
-    println(s"WARNING: ART versions do not match: ${codegenCurrentVers.get("art.version").get} vs ${artEmbeddedVersion}")
-    exclamations()
-  }
 }
 
 var changesDetected = F
 var jitpackFetches: ISZ[String] = ISZ()
-
-val arsitUtilDir = SIREUM_HOME / "hamr" / "codegen" / "arsit" / "resources" / "util"
 
 def compare(p: Os.Path, currentVersions: Map[String, String]): Unit = {
   var mod = ISZ[String]()
@@ -129,10 +120,8 @@ def compare(p: Os.Path, currentVersions: Map[String, String]): Unit = {
   }
   if (hasChanges && !noUpdate) {
     p.writeOver(st"${(mod, "\n")}\n".render)
-    p.copyOverTo(arsitUtilDir / p.name)
     println(s"Updated:")
     println(s"  ${p.toUri}")
-    println(s"  ${(arsitUtilDir / p.name).toUri}")
   }
   changesDetected = changesDetected || hasChanges
 }
@@ -168,7 +157,7 @@ if (!noUpdate && jitpackFetches.nonEmpty) {
     val sc = Os.tempFix(ops.StringOps(m).replaceAllChars(':', '_'), ".sc")
     sc.writeOver(
       st"""import org.sireum._
-          |for (cif <- Coursier.fetch("$scalaVer", ISZ("$m"), Proxy.empty)) {
+          |for (cif <- Coursier.fetch("$scalaVer", ISZ("$m"), Coursier.Proxy.empty)) {
           |  println(cif.path)
           |}""".render
     )
@@ -182,8 +171,8 @@ if (!noUpdate && jitpackFetches.nonEmpty) {
 }
 
 if (changesDetected && !noUpdate) {
-  val arsitProj = SIREUM_HOME / "hamr" / "codegen" / "arsit" / "jvm"
-  println(s"\nVersion changes detected: rebuild the hamr-arsit module to force macro expansion: ${arsitProj.toUri}")
+  val hamrCodegenModule = SIREUM_HOME / "hamr" / "codegen" / "jvm"
+  println(s"\nVersion changes detected: rebuild the hamr-codegen module to force macro expansion: ${hamrCodegenModule.toUri}")
 
   Os.exit(1) // return 1 to indicate versions have changed
 } else {

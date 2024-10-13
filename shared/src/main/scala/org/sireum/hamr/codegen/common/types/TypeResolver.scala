@@ -94,7 +94,7 @@ object TypeResolver {
                   reporter: Reporter): AadlType = {
 
     def base(): AadlType = {
-      val cname = c.classifier.get.name
+      val cname = ops.StringOps(ops.StringOps(c.classifier.get.name).replaceAllLiterally("::", ":")).split(c => c == ':')
 
       assert(c.category == ir.ComponentCategory.Data, s"Unexpected data type definition ${cname}")
 

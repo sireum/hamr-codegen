@@ -33,7 +33,7 @@ object GumboXGen {
             return annexInfos.filter(f => f.isInstanceOf[GclAnnexClauseInfo]).map(m => m.asInstanceOf[GclAnnexClauseInfo])
           case _ => return ISZ()
         }
-      case _ if componentPath == ISZ(TypeUtil.SlangEmbeddedBitTypeName) =>
+      case _ if componentPath == ISZ(st"${(TypeUtil.SlangEmbeddedBitTypeName, "::")}".render) =>
         return ISZ()
       case _ =>
         halt(s"Infeasible: couldn't find $componentPath")

@@ -9,16 +9,25 @@ import org.sireum.hamr.ir
                           val typeMap: Map[String, AadlType])
 
 @sig trait AadlType {
-  def container: Option[ir.Component]
 
-  def name: String
+  def classifier: ISZ[String]
+
+  def name: String = {
+    return st"${(classifier, "::")}".render
+  }
+
+  def simpleName: String = {
+    return classifier(classifier.lastIndex)
+  }
+
+  def container: Option[ir.Component]
 
   def nameProvider: TypeNameProvider
 
   def bitSize: Option[Z]
 }
 
-@datatype class EnumType(val name: String,
+@datatype class EnumType(val classifier: ISZ[String],
                          val nameProvider: TypeNameProvider,
 
                          val container: Option[ir.Component],
@@ -26,7 +35,7 @@ import org.sireum.hamr.ir
 
                          val values: ISZ[String]) extends AadlType
 
-@datatype class ArrayType(val name: String,
+@datatype class ArrayType(val classifier: ISZ[String],
                           val nameProvider: TypeNameProvider,
 
                           val container: Option[ir.Component],
@@ -35,7 +44,7 @@ import org.sireum.hamr.ir
                           val dimensions: ISZ[Z],
                           val baseType: AadlType) extends AadlType
 
-@datatype class RecordType(val name: String,
+@datatype class RecordType(val classifier: ISZ[String],
                            val nameProvider: TypeNameProvider,
 
                            val container: Option[ir.Component],
@@ -44,7 +53,7 @@ import org.sireum.hamr.ir
                            val fields: Map[String, AadlType]
                           ) extends AadlType
 
-@datatype class BaseType(val name: String,
+@datatype class BaseType(val classifier: ISZ[String],
                          val nameProvider: TypeNameProvider,
 
                          val container: Option[ir.Component],
@@ -53,7 +62,7 @@ import org.sireum.hamr.ir
                          val slangType: SlangType.Type
                         ) extends AadlType
 
-@datatype class TODOType(val name: String,
+@datatype class TODOType(val classifier: ISZ[String],
                          val nameProvider: TypeNameProvider,
 
                          val container: Option[ir.Component],
@@ -61,7 +70,7 @@ import org.sireum.hamr.ir
 
                         ) extends AadlType
 
-@datatype class BitType(val name: String,
+@datatype class BitType(val classifier: ISZ[String],
                         val nameProvider: TypeNameProvider,
 
                         val container: Option[ir.Component],
