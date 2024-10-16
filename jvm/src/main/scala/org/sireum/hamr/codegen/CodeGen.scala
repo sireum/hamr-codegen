@@ -34,20 +34,28 @@ object CodeGen {
               sergenCallback: (SireumToolsSergenOption, Reporter) => Z,
               slangCheckCallback: (SireumToolsSlangcheckGeneratorOption, Reporter) => Z): CodeGenResults = {
 
-    val targetingSel4 = options.platform == CodegenHamrPlatform.SeL4
+    if (model.components.size != 1) {
+      reporter.error(None(), toolName, s"Expecting exactly one root component but found ${model.components.size}")
+      return CodeGenResults.empty
+    }
 
-    val slangOutputDir: Path = Os.path(options.slangOutputDir.getOrElse("."))
+    val systemRootDirectory: Os.Path = getSystemRoot(model, options.workspaceRootDir)
 
-    val output_shared_C_Directory: Path =
-      if (options.slangOutputCDir.nonEmpty) Os.path(options.slangOutputCDir.get)
-      else slangOutputDir / "src" / "c"
+    def getPath(path: String): Os.Path = {
+      val p = Os.path(path)
+      return (
+        if (p.isAbs) p // use the abs path the user requested
+        else systemRootDirectory / path) // make the user's request relative to the system's root directory
+    }
 
-    val camkesOutputDir: Path =
-      if (options.camkesOutputDir.nonEmpty) Os.path(options.camkesOutputDir.get)
-      else output_shared_C_Directory / "camkes"
+    val slangOutputDir: Path = getPath(options.slangOutputDir.getOrElse("hamr/slang"))
+
+    val output_shared_C_Directory: Path = getPath(options.slangOutputCDir.getOrElse("hamr/c"))
+
+    val camkesOutputDir: Path = getPath(options.camkesOutputDir.getOrElse("hamr/camkes"))
 
     val output_platform_C_Directory: Path =
-      if (targetingSel4) camkesOutputDir / DirectoryUtil.DIR_SLANG_LIBRARIES
+      if (options.platform == CodegenHamrPlatform.SeL4) camkesOutputDir / DirectoryUtil.DIR_SLANG_LIBRARIES
       else output_shared_C_Directory
 
     val packageName: String = if (options.packageName.nonEmpty) {
@@ -56,22 +64,22 @@ object CodeGen {
       cleanupPackageName(slangOutputDir.name)
     }
 
-    val (runArsit, runACT, hamrIntegration, runMicrokit, runRos2, isTranspilerProject, isSlangProject): (B, B, B, B, B, B, B) =
+    val (runArsit, runACT, runMicrokit, runRos2, isTranspilerProject, isSlangProject): (B, B, B, B, B, B) =
       options.platform match {
-        case CodegenHamrPlatform.JVM => (T, F, F, F, F, F, T)
+        case CodegenHamrPlatform.JVM => (T, F, F, F, F, T)
 
-        case CodegenHamrPlatform.Linux => (T, F, F, F, F, T, T)
-        case CodegenHamrPlatform.Cygwin => (T, F, F, F, F, T, T)
-        case CodegenHamrPlatform.MacOS => (T, F, F, F, F, T, T)
+        case CodegenHamrPlatform.Linux => (T, F, F, F, T, T)
+        case CodegenHamrPlatform.Cygwin => (T, F, F, F, T, T)
+        case CodegenHamrPlatform.MacOS => (T, F, F, F, T, T)
 
-        case CodegenHamrPlatform.SeL4 => (T, T, T, F, F, T, T)
+        case CodegenHamrPlatform.SeL4 => (T, T, F, F, T, T)
 
-        case CodegenHamrPlatform.SeL4_Only => (F, T, F, F, F, F, F)
-        case CodegenHamrPlatform.SeL4_TB => (F, T, F, F, F, F, F)
+        case CodegenHamrPlatform.SeL4_Only => (F, T, F, F, F, F)
+        case CodegenHamrPlatform.SeL4_TB => (F, T, F, F, F, F)
 
-        case CodegenHamrPlatform.Microkit => (F, F, F, T, F, F, F)
+        case CodegenHamrPlatform.Microkit => (F, F, T, F, F, F)
 
-        case CodegenHamrPlatform.Ros2 => (F, F, F, F, T, F, F)
+        case CodegenHamrPlatform.Ros2 => (F, F, F, T, F, F)
     }
 
     var reporterIndex = z"0"
@@ -79,7 +87,7 @@ object CodeGen {
     if (options.runtimeMonitoring && isTranspilerProject) {
       reporter.error(None(), toolName, "Runtime monitoring support for transpiled projects has not been added yet. Disable runtime-monitoring before transpiling")
       reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
-      return CodeGenResults(ISZ(), ISZ())
+      return CodeGenResults.empty
     }
 
     var arsitResources: ISZ[FileResource] = ISZ()
@@ -90,14 +98,14 @@ object CodeGen {
     val result: Option[ModelElements] = ModelUtil.resolve(model, model.components(0).identifier.pos, packageName, options, reporter)
     reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
     if (result.isEmpty) {
-      return CodeGenResults(ISZ(), ISZ())
+      return CodeGenResults.empty
     }
 
     val (rmodel, aadlTypes, symbolTable): (Aadl, AadlTypes, SymbolTable) = (result.get.model, result.get.types, result.get.symbolTable)
 
     if (options.runtimeMonitoring && symbolTable.getThreads().isEmpty) {
       reporter.error(None(), toolName, "Model must contain threads in order to enable runtime monitoring")
-      return CodeGenResults(ISZ(), ISZ())
+      return CodeGenResults.empty
     }
 
     if (~reporter.hasError && runRos2) {
@@ -508,6 +516,35 @@ object CodeGen {
       }
     }
     return m.values
+  }
+
+  def getSystemRoot(model: Aadl, workspaceRootDir: Option[String]): Os.Path = {
+    model.components(0).identifier.pos match {
+      case Some(p) => p.uriOpt match {
+        case Some(uri) =>
+          if (ops.StringOps(uri).startsWith("file")) {
+            // probably from hamr sysml which emits absolute uri's
+            Os.Path.fromUri(uri).up
+          } else {
+            // probably from osate which emits relative uri's
+            workspaceRootDir match {
+              case Some(wroot) =>
+                var cand = Os.path(wroot) / uri
+                if (cand.exists) {
+                  cand
+                }
+                else {
+                  cand = Os.path(".") / uri
+                  if (cand.exists) cand
+                  else Os.path(".")
+                }
+              case _ => Os.path(".")
+            }
+          }
+        case _ => Os.path(".")
+      }
+      case _ => Os.path(".")
+    }
   }
 }
 

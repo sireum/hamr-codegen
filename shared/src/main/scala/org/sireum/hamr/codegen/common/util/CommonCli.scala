@@ -50,7 +50,7 @@ object CommonCli {
   val commonGroups: ISZ[OptGroup] = ISZ(
     OptGroup(name = "Slang", opts = ISZ(
       Opt(name = "slangOutputDir", longKey = "slang-output-dir", shortKey = Some('o'),
-        tpe = Type.Path(multiple = F, default = Some(".")),
+        tpe = Type.Path(multiple = F, default = None()),
         description = "Output directory for the generated project files"),
       Opt(name = "packageName", longKey = "package-name", shortKey = Some('n'),
         tpe = Type.Str(sep = None(), default = None()),
