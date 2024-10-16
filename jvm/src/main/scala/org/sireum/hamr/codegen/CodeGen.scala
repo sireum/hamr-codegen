@@ -524,27 +524,29 @@ object CodeGen {
         case Some(uri) =>
           if (ops.StringOps(uri).startsWith("file")) {
             // probably from hamr sysml which emits absolute uri's
-            Os.Path.fromUri(uri).up
+            return Os.Path.fromUri(uri).up
           } else {
             // probably from osate which emits relative uri's
             workspaceRootDir match {
               case Some(wroot) =>
                 var cand = Os.path(wroot) / uri
                 if (cand.exists) {
-                  cand
+                  return cand
                 }
                 else {
                   cand = Os.path(".") / uri
-                  if (cand.exists) cand
-                  else Os.path(".")
+                  if (cand.exists) {
+                    return cand
+                  }
                 }
-              case _ => Os.path(".")
+              case _ =>
             }
           }
-        case _ => Os.path(".")
+        case _ =>
       }
-      case _ => Os.path(".")
+      case _ =>
     }
+    return Os.path(".")
   }
 }
 
