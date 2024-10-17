@@ -104,17 +104,57 @@ object GumboXRuntimeMonitoring {
     resources = resources :+ injectionService
 
     // TODO:
-    val computeBody: ST = {
+    val computeBody: ST =
+    if (component.isPeriodic()) {
       val s = StringUtil.split_PreserveEmptySegments(entryPointTemplate.defaultComputeBody.render, c => c == '\n')
       var newLines: ISZ[String] = ISZ()
       for (l <- s) {
         val o = ops.StringOps(l)
         if (o.contains("Art.receiveInput")) {
-          newLines = newLines :+ s"${injectionServiceName}.pre_receiveInput()\n" :+ l :+ s"\n${epCompanionName}.${preComputeMethodName}()"
+          newLines = newLines :+
+            s"${injectionServiceName}.pre_receiveInput()\n" :+
+            l :+
+            s"\n${epCompanionName}.${preComputeMethodName}()"
         } else if (o.contains("Art.sendOutput")) {
-          newLines = newLines :+ s"${epCompanionName}.${postComputeMethodName}()\n\n$l"
+          newLines = newLines :+
+            s"${epCompanionName}.${postComputeMethodName}()\n\n$l"
         } else {
           newLines = newLines :+ l
+        }
+      }
+      st"${(newLines, "\n")}"
+    } else {
+      val s = StringUtil.split_PreserveEmptySegments(entryPointTemplate.defaultComputeBody.render, c => c == '\n')
+      var newLines: ISZ[String] = ISZ()
+      var i = 0
+      while (i <  s.size) {
+        val o = ops.StringOps(s(i))
+        val search = "if(portId == "
+
+        if (o.contains("Art.receiveInput")) {
+          newLines = newLines :+
+            s"${injectionServiceName}.pre_receiveInput()\n" :+
+            s(i)
+          i = i + 1
+        } else if (o.contains(search)) {
+          newLines = newLines :+ s(i)
+          i = i + 1
+          val portId = o.substring(o.stringIndexOf(search) + search.size, o.lastIndexOf(')'))
+
+          var next = ops.StringOps(s(i))
+          while (!next.contains("// implement the following")) {
+            newLines = newLines :+ s(i)
+            i = i + 1
+            next = ops.StringOps(s(i))
+          }
+          newLines = newLines :+ s"    ${epCompanionName}.${preComputeMethodName}($portId)\n"
+          newLines = newLines :+ s(i) :+ s(i + 1)
+          newLines = newLines :+ s"\n    ${epCompanionName}.${postComputeMethodName}()"
+
+          i = i + 2
+        } else {
+          newLines = newLines :+ s(i)
+          i = i + 1
         }
       }
       st"${(newLines, "\n")}"
@@ -432,7 +472,7 @@ object GumboXRuntimeMonitoring {
           |    ${runtimePackage}.RuntimeMonitor.observeInitialisePostState(${componentNames.archInstanceName}.id, $postInitKindFQ, $postContainer)
           |  }
           |
-          |  def ${preComputeMethodName}(): Unit = {
+          |  def ${preComputeMethodName}(${if (component.isSporadic()) s"${GumboXGenUtil.sporadicDispatchedEventPortParamName}: Art.PortId" else ""}): Unit = {
           |    // block the component while its pre-state values are retrieved
           |    $preContainer = Some(
           |      ${containers.observePreState_wL()})
