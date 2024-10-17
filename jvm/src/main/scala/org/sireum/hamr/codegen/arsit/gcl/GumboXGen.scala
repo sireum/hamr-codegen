@@ -1199,7 +1199,7 @@ object GumboXGen {
             stateVar = stateVar,
             id = i,
             isPreState = T,
-            aadlType = GclResolver.getAadlType(stateVar.classifier, aadlTypes, stateVar.posOpt, Reporter.create),//aadlTypes.typeMap.get(stateVar.classifier).get,
+            aadlType = GclResolver.getAadlType(stateVar.classifier, aadlTypes, stateVar.posOpt, Reporter.create),
 
             componentNames = componentNames)
 
@@ -1333,7 +1333,7 @@ object GumboXGen {
               stateVar = stateVar,
               id = i,
               isPreState = F,
-              aadlType = GclResolver.getAadlType(stateVar.classifier, aadlTypes, stateVar.posOpt, Reporter.create),//aadlTypes.typeMap.get(stateVar.classifier).get,
+              aadlType = GclResolver.getAadlType(stateVar.classifier, aadlTypes, stateVar.posOpt, Reporter.create),
               componentNames = componentNames)
             postOracleParams = postOracleParams + postSVGG
             step5PostValues = step5PostValues :+ st"val ${postSVGG.getParamDef} = ${componentNames.componentSingletonTypeQualifiedName}.${stateVar.name}"
@@ -1647,7 +1647,7 @@ object GumboXGen {
       val nextMethod: ST = {
         if (component.isSporadic()) {
           val incomingEventPorts: ISZ[String] =
-            for(i <- GumboXGenUtil.portsToParams(component.getPorts().filter(p => p.direction == Direction.In && p.isInstanceOf[AadlFeatureEvent]), componentNames)) yield
+            for (i <- GumboXGenUtil.portsToParams(component.getPorts().filter(p => p.direction == Direction.In && p.isInstanceOf[AadlFeatureEvent]), componentNames)) yield
               s"cp.${i.name}.nonEmpty"
 
           if (incomingEventPorts.isEmpty) {

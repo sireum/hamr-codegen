@@ -89,7 +89,6 @@ object GumboXGenUtil {
   }
 
 
-
   @pure def genUnitTestConfiguration(packageName: String): ST = {
     return (
       st"""//#Sireum
@@ -121,7 +120,7 @@ object GumboXGenUtil {
           |  def next: Container
           |}
           |""")
-    }
+  }
 
 
   @pure def genMutableBase(packageName: String): ST = {
@@ -303,9 +302,11 @@ object GumboXGenUtil {
       var fieldDecls: ISZ[ST] = ISZ()
       var nextEntries: ISZ[ST] = ISZ()
       val sps = sortParam(params)
+
       @pure def wrapOption(p: GGParam): String = {
         return if (p.isOptional) s"Option${p.ranGenName}" else p.ranGenName
       }
+
       for (i <- 0 until sps.size if !sps(i).isInstanceOf[GGStateVarParam] || includeStateVars) {
         val p = sps(i)
         traitFields = traitFields :+ st"def ${p.name}: RandomLib // random lib for generating ${p.aadlType.nameProvider.qualifiedTypeName}"
@@ -771,7 +772,7 @@ object GumboXGenUtil {
     }
 
     @pure def preFetchSporadic: ST = {
-      assert (isEvent)
+      assert(isEvent)
 
       if (isData) {
         // incoming event data port

@@ -2,7 +2,7 @@
 package org.sireum.hamr.arsit.gcl
 
 import org.sireum._
-import org.sireum.hamr.arsit.gcl.GumboXGenUtil.{GGParam, GGPortParam, GGStateVarParam, SymbolKind, inPortsToParams, outPortsToParams}
+import org.sireum.hamr.arsit.gcl.GumboXGenUtil.{GGParam, GGPortParam, GGStateVarParam, SymbolKind}
 import org.sireum.hamr.arsit.plugin.{EntryPointProviderPlugin, PlatformProviderPlugin}
 import org.sireum.hamr.arsit.templates.{ApiTemplate, EntryPointTemplate}
 import org.sireum.hamr.arsit.{EntryPoints, ProjectDirectories}
@@ -74,91 +74,92 @@ object GumboXRuntimeMonitoring {
     val injectionServiceName: String = s"${componentNames.componentSingletonType}_Injection_Service"
     val injectionProviderName: String = s"${componentNames.componentSingletonType}_Injection_Provider"
     val injectionService: FileResource = {
-      val content = st"""// #Sireum
-                         |package ${componentNames.packageName}
-                         |
-                         |import org.sireum._
-                         |
-                         |${CommentTemplate.doNotEditComment_scala}
-                         |
-                         |@msig trait ${injectionProviderName} {
-                         |  def pre_receiveInput(): Unit
-                         |}
-                         |
-                         |object ${injectionServiceName} {
-                         |
-                         |  var providers: MSZ[${injectionProviderName}] = MSZ()
-                         |
-                         |  def register(provider: ${injectionProviderName}): Unit = {
-                         |    providers = providers :+ provider
-                         |  }
-                         |
-                         |  def pre_receiveInput(): Unit = {
-                         |    for (provider <- providers) {
-                         |      provider.pre_receiveInput()
-                         |    }
-                         |  }
-                         |}"""
+      val content =
+        st"""// #Sireum
+            |package ${componentNames.packageName}
+            |
+            |import org.sireum._
+            |
+            |${CommentTemplate.doNotEditComment_scala}
+            |
+            |@msig trait ${injectionProviderName} {
+            |  def pre_receiveInput(): Unit
+            |}
+            |
+            |object ${injectionServiceName} {
+            |
+            |  var providers: MSZ[${injectionProviderName}] = MSZ()
+            |
+            |  def register(provider: ${injectionProviderName}): Unit = {
+            |    providers = providers :+ provider
+            |  }
+            |
+            |  def pre_receiveInput(): Unit = {
+            |    for (provider <- providers) {
+            |      provider.pre_receiveInput()
+            |    }
+            |  }
+            |}"""
       ResourceUtil.createResource(s"${bridgeDirectory}/${injectionServiceName}.scala", content, T)
     }
     resources = resources :+ injectionService
 
     // TODO:
     val computeBody: ST =
-    if (component.isPeriodic()) {
-      val s = StringUtil.split_PreserveEmptySegments(entryPointTemplate.defaultComputeBody.render, c => c == '\n')
-      var newLines: ISZ[String] = ISZ()
-      for (l <- s) {
-        val o = ops.StringOps(l)
-        if (o.contains("Art.receiveInput")) {
-          newLines = newLines :+
-            s"${injectionServiceName}.pre_receiveInput()\n" :+
-            l :+
-            s"\n${epCompanionName}.${preComputeMethodName}()"
-        } else if (o.contains("Art.sendOutput")) {
-          newLines = newLines :+
-            s"${epCompanionName}.${postComputeMethodName}()\n\n$l"
-        } else {
-          newLines = newLines :+ l
+      if (component.isPeriodic()) {
+        val s = StringUtil.split_PreserveEmptySegments(entryPointTemplate.defaultComputeBody.render, c => c == '\n')
+        var newLines: ISZ[String] = ISZ()
+        for (l <- s) {
+          val o = ops.StringOps(l)
+          if (o.contains("Art.receiveInput")) {
+            newLines = newLines :+
+              s"${injectionServiceName}.pre_receiveInput()\n" :+
+              l :+
+              s"\n${epCompanionName}.${preComputeMethodName}()"
+          } else if (o.contains("Art.sendOutput")) {
+            newLines = newLines :+
+              s"${epCompanionName}.${postComputeMethodName}()\n\n$l"
+          } else {
+            newLines = newLines :+ l
+          }
         }
-      }
-      st"${(newLines, "\n")}"
-    } else {
-      val s = StringUtil.split_PreserveEmptySegments(entryPointTemplate.defaultComputeBody.render, c => c == '\n')
-      var newLines: ISZ[String] = ISZ()
-      var i = 0
-      while (i <  s.size) {
-        val o = ops.StringOps(s(i))
-        val search = "if(portId == "
+        st"${(newLines, "\n")}"
+      } else {
+        val s = StringUtil.split_PreserveEmptySegments(entryPointTemplate.defaultComputeBody.render, c => c == '\n')
+        var newLines: ISZ[String] = ISZ()
+        var i = 0
+        while (i < s.size) {
+          val o = ops.StringOps(s(i))
+          val search = "if(portId == "
 
-        if (o.contains("Art.receiveInput")) {
-          newLines = newLines :+
-            s"${injectionServiceName}.pre_receiveInput()\n" :+
-            s(i)
-          i = i + 1
-        } else if (o.contains(search)) {
-          newLines = newLines :+ s(i)
-          i = i + 1
-          val portId = o.substring(o.stringIndexOf(search) + search.size, o.lastIndexOf(')'))
-
-          var next = ops.StringOps(s(i))
-          while (!next.contains("// implement the following")) {
+          if (o.contains("Art.receiveInput")) {
+            newLines = newLines :+
+              s"${injectionServiceName}.pre_receiveInput()\n" :+
+              s(i)
+            i = i + 1
+          } else if (o.contains(search)) {
             newLines = newLines :+ s(i)
             i = i + 1
-            next = ops.StringOps(s(i))
-          }
-          newLines = newLines :+ s"    ${epCompanionName}.${preComputeMethodName}($portId)\n"
-          newLines = newLines :+ s(i) :+ s(i + 1)
-          newLines = newLines :+ s"\n    ${epCompanionName}.${postComputeMethodName}()"
+            val portId = o.substring(o.stringIndexOf(search) + search.size, o.lastIndexOf(')'))
 
-          i = i + 2
-        } else {
-          newLines = newLines :+ s(i)
-          i = i + 1
+            var next = ops.StringOps(s(i))
+            while (!next.contains("// implement the following")) {
+              newLines = newLines :+ s(i)
+              i = i + 1
+              next = ops.StringOps(s(i))
+            }
+            newLines = newLines :+ s"    ${epCompanionName}.${preComputeMethodName}($portId)\n"
+            newLines = newLines :+ s(i) :+ s(i + 1)
+            newLines = newLines :+ s"\n    ${epCompanionName}.${postComputeMethodName}()"
+
+            i = i + 2
+          } else {
+            newLines = newLines :+ s(i)
+            i = i + 1
+          }
         }
+        st"${(newLines, "\n")}"
       }
-      st"${(newLines, "\n")}"
-    }
 
     val gEntryPoint = entryPointTemplate.generateCustomST(
       blocks = ISZ(),
@@ -640,65 +641,66 @@ object GumboXRuntimeMonitoring {
   def genSystemTest(basePackage: String,
                     importRenamings: ISZ[ST],
                     projectDirectories: ProjectDirectories): FileResource = {
-    val ret = st"""package $basePackage
-                  |
-                  |import org.sireum._
-                  |import art.Art
-                  |import art.scheduling.static._
-                  |
-                  |${CommentTemplate.safeToEditComment_scala}
-                  |
-                  |class SystemTests extends SystemTestSuite {
-                  |
-                  |  // note: this is overriding SystemTestSuite's 'def scheduler: Scheduler'
-                  |  //       abstract method
-                  |  var scheduler: StaticScheduler = Schedulers.getStaticSchedulerH(MNone())
-                  |
-                  |  def compute(isz: ISZ[Command]): Unit = {
-                  |    scheduler = scheduler(commandProvider = ISZCommandProvider(isz :+ Stop()))
-                  |
-                  |    Art.computePhase(scheduler)
-                  |  }
-                  |
-                  |  override def beforeEach(): Unit = {
-                  |    // uncomment the following to disable the various guis
-                  |    //System.setProperty("java.awt.headless", "true")
-                  |
-                  |    // uncomment the following to suppress (or potentially redirect) ART's log stream
-                  |    //art.ArtNative_Ext.logStream = new java.io.PrintStream(new java.io.OutputStream {
-                  |    //  override def write(b: Int): Unit = {}
-                  |    //})
-                  |
-                  |    // uncomment the following to suppress (or potentially redirect) the static scheduler's log stream
-                  |    //art.scheduling.static.StaticSchedulerIO_Ext.logStream = new java.io.PrintStream(new java.io.OutputStream {
-                  |    //  override def write(b: Int): Unit = {}
-                  |    //})
-                  |
-                  |    super.beforeEach()
-                  |  }
-                  |
-                  |  // Suggestion: add the following import renamings of the components' SystemTestAPIs,
-                  |  //             replacing nickname with shortened versions that are easier to reference
-                  |  ${(importRenamings, "\n")}
-                  |
-                  |  test("Example system test") {
-                  |    // run the initialization phase
-                  |    Art.initializePhase(scheduler)
-                  |
-                  |    // run components' compute entrypoints through one hyper-period
-                  |    compute(ISZ(Hstep(1)))
-                  |
-                  |    // use the component SystemTestAPIs' put methods to change the prestate values for components
-                  |    // TODO
-                  |
-                  |    // run another hyper-period
-                  |    compute(ISZ(Hstep(1)))
-                  |
-                  |    // use the component SystemTestAPIs' check or get methods to check the poststate values for components
-                  |    // TODO
-                  |  }
-                  |}
-                  |"""
+    val ret =
+      st"""package $basePackage
+          |
+          |import org.sireum._
+          |import art.Art
+          |import art.scheduling.static._
+          |
+          |${CommentTemplate.safeToEditComment_scala}
+          |
+          |class SystemTests extends SystemTestSuite {
+          |
+          |  // note: this is overriding SystemTestSuite's 'def scheduler: Scheduler'
+          |  //       abstract method
+          |  var scheduler: StaticScheduler = Schedulers.getStaticSchedulerH(MNone())
+          |
+          |  def compute(isz: ISZ[Command]): Unit = {
+          |    scheduler = scheduler(commandProvider = ISZCommandProvider(isz :+ Stop()))
+          |
+          |    Art.computePhase(scheduler)
+          |  }
+          |
+          |  override def beforeEach(): Unit = {
+          |    // uncomment the following to disable the various guis
+          |    //System.setProperty("java.awt.headless", "true")
+          |
+          |    // uncomment the following to suppress (or potentially redirect) ART's log stream
+          |    //art.ArtNative_Ext.logStream = new java.io.PrintStream(new java.io.OutputStream {
+          |    //  override def write(b: Int): Unit = {}
+          |    //})
+          |
+          |    // uncomment the following to suppress (or potentially redirect) the static scheduler's log stream
+          |    //art.scheduling.static.StaticSchedulerIO_Ext.logStream = new java.io.PrintStream(new java.io.OutputStream {
+          |    //  override def write(b: Int): Unit = {}
+          |    //})
+          |
+          |    super.beforeEach()
+          |  }
+          |
+          |  // Suggestion: add the following import renamings of the components' SystemTestAPIs,
+          |  //             replacing nickname with shortened versions that are easier to reference
+          |  ${(importRenamings, "\n")}
+          |
+          |  test("Example system test") {
+          |    // run the initialization phase
+          |    Art.initializePhase(scheduler)
+          |
+          |    // run components' compute entrypoints through one hyper-period
+          |    compute(ISZ(Hstep(1)))
+          |
+          |    // use the component SystemTestAPIs' put methods to change the prestate values for components
+          |    // TODO
+          |
+          |    // run another hyper-period
+          |    compute(ISZ(Hstep(1)))
+          |
+          |    // use the component SystemTestAPIs' check or get methods to check the poststate values for components
+          |    // TODO
+          |  }
+          |}
+          |"""
     val stsuitePath = s"${projectDirectories.testSystemDir}/${basePackage}/SystemTests.scala"
     return ResourceUtil.createResource(stsuitePath, ret, F)
   }
@@ -712,12 +714,12 @@ object GumboXRuntimeMonitoring {
     var putMethodBlocks: ISZ[ST] = ISZ()
     var putMethods: ISZ[ST] = ISZ()
     var hasStateVars: B = F
-    for(p <- inParams) {
+    for (p <- inParams) {
       hasStateVars = hasStateVars || p.isInstanceOf[GGStateVarParam]
       putMethods = putMethods :+ p.setter
       putMethodParams = putMethodParams :+ p.getParamDef
       putMethodBlocks = putMethodBlocks :+
-        st"put_${if(p.isInstanceOf[GGStateVarParam]) p.name else p.originName}(${p.name})"
+        st"put_${if (p.isInstanceOf[GGStateVarParam]) p.name else p.originName}(${p.name})"
     }
 
     val concretePut =
@@ -733,7 +735,7 @@ object GumboXRuntimeMonitoring {
     var check_parameters: ISZ[ST] = ISZ()
     var checks: ISZ[ST] = ISZ()
     var getters: ISZ[ST] = ISZ()
-    for(p <- GumboXGenUtil.sortParam(containers.outPorts ++ containers.outStateVars.asInstanceOf[ISZ[GGParam]])) {
+    for (p <- GumboXGenUtil.sortParam(containers.outPorts ++ containers.outStateVars.asInstanceOf[ISZ[GGParam]])) {
       p match {
         case port: GGPortParam =>
           getters = getters :+
@@ -1081,228 +1083,229 @@ object GumboXRuntimeMonitoring {
     val guipath = s"${runtimePath}/GumboXRuntimeMonitor.scala"
     resources = resources :+ ResourceUtil.createResource(guipath, gui, T)
 
-    val gxrm: ST = st"""package ${basePackageName}.runtimemonitor
-                       |
-                       |import art.Art.BridgeId
-                       |import ${basePackageName}.JSON
-                       |import org.sireum.$$internal.MutableMarker
-                       |import org.sireum._
-                       |
-                       |import java.awt.event.WindowEvent
-                       |import java.awt.{BorderLayout, Dimension}
-                       |import javax.swing._
-                       |import javax.swing.table.AbstractTableModel
-                       |
-                       |// Do not edit this file as it will be overwritten if HAMR codegen is rerun
-                       |
-                       |class GumboXRuntimeMonitor_Ext extends JFrame with RuntimeMonitorListener {
-                       |
-                       |  val testDir = Os.path(".") / "src" / "test" / "bridge" / "${basePackageName}"
-                       |
-                       |  var jtable: JTable = _
-                       |  var model: TableModel = _
-                       |  var scrollToBottom: B = T
-                       |  val threadNickNames = GumboXRuntimeMonitor.threadNickNames
-                       |
-                       |  def init(modelInfo: ModelInfo): Unit = {
-                       |    this.setTitle("GumboX Runtime Monitor")
-                       |
-                       |    model = new TableModel()
-                       |    jtable = new JTable()
-                       |    jtable.setModel(model)
-                       |
-                       |    val js = new JScrollPane(jtable)
-                       |    js.setVisible(true)
-                       |    add(js, BorderLayout.CENTER)
-                       |
-                       |    val btnGenTestSuite = new JButton("Generate TestSuite")
-                       |    btnGenTestSuite.addActionListener(e => {
-                       |      if (jtable.getSelectedRows.nonEmpty) {
-                       |        var testCases: Map[Z, ISZ[ST]] = Map.empty
-                       |
-                       |        for (row <- jtable.getSelectedRows) {
-                       |          val data = model.getRow(row)
-                       |          val id = data.bridgeId.toZ
-                       |          testCases = testCases + id ~>
-                       |            (testCases.getOrElse(id, ISZ[ST]()) :+
-                       |              GumboXDispatcher.genTestCase(data.observationKind, data.pre, data.post, Some(s": $$row")))
-                       |        }
-                       |        GumboXDispatcher.genTestSuite(testCases.entries)
-                       |      }
-                       |    })
-                       |    /*
-                       |    val btnGenTestCase = new JButton("Generate Test Case")
-                       |
-                       |    btnGenTestCase.addActionListener(e => {
-                       |      if (jtable.getSelectedRow >= 0) {
-                       |        val data = model.getRow(jtable.getSelectedRow)
-                       |
-                       |        if (data.observationKind.string.native.contains("post")) {
-                       |          val testCase = GumboXDispatcher.genTestCase(data.observationKind, data.pre, data.post, None())
-                       |
-                       |          val clip = Toolkit.getDefaultToolkit.getSystemClipboard
-                       |          val strse1 = new StringSelection(testCase.render.native)
-                       |          clip.setContents(strse1, strse1)
-                       |
-                       |          val txt = st${DSCTemplate.tq}<html><pre>$${testCase.render}</pre></html>${DSCTemplate.tq}
-                       |          val lbl = new JLabel(txt.render.native)
-                       |
-                       |          val viz = new JFrame()
-                       |          viz.add(lbl)
-                       |
-                       |          viz.pack()
-                       |          viz.setVisible(true)
-                       |        }
-                       |      }
-                       |    })
-                       |
-                       |    val btnVisualize = new JButton("Visualize")
-                       |
-                       |    btnVisualize.addActionListener(e => {
-                       |      if (jtable.getSelectedRow >= 0) {
-                       |        val data = model.getRow(jtable.getSelectedRow)
-                       |
-                       |        val preOpt: Option[ST] = if (data.pre.nonEmpty) Some(st"Pre: $${JSON.to_artDataContent(data.pre.get).left}") else None()
-                       |        val postOpt: Option[ST] = if (data.post.nonEmpty) Some(st"Post: $${JSON.to_artDataContent(data.post.get).left}") else None()
-                       |
-                       |        val txt =
-                       |          st${DSCTemplate.tq}<html>
-                       |              |  <pre>
-                       |              |    Component: $${data.bridgeId}
-                       |              |    Observation Kind: $${data.observationKind}
-                       |              |    <hr>
-                       |              |    $${preOpt}
-                       |              |    $${postOpt}
-                       |              |  </pre>
-                       |              |</html>${DSCTemplate.tq}
-                       |
-                       |        val lbl = new JLabel(txt.render.native)
-                       |
-                       |        val viz = new JFrame()
-                       |        viz.add(lbl)
-                       |
-                       |        viz.pack()
-                       |        viz.setVisible(true)
-                       |      }
-                       |    })
-                       |    */
-                       |    val jpbutton = new JPanel()
-                       |
-                       |    val chkScroll = new JCheckBox("Scroll to bottom")
-                       |    chkScroll.setSelected(scrollToBottom)
-                       |    chkScroll.addActionListener(e =>
-                       |      scrollToBottom = chkScroll.isSelected
-                       |    )
-                       |    jpbutton.add(chkScroll)
-                       |
-                       |    //jpbutton.add(Box.createRigidArea(new Dimension(10, 0)))
-                       |    jpbutton.setLayout(new BoxLayout(jpbutton, BoxLayout.LINE_AXIS))
-                       |    jpbutton.setBorder(BorderFactory.createEmptyBorder(0, 10, 10, 10))
-                       |    jpbutton.add(Box.createHorizontalGlue())
-                       |
-                       |    jpbutton.add(btnGenTestSuite)
-                       |    jpbutton.add(Box.createRigidArea(new Dimension(10, 0)))
-                       |
-                       |    //jpbutton.add(btnGenTestCase)
-                       |    //jpbutton.add(Box.createRigidArea(new Dimension(10, 0)))
-                       |
-                       |    //jpbutton.add(btnVisualize)
-                       |
-                       |
-                       |    add(jpbutton, BorderLayout.PAGE_END)
-                       |
-                       |    pack()
-                       |    setResizable(true)
-                       |    setLocation(800, 0)
-                       |    setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE)
-                       |    setVisible(true)
-                       |  }
-                       |
-                       |  def finalise(): Unit = {
-                       |    this.dispatchEvent(new WindowEvent(this, WindowEvent.WINDOW_CLOSING))
-                       |  }
-                       |
-                       |  def observeInitialisePostState(bridge: art.Art.BridgeId, observationKind: ObservationKind.Type, post: art.DataContent): Unit = {
-                       |    SwingUtilities.invokeLater(() => dispatch(bridge, observationKind, None(), Some(post)))
-                       |  }
-                       |
-                       |  def observeComputePreState(bridge: art.Art.BridgeId, observationKind: ObservationKind.Type, pre: Option[art.DataContent]): Unit = {
-                       |    SwingUtilities.invokeLater(() => dispatch(bridge, observationKind, pre, None()))
-                       |  }
-                       |
-                       |  def observeComputePrePostState(bridge: art.Art.BridgeId, observationKind: ObservationKind.Type, pre: Option[art.DataContent], post: art.DataContent): Unit = {
-                       |    SwingUtilities.invokeLater(() => dispatch(bridge, observationKind, pre, Some(post)))
-                       |  }
-                       |
-                       |  def dispatch(bridgeId: art.Art.BridgeId, observationKind: ObservationKind.Type, pre: Option[art.DataContent], post: Option[art.DataContent]): Unit = {
-                       |    val componentName = threadNickNames.get(bridgeId) match {
-                       |      case Some(nickName) => nickName.native
-                       |      case _ => bridgeId.string.native
-                       |    }
-                       |    val s = observationKind.string.native
-                       |    val simpleKind = s.substring(s.lastIndexOf("_") + 1, s.length)
-                       |    model.addRow(Row(bridgeId, observationKind,
-                       |      componentName, simpleKind,
-                       |      GumboXDispatcher.checkContract(observationKind, pre, post),
-                       |      if (pre.nonEmpty) Some(JSON.from_artDataContent(pre.get, T)) else None(),
-                       |      if (post.nonEmpty) Some(JSON.from_artDataContent(post.get, T)) else None()))
-                       |    if (scrollToBottom) {
-                       |      jtable.scrollRectToVisible(jtable.getCellRect(jtable.getRowCount() - 1, 0, true));
-                       |    }
-                       |  }
-                       |
-                       |  override def string: String = toString()
-                       |
-                       |  override def $$clonable: Boolean = false
-                       |
-                       |  override def $$clonable_=(b: Boolean): MutableMarker = this
-                       |
-                       |  override def $$owned: Boolean = false
-                       |
-                       |  override def $$owned_=(b: Boolean): MutableMarker = this
-                       |
-                       |  override def $$clone: MutableMarker = this
-                       |}
-                       |
-                       |case class Row(bridgeId: BridgeId, observationKind: ObservationKind.Type,
-                       |               componentName: String, simpleKind: String, result: Boolean, pre: Option[String], post: Option[String])
-                       |
-                       |class TableModel() extends AbstractTableModel {
-                       |  val columnNames = Array("Component", "Kind", "Satisified")
-                       |
-                       |  var data: ISZ[Row] = ISZ()
-                       |
-                       |  def addRow(row: Row): Unit = {
-                       |    data = data :+ row
-                       |    fireTableRowsInserted(data.size.toInt - 1, data.size.toInt - 1)
-                       |  }
-                       |
-                       |  def getRow(row: Int): Row = {
-                       |    return data(row)
-                       |  }
-                       |
-                       |  override def getRowCount: Int = {
-                       |    return data.size.toInt
-                       |  }
-                       |
-                       |  override def getColumnCount: Int = {
-                       |    return columnNames.length
-                       |  }
-                       |
-                       |  override def getColumnName(column: Int): java.lang.String = {
-                       |    return columnNames(column)
-                       |  }
-                       |
-                       |  override def getValueAt(rowIndex: Int, columnIndex: Int): Object = {
-                       |    return columnIndex match {
-                       |      case 0 => data(rowIndex).componentName.native
-                       |      case 1 => data(rowIndex).simpleKind.native
-                       |      case 2 => data(rowIndex).result.string.native
-                       |      case _ => halt("Infeasible")
-                       |    }
-                       |  }
-                       |}
-                       |"""
+    val gxrm: ST =
+      st"""package ${basePackageName}.runtimemonitor
+          |
+          |import art.Art.BridgeId
+          |import ${basePackageName}.JSON
+          |import org.sireum.$$internal.MutableMarker
+          |import org.sireum._
+          |
+          |import java.awt.event.WindowEvent
+          |import java.awt.{BorderLayout, Dimension}
+          |import javax.swing._
+          |import javax.swing.table.AbstractTableModel
+          |
+          |// Do not edit this file as it will be overwritten if HAMR codegen is rerun
+          |
+          |class GumboXRuntimeMonitor_Ext extends JFrame with RuntimeMonitorListener {
+          |
+          |  val testDir = Os.path(".") / "src" / "test" / "bridge" / "${basePackageName}"
+          |
+          |  var jtable: JTable = _
+          |  var model: TableModel = _
+          |  var scrollToBottom: B = T
+          |  val threadNickNames = GumboXRuntimeMonitor.threadNickNames
+          |
+          |  def init(modelInfo: ModelInfo): Unit = {
+          |    this.setTitle("GumboX Runtime Monitor")
+          |
+          |    model = new TableModel()
+          |    jtable = new JTable()
+          |    jtable.setModel(model)
+          |
+          |    val js = new JScrollPane(jtable)
+          |    js.setVisible(true)
+          |    add(js, BorderLayout.CENTER)
+          |
+          |    val btnGenTestSuite = new JButton("Generate TestSuite")
+          |    btnGenTestSuite.addActionListener(e => {
+          |      if (jtable.getSelectedRows.nonEmpty) {
+          |        var testCases: Map[Z, ISZ[ST]] = Map.empty
+          |
+          |        for (row <- jtable.getSelectedRows) {
+          |          val data = model.getRow(row)
+          |          val id = data.bridgeId.toZ
+          |          testCases = testCases + id ~>
+          |            (testCases.getOrElse(id, ISZ[ST]()) :+
+          |              GumboXDispatcher.genTestCase(data.observationKind, data.pre, data.post, Some(s": $$row")))
+          |        }
+          |        GumboXDispatcher.genTestSuite(testCases.entries)
+          |      }
+          |    })
+          |    /*
+          |    val btnGenTestCase = new JButton("Generate Test Case")
+          |
+          |    btnGenTestCase.addActionListener(e => {
+          |      if (jtable.getSelectedRow >= 0) {
+          |        val data = model.getRow(jtable.getSelectedRow)
+          |
+          |        if (data.observationKind.string.native.contains("post")) {
+          |          val testCase = GumboXDispatcher.genTestCase(data.observationKind, data.pre, data.post, None())
+          |
+          |          val clip = Toolkit.getDefaultToolkit.getSystemClipboard
+          |          val strse1 = new StringSelection(testCase.render.native)
+          |          clip.setContents(strse1, strse1)
+          |
+          |          val txt = st${DSCTemplate.tq}<html><pre>$${testCase.render}</pre></html>${DSCTemplate.tq}
+          |          val lbl = new JLabel(txt.render.native)
+          |
+          |          val viz = new JFrame()
+          |          viz.add(lbl)
+          |
+          |          viz.pack()
+          |          viz.setVisible(true)
+          |        }
+          |      }
+          |    })
+          |
+          |    val btnVisualize = new JButton("Visualize")
+          |
+          |    btnVisualize.addActionListener(e => {
+          |      if (jtable.getSelectedRow >= 0) {
+          |        val data = model.getRow(jtable.getSelectedRow)
+          |
+          |        val preOpt: Option[ST] = if (data.pre.nonEmpty) Some(st"Pre: $${JSON.to_artDataContent(data.pre.get).left}") else None()
+          |        val postOpt: Option[ST] = if (data.post.nonEmpty) Some(st"Post: $${JSON.to_artDataContent(data.post.get).left}") else None()
+          |
+          |        val txt =
+          |          st${DSCTemplate.tq}<html>
+          |              |  <pre>
+          |              |    Component: $${data.bridgeId}
+          |              |    Observation Kind: $${data.observationKind}
+          |              |    <hr>
+          |              |    $${preOpt}
+          |              |    $${postOpt}
+          |              |  </pre>
+          |              |</html>${DSCTemplate.tq}
+          |
+          |        val lbl = new JLabel(txt.render.native)
+          |
+          |        val viz = new JFrame()
+          |        viz.add(lbl)
+          |
+          |        viz.pack()
+          |        viz.setVisible(true)
+          |      }
+          |    })
+          |    */
+          |    val jpbutton = new JPanel()
+          |
+          |    val chkScroll = new JCheckBox("Scroll to bottom")
+          |    chkScroll.setSelected(scrollToBottom)
+          |    chkScroll.addActionListener(e =>
+          |      scrollToBottom = chkScroll.isSelected
+          |    )
+          |    jpbutton.add(chkScroll)
+          |
+          |    //jpbutton.add(Box.createRigidArea(new Dimension(10, 0)))
+          |    jpbutton.setLayout(new BoxLayout(jpbutton, BoxLayout.LINE_AXIS))
+          |    jpbutton.setBorder(BorderFactory.createEmptyBorder(0, 10, 10, 10))
+          |    jpbutton.add(Box.createHorizontalGlue())
+          |
+          |    jpbutton.add(btnGenTestSuite)
+          |    jpbutton.add(Box.createRigidArea(new Dimension(10, 0)))
+          |
+          |    //jpbutton.add(btnGenTestCase)
+          |    //jpbutton.add(Box.createRigidArea(new Dimension(10, 0)))
+          |
+          |    //jpbutton.add(btnVisualize)
+          |
+          |
+          |    add(jpbutton, BorderLayout.PAGE_END)
+          |
+          |    pack()
+          |    setResizable(true)
+          |    setLocation(800, 0)
+          |    setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE)
+          |    setVisible(true)
+          |  }
+          |
+          |  def finalise(): Unit = {
+          |    this.dispatchEvent(new WindowEvent(this, WindowEvent.WINDOW_CLOSING))
+          |  }
+          |
+          |  def observeInitialisePostState(bridge: art.Art.BridgeId, observationKind: ObservationKind.Type, post: art.DataContent): Unit = {
+          |    SwingUtilities.invokeLater(() => dispatch(bridge, observationKind, None(), Some(post)))
+          |  }
+          |
+          |  def observeComputePreState(bridge: art.Art.BridgeId, observationKind: ObservationKind.Type, pre: Option[art.DataContent]): Unit = {
+          |    SwingUtilities.invokeLater(() => dispatch(bridge, observationKind, pre, None()))
+          |  }
+          |
+          |  def observeComputePrePostState(bridge: art.Art.BridgeId, observationKind: ObservationKind.Type, pre: Option[art.DataContent], post: art.DataContent): Unit = {
+          |    SwingUtilities.invokeLater(() => dispatch(bridge, observationKind, pre, Some(post)))
+          |  }
+          |
+          |  def dispatch(bridgeId: art.Art.BridgeId, observationKind: ObservationKind.Type, pre: Option[art.DataContent], post: Option[art.DataContent]): Unit = {
+          |    val componentName = threadNickNames.get(bridgeId) match {
+          |      case Some(nickName) => nickName.native
+          |      case _ => bridgeId.string.native
+          |    }
+          |    val s = observationKind.string.native
+          |    val simpleKind = s.substring(s.lastIndexOf("_") + 1, s.length)
+          |    model.addRow(Row(bridgeId, observationKind,
+          |      componentName, simpleKind,
+          |      GumboXDispatcher.checkContract(observationKind, pre, post),
+          |      if (pre.nonEmpty) Some(JSON.from_artDataContent(pre.get, T)) else None(),
+          |      if (post.nonEmpty) Some(JSON.from_artDataContent(post.get, T)) else None()))
+          |    if (scrollToBottom) {
+          |      jtable.scrollRectToVisible(jtable.getCellRect(jtable.getRowCount() - 1, 0, true));
+          |    }
+          |  }
+          |
+          |  override def string: String = toString()
+          |
+          |  override def $$clonable: Boolean = false
+          |
+          |  override def $$clonable_=(b: Boolean): MutableMarker = this
+          |
+          |  override def $$owned: Boolean = false
+          |
+          |  override def $$owned_=(b: Boolean): MutableMarker = this
+          |
+          |  override def $$clone: MutableMarker = this
+          |}
+          |
+          |case class Row(bridgeId: BridgeId, observationKind: ObservationKind.Type,
+          |               componentName: String, simpleKind: String, result: Boolean, pre: Option[String], post: Option[String])
+          |
+          |class TableModel() extends AbstractTableModel {
+          |  val columnNames = Array("Component", "Kind", "Satisified")
+          |
+          |  var data: ISZ[Row] = ISZ()
+          |
+          |  def addRow(row: Row): Unit = {
+          |    data = data :+ row
+          |    fireTableRowsInserted(data.size.toInt - 1, data.size.toInt - 1)
+          |  }
+          |
+          |  def getRow(row: Int): Row = {
+          |    return data(row)
+          |  }
+          |
+          |  override def getRowCount: Int = {
+          |    return data.size.toInt
+          |  }
+          |
+          |  override def getColumnCount: Int = {
+          |    return columnNames.length
+          |  }
+          |
+          |  override def getColumnName(column: Int): java.lang.String = {
+          |    return columnNames(column)
+          |  }
+          |
+          |  override def getValueAt(rowIndex: Int, columnIndex: Int): Object = {
+          |    return columnIndex match {
+          |      case 0 => data(rowIndex).componentName.native
+          |      case 1 => data(rowIndex).simpleKind.native
+          |      case 2 => data(rowIndex).result.string.native
+          |      case _ => halt("Infeasible")
+          |    }
+          |  }
+          |}
+          |"""
     val gxrmpath = s"${runtimePath}/GumboXRuntimeMonitor_Ext.scala"
     resources = resources :+ ResourceUtil.createResource(gxrmpath, gxrm, T)
 
@@ -1316,7 +1319,7 @@ object GumboXRuntimeMonitoring {
 
     return ISZ(
       PlatformProviderPlugin.PlatformSetupContributions(imports = ISZ(), blocks = platformSetupBlocks, resources = resources),
-      PlatformProviderPlugin.PlatformTearDownContributions(imports =ISZ(), blocks = platformTeardownBlocks, resources = ISZ()))
+      PlatformProviderPlugin.PlatformTearDownContributions(imports = ISZ(), blocks = platformTeardownBlocks, resources = ISZ()))
   }
 
   def genModelInfo(componentInfos: ISZ[(String, ST)], runtimePackage: String, basePackage: String): ST = {
@@ -1433,28 +1436,29 @@ object GumboXRuntimeMonitoring {
   }
 
   def getHamrVision(basePackage: String): ST = {
-    val ret = st"""// #Sireum
-                  |
-                  |package ${basePackage}.runtimemonitor
-                  |
-                  |import org.sireum._
-                  |import art.scheduling.static.CommandProvider
-                  |
-                  |${CommentTemplate.doNotEditComment_scala}
-                  |
-                  |object HamrVision {
-                  |
-                  |  var cp: MOption[CommandProvider] = MNone()
-                  |
-                  |  def getCommandProvider(): CommandProvider = {
-                  |    cp = MSome(HamrVisionRuntimeMonitorI.getCommandProvider())
-                  |    return cp.get
-                  |  }
-                  |}
-                  |
-                  |@ext object HamrVisionRuntimeMonitorI {
-                  |  def getCommandProvider(): CommandProvider = $$
-                  |}"""
+    val ret =
+      st"""// #Sireum
+          |
+          |package ${basePackage}.runtimemonitor
+          |
+          |import org.sireum._
+          |import art.scheduling.static.CommandProvider
+          |
+          |${CommentTemplate.doNotEditComment_scala}
+          |
+          |object HamrVision {
+          |
+          |  var cp: MOption[CommandProvider] = MNone()
+          |
+          |  def getCommandProvider(): CommandProvider = {
+          |    cp = MSome(HamrVisionRuntimeMonitorI.getCommandProvider())
+          |    return cp.get
+          |  }
+          |}
+          |
+          |@ext object HamrVisionRuntimeMonitorI {
+          |  def getCommandProvider(): CommandProvider = $$
+          |}"""
     return ret
   }
 

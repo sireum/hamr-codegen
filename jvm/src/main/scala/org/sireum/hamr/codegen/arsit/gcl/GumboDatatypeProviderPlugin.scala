@@ -39,7 +39,7 @@ import org.sireum.message.Reporter
       case dt: DatatypeTemplate =>
         val invariants = GumboGen.processInvariants(aadlType, symbolTable, aadlTypes, aadlType.nameProvider.basePackageName)
 
-        val imports: ISZ[ST] = for(str <- (Set.empty[String] ++ GumboGen.imports).elements) yield st"$str"
+        val imports: ISZ[ST] = for (str <- (Set.empty[String] ++ GumboGen.imports).elements) yield st"$str"
 
         return DatatypeProviderPlugin.PartialDatatypeContribution(
           slangSwitches = ISZ(),

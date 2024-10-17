@@ -116,7 +116,7 @@ import org.sireum.message.Reporter
     }
 
     for (thread <- symbolTable.getThreads() if symbolTable.annexClauseInfos.contains(thread.path);
-      annex <- symbolTable.annexClauseInfos.get(thread.path).get) {
+         annex <- symbolTable.annexClauseInfos.get(thread.path).get) {
       if (annex.isInstanceOf[GclAnnexClauseInfo]) {
         componentsWithGclSubclauses = componentsWithGclSubclauses + thread.path
       }
@@ -190,8 +190,8 @@ import org.sireum.message.Reporter
                                            symbolTable: SymbolTable,
                                            aadlTypes: AadlTypes): B = {
     return arsitOptions.runtimeMonitoring //&&
-      //!handledComponents.contains(component.path) &&
-      //canHandle(component, resolvedAnnexSubclauses, symbolTable, aadlTypes)
+    //!handledComponents.contains(component.path) &&
+    //canHandle(component, resolvedAnnexSubclauses, symbolTable, aadlTypes)
   }
 
   override def handleEntryPointProvider(component: AadlThreadOrDevice,
