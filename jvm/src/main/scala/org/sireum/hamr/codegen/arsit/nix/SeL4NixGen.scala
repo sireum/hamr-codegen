@@ -240,7 +240,13 @@ import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
         basePackage = basePackage,
         instanceName = id,
         identifier = id,
-        sourcePaths = ISZ(),
+
+        // include the bridge and component directories in case a datatype's invariant makes a
+        // call to a gumbo function.  The functions will be in the 'component' source directory
+        // and those will require the 'bridge' source directory be available so that Tipe can
+        // resolve things like 'api' references
+        sourcePaths = ISZ(dirs.bridgeDir, dirs.componentDir),
+
         cOutputDir = cOutputDir,
 
         maxArraySize = 1,
