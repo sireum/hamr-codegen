@@ -123,7 +123,7 @@ import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
         basePackage,
         instanceSingletonName,
         ISZ(s"import ${names.basePackage}._", s"import ${names.packageName}.${names.sel4SlangExtensionName}"),
-        names.identifier,
+        names.seL4AppName,
         bridge,
         names.bridgeIdentifier,
         dispatchStatus,
@@ -136,7 +136,7 @@ import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
 
       addResource(
         dirs.seL4NixDir,
-        ISZ(basePackage, instanceSingletonName, s"${names.identifier}.scala"),
+        ISZ(basePackage, instanceSingletonName, s"${names.seL4AppName}.scala"),
         app,
         T)
 
@@ -179,6 +179,7 @@ import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
 
       val trans = genTranspiler(
         basePackage = basePackage,
+        appName = names.seL4AppName,
         names = names,
         maxArraySize = arsitOptions.maxArraySize,
         maxStackSizeInBytes = stackSizeInBytes,
@@ -239,7 +240,7 @@ import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
       val transForSlangTypeLibrary = genTranspilerBase(
         basePackage = basePackage,
         instanceName = id,
-        identifier = id,
+        appName = id,
 
         // include the bridge and component directories in case a datatype's invariant makes a
         // call to a gumbo function.  The functions will be in the 'component' source directory
@@ -389,7 +390,7 @@ import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
 
   def genTranspilerBase(basePackage: String,
                         instanceName: String,
-                        identifier: String,
+                        appName: String,
                         sourcePaths: ISZ[String],
                         cOutputDir: Os.Path,
 
@@ -404,10 +405,10 @@ import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
 
                         cmakeIncludes: ISZ[String]): (ST, SireumSlangTranspilersCOption) = {
     val packageName = s"${basePackage}/${instanceName}"
-    val appName = s"${basePackage}.${instanceName}.${identifier}"
+    val fqAppName = s"${basePackage}.${instanceName}.${appName}"
 
-    val apps: ISZ[String] = ISZ(appName)
-    val forwards: ISZ[String] = ISZ(s"art.ArtNative=${appName}")
+    val apps: ISZ[String] = ISZ(fqAppName)
+    val forwards: ISZ[String] = ISZ(s"art.ArtNative=${fqAppName}")
 
     val buildApps = F
 
@@ -440,6 +441,7 @@ import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
   }
 
   def genTranspiler(basePackage: String,
+                    appName: String,
                     names: NameProvider,
                     maxArraySize: Z,
                     maxStackSizeInBytes: Z,
@@ -490,7 +492,7 @@ import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
     return genTranspilerBase(
       basePackage = basePackage,
       instanceName = names.componentSingletonType,
-      identifier = names.identifier,
+      appName = appName,
       sourcePaths = sourcePaths,
       cOutputDir = cOutputDir,
 
@@ -534,7 +536,7 @@ import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
 
       val signature = SeL4NixTemplate.methodSignature(fullyQualifiedMethodName, ISZ(), returnType)
 
-      val routeToInstance = s"${names.basePackage}_${names.componentSingletonType}_${names.identifier}_${methodName}"
+      val routeToInstance = s"${names.fqSeL4AppName}_${methodName}"
 
       val returnOpt: Option[String] = if (returnType == "Unit") None() else Some("return ")
 

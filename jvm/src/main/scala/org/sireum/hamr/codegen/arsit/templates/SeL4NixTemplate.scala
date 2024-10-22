@@ -211,7 +211,7 @@ object SeL4NixTemplate {
   def app(packageName: String,
           instanceName: String,
           imports: ISZ[String],
-          identifier: String,
+          appName: String,
           bridge: ST,
           bridgeIdentifier: String,
           dispatchStatus: ST,
@@ -236,7 +236,7 @@ object SeL4NixTemplate {
           |import art.PortMode._
           |${(imports, "\n")}
           |
-          |object ${identifier} extends App {
+          |object $appName extends App {
           |
           |  ${bridge}
           |
