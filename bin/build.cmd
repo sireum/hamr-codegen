@@ -212,8 +212,8 @@ def regenClis(): Unit = {
           case nc: Type.NumChoice =>
             val default = nc.choices(0)
             toStrings = toStrings :+
-              st"""if (o.${o.name}.nonEmpty && (includeDefaults || o.${o.name}.get != $default)) {
-                  |  ret = ret :+ ("$longKey", Some(o.${o.name}.get.string))
+              st"""if (includeDefaults || o.${o.name} != $default) {
+                  |  ret = ret :+ ("$longKey", Some(o.${o.name}.string))
                   |}"""
           case s: Type.Str =>
             if (s.default.nonEmpty) {
