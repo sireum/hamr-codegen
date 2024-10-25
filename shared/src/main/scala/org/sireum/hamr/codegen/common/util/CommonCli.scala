@@ -42,6 +42,9 @@ object CommonCli {
       tpe = Type.Choice(name = "HamrPlatform", sep = None(),
         elements = ISZ("JVM", "Linux", "Cygwin", "MacOS", "seL4", "seL4_Only", "seL4_TB", "Microkit", "ros2")),
       description = "Target platform"),
+    Opt(name = "outputDir", longKey = "output-dir", shortKey = Some('o'),
+        tpe = Type.Path(multiple = F, default = None()),
+        description = "Default output directory"),
     Opt(name = "parseableMessages", longKey = "parseable-messages", shortKey = None(),
       tpe = Type.Flag(F),
       description = "Print parseable file messages")
@@ -49,9 +52,9 @@ object CommonCli {
 
   val commonGroups: ISZ[OptGroup] = ISZ(
     OptGroup(name = "Slang", opts = ISZ(
-      Opt(name = "slangOutputDir", longKey = "slang-output-dir", shortKey = Some('o'),
+      Opt(name = "slangOutputDir", longKey = "slang-output-dir", shortKey = None(),
         tpe = Type.Path(multiple = F, default = None()),
-        description = "Output directory for the generated project files"),
+        description = "Output directory for the generated Slang project files"),
       Opt(name = "packageName", longKey = "package-name", shortKey = Some('n'),
         tpe = Type.Str(sep = None(), default = None()),
         description = "Base package name for Slang project (output-dir's simple name used if not provided)"),

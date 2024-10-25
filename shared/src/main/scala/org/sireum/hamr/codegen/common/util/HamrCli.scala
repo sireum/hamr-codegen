@@ -42,6 +42,7 @@ object HamrCli {
     val verbose: B,
     val runtimeMonitoring: B,
     val platform: CodegenHamrPlatform.Type,
+    val outputDir: Option[String],
     val parseableMessages: B,
     val slangOutputDir: Option[String],
     val packageName: Option[String],
@@ -151,12 +152,12 @@ import HamrCli._
           |-p, --platform           Target platform (expects one of { JVM, Linux, Cygwin,
           |                           MacOS, seL4, seL4_Only, seL4_TB, Microkit, ros2 };
           |                           default: JVM)
+          |-o, --output-dir         Default output directory (expects a path)
           |    --parseable-messages Print parseable file messages
           |-h, --help               Display this information
           |
           |Slang Options:
-          |-o, --slang-output-dir    
-          |                          Output directory for the generated project files
+          |    --slang-output-dir   Output directory for the generated Slang project files
           |                           (expects a path)
           |-n, --package-name       Base package name for Slang project (output-dir's
           |                           simple name used if not provided) (expects a string)
@@ -214,6 +215,7 @@ import HamrCli._
     var verbose: B = false
     var runtimeMonitoring: B = false
     var platform: CodegenHamrPlatform.Type = CodegenHamrPlatform.JVM
+    var outputDir: Option[String] = None[String]()
     var parseableMessages: B = false
     var slangOutputDir: Option[String] = None[String]()
     var packageName: Option[String] = None[String]()
@@ -269,13 +271,19 @@ import HamrCli._
              case Some(v) => platform = v
              case _ => return None()
            }
+         } else if (arg == "-o" || arg == "--output-dir") {
+           val o: Option[Option[String]] = parsePath(args, j + 1)
+           o match {
+             case Some(v) => outputDir = v
+             case _ => return None()
+           }
          } else if (arg == "--parseable-messages") {
            val o: Option[B] = { j = j - 1; Some(!parseableMessages) }
            o match {
              case Some(v) => parseableMessages = v
              case _ => return None()
            }
-         } else if (arg == "-o" || arg == "--slang-output-dir") {
+         } else if (arg == "--slang-output-dir") {
            val o: Option[Option[String]] = parsePath(args, j + 1)
            o match {
              case Some(v) => slangOutputDir = v
@@ -416,7 +424,7 @@ import HamrCli._
         isOption = F
       }
     }
-    return Some(CodegenOption(help, parseArguments(args, j), msgpack, verbose, runtimeMonitoring, platform, parseableMessages, slangOutputDir, packageName, noProyekIve, noEmbedArt, devicesAsThreads, genSbtMill, slangAuxCodeDirs, slangOutputCDir, excludeComponentImpl, bitWidth, maxStringSize, maxArraySize, runTranspiler, camkesOutputDir, camkesAuxCodeDirs, workspaceRootDir, strictAadlMode, ros2OutputWorkspaceDir, ros2Dir, ros2NodesLanguage, ros2LaunchLanguage, experimentalOptions))
+    return Some(CodegenOption(help, parseArguments(args, j), msgpack, verbose, runtimeMonitoring, platform, outputDir, parseableMessages, slangOutputDir, packageName, noProyekIve, noEmbedArt, devicesAsThreads, genSbtMill, slangAuxCodeDirs, slangOutputCDir, excludeComponentImpl, bitWidth, maxStringSize, maxArraySize, runTranspiler, camkesOutputDir, camkesAuxCodeDirs, workspaceRootDir, strictAadlMode, ros2OutputWorkspaceDir, ros2Dir, ros2NodesLanguage, ros2LaunchLanguage, experimentalOptions))
   }
 
   def parseArguments(args: ISZ[String], i: Z): ISZ[String] = {

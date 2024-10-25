@@ -48,11 +48,13 @@ object CodeGen {
         else systemRootDirectory / path) // make the user's request relative to the system's root directory
     }
 
-    val slangOutputDir: Path = getPath(options.slangOutputDir.getOrElse("hamr/slang"))
+    val outputDir: Path = getPath(options.slangOutputDir.getOrElse("hamr"))
 
-    val output_shared_C_Directory: Path = getPath(options.slangOutputCDir.getOrElse("hamr/c"))
+    val slangOutputDir: Path = getPath(options.slangOutputDir.getOrElse((outputDir / "slang").value))
 
-    val camkesOutputDir: Path = getPath(options.camkesOutputDir.getOrElse("hamr/camkes"))
+    val output_shared_C_Directory: Path = getPath(options.slangOutputCDir.getOrElse((outputDir / "c").value))
+
+    val camkesOutputDir: Path = getPath(options.camkesOutputDir.getOrElse((outputDir / "camkes").value))
 
     val output_platform_C_Directory: Path =
       if (options.platform == CodegenHamrPlatform.SeL4) camkesOutputDir / DirectoryUtil.DIR_SLANG_LIBRARIES
