@@ -24,8 +24,8 @@ if (url != "https://github.com/sireum/kekinian.git" && url != "https://github.co
   Os.exit(0)
 }
 
-val codegenVersionsP = SIREUM_HOME / "hamr" / "codegen" / "jvm" / "src" / "main" / "resources" / "util"/ "codegen_versions.properties"
-val phantomVersionsP = SIREUM_HOME / "hamr" / "codegen" / "jvm" / "src" / "main" / "resources" / "util" / "phantom_versions.properties"
+val codegenVersionsP = SIREUM_HOME / "hamr" / "codegen" / "jvm" / "src" / "main" / "resources" / "codegen_versions.properties"
+val phantomVersionsP = SIREUM_HOME / "hamr" / "codegen" / "jvm" / "src" / "main" / "resources" / "phantom_versions.properties"
 
 var codegenCurrentVers: Map[String, String] = Map.empty
 var phantomCurrentVers: Map[String, String] = Map.empty

@@ -127,7 +127,7 @@ object Util {
   @pure def getIpc(ipcmech: IpcMechanism.Type, packageName: String): ST = {
     val PACKAGE_PLACEHOLDER = "PACKAGE_NAME"
     val r: String = ipcmech match {
-      case IpcMechanism.SharedMemory => "ipc_shared_memory.c"
+      case IpcMechanism.SharedMemory => "util/ipc_shared_memory.c"
       case x => halt("Unexpected IPC mechanism ${x}")
     }
     val lib = Util.getLibraryFile(r).render
