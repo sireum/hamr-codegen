@@ -191,7 +191,7 @@ def process(tool: CliOpt.Tool, optionName: String): Unit = {
           validityChecks = validityChecks :+ st"currentStore.${o.name}Valid"
 
         case s: Type.Str =>
-          val default: String = if (s.default.nonEmpty) s.default.get else st"""""""".render
+          val default: String = if (s.default.nonEmpty) st""""${s.default.get}"""".render else st"""""""".render
           storeEntries = storeEntries :+
             st"""var ${o.name}: String = $default,
                 |val ${o.name}Default: String = $default,

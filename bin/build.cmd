@@ -216,14 +216,14 @@ def regenClis(): Unit = {
                   |  ret = ret :+ ("$longKey", Some(o.${o.name}.string))
                   |}"""
           case s: Type.Str =>
-            if (s.default.nonEmpty) {
-              halt("todo: handle str default")
-            }
+            val includeDefault: Option[String] =
+              if (s.default.nonEmpty) Some("includeDefaults || ")
+              else None()
             val extract: String =
               if (s.sep.nonEmpty) st"""st"$${(o.${o.name}, "${s.sep.get}")}".render""".render
               else s"o.${o.name}.get"
             toStrings = toStrings :+
-              st"""if (o.${o.name}.nonEmpty) {
+              st"""if (${includeDefault}o.${o.name}.nonEmpty) {
                   |  ret = ret :+ ("$longKey", Some($extract))
                   |}"""
           case c: Type.Choice =>

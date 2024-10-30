@@ -62,7 +62,7 @@ object CodeGen {
     val packageName: String = if (options.packageName.nonEmpty) {
       cleanupPackageName(options.packageName.get)
     } else {
-      cleanupPackageName(systemRootDirectory.name)
+      cleanupPackageName("base" )
     }
 
     val (runArsit, runACT, runMicrokit, runRos2, isTranspilerProject, isSlangProject): (B, B, B, B, B, B) =
