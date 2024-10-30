@@ -28,7 +28,7 @@
 
 // This file is auto-generated from ActAst.scala
 
-package org.sireum.hamr.act.ast
+package org.sireum.hamr.codegen.act.ast
 
 import org.sireum._
 
@@ -975,7 +975,7 @@ object Transformer {
 
 }
 
-import org.sireum.hamr.act.ast.Transformer._
+import org.sireum.hamr.codegen.act.ast.Transformer._
 
 @datatype class Transformer[Context](val pp: PrePost[Context]) {
 

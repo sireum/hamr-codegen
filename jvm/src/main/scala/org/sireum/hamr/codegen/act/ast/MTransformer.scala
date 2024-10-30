@@ -28,7 +28,7 @@
 
 // This file is auto-generated from ActAst.scala
 
-package org.sireum.hamr.act.ast
+package org.sireum.hamr.codegen.act.ast
 
 import org.sireum._
 
@@ -151,7 +151,7 @@ object MTransformer {
 
 }
 
-import org.sireum.hamr.act.ast.MTransformer._
+import org.sireum.hamr.codegen.act.ast.MTransformer._
 
 @msig trait MTransformer {
 

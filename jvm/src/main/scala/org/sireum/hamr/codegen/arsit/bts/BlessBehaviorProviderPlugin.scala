@@ -1,8 +1,8 @@
 // #Sireum
-package org.sireum.hamr.arsit.bts
+package org.sireum.hamr.codegen.arsit.bts
 
 import org.sireum._
-import org.sireum.hamr.arsit.plugin.BehaviorProviderPlugin
+import org.sireum.hamr.codegen.arsit.plugin.BehaviorProviderPlugin
 import org.sireum.hamr.codegen.common.containers.{EResource, IResource, FileResource}
 import org.sireum.hamr.codegen.common.symbols.{AadlThreadOrDevice, AnnexClauseInfo, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlTypes

@@ -1,5 +1,5 @@
 // #Sireum
-package org.sireum.hamr.arsit.plugin
+package org.sireum.hamr.codegen.arsit.plugin
 
 import org.sireum._
 

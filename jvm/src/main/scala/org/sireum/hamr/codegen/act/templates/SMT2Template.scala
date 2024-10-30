@@ -1,11 +1,11 @@
 // #Sireum
 
-package org.sireum.hamr.act.templates
+package org.sireum.hamr.codegen.act.templates
 
 import org.sireum._
-import org.sireum.hamr.act.ast
-import org.sireum.hamr.act.proof.ProofContainer.SchedulingType
-import org.sireum.hamr.act.util.{ActPlatform, Sel4ConnectorTypes}
+import org.sireum.hamr.codegen.act.ast
+import org.sireum.hamr.codegen.act.proof.ProofContainer.SchedulingType
+import org.sireum.hamr.codegen.act.util.{ActPlatform, Sel4ConnectorTypes}
 import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlDispatchableComponent, Dispatch_Protocol, Processor}
 import org.sireum.hamr.ir.{ComponentCategory, Direction, FeatureCategory}
 

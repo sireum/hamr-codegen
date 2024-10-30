@@ -1,12 +1,12 @@
 // #Sireum
 
-package org.sireum.hamr.arsit.nix
+package org.sireum.hamr.codegen.arsit.nix
 
 import org.sireum._
-import org.sireum.hamr.arsit.Util.nameProvider
-import org.sireum.hamr.arsit._
-import org.sireum.hamr.arsit.templates.{ArchitectureTemplate, CMakeTemplate, SeL4NixTemplate, TranspilerTemplate}
-import org.sireum.hamr.arsit.util.{ArsitOptions, ArsitPlatform}
+import org.sireum.hamr.codegen.arsit.Util.nameProvider
+import org.sireum.hamr.codegen.arsit._
+import org.sireum.hamr.codegen.arsit.templates.{ArchitectureTemplate, CMakeTemplate, SeL4NixTemplate, TranspilerTemplate}
+import org.sireum.hamr.codegen.arsit.util.{ArsitOptions, ArsitPlatform}
 import org.sireum.hamr.codegen.common.containers.{FileResource, Resource, SireumSlangTranspilersCOption}
 import org.sireum.hamr.codegen.common.properties.PropertyUtil
 import org.sireum.hamr.codegen.common.symbols._

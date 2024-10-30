@@ -1,10 +1,10 @@
 // #Sireum
-package org.sireum.hamr.arsit
+package org.sireum.hamr.codegen.arsit
 
 import org.sireum._
-import org.sireum.hamr.arsit.plugin.{ArsitConfigurationPlugin, ArsitFinalizePlugin, ArsitInitializePlugin, PlatformProviderPlugin}
-import org.sireum.hamr.arsit.templates._
-import org.sireum.hamr.arsit.util.{ArsitLibrary, ArsitOptions, ArsitPlatform, ReporterUtil}
+import org.sireum.hamr.codegen.arsit.plugin.{ArsitConfigurationPlugin, ArsitFinalizePlugin, ArsitInitializePlugin, PlatformProviderPlugin}
+import org.sireum.hamr.codegen.arsit.templates._
+import org.sireum.hamr.codegen.arsit.util.{ArsitLibrary, ArsitOptions, ArsitPlatform, ReporterUtil}
 import org.sireum.hamr.codegen.common.containers.{FileResource, IResource, Resource}
 import org.sireum.hamr.codegen.common.plugin.Plugin
 import org.sireum.hamr.codegen.common.symbols.SymbolTable

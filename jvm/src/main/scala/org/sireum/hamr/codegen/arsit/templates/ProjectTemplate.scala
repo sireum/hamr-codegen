@@ -1,8 +1,8 @@
 // #Sireum
-package org.sireum.hamr.arsit.templates
+package org.sireum.hamr.codegen.arsit.templates
 
 import org.sireum._
-import org.sireum.hamr.arsit.util.ArsitLibrary
+import org.sireum.hamr.codegen.arsit.util.ArsitLibrary
 
 object ProjectTemplate {
 

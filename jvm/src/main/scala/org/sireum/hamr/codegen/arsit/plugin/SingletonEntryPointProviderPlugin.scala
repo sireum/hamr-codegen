@@ -1,10 +1,10 @@
 // #Sireum
-package org.sireum.hamr.arsit.plugin
+package org.sireum.hamr.codegen.arsit.plugin
 
 import org.sireum._
-import org.sireum.hamr.arsit.templates.{ApiTemplate, EntryPointTemplate}
-import org.sireum.hamr.arsit.util.ArsitOptions
-import org.sireum.hamr.arsit.{EntryPoints, Port, ProjectDirectories}
+import org.sireum.hamr.codegen.arsit.templates.{ApiTemplate, EntryPointTemplate}
+import org.sireum.hamr.codegen.arsit.util.ArsitOptions
+import org.sireum.hamr.codegen.arsit.{EntryPoints, Port, ProjectDirectories}
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.symbols.{AadlThreadOrDevice, AnnexClauseInfo, Dispatch_Protocol, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlTypes

@@ -1,9 +1,9 @@
 // #Sireum
 
-package org.sireum.hamr.act.templates
+package org.sireum.hamr.codegen.act.templates
 
 import org.sireum._
-import org.sireum.hamr.act.util._
+import org.sireum.hamr.codegen.act.util._
 import org.sireum.hamr.codegen.common.StringUtil
 import org.sireum.hamr.codegen.common.containers.FileResource
 import org.sireum.hamr.codegen.common.util.ResourceUtil

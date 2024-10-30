@@ -1,8 +1,8 @@
 // #Sireum
-package org.sireum.hamr.act.templates
+package org.sireum.hamr.codegen.act.templates
 
 import org.sireum._
-import org.sireum.hamr.act.util.{CMakeOption, CMakePreprocessorOption}
+import org.sireum.hamr.codegen.act.util.{CMakeOption, CMakePreprocessorOption}
 import org.sireum.hamr.codegen.common.NixSeL4NameUtil
 import org.sireum.hamr.codegen.common.templates._
 import org.sireum.hamr.ir.FeatureCategory

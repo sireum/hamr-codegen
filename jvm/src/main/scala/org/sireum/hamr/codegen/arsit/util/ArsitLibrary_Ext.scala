@@ -1,4 +1,4 @@
-package org.sireum.hamr.arsit.util
+package org.sireum.hamr.codegen.arsit.util
 
 import org.sireum.$internal.RC
 import org.sireum._

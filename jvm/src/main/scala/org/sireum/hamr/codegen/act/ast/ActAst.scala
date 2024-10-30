@@ -1,6 +1,6 @@
 // #Sireum
 
-package org.sireum.hamr.act.ast
+package org.sireum.hamr.codegen.act.ast
 
 import org.sireum._
 

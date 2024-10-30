@@ -1,13 +1,13 @@
 // #Sireum
-package org.sireum.hamr.act.vm
+package org.sireum.hamr.codegen.act.vm
 
 import org.sireum._
-import org.sireum.hamr.act.ast._
-import org.sireum.hamr.act.connections.{Connections, SBConnectionContainer, VMConnectionInfo}
-import org.sireum.hamr.act.periodic.{Dispatcher, PacerTemplate, PeriodicUtil}
-import org.sireum.hamr.act.proof.ProofContainer.CAmkESComponentCategory
-import org.sireum.hamr.act.templates.{CMakeTemplate, EventDataQueueTemplate}
-import org.sireum.hamr.act.util._
+import org.sireum.hamr.codegen.act.ast._
+import org.sireum.hamr.codegen.act.connections.{Connections, SBConnectionContainer, VMConnectionInfo}
+import org.sireum.hamr.codegen.act.periodic.{Dispatcher, PacerTemplate, PeriodicUtil}
+import org.sireum.hamr.codegen.act.proof.ProofContainer.CAmkESComponentCategory
+import org.sireum.hamr.codegen.act.templates.{CMakeTemplate, EventDataQueueTemplate}
+import org.sireum.hamr.codegen.act.util._
 import org.sireum.hamr.codegen.common.CommonUtil.IdPath
 import org.sireum.hamr.codegen.common.DirectoryUtil
 import org.sireum.hamr.codegen.common.containers.FileResource

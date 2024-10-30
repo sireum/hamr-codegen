@@ -1,10 +1,10 @@
 // #Sireum
 
-package org.sireum.hamr.act.periodic
+package org.sireum.hamr.codegen.act.periodic
 
 import org.sireum._
-import org.sireum.hamr.act.proof.ProofContainer.SchedulingType
-import org.sireum.hamr.act.util.{ActPlatform, Util}
+import org.sireum.hamr.codegen.act.proof.ProofContainer.SchedulingType
+import org.sireum.hamr.codegen.act.util.{ActPlatform, Util}
 import org.sireum.hamr.codegen.common.properties.CaseSchedulingProperties
 import org.sireum.hamr.codegen.common.properties.CaseSchedulingProperties.PacingMethod
 import org.sireum.hamr.codegen.common.symbols._

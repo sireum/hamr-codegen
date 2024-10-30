@@ -3,9 +3,8 @@ package org.sireum.hamr.codegen
 
 import org.sireum._
 import org.sireum.Os.Path
-import org.sireum.hamr.act.util.Util.ACT_INSTRUCTIONS_MESSAGE_KIND
-import org.sireum.hamr.arsit
-import org.sireum.hamr.arsit.Util.ARSIT_INSTRUCTIONS_MESSAGE_KIND
+import org.sireum.hamr.codegen.act.util.Util.ACT_INSTRUCTIONS_MESSAGE_KIND
+import org.sireum.hamr.codegen.arsit.Util.ARSIT_INSTRUCTIONS_MESSAGE_KIND
 import org.sireum.hamr.codegen.common.containers._
 import org.sireum.hamr.codegen.common.plugin.Plugin
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
@@ -48,7 +47,7 @@ object CodeGen {
         else systemRootDirectory / path) // make the user's request relative to the system's root directory
     }
 
-    val outputDir: Path = getPath(options.slangOutputDir.getOrElse("hamr"))
+    val outputDir: Path = getPath(options.outputDir.getOrElse("hamr"))
 
     val slangOutputDir: Path = getPath(options.slangOutputDir.getOrElse((outputDir / "slang").value))
 
@@ -63,7 +62,7 @@ object CodeGen {
     val packageName: String = if (options.packageName.nonEmpty) {
       cleanupPackageName(options.packageName.get)
     } else {
-      cleanupPackageName(slangOutputDir.name)
+      cleanupPackageName(systemRootDirectory.name)
     }
 
     val (runArsit, runACT, runMicrokit, runRos2, isTranspilerProject, isSlangProject): (B, B, B, B, B, B) =
@@ -284,10 +283,10 @@ object CodeGen {
 
     if (!reporter.hasError && runACT) {
 
-      val platform = org.sireum.hamr.act.util.ActPlatform.byName(options.platform.name).get
+      val platform = org.sireum.hamr.codegen.act.util.ActPlatform.byName(options.platform.name).get
       reporter.info(None(), toolName, "Generating CAmkES artifacts...")
 
-      val actOptions = org.sireum.hamr.act.util.ActOptions(
+      val actOptions = org.sireum.hamr.codegen.act.util.ActOptions(
         camkesOutputDir = camkesOutputDir.value,
         auxFiles = getAuxFiles(options.camkesAuxCodeDirs, F, reporter),
         workspaceRootDir = options.workspaceRootDir,
@@ -296,7 +295,7 @@ object CodeGen {
         experimentalOptions = options.experimentalOptions
       )
 
-      val results = org.sireum.hamr.act.Act.run(rmodel, actOptions, aadlTypes, symbolTable, reporter)
+      val results = org.sireum.hamr.codegen.act.Act.run(rmodel, actOptions, aadlTypes, symbolTable, reporter)
       actResources = actResources ++ results.resources
 
       reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ(ACT_INSTRUCTIONS_MESSAGE_KIND))

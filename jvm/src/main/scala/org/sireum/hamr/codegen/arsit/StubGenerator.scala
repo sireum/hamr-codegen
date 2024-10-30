@@ -1,15 +1,15 @@
 // #Sireum
 
-package org.sireum.hamr.arsit
+package org.sireum.hamr.codegen.arsit
 
 import org.sireum._
-import org.sireum.hamr.arsit.Util.nameProvider
-import org.sireum.hamr.arsit.gcl.GumboGen
-import org.sireum.hamr.arsit.plugin.BehaviorEntryPointProviderPlugin.BehaviorEntryPointObjectContributions
-import org.sireum.hamr.arsit.plugin._
-import org.sireum.hamr.arsit.templates.{ApiTemplate, StubTemplate, TestTemplate}
-import org.sireum.hamr.arsit.util.ArsitOptions
-import org.sireum.hamr.arsit.util.ReporterUtil.reporter
+import org.sireum.hamr.codegen.arsit.Util.nameProvider
+import org.sireum.hamr.codegen.arsit.gcl.GumboGen
+import org.sireum.hamr.codegen.arsit.plugin.BehaviorEntryPointProviderPlugin.BehaviorEntryPointObjectContributions
+import org.sireum.hamr.codegen.arsit.plugin._
+import org.sireum.hamr.codegen.arsit.templates.{ApiTemplate, StubTemplate, TestTemplate}
+import org.sireum.hamr.codegen.arsit.util.ArsitOptions
+import org.sireum.hamr.codegen.arsit.util.ReporterUtil.reporter
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.containers.{FileResource, Marker}
 import org.sireum.hamr.codegen.common.plugin.Plugin

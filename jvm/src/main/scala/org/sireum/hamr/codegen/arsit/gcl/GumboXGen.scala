@@ -1,14 +1,14 @@
 // #Sireum
-package org.sireum.hamr.arsit.gcl
+package org.sireum.hamr.codegen.arsit.gcl
 
 import org.sireum._
-import org.sireum.hamr.arsit.ProjectDirectories
-import org.sireum.hamr.arsit.gcl.GumboGen.toKey
-import org.sireum.hamr.arsit.gcl.GumboXGen._
-import org.sireum.hamr.arsit.gcl.GumboXGenUtil._
-import org.sireum.hamr.arsit.plugin.BehaviorEntryPointProviderPlugin.{ObjectContributions, emptyObjectContributions}
-import org.sireum.hamr.arsit.plugin.DatatypeProviderPlugin
-import org.sireum.hamr.arsit.templates.{StubTemplate, TestTemplate}
+import org.sireum.hamr.codegen.arsit.ProjectDirectories
+import org.sireum.hamr.codegen.arsit.gcl.GumboGen.toKey
+import org.sireum.hamr.codegen.arsit.gcl.GumboXGen._
+import org.sireum.hamr.codegen.arsit.gcl.GumboXGenUtil._
+import org.sireum.hamr.codegen.arsit.plugin.BehaviorEntryPointProviderPlugin.{ObjectContributions, emptyObjectContributions}
+import org.sireum.hamr.codegen.arsit.plugin.DatatypeProviderPlugin
+import org.sireum.hamr.codegen.arsit.templates.{StubTemplate, TestTemplate}
 import org.sireum.hamr.codegen.common.CommonUtil.IdPath
 import org.sireum.hamr.codegen.common.StringUtil
 import org.sireum.hamr.codegen.common.containers.FileResource

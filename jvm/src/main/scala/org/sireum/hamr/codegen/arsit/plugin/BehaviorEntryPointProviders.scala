@@ -1,12 +1,12 @@
 // #Sireum
 
-package org.sireum.hamr.arsit.plugin
+package org.sireum.hamr.codegen.arsit.plugin
 
 import org.sireum._
-import org.sireum.hamr.arsit.plugin.BehaviorEntryPointProviderPlugin._
-import org.sireum.hamr.arsit.templates.StubTemplate
-import org.sireum.hamr.arsit.util.ArsitOptions
-import org.sireum.hamr.arsit.{EntryPoints, ProjectDirectories}
+import org.sireum.hamr.codegen.arsit.plugin.BehaviorEntryPointProviderPlugin._
+import org.sireum.hamr.codegen.arsit.templates.StubTemplate
+import org.sireum.hamr.codegen.arsit.util.ArsitOptions
+import org.sireum.hamr.codegen.arsit.{EntryPoints, ProjectDirectories}
 import org.sireum.hamr.codegen.common.CommonUtil.toolName
 import org.sireum.hamr.codegen.common.containers.Marker
 import org.sireum.hamr.codegen.common.plugin.Plugin

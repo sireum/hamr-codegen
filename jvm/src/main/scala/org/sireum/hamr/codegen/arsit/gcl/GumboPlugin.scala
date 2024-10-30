@@ -1,12 +1,12 @@
 // #Sireum
 
-package org.sireum.hamr.arsit.gcl
+package org.sireum.hamr.codegen.arsit.gcl
 
 import org.sireum._
-import org.sireum.hamr.arsit.plugin.BehaviorEntryPointProviderPlugin
-import org.sireum.hamr.arsit.plugin.BehaviorEntryPointProviderPlugin.{BehaviorEntryPointContributions, ContractBlock, NonCaseContractBlock}
-import org.sireum.hamr.arsit.util.ArsitOptions
-import org.sireum.hamr.arsit.{EntryPoints, ProjectDirectories, Util}
+import org.sireum.hamr.codegen.arsit.plugin.BehaviorEntryPointProviderPlugin
+import org.sireum.hamr.codegen.arsit.plugin.BehaviorEntryPointProviderPlugin.{BehaviorEntryPointContributions, ContractBlock, NonCaseContractBlock}
+import org.sireum.hamr.codegen.arsit.util.ArsitOptions
+import org.sireum.hamr.codegen.arsit.{EntryPoints, ProjectDirectories, Util}
 import org.sireum.hamr.codegen.common.containers.{FileResource, Marker}
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.types.AadlTypes

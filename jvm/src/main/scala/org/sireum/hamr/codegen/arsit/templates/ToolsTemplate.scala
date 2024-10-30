@@ -1,5 +1,5 @@
 // #Sireum
-package org.sireum.hamr.arsit.templates
+package org.sireum.hamr.codegen.arsit.templates
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.containers

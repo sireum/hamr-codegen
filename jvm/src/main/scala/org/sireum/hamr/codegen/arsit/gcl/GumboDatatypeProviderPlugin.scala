@@ -1,10 +1,10 @@
 // #Sireum
-package org.sireum.hamr.arsit.gcl
+package org.sireum.hamr.codegen.arsit.gcl
 
 import org.sireum._
-import org.sireum.hamr.arsit.ProjectDirectories
-import org.sireum.hamr.arsit.plugin.DatatypeProviderPlugin
-import org.sireum.hamr.arsit.templates.{DatatypeTemplate, EnumTemplate, IDatatypeTemplate}
+import org.sireum.hamr.codegen.arsit.ProjectDirectories
+import org.sireum.hamr.codegen.arsit.plugin.DatatypeProviderPlugin
+import org.sireum.hamr.codegen.arsit.templates.{DatatypeTemplate, EnumTemplate, IDatatypeTemplate}
 import org.sireum.hamr.codegen.common.symbols.{AnnexClauseInfo, GclAnnexClauseInfo, SymbolTable}
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes}
 import org.sireum.message.Reporter

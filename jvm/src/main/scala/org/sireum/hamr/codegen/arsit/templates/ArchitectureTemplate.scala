@@ -1,9 +1,9 @@
 // #Sireum
 
-package org.sireum.hamr.arsit.templates
+package org.sireum.hamr.codegen.arsit.templates
 
 import org.sireum._
-import org.sireum.hamr.arsit._
+import org.sireum.hamr.codegen.arsit._
 import org.sireum.hamr.codegen.common.symbols.Dispatch_Protocol
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.ir.{Direction, FeatureCategory}

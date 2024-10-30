@@ -1,10 +1,10 @@
 // #Sireum
 
-package org.sireum.hamr.act.templates
+package org.sireum.hamr.codegen.act.templates
 
 import org.sireum._
-import org.sireum.hamr.act.util.{CMakeOption, CMakePreprocessorOption, CMakeStandardOption, Util}
-import org.sireum.hamr.act.vm.VMGen
+import org.sireum.hamr.codegen.act.util.{CMakeOption, CMakePreprocessorOption, CMakeStandardOption, Util}
+import org.sireum.hamr.codegen.act.vm.VMGen
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
 
 object CMakeTemplate {

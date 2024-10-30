@@ -1,9 +1,9 @@
 // #Sireum
-package org.sireum.hamr.arsit.plugin
+package org.sireum.hamr.codegen.arsit.plugin
 
 import org.sireum._
-import org.sireum.hamr.arsit.Port
-import org.sireum.hamr.arsit.templates.ApiTemplate
+import org.sireum.hamr.codegen.arsit.Port
+import org.sireum.hamr.codegen.arsit.templates.ApiTemplate
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.symbols.{AadlThreadOrDevice, SymbolTable}
 import org.sireum.hamr.codegen.common.templates.CommentTemplate

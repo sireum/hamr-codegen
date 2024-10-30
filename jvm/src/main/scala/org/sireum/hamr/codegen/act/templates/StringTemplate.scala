@@ -1,11 +1,11 @@
 // #Sireum
 
-package org.sireum.hamr.act.templates
+package org.sireum.hamr.codegen.act.templates
 
 import org.sireum._
-import org.sireum.hamr.act.ast
-import org.sireum.hamr.act.util._
-import org.sireum.hamr.act.vm.VM_Template
+import org.sireum.hamr.codegen.act.ast
+import org.sireum.hamr.codegen.act.util._
+import org.sireum.hamr.codegen.act.vm.VM_Template
 import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlPort}
 import org.sireum.hamr.codegen.common.templates.{CommentTemplate, StackFrameTemplate}
 import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}

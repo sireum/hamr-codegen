@@ -1,12 +1,12 @@
 // #Sireum
 
-package org.sireum.hamr.act.periodic
+package org.sireum.hamr.codegen.act.periodic
 
 import org.sireum._
-import org.sireum.hamr.act.ast
-import org.sireum.hamr.act.templates.CAmkESTemplate.DOMAIN_FIELD
-import org.sireum.hamr.act.templates.EventDataQueueTemplate
-import org.sireum.hamr.act.util._
+import org.sireum.hamr.codegen.act.ast
+import org.sireum.hamr.codegen.act.templates.CAmkESTemplate.DOMAIN_FIELD
+import org.sireum.hamr.codegen.act.templates.EventDataQueueTemplate
+import org.sireum.hamr.codegen.act.util._
 import org.sireum.hamr.codegen.common.properties.{CaseSchedulingProperties, OsateProperties}
 import org.sireum.hamr.codegen.common.symbols.Dispatch_Protocol
 

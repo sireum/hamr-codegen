@@ -1,11 +1,11 @@
 // #Sireum
-package org.sireum.hamr.arsit.gcl
+package org.sireum.hamr.codegen.arsit.gcl
 
 import org.sireum._
-import org.sireum.hamr.arsit.gcl.GumboXGenUtil.{GGParam, GGPortParam, GGStateVarParam, SymbolKind}
-import org.sireum.hamr.arsit.plugin.{EntryPointProviderPlugin, PlatformProviderPlugin}
-import org.sireum.hamr.arsit.templates.{ApiTemplate, EntryPointTemplate}
-import org.sireum.hamr.arsit.{EntryPoints, ProjectDirectories}
+import org.sireum.hamr.codegen.arsit.gcl.GumboXGenUtil.{GGParam, GGPortParam, GGStateVarParam, SymbolKind}
+import org.sireum.hamr.codegen.arsit.plugin.{EntryPointProviderPlugin, PlatformProviderPlugin}
+import org.sireum.hamr.codegen.arsit.templates.{ApiTemplate, EntryPointTemplate}
+import org.sireum.hamr.codegen.arsit.{EntryPoints, ProjectDirectories}
 import org.sireum.hamr.codegen.common.StringUtil
 import org.sireum.hamr.codegen.common.containers.{FileResource, Marker}
 import org.sireum.hamr.codegen.common.symbols._

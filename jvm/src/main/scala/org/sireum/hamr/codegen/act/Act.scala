@@ -1,11 +1,11 @@
 // #Sireum
-package org.sireum.hamr.act
+package org.sireum.hamr.codegen.act
 
 import org.sireum._
-import org.sireum.hamr.act.proof.ProofUtil
-import org.sireum.hamr.act.templates.StringTemplate
-import org.sireum.hamr.act.util.Util.reporter
-import org.sireum.hamr.act.util._
+import org.sireum.hamr.codegen.act.proof.ProofUtil
+import org.sireum.hamr.codegen.act.templates.StringTemplate
+import org.sireum.hamr.codegen.act.util.Util.reporter
+import org.sireum.hamr.codegen.act.util._
 import org.sireum.hamr.codegen.common.containers.FileResource
 import org.sireum.hamr.codegen.common.symbols.{AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlTypes

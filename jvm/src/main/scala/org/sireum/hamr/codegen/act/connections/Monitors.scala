@@ -1,9 +1,9 @@
 // #Sireum
 
-package org.sireum.hamr.act.connections
+package org.sireum.hamr.codegen.act.connections
 
 import org.sireum._
-import org.sireum.hamr.act.util._
+import org.sireum.hamr.codegen.act.util._
 import org.sireum.hamr.codegen.common.CommonUtil.IdPath
 import org.sireum.hamr.ir
 

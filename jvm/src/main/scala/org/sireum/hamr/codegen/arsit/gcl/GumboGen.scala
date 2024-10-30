@@ -1,10 +1,10 @@
 // #Sireum
 
-package org.sireum.hamr.arsit.gcl
+package org.sireum.hamr.codegen.arsit.gcl
 
 import org.sireum._
-import org.sireum.hamr.arsit.gcl.GumboGen._
-import org.sireum.hamr.arsit.plugin.BehaviorEntryPointProviderPlugin._
+import org.sireum.hamr.codegen.arsit.gcl.GumboGen._
+import org.sireum.hamr.codegen.arsit.plugin.BehaviorEntryPointProviderPlugin._
 import org.sireum.hamr.codegen.common.CommonUtil.IdPath
 import org.sireum.hamr.codegen.common.StringUtil
 import org.sireum.hamr.codegen.common.containers.Marker

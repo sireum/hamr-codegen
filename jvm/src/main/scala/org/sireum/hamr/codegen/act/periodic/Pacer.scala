@@ -1,16 +1,16 @@
 // #Sireum
 
-package org.sireum.hamr.act.periodic
+package org.sireum.hamr.codegen.act.periodic
 
 import org.sireum._
-import org.sireum.hamr.act._
-import org.sireum.hamr.act.ast.{Consumes, Dataport, Emits}
-import org.sireum.hamr.act.connections.ConnectionHolder
-import org.sireum.hamr.act.proof.ProofContainer.{CAmkESComponentCategory, CAmkESConnectionType}
-import org.sireum.hamr.act.templates.{CAmkESTemplate, ConnectionsSbTemplate}
-import org.sireum.hamr.act.util.Util.reporter
-import org.sireum.hamr.act.util._
-import org.sireum.hamr.act.vm.VMUtil
+import org.sireum.hamr.codegen.act._
+import org.sireum.hamr.codegen.act.ast.{Consumes, Dataport, Emits}
+import org.sireum.hamr.codegen.act.connections.ConnectionHolder
+import org.sireum.hamr.codegen.act.proof.ProofContainer.{CAmkESComponentCategory, CAmkESConnectionType}
+import org.sireum.hamr.codegen.act.templates.{CAmkESTemplate, ConnectionsSbTemplate}
+import org.sireum.hamr.codegen.act.util.Util.reporter
+import org.sireum.hamr.codegen.act.util._
+import org.sireum.hamr.codegen.act.vm.VMUtil
 import org.sireum.hamr.codegen.common.containers.FileResource
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.util.{ExperimentalOptions, ResourceUtil}

@@ -1,13 +1,13 @@
 // #Sireum
 
-package org.sireum.hamr.act.proof
+package org.sireum.hamr.codegen.act.proof
 
 import org.sireum._
-import org.sireum.hamr.act.ast
-import org.sireum.hamr.act.connections.SBConnectionContainer
-import org.sireum.hamr.act.proof.ProofContainer.{CAmkESComponentCategory, CAmkESConnection, CAmkESConnectionType}
-import org.sireum.hamr.act.templates.SMT2Template
-import org.sireum.hamr.act.util.{ActPlatform, Sel4ConnectorTypes}
+import org.sireum.hamr.codegen.act.ast
+import org.sireum.hamr.codegen.act.connections.SBConnectionContainer
+import org.sireum.hamr.codegen.act.proof.ProofContainer.{CAmkESComponentCategory, CAmkESConnection, CAmkESConnectionType}
+import org.sireum.hamr.codegen.act.templates.SMT2Template
+import org.sireum.hamr.codegen.act.util.{ActPlatform, Sel4ConnectorTypes}
 import org.sireum.hamr.codegen.common.containers.FileResource
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.util.ResourceUtil

@@ -1,9 +1,9 @@
 // #Sireum
 
-package org.sireum.hamr.act.dot
+package org.sireum.hamr.codegen.act.dot
 
 import org.sireum._
-import org.sireum.hamr.act.ast._
+import org.sireum.hamr.codegen.act.ast._
 
 @enum object EntityType {
   'dataport
