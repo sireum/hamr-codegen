@@ -248,11 +248,11 @@ object CodeGen {
             repositories = ISZ()
           )
 
-          reporter.info(None(), toolName, "Generating IVE project via Proyek IVE ...")
+          reporter.info(None(), toolName, "Generating IVE and Scala Metals project via Proyek ...")
           reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
 
           if (proyekIveCallback(proyekConfig) != 0) {
-            reporter.error(None(), toolName, "Proyek IVE did not complete successfully")
+            reporter.error(None(), toolName, "Proyek did not complete successfully")
           }
         }
       }
