@@ -111,7 +111,9 @@ object CodeGen {
 
     if (~reporter.hasError && runRos2) {
       val results = Ros2Codegen().run(rmodel, options, aadlTypes, symbolTable, plugins, reporter)
-      writeOutResources(results.fileResources, reporter)
+      if (!reporter.hasError) {
+        writeOutResources(results.fileResources, reporter)
+      }
       if (!options.parseableMessages) {
         reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
       }
@@ -120,7 +122,9 @@ object CodeGen {
 
     if (!reporter.hasError && runMicrokit) {
       val results = MicrokitCodegen().run(rmodel, options, aadlTypes, symbolTable, plugins, reporter)
-      writeOutResources(results.resources, reporter)
+      if (!reporter.hasError) {
+        writeOutResources(results.resources, reporter)
+      }
       if (!options.parseableMessages) {
         reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
       }
