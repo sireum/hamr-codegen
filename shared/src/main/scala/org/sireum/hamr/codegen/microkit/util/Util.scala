@@ -5,6 +5,39 @@ import org.sireum._
 
 object Util {
 
+  @strictpure def brand(s:String):String = s"sb_$s"
+
+  @pure def toPreprocessorName(s: String): String = {
+    return ops.StringOps(ops.StringOps(s).replaceAllLiterally(".", "_")).toUpper
+  }
+
+  val TAB: String = "\t"
+
+  @pure def toHex(z: Z): String = {
+    val hexchars = ISZ("0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D", "E", "F")
+    var rem: Z = 0
+    var hex = ""
+    var d = z
+    while (d > 0) {
+      rem = d % 16
+      hex = s"${hexchars(rem)}$hex"
+      d = d / 16
+    }
+    return hex
+  }
+
+  @pure def hexFormat(z: String): String = {
+    val s = conversions.String.toCis(z)
+    var ret: ISZ[C] = ISZ(s(s.lastIndex))
+    for (i <- 1 until s.size) {
+      if (i % 3 == 0) {
+        ret = '_' +: ret
+      }
+      ret = s(s.size - 1 - i) +: ret
+    }
+    return s"0x${conversions.String.fromCis(ret)}"
+  }
+
   val printfc: ST =
     st"""///////////////////////////////////////////////////////////////////////////////
         |// \author (c) Marco Paland (info@paland.com)

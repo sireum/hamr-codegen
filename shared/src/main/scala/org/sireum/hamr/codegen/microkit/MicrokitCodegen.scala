@@ -4,17 +4,20 @@ package org.sireum.hamr.codegen.microkit
 import org.sireum._
 import org.sireum.hamr.codegen.common.containers.FileResource
 import org.sireum.hamr.codegen.common.plugin.Plugin
-import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlPort, AadlThread, Dispatch_Protocol, SymbolTable}
-import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, ArrayType, TypeUtil => CommonTypeUtil}
+import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlEventPort, AadlFeatureEvent, AadlThread, SymbolTable}
+import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, TypeUtil => CommonTypeUtil}
 import org.sireum.hamr.codegen.common.util.{CodeGenResults, ResourceUtil}
 import org.sireum.hamr.codegen.common.util.HamrCli.CodegenOption
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen.toolName
+import org.sireum.hamr.codegen.microkit.connections.{ConnectionContributions, ConnectionStore, TypeApiContributions}
 import org.sireum.hamr.codegen.microkit.lint.Linter
-import org.sireum.hamr.codegen.microkit.util.{SystemDescription, Channel, MakefileContainer, MemoryMap, MemoryRegion, Perm, ProtectionDomain, SchedulingDomain, TypeUtil, Util}
+import org.sireum.hamr.codegen.microkit.types.{QueueTemplate, TypeStore, TypeUtil}
+import org.sireum.hamr.codegen.microkit.util.{Channel, MakefileContainer, MemoryMap, MemoryRegion, Perm, PortSharedMemoryRegion, ProtectionDomain, SchedulingDomain, SharedMemoryRegion, SystemDescription, Util}
 import org.sireum.hamr.ir.{Aadl, Direction}
 import org.sireum.message.Reporter
-
-import scala.:+
+import org.sireum.hamr.codegen.microkit.connections._
+import org.sireum.hamr.codegen.microkit.types._
+import org.sireum.hamr.codegen.microkit.util.Util.TAB
 
 object MicrokitCodegen {
   val toolName: String = "Mircokit Codegen"
@@ -32,18 +35,6 @@ object MicrokitCodegen {
 
   val pacerComputeExecutionTime: Z = 10
   val endOfFrameComputExecutionTime: Z = 10
-
-  @pure def hexFormat(z: Z): String = {
-    val s = conversions.String.toCis(z.string)
-    var ret: ISZ[C] = ISZ(s(s.lastIndex))
-    for (i <- 1 until s.size) {
-      if (i % 3 == 0) {
-        ret = '_' +: ret
-      }
-      ret = s(s.size - 1 - i) +: ret
-    }
-    return s"0x${conversions.String.fromCis(ret)}"
-  }
 }
 
 @record class MicrokitCodegen {
@@ -52,7 +43,7 @@ object MicrokitCodegen {
 
   var xmlSchedulingDomains: ISZ[SchedulingDomain] = ISZ()
   var xmlProtectionDomains: ISZ[ProtectionDomain] = ISZ()
-  var xmlMemoryRegions: HashSMap[String, MemoryRegion] = HashSMap.empty
+
   var xmlChannels: ISZ[Channel] = ISZ()
 
   var codePacerDefines: ISZ[ST] = ISZ()
@@ -68,8 +59,6 @@ object MicrokitCodegen {
     nextPacerChannelId = nextPacerChannelId - 1
     return nextPacerChannelId + 1
   }
-
-  var cFileSuffixes: ISZ[String] = ISZ()
 
   def run(model: Aadl, options: CodegenOption, types: AadlTypes, symbolTable: SymbolTable, plugins: MSZ[Plugin], reporter: Reporter): CodeGenResults = {
 
@@ -113,43 +102,33 @@ object MicrokitCodegen {
       return st"${(ops.ISZOps(ids).drop(1), "_")}"
     }
 
-    def createMemoryRegion(senderIdPath: ISZ[String]): MemoryRegion = {
-      val name = getName(senderIdPath)
-      if (xmlMemoryRegions.contains(name.render)) {
-        return xmlMemoryRegions.get(name.render).get
-      }
-      val mr = MemoryRegion(name = name.render, size = MicrokitCodegen.hexFormat(1000))
-      xmlMemoryRegions = xmlMemoryRegions + name.render ~> mr
-      return mr
-    }
+    def processTypes(): Map[AadlType, TypeStore] = {
+      var ret: Map[AadlType, TypeStore] = Map.empty
 
-    def getType(p: AadlPort): AadlType = {
-      p match {
-        case p: AadlDataPort => return p.aadlType
-        case p: AadlEventDataPort => return p.aadlType
-        case _ => halt("Infeasible")
-      }
-    }
+      val (name, _, _) = TypeUtil.processDatatype(TypeUtil.eventPortType, reporter)
+      ret = ret + TypeUtil.eventPortType ~> DefaultTypeStore(name)
 
-    def processTypes(): Unit = {
       if (types.rawConnections) {
         reporter.error(None(), MicrokitCodegen.toolName, "Raw connections are not currently supported")
-        return
+        return ret
       }
 
       var forwardDefs: ISZ[ST] = ISZ()
       var defs: ISZ[ST] = ISZ()
-      for (t <- ops.ISZOps(types.typeMap.values).sortWith((a, b) => CommonTypeUtil.isEnumTypeH(a)) if !CommonTypeUtil.isBaseTypeH(t)) {
-        val r = TypeUtil.processDatatype(t, reporter)
-        if (r._1.nonEmpty) {
-          forwardDefs = forwardDefs :+ r._1.get
+      for (t <- ops.ISZOps(types.typeMap.values).sortWith((a, b) => CommonTypeUtil.isEnumTypeH(a))) {
+        val (name, forwardDecl, typeDef) = TypeUtil.processDatatype(t, reporter)
+        ret = ret + t ~> DefaultTypeStore(name)
+        if (!CommonTypeUtil.isBaseTypeH(t)) {
+          if (forwardDecl.nonEmpty) {
+            forwardDefs = forwardDefs :+ forwardDecl.get
+          }
+          defs = defs :+ typeDef
         }
-        defs = defs :+ r._2
       }
 
       val content =
-        st"""#ifndef TYPES_H
-            |#define TYPES_H
+        st"""#ifndef ${Util.toPreprocessorName(TypeUtil.aadlTypesFilename)}
+            |#define ${Util.toPreprocessorName(TypeUtil.aadlTypesFilename)}
             |
             |#include <stdint.h>
             |
@@ -161,104 +140,244 @@ object MicrokitCodegen {
             |"""
 
       val outputdir = s"${options.camkesOutputDir.get}/${MicrokitCodegen.dirInclude}"
-      val path = s"$outputdir/types.h"
+      val path = s"$outputdir/${TypeUtil.aadlTypesFilename}"
       resources = resources :+ ResourceUtil.createResourceH(path, content, T, T)
+
+      return ret
     }
 
-    def processThread(t: AadlThread): (ProtectionDomain, Z) = {
-      assert(t.dispatchProtocol == Dispatch_Protocol.Periodic, "Only processing periodic threads currently")
+    def processConnections(typeStore: Map[AadlType, TypeStore]): ISZ[ConnectionStore] = {
+      var ret: ISZ[ConnectionStore] = ISZ()
 
+      for (srcThread <- symbolTable.getThreads()) {
+
+        for (srcPort <- srcThread.getPorts()
+             if srcPort.direction == Direction.Out && symbolTable.outConnections.contains(srcPort.path)) {
+          var srcPutContributions: ISZ[ST] = ISZ()
+
+          var outgoingPortType: Option[AadlType] = None()
+
+          var typeApiContributions: ISZ[TypeApiContributions] = ISZ()
+
+          var receiverContributions: Map[ISZ[String], ConnectionContributions] = Map.empty
+
+          var handledQueues: Set[Z] = Set.empty
+
+          for (outConnection <- symbolTable.getOutConnections(srcPort.path)) {
+            symbolTable.componentMap.get(outConnection.dst.component.name).get match {
+              case dstThread: AadlThread =>
+                val dstPort = symbolTable.featureMap.get(outConnection.dst.feature.get.name).get
+                val dstContributions: DefaultConnectionContributions = {
+                  assert(
+                    (srcPort.isInstanceOf[AadlDataPort] && dstPort.isInstanceOf[AadlDataPort]) ||
+                      (srcPort.isInstanceOf[AadlEventPort] && dstPort.isInstanceOf[AadlEventPort]) ||
+                      (srcPort.isInstanceOf[AadlEventDataPort] && dstPort.isInstanceOf[AadlEventDataPort]),
+                    s"Connected ports must be of the same type: ${srcPort.path} -> ${dstPort.path}")
+
+                  val isDataPort = srcPort.isInstanceOf[AadlDataPort]
+                  val isEventPort = srcPort.isInstanceOf[AadlEventPort]
+                  val isEventDataPort = srcPort.isInstanceOf[AadlEventDataPort]
+
+                  val dstQueueSize: Z = if (isDataPort) 1
+                  else dstPort.asInstanceOf[AadlFeatureEvent].queueSize
+
+                  val aadlType: AadlType = (srcPort, dstPort) match {
+                    case (_: AadlEventPort, _: AadlEventPort) =>
+                      TypeUtil.eventPortType
+                    case (srcPort: AadlEventDataPort, dstPort: AadlEventDataPort) =>
+                      assert(srcPort.aadlType == dstPort.aadlType, s"Currently expecting connected ports to have the same type ${outConnection.name}")
+                      srcPort.aadlType
+                    case (srcPort: AadlDataPort, dstPort: AadlDataPort) =>
+                      assert(srcPort.aadlType == dstPort.aadlType, s"Currently expecting connected ports to have the same type ${outConnection.name}")
+                      srcPort.aadlType
+                    case _ =>
+                      halt("Infeasible")
+                  }
+
+                  val typeName = typeStore.get(aadlType).get
+
+                  if (outgoingPortType.isEmpty) {
+                    outgoingPortType = Some(aadlType)
+                  } else {
+                    assert (outgoingPortType.get == aadlType)
+                  }
+
+                  if (!handledQueues.contains(dstQueueSize)) {
+                    typeApiContributions = typeApiContributions :+ TypeUtil.getTypeApiContributions(aadlType, typeName, dstQueueSize)
+
+                    val sharedMemVarName = QueueTemplate.getClientEnqueueSharedVarName(srcPort.identifier, dstQueueSize)
+                    srcPutContributions = srcPutContributions :+ QueueTemplate.getClientPutEntry(
+                      sharedMemoryVarName = sharedMemVarName,
+                      queueElementTypeName = typeName.typeName,
+                      queueSize = dstQueueSize,
+                      isEventPort = isEventPort)
+
+                    handledQueues = handledQueues + dstQueueSize
+                  }
+
+                  val sharedMemTypeName = QueueTemplate.getTypeQueueTypeName(typeName.typeName, dstQueueSize)
+
+                  val sharedVarName = QueueTemplate.getClientDequeueSharedVarName(dstPort.identifier, dstQueueSize)
+                  val recvQueueTypeName = QueueTemplate.getClientRecvQueueTypeName(typeName.typeName, dstQueueSize)
+                  val recvQueueVarName = QueueTemplate.getClientRecvQueueName(dstPort.identifier)
+
+                  var methodApiSigs: ISZ[ST] = ISZ()
+                  var methodApis: ISZ[ST] = ISZ()
+                  if (isEventPort || isEventDataPort) {
+                    methodApiSigs = methodApiSigs :+
+                      QueueTemplate.getClientIsEmptyMethodSig(dstPort.identifier) :+
+                      QueueTemplate.getClientGetterMethodPollSig(dstPort.identifier, typeName.typeName, isEventPort) :+
+                      QueueTemplate.getClientGetterMethodSig(dstPort.identifier, typeName.typeName, isEventPort)
+                    methodApis = methodApis :+
+                      QueueTemplate.getClientIsEmptyMethod(dstPort.identifier, typeName.typeName, dstQueueSize) :+
+                      QueueTemplate.getClientGetterMethodPoll(dstPort.identifier, typeName.typeName, dstQueueSize, isEventPort) :+
+                      QueueTemplate.getClientGetterMethod(dstPort.identifier, typeName.typeName, isEventPort)
+                  } else {
+                    methodApiSigs = methodApiSigs :+
+                      QueueTemplate.getClientGetterMethodSig(dstPort.identifier, typeName.typeName, F)
+                    methodApis = methodApis :+
+                      QueueTemplate.getClientDataGetterMethod(dstPort.identifier, typeName.typeName, dstQueueSize)
+                  }
+
+                  var userMethodSignatures: ISZ[ST] = ISZ()
+                  var userMethodDefaultImpls: ISZ[ST] = ISZ()
+                  var computeContributions: ISZ[ST] = ISZ()
+                  if (dstThread.isSporadic()) {
+                    userMethodSignatures = userMethodSignatures :+ QueueTemplate.getClientEventHandlerMethodSig(dstPort.identifier)
+
+                    if (isEventPort || isEventDataPort) {
+                      computeContributions = computeContributions :+ QueueTemplate.getClientSporadicComputeContributions(dstPort.identifier)
+                    }
+
+                    userMethodDefaultImpls = userMethodDefaultImpls :+ QueueTemplate.getClientSporadicDefaultImplContributions(dstPort.identifier)
+                  }
+
+                  DefaultConnectionContributions(
+                    portName = dstPort.path,
+                    portPriority = None(),
+                    headerImportContributions = ISZ(),
+                    implementationImportContributions = ISZ(),
+                    userMethodSignatures = userMethodSignatures,
+                    userMethodDefaultImpls = userMethodDefaultImpls,
+                    defineContributions = ISZ(),
+                    globalVarContributions = ISZ(
+                      (s"volatile $sharedMemTypeName", s"*$sharedVarName"),
+                      (recvQueueTypeName, recvQueueVarName)
+                    ),
+                    apiMethodSigs = methodApiSigs,
+                    apiMethods = methodApis,
+                    initContributions = ISZ(QueueTemplate.getClientRecvInitMethodCall(dstPort.identifier, typeName.typeName, dstQueueSize)),
+                    computeContributions = computeContributions,
+                    sharedMemoryMapping = ISZ(
+                      PortSharedMemoryRegion(
+                        outgoingPortPath = srcPort.path,
+                        queueSize = dstQueueSize,
+                        varAddr = sharedVarName,
+                        perms = ISZ(Perm.READ),
+                        dataSize = 4)
+                    )
+                  )
+                }
+                receiverContributions = receiverContributions + dstThread.path ~> dstContributions
+              case x =>
+                halt(s"Only handling thread to thread connections currently: $x")
+            }
+          }
+
+          val sPortType: String = typeStore.get(outgoingPortType.get).get.typeName
+          val isEventPort = outgoingPortType.get == TypeUtil.eventPortType
+
+          val apiMethodSig = QueueTemplate.getClientPutMethodSig(srcPort.identifier, sPortType, isEventPort)
+          val apiMethod = QueueTemplate.getClientPutMethod(srcPort.identifier, sPortType, srcPutContributions, isEventPort)
+
+          var sharedMemoryMappings: ISZ[SharedMemoryRegion] = ISZ()
+          var sharedMemoryVars: ISZ[(String, String)] = ISZ()
+          var initContributions: ISZ[ST] = ISZ()
+          for (queueSize <- handledQueues.elements) {
+            val queueType = QueueTemplate.getTypeQueueTypeName(sPortType, queueSize)
+            val varName = QueueTemplate.getClientEnqueueSharedVarName(srcPort.identifier, queueSize)
+            sharedMemoryVars = sharedMemoryVars :+ (s"volatile $queueType", s"*$varName")
+
+            initContributions = initContributions :+ QueueTemplate.getQueueInitMethod(varName, sPortType, queueSize)
+
+            sharedMemoryMappings = sharedMemoryMappings :+
+              PortSharedMemoryRegion(
+                outgoingPortPath = srcPort.path,
+                queueSize = queueSize,
+                varAddr = varName,
+                perms = ISZ(Perm.READ, Perm.WRITE),
+                dataSize = 4
+              )
+          }
+
+          ret = ret :+
+            DefaultConnectionStore(
+              systemContributions =
+                DefaultSystemContributions(
+                  sharedMemoryRegionContributions = sharedMemoryMappings,
+                  channelContributions = ISZ()),
+              typeApiContributions = typeApiContributions,
+              senderName = srcThread.path,
+              senderContributions =
+                DefaultConnectionContributions(
+                  portName = srcPort.path,
+                  portPriority = None(),
+                  headerImportContributions = ISZ(),
+                  implementationImportContributions = ISZ(),
+                  userMethodSignatures = ISZ(),
+                  userMethodDefaultImpls = ISZ(),
+                  defineContributions = ISZ(),
+                  globalVarContributions = sharedMemoryVars,
+                  apiMethodSigs = ISZ(apiMethodSig),
+                  apiMethods = ISZ(apiMethod),
+                  initContributions = initContributions,
+                  computeContributions = ISZ(),
+                  sharedMemoryMapping = sharedMemoryMappings),
+              receiverContributions = receiverContributions)
+        }
+      }
+      return ret
+    }
+
+    def processThread(t: AadlThread, connectionStore: ISZ[ConnectionStore]): (ProtectionDomain, Z) = {
       val threadId = getName(t.path)
       val threadMonId = st"${getName(t.path)}_MON"
-      var childMemMaps: ISZ[MemoryMap] = ISZ()
 
-      var vaddrs: ISZ[(ST, String)] = ISZ() // probably (vaddrName, type)
+      var headerImports: ISZ[String] = ISZ()
+      var userMethodSignatures: ISZ[ST] = ISZ()
+      var userMethodDefaultImpls: ISZ[ST] = ISZ()
+      var vaddrs: ISZ[(String, String)] = ISZ()
       var codeApiMethodSigs: ISZ[ST] = ISZ()
       var codeApiMethods: ISZ[ST] = ISZ()
-      var nextMemAddress = 10000000
-      for (port <- t.getPorts()) {
-        port match {
-          case d: AadlDataPort =>
-            val portType: AadlType = getType(d)
-            port.direction match {
-              case Direction.In =>
-                for (inConn <- symbolTable.getInConnections(port.path)) {
-                  val vaddrName = st"${port.identifier}"
-                  val region = createMemoryRegion(inConn.src.feature.get.name)
-                  childMemMaps = childMemMaps :+ MemoryMap(
-                    memoryRegion = region.name, vaddr = s"${MicrokitCodegen.hexFormat(nextMemAddress)}",
-                    perms = ISZ(Perm.READ), varAddr = vaddrName.render)
-                  nextMemAddress = nextMemAddress + 1000
-                  val portTypeName = TypeUtil.getTypeName(portType, reporter)
-                  vaddrs = vaddrs :+ (vaddrName, portTypeName)
-                  val methodSig: ST =
-                    if (TypeUtil.isPrimitive(d.aadlType)) st"$portTypeName get${ops.StringOps(port.identifier).firstToUpper}()"
-                    else st"void get${ops.StringOps(port.identifier).firstToUpper}($portTypeName *value)"
-                  codeApiMethodSigs = codeApiMethodSigs :+ methodSig
-                  val api: ST =
-                    (if (TypeUtil.isPrimitive(d.aadlType)) {
-                      st"""$methodSig {
-                          |  return *$vaddrName;
-                          |}"""
-                    } else if (CommonTypeUtil.isArrayTypeH(d.aadlType)) {
-                      val arr = d.aadlType.asInstanceOf[ArrayType]
-                      st"""$methodSig {
-                          |  // TODO need memmove or memcpy
-                          |  for (int i = 0; i < ${TypeUtil.getArrayDefinedSize(arr)}; i++){
-                          |    value[i] = $vaddrName[i];
-                          |  }
-                          |}"""
-                    }
-                    else {
-                      st"""$methodSig {
-                          |  *value = *$vaddrName;
-                          |}"""
-                    })
-                  codeApiMethods = codeApiMethods :+ api
-                }
-              case Direction.Out =>
-                val vaddrName = st"${port.identifier}"
-                val region = createMemoryRegion(port.feature.identifier.name)
-                childMemMaps = childMemMaps :+ MemoryMap(
-                  memoryRegion = region.name, vaddr = s"${MicrokitCodegen.hexFormat(nextMemAddress)}",
-                  perms = ISZ(Perm.READ, Perm.WRITE), varAddr = vaddrName.render)
-                nextMemAddress = nextMemAddress + 1000
-                val portTypeName = TypeUtil.getTypeName(portType, reporter)
-                vaddrs = vaddrs :+ (vaddrName, portTypeName)
-                val methodSig: ST =
-                  if (TypeUtil.isPrimitive(d.aadlType)) st"void put${ops.StringOps(port.identifier).firstToUpper}($portTypeName value)"
-                  else st"void put${ops.StringOps(port.identifier).firstToUpper}($portTypeName *value)"
-                codeApiMethodSigs = codeApiMethodSigs :+ methodSig
-                val api: ST =
-                  (if (TypeUtil.isPrimitive(d.aadlType)) {
-                    st"""$methodSig {
-                        |  *$vaddrName = value;
-                        |}"""
-                  } else if (CommonTypeUtil.isArrayTypeH(d.aadlType)) {
-                    val arr = d.aadlType.asInstanceOf[ArrayType]
-                    val bitsize: Z = arr.bitSize match {
-                      case Some(b) => b
-                      case _ =>
-                        reporter.error(None(), MicrokitCodegen.toolName, "Bit size must be specified")
-                        0
-                    }
-                    st"""$methodSig {
-                        |  // TODO need memmove or memcpy
-                        |  for (int i = 0; i < ${TypeUtil.getArrayDefinedSize(arr)}; i++){
-                        |    $vaddrName[i] = value[i];
-                        |  }
-                        |}"""
-                  } else {
-                    st"""$methodSig {
-                        |  *$vaddrName = *value;
-                        |}"""
-                  })
-                codeApiMethods = codeApiMethods :+ api
-              case _ =>
-                halt("Infeasible: codegen only supports in and out connections")
-            }
-          case _ =>
-            reporter.error(port.feature.identifier.pos, MicrokitCodegen.toolName, "Only currently handling data ports")
+      var initContributions: ISZ[ST] = ISZ()
+      var computeContributions: ISZ[ST] = ISZ()
+      var nextMemAddress = 262144
+      var sharedMemoryRegions: ISZ[SharedMemoryRegion] = ISZ()
+
+      for (entry <- connectionStore) {
+
+        if (entry.senderName == t.path) {
+          headerImports = headerImports ++ entry.senderContributions.headerImportContributions
+          userMethodSignatures = userMethodSignatures ++ entry.senderContributions.userMethodSignatures
+          userMethodDefaultImpls = userMethodDefaultImpls ++ entry.senderContributions.userMethodDefaultImpls
+          codeApiMethodSigs = codeApiMethodSigs ++ entry.senderContributions.apiMethodSigs
+          codeApiMethods = codeApiMethods ++ entry.senderContributions.apiMethods
+          vaddrs = vaddrs ++ entry.senderContributions.globalVarContributions
+          initContributions = initContributions ++ entry.senderContributions.initContributions
+          computeContributions = computeContributions ++ entry.senderContributions.computeContributions
+          sharedMemoryRegions = sharedMemoryRegions ++ entry.senderContributions.sharedMemoryMapping
+        }
+        if (entry.receiverContributions.contains(t.path)) {
+          val c = entry.receiverContributions.get(t.path).get
+          headerImports = headerImports ++ c.headerImportContributions
+          userMethodSignatures = userMethodSignatures ++ c.userMethodSignatures
+          userMethodDefaultImpls = userMethodDefaultImpls ++ c.userMethodDefaultImpls
+          codeApiMethodSigs = codeApiMethodSigs ++ c.apiMethodSigs
+          codeApiMethods = codeApiMethods ++ c.apiMethods
+          vaddrs = vaddrs ++ c.globalVarContributions
+          initContributions = initContributions ++ c.initContributions
+          computeContributions = computeContributions ++ c.computeContributions
+          sharedMemoryRegions = sharedMemoryRegions ++ c.sharedMemoryMapping
         }
       }
 
@@ -279,7 +398,7 @@ object MicrokitCodegen {
 
       val computeExecutionTime: Z = t.getComputeExecutionTime() match {
         case Some((l, h)) =>
-          assert (l <= h, s"low must be <= high: $l <= $h")
+          assert(l <= h, s"low must be <= high: $l <= $h")
           h
         case _ => 100
       }
@@ -287,8 +406,29 @@ object MicrokitCodegen {
       xmlSchedulingDomains = xmlSchedulingDomains :+
         SchedulingDomain(name = schedulingDomain, length = computeExecutionTime)
 
-      val child = ProtectionDomain(name = threadId.render, schedulingDomain = Some(schedulingDomain), id = Some(s"1"),
-        stackSize = None(), memMaps = childMemMaps, programImage = mk.elfName, children = ISZ())
+      var childMemMaps: ISZ[MemoryMap] = ISZ()
+      for (r <- sharedMemoryRegions) {
+        r match {
+          case p: PortSharedMemoryRegion =>
+
+            childMemMaps = childMemMaps :+ MemoryMap(
+              memoryRegion = p.regionName,
+              vaddr = nextMemAddress,
+              perms = p.perms,
+              varAddr = p.varAddr)
+            nextMemAddress = nextMemAddress + p.dataSize
+          case _ => halt("")
+        }
+      }
+
+      val child = ProtectionDomain(
+        name = threadId.render,
+        schedulingDomain = Some(schedulingDomain),
+        id = Some(s"1"),
+        stackSize = None(),
+        memMaps = childMemMaps,
+        programImage = mk.elfName,
+        children = ISZ())
 
       xmlProtectionDomains = xmlProtectionDomains :+
         ProtectionDomain(
@@ -342,17 +482,30 @@ object MicrokitCodegen {
       val monImplPath = s"${options.camkesOutputDir.get}/${mk.relativePathSrcDir}/${mk.monImplFilename}"
       resources = resources :+ ResourceUtil.createResource(monImplPath, monImplSource, T)
 
-
-
-      val vaddrEntries: ISZ[ST] = for (v <- vaddrs) yield st"volatile ${v._2} *${v._1};"
-
       val initializeMethodName = st"${threadId}_initialize"
-      val timeTriggeredMethodName = st"${threadId}_timeTriggered"
+      userMethodSignatures = st"void ${initializeMethodName}(void)" +: userMethodSignatures
+
+      userMethodDefaultImpls =
+        st"""void $initializeMethodName(void) {
+            |  // implement me
+            |}""" +: userMethodDefaultImpls
+
+      if (t.isPeriodic()) {
+        val timeTriggeredMethodName = st"${threadId}_timeTriggered"
+        userMethodSignatures = userMethodSignatures :+ st"void ${timeTriggeredMethodName}(void)"
+        computeContributions = computeContributions :+ st"${timeTriggeredMethodName}();"
+        userMethodDefaultImpls = userMethodDefaultImpls :+
+          st"""void $timeTriggeredMethodName(void) {
+              |  // implement me
+              |}"""
+      }
+
+      val vaddrEntries: ISZ[ST] = for (v <- vaddrs) yield st"${v._1} ${v._2};"
+
       val implSource =
         st"""#include "$headerFileName"
             |
-            |void ${initializeMethodName}(void);
-            |void ${timeTriggeredMethodName}(void);
+            |${(for (u <- userMethodSignatures) yield st"$u;", "\n")}
             |
             |${(vaddrEntries, "\n")}
             |
@@ -361,13 +514,15 @@ object MicrokitCodegen {
             |${(codeApiMethods, "\n\n")}
             |
             |void init(void) {
+            |  ${(initContributions, "\n\n")}
+            |
             |  $initializeMethodName();
             |}
             |
             |void notified(microkit_channel channel) {
             |  switch (channel) {
             |    case PORT_FROM_MON:
-            |      ${timeTriggeredMethodName}();
+            |      ${(computeContributions, "\n\n")}
             |      break;
             |  }
             |}
@@ -379,24 +534,18 @@ object MicrokitCodegen {
       val userImplSource =
         st"""#include "$headerFileName"
             |
-            |void ${initializeMethodName}(void) {
-            |  // add initialization code here
-            |  printf("%s: Init\n", microkit_name);
-            |}
-            |
-            |void ${timeTriggeredMethodName}() {
-            |  // add compute phase code here
-            |  printf("%s: timeTriggered\n", microkit_name);
-            |}
+            |${(userMethodDefaultImpls, "\n\n")}
             |"""
       val userImplPath = s"${options.camkesOutputDir.get}/${mk.relativePathSrcDir}/${mk.cUserImplFilename}"
       resources = resources :+ ResourceUtil.createResource(userImplPath, userImplSource, F)
 
+      val himports: ISZ[ST] = for (h <- headerImports) yield st"#include <$h>"
       val headerSource =
         st"""#include <printf.h>
             |#include <stdint.h>
             |#include <microkit.h>
-            |#include <types.h>
+            |#include <${TypeUtil.allTypesFilename}>
+            |${(himports, "\n")}
             |
             |${(codeApiMethodSigs, ";\n")};
             |"""
@@ -404,7 +553,8 @@ object MicrokitCodegen {
       resources = resources :+ ResourceUtil.createResource(headerPath, headerSource, T)
 
       return (child, computeExecutionTime)
-    }
+    } // end processThread
+
 
     if (!Linter.lint(model, options, types, symbolTable, reporter)) {
       return CodeGenResults(ISZ(), ISZ())
@@ -421,17 +571,58 @@ object MicrokitCodegen {
       case _ => halt("Infeasible") // linter should have ensured bound processor has frame period
     }
 
-    processTypes()
+    var buildEntries: ISZ[ST] = ISZ()
+
+    val typeStore = processTypes()
+
+    var typeHeaderFilenemes: ISZ[String] = ISZ(TypeUtil.aadlTypesFilename)
+    var typeImplFilenames: ISZ[String] = ISZ()
+    var objectNames: ISZ[String] = ISZ()
+
+    val baseIncludePath = s"${options.camkesOutputDir.get}/${MicrokitCodegen.dirInclude}"
+
+    val connectionStore = processConnections(typeStore)
+    for (entry <- connectionStore) {
+      val srcPath = s"${options.camkesOutputDir.get}/${MicrokitCodegen.dirSrc}"
+
+      for (tc <- entry.typeApiContributions) {
+        typeHeaderFilenemes = typeHeaderFilenemes :+ tc.headerFilename
+        typeImplFilenames = typeImplFilenames :+ tc.implementationFilename
+        objectNames = objectNames :+ tc.objectName
+        buildEntries = buildEntries :+ tc.buildEntry
+
+        val headerPath = s"$baseIncludePath/${tc.headerFilename}"
+        resources = resources :+ ResourceUtil.createResourceH(
+          path = headerPath, content = tc.header, overwrite = T, isDatatype = T)
+
+        val implPath = s"$srcPath/${tc.implementationFilename}"
+        resources = resources :+ ResourceUtil.createResourceH(
+          path = implPath, content = tc.implementation, overwrite = T, isDatatype = T)
+      }
+    }
+
+    val eventCounterPath = s"$baseIncludePath/${TypeUtil.eventCounterFilename}"
+    resources = resources :+ ResourceUtil.createResourceH(
+      path = eventCounterPath, content = TypeUtil.eventCounterContent, overwrite = T, isDatatype = T)
+
+    val allTypesContent =
+      st"""#ifndef ${Util.toPreprocessorName(TypeUtil.allTypesFilename)}
+          |#define ${Util.toPreprocessorName(TypeUtil.allTypesFilename)}
+          |
+          |${(for (i <- typeHeaderFilenemes) yield st"#include <$i>", "\n")}
+          |
+          |#endif"""
+    val allTypesPath = s"$baseIncludePath/${TypeUtil.allTypesFilename}"
+    resources = resources :+ ResourceUtil.createResourceH(
+      path = allTypesPath, content = allTypesContent, overwrite = T, isDatatype = T)
 
     var usedBudget: Z = 0
     for (t <- symbolTable.getThreads()) {
-      val results = processThread(t)
+      val results = processThread(t, connectionStore)
       usedBudget = usedBudget + results._2
     }
 
     addPacerComponent()
-
-
 
     val pacerSlot = SchedulingDomain(name = MicrokitCodegen.pacerSchedulingDomain, length = MicrokitCodegen.pacerComputeExecutionTime)
     val currentScheduleSize = xmlSchedulingDomains.size
@@ -448,10 +639,16 @@ object MicrokitCodegen {
     }
     xmlScheds = xmlScheds :+ SchedulingDomain(name = "domain0", length = framePeriod - usedBudget)
 
+    var memoryRegions: ISZ[MemoryRegion] = ISZ()
+    for (e <- connectionStore;
+         s <- e.systemContributions.sharedMemoryRegionContributions) {
+      memoryRegions = memoryRegions :+ MemoryRegion(name = s.regionName, size = s.dataSize)
+    }
+
     val sd = SystemDescription(
       schedulingDomains = xmlScheds,
       protectionDomains = xmlProtectionDomains,
-      memoryRegions = xmlMemoryRegions.values,
+      memoryRegions = memoryRegions,
       channels = xmlChannels)
 
     val xmlPath = s"${options.camkesOutputDir.get}/${MicrokitCodegen.microkitSystemXmlFilename}"
@@ -460,8 +657,6 @@ object MicrokitCodegen {
     val sysDot = sd.toDot
     val dotPath = s"${options.camkesOutputDir.get}/microkit.dot"
     resources = resources :+ ResourceUtil.createResource(path = dotPath, content = sysDot, overwrite = T)
-
-    val TAB: String = "\t"
 
     val makefileContents =
       st"""ifeq ($$(strip $$(MICROKIT_SDK)),)
@@ -499,8 +694,7 @@ object MicrokitCodegen {
     val makefilePath = s"${options.camkesOutputDir.get}/Makefile"
     resources = resources :+ ResourceUtil.createResource(makefilePath, makefileContents, T)
 
-    val objs: ISZ[ST] = for (mk <- makefileContainers) yield mk.OBJSEntry
-    val buildEntries: ISZ[ST] = for (mk <- makefileContainers) yield mk.buildEntry
+    buildEntries = buildEntries ++ (for (mk <- makefileContainers) yield mk.buildEntry)
 
     var elfFiles: ISZ[String] = ISZ()
     var oFiles: ISZ[String] = ISZ()
@@ -550,8 +744,7 @@ object MicrokitCodegen {
           |LIBS := --start-group -lmicrokit -Tmicrokit.ld --end-group
           |
           |
-          |PRINTF_OBJS := printf.o util.o
-          |${(objs, "\n")}
+          |${TypeUtil.make_TYPE_OBJS} := printf.o util.o ${(objectNames, " ")}
           |
           |SYSTEM_FILE := $${TOP}/${MicrokitCodegen.microkitSystemXmlFilename}
           |

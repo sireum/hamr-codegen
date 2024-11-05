@@ -2,6 +2,7 @@
 package org.sireum.hamr.codegen.microkit.util
 
 import org.sireum._
+import org.sireum.hamr.codegen.microkit.types.TypeUtil
 
 @datatype class MakefileContainer(val resourceSuffix: String,
                                   val relativePath: Option[String],
@@ -50,9 +51,9 @@ import org.sireum._
   @strictpure def relativePathIncludeDir: String = if (relativePath.nonEmpty) s"${relativePath.get}/include" else ""
 
   @pure def OBJSEntry: ST = {
-    var ret = st"${ops.StringOps(resourceSuffix).toUpper}_OBJS := $$(PRINTF_OBJS) $objName"
+    var ret = st"${ops.StringOps(resourceSuffix).toUpper}_OBJS := $$(${TypeUtil.make_TYPE_OBJS}) $objName"
     if (hasUserContent) {
-      ret = st"""${ops.StringOps(s"${resourceSuffix}_MON").toUpper}_OBJS := $$(PRINTF_OBJS) $monObjName
+      ret = st"""${ops.StringOps(s"${resourceSuffix}_MON").toUpper}_OBJS := $$(${TypeUtil.make_TYPE_OBJS}) $monObjName
                 |$ret"""
     }
     return ret
@@ -85,15 +86,15 @@ import org.sireum._
     val TAB: String = "\t"
     if (hasUserContent) {
       val ret =
-        st"""$monElfName: $$(PRINTF_OBJS) $monObjName
+        st"""$monElfName: $$(${TypeUtil.make_TYPE_OBJS}) $monObjName
             |${TAB}$$(LD) $$(LDFLAGS) $$^ $$(LIBS) -o $$@
             |
-            |$elfName: $$(PRINTF_OBJS) $userObjName $objName
+            |$elfName: $$(${TypeUtil.make_TYPE_OBJS}) $userObjName $objName
             |${TAB}$$(LD) $$(LDFLAGS) $$^ $$(LIBS) -o $$@"""
       return ret
     } else {
       val ret =
-        st"""$elfName: $$(PRINTF_OBJS) $objName
+        st"""$elfName: $$(${TypeUtil.make_TYPE_OBJS}) $objName
             |${TAB}$$(LD) $$(LDFLAGS) $$^ $$(LIBS) -o $$@"""
       return ret
     }

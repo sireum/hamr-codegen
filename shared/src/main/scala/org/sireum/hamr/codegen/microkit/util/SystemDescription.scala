@@ -2,6 +2,7 @@
 package org.sireum.hamr.codegen.microkit.util
 
 import org.sireum._
+import org.sireum.hamr.codegen.microkit.util.Util.{hexFormat, toHex}
 
 @datatype class SystemDescription (val schedulingDomains: ISZ[SchedulingDomain],
                                    val protectionDomains: ISZ[ProtectionDomain],
@@ -126,8 +127,8 @@ import org.sireum._
 }
 
 @datatype class MemoryRegion (name: String,
-                              size: String) {
-  @strictpure def prettyST: ST = st"""<memory_region name="$name" size="$size" />"""
+                              size: Z) {
+  @strictpure def prettyST: ST = st"""<memory_region name="$name" size="${hexFormat(toHex(size * 1024))}" />"""
 
   @strictpure def toDot: ST = st"$name"
 }
@@ -148,12 +149,16 @@ import org.sireum._
 }
 
 @datatype class MemoryMap (val memoryRegion: String,
-                           val vaddr: String,
+                           val vaddr: Z,
                            val perms: ISZ[Perm.Type],
                            val varAddr: String) {
   @pure def prettyST: ST = {
     val stPerms = st"""${(for (p <- perms) yield (if (p == Perm.READ) "r" else "w"), "")}"""
-    return st"""<map mr="$memoryRegion" vaddr="$vaddr" perms="$stPerms" setvar_vaddr="$varAddr" />"""
+    return (
+    st"""<map mr="$memoryRegion"
+        |     vaddr="${hexFormat(toHex(vaddr * 1024))}"
+        |     perms="$stPerms"
+        |     setvar_vaddr="$varAddr" />""")
   }
 
   @pure def toDotConnection: ST = {

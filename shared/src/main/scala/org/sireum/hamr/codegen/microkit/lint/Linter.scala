@@ -51,7 +51,7 @@ object Linter {
           }
         //case Dispatch_Protocol.Sporadic =>
         case s =>
-          reporter.error(t.component.identifier.pos, MicrokitCodegen.toolName, s"Dispatch protocol ${s.name} is not currently supported.")
+          //reporter.error(t.component.identifier.pos, MicrokitCodegen.toolName, s"Dispatch protocol ${s.name} is not currently supported.")
       }
 
       t.period match {
