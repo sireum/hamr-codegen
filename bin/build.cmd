@@ -378,12 +378,12 @@ def installOsateGumbo(): B = {
     val a = files.contains(hamrJar)
     val b = files.contains(gumboJar)
     if (!a) {
-      println(s"Didn't find $a")
-      println(files)
+      println(s"Didn't find $hamrJar")
+      println(st"${(files.s, "\n")}".render)
     }
     if (!b) {
-      println(s"Didn't find $b")
-      println(files)
+      println(s"Didn't find $gumboJar")
+      println(st"${(files.s, "\n")}".render)
     }
     //alreadyInstalled = files.contains(hamrJar) && files.contains(gumboJar)
     alreadyInstalled = a & b
