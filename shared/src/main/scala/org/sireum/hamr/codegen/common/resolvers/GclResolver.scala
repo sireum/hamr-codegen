@@ -5,6 +5,7 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.CommonUtil.IdPath
 import org.sireum.hamr.codegen.common.symbols._
+import org.sireum.hamr.codegen.common.types.TypeUtil.EmptyType
 import org.sireum.hamr.codegen.common.types._
 import org.sireum.hamr.codegen.common.util.{GclUtil, NameUtil}
 import org.sireum.hamr.ir._
@@ -132,7 +133,8 @@ object GclResolver {
             return Some(cands(0))
           }
         case x =>
-          halt(s"todo ${x}")
+          reporter.error(optPos, GclResolver.toolName, "Was expecting either a Thread or Data component")
+          return None()
       }
     }
 
@@ -162,7 +164,8 @@ object GclResolver {
             case e: AST.ResolvedInfo.Method => e.owner :+ e.id
             case e: AST.ResolvedInfo.Object => e.name
             case x =>
-              halt(s"Need to handle $x")
+              reporter.error(o.fullPosOpt, GclResolver.toolName, s"Wasn't expecting $x")
+              ISZ()
           }
           return lookup(o.id.value, fqName, o.resOpt, o.fullPosOpt)
         case _ => reporter.error(o.fullPosOpt, toolName, s"Ident '$o' did not resolve")
@@ -536,7 +539,8 @@ object GclResolver {
     aadlTypes.typeMap.get(s) match {
       case Some(t) => return t
       case _ =>
-        halt(s"Unexpected: couldn't resolve an AADL type for $s")
+        reporter.error(posOpt, toolName, s"$s did not resolve to an AADL type")
+        return EmptyType
     }
   }
 }
@@ -861,7 +865,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                     if (!glcIntegSpec.isInstanceOf[GclAssume]) {
                       reporter.error(glcIntegSpec.exp.fullPosOpt, GclResolver.toolName, s"Integration contracts for incoming ports must be Assume statements")
                     }
-                  case x => halt(s"Other phase rejects this case: ${x}")
+                  case x =>
+                    reporter.error(resolvedExpr.fullPosOpt, GclResolver.toolName, s"Previous phase should have rejected this case: ${x}")
                 }
               }
             }
@@ -905,7 +910,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                     rexprs = rexprs + toKey(e) ~> rexp2.get
                   }
                 }
-              case _ => halt("TODO")
+              case _ =>
+                reporter.error(e.fullPosOpt, GclResolver.toolName, s"Unable to resolve $e")
             }
           case _ =>
             reporter.error(posOpt, GclResolver.toolName, s"Expecting from/to expressions to be Idents, found ${exp}")
@@ -941,7 +947,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                       }
                     }
                   }
-                case _ => halt("TODO")
+                case _ => reporter.error(modifies.fullPosOpt, GclResolver.toolName, s"Unable to resolve $e")
               }
             case _ =>
               reporter.error(modifies.fullPosOpt, GclResolver.toolName, s"Modifies expressions must be the simple name of an outgoing port or a state variable, found ${modifies}")
@@ -1086,7 +1092,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                     case x => reporter.error(handler.port.fullPosOpt, GclResolver.toolName, s"Handler should resolve to an AADL port but received $x")
                   }
                 }
-              case _ => halt(s"TODO: ${handler.port} failed to type check")
+              case _ => reporter.error(handler.posOpt, GclResolver.toolName, s"Unable to resolve ${handler.port}")
             }
 
             processModifiesClause(handler.modifies)
@@ -1211,7 +1217,9 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       val ret: AST.Typed = value match {
         case atn: AST.Type.Named =>
           AST.Typed.Name(ids = atn.name.ids.map((m: AST.Id) => m.value), args = ISZ())
-        case _ => halt(s"Not yet ${value}")
+        case x =>
+          reporter.error(value.posOpt, GclResolver.toolName, s"Expected a Type.Named but received $x")
+          AST.Typed.Name(ids = ISZ(), args = ISZ())
       }
       return ret
     }
@@ -1239,7 +1247,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 AST.Name(ids = te.name.map((s: String) => AST.Id(value = s, attr = AST.Attr(None()))), attr = AST.Attr(None()))
 
               case x =>
-                halt(s"TODO ${x}")
+                reporter.error(typeInfo.posOpt, GclResolver.toolName, s"Wasn't expecting a $x")
+                AST.Name(ids = ISZ(), attr = AST.Attr(None()))
             }
 
             val typedName = AST.Typed.Name(ids = name.ids.map((i: AST.Id) => i.value), args = ISZ())
@@ -1249,7 +1258,9 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               typeArgs = ISZ(),
               attr = AST.TypedAttr(posOpt = None(), typedOpt = Some(typedName))
             )
-          case _ => halt(s"Not expected ${value}")
+          case x =>
+            reporter.error(value.posOpt, GclResolver.toolName, s"Wasn't expecting $x")
+            AST.Type.Named(name = AST.Name(ids = ISZ(), attr = AST.Attr(None())), typeArgs = ISZ(), attr = AST.TypedAttr(None(), None()))
         }
       }
       return ret
@@ -1258,7 +1269,9 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
     def typeToTyped(t: AST.Type): AST.Typed = {
       val ret: AST.Typed = t match {
         case atn: AST.Type.Named => AST.Typed.Name(ids = atn.name.ids.map((i: AST.Id) => i.value), args = ISZ())
-        case _ => halt(s"Not yet ${t}")
+        case x =>
+          reporter.error(t.posOpt, GclResolver.toolName, s"Wasn't expecting $x")
+          AST.Typed.Name(ids = ISZ(), args = ISZ())
       }
       return ret
     }
@@ -1275,7 +1288,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         case tadt: TypeInfo.Adt => Some(tadt.tpe)
         case te: TypeInfo.Enum => Some(AST.Typed.Name(ids = te.name, args = ISZ()))
         case x =>
-          halt(s"TODO ${x}")
+          reporter.error(aadlType.container.get.identifier.pos, GclResolver.toolName, s"Wasn't expecting $x")
+          None()
       }
       return typedOpt
     }
@@ -1414,7 +1428,9 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               case "Character" => "C"
               case "String" => "String"
 
-              case x => halt(s"Fix ${x}")
+              case x =>
+                reporter.error(b.container.get.identifier.pos, GclResolver.toolName, s"Wasn't expecting $simpleName")
+                "String"
             }
             val tipe: AST.Type = AST.Type.Named(
               name = AST.Name(
