@@ -375,7 +375,18 @@ def installOsateGumbo(): B = {
   var alreadyInstalled = F
   if (pluginsDir.exists) {
     val files = ops.ISZOps(pluginsDir.list.map((p: Os.Path) => p.name))
-    alreadyInstalled = files.contains(hamrJar) && files.contains(gumboJar)
+    val a = files.contains(hamrJar)
+    val b = files.contains(gumboJar)
+    if (!a) {
+      println(s"Didn't find $a")
+      println(files)
+    }
+    if (!b) {
+      println(s"Didn't find $b")
+      println(files)
+    }
+    //alreadyInstalled = files.contains(hamrJar) && files.contains(gumboJar)
+    alreadyInstalled = a & b
   }
 
   if (alreadyInstalled) {
