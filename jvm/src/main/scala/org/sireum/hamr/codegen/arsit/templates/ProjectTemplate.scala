@@ -187,7 +187,6 @@ object ProjectTemplate {
         |org.sireum%inspector-gui%=${inspectorVersion}
         |org.sireum%inspector-services-jvm%=${inspectorVersion}
         |
-        |org.sireum.kekinian%%hamr-vision%=${kekinianVersion}
         |
         |# remove the following entries if you want to use the versions
         |# that ship with sireum (i.e. $$SIREUM_HOME/bin/sireum --version)
@@ -196,6 +195,8 @@ object ProjectTemplate {
         |org.sireum%%scalac-plugin%=${sireumScalacVersion}
         |
         |org.sireum.kekinian%%library%=${kekinianVersion}
+        |
+        |org.sireum.kekinian%%hamr-vision%=${kekinianVersion}
         |
         |org.scala-lang%scala-library%=${scalaVersion}
         |org.scalatest%%scalatest%%=${scalaTestVersion}
