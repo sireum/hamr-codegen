@@ -24,25 +24,25 @@ object GeneratorPy {
 
   def genPyLaunchFileName(compNameS: String): String = {
     // create launch file name
-    val nodeNameT: String = s"$compNameS$py_launch_file_name_suffix"
+    val nodeNameT: String = s"${compNameS}${py_launch_file_name_suffix}"
     return nodeNameT
   }
 
   def genPyPackageName(packageNameS: String): String = {
     // create target package name
-    val packageNameT: String = s"$packageNameS$py_package_name_suffix"
+    val packageNameT: String = s"${packageNameS}${py_package_name_suffix}"
     return packageNameT
   }
 
   def genPyNodeSourceName(compNameS: String): String = {
     // create target node name
-    val nodeNameT: String = s"$compNameS$py_src_node_name_suffix"
+    val nodeNameT: String = s"${compNameS}${py_src_node_name_suffix}"
     return nodeNameT
   }
 
   def genExecutableFileName(componentNameS: String): String = {
     // create target executable name
-    val executableFileNameT: String = s"$componentNameS$node_executable_filename_suffix"
+    val executableFileNameT: String = s"${componentNameS}${node_executable_filename_suffix}"
     return executableFileNameT
   }
 
@@ -82,8 +82,8 @@ object GeneratorPy {
     val node_source_file_nameT = genPyNodeSourceName(componentName)
     val py_package_nameT = genPyPackageName(modelName)
     val node_executable_file_nameT = genExecutableFileName(componentName)
-    val entryPointDecl: ST
-    = st"\"$node_executable_file_nameT = $py_package_nameT.$node_source_file_nameT:$py_src_node_entry_point_name\""
+    val entryPointDecl:ST
+    = st"\"${node_executable_file_nameT} = ${py_package_nameT}.${node_source_file_nameT}:${py_src_node_entry_point_name}\""
     return entryPointDecl
   }
 
@@ -102,11 +102,11 @@ object GeneratorPy {
     }
 
     val setupFileBody =
-      st"""# $fileName   in  src/$top_level_package_nameT
+      st"""# ${fileName}   in  src/${top_level_package_nameT}
           |
           |from setuptools import find_packages, setup
           |
-          |package_name = '$top_level_package_nameT'
+          |package_name = '${top_level_package_nameT}'
           |
           |setup(
           |    name=package_name,
@@ -141,7 +141,7 @@ object GeneratorPy {
     var requirements: ISZ[ST] = IS()
 
     for (pkg <- packages) {
-      requirements = requirements :+ st"<depend>$pkg</depend>"
+      requirements = requirements :+ st"<depend>${pkg}</depend>"
     }
 
     return requirements
@@ -201,7 +201,7 @@ object GeneratorPy {
           |
           |    <buildtool_depend>ament_cmake</buildtool_depend>
           |
-          |    <exec_depend>$top_level_package_nameT</exec_depend>
+          |    <exec_depend>${top_level_package_nameT}</exec_depend>
           |
           |    <test_depend>ament_lint_auto</test_depend>
           |    <test_depend>ament_lint_common</test_depend>
@@ -337,7 +337,7 @@ object GeneratorPy {
     // Int32 is a placeholder message value
     val subscriptionMessageHeader: ST =
       st"""self.get_${portName}()
-         |  MsgType msg = applicationIn_$portName.front()
+         |  MsgType msg = applicationIn_${portName}.front()
          |  return (Int32)msg
          |"""
     return subscriptionMessageHeader
