@@ -2315,8 +2315,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                   reporter.error(None(), toolName, s"Could not resolve name for GCL Subclause: ${qualifiedName}")
                   return None()
               }
-            case _ =>
-              reporter.error(None(), toolName, s"Expecting AadlData or AadlThread but passed ${component}")
+            case c =>
+              reporter.error(c.component.identifier.pos, toolName, s"GUMBO subclause contracts can only be attached to threads and data components")
               return None()
           }
 
