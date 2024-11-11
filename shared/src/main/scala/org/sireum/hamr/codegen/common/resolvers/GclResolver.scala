@@ -1224,14 +1224,14 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       return ret
     }
 
-    def resolveType(value: AST.Type): AST.Type = {
+    def resolveType(value: AST.Type, posOpt: Option[Position]): AST.Type = {
       val ret: AST.Type = {
         value match {
           case atn: AST.Type.Named =>
             val fqn = atn.name.ids.map((i: AST.Id) => i.value)
             val s = st"${(fqn, "::")}".render
 
-            val aadlType: AadlType = getAadlType(s, aadlTypes, value.posOpt, reporter)
+            val aadlType: AadlType = getAadlType(s, aadlTypes, if(posOpt.nonEmpty) posOpt else value.posOpt, reporter)
             val typeInfo = buildTypeInfo(aadlType)
 
             val name: AST.Name = typeInfo match {
@@ -1594,11 +1594,11 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       val qualifiedMethodName = adtQualifiedName :+ methodName
 
       val resolvedParams: ISZ[AST.Param] = m.sig.params.map((p: AST.Param) => {
-        val resolvedTipe = resolveType(p.tipe)
+        val resolvedTipe = resolveType(p.tipe, p.id.attr.posOpt)
         p(tipe = resolvedTipe)
       })
 
-      val resolvedReturnType: AST.Type = resolveType(m.sig.returnType)
+      val resolvedReturnType: AST.Type = resolveType(m.sig.returnType, m.sig.id.attr.posOpt)
 
       val resolvedReturnTyped: AST.Typed = fromTypetoTyped(resolvedReturnType)
 
