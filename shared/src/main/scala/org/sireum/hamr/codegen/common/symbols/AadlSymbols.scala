@@ -294,6 +294,10 @@ import org.sireum.hamr.ir._
     }
     return ret
   }
+
+  def stackSizeInBytes(): Option[Z] = {
+    return PropertyUtil.getStackSizeInBytes(component)
+  }
 }
 
 @datatype class AadlThread(val component: ir.Component,

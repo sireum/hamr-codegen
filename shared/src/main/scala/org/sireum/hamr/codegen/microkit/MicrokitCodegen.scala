@@ -68,7 +68,7 @@ object MicrokitCodegen {
           name = MicrokitCodegen.pacerName,
           schedulingDomain = Some("domain1"),
           id = None(),
-          stackSize = None(),
+          stackSizeInKiBytes = None(),
           memMaps = ISZ(),
           programImage = s"${MicrokitCodegen.pacerName}.elf",
           children = ISZ())
@@ -274,7 +274,7 @@ object MicrokitCodegen {
                         queueSize = dstQueueSize,
                         varAddr = sharedVarName,
                         perms = ISZ(Perm.READ),
-                        dataSize = 4)
+                        dataSizeInKiBytes = Util.defaultPageSizeInKiBytes)
                     )
                   )
                 }
@@ -306,7 +306,7 @@ object MicrokitCodegen {
                 queueSize = queueSize,
                 varAddr = varName,
                 perms = ISZ(Perm.READ, Perm.WRITE),
-                dataSize = 4
+                dataSizeInKiBytes = Util.defaultPageSizeInKiBytes
               )
           }
 
@@ -351,7 +351,7 @@ object MicrokitCodegen {
       var codeApiMethods: ISZ[ST] = ISZ()
       var initContributions: ISZ[ST] = ISZ()
       var computeContributions: ISZ[ST] = ISZ()
-      var nextMemAddress = 262144
+      var nextMemAddressInKiBytes = 262144
       var sharedMemoryRegions: ISZ[SharedMemoryRegion] = ISZ()
 
       for (entry <- connectionStore) {
@@ -413,27 +413,37 @@ object MicrokitCodegen {
 
             childMemMaps = childMemMaps :+ MemoryMap(
               memoryRegion = p.regionName,
-              vaddr = nextMemAddress,
+              vaddrInKiBytes = nextMemAddressInKiBytes,
               perms = p.perms,
               varAddr = p.varAddr)
-            nextMemAddress = nextMemAddress + p.dataSize
+            nextMemAddressInKiBytes = nextMemAddressInKiBytes + p.dataSizeInKiBytes
           case _ => halt("")
         }
+      }
+
+      val stackSizeInKiBytes: Option[Z] = t.stackSizeInBytes() match {
+        case Some(bytes) => Some(Util.bytesToKiBytes(bytes))
+        case _ => None()
       }
 
       val child = ProtectionDomain(
         name = threadId.render,
         schedulingDomain = Some(schedulingDomain),
         id = Some(s"1"),
-        stackSize = None(),
+        stackSizeInKiBytes = stackSizeInKiBytes,
         memMaps = childMemMaps,
         programImage = mk.elfName,
         children = ISZ())
 
       xmlProtectionDomains = xmlProtectionDomains :+
         ProtectionDomain(
-          name = threadMonId.render, schedulingDomain = Some(schedulingDomain), id = None(), stackSize = None(),
-          memMaps = ISZ(), programImage = mk.monElfName, children = ISZ(child))
+          name = threadMonId.render,
+          schedulingDomain = Some(schedulingDomain),
+          id = None(),
+          stackSizeInKiBytes = None(),
+          memMaps = ISZ(),
+          programImage = mk.monElfName,
+          children = ISZ(child))
 
       val pacerChannelId = getNextPacerChannelId
 
@@ -642,7 +652,7 @@ object MicrokitCodegen {
     var memoryRegions: ISZ[MemoryRegion] = ISZ()
     for (e <- connectionStore;
          s <- e.systemContributions.sharedMemoryRegionContributions) {
-      memoryRegions = memoryRegions :+ MemoryRegion(name = s.regionName, size = s.dataSize)
+      memoryRegions = memoryRegions :+ MemoryRegion(name = s.regionName, sizeInKiBytes = s.dataSizeInKiBytes)
     }
 
     val sd = SystemDescription(

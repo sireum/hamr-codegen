@@ -5,13 +5,29 @@ import org.sireum._
 
 object Util {
 
+  val TAB: String = "\t"
+
+  val defaultPageSizeInKiBytes: Z = 4
+
+  val MemAlignmentInKiBytes: Z = 4
+
+
   @strictpure def brand(s:String):String = s"sb_$s"
 
   @pure def toPreprocessorName(s: String): String = {
     return ops.StringOps(ops.StringOps(s).replaceAllLiterally(".", "_")).toUpper
   }
 
-  val TAB: String = "\t"
+  @pure def bytesToKiBytes(bytes: Z): Z = {
+    return Extensions.bytesToKiBytes(bytes)
+  }
+
+  @pure def KiBytesToHex(offset: Z): String = {
+    val aligned: Z =
+      if (offset == 0) 4
+      else offset + ((MemAlignmentInKiBytes - (offset % MemAlignmentInKiBytes)) % MemAlignmentInKiBytes)
+    return hexFormat(toHex(aligned * 1024))
+  }
 
   @pure def toHex(z: Z): String = {
     val hexchars = ISZ("0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D", "E", "F")
@@ -1260,4 +1276,8 @@ object Util {
         |
         |"""
 
+}
+
+@ext object Extensions {
+  def bytesToKiBytes(bytes: Z): Z = $
 }

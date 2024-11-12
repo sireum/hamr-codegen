@@ -2,7 +2,7 @@
 package org.sireum.hamr.codegen.microkit.util
 
 import org.sireum._
-import org.sireum.hamr.codegen.microkit.util.Util.{hexFormat, toHex}
+import org.sireum.hamr.codegen.microkit.util.Util.{KiBytesToHex}
 
 @datatype class SystemDescription (val schedulingDomains: ISZ[SchedulingDomain],
                                    val protectionDomains: ISZ[ProtectionDomain],
@@ -69,7 +69,7 @@ import org.sireum.hamr.codegen.microkit.util.Util.{hexFormat, toHex}
 @datatype class ProtectionDomain (val name: String,
                                   val schedulingDomain: Option[String],
                                   val id: Option[String],
-                                  val stackSize: Option[Z],
+                                  val stackSizeInKiBytes: Option[Z],
 
                                   val memMaps: ISZ[MemoryMap],
                                   val programImage: String,
@@ -89,8 +89,13 @@ import org.sireum.hamr.codegen.microkit.util.Util.{hexFormat, toHex}
     val stMaps: Option[ST] =
       if (memMaps.nonEmpty) Some(st"${(for (m <- memMaps) yield m.prettyST, "\n")}")
       else None()
+    val stackSizeOpt: Option[ST] =
+      stackSizeInKiBytes match {
+        case Some(k) => Some(st""" stack_size="${KiBytesToHex(k)}"""")
+        case _ => None()
+      }
     val ret =
-      st"""<protection_domain name="$name"$domain$stId>
+      st"""<protection_domain name="$name"$domain$stId$stackSizeOpt>
           |  $stChildren
           |  $stMaps
           |  <program_image path="$programImage" />
@@ -127,8 +132,8 @@ import org.sireum.hamr.codegen.microkit.util.Util.{hexFormat, toHex}
 }
 
 @datatype class MemoryRegion (name: String,
-                              size: Z) {
-  @strictpure def prettyST: ST = st"""<memory_region name="$name" size="${hexFormat(toHex(size * 1024))}" />"""
+                              sizeInKiBytes: Z) {
+  @strictpure def prettyST: ST = st"""<memory_region name="$name" size="${KiBytesToHex(sizeInKiBytes)}" />"""
 
   @strictpure def toDot: ST = st"$name"
 }
@@ -149,14 +154,14 @@ import org.sireum.hamr.codegen.microkit.util.Util.{hexFormat, toHex}
 }
 
 @datatype class MemoryMap (val memoryRegion: String,
-                           val vaddr: Z,
+                           val vaddrInKiBytes: Z,
                            val perms: ISZ[Perm.Type],
                            val varAddr: String) {
   @pure def prettyST: ST = {
     val stPerms = st"""${(for (p <- perms) yield (if (p == Perm.READ) "r" else "w"), "")}"""
     return (
     st"""<map mr="$memoryRegion"
-        |     vaddr="${hexFormat(toHex(vaddr * 1024))}"
+        |     vaddr="${KiBytesToHex(vaddrInKiBytes)}"
         |     perms="$stPerms"
         |     setvar_vaddr="$varAddr" />""")
   }
