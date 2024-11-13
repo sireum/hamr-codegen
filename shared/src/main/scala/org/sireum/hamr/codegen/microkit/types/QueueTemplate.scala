@@ -209,10 +209,9 @@ object QueueTemplate {
           |$methodSig {
           |  ${TypeUtil.eventCounterTypename} numDropped;
           |  ${queueElementTypeName} fresh_data;
-          |  bool isFresh = false;
-          |  if ($apiMethodName(($queueTypeName *) &$recvQueueMemVarName, &numDropped, &fresh_data)) {
+          |  bool isFresh = $apiMethodName(($queueTypeName *) &$recvQueueMemVarName, &numDropped, &fresh_data);
+          |  if (isFresh) {
           |    $lastName = fresh_data;
-          |    isFresh = true;
           |  }
           |  *data = $lastName;
           |  return isFresh;
