@@ -759,9 +759,8 @@ object MicrokitCodegen {
           |SYSTEM_FILE := $${TOP}/${MicrokitCodegen.microkitSystemXmlFilename}
           |
           |IMAGES := ${(elfFiles, " ")}
-          |IMAGE_FILE_DATAPORT = microkit.img
           |IMAGE_FILE = loader.img
-          |REPORT_FILE = /report.txt
+          |REPORT_FILE = report.txt
           |
           |all: $$(IMAGE_FILE)
           |${TAB}CHECK_FLAGS_BOARD_MD5:=.board_cflags-$$(shell echo -- $${CFLAGS} $${BOARD} $${MICROKIT_CONFIG}| shasum | sed 's/ *-//')
