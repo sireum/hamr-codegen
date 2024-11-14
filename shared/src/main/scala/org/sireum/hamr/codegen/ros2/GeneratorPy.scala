@@ -13,6 +13,7 @@ object GeneratorPy {
   val py_package_name_suffix: String = "_py_pkg"
   val py_src_node_name_suffix: String = "_src.py"
   val py_src_node_entry_point_name: String = "main"
+  val py_node_runner_name_suffix: String = "_runner.py"
 
   // TODO: Reentrant or mutually exclusive (or single-threaded executor)?
   // This value will work for Python and C++ code
@@ -23,25 +24,25 @@ object GeneratorPy {
 
   def genPyLaunchFileName(compNameS: String): String = {
     // create launch file name
-    val nodeNameT: String = s"${compNameS}${py_launch_file_name_suffix}"
+    val nodeNameT: String = s"$compNameS$py_launch_file_name_suffix"
     return nodeNameT
   }
 
   def genPyPackageName(packageNameS: String): String = {
     // create target package name
-    val packageNameT: String = s"${packageNameS}${py_package_name_suffix}"
+    val packageNameT: String = s"$packageNameS$py_package_name_suffix"
     return packageNameT
   }
 
   def genPyNodeSourceName(compNameS: String): String = {
     // create target node name
-    val nodeNameT: String = s"${compNameS}${py_src_node_name_suffix}"
+    val nodeNameT: String = s"$compNameS$py_src_node_name_suffix"
     return nodeNameT
   }
 
   def genExecutableFileName(componentNameS: String): String = {
     // create target executable name
-    val executableFileNameT: String = s"${componentNameS}${node_executable_filename_suffix}"
+    val executableFileNameT: String = s"$componentNameS$node_executable_filename_suffix"
     return executableFileNameT
   }
 
@@ -82,7 +83,7 @@ object GeneratorPy {
     val py_package_nameT = genPyPackageName(modelName)
     val node_executable_file_nameT = genExecutableFileName(componentName)
     val entryPointDecl:ST
-    = st"\"${node_executable_file_nameT} = ${py_package_nameT}.${node_source_file_nameT}:${py_src_node_entry_point_name}\""
+    = st"\"$node_executable_file_nameT = $py_package_nameT.$node_source_file_nameT:$py_src_node_entry_point_name\""
     return entryPointDecl
   }
 
@@ -101,11 +102,11 @@ object GeneratorPy {
     }
 
     val setupFileBody =
-      st"""# ${fileName}   in  src/${top_level_package_nameT}
+      st"""# $fileName   in  src/$top_level_package_nameT
           |
           |from setuptools import find_packages, setup
           |
-          |package_name = '${top_level_package_nameT}'
+          |package_name = '$top_level_package_nameT'
           |
           |setup(
           |    name=package_name,
@@ -140,7 +141,7 @@ object GeneratorPy {
     var requirements: ISZ[ST] = IS()
 
     for (pkg <- packages) {
-      requirements = requirements :+ st"<depend>${pkg}</depend>"
+      requirements = requirements :+ st"<depend>$pkg</depend>"
     }
 
     return requirements
@@ -200,7 +201,7 @@ object GeneratorPy {
           |
           |    <buildtool_depend>ament_cmake</buildtool_depend>
           |
-          |    <exec_depend>${top_level_package_nameT}</exec_depend>
+          |    <exec_depend>$top_level_package_nameT</exec_depend>
           |
           |    <test_depend>ament_lint_auto</test_depend>
           |    <test_depend>ament_lint_common</test_depend>
@@ -293,32 +294,6 @@ object GeneratorPy {
   }
 
   //================================================
-  //  P a c k a g e   G e n e r a t o r s
-  //================================================
-
-  // TODO: Python pkgs
-  def genPyNodePkg(modelName: String, threadComponents: ISZ[AadlThread], connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
-                   strictAADLMode: B): ISZ[(ISZ[String], ST)] = {
-    var files: ISZ[(ISZ[String], ST)] = IS()
-
-    files = files :+ genPyFormatLaunchFile(modelName, threadComponents)
-    files = files :+ genPySetupFile(modelName, threadComponents)
-
-    return files
-  }
-  // TODO: Python pkgs
-  def genPyLaunchPkg(modelName: String, threadComponents: ISZ[AadlThread]): ISZ[(ISZ[String], ST)] = {
-    var files: ISZ[(ISZ[String], ST)] = IS()
-
-    // TODO
-    //files = files :+ genXmlFormatLaunchFile(modelName, threadComponents)
-    files = files :+ genLaunchCMakeListsFile(modelName)
-    files = files :+ genLaunchPackageFile(modelName)
-
-    return files
-  }
-
-  //================================================
   //  Node files (Py)
   //    Example: https://github.com/santoslab/ros-examples/tree/main/tempControl_ws/src/tc_py_pkg/tc_py_pkg
   //================================================
@@ -343,7 +318,7 @@ object GeneratorPy {
       }
 
     // Int32 is a placeholder message value
-    var portCode: ST =
+    val portCode: ST =
       st"""self.${topicName}_subscription_ = self.create_subscription(
          |                                  Int32,
          |                                  "${topicName}",
@@ -360,7 +335,7 @@ object GeneratorPy {
     // Int32 is a placeholder message value
     val subscriptionMessageHeader: ST =
       st"""self.get_${portName}()
-         |  MsgType msg = applicationIn_${portName}.front()
+         |  MsgType msg = applicationIn_$portName.front()
          |  return (Int32)msg
          |"""
     return subscriptionMessageHeader
@@ -619,7 +594,7 @@ object GeneratorPy {
   }
 
   def genPyReceiveInputsPeriodic(nodeName: String): ST = {
-    val method: ST = {
+    val method: ST =
       st"""def receiveInputs(self):
         | for port in inDataPortTupleVector:
         |   auto infrastructureQueue = std::get<0>(port)
@@ -634,8 +609,7 @@ object GeneratorPy {
         |       infrastructureQueue->pop()
         |       enqueue(*std::get<1>(port), msg)
       """
-      return method
-    }
+    return method
   }
 
   def genPyEnqueue(nodeName: String): ST = {
@@ -855,5 +829,174 @@ object GeneratorPy {
     val filePath: ISZ[String] = IS("src", packageName, "src", "base_code", fileName)
 
     return (filePath, fileBody)
+  }
+
+  def genPySubscriptionHandlerSporadicStrict(inPort: AadlPort, nodeName: String): ST = {
+    val handlerName = inPort.identifier
+
+    // Int32 is a placeholder message value
+    val subscriptionHandlerHeader: ST =
+      st"""def handle_${handlerName}(self, msg)
+          |{
+          |    // Handle ${handlerName} msg
+          |}
+        """
+    return subscriptionHandlerHeader
+  }
+
+  def genPySubscriptionHandlerSporadic(inPort: AadlPort, nodeName: String): ST = {
+    val handlerName = inPort.identifier
+
+    // Int32 is a placeholder message value
+    val subscriptionHandlerHeader: ST =
+      st"""def handle_${handlerName}(self, msg)
+          |{
+          |    // Handle ${handlerName} msg
+          |}
+        """
+    return subscriptionHandlerHeader
+  }
+
+  def genPyTimeTriggeredMethod(nodeName: String): ST = {
+    val timeTriggered: ST =
+      st"""def timeTriggered(self)
+          |{
+          |    // Handle communication
+          |}
+        """
+    return timeTriggered
+  }
+
+  def genPyUserNodePyFile(packageName: String, component: AadlThread, strictAADLMode: B): (ISZ[String], ST) = {
+    val nodeName = component.pathAsString("_")
+    val fileName = genPyNodeSourceName(nodeName)
+
+    var subscriptionHandlers: ISZ[ST] = IS()
+    if (isSporadic(component)) {
+      for (p <- component.getPorts()) {
+        // TODO: Datatypes
+        if (p.direction == Direction.In && !p.isInstanceOf[AadlDataPort]) {
+          if (strictAADLMode) {
+            subscriptionHandlers = subscriptionHandlers :+
+              genPySubscriptionHandlerSporadicStrict(p, nodeName)
+          }
+          else {
+            subscriptionHandlers = subscriptionHandlers :+
+              genPySubscriptionHandlerSporadic(p, nodeName)
+          }
+        }
+      }
+    }
+    else {
+      subscriptionHandlers = subscriptionHandlers :+ genPyTimeTriggeredMethod(nodeName)
+    }
+
+    val fileBody =
+      st"""#!/usr/bin/env python3
+          |import rclpy
+          |from rclpy.node import Node
+          |//=================================================
+          |//  I n i t i a l i z e    E n t r y    P o i n t
+          |//=================================================
+          |def initialize(self)
+          |{
+          |    PRINT_INFO("Initialize Entry Point invoked");
+          |
+          |    // Initialize the node
+          |}
+          |
+          |//=================================================
+          |//  C o m p u t e    E n t r y    P o i n t
+          |//=================================================
+          |${(subscriptionHandlers, "\n")}
+        """
+
+    val filePath: ISZ[String] = IS("src", packageName, "src", "user_code", fileName)
+
+    return (filePath, fileBody)
+  }
+
+  def genPyNodeRunnerName(compNameS: String): String = {
+    // create runner file name
+    val nodeNameT: String = s"${compNameS}${py_node_runner_name_suffix}"
+    return nodeNameT
+  }
+
+  def genPyNodeRunnerFile(packageName: String, component: AadlThread): (ISZ[String], ST) = {
+    val nodeName = component.pathAsString("_")
+    val fileName = genPyNodeRunnerName(nodeName)
+
+    val fileBody =
+      st"""#!/usr/bin/env python3
+          |import rclpy
+          |from rclpy.node import Node
+          |//=================================================
+          |//  D O   N O T   E D I T   T H I S   F I L E
+          |//=================================================
+          |
+          |${nodeName}::${nodeName}() : ${nodeName}_base()
+          |{
+          |    // Invoke initialize entry point
+          |    initialize();
+          |
+          |    PRINT_INFO("${nodeName} infrastructure set up");
+          |}
+          |
+          |int main(int argc, char **argv)
+          |{
+          |    rclcpp::init(argc, argv);
+          |    auto executor = rclcpp::executors::MultiThreadedExecutor();
+          |    auto node = std::make_shared<${nodeName}>();
+          |    executor.add_node(node);
+          |    executor.spin();
+          |    rclcpp::shutdown();
+          |    return 0;
+          |}
+        """
+
+    val filePath: ISZ[String] = IS("src", packageName, "src", "base_code", fileName)
+
+    return (filePath, fileBody)
+  }
+
+  def genPyNodeFiles(modelName: String, threadComponents: ISZ[AadlThread], connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
+                     strictAADLMode: B): ISZ[(ISZ[String], ST)] = {
+    val top_level_package_nameT: String = genPyPackageName(modelName)
+    var py_files: ISZ[(ISZ[String], ST)] = IS()
+    for (comp <- threadComponents) {
+      py_files =
+        py_files :+ genPyBaseNodePyFile(top_level_package_nameT, comp, connectionMap, strictAADLMode)
+      py_files =
+        py_files :+ genPyUserNodePyFile(top_level_package_nameT, comp, strictAADLMode)
+      py_files :+ genPyNodeRunnerFile(top_level_package_nameT, comp)
+    }
+    return py_files
+  }
+
+  //================================================
+  //  P a c k a g e   G e n e r a t o r s
+  //================================================
+
+  // TODO: Python pkgs
+  def genPyNodePkg(modelName: String, threadComponents: ISZ[AadlThread], connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
+                   strictAADLMode: B): ISZ[(ISZ[String], ST)] = {
+    var files: ISZ[(ISZ[String], ST)] = IS()
+
+    files = files :+ genPyFormatLaunchFile(modelName, threadComponents)
+    files = files :+ genPySetupFile(modelName, threadComponents)
+    files = files :+ genPyNodeFiles(modelName, threadComponents, connectionMap, strictAADLMode)
+
+    return files
+  }
+  // TODO: Python pkgs
+  def genPyLaunchPkg(modelName: String, threadComponents: ISZ[AadlThread]): ISZ[(ISZ[String], ST)] = {
+    var files: ISZ[(ISZ[String], ST)] = IS()
+
+    // TODO
+    //files = files :+ genXmlFormatLaunchFile(modelName, threadComponents)
+    files = files :+ genLaunchCMakeListsFile(modelName)
+    files = files :+ genLaunchPackageFile(modelName)
+
+    return files
   }
 }
