@@ -4,6 +4,7 @@ package org.sireum.hamr.codegen.microkit.types
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.StringUtil
+import org.sireum.hamr.codegen.common.types.{AadlType, ArrayType}
 import org.sireum.hamr.codegen.microkit.util.Util.brand
 
 object QueueTemplate {
@@ -196,13 +197,24 @@ object QueueTemplate {
 
   def getClientDataGetterMethod(portName: String,
                                 queueElementTypeName: String,
-                                queueSize: Z): ST = {
+                                queueSize: Z,
+                                aadlType: AadlType): ST = {
     val apiMethodName = getQueueDequeueMethodName(queueElementTypeName, queueSize)
     val methodSig = getClientGetterMethodSig(portName, queueElementTypeName, F)
     val recvQueueMemVarName = getClientRecvQueueName(portName)
     val queueTypeName = getTypeRecvQueueTypeName(queueElementTypeName, queueSize)
 
     val lastName = s"last_${portName}_payload"
+
+    val (copyInfra, copyUser): (ST, ST) = aadlType match {
+      case a: ArrayType => (
+        st"memcpy(&$lastName, &fresh_data, ${TypeUtil.getArrayByteSizeDefineName(a)})",
+        st"memcpy(data, &$lastName, ${TypeUtil.getArrayByteSizeDefineName(a)})")
+      case _ => (
+        st"$lastName = fresh_data",
+        st"*data = $lastName")
+    }
+
     return (
       st"""${queueElementTypeName} $lastName;
           |
@@ -211,9 +223,9 @@ object QueueTemplate {
           |  ${queueElementTypeName} fresh_data;
           |  bool isFresh = $apiMethodName(($queueTypeName *) &$recvQueueMemVarName, &numDropped, &fresh_data);
           |  if (isFresh) {
-          |    $lastName = fresh_data;
+          |    $copyInfra;
           |  }
-          |  *data = $lastName;
+          |  $copyUser;
           |  return isFresh;
           |}""")
   }
@@ -307,6 +319,7 @@ object QueueTemplate {
           |#include <${TypeUtil.eventCounterFilename}>
           |#include <${TypeUtil.aadlTypesFilename}>
           |#include <stdbool.h>
+          |#include <util.h>
           |
           |// Queue size must be an integer factor of the size for ${TypeUtil.eventCounterTypename} (an unsigned
           |// integer type). Since we are using standard C unsigned integers for the
@@ -417,6 +430,7 @@ object QueueTemplate {
   def implementation( //queueHeaderFilename: String,
                       queueElementTypeName: String,
                       queueSize: Z,
+                      aadlType: AadlType
 
                       //counterTypeName: String
                     ): ST = {
@@ -436,6 +450,19 @@ object QueueTemplate {
     val enqueueMethodName = getQueueEnqueueMethodName(queueElementTypeName, queueSize)
     val isEmptyMethodName = getQueueIsEmptyMethodName(queueElementTypeName, queueSize)
 
+    val enqueue: ST = {
+      aadlType match {
+        case a: ArrayType => st"memcpy(&queue->elt[index], data, ${TypeUtil.getArrayByteSizeDefineName(a)})"
+        case _ => st"queue->elt[index] = *data"
+      }
+    }
+
+    val dequeue: ST = {
+      aadlType match {
+        case a: ArrayType => st"memcpy(data, &queue->elt[index], ${TypeUtil.getArrayByteSizeDefineName(a)})"
+        case _ => st"*data = queue->elt[index]"
+      }
+    }
 
     val r =
       st"""/*
@@ -480,7 +507,7 @@ object QueueTemplate {
           |
           |  size_t index = queue->numSent % ${queueSizeMacroName};
           |
-          |  queue->elt[index] = *data; // Copy data into queue
+          |  $enqueue; // Copy data into queue
           |
           |  // Release memory fence - ensure that data write above completes BEFORE we advance queue->numSent
           |  __atomic_thread_fence(__ATOMIC_RELEASE);
@@ -536,7 +563,7 @@ object QueueTemplate {
           |  //${TypeUtil.eventCounterTypename} numRemaining = numSent - *numRecv;
           |
           |  size_t index = (*numRecv - 1) % ${queueSizeMacroName};
-          |  *data = queue->elt[index]; // Copy data
+          |  $dequeue; // Copy data
           |
           |  // Acquire memory fence - ensure read of data BEFORE reading queue->numSent again
           |  __atomic_thread_fence(__ATOMIC_ACQUIRE);

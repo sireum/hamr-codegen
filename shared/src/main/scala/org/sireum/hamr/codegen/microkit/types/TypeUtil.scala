@@ -58,7 +58,7 @@ object TypeUtil {
       aadlType = aadlType,
       simpleFilename = QueueTemplate.getTypeQueueName(typeName, queueSize),
       header = QueueTemplate.header(typeName, queueSize),
-      implementation = QueueTemplate.implementation(typeName, queueSize))
+      implementation = QueueTemplate.implementation(typeName, queueSize, aadlType))
   }
 
   def processDatatype(t: AadlType, reporter: Reporter): (String, Option[ST], ST) = {
@@ -68,15 +68,15 @@ object TypeUtil {
   def processDatatypeH(t: AadlType, isField: B, reporter: Reporter): (String, Option[ST], ST) = {
     if (CommonTypeUtil.isRecordTypeH(t)) {
       val r = t.asInstanceOf[RecordType]
-      val name = t.nameProvider.qualifiedCTypeName
+      val cTypeName = t.nameProvider.qualifiedCTypeName
       if (isField) {
-        return (name, None(), st"$name")
+        return (cTypeName, None(), st"$cTypeName")
       } else {
-        val fields: ISZ[ST] = for (s <- r.fields.entries) yield st"${processDatatypeH(s._2, T, reporter)._2} ${s._1};"
+        val fields: ISZ[ST] = for (s <- r.fields.entries) yield st"${processDatatypeH(s._2, T, reporter)._1} ${s._1};"
         return (
-          name,
-          Some(st"typedef struct $name $name;"),
-          st"""struct $name {
+          cTypeName,
+          Some(st"typedef struct $cTypeName $cTypeName;"),
+          st"""struct $cTypeName {
               |  ${(fields, "\n")}
               |};""")
       }
@@ -102,20 +102,36 @@ object TypeUtil {
 
       val baseType: String = getTypeName(a, reporter)
 
-      val bitsize: Z = a.bitSize match {
-        case Some(b) => b / 8
+      val dim: Z = a.dimensions match {
+        case ISZ() =>
+          reporter.error(None(), MicrokitCodegen.toolName, s"Unbounded arrays are not currently supported: ${a.name}")
+          0
+        case ISZ(d) =>
+          if (d <= 0) {
+            reporter.error(None(), MicrokitCodegen.toolName, s"Array dimension must by >= 1: ${a.name}")
+          }
+          d
         case _ =>
-          reporter.error(None(), MicrokitCodegen.toolName, "Bit size must be specified")
+          reporter.error(None(), MicrokitCodegen.toolName, s"Multi dimensional arrays are not currently supported: ${a.name}")
           0
       }
 
-      val sizeName = getArrayDefinedSize(a)
+      val byteSize: Z = a.bitSize match {
+        case Some(b) => b / 8
+        case _ =>
+          reporter.error(None(), MicrokitCodegen.toolName, s"Bit size must be specified for ${a.name}")
+          0
+      }
+
+      val byteSizeName = getArrayByteSizeDefineName(a)
+      val dimName = getArrayDimDefineName(a)
       return (
         name,
         None(),
-        st"""#define ${name}_SIZE $bitsize
+        st"""#define $byteSizeName $byteSize
+            |#define $dimName $dim
             |
-            |typedef $baseType $name [$sizeName];
+            |typedef $baseType $name [$dimName];
             |
             |typedef
             |  struct $container{
@@ -127,8 +143,12 @@ object TypeUtil {
     }
   }
 
-  @pure def getArrayDefinedSize(a: ArrayType): String = {
+  @pure def getArrayByteSizeDefineName(a: ArrayType): String = {
     return s"${a.nameProvider.qualifiedCTypeName}_SIZE"
+  }
+
+  @pure def getArrayDimDefineName(a: ArrayType): String = {
+    return s"${a.nameProvider.qualifiedCTypeName}_DIM"
   }
 
   @pure def isPrimitive(a: AadlType): B = {

@@ -106,7 +106,7 @@ object MicrokitCodegen {
       var ret: Map[AadlType, TypeStore] = Map.empty
 
       val (name, _, _) = TypeUtil.processDatatype(TypeUtil.eventPortType, reporter)
-      ret = ret + TypeUtil.eventPortType ~> DefaultTypeStore(name)
+      ret = ret + TypeUtil.eventPortType ~> DefaultTypeStore(typeName = name, aadlType = TypeUtil.eventPortType)
 
       if (types.rawConnections) {
         reporter.error(None(), MicrokitCodegen.toolName, "Raw connections are not currently supported")
@@ -117,7 +117,7 @@ object MicrokitCodegen {
       var defs: ISZ[ST] = ISZ()
       for (t <- ops.ISZOps(types.typeMap.values).sortWith((a, b) => CommonTypeUtil.isEnumTypeH(a))) {
         val (name, forwardDecl, typeDef) = TypeUtil.processDatatype(t, reporter)
-        ret = ret + t ~> DefaultTypeStore(name)
+        ret = ret + t ~> DefaultTypeStore(typeName = name, aadlType = t)
         if (!CommonTypeUtil.isBaseTypeH(t)) {
           if (forwardDecl.nonEmpty) {
             forwardDefs = forwardDefs :+ forwardDecl.get
@@ -236,7 +236,7 @@ object MicrokitCodegen {
                     methodApiSigs = methodApiSigs :+
                       QueueTemplate.getClientGetterMethodSig(dstPort.identifier, typeName.typeName, F)
                     methodApis = methodApis :+
-                      QueueTemplate.getClientDataGetterMethod(dstPort.identifier, typeName.typeName, dstQueueSize)
+                      QueueTemplate.getClientDataGetterMethod(dstPort.identifier, typeName.typeName, dstQueueSize, aadlType)
                   }
 
                   var userMethodSignatures: ISZ[ST] = ISZ()
