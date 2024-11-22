@@ -54,9 +54,15 @@ import org.sireum.cli.CliOpt.Type
 
 val homeBin: Os.Path = Os.slashDir
 val home: Os.Path = homeBin.up
-val sireum: Os.Path = homeBin / (if (Os.isWin) "sireum.bat" else "sireum")
-val sireumJar: Os.Path = homeBin / "sireum.jar"
-val appDir: Os.Path = homeBin / (if (Os.isMac) "mac" else if (Os.isWin) "win" else "linux")
+val sireumHome: Os.Path = {
+  if ((home.up.up / "bin" / "sireum.jar").exists) { // use kekinian's sireum.jar if it exists
+    home.up.up
+  } else {
+    Os.sireumHomeOpt.get // this will use the environment's sireum.jar if this script is called via 'sireum slang run'
+  }
+}
+val sireum: Os.Path = sireumHome / "bin" / (if (Os.isWin) "sireum.bat" else "sireum")
+val appDir: Os.Path = sireumHome / "bin" / (if (Os.isMac) "mac" else if (Os.isWin) "win" else "linux")
 
 val osateDir: Os.Path = {
   Os.env("OSATE_HOME") match {
@@ -156,27 +162,6 @@ def regenTransformers(): Unit = {
 }
 
 def regenClis(): Unit = {
-  val ksireumJar = home.up.up / "bin" / "sireum.jar"
-  if (!ksireumJar.exists) {
-    println(s"${ksireumJar} does not exists")
-    Os.exit(1)
-  }
-  if (!sireumJar.isSymLink) {
-    sireumJar.remove()
-    sireumJar.mklink(ksireumJar)
-    println(
-      st"""Need to rerun command as sireum.jar has been symlinked to $ksireumJar.
-          |
-          |After making changes to codegen's cli, do the following
-          |  1) $$SIREUM_HOME/bin/build.cmd           # get the new options into sireum.jar
-          |  2) $$SIREUM_HOME/bin/build.cmd regen-cli # regen sireum's cli
-          |  3) $$SIREUM_HOME/bin/build.cmd           # build again to include the updated cli
-          |
-          |You can then run '$$SIREUM_HOME/hamr/codegen/bin/build.cmd regen-cli' in order to
-          |update codegen's testing cli and also update CliKeys.scala""".render)
-    Os.exit(0)
-  }
-
   val utilDir = home / "shared" / "src" / "main" / "scala" / "org" / "sireum" / "hamr" / "codegen" / "common" / "util"
   // NOTE: cliJson.sc emits what's in $SIREUM_HOME/bin/sireum.jar's version of
   //       hamr's cli so regen that first, rebuild sireum.jar, then call this method
