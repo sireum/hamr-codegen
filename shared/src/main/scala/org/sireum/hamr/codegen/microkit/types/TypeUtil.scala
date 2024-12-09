@@ -10,6 +10,8 @@ import org.sireum.message.Reporter
 
 object TypeUtil {
 
+  val typesDir: String = "types"
+
   val allTypesFilename: String = brand("types.h")
 
   val aadlTypesFilename: String = brand("aadl_types.h")

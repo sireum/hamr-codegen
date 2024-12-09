@@ -66,15 +66,53 @@ import org.sireum.hamr.codegen.microkit.util.Util.{KiBytesToHex}
   @strictpure def prettyST: ST = st"""<domain name="$name" length="$length" />"""
 }
 
+@sig trait MicrokitDomain {
+  def name: String
+  def schedulingDomain: Option[String]
+
+  def memMaps: ISZ[MemoryMap]
+
+  def prettyST: ST
+
+  def toDot: ST
+
+  def getDotMemConnections: ISZ[ST]
+}
+
+@datatype class VirtualMachine(val name: String,
+                               val vcpuId: String,
+                               val schedulingDomain: Option[String],
+                               val memMaps: ISZ[MemoryMap]) extends MicrokitDomain {
+
+  override def prettyST: ST = {
+    val stMaps: Option[ST] =
+      if (memMaps.nonEmpty) Some(st"${(for (m <- memMaps) yield m.prettyST, "\n")}")
+      else None()
+    return (st"""<virtual_machine name="$name">
+                |  <vcpu id="$vcpuId" />
+                |  $stMaps
+                |</virtual_machine>""")
+  }
+
+  override def toDot: ST = {
+    return st"toDot: TODO"
+  }
+
+  override def getDotMemConnections: ISZ[ST] = {
+    return ISZ(st"getDotMemConnections: TODO")
+  }
+}
+
 @datatype class ProtectionDomain (val name: String,
                                   val schedulingDomain: Option[String],
                                   val id: Option[String],
                                   val stackSizeInKiBytes: Option[Z],
 
                                   val memMaps: ISZ[MemoryMap],
+                                  val irqs: ISZ[IRQ],
                                   val programImage: String,
 
-                                  val children: ISZ[ProtectionDomain]) {
+                                  val children: ISZ[MicrokitDomain]) extends MicrokitDomain {
   @pure def prettyST: ST = {
     val domain: Option[ST] =
       if (schedulingDomain.nonEmpty) Some(st""" domain="${schedulingDomain.get}"""")
@@ -89,6 +127,9 @@ import org.sireum.hamr.codegen.microkit.util.Util.{KiBytesToHex}
     val stMaps: Option[ST] =
       if (memMaps.nonEmpty) Some(st"${(for (m <- memMaps) yield m.prettyST, "\n")}")
       else None()
+    val irqsOpt: Option[ST] =
+      if (irqs.nonEmpty) Some(st"${(for (i <- irqs) yield i.prettyST, "\n")}")
+      else None()
     val stackSizeOpt: Option[ST] =
       stackSizeInKiBytes match {
         case Some(k) => Some(st""" stack_size="${KiBytesToHex(k)}"""")
@@ -96,9 +137,10 @@ import org.sireum.hamr.codegen.microkit.util.Util.{KiBytesToHex}
       }
     val ret =
       st"""<protection_domain name="$name"$domain$stId$stackSizeOpt>
-          |  $stChildren
-          |  $stMaps
           |  <program_image path="$programImage" />
+          |  $stMaps
+          |  $irqsOpt
+          |  $stChildren
           |</protection_domain>"""
     return ret
   }
@@ -131,11 +173,61 @@ import org.sireum.hamr.codegen.microkit.util.Util.{KiBytesToHex}
   }
 }
 
-@datatype class MemoryRegion (name: String,
-                              sizeInKiBytes: Z) {
-  @strictpure def prettyST: ST = st"""<memory_region name="$name" size="${KiBytesToHex(sizeInKiBytes)}" />"""
+@sig trait MemoryRegion {
+  def name: String
+  def sizeInKiBytes: Z
+  def physicalAddressInKiBytes: Option[Z]
 
-  @strictpure def toDot: ST = st"$name"
+  @pure def prettyST: ST = {
+    val physAddr: Option[ST] =
+      if (physicalAddressInKiBytes.nonEmpty) Some(
+        st"""
+            |               phys_addr="${KiBytesToHex(physicalAddressInKiBytes.get)}"""")
+      else None()
+    return (
+      st"""<memory_region name="$name"
+          |               size="${KiBytesToHex(sizeInKiBytes)}"$physAddr />""")
+  }
+
+  @pure def toDot: ST = {
+    return st"$name"
+  }
+}
+
+@datatype class PortSharedMemoryRegion(val outgoingPortPath: ISZ[String],
+                                       val queueSize: Z,
+                                       val varAddr: String,
+                                       val perms: ISZ[Perm.Type],
+                                       val sizeInKiBytes: Z,
+                                       val physicalAddressInKiBytes: Option[Z]) extends MemoryRegion {
+
+  def name: String = {
+    return st"${(outgoingPortPath, "_")}_${queueSize}_Memory_Region".render
+  }
+}
+
+@enum object VirtualMemoryRegionType {
+  "GIC"
+  "RAM"
+  "SERIAL"
+}
+
+@datatype class VirtualMachineMemoryRegion(val typ: VirtualMemoryRegionType.Type,
+                                            val threadPath: ISZ[String],
+                                           val sizeInKiBytes: Z,
+                                           val physicalAddressInKiBytes: Option[Z]) extends MemoryRegion {
+  def name: String = {
+    val suffix: String = typ match {
+      case VirtualMemoryRegionType.GIC => "GIC"
+      case VirtualMemoryRegionType.RAM => "Guest_RAM"
+      case VirtualMemoryRegionType.SERIAL => "Serial"
+    }
+    return st"${(threadPath, "_")}_VM_${suffix}".render
+  }
+
+  def vmmVaddrName: String = {
+    return s"${name}_vaddr"
+  }
 }
 
 @datatype class Channel (val firstPD: String,
@@ -153,21 +245,44 @@ import org.sireum.hamr.codegen.microkit.util.Util.{KiBytesToHex}
   }
 }
 
+@datatype class IRQ(val id: Z,
+                    val irq: Z) {
+  @pure def prettyST: ST = {
+    return st"""<irq irq="$irq" id="$id" />"""
+  }
+}
+
 @datatype class MemoryMap (val memoryRegion: String,
                            val vaddrInKiBytes: Z,
                            val perms: ISZ[Perm.Type],
-                           val varAddr: String) {
+                           val varAddr: Option[String],
+                           val cached: Option[B]) {
   @pure def prettyST: ST = {
-    val stPerms = st"""${(for (p <- perms) yield (if (p == Perm.READ) "r" else "w"), "")}"""
+    val stPerms = st"""${(for (p <- perms) yield (
+      if (p == Perm.READ) "r"
+      else if (p == Perm.WRITE) "w"
+      else "x"), "")}"""
+    val setVarAddr: Option[String] =
+      if (varAddr.nonEmpty) Some(s"setvar_vaddr=\"${varAddr.get}\"")
+      else None()
+    val cachedOpt: Option[ST] =
+      if (cached.nonEmpty) Some(st"""cached="${if(cached.get) "true" else "false"}"""")
+      else None()
     return (
     st"""<map mr="$memoryRegion"
         |     vaddr="${KiBytesToHex(vaddrInKiBytes)}"
         |     perms="$stPerms"
-        |     setvar_vaddr="$varAddr" />""")
+        |     $setVarAddr
+        |     $cachedOpt
+        |/>""")
   }
 
   @pure def toDotConnection: ST = {
-    val style: Option[ST] =
+    val style: Option[ST] = {
+      if (perms.size == 3){
+        assert (ops.ISZOps(perms).contains(Perm.EXECUTE) &&
+          ops.ISZOps(perms).contains(Perm.READ) && ops.ISZOps(perms).contains(Perm.WRITE))
+      }
       if (perms.size == 2) {
         assert (ops.ISZOps(perms).contains(Perm.READ) && ops.ISZOps(perms).contains(Perm.WRITE))
         Some(st"dir=both,")
@@ -178,6 +293,7 @@ import org.sireum.hamr.codegen.microkit.util.Util.{KiBytesToHex}
       else {
         halt("Infeasible")
       }
+    }
     return st"$varAddr -> $memoryRegion [$style style=dashed]"
   }
 
@@ -187,6 +303,7 @@ import org.sireum.hamr.codegen.microkit.util.Util.{KiBytesToHex}
 }
 
 @enum object Perm {
+  "EXECUTE"
   "READ"
   "WRITE"
 }

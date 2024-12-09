@@ -2,7 +2,7 @@
 package org.sireum.hamr.codegen.microkit.lint
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.symbols.{AadlProcess, Dispatch_Protocol, SymbolTable}
+import org.sireum.hamr.codegen.common.symbols.{AadlProcess, AadlProcessor, AadlVirtualProcessor, Dispatch_Protocol, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.HamrCli
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen
@@ -12,21 +12,35 @@ import org.sireum.message.Reporter
 object Linter {
 
   def lint(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, reporter: Reporter): B = {
+    val allProcesses = symbolTable.getProcesses()
 
-    for (p <- symbolTable.getAllBoundProcessors()) {
-      if (p.getClockPeriod().isEmpty) {
-        reporter.error(p.component.identifier.pos, MicrokitCodegen.toolName, "Bound processors must be assigned a clock period.")
-      }
-      if (p.getFramePeriod().isEmpty) {
-        reporter.error(p.component.identifier.pos, MicrokitCodegen.toolName, "Bound processors must be assigned a frame period.")
+    for (p <- allProcesses) {
+      p.getBoundProcessor(symbolTable) match {
+        case Some(x) =>
+          val actualProcessor: AadlProcessor =
+            x match {
+              case avp: AadlVirtualProcessor =>
+                symbolTable.getActualBoundProcess(avp) match {
+                  case Some(ap) => ap
+                  case _ =>
+                    reporter.error(avp.component.identifier.pos, MicrokitCodegen.toolName, "Virtual processors must be bound to an actual processor")
+                    return F
+                }
+              case ap: AadlProcessor => ap
+            }
+          if (actualProcessor.getClockPeriod().isEmpty) {
+            reporter.error(actualProcessor.component.identifier.pos, MicrokitCodegen.toolName, "Bound processors must be assigned a clock period.")
+          }
+          if (actualProcessor.getFramePeriod().isEmpty) {
+            reporter.error(actualProcessor.component.identifier.pos, MicrokitCodegen.toolName, "Bound processors must be assigned a frame period.")
+          }
+        case _ =>
+          reporter.error(p.component.identifier.pos, MicrokitCodegen.toolName, "Processes must be bound to an actual processor")
       }
     }
 
     var assignedDomains: Map[Z, AadlProcess] = Map.empty
-    for (p <- symbolTable.getProcesses()){
-      if (p.getBoundProcessor(symbolTable).isEmpty) {
-        reporter.error(p.component.identifier.pos, MicrokitCodegen.toolName, "Processes must be bound to a processor.")
-      }
+    for (p <- allProcesses){
       if (p.getThreads().size > 1) {
         reporter.error(p.component.identifier.pos, MicrokitCodegen.toolName, "Processes can only contain a single thread.")
       }
@@ -49,9 +63,9 @@ object Linter {
           if (t.period.isEmpty) {
             reporter.error(t.component.identifier.pos, MicrokitCodegen.toolName, s"Periodic threads must be assigned a period property.")
           }
-        //case Dispatch_Protocol.Sporadic =>
+        case Dispatch_Protocol.Sporadic =>
         case s =>
-          //reporter.error(t.component.identifier.pos, MicrokitCodegen.toolName, s"Dispatch protocol ${s.name} is not currently supported.")
+          reporter.error(t.component.identifier.pos, MicrokitCodegen.toolName, s"Dispatch protocol ${s.name} is not currently supported.")
       }
 
       t.period match {
@@ -62,6 +76,4 @@ object Linter {
 
     return !reporter.hasError
   }
-
-
 }

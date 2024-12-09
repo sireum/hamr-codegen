@@ -319,7 +319,6 @@ object QueueTemplate {
           |#include <${TypeUtil.eventCounterFilename}>
           |#include <${TypeUtil.aadlTypesFilename}>
           |#include <stdbool.h>
-          |#include <util.h>
           |
           |// Queue size must be an integer factor of the size for ${TypeUtil.eventCounterTypename} (an unsigned
           |// integer type). Since we are using standard C unsigned integers for the
@@ -483,6 +482,12 @@ object QueueTemplate {
           |#include <${queueHeaderFilename}>
           |#include <stdint.h>
           |#include <stddef.h>
+          |
+          |#if __has_include("util.h")
+          |#include <util.h>
+          |#elif __has_include("libvmm/util.util.h")
+          |#include <libvmm/util/util.h>
+          |#endif
           |
           |//------------------------------------------------------------------------------
           |// Sender API

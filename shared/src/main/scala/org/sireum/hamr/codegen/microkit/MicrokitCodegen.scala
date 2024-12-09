@@ -12,12 +12,13 @@ import org.sireum.hamr.codegen.microkit.MicrokitCodegen.toolName
 import org.sireum.hamr.codegen.microkit.connections.{ConnectionContributions, ConnectionStore, TypeApiContributions}
 import org.sireum.hamr.codegen.microkit.lint.Linter
 import org.sireum.hamr.codegen.microkit.types.{QueueTemplate, TypeStore, TypeUtil}
-import org.sireum.hamr.codegen.microkit.util.{Channel, MakefileContainer, MemoryMap, MemoryRegion, Perm, PortSharedMemoryRegion, ProtectionDomain, SchedulingDomain, SharedMemoryRegion, SystemDescription, Util}
+import org.sireum.hamr.codegen.microkit.util._
 import org.sireum.hamr.ir.{Aadl, Direction}
 import org.sireum.message.Reporter
 import org.sireum.hamr.codegen.microkit.connections._
 import org.sireum.hamr.codegen.microkit.types._
 import org.sireum.hamr.codegen.microkit.util.Util.TAB
+import org.sireum.hamr.codegen.microkit.vm.{VmMakefileTemplate, VmUser, VmUtil}
 
 object MicrokitCodegen {
   val toolName: String = "Mircokit Codegen"
@@ -70,13 +71,19 @@ object MicrokitCodegen {
           id = None(),
           stackSizeInKiBytes = None(),
           memMaps = ISZ(),
+          irqs = ISZ(),
           programImage = s"${MicrokitCodegen.pacerName}.elf",
           children = ISZ())
 
       portPacerToEndOfFrame = getNextPacerChannelId
       portEndOfFrameToPacer = getNextPacerChannelId
 
-      val mk = MakefileContainer(resourceSuffix = MicrokitCodegen.pacerName, relativePath = Some(s"${MicrokitCodegen.dirComponents}/${ops.StringOps(MicrokitCodegen.pacerName).toLower}"), hasHeader = F, hasUserContent = F)
+      val mk = MakefileContainer(
+        resourceSuffix = MicrokitCodegen.pacerName,
+        relativePath = Some(s"${MicrokitCodegen.dirComponents}/${ops.StringOps(MicrokitCodegen.pacerName).toLower}"),
+        hasHeader = F,
+        isVM = F,
+        hasUserContent = F)
       makefileContainers = makefileContainers :+ mk
 
       val content =
@@ -127,19 +134,18 @@ object MicrokitCodegen {
       }
 
       val content =
-        st"""#ifndef ${Util.toPreprocessorName(TypeUtil.aadlTypesFilename)}
-            |#define ${Util.toPreprocessorName(TypeUtil.aadlTypesFilename)}
+        st"""#pragma once
             |
             |#include <stdint.h>
+            |
+            |${Util.doNotEdit}
             |
             |${(forwardDefs, "\n\n")}
             |
             |${(defs, "\n\n")}
-            |
-            |#endif
             |"""
 
-      val outputdir = s"${options.camkesOutputDir.get}/${MicrokitCodegen.dirInclude}"
+      val outputdir = s"${options.camkesOutputDir.get}/${TypeUtil.typesDir}/${MicrokitCodegen.dirInclude}"
       val path = s"$outputdir/${TypeUtil.aadlTypesFilename}"
       resources = resources :+ ResourceUtil.createResourceH(path, content, T, T)
 
@@ -242,14 +248,16 @@ object MicrokitCodegen {
                   var userMethodSignatures: ISZ[ST] = ISZ()
                   var userMethodDefaultImpls: ISZ[ST] = ISZ()
                   var computeContributions: ISZ[ST] = ISZ()
-                  if (dstThread.isSporadic()) {
-                    userMethodSignatures = userMethodSignatures :+ QueueTemplate.getClientEventHandlerMethodSig(dstPort.identifier)
+                  if (!dstThread.toVirtualMachine(symbolTable)) {
+                    if (dstThread.isSporadic()) {
+                      userMethodSignatures = userMethodSignatures :+ QueueTemplate.getClientEventHandlerMethodSig(dstPort.identifier)
 
-                    if (isEventPort || isEventDataPort) {
-                      computeContributions = computeContributions :+ QueueTemplate.getClientSporadicComputeContributions(dstPort.identifier)
+                      if (isEventPort || isEventDataPort) {
+                        computeContributions = computeContributions :+ QueueTemplate.getClientSporadicComputeContributions(dstPort.identifier)
+                      }
+
+                      userMethodDefaultImpls = userMethodDefaultImpls :+ QueueTemplate.getClientSporadicDefaultImplContributions(dstPort.identifier)
                     }
-
-                    userMethodDefaultImpls = userMethodDefaultImpls :+ QueueTemplate.getClientSporadicDefaultImplContributions(dstPort.identifier)
                   }
 
                   DefaultConnectionContributions(
@@ -261,8 +269,8 @@ object MicrokitCodegen {
                     userMethodDefaultImpls = userMethodDefaultImpls,
                     defineContributions = ISZ(),
                     globalVarContributions = ISZ(
-                      (s"volatile $sharedMemTypeName", s"*$sharedVarName"),
-                      (recvQueueTypeName, recvQueueVarName)
+                      PortVaddr(s"volatile $sharedMemTypeName", s"*$sharedVarName"),
+                      QueueVaddr(recvQueueTypeName, recvQueueVarName)
                     ),
                     apiMethodSigs = methodApiSigs,
                     apiMethods = methodApis,
@@ -274,7 +282,8 @@ object MicrokitCodegen {
                         queueSize = dstQueueSize,
                         varAddr = sharedVarName,
                         perms = ISZ(Perm.READ),
-                        dataSizeInKiBytes = Util.defaultPageSizeInKiBytes)
+                        sizeInKiBytes = Util.defaultPageSizeInKiBytes,
+                        physicalAddressInKiBytes = None())
                     )
                   )
                 }
@@ -290,13 +299,13 @@ object MicrokitCodegen {
           val apiMethodSig = QueueTemplate.getClientPutMethodSig(srcPort.identifier, sPortType, isEventPort)
           val apiMethod = QueueTemplate.getClientPutMethod(srcPort.identifier, sPortType, srcPutContributions, isEventPort)
 
-          var sharedMemoryMappings: ISZ[SharedMemoryRegion] = ISZ()
-          var sharedMemoryVars: ISZ[(String, String)] = ISZ()
+          var sharedMemoryMappings: ISZ[MemoryRegion] = ISZ()
+          var sharedMemoryVars: ISZ[GlobalVarContribution] = ISZ()
           var initContributions: ISZ[ST] = ISZ()
           for (queueSize <- handledQueues.elements) {
             val queueType = QueueTemplate.getTypeQueueTypeName(sPortType, queueSize)
             val varName = QueueTemplate.getClientEnqueueSharedVarName(srcPort.identifier, queueSize)
-            sharedMemoryVars = sharedMemoryVars :+ (s"volatile $queueType", s"*$varName")
+            sharedMemoryVars = sharedMemoryVars :+ QueueVaddr(s"volatile $queueType", s"*$varName")
 
             initContributions = initContributions :+ QueueTemplate.getQueueInitMethod(varName, sPortType, queueSize)
 
@@ -306,7 +315,8 @@ object MicrokitCodegen {
                 queueSize = queueSize,
                 varAddr = varName,
                 perms = ISZ(Perm.READ, Perm.WRITE),
-                dataSizeInKiBytes = Util.defaultPageSizeInKiBytes
+                sizeInKiBytes = Util.defaultPageSizeInKiBytes,
+                physicalAddressInKiBytes = None()
               )
           }
 
@@ -339,20 +349,29 @@ object MicrokitCodegen {
       return ret
     }
 
-    def processThread(t: AadlThread, connectionStore: ISZ[ConnectionStore]): (ProtectionDomain, Z) = {
+    def processThread(t: AadlThread,
+                      connectionStore: ISZ[ConnectionStore]):
+    (MicrokitDomain, ISZ[MemoryRegion], Z) = {
+
+      var retMemoryRegions: ISZ[MemoryRegion] = ISZ()
+
+      val isVM = t.toVirtualMachine(symbolTable)
+
       val threadId = getName(t.path)
       val threadMonId = st"${getName(t.path)}_MON"
 
       var headerImports: ISZ[String] = ISZ()
       var userMethodSignatures: ISZ[ST] = ISZ()
       var userMethodDefaultImpls: ISZ[ST] = ISZ()
-      var vaddrs: ISZ[(String, String)] = ISZ()
+      var vaddrs: ISZ[GlobalVarContribution] = ISZ()
       var codeApiMethodSigs: ISZ[ST] = ISZ()
       var codeApiMethods: ISZ[ST] = ISZ()
       var initContributions: ISZ[ST] = ISZ()
       var computeContributions: ISZ[ST] = ISZ()
       var nextMemAddressInKiBytes = 262144
-      var sharedMemoryRegions: ISZ[SharedMemoryRegion] = ISZ()
+      var sharedMemoryRegions: ISZ[MemoryRegion] = ISZ()
+
+      val initializeMethodName = st"${threadId}_initialize"
 
       for (entry <- connectionStore) {
 
@@ -393,7 +412,12 @@ object MicrokitCodegen {
         case _ => halt("Infeasible")
       }
 
-      val mk = MakefileContainer(resourceSuffix = threadId.render, relativePath = Some(s"${MicrokitCodegen.dirComponents}/${threadId.render}"), hasHeader = T, hasUserContent = T)
+      val mk = MakefileContainer(
+        resourceSuffix = threadId.render,
+        relativePath = Some(s"${MicrokitCodegen.dirComponents}/${threadId.render}"),
+        hasHeader = T,
+        isVM = isVM,
+        hasUserContent = !isVM)
       makefileContainers = makefileContainers :+ mk
 
       val computeExecutionTime: Z = t.getComputeExecutionTime() match {
@@ -407,33 +431,125 @@ object MicrokitCodegen {
         SchedulingDomain(name = schedulingDomain, length = computeExecutionTime)
 
       var childMemMaps: ISZ[MemoryMap] = ISZ()
-      for (r <- sharedMemoryRegions) {
-        r match {
-          case p: PortSharedMemoryRegion =>
+      var childIrqs: ISZ[IRQ] = ISZ()
 
-            childMemMaps = childMemMaps :+ MemoryMap(
-              memoryRegion = p.regionName,
-              vaddrInKiBytes = nextMemAddressInKiBytes,
-              perms = p.perms,
-              varAddr = p.varAddr)
-            nextMemAddressInKiBytes = nextMemAddressInKiBytes + p.dataSizeInKiBytes
-          case _ => halt("")
-        }
+      var vms: ISZ[MicrokitDomain] = ISZ()
+      if (isVM) {
+        val vmName = s"${threadId.render}"
+
+        val guestRam = VirtualMachineMemoryRegion(
+          typ = VirtualMemoryRegionType.RAM,
+          threadPath = t.path,
+          sizeInKiBytes = Util.defaultVmRamSizeInKiBytes,
+          physicalAddressInKiBytes = None()
+        )
+
+        val hostVaddr = VMRamVaddr("uintptr_t", guestRam.vmmVaddrName)
+
+        vaddrs = vaddrs :+ hostVaddr
+
+        childMemMaps = childMemMaps :+ MemoryMap(
+          memoryRegion = guestRam.name,
+          vaddrInKiBytes = 1048576, // 0x40_000_000
+          perms = ISZ(Perm.READ, Perm.WRITE),
+          varAddr = Some(hostVaddr.varName),
+          cached = None())
+
+        retMemoryRegions = retMemoryRegions :+ guestRam
+
+        nextMemAddressInKiBytes = nextMemAddressInKiBytes + guestRam.sizeInKiBytes
+
+        val gicRegion = VirtualMachineMemoryRegion(
+          typ = VirtualMemoryRegionType.GIC,
+          threadPath = t.path,
+          sizeInKiBytes = 4, // 0x1000
+          physicalAddressInKiBytes = Some(131328) // 0x8040000
+          )
+        retMemoryRegions = retMemoryRegions :+ gicRegion
+
+        val serialRegion = VirtualMachineMemoryRegion(
+          typ = VirtualMemoryRegionType.SERIAL,
+          threadPath = t.path,
+          sizeInKiBytes = 4, // 0x1000
+          physicalAddressInKiBytes = Some(147456) // 0x9_000_000
+        )
+        retMemoryRegions = retMemoryRegions :+ serialRegion
+
+        childIrqs = childIrqs :+ IRQ(id = 1, irq = 33)
+
+        vms = vms :+ VirtualMachine(
+          name = vmName,
+          vcpuId = "0",
+          schedulingDomain = Some(schedulingDomain),
+          memMaps = ISZ(MemoryMap(
+            memoryRegion = guestRam.name,
+            vaddrInKiBytes = 1048576, // 0x40_000_000
+            perms = ISZ(Perm.READ, Perm.WRITE, Perm.EXECUTE),
+            varAddr = None(),
+            cached = None()),
+
+            // Any access to the GIC from
+            //             0x8010000 - 0x8011000 will access the VCPU interface. All other
+            //             accesses will result in virtual memory faults, routed to the VMM.
+            MemoryMap(
+              memoryRegion = gicRegion.name,
+              vaddrInKiBytes = 131136, // 0x8_010_000
+              perms = ISZ(Perm.READ, Perm.WRITE),
+              varAddr = None(),
+              cached = Some(F)
+            ),
+            MemoryMap(
+              memoryRegion = serialRegion.name,
+              vaddrInKiBytes = 147456, // 0x9_000_000
+              perms = ISZ(Perm.READ, Perm.WRITE),
+              varAddr = None(),
+              cached = Some(F)
+            ))
+        )
+
+        val boardPath = s"${options.camkesOutputDir.get}/${mk.relativePathVmBoardDir}/qemu_virt_aarch64"
+
+        val vmmMake = VmMakefileTemplate.Makefile(threadId.render)
+        resources = resources :+ ResourceUtil.createResource(s"${boardPath}/Makefile", vmmMake, T)
+
+
+        val vmm_config = VmUtil.vmm_config(
+          guestDtbVaddrInHex = "0x4f000000",
+          guestInitRamDiskVaddrInHex = "0x4d700000",
+          maxIrqs = 1
+        )
+        resources = resources :+ ResourceUtil.createResource(s"${options.camkesOutputDir.get}/${mk.relativePathIncludeDir}/${threadId.render}_user.h", vmm_config, T)
       }
 
-      val stackSizeInKiBytes: Option[Z] = t.stackSizeInBytes() match {
+      val childStackSizeInKiBytes: Option[Z] = t.stackSizeInBytes() match {
         case Some(bytes) => Some(Util.bytesToKiBytes(bytes))
         case _ => None()
       }
 
-      val child = ProtectionDomain(
-        name = threadId.render,
-        schedulingDomain = Some(schedulingDomain),
-        id = Some(s"1"),
-        stackSizeInKiBytes = stackSizeInKiBytes,
-        memMaps = childMemMaps,
-        programImage = mk.elfName,
-        children = ISZ())
+      for (r <- sharedMemoryRegions) {
+        r match {
+          case p: PortSharedMemoryRegion =>
+            childMemMaps = childMemMaps :+ MemoryMap(
+              memoryRegion = p.name,
+              vaddrInKiBytes = nextMemAddressInKiBytes,
+              perms = p.perms,
+              varAddr = Some(p.varAddr),
+              cached = None())
+            nextMemAddressInKiBytes = nextMemAddressInKiBytes + p.sizeInKiBytes
+          case _ => halt("")
+        }
+      }
+
+      val child =
+          ProtectionDomain(
+            name = threadId.render,
+            schedulingDomain = Some(schedulingDomain),
+            id = Some(s"1"),
+            stackSizeInKiBytes = childStackSizeInKiBytes,
+            memMaps = childMemMaps,
+            irqs = childIrqs,
+            programImage = mk.elfName,
+            children = vms)
 
       xmlProtectionDomains = xmlProtectionDomains :+
         ProtectionDomain(
@@ -442,6 +558,7 @@ object MicrokitCodegen {
           id = None(),
           stackSizeInKiBytes = None(),
           memMaps = ISZ(),
+          irqs = ISZ(),
           programImage = mk.monElfName,
           children = ISZ(child))
 
@@ -467,7 +584,9 @@ object MicrokitCodegen {
       val headerFileName = s"${threadId.render}.h"
 
       val monImplSource =
-        st"""#include "$headerFileName"
+        st"""#include <microkit.h>
+            |
+            |${Util.doNotEdit}
             |
             |#define PORT_PACER $pacerChannelId
             |
@@ -492,28 +611,46 @@ object MicrokitCodegen {
       val monImplPath = s"${options.camkesOutputDir.get}/${mk.relativePathSrcDir}/${mk.monImplFilename}"
       resources = resources :+ ResourceUtil.createResource(monImplPath, monImplSource, T)
 
-      val initializeMethodName = st"${threadId}_initialize"
-      userMethodSignatures = st"void ${initializeMethodName}(void)" +: userMethodSignatures
+      val userNotifyMethodName = st"${threadId}_notify"
+        initContributions = initContributions :+ st"$initializeMethodName();"
+        userMethodSignatures = st"void ${initializeMethodName}(void)" +: userMethodSignatures
+        userMethodSignatures = userMethodSignatures :+ st"void ${userNotifyMethodName}(microkit_channel channel)"
 
-      userMethodDefaultImpls =
-        st"""void $initializeMethodName(void) {
-            |  // implement me
-            |}""" +: userMethodDefaultImpls
-
-      if (t.isPeriodic()) {
-        val timeTriggeredMethodName = st"${threadId}_timeTriggered"
-        userMethodSignatures = userMethodSignatures :+ st"void ${timeTriggeredMethodName}(void)"
-        computeContributions = computeContributions :+ st"${timeTriggeredMethodName}();"
-        userMethodDefaultImpls = userMethodDefaultImpls :+
-          st"""void $timeTriggeredMethodName(void) {
+        userMethodDefaultImpls =
+          st"""void $initializeMethodName(void) {
               |  // implement me
-              |}"""
-      }
+              |}""" +: userMethodDefaultImpls
 
-      val vaddrEntries: ISZ[ST] = for (v <- vaddrs) yield st"${v._1} ${v._2};"
+        if (t.isPeriodic()) {
+          val timeTriggeredMethodName = st"${threadId}_timeTriggered"
+          userMethodSignatures = userMethodSignatures :+ st"void ${timeTriggeredMethodName}(void)"
+          computeContributions = computeContributions :+ st"${timeTriggeredMethodName}();"
+          userMethodDefaultImpls = userMethodDefaultImpls :+
+            st"""void $timeTriggeredMethodName(void) {
+                |  // implement me
+                |}"""
+        }
+
+      userMethodDefaultImpls = userMethodDefaultImpls :+
+        st"""void $userNotifyMethodName(microkit_channel channel) {
+            |  // this method is called when the monitor does not handle the passed in channel
+            |  switch (channel) {
+            |    default:
+            |      printf("%s: Unexpected channel %d\n", microkit_name, channel);
+            |  }
+            |}"""
+
+      var vaddrEntries: ISZ[ST] = ISZ()
+      for (v <- vaddrs) {
+        if (!v.isInstanceOf[VMRamVaddr]) {
+          vaddrEntries = vaddrEntries :+ v.pretty
+        }
+      }
 
       val implSource =
         st"""#include "$headerFileName"
+            |
+            |${Util.doNotEdit}
             |
             |${(for (u <- userMethodSignatures) yield st"$u;", "\n")}
             |
@@ -525,8 +662,6 @@ object MicrokitCodegen {
             |
             |void init(void) {
             |  ${(initContributions, "\n\n")}
-            |
-            |  $initializeMethodName();
             |}
             |
             |void notified(microkit_channel channel) {
@@ -534,6 +669,8 @@ object MicrokitCodegen {
             |    case PORT_FROM_MON:
             |      ${(computeContributions, "\n\n")}
             |      break;
+            |    default:
+            |      ${userNotifyMethodName}(channel);
             |  }
             |}
             |"""
@@ -541,20 +678,41 @@ object MicrokitCodegen {
       val implPath = s"${options.camkesOutputDir.get}/${mk.relativePathSrcDir}/${mk.cImplFilename}"
       resources = resources :+ ResourceUtil.createResource(implPath, implSource, T)
 
-      val userImplSource =
-        st"""#include "$headerFileName"
-            |
-            |${(userMethodDefaultImpls, "\n\n")}
-            |"""
       val userImplPath = s"${options.camkesOutputDir.get}/${mk.relativePathSrcDir}/${mk.cUserImplFilename}"
+      val userImplSource: ST =
+        if (isVM) {
+          val cand = vaddrs.filter(f => f.isInstanceOf[VMRamVaddr])
+          assert (cand.size == 1, s"didn't find a guest ram vaddr for ${t.identifier}: ${cand.size}")
+          VmUser.vmUserCode(threadId, cand(0).pretty)
+        } else {
+          st"""#include "$headerFileName"
+              |
+              |${Util.safeToEdit}
+              |
+              |${(userMethodDefaultImpls, "\n\n")}
+              |"""
+        }
       resources = resources :+ ResourceUtil.createResource(userImplPath, userImplSource, F)
+
+      val utilIncludes: ST =
+        if (isVM)
+          st"""#include <libvmm/util/printf.h>
+              |#include <libvmm/util/util.h>"""
+        else
+          st"""#include <printf.h>
+              |#include <util.h>"""
 
       val himports: ISZ[ST] = for (h <- headerImports) yield st"#include <$h>"
       val headerSource =
-        st"""#include <printf.h>
+        st"""#pragma once
+            |
+            |$utilIncludes
             |#include <stdint.h>
             |#include <microkit.h>
             |#include <${TypeUtil.allTypesFilename}>
+            |
+            |${Util.doNotEdit}
+            |
             |${(himports, "\n")}
             |
             |${(codeApiMethodSigs, ";\n")};
@@ -562,7 +720,7 @@ object MicrokitCodegen {
       val headerPath = s"${options.camkesOutputDir.get}/${mk.relativePathIncludeDir}/${mk.cHeaderFilename}"
       resources = resources :+ ResourceUtil.createResource(headerPath, headerSource, T)
 
-      return (child, computeExecutionTime)
+      return (child, retMemoryRegions, computeExecutionTime)
     } // end processThread
 
 
@@ -570,9 +728,9 @@ object MicrokitCodegen {
       return CodeGenResults(ISZ(), ISZ())
     }
 
-    val boundProcessors = symbolTable.getAllBoundProcessors()
+    val boundProcessors = symbolTable.getActualBoundProcessors()
     if (boundProcessors.size != 1) {
-      reporter.error(None(), toolName, "Currently handling models with exactly one bound processor")
+      reporter.error(None(), toolName, "Currently only handling models with exactly one actual bound processor")
       return CodeGenResults(ISZ(), ISZ())
     }
     var framePeriod: Z = 0
@@ -585,23 +743,23 @@ object MicrokitCodegen {
 
     val typeStore = processTypes()
 
-    var typeHeaderFilenemes: ISZ[String] = ISZ(TypeUtil.aadlTypesFilename)
+    var typeHeaderFilenames: ISZ[String] = ISZ(TypeUtil.aadlTypesFilename)
     var typeImplFilenames: ISZ[String] = ISZ()
-    var objectNames: ISZ[String] = ISZ()
+    var typeObjectNames: ISZ[String] = ISZ()
 
-    val baseIncludePath = s"${options.camkesOutputDir.get}/${MicrokitCodegen.dirInclude}"
+    val baseTypesIncludePath = s"${options.camkesOutputDir.get}/${TypeUtil.typesDir}/${MicrokitCodegen.dirInclude}"
 
     val connectionStore = processConnections(typeStore)
     for (entry <- connectionStore) {
-      val srcPath = s"${options.camkesOutputDir.get}/${MicrokitCodegen.dirSrc}"
+      val srcPath = s"${options.camkesOutputDir.get}/${TypeUtil.typesDir}/${MicrokitCodegen.dirSrc}"
 
       for (tc <- entry.typeApiContributions) {
-        typeHeaderFilenemes = typeHeaderFilenemes :+ tc.headerFilename
+        typeHeaderFilenames = typeHeaderFilenames :+ tc.headerFilename
         typeImplFilenames = typeImplFilenames :+ tc.implementationFilename
-        objectNames = objectNames :+ tc.objectName
+        typeObjectNames = typeObjectNames :+ tc.objectName
         buildEntries = buildEntries :+ tc.buildEntry
 
-        val headerPath = s"$baseIncludePath/${tc.headerFilename}"
+        val headerPath = s"$baseTypesIncludePath/${tc.headerFilename}"
         resources = resources :+ ResourceUtil.createResourceH(
           path = headerPath, content = tc.header, overwrite = T, isDatatype = T)
 
@@ -611,25 +769,27 @@ object MicrokitCodegen {
       }
     }
 
-    val eventCounterPath = s"$baseIncludePath/${TypeUtil.eventCounterFilename}"
+    val eventCounterPath = s"$baseTypesIncludePath/${TypeUtil.eventCounterFilename}"
     resources = resources :+ ResourceUtil.createResourceH(
       path = eventCounterPath, content = TypeUtil.eventCounterContent, overwrite = T, isDatatype = T)
 
     val allTypesContent =
-      st"""#ifndef ${Util.toPreprocessorName(TypeUtil.allTypesFilename)}
-          |#define ${Util.toPreprocessorName(TypeUtil.allTypesFilename)}
+      st"""#pragma once
           |
-          |${(for (i <- typeHeaderFilenemes) yield st"#include <$i>", "\n")}
+          |${Util.doNotEdit}
           |
-          |#endif"""
-    val allTypesPath = s"$baseIncludePath/${TypeUtil.allTypesFilename}"
+          |${(for (i <- typeHeaderFilenames) yield st"#include <$i>", "\n")}
+          |"""
+    val allTypesPath = s"$baseTypesIncludePath/${TypeUtil.allTypesFilename}"
     resources = resources :+ ResourceUtil.createResourceH(
       path = allTypesPath, content = allTypesContent, overwrite = T, isDatatype = T)
 
+    var memoryRegions: ISZ[MemoryRegion] = ISZ()
     var usedBudget: Z = 0
     for (t <- symbolTable.getThreads()) {
       val results = processThread(t, connectionStore)
-      usedBudget = usedBudget + results._2
+      memoryRegions = memoryRegions ++ results._2
+      usedBudget = usedBudget + results._3
     }
 
     addPacerComponent()
@@ -649,10 +809,10 @@ object MicrokitCodegen {
     }
     xmlScheds = xmlScheds :+ SchedulingDomain(name = "domain0", length = framePeriod - usedBudget)
 
-    var memoryRegions: ISZ[MemoryRegion] = ISZ()
+
     for (e <- connectionStore;
          s <- e.systemContributions.sharedMemoryRegionContributions) {
-      memoryRegions = memoryRegions :+ MemoryRegion(name = s.regionName, sizeInKiBytes = s.dataSizeInKiBytes)
+      memoryRegions = memoryRegions :+ s
     }
 
     val sd = SystemDescription(
@@ -668,39 +828,7 @@ object MicrokitCodegen {
     val dotPath = s"${options.camkesOutputDir.get}/microkit.dot"
     resources = resources :+ ResourceUtil.createResource(path = dotPath, content = sysDot, overwrite = T)
 
-    val makefileContents =
-      st"""ifeq ($$(strip $$(MICROKIT_SDK)),)
-          |$$(error MICROKIT_SDK must be specified)
-          |endif
-          |override MICROKIT_SDK := $$(abspath $${MICROKIT_SDK})
-          |
-          |BUILD_DIR ?= build
-          |# By default we make a debug build so that the client debug prints can be seen.
-          |MICROKIT_CONFIG ?= debug
-          |
-          |export CPU := cortex-a53
-          |QEMU := qemu-system-aarch64
-          |
-          |CC := clang
-          |LD := ld.lld
-          |export MICROKIT_TOOL ?= $$(abspath $$(MICROKIT_SDK)/bin/microkit)
-          |
-          |export BOARD_DIR := $$(abspath $$(MICROKIT_SDK)/board/qemu_virt_aarch64/debug)
-          |export TOP:= $$(abspath $$(dir $${MAKEFILE_LIST}))
-          |IMAGE_FILE := $$(BUILD_DIR)/loader.img
-          |REPORT_FILE := $$(BUILD_DIR)/report.txt
-          |
-          |all: $${IMAGE_FILE}
-          |
-          |qemu $${IMAGE_FILE} $${REPORT_FILE} clean clobber: $$(IMAGE_FILE) $${BUILD_DIR}/Makefile FORCE
-          |${TAB}$${MAKE} -C $${BUILD_DIR} MICROKIT_SDK=$${MICROKIT_SDK} $$(notdir $$@)
-          |
-          |$${BUILD_DIR}/Makefile: ${MicrokitCodegen.systemMakeFilename}
-          |${TAB}mkdir -p $${BUILD_DIR}
-          |${TAB}cp ${MicrokitCodegen.systemMakeFilename} $${BUILD_DIR}/Makefile
-          |
-          |FORCE:
-          |"""
+    val makefileContents = MakefileTemplate.mainMakefile
     val makefilePath = s"${options.camkesOutputDir.get}/Makefile"
     resources = resources :+ ResourceUtil.createResource(makefilePath, makefileContents, T)
 
@@ -715,101 +843,22 @@ object MicrokitCodegen {
 
     val elfEntries: ISZ[ST] = for (mk <- makefileContainers) yield mk.elfEntry
 
-    val systemmkContents =
-      st"""ifeq ($$(strip $$(MICROKIT_SDK)),)
-          |$$(error MICROKIT_SDK must be specified)
-          |endif
-          |
-          |MICROKIT_TOOL ?= $$(MICROKIT_SDK)/bin/microkit
-          |
-          |ifeq ("$$(wildcard $$(MICROKIT_TOOL))","")
-          |$$(error Microkit tool not found at $${MICROKIT_TOOL})
-          |endif
-          |
-          |ifeq ($$(strip $$(MICROKIT_BOARD)),)
-          |$$(error MICROKIT_BOARD must be specified)
-          |endif
-          |
-          |BUILD_DIR ?= build
-          |# By default we make a debug build so that the client debug prints can be seen.
-          |MICROKIT_CONFIG ?= debug
-          |
-          |QEMU := qemu-system-aarch64
-          |
-          |CC := clang
-          |LD := ld.lld
-          |AR := llvm-ar
-          |RANLIB := llvm-ranlib
-          |
-          |CFLAGS := -mcpu=$$(CPU) \
-          |${TAB}-mstrict-align \
-          |${TAB}-nostdlib \
-          |${TAB}-ffreestanding \
-          |${TAB}-g3 \
-          |${TAB}-O3 \
-          |${TAB}-Wall -Wno-unused-function -Werror -Wno-unused-command-line-argument \
-          |${TAB}-target aarch64-none-elf \
-          |${TAB}-I$$(BOARD_DIR)/include
-          |LDFLAGS := -L$$(BOARD_DIR)/lib
-          |LIBS := --start-group -lmicrokit -Tmicrokit.ld --end-group
-          |
-          |
-          |${TypeUtil.make_TYPE_OBJS} := printf.o util.o ${(objectNames, " ")}
-          |
-          |SYSTEM_FILE := $${TOP}/${MicrokitCodegen.microkitSystemXmlFilename}
-          |
-          |IMAGES := ${(elfFiles, " ")}
-          |IMAGE_FILE = loader.img
-          |REPORT_FILE = report.txt
-          |
-          |all: $$(IMAGE_FILE)
-          |${TAB}CHECK_FLAGS_BOARD_MD5:=.board_cflags-$$(shell echo -- $${CFLAGS} $${BOARD} $${MICROKIT_CONFIG}| shasum | sed 's/ *-//')
-          |
-          |$${CHECK_FLAGS_BOARD_MD5}:
-          |${TAB}-rm -f .board_cflags-*
-          |${TAB}touch $$@
-          |
-          |%.o: $${TOP}/%.c Makefile
-          |${TAB}$$(CC) -c $$(CFLAGS) $$< -o $$@ -I$${TOP}/include
-          |
-          |printf.o: $${TOP}/${MicrokitCodegen.dirSrc}/printf.c Makefile
-          |${TAB}$$(CC) -c $$(CFLAGS) $$< -o $$@ -I$${TOP}/include
-          |
-          |util.o: $${TOP}/${MicrokitCodegen.dirSrc}/util.c Makefile
-          |${TAB}$$(CC) -c $$(CFLAGS) $$< -o $$@ -I$${TOP}/include
-          |
-          |${(buildEntries, "\n\n")}
-          |
-          |${(elfEntries, "\n\n")}
-          |
-          |$$(IMAGE_FILE): $$(IMAGES) $$(SYSTEM_FILE)
-          |${TAB}$$(MICROKIT_TOOL) $$(SYSTEM_FILE) --search-path $$(BUILD_DIR) --board $$(MICROKIT_BOARD) --config $$(MICROKIT_CONFIG) -o $$(IMAGE_FILE) -r $$(REPORT_FILE)
-          |
-          |
-          |qemu: $$(IMAGE_FILE)
-          |${TAB}$$(QEMU) -machine virt,virtualization=on \
-          |${TAB}${TAB}${TAB}-cpu cortex-a53 \
-          |${TAB}${TAB}${TAB}-serial mon:stdio \
-          |${TAB}${TAB}${TAB}-device loader,file=$$(IMAGE_FILE),addr=0x70000000,cpu-num=0 \
-          |${TAB}${TAB}${TAB}-m size=2G \
-          |${TAB}${TAB}${TAB}-nographic
-          |
-          |clean::
-          |${TAB}rm -f ${(oFiles, " ")}
-          |
-          |clobber:: clean
-          |${TAB}rm -f ${(elfFiles, " ")} $${IMAGE_FILE} $${REPORT_FILE}
-          |"""
+    val systemmkContents = MakefileTemplate.systemMakefile(
+      elfFiles = elfFiles,
+      typeObjectNames = typeObjectNames,
+      buildEntries = buildEntries,
+      elfEntries = elfEntries)
+
     val systemmkPath = s"${options.camkesOutputDir.get}/${MicrokitCodegen.systemMakeFilename}"
     resources = resources :+ ResourceUtil.createResource(systemmkPath, systemmkContents, T)
 
 
-    val includePath = s"${options.camkesOutputDir.get}/${MicrokitCodegen.dirInclude}"
-    val srcPath = s"${options.camkesOutputDir.get}/${MicrokitCodegen.dirSrc}"
-    resources = resources :+ ResourceUtil.createResource(s"${includePath}/printf.h", Util.printfh, T)
-    resources = resources :+ ResourceUtil.createResource(s"${srcPath}/printf.c", Util.printfc, T)
-    resources = resources :+ ResourceUtil.createResource(s"${includePath}/util.h", Util.utilh, T)
-    resources = resources :+ ResourceUtil.createResource(s"${srcPath}/util.c", Util.utilc, T)
+    val utilIncludePath = s"${options.camkesOutputDir.get}/${Util.utilDir}/${MicrokitCodegen.dirInclude}"
+    val utilSrcPath = s"${options.camkesOutputDir.get}/${Util.utilDir}/${MicrokitCodegen.dirSrc}"
+    resources = resources :+ ResourceUtil.createResource(s"${utilIncludePath}/printf.h", Util.printfh, T)
+    resources = resources :+ ResourceUtil.createResource(s"${utilSrcPath}/printf.c", Util.printfc, T)
+    resources = resources :+ ResourceUtil.createResource(s"${utilIncludePath}/util.h", Util.utilh, T)
+    resources = resources :+ ResourceUtil.createResource(s"${utilSrcPath}/util.c", Util.utilc, T)
 
     return CodeGenResults(resources = resources, auxResources = ISZ())
   }

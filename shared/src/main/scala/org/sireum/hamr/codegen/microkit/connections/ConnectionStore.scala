@@ -3,7 +3,8 @@ package org.sireum.hamr.codegen.microkit.connections
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.types.AadlType
-import org.sireum.hamr.codegen.microkit.util.SharedMemoryRegion
+import org.sireum.hamr.codegen.microkit.types.TypeUtil
+import org.sireum.hamr.codegen.microkit.util.MemoryRegion
 import org.sireum.hamr.codegen.microkit.util.Util.TAB
 
 @sig trait ConnectionStore {
@@ -29,12 +30,12 @@ import org.sireum.hamr.codegen.microkit.util.Util.TAB
                                         val receiverContributions: Map[ISZ[String], ConnectionContributions]) extends ConnectionStore
 
 @sig trait SystemContributions {
-  def sharedMemoryRegionContributions: ISZ[SharedMemoryRegion]
+  def sharedMemoryRegionContributions: ISZ[MemoryRegion]
 
   def channelContributions: ISZ[ST]
 }
 
-@datatype class DefaultSystemContributions(val sharedMemoryRegionContributions: ISZ[SharedMemoryRegion],
+@datatype class DefaultSystemContributions(val sharedMemoryRegionContributions: ISZ[MemoryRegion],
                                            val channelContributions: ISZ[ST]) extends SystemContributions
 
 @sig trait TypeApiContributions {
@@ -43,7 +44,7 @@ import org.sireum.hamr.codegen.microkit.util.Util.TAB
   def simpleFilename: String
 
   @pure def objectName: String = {
-    return s"$simpleFilename.o"
+    return s"$$(TOP_DIR)/build/$simpleFilename.o"
   }
 
   @pure def headerFilename: String = {
@@ -56,8 +57,8 @@ import org.sireum.hamr.codegen.microkit.util.Util.TAB
 
   @pure def buildEntry: ST = {
     return (
-      st"""$objectName: $${TOP}/src/$implementationFilename Makefile
-          |${TAB}$$(CC) -c $$(CFLAGS) $$< -o $$@ -I$${TOP}/include
+      st"""$objectName: $$(TOP_DIR)/${TypeUtil.typesDir}/src/$implementationFilename Makefile
+          |${TAB}$$(CC) -c $$(CFLAGS) $$< -o $$@ $$(TOP_INCLUDE)
         """)
   }
 
@@ -70,6 +71,23 @@ import org.sireum.hamr.codegen.microkit.util.Util.TAB
                                             val simpleFilename: String,
                                             val header: ST,
                                             val implementation: ST) extends  TypeApiContributions
+
+@sig trait GlobalVarContribution {
+  def typ: String
+  def varName: String
+
+  def pretty: ST = {
+    return st"$typ $varName;"
+  }
+}
+@datatype class PortVaddr(val typ: String,
+                          val varName: String) extends GlobalVarContribution
+
+@datatype class QueueVaddr(val typ: String,
+                          val varName: String) extends GlobalVarContribution
+
+@datatype class VMRamVaddr (val typ: String,
+                            val varName:String) extends GlobalVarContribution
 
 @sig trait ConnectionContributions {
 
@@ -87,7 +105,7 @@ import org.sireum.hamr.codegen.microkit.util.Util.TAB
 
   def defineContributions: ISZ[ST]
 
-  def globalVarContributions: ISZ[(String, String)]
+  def globalVarContributions: ISZ[GlobalVarContribution]
 
   def apiMethodSigs: ISZ[ST]
 
@@ -97,7 +115,7 @@ import org.sireum.hamr.codegen.microkit.util.Util.TAB
 
   def computeContributions: ISZ[ST]
 
-  def sharedMemoryMapping: ISZ[SharedMemoryRegion]
+  def sharedMemoryMapping: ISZ[MemoryRegion]
 }
 
 @datatype class DefaultConnectionContributions(val portName: ISZ[String],
@@ -107,9 +125,9 @@ import org.sireum.hamr.codegen.microkit.util.Util.TAB
                                                val userMethodSignatures: ISZ[ST],
                                                val userMethodDefaultImpls: ISZ[ST],
                                                val defineContributions: ISZ[ST],
-                                               val globalVarContributions: ISZ[(String, String)],
+                                               val globalVarContributions: ISZ[GlobalVarContribution],
                                                val apiMethodSigs: ISZ[ST],
                                                val apiMethods: ISZ[ST],
                                                val initContributions: ISZ[ST],
                                                val computeContributions: ISZ[ST],
-                                               val sharedMemoryMapping: ISZ[SharedMemoryRegion]) extends ConnectionContributions
+                                               val sharedMemoryMapping: ISZ[MemoryRegion]) extends ConnectionContributions
