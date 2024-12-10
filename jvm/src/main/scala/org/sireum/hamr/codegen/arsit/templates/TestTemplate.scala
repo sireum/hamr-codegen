@@ -1,8 +1,8 @@
 // #Sireum
-package org.sireum.hamr.arsit.templates
+package org.sireum.hamr.codegen.arsit.templates
 
 import org.sireum._
-import org.sireum.hamr.arsit.{Port, ProjectDirectories, Util}
+import org.sireum.hamr.codegen.arsit.{Port, ProjectDirectories, Util}
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.containers.FileResource
 import org.sireum.hamr.codegen.common.templates.CommentTemplate

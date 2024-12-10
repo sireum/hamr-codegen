@@ -79,13 +79,17 @@ for(releaseDir <- releases) {
     val featureJarFile = featuresDir.list(0)
     val jarName = ops.StringOps(featureJarFile.name)
     val pluginVersion: String = jarName.substring(jarName.lastIndexOf('_') + 1, jarName.lastIndexOf('.'))
+    val noTimePluginVersion: String = jarName.substring(jarName.lastIndexOf('_') + 1, jarName.lastIndexOf('.') - 4)
     val site_xml_contents = site_xml(feature.updateSiteName, featureJarFile.name, feature.featureId, pluginVersion)
 
     (featureUpdateDir / "site.xml").writeOver(site_xml_contents.render)
     println(s"Wrote: ${(featureUpdateDir / "site.xml").value}")
 
-    if(previousVersion == "") { previousVersion = pluginVersion}
-    else { assert (previousVersion == pluginVersion, s"${previousVersion} vs ${pluginVersion} for ${featuresDir}")}
+    if(previousVersion == "") {
+      // the various plugins should all have been build within the same day???
+      previousVersion = noTimePluginVersion
+    }
+    else { assert (previousVersion == noTimePluginVersion, s"${previousVersion} vs ${noTimePluginVersion} for ${featuresDir}")}
   }
 
   val (a,b): (ST, ST) = composite(features.map(m => m.name))

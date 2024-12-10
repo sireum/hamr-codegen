@@ -1,11 +1,11 @@
 // #Sireum
-package org.sireum.hamr.act.proof
+package org.sireum.hamr.codegen.act.proof
 
 import org.sireum._
-import org.sireum.hamr.act.ast
-import org.sireum.hamr.act.periodic.PeriodicDispatcherTemplate.DISPATCH_PERIODIC_INSTANCE
-import org.sireum.hamr.act.util.Util
-import org.sireum.hamr.act.vm.MetaPort
+import org.sireum.hamr.codegen.act.ast
+import org.sireum.hamr.codegen.act.periodic.PeriodicDispatcherTemplate.DISPATCH_PERIODIC_INSTANCE
+import org.sireum.hamr.codegen.act.util.Util
+import org.sireum.hamr.codegen.act.vm.MetaPort
 import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlPort, AadlProcess, SymbolTable}
 
 object ProofContainer {
@@ -62,7 +62,7 @@ object ProofContainer {
   }
 }
 
-import org.sireum.hamr.act.proof.ProofContainer._
+import org.sireum.hamr.codegen.act.proof.ProofContainer._
 
 object ProofUtil {
 

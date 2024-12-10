@@ -198,6 +198,13 @@ object NameUtil {
       return s"${cPackageName}_${componentSingletonType}_Bridge_EntryPoints"
     }
 
+    @memoize def fqSeL4AppName: String = {
+      return s"${basePackage}_${componentSingletonType}_$seL4AppName"
+    }
+
+    @memoize def seL4AppName: String = {
+      return s"${identifier}_seL4App"
+    }
 
     @memoize def sel4SlangExtensionName: String = {
       return s"${componentSingletonType}_seL4Nix"

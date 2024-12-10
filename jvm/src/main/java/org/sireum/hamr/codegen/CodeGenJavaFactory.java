@@ -1,10 +1,18 @@
 package org.sireum.hamr.codegen;
 
-import org.sireum.IS;
-import org.sireum.Z;
-import org.sireum.ST;
+import org.sireum.*;
+
+import java.lang.String;
 
 public class CodeGenJavaFactory {
+
+    public static <T> org.sireum.Option<T> sireumOption(T o) {
+        if(o != null) {
+            return Some$.MODULE$.apply(o);
+        } else {
+            return None$.MODULE$.apply();
+        }
+    }
 
     public static ST stringToST(String s) {
         return CodeGenFactory.stringToST(s);

@@ -157,9 +157,6 @@ object TypeResolver {
         var fields: Map[String, AadlType] = Map.empty
 
         for (sc <- c.subComponents) {
-          if (sc.identifier.name.isEmpty) {
-            assert(T)
-          }
           val fieldName = CommonUtil.getLastName(sc.identifier)
           fields = fields + (fieldName ~> processType(sc, basePackage, maxStringSize, unboundedZRBitWidth, typeMap, rawProtocol, reporter))
         }

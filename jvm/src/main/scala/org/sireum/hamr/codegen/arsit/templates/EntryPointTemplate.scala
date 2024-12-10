@@ -1,8 +1,8 @@
 // #Sireum
-package org.sireum.hamr.arsit.templates
+package org.sireum.hamr.codegen.arsit.templates
 
 import org.sireum._
-import org.sireum.hamr.arsit.EntryPoints
+import org.sireum.hamr.codegen.arsit.EntryPoints
 
 @datatype class EntryPointTemplate(parameters: ISZ[ST],
                                    localVars: ISZ[ST],

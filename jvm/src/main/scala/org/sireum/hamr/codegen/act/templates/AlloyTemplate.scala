@@ -1,5 +1,5 @@
 // #Sireum
-package org.sireum.hamr.act.templates
+package org.sireum.hamr.codegen.act.templates
 
 import org.sireum._
 

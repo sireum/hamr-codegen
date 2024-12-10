@@ -181,6 +181,23 @@ import org.sireum.message.Position
     return processors.elements
   }
 
+  def getActualBoundProcessors(): ISZ[Processor] = {
+    var processors: Set[Processor] = Set.empty
+
+    for (process <- getProcesses()) {
+      getBoundProcessor(process) match {
+        case Some(aadlProcessor: AadlProcessor) => processors = processors + aadlProcessor
+        case Some(avp: AadlVirtualProcessor) =>
+          getActualBoundProcess(avp) match {
+            case Some(ap) => processors = processors + ap
+            case _ =>
+          }
+        case _ =>
+      }
+    }
+    return processors.elements
+  }
+
   def hasVM(): B = {
     return ops.ISZOps(getProcesses()).exists(p => p.toVirtualMachine(this))
   }

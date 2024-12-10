@@ -1,10 +1,10 @@
 // #Sireum
 
-package org.sireum.hamr.act.util
+package org.sireum.hamr.codegen.act.util
 
 import org.sireum._
-import org.sireum.hamr.act.ast
-import org.sireum.hamr.act.connections.ConnectorContainer
+import org.sireum.hamr.codegen.act.ast
+import org.sireum.hamr.codegen.act.connections.ConnectorContainer
 import org.sireum.hamr.codegen.common.containers.FileResource
 import org.sireum.hamr.ir
 

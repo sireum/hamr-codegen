@@ -294,6 +294,10 @@ import org.sireum.hamr.ir._
     }
     return ret
   }
+
+  def stackSizeInBytes(): Option[Z] = {
+    return PropertyUtil.getStackSizeInBytes(component)
+  }
 }
 
 @datatype class AadlThread(val component: ir.Component,
@@ -436,6 +440,10 @@ import org.sireum.hamr.ir._
 @sig trait AadlPort extends AadlDirectedFeature
 
 @sig trait AadlFeatureEvent extends AadlDirectedFeature {
+  def queueSize: Z = {
+    return PropertyUtil.getQueueSize(feature, 1)
+  }
+
   def getComputeEntrypointSourceText(): Option[String] = {
     return PropertyUtil.getComputeEntrypointSourceText(feature.properties)
   }

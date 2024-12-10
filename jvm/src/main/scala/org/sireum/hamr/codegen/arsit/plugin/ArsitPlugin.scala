@@ -1,13 +1,13 @@
 // #Sireum
-package org.sireum.hamr.arsit.plugin
+package org.sireum.hamr.codegen.arsit.plugin
 
 import org.sireum._
-import org.sireum.hamr.arsit.bts.BlessBehaviorProviderPlugin
-import org.sireum.hamr.arsit.gcl.{GumboDatatypeProviderPlugin, GumboPlugin, GumboXPlugin}
-import org.sireum.hamr.arsit.plugin.BehaviorEntryPointProviderPlugin.{BehaviorEntryPointContributions, ObjectContributions}
-import org.sireum.hamr.arsit.templates.{EntryPointTemplate, IDatatypeTemplate}
-import org.sireum.hamr.arsit.util.ArsitOptions
-import org.sireum.hamr.arsit.{EntryPoints, Port, ProjectDirectories, plugin}
+import org.sireum.hamr.codegen.arsit.bts.BlessBehaviorProviderPlugin
+import org.sireum.hamr.codegen.arsit.gcl.{GumboDatatypeProviderPlugin, GumboPlugin, GumboXPlugin}
+import org.sireum.hamr.codegen.arsit.plugin.BehaviorEntryPointProviderPlugin.{BehaviorEntryPointContributions, ObjectContributions}
+import org.sireum.hamr.codegen.arsit.templates.{EntryPointTemplate, IDatatypeTemplate}
+import org.sireum.hamr.codegen.arsit.util.ArsitOptions
+import org.sireum.hamr.codegen.arsit.{EntryPoints, Port, ProjectDirectories, plugin}
 import org.sireum.hamr.codegen.common.CommonUtil.toolName
 import org.sireum.hamr.codegen.common.containers.{FileResource, Marker}
 import org.sireum.hamr.codegen.common.plugin.Plugin

@@ -1,9 +1,9 @@
 // #Sireum
 
-package org.sireum.hamr.act.periodic
+package org.sireum.hamr.codegen.act.periodic
 
 import org.sireum._
-import org.sireum.hamr.act.util._
+import org.sireum.hamr.codegen.act.util._
 import org.sireum.hamr.codegen.common.symbols._
 
 object Dispatcher {

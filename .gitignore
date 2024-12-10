@@ -29,3 +29,4 @@ sysml/
 project.json
 *.dot
 bin/install/
+*7zz*

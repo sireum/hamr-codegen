@@ -28,7 +28,7 @@
 
 // This file is auto-generated from ActAst.scala
 
-package org.sireum.hamr.act.ast
+package org.sireum.hamr.codegen.act.ast
 
 import org.sireum._
 

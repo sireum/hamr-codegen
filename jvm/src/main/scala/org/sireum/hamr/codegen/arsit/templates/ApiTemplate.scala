@@ -1,10 +1,10 @@
 // #Sireum
 
-package org.sireum.hamr.arsit.templates
+package org.sireum.hamr.codegen.arsit.templates
 
 import org.sireum._
-import org.sireum.hamr.arsit.Port
-import org.sireum.hamr.arsit.gcl.GumboGen.GclApiContributions
+import org.sireum.hamr.codegen.arsit.Port
+import org.sireum.hamr.codegen.arsit.gcl.GumboGen.GclApiContributions
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlEventPort, AadlFeature, AadlFeatureData, AadlFeatureEvent, AadlPort}
 import org.sireum.hamr.codegen.common.types.{AadlType, TypeUtil}

@@ -1,10 +1,10 @@
 // #Sireum
 
-package org.sireum.hamr.arsit.nix
+package org.sireum.hamr.codegen.arsit.templates
 
 import org.sireum._
-import org.sireum.hamr.arsit._
-import org.sireum.hamr.arsit.util.{ArsitLibrary, ArsitPlatform}
+import org.sireum.hamr.codegen.arsit._
+import org.sireum.hamr.codegen.arsit.util.{ArsitLibrary, ArsitPlatform}
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.symbols.{AadlPort, AadlThreadOrDevice}
 import org.sireum.hamr.codegen.common.templates.CommentTemplate

@@ -1,11 +1,11 @@
 // #Sireum
 
-package org.sireum.hamr.arsit.templates
+package org.sireum.hamr.codegen.arsit.templates
 
 import org.sireum._
-import org.sireum.hamr.arsit.gcl.GumboGen
-import org.sireum.hamr.arsit.gcl.GumboGen.{GclEntryPointInitialize, GclEntryPointPeriodicCompute, GclEntryPointSporadicCompute}
-import org.sireum.hamr.arsit.{EntryPoints, Port}
+import org.sireum.hamr.codegen.arsit.gcl.GumboGen
+import org.sireum.hamr.codegen.arsit.gcl.GumboGen.{GclEntryPointInitialize, GclEntryPointPeriodicCompute, GclEntryPointSporadicCompute}
+import org.sireum.hamr.codegen.arsit.{EntryPoints, Port}
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.symbols.{AadlPort, Dispatch_Protocol, SymbolTable}
 import org.sireum.hamr.codegen.common.util.NameUtil.NameProvider

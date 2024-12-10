@@ -1,10 +1,10 @@
 // #Sireum
 
-package org.sireum.hamr.arsit
+package org.sireum.hamr.codegen.arsit
 
 import org.sireum._
-import org.sireum.hamr.arsit.util.{ArsitLibrary, ArsitOptions, ArsitPlatform, IpcMechanism}
-import org.sireum.hamr.codegen.common.containers.{FileResource, Resource, SireumSlangTranspilersCOption}
+import org.sireum.hamr.codegen.arsit.util.{ArsitLibrary, ArsitOptions, ArsitPlatform, IpcMechanism}
+import org.sireum.hamr.codegen.common.containers.{FileResource, Resource}
 import org.sireum.hamr.codegen.common.properties.{OsateProperties, PropertyUtil}
 import org.sireum.hamr.codegen.common.symbols.{AadlFeature, AadlThreadOrDevice}
 import org.sireum.hamr.codegen.common.types._
@@ -127,7 +127,7 @@ object Util {
   @pure def getIpc(ipcmech: IpcMechanism.Type, packageName: String): ST = {
     val PACKAGE_PLACEHOLDER = "PACKAGE_NAME"
     val r: String = ipcmech match {
-      case IpcMechanism.SharedMemory => "ipc_shared_memory.c"
+      case IpcMechanism.SharedMemory => "util/ipc_shared_memory.c"
       case x => halt("Unexpected IPC mechanism ${x}")
     }
     val lib = Util.getLibraryFile(r).render

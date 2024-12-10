@@ -1,14 +1,14 @@
 // #Sireum
-package org.sireum.hamr.arsit.gcl
+package org.sireum.hamr.codegen.arsit.gcl
 
 import org.sireum._
-import org.sireum.hamr.arsit.ProjectDirectories
-import org.sireum.hamr.arsit.gcl.GumboGen.toKey
-import org.sireum.hamr.arsit.gcl.GumboXGen._
-import org.sireum.hamr.arsit.gcl.GumboXGenUtil._
-import org.sireum.hamr.arsit.plugin.BehaviorEntryPointProviderPlugin.{ObjectContributions, emptyObjectContributions}
-import org.sireum.hamr.arsit.plugin.DatatypeProviderPlugin
-import org.sireum.hamr.arsit.templates.{StubTemplate, TestTemplate}
+import org.sireum.hamr.codegen.arsit.ProjectDirectories
+import org.sireum.hamr.codegen.arsit.gcl.GumboGen.toKey
+import org.sireum.hamr.codegen.arsit.gcl.GumboXGen._
+import org.sireum.hamr.codegen.arsit.gcl.GumboXGenUtil._
+import org.sireum.hamr.codegen.arsit.plugin.BehaviorEntryPointProviderPlugin.{ObjectContributions, emptyObjectContributions}
+import org.sireum.hamr.codegen.arsit.plugin.DatatypeProviderPlugin
+import org.sireum.hamr.codegen.arsit.templates.{StubTemplate, TestTemplate}
 import org.sireum.hamr.codegen.common.CommonUtil.IdPath
 import org.sireum.hamr.codegen.common.StringUtil
 import org.sireum.hamr.codegen.common.containers.FileResource
@@ -1199,7 +1199,7 @@ object GumboXGen {
             stateVar = stateVar,
             id = i,
             isPreState = T,
-            aadlType = GclResolver.getAadlType(stateVar.classifier, aadlTypes, stateVar.posOpt, Reporter.create),//aadlTypes.typeMap.get(stateVar.classifier).get,
+            aadlType = GclResolver.getAadlType(stateVar.classifier, aadlTypes, stateVar.posOpt, Reporter.create),
 
             componentNames = componentNames)
 
@@ -1333,7 +1333,7 @@ object GumboXGen {
               stateVar = stateVar,
               id = i,
               isPreState = F,
-              aadlType = GclResolver.getAadlType(stateVar.classifier, aadlTypes, stateVar.posOpt, Reporter.create),//aadlTypes.typeMap.get(stateVar.classifier).get,
+              aadlType = GclResolver.getAadlType(stateVar.classifier, aadlTypes, stateVar.posOpt, Reporter.create),
               componentNames = componentNames)
             postOracleParams = postOracleParams + postSVGG
             step5PostValues = step5PostValues :+ st"val ${postSVGG.getParamDef} = ${componentNames.componentSingletonTypeQualifiedName}.${stateVar.name}"
@@ -1647,7 +1647,7 @@ object GumboXGen {
       val nextMethod: ST = {
         if (component.isSporadic()) {
           val incomingEventPorts: ISZ[String] =
-            for(i <- GumboXGenUtil.portsToParams(component.getPorts().filter(p => p.direction == Direction.In && p.isInstanceOf[AadlFeatureEvent]), componentNames)) yield
+            for (i <- GumboXGenUtil.portsToParams(component.getPorts().filter(p => p.direction == Direction.In && p.isInstanceOf[AadlFeatureEvent]), componentNames)) yield
               s"cp.${i.name}.nonEmpty"
 
           if (incomingEventPorts.isEmpty) {

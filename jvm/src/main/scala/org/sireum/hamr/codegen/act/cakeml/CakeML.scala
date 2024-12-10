@@ -1,10 +1,10 @@
 // #Sireum
 
-package org.sireum.hamr.act.cakeml
+package org.sireum.hamr.codegen.act.cakeml
 
 import org.sireum._
-import org.sireum.hamr.act.templates.CakeMLTemplate
-import org.sireum.hamr.act.util._
+import org.sireum.hamr.codegen.act.templates.CakeMLTemplate
+import org.sireum.hamr.codegen.act.util._
 import org.sireum.hamr.codegen.common.NixSeL4NameUtil
 import org.sireum.hamr.codegen.common.containers.FileResource
 import org.sireum.hamr.codegen.common.properties.CaseSchedulingProperties.PacingMethod

@@ -1,10 +1,10 @@
 // #Sireum
-package org.sireum.hamr.arsit.gcl
+package org.sireum.hamr.codegen.arsit.gcl
 
 import org.sireum._
-import org.sireum.hamr.arsit.ProjectDirectories
-import org.sireum.hamr.arsit.plugin.DatatypeProviderPlugin
-import org.sireum.hamr.arsit.templates.{DatatypeTemplate, EnumTemplate, IDatatypeTemplate}
+import org.sireum.hamr.codegen.arsit.ProjectDirectories
+import org.sireum.hamr.codegen.arsit.plugin.DatatypeProviderPlugin
+import org.sireum.hamr.codegen.arsit.templates.{DatatypeTemplate, EnumTemplate, IDatatypeTemplate}
 import org.sireum.hamr.codegen.common.symbols.{AnnexClauseInfo, GclAnnexClauseInfo, SymbolTable}
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes}
 import org.sireum.message.Reporter
@@ -39,7 +39,7 @@ import org.sireum.message.Reporter
       case dt: DatatypeTemplate =>
         val invariants = GumboGen.processInvariants(aadlType, symbolTable, aadlTypes, aadlType.nameProvider.basePackageName)
 
-        val imports: ISZ[ST] = for(str <- (Set.empty[String] ++ GumboGen.imports).elements) yield st"$str"
+        val imports: ISZ[ST] = for (str <- (Set.empty[String] ++ GumboGen.imports).elements) yield st"$str"
 
         return DatatypeProviderPlugin.PartialDatatypeContribution(
           slangSwitches = ISZ(),

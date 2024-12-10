@@ -50,12 +50,19 @@ exit /B %errorlevel%
 
 import org.sireum._
 import org.sireum.cli.CliOpt
+import org.sireum.cli.CliOpt.Type
 
 val homeBin: Os.Path = Os.slashDir
 val home: Os.Path = homeBin.up
-val sireum: Os.Path = homeBin / (if (Os.isWin) "sireum.bat" else "sireum")
-val sireumJar: Os.Path = homeBin / "sireum.jar"
-val appDir: Os.Path = homeBin / (if (Os.isMac) "mac" else if (Os.isWin) "win" else "linux")
+val sireumHome: Os.Path = {
+  if ((home.up.up / "bin" / "sireum.jar").exists) { // use kekinian's sireum.jar if it exists
+    home.up.up
+  } else {
+    Os.sireumHomeOpt.get // this will use the environment's sireum.jar if this script is called via 'sireum slang run'
+  }
+}
+val sireum: Os.Path = sireumHome / "bin" / (if (Os.isWin) "sireum.bat" else "sireum")
+val appDir: Os.Path = sireumHome / "bin" / (if (Os.isMac) "mac" else if (Os.isWin) "win" else "linux")
 
 val osateDir: Os.Path = {
   Os.env("OSATE_HOME") match {
@@ -155,51 +162,76 @@ def regenTransformers(): Unit = {
 }
 
 def regenClis(): Unit = {
-  val ksireumJar = home.up.up / "bin" / "sireum.jar"
-  if (!ksireumJar.exists) {
-    println(s"${ksireumJar} does not exists")
-    Os.exit(1)
-  }
-  if (!sireumJar.isSymLink) {
-    sireumJar.remove()
-    sireumJar.mklink(ksireumJar)
-    println(
-      st"""Need to rerun command as sireum.jar has been symlinked to $ksireumJar.
-          |
-          |After making changes to codegen's cli, do the following
-          |  1) $$SIREUM_HOME/bin/build.cmd           # get the new options into sireum.jar
-          |  2) $$SIREUM_HOME/bin/build.cmd regen-cli # regen sireum's cli
-          |  3) $$SIREUM_HOME/bin/build.cmd           # build again to include the updated cli
-          |
-          |You can then run '$$SIREUM_HOME/hamr/codegen/bin/build.cmd regen-cli' in order to
-          |update codegen's testing cli and also update CliKeys.scala""".render)
-    Os.exit(0)
-  }
-
   val utilDir = home / "shared" / "src" / "main" / "scala" / "org" / "sireum" / "hamr" / "codegen" / "common" / "util"
   // NOTE: cliJson.sc emits what's in $SIREUM_HOME/bin/sireum.jar's version of
   //       hamr's cli so regen that first, rebuild sireum.jar, then call this method
   proc"${sireum} tools cligen -p org.sireum.hamr.codegen.common.util -n HamrCli -o ${utilDir.value} ${(utilDir / "cliJson.sc")}".console.runCheck()
 
 
-  def process(tool: CliOpt.Tool, packageName: String, output: Os.Path): Unit = {
+  def process(tool: CliOpt.Tool, packageName: String, outputKeyUtil: Os.Path, optionName: String): Unit = {
 
     var shorts: ISZ[ST] = ISZ()
     var longs: ISZ[ST] = ISZ()
     var allLongs: ISZ[ST] = ISZ()
     var allShorts: ISZ[ST] = ISZ()
+    var toStrings: ISZ[ST] = ISZ()
 
     def addOptions(opts: ISZ[org.sireum.cli.CliOpt.Opt], optGroup: String): Unit = {
       for (o <- opts) {
-        longs = longs :+ st"""val $optGroup${o.name}: String = "--${o.longKey}""""
+        val longKey = s"--${o.longKey}"
+        longs = longs :+ st"""val $optGroup${o.name}: String = "$longKey""""
         allLongs = allLongs :+ st"$optGroup${o.name}"
+        o.tpe match {
+          case f: Type.Flag =>
+            toStrings = toStrings :+
+              st"""if (o.${o.name}) {
+                  |  ret = ret :+ ("$longKey", None())
+                  |}"""
+          case n: Type.Num =>
+            toStrings = toStrings :+
+              st"""if (includeDefaults || o.${o.name} != ${n.default}) {
+                  |  ret = ret :+ ("$longKey", Some(o.${o.name}.string))
+                  |}"""
+          case nf: Type.NumFlag =>
+            halt(s"todo: $nf")
+          case nc: Type.NumChoice =>
+            val default = nc.choices(0)
+            toStrings = toStrings :+
+              st"""if (includeDefaults || o.${o.name} != $default) {
+                  |  ret = ret :+ ("$longKey", Some(o.${o.name}.string))
+                  |}"""
+          case s: Type.Str =>
+            val includeDefault: Option[String] =
+              if (s.default.nonEmpty) Some("includeDefaults || ")
+              else None()
+            val extract: String =
+              if (s.sep.nonEmpty) st"""st"$${(o.${o.name}, "${s.sep.get}")}".render""".render
+              else s"o.${o.name}.get"
+            toStrings = toStrings :+
+              st"""if (${includeDefault}o.${o.name}.nonEmpty) {
+                  |  ret = ret :+ ("$longKey", Some($extract))
+                  |}"""
+          case c: Type.Choice =>
+            val default = c.elements(0)
+            toStrings = toStrings :+
+              st"""if (includeDefaults || o.${o.name}.name != "$default") {
+                  |  ret = ret :+ ("$longKey", Some(o.${o.name}.name))
+                  }"""
+          case p: Type.Path =>
+            if(p.default.nonEmpty) {
+              halt("todo: handle path default")
+            }
+            toStrings = toStrings :+
+              st"""if (o.${o.name}.nonEmpty) {
+                  |  ret = ret :+ ("$longKey", Some(st"$${(o.${o.name}, Os.pathSep)}".render))
+                  |}"""
+        }
         if (o.shortKey.nonEmpty) {
           shorts = shorts :+ st"""val $optGroup${o.name}: String = "-${o.shortKey.get}""""
           allShorts = allShorts :+ st"$optGroup${o.name}"
         }
       }
     }
-    // Ignore the Tipe error "'hamr' is not a member of package 'org.sireum'"
     addOptions(tool.opts, "")
     for (g <- tool.groups) {
       addOptions(g.opts, s"${g.name}_")
@@ -255,12 +287,60 @@ def regenClis(): Unit = {
           |  // boolean sameKeys = org.sireum.hamr.codegen.ShortKeys.sameKeys(knownKeys);
           |}
           |"""
-    output.writeOver(content.render)
-    println(s"Wrote: $output")
+    outputKeyUtil.writeOver(content.render)
+    println(s"Wrote: $outputKeyUtil")
+
+    val hamrCli = home.up.up / "cli"/ "jvm" / "src" / "main" / "scala" / "org" / "sireum" / "cli" / "HAMR.scala"
+
+    val cliContent =
+      st"""
+          |// Autogenerated via ${(home / "bin" / "build.cmd").value} --regen-cli
+          |
+          |object ${optionName}Util {
+          |  def optionsToString(o: Cli.$optionName, includeDefaults: B): String = {
+          |    val ops: ISZ[ST] = for(e <- optionsToStringH(o, includeDefaults)) yield st"$${e._1}$${if (e._2.isEmpty) "" else s" $${e._2.get}"}"
+          |    return st"$${(ops, " ")}".render
+          |  }
+          |
+          |  def optionsToStringH(o : Cli.$optionName, includeDefaults: B): ISZ[(String, Option[String])] = {
+          |    var ret: ISZ[(String, Option[String])] = ISZ()
+          |    ${(toStrings, "\n")}
+          |    return ret
+          |  }
+          |}"""
+
+    val hamrCliContent = ops.StringOps(hamrCli.read)
+    val start = hamrCliContent.stringIndexOf(s"// BEGIN $optionName")
+    val endText: String = s"// END $optionName"
+    val end = hamrCliContent.stringIndexOf(endText)
+    if (start < 0 || end < 0) {
+      halt(s"Couldn't find BEGIN/END markers for $optionName")
+    }
+    hamrCli.writeOver(
+      st"""${hamrCliContent.substring(0, start - 1)}
+        |// BEGIN $optionName
+        |$cliContent
+        |// END $optionName
+        |${hamrCliContent.substring(end + endText.size + 1, hamrCliContent.size)}""".render)
+    println(s"Modified: $hamrCli")
   }
 
-  process(org.sireum.hamr.codegen.HamrCodegenCli.codeGenTool, "org.sireum.hamr.codegen", home / "shared" / "src" / "main" / "scala" / "org" / "sireum" / "hamr" / "codegen" / "CliKeys.scala")
-  process(org.sireum.hamr.sysml.cli.sysmlCodegen, "org.sireum.hamr.sysml", home.up / "sysml"/ "frontend" / "jvm" / "src" / "main" / "scala" / "org" / "sireum" / "hamr" / "sysml" / "CliKeys.scala")
+
+
+  // Ignore the Tipe error "'hamr' is not a member of package 'org.sireum'"
+  process(
+    tool = org.sireum.hamr.codegen.HamrCodegenCli.codeGenTool,
+    packageName = "org.sireum.hamr.codegen",
+    outputKeyUtil = home / "shared" / "src" / "main" / "scala" / "org" / "sireum" / "hamr" / "codegen" / "CliKeys.scala",
+    optionName =  "SireumHamrCodegenOption"
+  )
+
+  process(
+    tool = org.sireum.hamr.sysml.cli.sysmlCodegen,
+    packageName = "org.sireum.hamr.sysml",
+    outputKeyUtil = home.up / "sysml"/ "frontend" / "jvm" / "src" / "main" / "scala" / "org" / "sireum" / "hamr" / "sysml" / "CliKeys.scala",
+    optionName = "SireumHamrSysmlCodegenOption"
+  )
 }
 
 def isCI(): B = {
@@ -320,15 +400,6 @@ def installSbtMill(): Unit = {
     millBin.chmod("+x")
     println()
   }
-}
-
-Os.env("GITHUB_WORKFLOW") match {
-  case Some(n) if (ops.StringOps(ops.StringOps(n).toLower).contains("camkes")) =>
-    val ver = (home / "versions.properties").properties.get("org.sireum.version.z3").get
-    println(s"z3 4.12+ requires glibc 2.35 but the camkes container has 2.31 so installing z3 4.11.2 rather than ${ver}")
-    proc"sed -i s/org.sireum.version.z3=${ver}/org.sireum.version.z3=4.11.2/g ${home / "versions.properties"}".runCheck()
-    proc"cat ${home / "versions.properties"}".console.runCheck()
-  case _ =>
 }
 
 var continue = T

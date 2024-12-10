@@ -1,5 +1,5 @@
 // #Sireum
-package org.sireum.hamr.arsit.gcl
+package org.sireum.hamr.codegen.arsit.gcl
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.util.GclUtil

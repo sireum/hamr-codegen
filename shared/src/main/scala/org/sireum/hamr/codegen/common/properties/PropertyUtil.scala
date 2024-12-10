@@ -114,9 +114,13 @@ object PropertyUtil {
               case Some("bits") => Some(_v / z"8")
               case Some("Bytes") => Some(_v)
               case Some("KByte") => Some(_v * z"1000")
+              case Some("KiByte") => Some(_v * z"1024")
               case Some("MByte") => Some(_v * z"1000" * z"1000")
+              case Some("MiByte") => Some(_v * z"1024" * z"1024")
               case Some("GByte") => Some(_v * z"1000" * z"1000" * z"1000")
+              case Some("GiByte") => Some(_v * z"1024" * z"1024" * z"1024")
               case Some("TByte") => Some(_v * z"1000" * z"1000" * z"1000" * z"1000")
+              case Some("TiByte") => Some(_v * z"1024" * z"1024" * z"1024" * z"1024")
               case _ => None[Z]()
             }
             _ret

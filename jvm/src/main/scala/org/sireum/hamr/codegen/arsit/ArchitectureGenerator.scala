@@ -1,14 +1,14 @@
 // #Sireum
 
-package org.sireum.hamr.arsit
+package org.sireum.hamr.codegen.arsit
 
 import org.sireum._
-import org.sireum.hamr.arsit.Util.{nameProvider, toolName}
-import org.sireum.hamr.arsit.nix.NixGen
-import org.sireum.hamr.arsit.plugin.DatatypeProviderPlugin
-import org.sireum.hamr.arsit.templates._
-import org.sireum.hamr.arsit.util.ReporterUtil.reporter
-import org.sireum.hamr.arsit.util.{ArsitOptions, SchedulerUtil}
+import org.sireum.hamr.codegen.arsit.Util.{nameProvider, toolName}
+import org.sireum.hamr.codegen.arsit.nix.NixGen
+import org.sireum.hamr.codegen.arsit.plugin.DatatypeProviderPlugin
+import org.sireum.hamr.codegen.arsit.templates._
+import org.sireum.hamr.codegen.arsit.util.ReporterUtil.reporter
+import org.sireum.hamr.codegen.arsit.util.{ArsitOptions, SchedulerUtil}
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.containers._
 import org.sireum.hamr.codegen.common.plugin.Plugin

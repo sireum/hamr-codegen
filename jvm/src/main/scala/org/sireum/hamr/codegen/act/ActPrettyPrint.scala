@@ -1,15 +1,15 @@
 // #Sireum
 
-package org.sireum.hamr.act
+package org.sireum.hamr.codegen.act
 
 import org.sireum._
-import org.sireum.hamr.act.ast._
-import org.sireum.hamr.act.connections.{ConnectorContainer, ConnectorTemplate}
-import org.sireum.hamr.act.periodic.{PacerTemplate, PeriodicDispatcherTemplate}
-import org.sireum.hamr.act.templates._
-import org.sireum.hamr.act.util.Util.reporter
-import org.sireum.hamr.act.util._
-import org.sireum.hamr.act.vm.VM_Template
+import org.sireum.hamr.codegen.act.ast._
+import org.sireum.hamr.codegen.act.connections.{ConnectorContainer, ConnectorTemplate}
+import org.sireum.hamr.codegen.act.periodic.{PacerTemplate, PeriodicDispatcherTemplate}
+import org.sireum.hamr.codegen.act.templates._
+import org.sireum.hamr.codegen.act.util.Util.reporter
+import org.sireum.hamr.codegen.act.util._
+import org.sireum.hamr.codegen.act.vm.VM_Template
 import org.sireum.hamr.codegen.common.DirectoryUtil
 import org.sireum.hamr.codegen.common.containers.{EResource, FileResource, IResource}
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
@@ -41,10 +41,10 @@ import org.sireum.ops.StringOps
 
     if (ExperimentalOptions.generateDotGraphs(options.experimentalOptions)) {
       val assembly = container.models(0).asInstanceOf[Assembly]
-      val dot = org.sireum.hamr.act.dot.HTMLDotGenerator.dotty(assembly, F)
+      val dot = org.sireum.hamr.codegen.act.dot.HTMLDotGenerator.dotty(assembly, F)
       add(s"graph.dot", dot)
 
-      val dotSimple = org.sireum.hamr.act.dot.HTMLDotGenerator.dotty(assembly, T)
+      val dotSimple = org.sireum.hamr.codegen.act.dot.HTMLDotGenerator.dotty(assembly, T)
       add(s"graph_simple.dot", dotSimple)
     }
 

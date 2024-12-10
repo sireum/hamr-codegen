@@ -1,9 +1,9 @@
 // #Sireum
 
-package org.sireum.hamr.arsit.templates
+package org.sireum.hamr.codegen.arsit.templates
 
 import org.sireum._
-import org.sireum.hamr.arsit.Port
+import org.sireum.hamr.codegen.arsit.Port
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.templates.{CommentTemplate, StackFrameTemplate}
 import org.sireum.hamr.codegen.common.types.{TypeKind, TypeNameProvider, TypeResolver, TypeUtil}
@@ -211,7 +211,7 @@ object SeL4NixTemplate {
   def app(packageName: String,
           instanceName: String,
           imports: ISZ[String],
-          identifier: String,
+          appName: String,
           bridge: ST,
           bridgeIdentifier: String,
           dispatchStatus: ST,
@@ -236,7 +236,7 @@ object SeL4NixTemplate {
           |import art.PortMode._
           |${(imports, "\n")}
           |
-          |object ${identifier} extends App {
+          |object $appName extends App {
           |
           |  ${bridge}
           |

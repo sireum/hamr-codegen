@@ -1,9 +1,9 @@
 // #Sireum
-package org.sireum.hamr.arsit.bts
+package org.sireum.hamr.codegen.arsit.bts
 
 import org.sireum._
-import org.sireum.hamr.arsit.templates.BlessST
-import org.sireum.hamr.arsit.{ProjectDirectories, Result, Util}
+import org.sireum.hamr.codegen.arsit.templates.BlessST
+import org.sireum.hamr.codegen.arsit.{ProjectDirectories, Result, Util}
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.containers.{FileResource, Resource, SireumSlangTranspilersCOption}
 import org.sireum.hamr.codegen.common.symbols.{AadlThreadOrDevice, BTSSymbolTable, SymbolTable}

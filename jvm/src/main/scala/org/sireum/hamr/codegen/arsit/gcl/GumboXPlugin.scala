@@ -1,13 +1,13 @@
 // #Sireum
 
-package org.sireum.hamr.arsit.gcl
+package org.sireum.hamr.codegen.arsit.gcl
 
 import org.sireum._
-import org.sireum.hamr.arsit.plugin.BehaviorEntryPointProviderPlugin.ObjectContributions
-import org.sireum.hamr.arsit.plugin._
-import org.sireum.hamr.arsit.templates.{EntryPointTemplate, IDatatypeTemplate}
-import org.sireum.hamr.arsit.util.{ArsitOptions, ReporterUtil}
-import org.sireum.hamr.arsit.{EntryPoints, Port, ProjectDirectories}
+import org.sireum.hamr.codegen.arsit.plugin.BehaviorEntryPointProviderPlugin.ObjectContributions
+import org.sireum.hamr.codegen.arsit.plugin._
+import org.sireum.hamr.codegen.arsit.templates.{EntryPointTemplate, IDatatypeTemplate}
+import org.sireum.hamr.codegen.arsit.util.{ArsitOptions, ReporterUtil}
+import org.sireum.hamr.codegen.arsit.{EntryPoints, Port, ProjectDirectories}
 import org.sireum.hamr.codegen.common.CommonUtil.IdPath
 import org.sireum.hamr.codegen.common.containers.FileResource
 import org.sireum.hamr.codegen.common.symbols._
@@ -116,7 +116,7 @@ import org.sireum.message.Reporter
     }
 
     for (thread <- symbolTable.getThreads() if symbolTable.annexClauseInfos.contains(thread.path);
-      annex <- symbolTable.annexClauseInfos.get(thread.path).get) {
+         annex <- symbolTable.annexClauseInfos.get(thread.path).get) {
       if (annex.isInstanceOf[GclAnnexClauseInfo]) {
         componentsWithGclSubclauses = componentsWithGclSubclauses + thread.path
       }
@@ -190,8 +190,8 @@ import org.sireum.message.Reporter
                                            symbolTable: SymbolTable,
                                            aadlTypes: AadlTypes): B = {
     return arsitOptions.runtimeMonitoring //&&
-      //!handledComponents.contains(component.path) &&
-      //canHandle(component, resolvedAnnexSubclauses, symbolTable, aadlTypes)
+    //!handledComponents.contains(component.path) &&
+    //canHandle(component, resolvedAnnexSubclauses, symbolTable, aadlTypes)
   }
 
   override def handleEntryPointProvider(component: AadlThreadOrDevice,

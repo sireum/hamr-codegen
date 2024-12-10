@@ -1,9 +1,9 @@
 // #Sireum
 
-package org.sireum.hamr.act.util
+package org.sireum.hamr.codegen.act.util
 
 import org.sireum._
-import org.sireum.hamr.act.util.Util.reporter
+import org.sireum.hamr.codegen.act.util.Util.reporter
 import org.sireum.hamr.codegen.common.properties.{OsateProperties, PropertyUtil}
 import org.sireum.hamr.ir
 

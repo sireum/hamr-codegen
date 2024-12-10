@@ -1,4 +1,4 @@
-package org.sireum.hamr.arsit.util
+package org.sireum.hamr.codegen.arsit.util
 
 import org.sireum.$internal.RC
 import org.sireum._
@@ -10,7 +10,7 @@ object ArsitLibrary_Ext {
   def getFiles: ISZ[(String, String)] = {
     val map = RC.text(Vector(
       "../../../../../../../../../../art/shared/src/main/scala/",
-      "../../../../../../../resources/util")) { (p, f) => true }
+      "../../../../../../../resources/")) { (p, f) => true }
     ISZ(map.toSeq.map(p => (String(p._1.mkString("/")), String(p._2))): _*)
   }
 

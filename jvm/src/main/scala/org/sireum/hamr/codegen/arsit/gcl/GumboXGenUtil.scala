@@ -1,5 +1,5 @@
 // #Sireum
-package org.sireum.hamr.arsit.gcl
+package org.sireum.hamr.codegen.arsit.gcl
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.resolvers.GclResolver
@@ -15,6 +15,8 @@ import org.sireum.lang.{ast => AST}
 import org.sireum.message.Reporter
 
 object GumboXGenUtil {
+  val sporadicDispatchedEventPortParamName: String = "dispatchedEventPortId"
+
   def genGumboXUtil(basePackage: String): ST = {
     val utilContent: ST =
       st"""// #Sireum
@@ -87,7 +89,6 @@ object GumboXGenUtil {
   }
 
 
-
   @pure def genUnitTestConfiguration(packageName: String): ST = {
     return (
       st"""//#Sireum
@@ -119,7 +120,7 @@ object GumboXGenUtil {
           |  def next: Container
           |}
           |""")
-    }
+  }
 
 
   @pure def genMutableBase(packageName: String): ST = {
@@ -144,7 +145,8 @@ object GumboXGenUtil {
                 |""")
   }
 
-  @datatype class Container(val componentSingletonType: String,
+  @datatype class Container(val componentIsSporadic: B,
+                            val componentSingletonType: String,
                             val packageName: String,
                             val packageNameI: ISZ[String],
                             val basePackage: String,
@@ -193,12 +195,17 @@ object GumboXGenUtil {
 
       var entries: ISZ[ST] = ISZ()
       for (param <- sortParam(params)) {
-        entries = entries :+ st"${param.name} = ${param.preFetch}"
+        if (!componentIsSporadic || !param.isInEventPort) {
+          entries = entries :+ st"${param.name} = ${param.preFetch}"
+        } else {
+          entries = entries :+ st"${param.name} = ${param.asInstanceOf[GGPortParam].preFetchSporadic}"
+        }
       }
-      return if (entries.isEmpty) st"$containerName()"
-      else
-        st"""${containerName}(
-            |  ${(entries, ", \n")})"""
+      return (
+        if (entries.isEmpty) st"$containerName()"
+        else
+          st"""${containerName}(
+              |  ${(entries, ", \n")})""")
     }
 
     def observePreState(): ST = {
@@ -295,9 +302,11 @@ object GumboXGenUtil {
       var fieldDecls: ISZ[ST] = ISZ()
       var nextEntries: ISZ[ST] = ISZ()
       val sps = sortParam(params)
+
       @pure def wrapOption(p: GGParam): String = {
         return if (p.isOptional) s"Option${p.ranGenName}" else p.ranGenName
       }
+
       for (i <- 0 until sps.size if !sps(i).isInstanceOf[GGStateVarParam] || includeStateVars) {
         val p = sps(i)
         traitFields = traitFields :+ st"def ${p.name}: RandomLib // random lib for generating ${p.aadlType.nameProvider.qualifiedTypeName}"
@@ -447,6 +456,7 @@ object GumboXGenUtil {
     val outPorts = outPortsToParams(component, componentNames)
     val outStateVars = stateVarsToParams(componentNames, annexInfo, F, aadlTypes)
     return Container(
+      componentIsSporadic = component.isSporadic(),
       componentSingletonType = componentNames.componentSingletonType,
       packageName = componentNames.packageName,
       packageNameI = componentNames.packageNameI,
@@ -644,6 +654,10 @@ object GumboXGenUtil {
     @pure def getParamDef: ST = {
       return st"$name: $slangType"
     }
+
+    @pure def isInEventPort: B = {
+      return kind == SymbolKind.ApiVarInEventData || kind == SymbolKind.ApiVarInEvent
+    }
   }
 
   @datatype class GGStateVarParam(val stateVar: GclStateVar,
@@ -754,6 +768,28 @@ object GumboXGenUtil {
       } else {
         // incoming event port so no need to unpack
         return st"$observeInPortVariable.asInstanceOf[$slangType]"
+      }
+    }
+
+    @pure def preFetchSporadic: ST = {
+      assert(isEvent)
+
+      if (isData) {
+        // incoming event data port
+        return (
+          st"""
+              |  if (${GumboXGenUtil.sporadicDispatchedEventPortParamName} == ${archPortId})
+              |    if (${observeInPortVariable}.nonEmpty)
+              |      Some(${observeInPortVariable}.get.asInstanceOf[${aadlType.nameProvider.qualifiedPayloadName}].value)
+              |    else None()
+              |  else None()""")
+      } else {
+        // incoming event port so no need to unpack
+        return (
+          st"""
+              |  if (${GumboXGenUtil.sporadicDispatchedEventPortParamName} == ${archPortId})
+              |    $observeInPortVariable.asInstanceOf[$slangType]
+              |  else None()""")
       }
     }
 

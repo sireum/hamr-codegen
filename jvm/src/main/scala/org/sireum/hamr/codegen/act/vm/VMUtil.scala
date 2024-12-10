@@ -1,6 +1,6 @@
 // #Sireum
 
-package org.sireum.hamr.act.vm
+package org.sireum.hamr.codegen.act.vm
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.symbols._
