@@ -173,6 +173,8 @@ object TypeUtil {
 
   def translateBaseType(c: String, reporter: Reporter): Option[String] = {
     c match {
+      case "Base_Types::Integer" => return Some("int64_t")
+
       case "Base_Types::Boolean" => return Some("bool")
 
       case "Base_Types::Integer_8" => return Some(s"int8_t")
@@ -184,6 +186,8 @@ object TypeUtil {
       case "Base_Types::Unsigned_16" => return Some(s"uint16_t")
       case "Base_Types::Unsigned_32" => return Some(s"uint32_t")
       case "Base_Types::Unsigned_64" => return Some(s"uint64_t")
+
+      case "Base_Types::Float" => return Some("double")
 
       case "Base_Types::Float_32" => return Some("float")
       case "Base_Types::Float_64" => return Some("double")

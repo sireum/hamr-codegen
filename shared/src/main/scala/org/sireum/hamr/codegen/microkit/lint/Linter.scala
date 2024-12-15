@@ -2,8 +2,8 @@
 package org.sireum.hamr.codegen.microkit.lint
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.symbols.{AadlProcess, AadlProcessor, AadlVirtualProcessor, Dispatch_Protocol, SymbolTable}
-import org.sireum.hamr.codegen.common.types.AadlTypes
+import org.sireum.hamr.codegen.common.symbols.{AadlData, AadlFeatureData, AadlProcess, AadlProcessor, AadlVirtualProcessor, Dispatch_Protocol, SymbolTable}
+import org.sireum.hamr.codegen.common.types.{AadlTypes, BaseType}
 import org.sireum.hamr.codegen.common.util.HamrCli
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen
 import org.sireum.hamr.ir.Aadl
@@ -71,6 +71,24 @@ object Linter {
       t.period match {
         case Some(_) =>
         case _ =>
+      }
+
+      for(p <- t.getPorts()) {
+         p match {
+          case i: AadlFeatureData =>
+            i.aadlType match {
+              case b: BaseType =>
+                b.classifier match {
+                  case ISZ("Base_Types::Integer") =>
+                    reporter.error(p.feature.identifier.pos, MicrokitCodegen.toolName, "Unbounded Integer is not supported for Microkit")
+                  case ISZ("Base_Types::Float") =>
+                    reporter.error(p.feature.identifier.pos, MicrokitCodegen.toolName, "Unbounded Float is not supported for Microkit")
+                  case _ =>
+                }
+              case _ =>
+            }
+          case _ =>
+        }
       }
     }
 
