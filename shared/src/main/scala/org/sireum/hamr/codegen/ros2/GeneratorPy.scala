@@ -82,7 +82,7 @@ object GeneratorPy {
     val node_source_file_nameT = genPyNodeSourceName(componentName)
     val py_package_nameT = genPyPackageName(modelName)
     val node_executable_file_nameT = genExecutableFileName(componentName)
-    val entryPointDecl:ST
+    val entryPointDecl: ST
     = st"\"${node_executable_file_nameT} = ${py_package_nameT}.${node_source_file_nameT}:${py_src_node_entry_point_name}\""
     return entryPointDecl
   }
