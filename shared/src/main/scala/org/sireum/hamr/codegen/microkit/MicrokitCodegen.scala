@@ -136,6 +136,7 @@ object MicrokitCodegen {
       val content =
         st"""#pragma once
             |
+            |#include <stdbool.h>
             |#include <stdint.h>
             |
             |${Util.doNotEdit}
@@ -618,7 +619,7 @@ object MicrokitCodegen {
 
         userMethodDefaultImpls =
           st"""void $initializeMethodName(void) {
-              |  // implement me
+              |  printf("%s: $initializeMethodName invoked\n", microkit_name);
               |}""" +: userMethodDefaultImpls
 
         if (t.isPeriodic()) {
@@ -627,7 +628,7 @@ object MicrokitCodegen {
           computeContributions = computeContributions :+ st"${timeTriggeredMethodName}();"
           userMethodDefaultImpls = userMethodDefaultImpls :+
             st"""void $timeTriggeredMethodName(void) {
-                |  // implement me
+                |  printf("%s: $timeTriggeredMethodName invoked\n", microkit_name);
                 |}"""
         }
 

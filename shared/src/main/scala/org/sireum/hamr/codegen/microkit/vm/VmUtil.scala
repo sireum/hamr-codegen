@@ -114,7 +114,7 @@ object VmUtil {
                       |}
                       |
                       |void $computeMethodName(void) {
-                      |  // implement me
+                      |  printf("%s: $computeMethodName invoked\n", microkit_name);
                       |}
                       |
                       |/*

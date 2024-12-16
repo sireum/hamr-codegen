@@ -32,8 +32,8 @@ object VmMakefileTemplate {
           |
           |LIB_VMM_DIR ?= $$(VMM_DIR)
           |ifeq ("$$(wildcard $$(LIB_VMM_DIR)/tools)","")
-          |LIB_VMM_DIR := $${$threadId}/libvmm
-          |ifeq ("$$(wildcard $$(${threadId}_DIR))","")
+          |LIB_VMM_DIR := $$(${threadId}_DIR)/libvmm
+          |ifeq ("$$(wildcard $$(LIB_VMM_DIR)/tools)","")
           |$$(error Set VMM_DIR to point to a copy of https://github.com/au-ts/libvmm")
           |endif
           |endif

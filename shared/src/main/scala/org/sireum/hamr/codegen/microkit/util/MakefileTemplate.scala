@@ -62,6 +62,9 @@ object MakefileTemplate {
                            typeObjectNames: ISZ[String],
                            buildEntries: ISZ[ST],
                            elfEntries: ISZ[ST]): ST = {
+
+    val uniqueBuildEntries: ISZ[String] = (Set.empty[String] ++ (for(be <- buildEntries) yield be.render)).elements
+
     val content =
       st"""${Util.doNotEditMakefile}
           |
@@ -118,7 +121,7 @@ object MakefileTemplate {
           |%.o: $${TOP_DIR}/util/src/%.c Makefile
           |${TAB}$$(CC) -c $$(CFLAGS) $$< -o $$@ -I$$(TOP_DIR)/util/include
           |
-          |${(buildEntries, "\n\n")}
+          |${(uniqueBuildEntries, "\n\n")}
           |
           |${(elfEntries, "\n\n")}
           |

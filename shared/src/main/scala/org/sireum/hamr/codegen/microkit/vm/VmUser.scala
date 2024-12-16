@@ -90,7 +90,6 @@ object VmUser {
           |}
           |
           |void ${componentPath}_timeTriggered(void) {
-          |  // implement me
           |  printf("%s: ${componentPath}_timeTriggered invoked\n", microkit_name);
           |}
           |

@@ -115,7 +115,7 @@ import org.sireum.hamr.codegen.microkit.util.Util.{KiBytesToHex}
                                   val children: ISZ[MicrokitDomain]) extends MicrokitDomain {
   @pure def prettyST: ST = {
     val domain: Option[ST] =
-      if (schedulingDomain.nonEmpty) Some(st""" domain="${schedulingDomain.get}"""")
+      if (schedulingDomain.nonEmpty) Some(st""" domain="domain_${schedulingDomain.get}"""")
       else None()
     val stId: Option[ST] =
       if (id.nonEmpty) Some(st""" id="${id.get}"""")
