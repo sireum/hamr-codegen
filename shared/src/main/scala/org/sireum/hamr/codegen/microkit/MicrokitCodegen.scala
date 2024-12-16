@@ -8,7 +8,7 @@ import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, 
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, TypeUtil => CommonTypeUtil}
 import org.sireum.hamr.codegen.common.util.{CodeGenResults, ResourceUtil}
 import org.sireum.hamr.codegen.common.util.HamrCli.CodegenOption
-import org.sireum.hamr.codegen.microkit.MicrokitCodegen.toolName
+import org.sireum.hamr.codegen.microkit.MicrokitCodegen.{pacerSchedulingDomain, toolName}
 import org.sireum.hamr.codegen.microkit.connections.{ConnectionContributions, ConnectionStore, TypeApiContributions}
 import org.sireum.hamr.codegen.microkit.lint.Linter
 import org.sireum.hamr.codegen.microkit.types.{QueueTemplate, TypeStore, TypeUtil}
@@ -28,7 +28,7 @@ object MicrokitCodegen {
 
   val pacerName: String = "pacer"
 
-  val pacerSchedulingDomain: String = "domain1"
+  val pacerSchedulingDomain: Z = 1
 
   val dirComponents: String = "components"
   val dirInclude: String = "include"
@@ -67,7 +67,7 @@ object MicrokitCodegen {
       xmlProtectionDomains = xmlProtectionDomains :+
         ProtectionDomain(
           name = MicrokitCodegen.pacerName,
-          schedulingDomain = Some("domain1"),
+          schedulingDomain = Some(pacerSchedulingDomain),
           id = None(),
           stackSizeInKiBytes = None(),
           memMaps = ISZ(),
@@ -400,7 +400,7 @@ object MicrokitCodegen {
         }
       }
 
-      val schedulingDomain: String = t.getDomain(symbolTable) match {
+      val schedulingDomain: Z = t.getDomain(symbolTable) match {
         case Some(d) =>
           if (d == 0 || d == 1) { // TODO what's upper bound
             reporter.error(t.component.identifier.pos, toolName, s"Domain '$d' is reserved")
@@ -408,7 +408,7 @@ object MicrokitCodegen {
           if (d > largestSchedulingDomain) {
             largestSchedulingDomain = d
           }
-          s"domain$d"
+          d
         case _ => halt("Infeasible")
       }
 
@@ -428,7 +428,7 @@ object MicrokitCodegen {
       }
 
       xmlSchedulingDomains = xmlSchedulingDomains :+
-        SchedulingDomain(name = schedulingDomain, length = computeExecutionTime)
+        SchedulingDomain(id = schedulingDomain, length = computeExecutionTime)
 
       var childMemMaps: ISZ[MemoryMap] = ISZ()
       var childIrqs: ISZ[IRQ] = ISZ()
@@ -794,7 +794,7 @@ object MicrokitCodegen {
 
     addPacerComponent()
 
-    val pacerSlot = SchedulingDomain(name = MicrokitCodegen.pacerSchedulingDomain, length = MicrokitCodegen.pacerComputeExecutionTime)
+    val pacerSlot = SchedulingDomain(id = MicrokitCodegen.pacerSchedulingDomain, length = MicrokitCodegen.pacerComputeExecutionTime)
     val currentScheduleSize = xmlSchedulingDomains.size
     usedBudget = usedBudget + (currentScheduleSize * MicrokitCodegen.pacerComputeExecutionTime)
 
@@ -804,10 +804,10 @@ object MicrokitCodegen {
     }
 
     var xmlScheds: ISZ[SchedulingDomain] = ISZ()
-    for (x <- xmlSchedulingDomains) {
+    for (x <- ops.ISZOps(xmlSchedulingDomains).sortWith((a,b) => a.id < b.id)) {
       xmlScheds = xmlScheds :+ pacerSlot :+ x
     }
-    xmlScheds = xmlScheds :+ SchedulingDomain(name = "domain0", length = framePeriod - usedBudget)
+    xmlScheds = xmlScheds :+ SchedulingDomain(id = 0, length = framePeriod - usedBudget)
 
 
     for (e <- connectionStore;

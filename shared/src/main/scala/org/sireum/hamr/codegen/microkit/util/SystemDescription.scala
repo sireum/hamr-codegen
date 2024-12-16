@@ -61,14 +61,14 @@ import org.sireum.hamr.codegen.microkit.util.Util.{KiBytesToHex}
   }
 }
 
-@datatype class SchedulingDomain (val name: String,
+@datatype class SchedulingDomain (val id: Z,
                                   val length: Z) {
-  @strictpure def prettyST: ST = st"""<domain name="$name" length="$length" />"""
+  @strictpure def prettyST: ST = st"""<domain name="domain_$id" length="$length" />"""
 }
 
 @sig trait MicrokitDomain {
   def name: String
-  def schedulingDomain: Option[String]
+  def schedulingDomain: Option[Z]
 
   def memMaps: ISZ[MemoryMap]
 
@@ -81,7 +81,7 @@ import org.sireum.hamr.codegen.microkit.util.Util.{KiBytesToHex}
 
 @datatype class VirtualMachine(val name: String,
                                val vcpuId: String,
-                               val schedulingDomain: Option[String],
+                               val schedulingDomain: Option[Z],
                                val memMaps: ISZ[MemoryMap]) extends MicrokitDomain {
 
   override def prettyST: ST = {
@@ -104,7 +104,7 @@ import org.sireum.hamr.codegen.microkit.util.Util.{KiBytesToHex}
 }
 
 @datatype class ProtectionDomain (val name: String,
-                                  val schedulingDomain: Option[String],
+                                  val schedulingDomain: Option[Z],
                                   val id: Option[String],
                                   val stackSizeInKiBytes: Option[Z],
 

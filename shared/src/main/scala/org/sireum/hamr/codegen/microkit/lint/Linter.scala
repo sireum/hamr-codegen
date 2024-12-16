@@ -74,7 +74,11 @@ object Linter {
       }
 
       for(p <- t.getPorts()) {
-         p match {
+        if (symbolTable.getInConnections(p.path).size > 1) {
+          reporter.error(p.feature.identifier.pos, MicrokitCodegen.toolName, "Fan in connections (including event ports) are disallowed for Microkit")
+        }
+
+        p match {
           case i: AadlFeatureData =>
             i.aadlType match {
               case b: BaseType =>
