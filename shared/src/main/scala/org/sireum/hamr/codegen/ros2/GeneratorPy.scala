@@ -82,7 +82,7 @@ object GeneratorPy {
     val node_source_file_nameT = genPyNodeSourceName(componentName)
     val py_package_nameT = genPyPackageName(modelName)
     val node_executable_file_nameT = genExecutableFileName(componentName)
-    val entryPointDecl:ST
+    val entryPointDecl: ST
     = st"\"$node_executable_file_nameT = $py_package_nameT.$node_source_file_nameT:$py_src_node_entry_point_name\""
     return entryPointDecl
   }
@@ -309,7 +309,9 @@ object GeneratorPy {
     val portName = inPort.identifier
 
     val handler: ST =
-      if (!isSporadic || inPort.isInstanceOf[AadlDataPort]) st"enqueue(infrastructureIn_${portName}, msg)"
+      if (!isSporadic || inPort.isInstanceOf[AadlDataPort]) {
+        st"enqueue(infrastructureIn_${portName}, msg)"
+      }
       else {
         // TODO: CPP to Py
         st"""enqueue(infrastructureIn_${portName}, msg)
@@ -984,10 +986,14 @@ object GeneratorPy {
 
     files = files :+ genPyFormatLaunchFile(modelName, threadComponents)
     files = files :+ genPySetupFile(modelName, threadComponents)
-    files = files :+ genPyNodeFiles(modelName, threadComponents, connectionMap, strictAADLMode)
+
+    for(file <- genPyNodeFiles(modelName, threadComponents, connectionMap, strictAADLMode)) {
+      files = files :+ file
+    }
 
     return files
   }
+
   // TODO: Python pkgs
   def genPyLaunchPkg(modelName: String, threadComponents: ISZ[AadlThread]): ISZ[(ISZ[String], ST)] = {
     var files: ISZ[(ISZ[String], ST)] = IS()
