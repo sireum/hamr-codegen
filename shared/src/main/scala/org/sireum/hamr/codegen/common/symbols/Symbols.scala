@@ -5,6 +5,7 @@ package org.sireum.hamr.codegen.common.symbols
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.CommonUtil.IdPath
+import org.sireum.hamr.codegen.common.properties.PropertyUtil
 import org.sireum.hamr.ir
 import org.sireum.hamr.ir.{ConnectionInstance, FeatureEnd}
 import org.sireum.message.Position
@@ -127,72 +128,79 @@ import org.sireum.message.Position
     return c.map(m => m.asInstanceOf[AadlThread])
   }
 
-  def getBoundProcesses(c: AadlProcessor): ISZ[AadlProcess] = {
-    val ret: ISZ[AadlComponent] = componentMap.values.filter((p: AadlComponent) => p match {
-      case process: AadlProcess =>
-        getBoundProcessor(process) match {
-          case Some(processor) => processor == c
-          case _ => F
-        }
-      case _ => F
-    })
-    return ret.map(m => m.asInstanceOf[AadlProcess])
+  def getBoundProcesses(processor: AadlProcessor): ISZ[AadlProcess] = {
+    var ret: Set[AadlProcess] = Set.empty
+    for (c <- componentMap.values) {
+      c match {
+        case process: AadlProcess =>
+          for (p <- getBoundProcessors(process) if p == processor) {
+            ret = ret + process
+          }
+        case _ =>
+      }
+    }
+    return ret.elements
   }
 
-  def getActualBoundProcess(c: AadlVirtualProcessor): Option[AadlProcessor] = {
-    val ret: Option[AadlProcessor] = c.boundProcessor match {
-      case Some(path) =>
-        componentMap.get(path).get match {
-          case ap: AadlProcessor => Some(ap)
-          case apv: AadlVirtualProcessor =>
-            // allow virtual processor chaining here, but symbol checking phase currently
-            // rejects this, though maybe this will be allowed in the future
-            return getActualBoundProcess(apv)
-          case _ => None()
-        }
-      case _ => None()
+  def getActualBoundProcessors(c: AadlVirtualProcessor): ISZ[AadlProcessor] = {
+    var ret: Set[AadlProcessor] = Set.empty
+    for (p <- getBoundProcessors(c)) {
+      p match {
+        case ap: AadlProcessor => ret = ret + ap
+        case apv: AadlVirtualProcessor =>
+          // allow virtual processor chaining here, but symbol checking phase currently
+          // rejects this, though maybe this will be allowed in the future
+          ret = ret ++ getActualBoundProcessors(apv)
+        case _ =>
+      }
     }
-    return ret
+    return ret.elements
   }
 
-  def getBoundProcessor(c: AadlProcess): Option[Processor] = {
-    val ret: Option[Processor] = c.boundProcessor match {
-      case Some(path) =>
-        componentMap.get(path) match {
-          case Some(a: AadlProcessor) => Some(a)
-          case Some(v: AadlVirtualProcessor) => Some(v)
-          case Some(x) => halt(s"Unexpected, ${c.identifier} is a process but is bound to ${x} rather than a processor")
-          case _ => None()
-        }
-      case _ => None()
+  /**
+    --- A thread is bound to the processor specified by the <b>Actual_Processor_Binding</b> property.  The process of
+    --- binding threads to processors determines the value of this property.  If there is more than one processor listed,
+    --- a scheduler will dynamically assign the thread to one at a time.  This allows modeling of multi-core processors
+    --- without explicit binding to one of the cores.<p>
+    --- If a device is bound to a processor this indicates the binding of the device driver software.
+    --- A virtual processor may be bound to a processor. This indicates that the virtual processor executes on the
+    --- processor it is bound to.<p>
+    --- Threads, devices, and virtual processors can be bound to virtual processors, which in turn are bound to virtual
+    --- processors or processors.
+  */
+  def getBoundProcessors(c: AadlComponent): ISZ[Processor] = {
+    val bindings = PropertyUtil.getActualProcessorBinding(c.component)
+    if (bindings.nonEmpty) {
+      // AADL let you bind components to systems, devices, and abstract in addition to
+      // processor and virtual processors.  Not sure what the semantics are for the former
+      // bindings so the linter only allows processors and virtual processors for now
+      return (for(b <- bindings) yield componentMap.get(b).get.asInstanceOf[Processor])
+    } else {
+      if (c.parent.nonEmpty) {
+        return getBoundProcessors(componentMap.get(c.parent).get)
+      } else {
+        return ISZ()
+      }
     }
-    return ret
   }
 
   def getAllBoundProcessors(): ISZ[Processor] = {
     var processors: Set[Processor] = Set.empty
-
-    for (process <- getProcesses()) {
-      getBoundProcessor(process) match {
-        case Some(aadlProcessor) => processors = processors + aadlProcessor
-        case _ =>
-      }
+    for (c <- componentMap.values) {
+      processors = processors ++ getBoundProcessors(c)
     }
     return processors.elements
   }
 
-  def getActualBoundProcessors(): ISZ[Processor] = {
-    var processors: Set[Processor] = Set.empty
+  def getAllActualBoundProcessors(): ISZ[AadlProcessor] = {
+    var processors: Set[AadlProcessor] = Set.empty
 
-    for (process <- getProcesses()) {
-      getBoundProcessor(process) match {
-        case Some(aadlProcessor: AadlProcessor) => processors = processors + aadlProcessor
-        case Some(avp: AadlVirtualProcessor) =>
-          getActualBoundProcess(avp) match {
-            case Some(ap) => processors = processors + ap
-            case _ =>
-          }
-        case _ =>
+    for (c <- componentMap.values;
+         p <- getBoundProcessors(c)) {
+      p match {
+        case ap: AadlProcessor => processors = processors + ap
+        case avp: AadlVirtualProcessor =>
+          processors = processors ++ getActualBoundProcessors(avp)
       }
     }
     return processors.elements

@@ -55,7 +55,8 @@ object SchedulerUtil {
     for (process <- symbolTable.getThreads().map((t: AadlThread) => t.getParent(symbolTable))) {
       process.getBoundProcessor(symbolTable) match {
         case Some(processor: AadlProcessor) => processors = processors + processor
-        case Some(processor: AadlVirtualProcessor) => processors = processors + symbolTable.getActualBoundProcess(processor).get
+        case Some(processor: AadlVirtualProcessor) =>
+          processors = processors ++ symbolTable.getActualBoundProcessors(processor)
         case _ =>
       }
     }

@@ -35,7 +35,8 @@ object MicrokitCodegen {
   val dirSrc: String = "src"
 
   val pacerComputeExecutionTime: Z = 10
-  val endOfFrameComputExecutionTime: Z = 10
+
+  val defaultComputeExecutionTime: Z = 10
 }
 
 @record class MicrokitCodegen {
@@ -425,7 +426,7 @@ object MicrokitCodegen {
         case Some((l, h)) =>
           assert(l <= h, s"low must be <= high: $l <= $h")
           h
-        case _ => 100
+        case _ => MicrokitCodegen.defaultComputeExecutionTime
       }
 
       xmlSchedulingDomains = xmlSchedulingDomains :+
@@ -729,7 +730,7 @@ object MicrokitCodegen {
       return CodeGenResults(ISZ(), ISZ())
     }
 
-    val boundProcessors = symbolTable.getActualBoundProcessors()
+    val boundProcessors = symbolTable.getAllActualBoundProcessors()
     if (boundProcessors.size != 1) {
       reporter.error(None(), toolName, "Currently only handling models with exactly one actual bound processor")
       return CodeGenResults(ISZ(), ISZ())

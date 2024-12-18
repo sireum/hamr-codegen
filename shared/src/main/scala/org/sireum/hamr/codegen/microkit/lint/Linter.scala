@@ -20,8 +20,10 @@ object Linter {
           val actualProcessor: AadlProcessor =
             x match {
               case avp: AadlVirtualProcessor =>
-                symbolTable.getActualBoundProcess(avp) match {
-                  case Some(ap) => ap
+                symbolTable.getActualBoundProcessors(avp) match {
+                  case ISZ(ap) => ap
+                  case x if x.size > 1 =>
+                    halt(s"Infeasible: linting phase only allows for a single bound processor but found ${x.size}")
                   case _ =>
                     reporter.error(avp.component.identifier.pos, MicrokitCodegen.toolName, "Virtual processors must be bound to an actual processor")
                     return F

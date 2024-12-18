@@ -86,15 +86,19 @@ object PacerUtil {
         if (domain == 1) {
           domain1InUse = Some(p)
         }
-        symbolTable.getBoundProcessor(p) match {
-          case Some(proc: AadlProcessor) =>
+
+        val theBoundProcessor = symbolTable.getBoundProcessors(p)
+        assert (theBoundProcessor.size <= 1, "Infeasible: linting only allows at most one bound processor")
+
+        theBoundProcessor match {
+          case ISZ(proc: AadlProcessor) =>
             boundProcessors = boundProcessors + proc
             if (seenNonVMDomains.contains(domain)) {
               mesg = mesg :+ st"More than one process in domain ${domain}. Only processes bound to the same VM can be in the same domain."
             }
             seenNonVMDomains = seenNonVMDomains + domain
-          case Some(proc: AadlVirtualProcessor) =>
-            boundProcessors = boundProcessors + symbolTable.getActualBoundProcess(proc).get
+          case ISZ(proc: AadlVirtualProcessor) =>
+            boundProcessors = boundProcessors ++ symbolTable.getActualBoundProcessors(proc)
             vmDomainMapping.get(domain) match {
               case Some(proc2) if proc != proc2 =>
                 mesg = mesg :+ st"Multiple VM bound processors are in domain ${domain}"

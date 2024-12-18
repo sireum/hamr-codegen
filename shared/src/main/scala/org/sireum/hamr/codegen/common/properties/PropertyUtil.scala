@@ -158,14 +158,16 @@ object PropertyUtil {
     return ret
   }
 
-  def getActualProcessorBinding(c: ir.Component): Option[IdPath] = {
-
-    val ret: Option[IdPath] =
-      getDiscreetPropertyValue(c.properties, OsateProperties.DEPLOYMENT_PROPERTIES__ACTUAL_PROCESSOR_BINDING) match {
-        case Some(v: ir.ReferenceProp) => Some(v.value.name)
-        case _ => return None()
+  def getActualProcessorBinding(c: ir.Component): ISZ[IdPath] = {
+    val ps = getPropertyValues(c.properties, OsateProperties.DEPLOYMENT_PROPERTIES__ACTUAL_PROCESSOR_BINDING)
+    var ret: ISZ[IdPath] = ISZ()
+    for(p <- ps) {
+      p match {
+        case v: ir.ReferenceProp => ret = ret :+ v.value.name
+        case x =>
+          halt(s"Unexpected: was expecting a reference prop for ${c.identifier.name} but found $x")
       }
-
+    }
     return ret
   }
 

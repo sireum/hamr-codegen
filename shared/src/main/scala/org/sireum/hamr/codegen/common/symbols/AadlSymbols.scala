@@ -14,6 +14,10 @@ import org.sireum.hamr.ir._
 @sig trait AadlComponent extends AadlSymbol {
   def component: ir.Component
 
+  @pure def properties: ISZ[ir.Property] = {
+    return component.properties
+  }
+
   def parent: IdPath
 
   def path: IdPath
@@ -172,9 +176,7 @@ import org.sireum.hamr.ir._
                                      val connectionInstances: ISZ[ir.ConnectionInstance],
 
                                      val dispatchProtocol: Dispatch_Protocol.Type,
-                                     val period: Option[Z],
-
-                                     val boundProcessor: Option[IdPath]) extends Processor with AadlDispatchableComponent
+                                     val period: Option[Z]) extends Processor with AadlDispatchableComponent
 
 @datatype class AadlProcess(val component: ir.Component,
                             val parent: IdPath,
@@ -182,9 +184,7 @@ import org.sireum.hamr.ir._
                             val identifier: String,
                             val features: ISZ[AadlFeature],
                             val subComponents: ISZ[AadlComponent],
-                            val connectionInstances: ISZ[ir.ConnectionInstance],
-
-                            val boundProcessor: Option[ISZ[String]]) extends AadlComponent {
+                            val connectionInstances: ISZ[ir.ConnectionInstance]) extends AadlComponent {
 
   def getDomainMapping(symbolTable: SymbolTable): Option[Z] = {
     return symbolTable.rootSystem.getDomainMappings().get(path)
@@ -205,20 +205,19 @@ import org.sireum.hamr.ir._
 
     // or is the parent a virtual processor (symbol checking phase ensures the virtual processor
     // is bound to an actual processor)
-    boundProcessor match {
-      case Some(_parent) =>
-        symbolTable.componentMap.get(_parent).get match {
-          case avp: AadlVirtualProcessor => return T
-          case _ =>
-        }
-      case _ =>
+    getBoundProcessor(symbolTable) match {
+      case Some(avp: AadlVirtualProcessor) => return T
+      case _ => return F
     }
-
-    return F
   }
 
   def getBoundProcessor(symbolTable: SymbolTable): Option[Processor] = {
-    return symbolTable.getBoundProcessor(this)
+    symbolTable.getBoundProcessors(this) match {
+      case ISZ(p) => return Some(p)
+      case x if x.isEmpty => return None()
+      case x =>
+        halt(s"Infeasible: the linter currently only allows a single processor binding but $identifier has ${x.size}")
+    }
   }
 
   def getThreads(): ISZ[AadlThread] = {

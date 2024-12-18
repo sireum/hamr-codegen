@@ -4,7 +4,7 @@ package org.sireum.hamr.codegen.common.util
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.properties.PropertyUtil
-import org.sireum.hamr.codegen.common.symbols.{SymbolResolver, SymbolTable, SymbolUtil}
+import org.sireum.hamr.codegen.common.symbols.{Linter, SymbolResolver, SymbolTable, SymbolUtil}
 import org.sireum.hamr.codegen.common.transformers.Transformers
 import org.sireum.hamr.codegen.common.types.{AadlTypes, TypeResolver}
 import org.sireum.hamr.codegen.common.util.HamrCli.CodegenOption
@@ -53,7 +53,10 @@ object ModelUtil {
       aadlMaps = aadlMaps,
       options = options,
       reporter = reporter) match {
-      case Some(symbolTable) => return Some(ModelElements(transModel, modelPosOpt, aadlTypes, symbolTable))
+      case Some(symbolTable) =>
+        Linter.lint(options, symbolTable, reporter)
+
+        return Some(ModelElements(transModel, modelPosOpt, aadlTypes, symbolTable))
       case _ => return None()
     }
   }

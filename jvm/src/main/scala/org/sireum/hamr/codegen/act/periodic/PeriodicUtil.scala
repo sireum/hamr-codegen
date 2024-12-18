@@ -45,10 +45,15 @@ object PeriodicUtil {
 
     val aadlThread = symbolTable.getThreads()(0)
     val aadlProcess = aadlThread.getParent(symbolTable)
-    val ret: AadlProcessor = symbolTable.getBoundProcessor(aadlProcess) match {
-      case Some(p: AadlProcessor) => p
-      case Some(p: AadlVirtualProcessor) => symbolTable.getActualBoundProcess(p).get
-      case _ => halt("Unexpected")
+    val ret: AadlProcessor = symbolTable.getBoundProcessors(aadlProcess) match {
+      case ISZ(p: AadlProcessor) => p
+      case ISZ(avp: AadlVirtualProcessor) =>
+        symbolTable.getActualBoundProcessors(avp) match {
+          case ISZ(ap) => ap
+          case x =>
+            halt(s"Infeasbile: Virtual processor ${avp.identifier} is bound to ${x.size} processors")
+        }
+      case x => halt("Unexpected: $x")
     }
     return ret
   }
