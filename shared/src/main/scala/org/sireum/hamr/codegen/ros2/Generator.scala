@@ -88,14 +88,44 @@ object Generator {
     return executableFileNameT
   }
 
+  def genNodeName(component: AadlThread): String = {
+    var name: ST = st""
+    var i: Z = 1
+    while (i < component.path.size) {
+      name = st"${name}_${component.path.apply(i)}"
+      i = i + 1
+    }
+    return ops.StringOps(name.render).substring(1, name.render.size)
+  }
+
+  def genPortName(port: AadlPort): String = {
+    var name: ST = st""
+    var i: Z = 1
+    while (i < port.path.size) {
+      name = st"${name}_${port.path.apply(i)}"
+      i = i + 1
+    }
+    return ops.StringOps(name.render).substring(1, name.render.size)
+  }
+
+  def isDataPort(portType: String): B = {
+    return ops.StringOps(portType).substring(portType.size - 7, portType.size) == "::Empty"
+  }
+
   def isSporadic(component: AadlThread): B = {
     return component.dispatchProtocol == Dispatch_Protocol.Sporadic
   }
 
   def getPortNames(portNames: ISZ[ISZ[String]]): ISZ[String] = {
     var names: ISZ[String] = IS()
-    for (name <- portNames) {
-      names = names :+ seqToString(name, "_")
+    for (portName <- portNames) {
+      var name: ST = st""
+      var i: Z = 1
+      while (i < portName.size) {
+        name = st"${name}_${portName.apply(i)}"
+        i = i + 1
+      }
+      names = names :+ ops.StringOps(name.render).substring(1, name.render.size)
     }
     return names
   }
@@ -187,9 +217,9 @@ object Generator {
     // build entry point declarations
     var entry_point_decls: ISZ[ST] = IS()
     for (comp <- threadComponents) {
-      val launch_node_decl_nameT = genPyFormatLaunchNodeDeclName(comp.pathAsString("_"))
+      val launch_node_decl_nameT = genPyFormatLaunchNodeDeclName(genNodeName(comp))
       entry_point_decls =
-        entry_point_decls :+ genPySetupEntryPointDecl(modelName, comp.pathAsString("_"))
+        entry_point_decls :+ genPySetupEntryPointDecl(modelName, genNodeName(comp))
     }
 
     val setupFileBody =
@@ -263,9 +293,9 @@ object Generator {
     var entry_point_executables: ISZ[String] = IS()
     for (comp <- threadComponents) {
       entry_point_decls =
-        entry_point_decls :+ genCppCMakeListsEntryPointDecl(modelName, comp.pathAsString("_"))
+        entry_point_decls :+ genCppCMakeListsEntryPointDecl(modelName, genNodeName(comp))
       entry_point_executables =
-        entry_point_executables :+ genExecutableFileName(comp.pathAsString("_"))
+        entry_point_executables :+ genExecutableFileName(genNodeName(comp))
     }
 
     val packages: ISZ[String] = IS(s"${top_level_package_nameT}_interfaces")
@@ -427,7 +457,7 @@ object Generator {
   def genPyFormatLaunchNodeDecl(launch_node_decl_nameT: String,
                                 top_level_package_nameT: String,
                                 component: AadlThread): ST = {
-    val node_executable_file_nameT = genExecutableFileName(component.pathAsString("_"))
+    val node_executable_file_nameT = genExecutableFileName(genNodeName(component))
     val s =
       st"""
           |${launch_node_decl_nameT} = Node(
@@ -455,7 +485,7 @@ object Generator {
     var ld_entries: ISZ[ST] = IS()
 
     for (comp <- threadComponents) {
-      val launch_node_decl_nameT = genPyFormatLaunchNodeDeclName(comp.pathAsString("_"))
+      val launch_node_decl_nameT = genPyFormatLaunchNodeDeclName(genNodeName(comp))
       node_decls = node_decls :+ genPyFormatLaunchNodeDecl(launch_node_decl_nameT, top_level_package_nameT, comp)
       ld_entries = ld_entries :+ genPyFormatLaunchAddAction(launch_node_decl_nameT)
     }
@@ -487,7 +517,7 @@ object Generator {
   //     <node pkg="tc_cpp_pkg" exec="tc_test_exe"></node>
   def genXmlFormatLaunchNodeDecl(top_level_package_nameT: String,
                                  component: AadlThread): ST = {
-    val node_executable_file_nameT = genExecutableFileName(component.pathAsString("_"))
+    val node_executable_file_nameT = genExecutableFileName(genNodeName(component))
     val s =
       st"""
           |<node pkg="${top_level_package_nameT}" exec="${node_executable_file_nameT}">
@@ -670,7 +700,7 @@ object Generator {
   // Example:
   //  rclcpp::Subscription<example_interfaces::msg::Int32>::SharedPtr temp_control_currentTemp_subscription;
   def genCppTopicSubscriptionVarHeader(inPort: AadlPort, portType: String): ST = {
-    val portName = seqToString(inPort.path, "_")
+    val portName = genPortName(inPort)
 
     val varHeader: ST =
       st"rclcpp::Subscription<${portType}>::SharedPtr ${portName}_subscription_;"
@@ -683,7 +713,7 @@ object Generator {
   //     1,
   //     std::bind(&TempControl::handle_currentTemp, this, std::placeholders::_1));
   def genCppTopicSubscription(inPort: AadlPort, nodeName: String, portType: String): ST = {
-    val topicName = seqToString(inPort.path, "_")
+    val topicName = genPortName(inPort)
     val portName = inPort.identifier
 
     val portCode: ST =
@@ -696,7 +726,7 @@ object Generator {
   }
 
   def genCppTopicSubscriptionStrict(inPort: AadlPort, isSporadic: B, portType: String): ST = {
-    val topicName = seqToString(inPort.path, "_")
+    val topicName = genPortName(inPort)
     val portName = inPort.identifier
 
     val handler: ST =
@@ -744,7 +774,7 @@ object Generator {
   // Example:
   //  rclcpp::Publisher<example_interfaces::msg::Int32>::SharedPtr temp_control_currentTemp_publisher;
   def genCppTopicPublisherVarHeader(outPort: AadlPort, portType: String, inputPortCount: Z): ST = {
-    val portName = seqToString(outPort.path, "_")
+    val portName = genPortName(outPort)
 
     if (inputPortCount == 1) {
       val varHeader: ST =
@@ -771,7 +801,7 @@ object Generator {
   //    "operator_interface_currentTemp",
   //     1);
   def genCppTopicPublisher(outPort: AadlPort, portType: String, inPortNames: ISZ[String]): ST = {
-    val portName = seqToString(outPort.path, "_")
+    val portName = genPortName(outPort)
 
     if (inPortNames.size == 1) {
       val inPortName = inPortNames.apply(0)
@@ -803,14 +833,18 @@ object Generator {
     return fanPortCode
   }
 
-  // TODO: Probably use MsgType if strict....?
   // Example:
   //  void put_currentTemp(example_interfaces::msg::Int32 msg);
   def genCppPutMsgMethodHeader(outPort: AadlPort, portType: String): ST = {
     val handlerName = outPort.identifier
 
-    val publisherHeader: ST =
-      st"void put_${handlerName}(${portType} msg);"
+    var publisherHeader: ST = st"void put_${handlerName}("
+
+    if (!isDataPort(portType)) {
+      publisherHeader = st"${publisherHeader}${portType} msg"
+    }
+
+    publisherHeader = st"${publisherHeader});"
     return publisherHeader
   }
 
@@ -830,7 +864,7 @@ object Generator {
   //    temp_control_currentTemp_publisher->publish(msg);
   //  }
   def genCppTopicPublishMethod(outPort: AadlPort, nodeName: String, portType: String, inputPortCount: Z): ST = {
-    val portName = seqToString(outPort.path, "_")
+    val portName = genPortName(outPort)
     val handlerName = outPort.identifier
 
     var publishers: ISZ[ST] = IS()
@@ -845,18 +879,32 @@ object Generator {
       }
     }
 
-    val publisherCode: ST =
-      st"""void ${nodeName}::put_${handlerName}(${portType} msg)
-          |{
-          |    ${(publishers, "\n")}
-          |}
-         """
+    var publisherCode: ST = st""
+
+    if (isDataPort(portType)) {
+      publisherCode =
+        st"""void ${nodeName}::put_${handlerName}()
+            |{
+            |    ${portType} msg = ${portType}();
+            |
+            |    ${(publishers, "\n")}
+            |}
+          """
+    }
+    else {
+      publisherCode =
+        st"""void ${nodeName}::put_${handlerName}(${portType} msg)
+            |{
+            |    ${(publishers, "\n")}
+            |}
+          """
+    }
 
     return publisherCode
   }
 
   def genCppTopicPublishMethodStrict(outPort: AadlPort, nodeName: String, portType: String, inputPortCount: Z): ST = {
-    val portName = seqToString(outPort.path, "_")
+    val portName = genPortName(outPort)
     val handlerName = outPort.identifier
 
     var publishers: ISZ[ST] = IS()
@@ -889,12 +937,25 @@ object Generator {
   def genCppPutMsgMethodStrict(outPort: AadlPort, nodeName: String, portType: String): ST = {
     val handlerName = outPort.identifier
 
-    val putMsgCode: ST =
-      st"""void ${nodeName}::put_${handlerName}(${portType} msg)
-          |{
-          |    enqueue(applicationOut_${handlerName}, msg);
-          |}
+    var putMsgCode: ST = st""
+
+    if (isDataPort(portType)) {
+      putMsgCode =
+        st"""void ${nodeName}::put_${handlerName}()
+            |{
+            |    enqueue(applicationOut_${handlerName}, ${portType}());
+            |}
         """
+    }
+    else {
+      putMsgCode =
+        st"""void ${nodeName}::put_${handlerName}(${portType} msg)
+            |{
+            |    enqueue(applicationOut_${handlerName}, msg);
+            |}
+        """
+    }
+
     return putMsgCode
   }
 
@@ -1065,7 +1126,8 @@ object Generator {
       st"""${portType} ${nodeName}::get_${portName}() {
           |    MsgType msg = applicationIn_${portName}.front();
           |    return std::get<${portType}>(msg);
-          |}"""
+          |}
+        """
     return subscriptionMessageHeader
   }
 
@@ -1318,7 +1380,7 @@ object Generator {
 
   def genCppBaseNodeHeaderFile(packageName: String, component: AadlThread, connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
                                datatypeMap: Map[AadlType, (String, ISZ[String])], strictAADLMode: B, reporter: Reporter): (ISZ[String], ST) = {
-    val nodeName = s"${component.pathAsString("_")}_base"
+    val nodeName = s"${genNodeName(component)}_base"
     val fileName = genCppNodeSourceHeaderName(nodeName)
 
     var subscriptionHeaders: ISZ[ST] = IS()
@@ -1566,7 +1628,7 @@ object Generator {
 
   def genCppBaseNodeCppFile(packageName: String, component: AadlThread, connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
                             datatypeMap: Map[AadlType, (String, ISZ[String])], strictAADLMode: B, reporter: Reporter): (ISZ[String], ST) = {
-    val nodeName = s"${component.pathAsString("_")}_base"
+    val nodeName = s"${genNodeName(component)}_base"
     val fileName = genCppNodeSourceName(nodeName)
 
     var subscribers: ISZ[ST] = IS()
@@ -1642,7 +1704,7 @@ object Generator {
           |//  D O   N O T   E D I T   T H I S   F I L E
           |//=================================================
           |
-          |${nodeName}::${nodeName}() : Node("${component.pathAsString("_")}")
+          |${nodeName}::${nodeName}() : Node("${genNodeName(component)}")
           |{
           |    ${genCppCallbackGroupVar()}"""
 
@@ -1757,7 +1819,7 @@ object Generator {
 
   def genCppUserNodeHeaderFile(packageName: String, component: AadlThread, datatypeMap: Map[AadlType, (String, ISZ[String])],
                                strictAADLMode: B, reporter: Reporter): (ISZ[String], ST) = {
-    val nodeName = component.pathAsString("_")
+    val nodeName = genNodeName(component)
     val fileName = genCppNodeSourceHeaderName(nodeName)
 
     var subscriptionHandlers: ISZ[ST] = IS()
@@ -1819,7 +1881,7 @@ object Generator {
 
   def genCppUserNodeCppFile(packageName: String, component: AadlThread, datatypeMap: Map[AadlType, (String, ISZ[String])],
                             strictAADLMode: B, reporter: Reporter): (ISZ[String], ST) = {
-    val nodeName = component.pathAsString("_")
+    val nodeName = genNodeName(component)
     val fileName = genCppNodeSourceName(nodeName)
 
     var subscriptionHandlers: ISZ[ST] = IS()
@@ -1867,7 +1929,7 @@ object Generator {
   }
 
   def genCppNodeRunnerFile(packageName: String, component: AadlThread): (ISZ[String], ST) = {
-    val nodeName = component.pathAsString("_")
+    val nodeName = genNodeName(component)
     val fileName = genCppNodeRunnerName(nodeName)
 
     val fileBody =
