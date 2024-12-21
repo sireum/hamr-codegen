@@ -108,7 +108,7 @@ object Generator {
     return ops.StringOps(name.render).substring(1, name.render.size)
   }
 
-  def isDataPort(portType: String): B = {
+  def isEventPort(portType: String): B = {
     return ops.StringOps(portType).substring(portType.size - 7, portType.size) == "::Empty"
   }
 
@@ -840,7 +840,7 @@ object Generator {
 
     var publisherHeader: ST = st"void put_${handlerName}("
 
-    if (!isDataPort(portType)) {
+    if (!isEventPort(portType)) {
       publisherHeader = st"${publisherHeader}${portType} msg"
     }
 
@@ -881,7 +881,7 @@ object Generator {
 
     var publisherCode: ST = st""
 
-    if (isDataPort(portType)) {
+    if (isEventPort(portType)) {
       publisherCode =
         st"""void ${nodeName}::put_${handlerName}()
             |{
@@ -939,7 +939,7 @@ object Generator {
 
     var putMsgCode: ST = st""
 
-    if (isDataPort(portType)) {
+    if (isEventPort(portType)) {
       putMsgCode =
         st"""void ${nodeName}::put_${handlerName}()
             |{
