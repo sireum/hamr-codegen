@@ -716,12 +716,21 @@ object Generator {
     val topicName = genPortName(inPort)
     val portName = inPort.identifier
 
-    val portCode: ST =
-      st"""${topicName}_subscription_ = this->create_subscription<${portType}>(
-          |    "${topicName}",
-          |    1,
-          |    std::bind(&${nodeName}::handle_${portName}, this, std::placeholders::_1), ${subscription_options_name});
-        """
+    var portCode: ST = st""
+    if (isEventPort(portType)) {
+      portCode = st"""${topicName}_subscription_ = this->create_subscription<${portType}>(
+                     |    "${topicName}",
+                     |    1,
+                     |    std::bind(&${nodeName}::event_handle_${portName}, this, std::placeholders::_1), ${subscription_options_name});
+                   """
+    }
+    else {
+      portCode = st"""${topicName}_subscription_ = this->create_subscription<${portType}>(
+                     |    "${topicName}",
+                     |    1,
+                     |    std::bind(&${nodeName}::handle_${portName}, this, std::placeholders::_1), ${subscription_options_name});
+                   """
+    }
     return portCode
   }
 
@@ -964,17 +973,42 @@ object Generator {
   def genCppSubscriptionHandlerVirtualHeader(inPort: AadlPort, portType: String): ST = {
     val handlerName = inPort.identifier
 
-    val subscriptionHandlerHeader: ST =
-      st"virtual void handle_${handlerName}(const ${portType}::SharedPtr msg) = 0;"
+    var subscriptionHandlerHeader: ST = st""
+    if (isEventPort(portType)) {
+      subscriptionHandlerHeader = st"""void event_handle_${handlerName}(const ${portType}::SharedPtr msg);
+                                      |virtual void handle_${handlerName}() = 0;"""
+    }
+    else {
+      subscriptionHandlerHeader = st"virtual void handle_${handlerName}(const ${portType}::SharedPtr msg) = 0;"
+    }
     return subscriptionHandlerHeader
   }
 
   def genCppSubscriptionHandlerVirtualHeaderStrict(inPort: AadlPort, portType: String): ST = {
     val handlerName = inPort.identifier
 
-    val subscriptionHandlerHeader: ST =
-      st"virtual void handle_${handlerName}(const ${portType} msg) = 0;"
+    var subscriptionHandlerHeader: ST = st""
+    if (isEventPort(portType)) {
+      subscriptionHandlerHeader = st"virtual void handle_${handlerName}() = 0;"
+    }
+    else {
+      subscriptionHandlerHeader = st"virtual void handle_${handlerName}(const ${portType} msg) = 0;"
+    }
+
     return subscriptionHandlerHeader
+  }
+
+  def genCppEventPortHandler(inPort: AadlPort, nodeName: String, portType: String): ST = {
+    val handlerName = inPort.identifier
+
+    val handler: ST = st"""void ${nodeName}::event_handle_${handlerName}(const ${portType}::SharedPtr msg)
+                                    |{
+                                    |    (void)msg;
+                                    |    handle_${handlerName}();
+                                    |}
+                                    """
+
+    return handler
   }
 
   // Example:
@@ -982,24 +1016,44 @@ object Generator {
   def genCppSubscriptionHandlerSporadic(inPort: AadlPort, nodeName: String, portType: String): ST = {
     val handlerName = inPort.identifier
 
-    val subscriptionHandlerHeader: ST =
-      st"""void ${nodeName}::handle_${handlerName}(const ${portType}::SharedPtr msg)
-          |{
-          |    // Handle ${handlerName} msg
-          |}
-        """
+    var subscriptionHandlerHeader: ST = st""
+    if (isEventPort(portType)) {
+      subscriptionHandlerHeader = st"""void ${nodeName}::handle_${handlerName}()
+                                      |{
+                                      |    // Handle ${handlerName} event
+                                      |}
+                                    """
+    }
+    else {
+      subscriptionHandlerHeader = st"""void ${nodeName}::handle_${handlerName}(const ${portType}::SharedPtr msg)
+                                      |{
+                                      |    // Handle ${handlerName} msg
+                                      |}
+                                    """
+    }
+
     return subscriptionHandlerHeader
   }
 
   def genCppSubscriptionHandlerSporadicStrict(inPort: AadlPort, nodeName: String, portType: String): ST = {
     val handlerName = inPort.identifier
 
-    val subscriptionHandlerHeader: ST =
-      st"""void ${nodeName}::handle_${handlerName}(const ${portType} msg)
-          |{
-          |    // Handle ${handlerName} msg
-          |}
-        """
+    var subscriptionHandlerHeader: ST = st""
+    if (isEventPort(portType)) {
+      subscriptionHandlerHeader = st"""void ${nodeName}::handle_${handlerName}()
+                                      |{
+                                      |    // Handle ${handlerName} event
+                                      |}
+                                    """
+    }
+    else {
+      subscriptionHandlerHeader = st"""void ${nodeName}::handle_${handlerName}(const ${portType} msg)
+                                      |{
+                                      |    // Handle ${handlerName} msg
+                                      |}
+                                    """
+    }
+
     return subscriptionHandlerHeader
   }
 
@@ -1017,16 +1071,25 @@ object Generator {
   def genCppSubscriptionHandlerBaseSporadic(inPort: AadlPort, nodeName: String, portType: String): ST = {
     val handlerName = inPort.identifier
 
-    val handlerCode: ST =
-      st"""void ${nodeName}::handle_${handlerName}_base(MsgType msg)
-          |{
-          |    if (auto typedMsg = std::get_if<${portType}>(&msg)) {
-          |        handle_${handlerName}(*typedMsg);
-          |    } else {
-          |        PRINT_ERROR("Sending out wrong type of variable on port ${handlerName}.\nThis shouldn't be possible.  If you are seeing this message, please notify this tool's current maintainer.");
-          |    }
-          |}
-         """
+    var handlerCode: ST = st""
+    if (isEventPort(portType)) {
+      handlerCode = st"""void ${nodeName}::handle_${handlerName}_base(MsgType msg)
+                        |{
+                        |    handle_${handlerName}();
+                        |}
+                      """
+    }
+    else {
+      handlerCode = st"""void ${nodeName}::handle_${handlerName}_base(MsgType msg)
+                        |{
+                        |    if (auto typedMsg = std::get_if<${portType}>(&msg)) {
+                        |        handle_${handlerName}(*typedMsg);
+                        |    } else {
+                        |        PRINT_ERROR("Receiving wrong type of variable on port ${handlerName}.\nThis shouldn't be possible.  If you are seeing this message, please notify this tool's current maintainer.");
+                        |    }
+                        |}
+                      """
+    }
 
     return handlerCode
   }
@@ -1036,16 +1099,28 @@ object Generator {
   def genCppSubscriptionHandlerHeader(inPort: AadlPort, portType: String): ST = {
     val handlerName = inPort.identifier
 
-    val subscriptionHandlerHeader: ST =
-      st"void handle_${handlerName}(const ${portType}::SharedPtr msg);"
+    var subscriptionHandlerHeader: ST = st""
+    if (isEventPort(portType)) {
+      subscriptionHandlerHeader = st"void handle_${handlerName}();"
+    }
+    else {
+      subscriptionHandlerHeader = st"void handle_${handlerName}(const ${portType}::SharedPtr msg);"
+    }
+
     return subscriptionHandlerHeader
   }
 
   def genCppSubscriptionHandlerHeaderStrict(inPort: AadlPort, portType: String): ST = {
     val handlerName = inPort.identifier
 
-    val subscriptionHandlerHeader: ST =
-      st"void handle_${handlerName}(const ${portType} msg);"
+    var subscriptionHandlerHeader: ST = st""
+    if (isEventPort(portType)) {
+      subscriptionHandlerHeader = st"void handle_${handlerName}();"
+    }
+    else {
+      subscriptionHandlerHeader = st"void handle_${handlerName}(const ${portType} msg);"
+    }
+
     return subscriptionHandlerHeader
   }
 
@@ -1636,6 +1711,7 @@ object Generator {
     var subscriberMethods: ISZ[ST] = IS()
     var publisherMethods: ISZ[ST] = IS()
     var subscriptionMessageGetters: ISZ[ST] = IS()
+    var eventPortHandlers: ISZ[ST] = IS()
 
     var outPortNames: ISZ[String] = IS()
     var inTuplePortNames: ISZ[String] = IS()
@@ -1678,6 +1754,10 @@ object Generator {
       else {
         if (p.direction == Direction.In) {
           subscribers = subscribers :+ genCppTopicSubscription(p, nodeName, portDatatype)
+          // Specifically for event ports, not eventdata ports (no data to be handled)
+          if (isEventPort(portDatatype)) {
+            eventPortHandlers = eventPortHandlers :+ genCppEventPortHandler(p, nodeName, portDatatype)
+          }
           if (!isSporadic(component) || p.isInstanceOf[AadlDataPort]) {
             subscriberMethods = subscriberMethods :+
               genCppSubscriptionHandlerPeriodic(p, nodeName, portDatatype)
@@ -1779,6 +1859,13 @@ object Generator {
         fileBody =
           st"""${fileBody}
               |${(subscriptionMessageGetters, "\n")}"""
+      }
+
+      // TODO: Here
+      if (eventPortHandlers.size > 0) {
+        fileBody =
+          st"""${fileBody}
+              |${(eventPortHandlers, "\n")}"""
       }
 
       if (strictSubscriptionHandlerBaseMethods.size > 0) {
