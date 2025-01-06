@@ -7,7 +7,7 @@ import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, 
 import org.sireum.hamr.codegen.common.types.{AadlType, ArrayType, BaseType, EnumType, RecordType}
 import org.sireum.hamr.ir.Direction
 import org.sireum.message.Reporter
-import org.sireum.ops.ISZOps
+import org.sireum.ops.{ISZOps, StringOps}
 
 object Generator {
 
@@ -25,10 +25,8 @@ object Generator {
   val cpp_src_node_header_name_suffix: String = "_src.hpp"
   val cpp_node_runner_name_suffix: String = "_runner.cpp"
 
-  // TODO: Reentrant or mutually exclusive (or single-threaded executor)?
   // This value will work for Python and C++ code
   val callback_group_type: String = "Reentrant"
-  // TODO: Confirm this name (and maybe remove based on how callback groups are done)
   val callback_group_name: String = "cb_group_"
   val subscription_options_name: String = "subscription_options_"
   // Mutex is used for thread locking in C++
@@ -266,13 +264,17 @@ object Generator {
   //================================================
 
   def genCppCMakeListsEntryPointDecl(modelName: String,
-                                     componentName: String): ST = {
+                                     componentName: String, hasEnumConverter: B): ST = {
     val node_executable_file_nameT = genExecutableFileName(componentName)
 
     var source_files: ISZ[String] = IS()
     source_files = source_files :+ s"src/base_code/${componentName}_runner.cpp"
     source_files = source_files :+ s"src/user_code/${componentName}_src.cpp"
     source_files = source_files :+ s"src/base_code/${componentName}_base_src.cpp"
+
+    if (hasEnumConverter) {
+      source_files = source_files :+s"src/base_code/enum_converter.cpp"
+    }
 
     val packages: ISZ[String] = IS(s"${genCppPackageName(modelName)}_interfaces")
 
@@ -284,7 +286,7 @@ object Generator {
 
   //  Setup file for node source package
   //    Example: https://github.com/santoslab/ros-examples/blob/main/tempControlcpp_ws/src/tc_cpp_pkg/CMakeLists.txt
-  def genCppCMakeListsFile(modelName: String, threadComponents: ISZ[AadlThread]): (ISZ[String], ST) = {
+  def genCppCMakeListsFile(modelName: String, threadComponents: ISZ[AadlThread], hasEnumConverter: B): (ISZ[String], ST) = {
     val top_level_package_nameT: String = genCppPackageName(modelName)
     val fileName: String = "CMakeLists.txt"
 
@@ -293,7 +295,7 @@ object Generator {
     var entry_point_executables: ISZ[String] = IS()
     for (comp <- threadComponents) {
       entry_point_decls =
-        entry_point_decls :+ genCppCMakeListsEntryPointDecl(modelName, genNodeName(comp))
+        entry_point_decls :+ genCppCMakeListsEntryPointDecl(modelName, genNodeName(comp), hasEnumConverter)
       entry_point_executables =
         entry_point_executables :+ genExecutableFileName(genNodeName(comp))
     }
@@ -1075,6 +1077,7 @@ object Generator {
     if (isEventPort(portType)) {
       handlerCode = st"""void ${nodeName}::handle_${handlerName}_base(MsgType msg)
                         |{
+                        |    (void)msg;
                         |    handle_${handlerName}();
                         |}
                       """
@@ -1452,6 +1455,8 @@ object Generator {
         """
     return vector
   }
+
+
 
   def genCppBaseNodeHeaderFile(packageName: String, component: AadlThread, connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
                                datatypeMap: Map[AadlType, (String, ISZ[String])], strictAADLMode: B, reporter: Reporter): (ISZ[String], ST) = {
@@ -1861,7 +1866,6 @@ object Generator {
               |${(subscriptionMessageGetters, "\n")}"""
       }
 
-      // TODO: Here
       if (eventPortHandlers.size > 0) {
         fileBody =
           st"""${fileBody}
@@ -1967,7 +1971,7 @@ object Generator {
   }
 
   def genCppUserNodeCppFile(packageName: String, component: AadlThread, datatypeMap: Map[AadlType, (String, ISZ[String])],
-                            strictAADLMode: B, reporter: Reporter): (ISZ[String], ST) = {
+                            hasConverterFiles: B, strictAADLMode: B, reporter: Reporter): (ISZ[String], ST) = {
     val nodeName = genNodeName(component)
     val fileName = genCppNodeSourceName(nodeName)
 
@@ -1991,8 +1995,16 @@ object Generator {
       subscriptionHandlers = subscriptionHandlers :+ genCppTimeTriggeredMethod(nodeName)
     }
 
+    var includeFiles: ST = st"#include \"${packageName}/user_headers/${nodeName}${cpp_src_node_header_name_suffix}\""
+
+    if (hasConverterFiles) {
+      includeFiles =
+        st"""${includeFiles}
+            |#include "${packageName}/base_headers/enum_converter.hpp""""
+    }
+
     val fileBody =
-      st"""#include "${packageName}/user_headers/${nodeName}${cpp_src_node_header_name_suffix}"
+      st"""${includeFiles}
           |
           |//=================================================
           |//  I n i t i a l i z e    E n t r y    P o i n t
@@ -2052,10 +2064,11 @@ object Generator {
   }
 
   def genCppNodeFiles(modelName: String, threadComponents: ISZ[AadlThread], connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
-                      datatypeMap: Map[AadlType, (String, ISZ[String])], strictAADLMode: B, reporter: Reporter): ISZ[(ISZ[String], ST)] = {
+                      datatypeMap: Map[AadlType, (String, ISZ[String])], hasConverterFiles: B, strictAADLMode: B, reporter: Reporter): ISZ[(ISZ[String], ST)] = {
     val top_level_package_nameT: String = genCppPackageName(modelName)
 
     var cpp_files: ISZ[(ISZ[String], ST)] = IS()
+
     for (comp <- threadComponents) {
       cpp_files =
         cpp_files :+ genCppBaseNodeHeaderFile(top_level_package_nameT, comp, connectionMap, datatypeMap, strictAADLMode, reporter)
@@ -2064,12 +2077,131 @@ object Generator {
       cpp_files =
         cpp_files :+ genCppUserNodeHeaderFile(top_level_package_nameT, comp, datatypeMap, strictAADLMode, reporter)
       cpp_files =
-        cpp_files :+ genCppUserNodeCppFile(top_level_package_nameT, comp, datatypeMap, strictAADLMode, reporter)
+        cpp_files :+ genCppUserNodeCppFile(top_level_package_nameT, comp, datatypeMap, hasConverterFiles, strictAADLMode, reporter)
       cpp_files =
         cpp_files :+ genCppNodeRunnerFile(top_level_package_nameT, comp)
     }
 
     return cpp_files
+  }
+
+  def genCppEnumConverterHeaderFile(packageName: String, enumTypes: ISZ[(String, AadlType)],
+                                    strictAADLMode: B): (ISZ[String], ST) = {
+    var includes: ISZ[ST] = IS()
+    var converterHeaders: ISZ[ST] = IS()
+
+    for (enum <- enumTypes) {
+      val enumName: String = enum._2.classifier.apply(enum._2.classifier.size - 1)
+
+      includes = includes :+ st"#include \"${packageName}_interfaces/msg/${enum._1}.hpp\""
+
+      if (strictAADLMode) {
+        converterHeaders = converterHeaders :+
+          st"std::string enumToString(${packageName}_interfaces::msg::${enumName} value);"
+      }
+      else {
+        converterHeaders = converterHeaders :+
+          st"std::string enumToString(${packageName}_interfaces::msg::${enumName}* value);"
+      }
+    }
+
+    val fileBody =
+      st"""#ifndef ENUM_CONVERTER_HPP
+          |#define ENUM_CONVERTER_HPP
+          |
+          |#include <string>
+          |${(includes, "\n")}
+          |
+          |${(converterHeaders, "\n")}
+          |
+          |#endif
+        """
+
+    val filePath: ISZ[String] = IS("src", packageName, "include", packageName, "base_headers", "enum_converter.hpp")
+
+    return (filePath, fileBody)
+  }
+
+  def genCppEnumConverters(packageName: String, enumTypes: ISZ[(String, AadlType)], strictAADLMode: B): ISZ[ST] = {
+    var converters: ISZ[ST] = IS()
+
+    for (enum <- enumTypes) {
+      val enumName: String = enum._2.classifier.apply(enum._2.classifier.size - 1)
+      val enumValues: ISZ[String] = enum._2.asInstanceOf[EnumType].values
+
+      var cases: ISZ[ST] = IS()
+
+      for (value <- enumValues) {
+        cases = cases :+
+          st"""case building_control_cpp_pkg_interfaces::msg::${enumName}::${StringOps(enum._1).toUpper}_${StringOps(value).toUpper}:
+              |    return "${enumName} ${value}";"""
+      }
+
+      if (strictAADLMode) {
+        converters = converters :+
+          st"""std::string enumToString(${packageName}_interfaces::msg::${enumName} value) {
+              |    switch (value.${enum._1}) {
+              |        ${(cases, "\n")}
+              |        default:
+              |            return "Unknown value for ${enumName}";
+              |    }
+              |}
+        """
+      }
+      else {
+        converters = converters :+
+          st"""std::string enumToString(${packageName}_interfaces::msg::${enumName}* value) {
+              |    switch (value->${enum._1}) {
+              |        ${(cases, "\n")}
+              |        default:
+              |            return "Unknown value for ${enumName}";
+              |    }
+              |}
+        """
+      }
+    }
+
+    return converters
+  }
+
+  def genCppEnumConverterFile(packageName: String, enumTypes: ISZ[(String, AadlType)],
+                              strictAADLMode: B): (ISZ[String], ST) = {
+    val fileBody =
+      st"""#include "${packageName}/base_headers/enum_converter.hpp"
+          |
+          |${(genCppEnumConverters(packageName, enumTypes, strictAADLMode), "\n")}
+        """
+
+    val filePath: ISZ[String] = IS("src", packageName, "src", "base_code", "enum_converter.cpp")
+
+    return (filePath, fileBody)
+  }
+
+  def genCppEnumConverterFiles(modelName: String, datatypeMap: Map[AadlType, (String, ISZ[String])],
+                               strictAADLMode: B): ISZ[(ISZ[String], ST)] = {
+    var enumTypes: ISZ[(String, AadlType)] = IS()
+
+    for (key <- datatypeMap.keys) {
+      key match {
+        case _: EnumType =>
+          val datatype: String = datatypeMap.get(key).get._2.apply(0)
+          val datatypeName: String = StringOps(datatype).substring(StringOps(datatype).indexOf(' ') + 1, datatype.size)
+          enumTypes = enumTypes :+ (datatypeName, key)
+        case x =>
+      }
+    }
+
+    if (enumTypes.size == 0) {
+      return IS()
+    }
+
+    var files: ISZ[(ISZ[String], ST)] = IS()
+    val packageName: String = genCppPackageName(modelName)
+
+    files = files :+ genCppEnumConverterHeaderFile(packageName, enumTypes, strictAADLMode)
+    files = files :+ genCppEnumConverterFile(packageName, enumTypes, strictAADLMode)
+
+    return files
   }
 
 
@@ -2103,8 +2235,13 @@ object Generator {
                     datatypeMap: Map[AadlType, (String, ISZ[String])], strictAADLMode: B, reporter: Reporter): ISZ[(ISZ[String], ST)] = {
     var files: ISZ[(ISZ[String], ST)] = ISZ()
 
-    files = files ++ genCppNodeFiles(modelName, threadComponents, connectionMap, datatypeMap, strictAADLMode, reporter)
-    files = files :+ genCppCMakeListsFile(modelName, threadComponents)
+    val converterFiles: ISZ[(ISZ[String], ST)] = genCppEnumConverterFiles(modelName, datatypeMap, strictAADLMode)
+    val hasConverterFiles: B = (converterFiles.size > 0)
+
+    files = files ++
+      genCppNodeFiles(modelName, threadComponents, connectionMap, datatypeMap, hasConverterFiles, strictAADLMode, reporter)
+    files = files ++ converterFiles
+    files = files :+ genCppCMakeListsFile(modelName, threadComponents, hasConverterFiles)
     files = files :+ genCppPackageFile(modelName)
 
     return files
