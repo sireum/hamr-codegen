@@ -38,7 +38,9 @@ object CodeGen {
       return CodeGenResults.empty
     }
 
-    val systemRootDirectory: Os.Path = getSystemRoot(model, options.workspaceRootDir)
+    var modOptions = options
+
+    val systemRootDirectory: Os.Path = getSystemRoot(model, modOptions.workspaceRootDir)
 
     def getPath(path: String): Os.Path = {
       val p = Os.path(path)
@@ -47,26 +49,33 @@ object CodeGen {
         else systemRootDirectory / path) // make the user's request relative to the system's root directory
     }
 
-    val outputDir: Path = getPath(options.outputDir.getOrElse("hamr"))
+    val outputDir: Path = getPath(modOptions.outputDir.getOrElse("hamr"))
 
-    val slangOutputDir: Path = getPath(options.slangOutputDir.getOrElse((outputDir / "slang").value))
+    val slangOutputDir: Path = getPath(modOptions.slangOutputDir.getOrElse((outputDir / "slang").value))
 
-    val output_shared_C_Directory: Path = getPath(options.slangOutputCDir.getOrElse((outputDir / "c").value))
+    val output_shared_C_Directory: Path = getPath(modOptions.slangOutputCDir.getOrElse((outputDir / "c").value))
 
-    val sel4OutputDir: Path = getPath(options.sel4OutputDir.getOrElse((outputDir / "camkes").value))
+    val sel4Type: String = if (modOptions.platform == CodegenHamrPlatform.Microkit) "microkit" else "camkes"
+    val sel4OutputDir: Path = getPath(modOptions.sel4OutputDir.getOrElse((outputDir / sel4Type).value))
 
     val output_platform_C_Directory: Path =
-      if (options.platform == CodegenHamrPlatform.SeL4) sel4OutputDir / DirectoryUtil.DIR_SLANG_LIBRARIES
+      if (modOptions.platform == CodegenHamrPlatform.SeL4) sel4OutputDir / DirectoryUtil.DIR_SLANG_LIBRARIES
       else output_shared_C_Directory
 
-    val packageName: String = if (options.packageName.nonEmpty) {
-      cleanupPackageName(options.packageName.get)
+    val packageName: String = if (modOptions.packageName.nonEmpty) {
+      cleanupPackageName(modOptions.packageName.get)
     } else {
       cleanupPackageName("base" )
     }
 
+    modOptions = modOptions(
+      packageName = Some(packageName),
+      outputDir = Some(outputDir.canon.value),
+      slangOutputDir = Some(slangOutputDir.canon.value),
+      sel4OutputDir = Some(sel4OutputDir.canon.value))
+
     val (runArsit, runACT, runMicrokit, runRos2, isTranspilerProject, isSlangProject): (B, B, B, B, B, B) =
-      options.platform match {
+      modOptions.platform match {
         case CodegenHamrPlatform.JVM => (T, F, F, F, F, T)
 
         case CodegenHamrPlatform.Linux => (T, F, F, F, T, T)
@@ -85,9 +94,9 @@ object CodeGen {
 
     var reporterIndex = z"0"
 
-    if (options.runtimeMonitoring && isTranspilerProject) {
+    if (modOptions.runtimeMonitoring && isTranspilerProject) {
       reporter.error(None(), toolName, "Runtime monitoring support for transpiled projects has not been added yet. Disable runtime-monitoring before transpiling")
-      reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
+      reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
       return CodeGenResults.empty
     }
 
@@ -96,37 +105,38 @@ object CodeGen {
 
     var wroteOutArsitResources: B = F
 
-    val result: Option[ModelElements] = ModelUtil.resolve(model, model.components(0).identifier.pos, packageName, options, reporter)
-    reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
+    val result: Option[ModelElements] = ModelUtil.resolve(model, model.components(0).identifier.pos, packageName, modOptions, reporter)
+    reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
     if (result.isEmpty) {
       return CodeGenResults.empty
     }
 
     val (rmodel, aadlTypes, symbolTable): (Aadl, AadlTypes, SymbolTable) = (result.get.model, result.get.types, result.get.symbolTable)
 
-    if (options.runtimeMonitoring && symbolTable.getThreads().isEmpty) {
+    if (modOptions.runtimeMonitoring && symbolTable.getThreads().isEmpty) {
       reporter.error(None(), toolName, "Model must contain threads in order to enable runtime monitoring")
       return CodeGenResults.empty
     }
 
     if (~reporter.hasError && runRos2) {
-      val results = Ros2Codegen().run(rmodel, options, aadlTypes, symbolTable, plugins, reporter)
+      val results = Ros2Codegen().run(rmodel, modOptions, aadlTypes, symbolTable, plugins, reporter)
       if (!reporter.hasError) {
         writeOutResources(results.fileResources, reporter)
       }
-      if (!options.parseableMessages) {
-        reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
+      if (!modOptions.parseableMessages) {
+        reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
       }
       return CodeGenResults(resources = results.fileResources, auxResources = ISZ())
     }
 
     if (!reporter.hasError && runMicrokit) {
-      val results = MicrokitCodegen().run(rmodel, options, aadlTypes, symbolTable, plugins, reporter)
+      reporter.info(None(), toolName, "Generating Microkit artifacts...")
+      val results = MicrokitCodegen().run(rmodel, modOptions, aadlTypes, symbolTable, plugins, reporter)
       if (!reporter.hasError) {
         writeOutResources(results.resources, reporter)
       }
-      if (!options.parseableMessages) {
-        reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
+      if (!modOptions.parseableMessages) {
+        reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
       }
       return results
     }
@@ -135,49 +145,49 @@ object CodeGen {
 
       val genBlessEntryPoints = false
       val ipc = arsit.util.IpcMechanism.SharedMemory
-      val platform = arsit.util.ArsitPlatform.byName(options.platform.name).get
+      val platform = arsit.util.ArsitPlatform.byName(modOptions.platform.name).get
       val fileSep = StringOps(org.sireum.Os.fileSep).first
 
       val opt = arsit.util.ArsitOptions(
         slangOutputDir = slangOutputDir,
         packageName = packageName,
-        noEmbedArt = options.noEmbedArt,
+        noEmbedArt = modOptions.noEmbedArt,
         bless = genBlessEntryPoints,
-        verbose = options.verbose,
-        runtimeMonitoring = options.runtimeMonitoring,
-        devicesAsThreads = options.devicesAsThreads,
-        genSbtMill = options.genSbtMill,
+        verbose = modOptions.verbose,
+        runtimeMonitoring = modOptions.runtimeMonitoring,
+        devicesAsThreads = modOptions.devicesAsThreads,
+        genSbtMill = modOptions.genSbtMill,
         ipc = ipc,
-        auxCodeDirs = options.slangAuxCodeDirs,
+        auxCodeDirs = modOptions.slangAuxCodeDirs,
         outputSharedCDir = output_shared_C_Directory,
         outputPlatformCDir = output_platform_C_Directory,
-        excludeImpl = options.excludeComponentImpl,
+        excludeImpl = modOptions.excludeComponentImpl,
         platform = platform,
-        bitWidth = options.bitWidth,
-        maxStringSize = options.maxStringSize,
-        maxArraySize = options.maxArraySize,
+        bitWidth = modOptions.bitWidth,
+        maxStringSize = modOptions.maxStringSize,
+        maxArraySize = modOptions.maxArraySize,
         pathSeparator = fileSep,
-        experimentalOptions = options.experimentalOptions,
+        experimentalOptions = modOptions.experimentalOptions,
 
-        runSlangCheck = !ExperimentalOptions.disableSlangCheck(options.experimentalOptions)
+        runSlangCheck = !ExperimentalOptions.disableSlangCheck(modOptions.experimentalOptions)
       )
 
       reporter.info(None(), toolName, "Generating Slang artifacts...")
-      reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
+      reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
 
       val results = arsit.Arsit.run(rmodel, opt, aadlTypes, symbolTable, plugins, reporter)
 
       arsitResources = arsitResources ++ results.resources
       arsitAuxResources = arsitAuxResources ++ results.auxResources
 
-      reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ(ARSIT_INSTRUCTIONS_MESSAGE_KIND))
+      reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ(ARSIT_INSTRUCTIONS_MESSAGE_KIND))
 
       arsitResources = removeDuplicates(arsitResources, reporter)
 
       val sergenConfigs = Resource.projectSergenConfigs(arsitAuxResources)
       if (!reporter.hasError && isSlangProject && sergenConfigs.nonEmpty &&
-        !ExperimentalOptions.disableSergen(options.experimentalOptions) &&
-        !options.noEmbedArt // only run sergen and slangcheck when art is embedded
+        !ExperimentalOptions.disableSergen(modOptions.experimentalOptions) &&
+        !modOptions.noEmbedArt // only run sergen and slangcheck when art is embedded
       ) {
         // doesn't matter what 'o.writeOutResources' is, sergen/slangcheck needs the
         // resources to be written out
@@ -188,7 +198,7 @@ object CodeGen {
 
         if (!reporter.hasError) {
           reporter.info(None(), toolName, "Generating serializer/deserializers for data types via sergen ...")
-          reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
+          reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
 
           for (sc <- sergenConfigs if !reporter.hasError) {
             sergenCallback(sc, reporter)
@@ -198,8 +208,8 @@ object CodeGen {
 
       val slangCheckConfigs = Resource.projectSlangCheckConfigs(arsitAuxResources)
       if (!reporter.hasError && isSlangProject && slangCheckConfigs.nonEmpty &&
-        !ExperimentalOptions.disableSlangCheck(options.experimentalOptions) &&
-        !options.noEmbedArt // only run sergen and slangcheck when art is embedded
+        !ExperimentalOptions.disableSlangCheck(modOptions.experimentalOptions) &&
+        !modOptions.noEmbedArt // only run sergen and slangcheck when art is embedded
       ) {
         // doesn't matter what 'o.writeOutResources' is, sergen/slangcheck needs the
         // resources to be written out
@@ -210,7 +220,7 @@ object CodeGen {
 
         if (!reporter.hasError) {
           reporter.info(None(), toolName, "Generating SlangCheck artifacts ...")
-          reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
+          reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
 
           for (sc <- slangCheckConfigs if !reporter.hasError) {
             slangCheckCallback(sc, reporter)
@@ -218,7 +228,7 @@ object CodeGen {
         }
       }
 
-      if (!reporter.hasError && !options.noProyekIve && isSlangProject) {
+      if (!reporter.hasError && !modOptions.noProyekIve && isSlangProject) {
         // doesn't matter what 'o.writeOutResources' is, proyek ive needs the
         // resources to be written out
         if (!wroteOutArsitResources) {
@@ -249,7 +259,7 @@ object CodeGen {
           )
 
           reporter.info(None(), toolName, "Generating IVE and Scala Metals project via Proyek ...")
-          reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
+          reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
 
           if (proyekIveCallback(proyekConfig) != 0) {
             reporter.error(None(), toolName, "Proyek did not complete successfully")
@@ -257,7 +267,7 @@ object CodeGen {
         }
       }
 
-      if (!reporter.hasError && options.runTranspiler && isTranspilerProject) {
+      if (!reporter.hasError && modOptions.runTranspiler && isTranspilerProject) {
 
         // doesn't matter what 'o.writeOutResources' is, transpiler needs the
         // resources to be written out
@@ -268,7 +278,7 @@ object CodeGen {
 
         if (!reporter.hasError) {
           reporter.info(None(), toolName, "Transpiling project ...")
-          reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
+          reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
 
           for (transpilerConfig <- Resource.projectTranspilerConfigs(results.auxResources) if !reporter.hasError) {
             // CTranspiler prints all the messages in the passed in reporter so
@@ -287,22 +297,22 @@ object CodeGen {
 
     if (!reporter.hasError && runACT) {
 
-      val platform = org.sireum.hamr.codegen.act.util.ActPlatform.byName(options.platform.name).get
+      val platform = org.sireum.hamr.codegen.act.util.ActPlatform.byName(modOptions.platform.name).get
       reporter.info(None(), toolName, "Generating CAmkES artifacts...")
 
       val actOptions = org.sireum.hamr.codegen.act.util.ActOptions(
         sel4OutputDir = sel4OutputDir.value,
-        auxFiles = getAuxFiles(options.sel4AuxCodeDirs, F, reporter),
-        workspaceRootDir = options.workspaceRootDir,
+        auxFiles = getAuxFiles(modOptions.sel4AuxCodeDirs, F, reporter),
+        workspaceRootDir = modOptions.workspaceRootDir,
         platform = platform,
         hamrBasePackageName = Some(packageName),
-        experimentalOptions = options.experimentalOptions
+        experimentalOptions = modOptions.experimentalOptions
       )
 
       val results = org.sireum.hamr.codegen.act.Act.run(rmodel, actOptions, aadlTypes, symbolTable, reporter)
       actResources = actResources ++ results.resources
 
-      reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ(ACT_INSTRUCTIONS_MESSAGE_KIND))
+      reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ(ACT_INSTRUCTIONS_MESSAGE_KIND))
     }
 
     actResources = removeDuplicates(actResources, reporter)
@@ -315,7 +325,7 @@ object CodeGen {
       writeOutResources(actResources, reporter)
     }
 
-    reporterIndex = printMessages(reporter.messages, options.verbose, reporterIndex, ISZ())
+    reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
 
     if (!reporter.hasError && shouldWriteOutResources) {
       // always print out any instructional messages
@@ -327,7 +337,7 @@ object CodeGen {
       }
     }
 
-    if (reporter.hasError && !options.verbose) { // at least need to print out the error messages
+    if (reporter.hasError && !modOptions.verbose) { // at least need to print out the error messages
       printMessages(reporter.errors, T, 0, ISZ())
     }
 
