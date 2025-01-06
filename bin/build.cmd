@@ -161,10 +161,31 @@ def regenTransformers(): Unit = {
     "-m", "immutable,mutable") ++ asts).at(symbolPackagePath).console.runCheck()
 }
 
+def symLinkSireumJar(): Unit = {
+  val sireumjar = home.up.up / "bin" / "sireum.jar"
+  val bootstrapSireumjar = homeBin / "sireum.jar"
+  if (sireumjar.exists) {
+    if (!bootstrapSireumjar.isSymLink) {
+      bootstrapSireumjar.remove()
+      bootstrapSireumjar.mklink(sireumjar)
+      println(
+        st"""Replaced bootstrapping sireum.jar with $sireumjar.
+            |Please rerun the last task.""".render)
+    }
+  } else {
+    println(
+      st"""This task requires build.cmd be run using $sireumjar
+          |rather than the bootstrapping version. Please clone the kekinian repo and try again.""".render)
+    Os.exit(1)
+  }
+}
+
 def regenClis(): Unit = {
+  symLinkSireumJar()
   val utilDir = home / "shared" / "src" / "main" / "scala" / "org" / "sireum" / "hamr" / "codegen" / "common" / "util"
   // NOTE: cliJson.sc emits what's in $SIREUM_HOME/bin/sireum.jar's version of
   //       hamr's cli so regen that first, rebuild sireum.jar, then call this method
+
   proc"${sireum} tools cligen -p org.sireum.hamr.codegen.common.util -n HamrCli -o ${utilDir.value} ${(utilDir / "cliJson.sc")}".console.runCheck()
 
 
@@ -179,8 +200,11 @@ def regenClis(): Unit = {
     def addOptions(opts: ISZ[org.sireum.cli.CliOpt.Opt], optGroup: String): Unit = {
       for (o <- opts) {
         val longKey = s"--${o.longKey}"
-        longs = longs :+ st"""val $optGroup${o.name}: String = "$longKey""""
-        allLongs = allLongs :+ st"$optGroup${o.name}"
+        @strictpure def sanitize(s: String): ST =
+          st"${ops.StringOps(s).replaceAllLiterally("/", "_")}"
+        val id = sanitize(s"$optGroup${o.name}")
+        longs = longs :+ st"""val $id: String = "$longKey""""
+        allLongs = allLongs :+ id
         o.tpe match {
           case f: Type.Flag =>
             toStrings = toStrings :+
@@ -227,8 +251,8 @@ def regenClis(): Unit = {
                   |}"""
         }
         if (o.shortKey.nonEmpty) {
-          shorts = shorts :+ st"""val $optGroup${o.name}: String = "-${o.shortKey.get}""""
-          allShorts = allShorts :+ st"$optGroup${o.name}"
+          shorts = shorts :+ st"""val $id: String = "-${o.shortKey.get}""""
+          allShorts = allShorts :+ id
         }
       }
     }
@@ -324,8 +348,6 @@ def regenClis(): Unit = {
         |${hamrCliContent.substring(end + endText.size + 1, hamrCliContent.size)}""".render)
     println(s"Modified: $hamrCli")
   }
-
-
 
   // Ignore the Tipe error "'hamr' is not a member of package 'org.sireum'"
   process(

@@ -94,13 +94,13 @@ object CommonCli {
         tpe = Type.Flag(F),
         description = "Run Transpiler during HAMR Codegen")
     )),
-    OptGroup(name = "CAmkES", opts = ISZ(
-      Opt(name = "camkesOutputDir", longKey = "camkes-output-dir", shortKey = None(),
+    OptGroup(name = "CAmkES/Microkit", opts = ISZ(
+      Opt(name = "sel4OutputDir", longKey = "sel4-output-dir", shortKey = None(),
         tpe = Type.Path(multiple = F, default = None()),
-        description = "Output directory for the generated CAmkES project files"),
-      Opt(name = "camkesAuxCodeDirs", longKey = "camkes-aux-code-dirs", shortKey = None(),
+        description = "Output directory for the generated CAmkES/Microkit project files"),
+      Opt(name = "sel4AuxCodeDirs", longKey = "sel4-aux-code-dirs", shortKey = None(),
         tpe = Type.Path(multiple = T, default = None()),
-        description = "Directories containing C files to be included in CAmkES build"),
+        description = "Directories containing C files to be included in CAmkES/Microkit build"),
       Opt(name = "workspaceRootDir", longKey = "workspace-root-dir", shortKey = Some('r'),
         tpe = Type.Path(multiple = F, default = None()),
         description = "Root directory containing the architectural model project")

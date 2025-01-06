@@ -39,7 +39,7 @@ object Act {
 
     val auxFiles: ISZ[(String, String)] = options.auxFiles.entries.map(m => {
 
-      val resourceName = s"${options.camkesOutputDir}/${Util.AUX_CODE_DIRECTORY_NAME}/${m._1}"
+      val resourceName = s"${options.sel4OutputDir}/${Util.AUX_CODE_DIRECTORY_NAME}/${m._1}"
       resources = resources :+ ResourceUtil.createStringResource(resourceName, m._2, T)
 
       val relName = s"${Util.AUX_CODE_DIRECTORY_NAME}/${m._1}"
@@ -65,7 +65,7 @@ object Act {
           case _ => "."
         }
         resources = resources ++ ActPrettyPrint().tempEntry(
-          destDir = options.camkesOutputDir,
+          destDir = options.sel4OutputDir,
           container = container,
           cFiles = auxCFiles,
           cHeaderDirectories = auxHeaderDirectories,
@@ -91,7 +91,7 @@ object Act {
 
       reporter.info(None(), Util.ACT_INSTRUCTIONS_MESSAGE_KIND,
         StringTemplate.postGenInstructionsMessage(
-          camkesProjDirectory = options.camkesOutputDir,
+          camkesProjDirectory = options.sel4OutputDir,
           cakeMLAssemblyLocations = cakeMLAssemblyLocations,
           runCamkesScript = runCamkesScript,
           hasVM = symbolTable.hasVM()).render)

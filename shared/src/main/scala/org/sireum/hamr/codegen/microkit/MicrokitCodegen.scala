@@ -101,7 +101,7 @@ object MicrokitCodegen {
             |  }
             |}
             |"""
-      val path = s"${options.camkesOutputDir.get}/${mk.relativePathSrcDir}/${mk.cImplFilename}"
+      val path = s"${options.sel4OutputDir.get}/${mk.relativePathSrcDir}/${mk.cImplFilename}"
       resources = resources :+ ResourceUtil.createResource(path, content, T)
     }
 
@@ -147,7 +147,7 @@ object MicrokitCodegen {
             |${(defs, "\n\n")}
             |"""
 
-      val outputdir = s"${options.camkesOutputDir.get}/${TypeUtil.typesDir}/${MicrokitCodegen.dirInclude}"
+      val outputdir = s"${options.sel4OutputDir.get}/${TypeUtil.typesDir}/${MicrokitCodegen.dirInclude}"
       val path = s"$outputdir/${TypeUtil.aadlTypesFilename}"
       resources = resources :+ ResourceUtil.createResourceH(path, content, T, T)
 
@@ -509,7 +509,7 @@ object MicrokitCodegen {
             ))
         )
 
-        val boardPath = s"${options.camkesOutputDir.get}/${mk.relativePathVmBoardDir}/qemu_virt_aarch64"
+        val boardPath = s"${options.sel4OutputDir.get}/${mk.relativePathVmBoardDir}/qemu_virt_aarch64"
 
         val vmmMake = VmMakefileTemplate.Makefile(threadId.render)
         resources = resources :+ ResourceUtil.createResource(s"${boardPath}/Makefile", vmmMake, T)
@@ -520,7 +520,7 @@ object MicrokitCodegen {
           guestInitRamDiskVaddrInHex = "0x4d700000",
           maxIrqs = 1
         )
-        resources = resources :+ ResourceUtil.createResource(s"${options.camkesOutputDir.get}/${mk.relativePathIncludeDir}/${threadId.render}_user.h", vmm_config, T)
+        resources = resources :+ ResourceUtil.createResource(s"${options.sel4OutputDir.get}/${mk.relativePathIncludeDir}/${threadId.render}_user.h", vmm_config, T)
       }
 
       val childStackSizeInKiBytes: Option[Z] = t.stackSizeInBytes() match {
@@ -610,7 +610,7 @@ object MicrokitCodegen {
             |  }
             |}"""
 
-      val monImplPath = s"${options.camkesOutputDir.get}/${mk.relativePathSrcDir}/${mk.monImplFilename}"
+      val monImplPath = s"${options.sel4OutputDir.get}/${mk.relativePathSrcDir}/${mk.monImplFilename}"
       resources = resources :+ ResourceUtil.createResource(monImplPath, monImplSource, T)
 
       val userNotifyMethodName = st"${threadId}_notify"
@@ -677,10 +677,10 @@ object MicrokitCodegen {
             |}
             |"""
 
-      val implPath = s"${options.camkesOutputDir.get}/${mk.relativePathSrcDir}/${mk.cImplFilename}"
+      val implPath = s"${options.sel4OutputDir.get}/${mk.relativePathSrcDir}/${mk.cImplFilename}"
       resources = resources :+ ResourceUtil.createResource(implPath, implSource, T)
 
-      val userImplPath = s"${options.camkesOutputDir.get}/${mk.relativePathSrcDir}/${mk.cUserImplFilename}"
+      val userImplPath = s"${options.sel4OutputDir.get}/${mk.relativePathSrcDir}/${mk.cUserImplFilename}"
       val userImplSource: ST =
         if (isVM) {
           val cand = vaddrs.filter(f => f.isInstanceOf[VMRamVaddr])
@@ -719,7 +719,7 @@ object MicrokitCodegen {
             |
             |${(codeApiMethodSigs, ";\n")};
             |"""
-      val headerPath = s"${options.camkesOutputDir.get}/${mk.relativePathIncludeDir}/${mk.cHeaderFilename}"
+      val headerPath = s"${options.sel4OutputDir.get}/${mk.relativePathIncludeDir}/${mk.cHeaderFilename}"
       resources = resources :+ ResourceUtil.createResource(headerPath, headerSource, T)
 
       return (child, retMemoryRegions, computeExecutionTime)
@@ -749,11 +749,11 @@ object MicrokitCodegen {
     var typeImplFilenames: ISZ[String] = ISZ()
     var typeObjectNames: ISZ[String] = ISZ()
 
-    val baseTypesIncludePath = s"${options.camkesOutputDir.get}/${TypeUtil.typesDir}/${MicrokitCodegen.dirInclude}"
+    val baseTypesIncludePath = s"${options.sel4OutputDir.get}/${TypeUtil.typesDir}/${MicrokitCodegen.dirInclude}"
 
     val connectionStore = processConnections(typeStore)
     for (entry <- connectionStore) {
-      val srcPath = s"${options.camkesOutputDir.get}/${TypeUtil.typesDir}/${MicrokitCodegen.dirSrc}"
+      val srcPath = s"${options.sel4OutputDir.get}/${TypeUtil.typesDir}/${MicrokitCodegen.dirSrc}"
 
       for (tc <- entry.typeApiContributions) {
         typeHeaderFilenames = typeHeaderFilenames :+ tc.headerFilename
@@ -823,15 +823,15 @@ object MicrokitCodegen {
       memoryRegions = memoryRegions,
       channels = xmlChannels)
 
-    val xmlPath = s"${options.camkesOutputDir.get}/${MicrokitCodegen.microkitSystemXmlFilename}"
+    val xmlPath = s"${options.sel4OutputDir.get}/${MicrokitCodegen.microkitSystemXmlFilename}"
     resources = resources :+ ResourceUtil.createResource(path = xmlPath, content = sd.prettyST, overwrite = T)
 
     val sysDot = sd.toDot
-    val dotPath = s"${options.camkesOutputDir.get}/microkit.dot"
+    val dotPath = s"${options.sel4OutputDir.get}/microkit.dot"
     resources = resources :+ ResourceUtil.createResource(path = dotPath, content = sysDot, overwrite = T)
 
     val makefileContents = MakefileTemplate.mainMakefile
-    val makefilePath = s"${options.camkesOutputDir.get}/Makefile"
+    val makefilePath = s"${options.sel4OutputDir.get}/Makefile"
     resources = resources :+ ResourceUtil.createResource(makefilePath, makefileContents, T)
 
     buildEntries = buildEntries ++ (for (mk <- makefileContainers) yield mk.buildEntry)
@@ -851,12 +851,12 @@ object MicrokitCodegen {
       buildEntries = buildEntries,
       elfEntries = elfEntries)
 
-    val systemmkPath = s"${options.camkesOutputDir.get}/${MicrokitCodegen.systemMakeFilename}"
+    val systemmkPath = s"${options.sel4OutputDir.get}/${MicrokitCodegen.systemMakeFilename}"
     resources = resources :+ ResourceUtil.createResource(systemmkPath, systemmkContents, T)
 
 
-    val utilIncludePath = s"${options.camkesOutputDir.get}/${Util.utilDir}/${MicrokitCodegen.dirInclude}"
-    val utilSrcPath = s"${options.camkesOutputDir.get}/${Util.utilDir}/${MicrokitCodegen.dirSrc}"
+    val utilIncludePath = s"${options.sel4OutputDir.get}/${Util.utilDir}/${MicrokitCodegen.dirInclude}"
+    val utilSrcPath = s"${options.sel4OutputDir.get}/${Util.utilDir}/${MicrokitCodegen.dirSrc}"
     resources = resources :+ ResourceUtil.createResource(s"${utilIncludePath}/printf.h", Util.printfh, T)
     resources = resources :+ ResourceUtil.createResource(s"${utilSrcPath}/printf.c", Util.printfc, T)
     resources = resources :+ ResourceUtil.createResource(s"${utilIncludePath}/util.h", Util.utilh, T)

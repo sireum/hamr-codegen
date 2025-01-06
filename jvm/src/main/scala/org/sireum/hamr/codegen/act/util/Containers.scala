@@ -159,7 +159,7 @@ import org.sireum.hamr.ir
   'SeL4_TB
 }
 
-@datatype class ActOptions(camkesOutputDir: String,
+@datatype class ActOptions(sel4OutputDir: String,
                            auxFiles: Map[String, String],
                            workspaceRootDir: Option[String],
                            platform: ActPlatform.Type,

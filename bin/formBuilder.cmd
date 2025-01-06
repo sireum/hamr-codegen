@@ -58,6 +58,22 @@ val sireum: Os.Path = homeBin / (if (Os.isWin) "sireum.bat" else "sireum")
 val sireumJar: Os.Path = homeBin / "sireum.jar"
 val appDir: Os.Path = homeBin / (if (Os.isMac) "mac" else if (Os.isWin) "win" else "linux")
 
+if (!sireumJar.isSymLink) {
+  val sireumjar = home.up.up / "bin" / "sireum.jar"
+  if (sireumjar.exists) {
+    (homeBin / "sireum.jar").remove()
+    (homeBin / "sireum.jar").mklink(sireumjar)
+    println(
+      st"""Replaced bootstrapping sireum.jar with $sireumjar.
+          |Please rerun the last task.""".render)
+  } else {
+    println(
+      st"""This task requires $sireumjar
+          |rather than the bootstrapping version. Please clone the kekinian repo and try again.""".render)
+    Os.exit(1)
+  }
+}
+
 val ignoreKeys: Set[String] = Set(ISZ(
   "devicesAsThreads", "line", "verbose", "parseableMessages", "genSbtMill", "noProyekIve", "noEmbedArt",
 "runTranspiler", "system", "experimentalOptions", "sourcepath", "workspaceRootDir"))

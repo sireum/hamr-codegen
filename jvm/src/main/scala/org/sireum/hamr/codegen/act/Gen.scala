@@ -207,7 +207,7 @@ import org.sireum.ops.ISZOps
 
       if (ExperimentalOptions.generateRefinementProof(actOptions.experimentalOptions) && actOptions.platform != ActPlatform.SeL4_TB) {
         ProofUtil.proofContainer.modelSchedulingType = PeriodicUtil.getSchedulingType(symbolTable, actOptions.platform)
-        auxResourceFiles = auxResourceFiles ++ SMT2ProofGen.genSmt2Proof(ProofUtil.proofContainer, astObjects, sbConnectionContainer, symbolTable, actOptions.camkesOutputDir, actOptions.platform)
+        auxResourceFiles = auxResourceFiles ++ SMT2ProofGen.genSmt2Proof(ProofUtil.proofContainer, astObjects, sbConnectionContainer, symbolTable, actOptions.sel4OutputDir, actOptions.platform)
       }
 
       return Some(ActContainer(

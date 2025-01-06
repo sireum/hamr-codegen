@@ -53,10 +53,10 @@ object CodeGen {
 
     val output_shared_C_Directory: Path = getPath(options.slangOutputCDir.getOrElse((outputDir / "c").value))
 
-    val camkesOutputDir: Path = getPath(options.camkesOutputDir.getOrElse((outputDir / "camkes").value))
+    val sel4OutputDir: Path = getPath(options.sel4OutputDir.getOrElse((outputDir / "camkes").value))
 
     val output_platform_C_Directory: Path =
-      if (options.platform == CodegenHamrPlatform.SeL4) camkesOutputDir / DirectoryUtil.DIR_SLANG_LIBRARIES
+      if (options.platform == CodegenHamrPlatform.SeL4) sel4OutputDir / DirectoryUtil.DIR_SLANG_LIBRARIES
       else output_shared_C_Directory
 
     val packageName: String = if (options.packageName.nonEmpty) {
@@ -291,8 +291,8 @@ object CodeGen {
       reporter.info(None(), toolName, "Generating CAmkES artifacts...")
 
       val actOptions = org.sireum.hamr.codegen.act.util.ActOptions(
-        camkesOutputDir = camkesOutputDir.value,
-        auxFiles = getAuxFiles(options.camkesAuxCodeDirs, F, reporter),
+        sel4OutputDir = sel4OutputDir.value,
+        auxFiles = getAuxFiles(options.sel4AuxCodeDirs, F, reporter),
         workspaceRootDir = options.workspaceRootDir,
         platform = platform,
         hamrBasePackageName = Some(packageName),
