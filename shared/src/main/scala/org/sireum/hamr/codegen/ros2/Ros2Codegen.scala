@@ -220,13 +220,13 @@ import org.sireum.ops.ISZOps
       msg = s"${baseType}[${arr.dimensions.apply(0)}] arr"
     } else {
       var length: Z = 1
-      msg = s"int16[${arr.dimensions.size}] DIMENSIONS = ["
+      var index: Z = 0
       for (dim <- arr.dimensions) {
         length = length * dim
-        msg = s"${msg}${dim},"
+        msg = s"${msg}int16 DIM_${index} = ${dim}\n"
+        index = index + 1
       }
-      msg = ops.StringOps(msg).substring(0, msg.size - 1)
-      msg = s"${msg}]\n${baseType}[${length}] arr"
+      msg = s"${msg}\n${baseType}[${length}] arr"
     }
 
     datatypeMap = datatypeMap + (t ~> (s, ISZ(msg)))

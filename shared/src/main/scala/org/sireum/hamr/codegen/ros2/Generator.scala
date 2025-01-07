@@ -1749,9 +1749,10 @@ object Generator {
               genCppTopicPublishMethodStrict(p, nodeName, portDatatype, inputPortNames.size)
           }
           else {
-            // TODO: Why is this 0?  It should probably be 1
+            // Out ports with no connections should still publish to a topic (for other non-generated components
+            // to subscribe to, for example)
             publisherMethods = publisherMethods :+
-              genCppTopicPublishMethodStrict(p, nodeName, portDatatype, 0)
+              genCppTopicPublishMethodStrict(p, nodeName, portDatatype, 1)
           }
           strictPutMsgMethods = strictPutMsgMethods :+ genCppPutMsgMethodStrict(p, nodeName, portDatatype)
         }
@@ -2097,11 +2098,11 @@ object Generator {
 
       if (strictAADLMode) {
         converterHeaders = converterHeaders :+
-          st"std::string enumToString(${packageName}_interfaces::msg::${enumName} value);"
+          st"const char* enumToString(${packageName}_interfaces::msg::${enumName} value);"
       }
       else {
         converterHeaders = converterHeaders :+
-          st"std::string enumToString(${packageName}_interfaces::msg::${enumName}* value);"
+          st"const char* enumToString(${packageName}_interfaces::msg::${enumName}* value);"
       }
     }
 
@@ -2133,13 +2134,13 @@ object Generator {
 
       for (value <- enumValues) {
         cases = cases :+
-          st"""case building_control_cpp_pkg_interfaces::msg::${enumName}::${StringOps(enum._1).toUpper}_${StringOps(value).toUpper}:
+          st"""case ${packageName}_interfaces::msg::${enumName}::${StringOps(enum._1).toUpper}_${StringOps(value).toUpper}:
               |    return "${enumName} ${value}";"""
       }
 
       if (strictAADLMode) {
         converters = converters :+
-          st"""std::string enumToString(${packageName}_interfaces::msg::${enumName} value) {
+          st"""const char* enumToString(${packageName}_interfaces::msg::${enumName} value) {
               |    switch (value.${enum._1}) {
               |        ${(cases, "\n")}
               |        default:
@@ -2150,7 +2151,7 @@ object Generator {
       }
       else {
         converters = converters :+
-          st"""std::string enumToString(${packageName}_interfaces::msg::${enumName}* value) {
+          st"""const char* enumToString(${packageName}_interfaces::msg::${enumName}* value) {
               |    switch (value->${enum._1}) {
               |        ${(cases, "\n")}
               |        default:
