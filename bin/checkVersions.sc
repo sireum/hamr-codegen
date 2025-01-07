@@ -136,10 +136,13 @@ compare(phantomVersionsP, phantomCurrentVers)
 
   def fcompare(name: String, expected: String): Unit = {
     val actual = ops.ISZOps(tool.opts).filter(p => p.name == name)(0).tpe.asInstanceOf[org.sireum.cli.CliOpt.Type.Str].default.get
-    if (actual != expected) {
+    val parts = ops.StringOps(expected).split(c => c == '.')
+    // NOTE: eclipse will drop the leading zero for months 01-09 so add it back if needed
+    val mdyhm: String = if (parts(2).size == 8) parts(2) else s"0${parts(2)}"
+    val _expected = s"${parts(0)}.${parts(1)}.${mdyhm}.${parts(3)}"
+    if (actual != _expected) {
       exclamations()
-      println(s"WARNING: FMIDE version for ${name} does not match: ${actual} vs ${expected}: ${fmidecli.toUri}")
-      println(s"  NOTE: eclipse will drop the leading zero for months 01-09")
+      println(s"WARNING: FMIDE version for ${name} does not match: ${actual} vs ${_expected}: ${fmidecli.toUri}")
       exclamations()
     }
   }
