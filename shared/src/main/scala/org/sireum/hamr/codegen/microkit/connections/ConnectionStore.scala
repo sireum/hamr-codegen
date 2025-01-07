@@ -16,7 +16,7 @@ import org.sireum.hamr.codegen.microkit.util.Util.TAB
 
   def senderName: ISZ[String]
 
-  def senderContributions: ConnectionContributions
+  def senderContributions: Option[ConnectionContributions]
 
   // component path -> contributions
   def receiverContributions: Map[ISZ[String], ConnectionContributions]
@@ -26,7 +26,7 @@ import org.sireum.hamr.codegen.microkit.util.Util.TAB
                                         val systemContributions: SystemContributions,
                                         val typeApiContributions: ISZ[TypeApiContributions],
                                         val senderName: ISZ[String],
-                                        val senderContributions: ConnectionContributions,
+                                        val senderContributions: Option[ConnectionContributions],
                                         val receiverContributions: Map[ISZ[String], ConnectionContributions]) extends ConnectionStore
 
 @sig trait SystemContributions {
@@ -69,8 +69,8 @@ import org.sireum.hamr.codegen.microkit.util.Util.TAB
 
 @datatype class DefaultTypeApiContributions(val aadlType: AadlType,
                                             val simpleFilename: String,
-                                            val header: ST,
-                                            val implementation: ST) extends  TypeApiContributions
+                                            @hidden val header: ST,
+                                            @hidden val implementation: ST) extends  TypeApiContributions
 
 @sig trait GlobalVarContribution {
   def typ: String
@@ -116,6 +116,10 @@ import org.sireum.hamr.codegen.microkit.util.Util.TAB
   def computeContributions: ISZ[ST]
 
   def sharedMemoryMapping: ISZ[MemoryRegion]
+
+  def aadlType: AadlType
+
+  def queueSize: Z
 }
 
 @datatype class DefaultConnectionContributions(val portName: ISZ[String],
@@ -130,4 +134,7 @@ import org.sireum.hamr.codegen.microkit.util.Util.TAB
                                                val apiMethods: ISZ[ST],
                                                val initContributions: ISZ[ST],
                                                val computeContributions: ISZ[ST],
-                                               val sharedMemoryMapping: ISZ[MemoryRegion]) extends ConnectionContributions
+                                               val sharedMemoryMapping: ISZ[MemoryRegion],
+
+                                               val aadlType: AadlType,
+                                               val queueSize: Z) extends ConnectionContributions

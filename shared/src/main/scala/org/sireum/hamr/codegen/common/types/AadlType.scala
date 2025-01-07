@@ -30,7 +30,7 @@ import org.sireum.hamr.ir
 @datatype class EnumType(val classifier: ISZ[String],
                          val nameProvider: TypeNameProvider,
 
-                         val container: Option[ir.Component],
+                         @hidden val container: Option[ir.Component],
                          val bitSize: Option[Z],
 
                          val values: ISZ[String]) extends AadlType
@@ -38,7 +38,7 @@ import org.sireum.hamr.ir
 @datatype class ArrayType(val classifier: ISZ[String],
                           val nameProvider: TypeNameProvider,
 
-                          val container: Option[ir.Component],
+                          @hidden val container: Option[ir.Component],
                           val bitSize: Option[Z],
 
                           val dimensions: ISZ[Z],
@@ -47,7 +47,7 @@ import org.sireum.hamr.ir
 @datatype class RecordType(val classifier: ISZ[String],
                            val nameProvider: TypeNameProvider,
 
-                           val container: Option[ir.Component],
+                           @hidden val container: Option[ir.Component],
                            val bitSize: Option[Z],
 
                            val fields: Map[String, AadlType]
@@ -56,7 +56,7 @@ import org.sireum.hamr.ir
 @datatype class BaseType(val classifier: ISZ[String],
                          val nameProvider: TypeNameProvider,
 
-                         val container: Option[ir.Component],
+                         @hidden val container: Option[ir.Component],
                          val bitSize: Option[Z],
 
                          val slangType: SlangType.Type
@@ -65,7 +65,7 @@ import org.sireum.hamr.ir
 @datatype class TODOType(val classifier: ISZ[String],
                          val nameProvider: TypeNameProvider,
 
-                         val container: Option[ir.Component],
+                         @hidden val container: Option[ir.Component],
                          val bitSize: Option[Z]
 
                         ) extends AadlType
@@ -73,7 +73,7 @@ import org.sireum.hamr.ir
 @datatype class BitType(val classifier: ISZ[String],
                         val nameProvider: TypeNameProvider,
 
-                        val container: Option[ir.Component],
+                        @hidden val container: Option[ir.Component],
                         val bitSize: Option[Z],
 
                         val originatingType: Option[AadlType]) extends AadlType

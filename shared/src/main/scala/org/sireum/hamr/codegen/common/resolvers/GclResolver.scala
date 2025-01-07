@@ -1470,7 +1470,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
           return ta
 
-        case TODOType(ISZ("art", "Empty"), _, _, _) =>
+        case TODOType(ISZ("art", "Empty"), _, _) =>
           val adtAst: AST.Stmt.Adt =
             AST.Stmt.Adt(
               isRoot = F,

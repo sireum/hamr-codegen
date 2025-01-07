@@ -4,21 +4,18 @@ package org.sireum.hamr.codegen.microkit
 import org.sireum._
 import org.sireum.hamr.codegen.common.containers.FileResource
 import org.sireum.hamr.codegen.common.plugin.Plugin
-import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlEventPort, AadlFeatureEvent, AadlThread, SymbolTable}
+import org.sireum.hamr.codegen.common.symbols.{AadlPort, AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, TypeUtil => CommonTypeUtil}
-import org.sireum.hamr.codegen.common.util.{CodeGenResults, ResourceUtil}
 import org.sireum.hamr.codegen.common.util.HamrCli.CodegenOption
+import org.sireum.hamr.codegen.common.util.{CodeGenResults, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen.{pacerSchedulingDomain, toolName}
-import org.sireum.hamr.codegen.microkit.connections.{ConnectionContributions, ConnectionStore, TypeApiContributions}
+import org.sireum.hamr.codegen.microkit.connections._
 import org.sireum.hamr.codegen.microkit.lint.Linter
-import org.sireum.hamr.codegen.microkit.types.{QueueTemplate, TypeStore, TypeUtil}
+import org.sireum.hamr.codegen.microkit.types.{DefaultTypeStore, TypeStore, TypeUtil}
 import org.sireum.hamr.codegen.microkit.util._
+import org.sireum.hamr.codegen.microkit.vm.{VmMakefileTemplate, VmUser, VmUtil}
 import org.sireum.hamr.ir.{Aadl, Direction}
 import org.sireum.message.Reporter
-import org.sireum.hamr.codegen.microkit.connections._
-import org.sireum.hamr.codegen.microkit.types._
-import org.sireum.hamr.codegen.microkit.util.Util.TAB
-import org.sireum.hamr.codegen.microkit.vm.{VmMakefileTemplate, VmUser, VmUtil}
 
 object MicrokitCodegen {
   val toolName: String = "Mircokit Codegen"
@@ -161,193 +158,85 @@ object MicrokitCodegen {
 
         for (srcPort <- srcThread.getPorts()
              if srcPort.direction == Direction.Out && symbolTable.outConnections.contains(srcPort.path)) {
-          var srcPutContributions: ISZ[ST] = ISZ()
-
-          var outgoingPortType: Option[AadlType] = None()
-
-          var typeApiContributions: ISZ[TypeApiContributions] = ISZ()
 
           var receiverContributions: Map[ISZ[String], ConnectionContributions] = Map.empty
-
-          var handledQueues: Set[Z] = Set.empty
 
           for (outConnection <- symbolTable.getOutConnections(srcPort.path)) {
             symbolTable.componentMap.get(outConnection.dst.component.name).get match {
               case dstThread: AadlThread =>
+
                 val dstPort = symbolTable.featureMap.get(outConnection.dst.feature.get.name).get
-                val dstContributions: DefaultConnectionContributions = {
-                  assert(
-                    (srcPort.isInstanceOf[AadlDataPort] && dstPort.isInstanceOf[AadlDataPort]) ||
-                      (srcPort.isInstanceOf[AadlEventPort] && dstPort.isInstanceOf[AadlEventPort]) ||
-                      (srcPort.isInstanceOf[AadlEventDataPort] && dstPort.isInstanceOf[AadlEventDataPort]),
-                    s"Connected ports must be of the same type: ${srcPort.path} -> ${dstPort.path}")
 
-                  val isDataPort = srcPort.isInstanceOf[AadlDataPort]
-                  val isEventPort = srcPort.isInstanceOf[AadlEventPort]
-                  val isEventDataPort = srcPort.isInstanceOf[AadlEventDataPort]
+                receiverContributions = receiverContributions + dstThread.path ~>
+                  ConnectionUtil.processInPort(dstThread, dstPort.asInstanceOf[AadlPort],
+                    Some(srcPort), Some(outConnection), typeStore, symbolTable)
 
-                  val dstQueueSize: Z = if (isDataPort) 1
-                  else dstPort.asInstanceOf[AadlFeatureEvent].queueSize
-
-                  val aadlType: AadlType = (srcPort, dstPort) match {
-                    case (_: AadlEventPort, _: AadlEventPort) =>
-                      TypeUtil.eventPortType
-                    case (srcPort: AadlEventDataPort, dstPort: AadlEventDataPort) =>
-                      assert(srcPort.aadlType == dstPort.aadlType, s"Currently expecting connected ports to have the same type ${outConnection.name}")
-                      srcPort.aadlType
-                    case (srcPort: AadlDataPort, dstPort: AadlDataPort) =>
-                      assert(srcPort.aadlType == dstPort.aadlType, s"Currently expecting connected ports to have the same type ${outConnection.name}")
-                      srcPort.aadlType
-                    case _ =>
-                      halt("Infeasible")
-                  }
-
-                  val typeName = typeStore.get(aadlType).get
-
-                  if (outgoingPortType.isEmpty) {
-                    outgoingPortType = Some(aadlType)
-                  } else {
-                    assert (outgoingPortType.get == aadlType)
-                  }
-
-                  if (!handledQueues.contains(dstQueueSize)) {
-                    typeApiContributions = typeApiContributions :+ TypeUtil.getTypeApiContributions(aadlType, typeName, dstQueueSize)
-
-                    val sharedMemVarName = QueueTemplate.getClientEnqueueSharedVarName(srcPort.identifier, dstQueueSize)
-                    srcPutContributions = srcPutContributions :+ QueueTemplate.getClientPutEntry(
-                      sharedMemoryVarName = sharedMemVarName,
-                      queueElementTypeName = typeName.typeName,
-                      queueSize = dstQueueSize,
-                      isEventPort = isEventPort)
-
-                    handledQueues = handledQueues + dstQueueSize
-                  }
-
-                  val sharedMemTypeName = QueueTemplate.getTypeQueueTypeName(typeName.typeName, dstQueueSize)
-
-                  val sharedVarName = QueueTemplate.getClientDequeueSharedVarName(dstPort.identifier, dstQueueSize)
-                  val recvQueueTypeName = QueueTemplate.getClientRecvQueueTypeName(typeName.typeName, dstQueueSize)
-                  val recvQueueVarName = QueueTemplate.getClientRecvQueueName(dstPort.identifier)
-
-                  var methodApiSigs: ISZ[ST] = ISZ()
-                  var methodApis: ISZ[ST] = ISZ()
-                  if (isEventPort || isEventDataPort) {
-                    methodApiSigs = methodApiSigs :+
-                      QueueTemplate.getClientIsEmptyMethodSig(dstPort.identifier) :+
-                      QueueTemplate.getClientGetterMethodPollSig(dstPort.identifier, typeName.typeName, isEventPort) :+
-                      QueueTemplate.getClientGetterMethodSig(dstPort.identifier, typeName.typeName, isEventPort)
-                    methodApis = methodApis :+
-                      QueueTemplate.getClientIsEmptyMethod(dstPort.identifier, typeName.typeName, dstQueueSize) :+
-                      QueueTemplate.getClientGetterMethodPoll(dstPort.identifier, typeName.typeName, dstQueueSize, isEventPort) :+
-                      QueueTemplate.getClientGetterMethod(dstPort.identifier, typeName.typeName, isEventPort)
-                  } else {
-                    methodApiSigs = methodApiSigs :+
-                      QueueTemplate.getClientGetterMethodSig(dstPort.identifier, typeName.typeName, F)
-                    methodApis = methodApis :+
-                      QueueTemplate.getClientDataGetterMethod(dstPort.identifier, typeName.typeName, dstQueueSize, aadlType)
-                  }
-
-                  var userMethodSignatures: ISZ[ST] = ISZ()
-                  var userMethodDefaultImpls: ISZ[ST] = ISZ()
-                  var computeContributions: ISZ[ST] = ISZ()
-                  if (!dstThread.toVirtualMachine(symbolTable)) {
-                    if (dstThread.isSporadic()) {
-                      userMethodSignatures = userMethodSignatures :+ QueueTemplate.getClientEventHandlerMethodSig(dstPort.identifier)
-
-                      if (isEventPort || isEventDataPort) {
-                        computeContributions = computeContributions :+ QueueTemplate.getClientSporadicComputeContributions(dstPort.identifier)
-                      }
-
-                      userMethodDefaultImpls = userMethodDefaultImpls :+ QueueTemplate.getClientSporadicDefaultImplContributions(dstPort.identifier)
-                    }
-                  }
-
-                  DefaultConnectionContributions(
-                    portName = dstPort.path,
-                    portPriority = None(),
-                    headerImportContributions = ISZ(),
-                    implementationImportContributions = ISZ(),
-                    userMethodSignatures = userMethodSignatures,
-                    userMethodDefaultImpls = userMethodDefaultImpls,
-                    defineContributions = ISZ(),
-                    globalVarContributions = ISZ(
-                      PortVaddr(s"volatile $sharedMemTypeName", s"*$sharedVarName"),
-                      QueueVaddr(recvQueueTypeName, recvQueueVarName)
-                    ),
-                    apiMethodSigs = methodApiSigs,
-                    apiMethods = methodApis,
-                    initContributions = ISZ(QueueTemplate.getClientRecvInitMethodCall(dstPort.identifier, typeName.typeName, dstQueueSize)),
-                    computeContributions = computeContributions,
-                    sharedMemoryMapping = ISZ(
-                      PortSharedMemoryRegion(
-                        outgoingPortPath = srcPort.path,
-                        queueSize = dstQueueSize,
-                        varAddr = sharedVarName,
-                        perms = ISZ(Perm.READ),
-                        sizeInKiBytes = Util.defaultPageSizeInKiBytes,
-                        physicalAddressInKiBytes = None())
-                    )
-                  )
-                }
-                receiverContributions = receiverContributions + dstThread.path ~> dstContributions
               case x =>
                 halt(s"Only handling thread to thread connections currently: $x")
             }
-          }
+          } // end processing out connections for the source port
 
-          val sPortType: String = typeStore.get(outgoingPortType.get).get.typeName
-          val isEventPort = outgoingPortType.get == TypeUtil.eventPortType
+          val senderContributions = ConnectionUtil.processOutPort(srcPort, receiverContributions, typeStore)
 
-          val apiMethodSig = QueueTemplate.getClientPutMethodSig(srcPort.identifier, sPortType, isEventPort)
-          val apiMethod = QueueTemplate.getClientPutMethod(srcPort.identifier, sPortType, srcPutContributions, isEventPort)
-
-          var sharedMemoryMappings: ISZ[MemoryRegion] = ISZ()
-          var sharedMemoryVars: ISZ[GlobalVarContribution] = ISZ()
-          var initContributions: ISZ[ST] = ISZ()
-          for (queueSize <- handledQueues.elements) {
-            val queueType = QueueTemplate.getTypeQueueTypeName(sPortType, queueSize)
-            val varName = QueueTemplate.getClientEnqueueSharedVarName(srcPort.identifier, queueSize)
-            sharedMemoryVars = sharedMemoryVars :+ QueueVaddr(s"volatile $queueType", s"*$varName")
-
-            initContributions = initContributions :+ QueueTemplate.getQueueInitMethod(varName, sPortType, queueSize)
-
-            sharedMemoryMappings = sharedMemoryMappings :+
-              PortSharedMemoryRegion(
-                outgoingPortPath = srcPort.path,
-                queueSize = queueSize,
-                varAddr = varName,
-                perms = ISZ(Perm.READ, Perm.WRITE),
-                sizeInKiBytes = Util.defaultPageSizeInKiBytes,
-                physicalAddressInKiBytes = None()
-              )
-          }
+          val typeApiContributions:ISZ[TypeApiContributions] =
+            (Set.empty ++ (for(rc <- receiverContributions.values) yield
+              TypeUtil.getTypeApiContributions(rc.aadlType, typeStore.get(rc.aadlType).get, rc.queueSize))).elements
 
           ret = ret :+
             DefaultConnectionStore(
               systemContributions =
                 DefaultSystemContributions(
-                  sharedMemoryRegionContributions = sharedMemoryMappings,
+                  sharedMemoryRegionContributions = senderContributions.sharedMemoryMapping,
                   channelContributions = ISZ()),
               typeApiContributions = typeApiContributions,
               senderName = srcThread.path,
-              senderContributions =
-                DefaultConnectionContributions(
-                  portName = srcPort.path,
-                  portPriority = None(),
-                  headerImportContributions = ISZ(),
-                  implementationImportContributions = ISZ(),
-                  userMethodSignatures = ISZ(),
-                  userMethodDefaultImpls = ISZ(),
-                  defineContributions = ISZ(),
-                  globalVarContributions = sharedMemoryVars,
-                  apiMethodSigs = ISZ(apiMethodSig),
-                  apiMethods = ISZ(apiMethod),
-                  initContributions = initContributions,
-                  computeContributions = ISZ(),
-                  sharedMemoryMapping = sharedMemoryMappings),
+              senderContributions = Some(senderContributions),
               receiverContributions = receiverContributions)
+        } // end processing connections for source port
+
+        // now handle unconnected ports
+
+        for (unconnectedOutPort <- srcThread.getPorts().filter(p => p.direction == Direction.Out).filter(p => !symbolTable.outConnections.contains(p.path))) {
+          val senderContributions = ConnectionUtil.processOutPort(unconnectedOutPort, Map.empty, typeStore)
+          val typeApiContributions =
+            TypeUtil.getTypeApiContributions(senderContributions.aadlType, typeStore.get(senderContributions.aadlType).get, senderContributions.queueSize)
+
+          ret = ret :+
+            DefaultConnectionStore(
+              systemContributions =
+                DefaultSystemContributions(
+                  sharedMemoryRegionContributions = senderContributions.sharedMemoryMapping,
+                  channelContributions = ISZ()),
+              typeApiContributions = ISZ(typeApiContributions),
+              senderName = srcThread.path,
+              senderContributions = Some(senderContributions),
+              receiverContributions = Map.empty
+            )
         }
-      }
+
+        for (unconnectedInPort <- srcThread.getPorts().filter(p => p.direction == Direction.In).filter(p => !symbolTable.inConnections.contains(p.path))) {
+          val receiverContributions = ConnectionUtil.processInPort(
+            dstThread = srcThread, dstPort = unconnectedInPort,
+            srcPort = None(), outConnection = None(),
+            typeStore = typeStore, symbolTable = symbolTable)
+
+          val typeApiContributions =
+            TypeUtil.getTypeApiContributions(receiverContributions.aadlType, typeStore.get(receiverContributions.aadlType).get, receiverContributions.queueSize)
+
+          ret = ret :+
+            DefaultConnectionStore(
+              systemContributions =
+              DefaultSystemContributions(
+                sharedMemoryRegionContributions = receiverContributions.sharedMemoryMapping,
+                channelContributions = ISZ()),
+              typeApiContributions = ISZ(typeApiContributions),
+              senderName = srcThread.path,
+              senderContributions = None(),
+              receiverContributions = Map.empty + srcThread.path ~> receiverContributions)
+
+        }
+
+      } // end processing connections for threads
       return ret
     }
 
@@ -377,16 +266,16 @@ object MicrokitCodegen {
 
       for (entry <- connectionStore) {
 
-        if (entry.senderName == t.path) {
-          headerImports = headerImports ++ entry.senderContributions.headerImportContributions
-          userMethodSignatures = userMethodSignatures ++ entry.senderContributions.userMethodSignatures
-          userMethodDefaultImpls = userMethodDefaultImpls ++ entry.senderContributions.userMethodDefaultImpls
-          codeApiMethodSigs = codeApiMethodSigs ++ entry.senderContributions.apiMethodSigs
-          codeApiMethods = codeApiMethods ++ entry.senderContributions.apiMethods
-          vaddrs = vaddrs ++ entry.senderContributions.globalVarContributions
-          initContributions = initContributions ++ entry.senderContributions.initContributions
-          computeContributions = computeContributions ++ entry.senderContributions.computeContributions
-          sharedMemoryRegions = sharedMemoryRegions ++ entry.senderContributions.sharedMemoryMapping
+        if (entry.senderName == t.path && entry.senderContributions.nonEmpty) {
+          headerImports = headerImports ++ entry.senderContributions.get.headerImportContributions
+          userMethodSignatures = userMethodSignatures ++ entry.senderContributions.get.userMethodSignatures
+          userMethodDefaultImpls = userMethodDefaultImpls ++ entry.senderContributions.get.userMethodDefaultImpls
+          codeApiMethodSigs = codeApiMethodSigs ++ entry.senderContributions.get.apiMethodSigs
+          codeApiMethods = codeApiMethods ++ entry.senderContributions.get.apiMethods
+          vaddrs = vaddrs ++ entry.senderContributions.get.globalVarContributions
+          initContributions = initContributions ++ entry.senderContributions.get.initContributions
+          computeContributions = computeContributions ++ entry.senderContributions.get.computeContributions
+          sharedMemoryRegions = sharedMemoryRegions ++ entry.senderContributions.get.sharedMemoryMapping
         }
         if (entry.receiverContributions.contains(t.path)) {
           val c = entry.receiverContributions.get(t.path).get
