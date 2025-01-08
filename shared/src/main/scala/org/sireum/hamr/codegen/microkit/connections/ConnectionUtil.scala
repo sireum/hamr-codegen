@@ -11,12 +11,13 @@ import org.sireum.hamr.ir.{ConnectionInstance, Name}
 object ConnectionUtil {
 
   def getPortType(p: AadlPort): AadlType = {
-    p match {
+    val ret: AadlType = p match {
       case _: AadlEventPort => TypeUtil.eventPortType
       case p: AadlEventDataPort => p.aadlType
       case p: AadlDataPort => p.aadlType
       case _ => halt("Infeasible")
     }
+    return ret
   }
 
   def processInPort(dstThread: AadlThread,

@@ -179,7 +179,7 @@ object MicrokitCodegen {
           val senderContributions = ConnectionUtil.processOutPort(srcPort, receiverContributions, typeStore)
 
           val typeApiContributions:ISZ[TypeApiContributions] =
-            (Set.empty ++ (for(rc <- receiverContributions.values) yield
+            (Set.empty[TypeApiContributions] ++ (for(rc <- receiverContributions.values) yield
               TypeUtil.getTypeApiContributions(rc.aadlType, typeStore.get(rc.aadlType).get, rc.queueSize))).elements
 
           ret = ret :+
@@ -232,7 +232,8 @@ object MicrokitCodegen {
               typeApiContributions = ISZ(typeApiContributions),
               senderName = srcThread.path,
               senderContributions = None(),
-              receiverContributions = Map.empty + srcThread.path ~> receiverContributions)
+              receiverContributions = Map.empty[ISZ[String], ConnectionContributions] +
+                srcThread.path ~> receiverContributions)
 
         }
 
