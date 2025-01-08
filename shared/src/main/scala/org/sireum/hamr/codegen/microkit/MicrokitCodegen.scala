@@ -33,7 +33,7 @@ object MicrokitCodegen {
 
   val pacerComputeExecutionTime: Z = 10
 
-  val defaultComputeExecutionTime: Z = 10
+  val defaultComputeExecutionTime: Z = 50
 }
 
 @record class MicrokitCodegen {
