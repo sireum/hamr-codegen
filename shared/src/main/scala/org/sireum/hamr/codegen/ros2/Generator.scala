@@ -1663,6 +1663,11 @@ object Generator {
               publisherHeaders = publisherHeaders :+ genCppTopicPublisherVarHeader(p, portDatatype, 1)
             }
           }
+          else {
+            // Out ports with no connections should still publish to a topic (for other non-generated components
+            // to subscribe to, for example)
+            publisherHeaders = publisherHeaders :+ genCppTopicPublisherVarHeader(p, portDatatype, 1)
+          }
         }
       }
       else {
@@ -2029,6 +2034,12 @@ object Generator {
               publisherMethods = publisherMethods :+
                 genCppTopicPublishMethod(p, nodeName, portDatatype, 1)
             }
+          }
+          else {
+            // Out ports with no connections should still publish to a topic
+            publishers = publishers :+ genCppTopicPublisher(p, portDatatype, getPortNames(IS(p.path.toISZ)))
+            publisherMethods = publisherMethods :+
+              genCppTopicPublishMethod(p, nodeName, portDatatype, 1)
           }
         }
       }
