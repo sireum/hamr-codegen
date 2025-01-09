@@ -3,7 +3,7 @@
 package org.sireum.hamr.codegen.ros2
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlPort, AadlThread, Dispatch_Protocol}
+import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlDataPort, AadlEventDataPort, AadlPort, AadlProcess, AadlSystem, AadlThread, Dispatch_Protocol}
 import org.sireum.hamr.codegen.common.types.{AadlType, ArrayType, BaseType, EnumType, RecordType}
 import org.sireum.hamr.ir.Direction
 import org.sireum.message.Reporter
@@ -514,12 +514,12 @@ object Generator {
   //  L a u n c h  File (XML Format)
   //================================================
 
-  // genLaunchNodeDecl() - generate node declaration
+  // Generate node launch code
   //   Example:
   //     <node pkg="tc_cpp_pkg" exec="tc_test_exe"></node>
   def genXmlFormatLaunchNodeDecl(top_level_package_nameT: String,
-                                 component: AadlThread): ST = {
-    val node_executable_file_nameT = genExecutableFileName(genNodeName(component))
+                                 thread: AadlThread): ST = {
+    val node_executable_file_nameT = genExecutableFileName(genNodeName(thread))
     val s =
       st"""
           |<node pkg="${top_level_package_nameT}" exec="${node_executable_file_nameT}">
@@ -528,27 +528,78 @@ object Generator {
     return s
   }
 
-  // For example, see https://github.com/santoslab/ros-examples/blob/main/tempControl_ws/src/tc_bringup/launch/tc.launch.py
-  def genXmlFormatLaunchFile(modelName: String, threadComponents: ISZ[AadlThread]): (ISZ[String], ST) = {
-    val fileName = genXmlLaunchFileName(modelName)
+  // Generate system launch code (including a system launch file)
+  //   Example:
+  //     <include file="$(find-pkg-share gazebo_ros)/launch/gazebo.launch.py"/>
+  def genXmlFormatLaunchSystemDecl(top_level_package_nameT: String,
+                                   system: AadlSystem): ST = {
+    val launchFileName: String = genXmlLaunchFileName(system.identifier)
+    val s =
+      st"""
+          |<include file="$$(find-pkg-share ${top_level_package_nameT}_bringup)/launch/${launchFileName}"/>
+        """
+    return s
+  }
 
-    val top_level_package_nameT: String = genCppPackageName(modelName)
+  def genXmlFormatLaunchDecls(component: AadlComponent, packageName: String): ISZ[ST] = {
+    var launch_decls: ISZ[ST] = IS()
 
-    var node_decls: ISZ[ST] = IS()
-
-    for (comp <- threadComponents) {
-      node_decls = node_decls :+ genXmlFormatLaunchNodeDecl(top_level_package_nameT, comp)
+    for (comp <- component.subComponents) {
+      comp match {
+        case thread: AadlThread =>
+          launch_decls = launch_decls :+ genXmlFormatLaunchNodeDecl(packageName, thread)
+        case system: AadlSystem =>
+          launch_decls = launch_decls :+ genXmlFormatLaunchSystemDecl(packageName, system)
+        case process: AadlProcess =>
+          launch_decls = launch_decls ++ genXmlFormatLaunchDecls(process, packageName)
+        case _ =>
+      }
     }
 
-    val launchFileBody =
-      st"""<launch>
-          |    ${(node_decls, "\n")}
-          |</launch>
+    return launch_decls
+  }
+
+  // For example, see https://github.com/santoslab/ros-examples/blob/main/tempControl_ws/src/tc_bringup/launch/tc.launch.py
+  // Creates a launch file for each system component in the model
+  def genXmlFormatLaunchFiles(modelName: String, threadComponents: ISZ[AadlThread],
+                              systemComponents: ISZ[AadlSystem]): ISZ[(ISZ[String], ST)] = {
+    val top_level_package_nameT: String = genCppPackageName(modelName)
+
+    var launchFiles: ISZ[(ISZ[String], ST)] = IS()
+
+    for (system <- systemComponents) {
+      val fileName = genXmlLaunchFileName(system.identifier)
+
+
+
+      val launch_decls: ISZ[ST] = genXmlFormatLaunchDecls(system, top_level_package_nameT)
+
+
+
+/*
+      var node_decls: ISZ[ST] = IS()
+
+      for (thread <- threadComponents) {
+        val threadPath: String = thread.pathAsString(",")
+        val systemPath: String = system.pathAsString(",")
+
+        if (threadPath.size > systemPath.size && ops.StringOps(threadPath).substring(0, systemPath.size) == systemPath) {
+          node_decls = node_decls :+ genXmlFormatLaunchNodeDecl(top_level_package_nameT, thread)
+        }
+      }
+*/
+      val launchFileBody =
+        st"""<launch>
+            |    ${(launch_decls, "\n")}
+            |</launch>
         """
 
-    val filePath: ISZ[String] = IS("src", s"${top_level_package_nameT}_bringup", "launch", fileName)
+      val filePath: ISZ[String] = IS("src", s"${top_level_package_nameT}_bringup", "launch", fileName)
 
-    return (filePath, launchFileBody)
+      launchFiles = launchFiles :+ (filePath, launchFileBody)
+    }
+
+    return launchFiles
   }
 
 
@@ -1503,6 +1554,11 @@ object Generator {
             val inputPorts = connectionMap.get(p.path).get
             publisherHeaders = publisherHeaders :+ genCppTopicPublisherVarHeader(p, portDatatype, inputPorts.size)
           }
+          else {
+            // Out ports with no connections should still publish to a topic (for other non-generated components
+            // to subscribe to, for example)
+            publisherHeaders = publisherHeaders :+ genCppTopicPublisherVarHeader(p, portDatatype, 1)
+          }
         }
       }
       else {
@@ -1523,8 +1579,12 @@ object Generator {
           if (connectionMap.get(p.path).nonEmpty) {
             val inputPorts = connectionMap.get(p.path).get
             publisherHeaders = publisherHeaders :+ genCppTopicPublisherVarHeader(p, portDatatype, inputPorts.size)
-            putMethodHeaders = putMethodHeaders :+
-              genCppPutMsgMethodHeader(p, portDatatype)
+            putMethodHeaders = putMethodHeaders :+ genCppPutMsgMethodHeader(p, portDatatype)
+          }
+          else {
+            // Out ports with no connections should still publish to a topic
+            publisherHeaders = publisherHeaders :+ genCppTopicPublisherVarHeader(p, portDatatype, 1)
+            putMethodHeaders = putMethodHeaders :+ genCppPutMsgMethodHeader(p, portDatatype)
           }
         }
       }
@@ -1749,8 +1809,8 @@ object Generator {
               genCppTopicPublishMethodStrict(p, nodeName, portDatatype, inputPortNames.size)
           }
           else {
-            // Out ports with no connections should still publish to a topic (for other non-generated components
-            // to subscribe to, for example)
+            // Out ports with no connections should still publish to a topic
+            publishers = publishers :+ genCppTopicPublisher(p, portDatatype, getPortNames(IS(p.path.toISZ)))
             publisherMethods = publisherMethods :+
               genCppTopicPublishMethodStrict(p, nodeName, portDatatype, 1)
           }
@@ -1778,6 +1838,12 @@ object Generator {
             publishers = publishers :+ genCppTopicPublisher(p, portDatatype, inputPortNames)
             publisherMethods = publisherMethods :+
               genCppTopicPublishMethod(p, nodeName, portDatatype, inputPortNames.size)
+          }
+          else {
+            // Out ports with no connections should still publish to a topic
+            publishers = publishers :+ genCppTopicPublisher(p, portDatatype, getPortNames(IS(p.path.toISZ)))
+            publisherMethods = publisherMethods :+
+              genCppTopicPublishMethod(p, nodeName, portDatatype, 1)
           }
         }
       }
@@ -2092,7 +2158,7 @@ object Generator {
     var converterHeaders: ISZ[ST] = IS()
 
     for (enum <- enumTypes) {
-      val enumName: String = enum._2.classifier.apply(enum._2.classifier.size - 1)
+      val enumName: String = ops.StringOps(enum._2.classifier.apply(enum._2.classifier.size - 1)).replaceAllLiterally("_", "")
 
       includes = includes :+ st"#include \"${packageName}_interfaces/msg/${enum._1}.hpp\""
 
@@ -2127,7 +2193,7 @@ object Generator {
     var converters: ISZ[ST] = IS()
 
     for (enum <- enumTypes) {
-      val enumName: String = enum._2.classifier.apply(enum._2.classifier.size - 1)
+      val enumName: String = ops.StringOps(enum._2.classifier.apply(enum._2.classifier.size - 1)).replaceAllLiterally("_", "")
       val enumValues: ISZ[String] = enum._2.asInstanceOf[EnumType].values
 
       var cases: ISZ[ST] = IS()
@@ -2248,10 +2314,10 @@ object Generator {
     return files
   }
 
-  def genXmlLaunchPkg(modelName: String, threadComponents: ISZ[AadlThread]): ISZ[(ISZ[String], ST)] = {
+  def genXmlLaunchPkg(modelName: String, threadComponents: ISZ[AadlThread], systemComponents: ISZ[AadlSystem]): ISZ[(ISZ[String], ST)] = {
     var files: ISZ[(ISZ[String], ST)] = IS()
 
-    files = files :+ genXmlFormatLaunchFile(modelName, threadComponents)
+    files = files ++ genXmlFormatLaunchFiles(modelName, threadComponents, systemComponents)
     files = files :+ genLaunchCMakeListsFile(modelName)
     files = files :+ genLaunchPackageFile(modelName)
 
