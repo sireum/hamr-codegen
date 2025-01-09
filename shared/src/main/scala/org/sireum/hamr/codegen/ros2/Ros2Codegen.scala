@@ -6,7 +6,7 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.containers.FileResource
 import org.sireum.hamr.codegen.common.plugin.Plugin
-import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlThread, SymbolTable}
+import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlSystem, AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, ArrayType, BaseType, EnumType, RecordType}
 import org.sireum.hamr.codegen.common.util.HamrCli.CodegenOption
 import org.sireum.hamr.codegen.common.util.ResourceUtil
@@ -24,6 +24,7 @@ import org.sireum.ops.ISZOps
 
   var resources: ISZ[FileResource] = ISZ()
   var threadComponents: ISZ[AadlThread] = ISZ()
+  var systemComponents: ISZ[AadlSystem] = ISZ()
   var connectionMap: Map[ISZ[String], ISZ[ISZ[String]]] = Map.empty
   var datatypeMap: Map[AadlType, (String, ISZ[String])] = Map.empty
 
@@ -45,7 +46,7 @@ import org.sireum.ops.ISZOps
     }
 
     options.ros2LaunchLanguage.name match {
-      case "Xml" => files = files ++ Generator.genXmlLaunchPkg(modelName, threadComponents)
+      case "Xml" => files = files ++ Generator.genXmlLaunchPkg(modelName, threadComponents, systemComponents)
       case "Python" => files = files ++ Generator.genPyLaunchPkg(modelName, threadComponents)
       case _ => reporter.error(None(), toolName, s"Unknown code type: ${options.ros2NodesLanguage.name}")
     }
@@ -80,8 +81,12 @@ import org.sireum.ops.ISZOps
       processConnection(ci, c.component, symbolTable, reporter)
     }
 
-    if (c.isInstanceOf[AadlThread]) {
-      threadComponents = threadComponents :+ c.asInstanceOf[AadlThread]
+    c match {
+      case thread: AadlThread =>
+        threadComponents = threadComponents :+ thread
+      case system: AadlSystem =>
+        systemComponents = systemComponents :+ system
+      case _ =>
     }
 
     for (sc <- c.subComponents) {
