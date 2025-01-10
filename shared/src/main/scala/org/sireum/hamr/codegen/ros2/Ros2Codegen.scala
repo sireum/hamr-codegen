@@ -4,7 +4,7 @@ package org.sireum.hamr.codegen.ros2
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
-import org.sireum.hamr.codegen.common.containers.FileResource
+import org.sireum.hamr.codegen.common.containers.{FileResource, IResource, Marker}
 import org.sireum.hamr.codegen.common.plugin.Plugin
 import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlSystem, AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, ArrayType, BaseType, EnumType, RecordType}
@@ -37,11 +37,11 @@ import org.sireum.ops.ISZOps
 
     mapDatatypes(aadlTypes, reporter)
 
-    var files: ISZ[(ISZ[String], ST)] = IS()
+    var files: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
 
     options.ros2NodesLanguage.name match {
       case "Cpp" => files = Generator.genCppNodePkg(modelName, threadComponents, connectionMap, datatypeMap, options.strictAadlMode, reporter)
-      case "Python" => files = Generator.genPyNodePkg(modelName, threadComponents, connectionMap, options.strictAadlMode)
+      //case "Python" => files = Generator.genPyNodePkg(modelName, threadComponents, connectionMap, options.strictAadlMode)
       case _ => reporter.error(None(), toolName, s"Unknown code type: ${options.ros2NodesLanguage.name}")
     }
 
@@ -65,11 +65,7 @@ import org.sireum.ops.ISZOps
         case _ => filePath
       }
 
-      resources = resources :+ ResourceUtil.createResource(
-        path = absPath,
-        content = file._2,
-        overwrite = T
-      )
+      resources = resources :+ IResource(absPath, file._2, file._4, file._3, F, F, F)
     }
 
     return Ros2Results(fileResources = resources)

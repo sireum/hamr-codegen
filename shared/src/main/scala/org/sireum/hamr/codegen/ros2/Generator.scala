@@ -3,6 +3,7 @@
 package org.sireum.hamr.codegen.ros2
 
 import org.sireum._
+import org.sireum.hamr.codegen.common.containers.Marker
 import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlDataPort, AadlEventDataPort, AadlPort, AadlProcess, AadlSystem, AadlThread, Dispatch_Protocol}
 import org.sireum.hamr.codegen.common.types.{AadlType, ArrayType, BaseType, EnumType, RecordType}
 import org.sireum.hamr.ir.Direction
@@ -31,6 +32,7 @@ object Generator {
   val subscription_options_name: String = "subscription_options_"
   // Mutex is used for thread locking in C++
   val mutex_name: String = "mutex_"
+
 
   def genPyLaunchFileName(compNameS: String): String = {
     // create launch file name
@@ -286,9 +288,12 @@ object Generator {
 
   //  Setup file for node source package
   //    Example: https://github.com/santoslab/ros-examples/blob/main/tempControlcpp_ws/src/tc_cpp_pkg/CMakeLists.txt
-  def genCppCMakeListsFile(modelName: String, threadComponents: ISZ[AadlThread], hasEnumConverter: B): (ISZ[String], ST) = {
+  def genCppCMakeListsFile(modelName: String, threadComponents: ISZ[AadlThread], hasEnumConverter: B): (ISZ[String], ST, B, ISZ[Marker]) = {
     val top_level_package_nameT: String = genCppPackageName(modelName)
     val fileName: String = "CMakeLists.txt"
+
+    val startMarker: String = "# Additions within these tags will be preserved when re-running Codegen"
+    val endMarker: String = "# Additions within these tags will be preserved when re-running Codegen"
 
     // build entry point declarations
     var entry_point_decls: ISZ[ST] = IS()
@@ -315,6 +320,10 @@ object Generator {
           |find_package(rclcpp REQUIRED)
           |${(pkgRequirements, "\n")}
           |
+          |${startMarker}
+          |
+          |${endMarker}
+          |
           |include_directories(include)
           |
           |${(entry_point_decls, "\n\n")}
@@ -329,14 +338,17 @@ object Generator {
 
     val filePath: ISZ[String] = IS("src", top_level_package_nameT, fileName)
 
-    return (filePath, setupFileBody)
+    return (filePath, setupFileBody, F, IS(Marker(startMarker, endMarker)))
   }
 
   //  Setup file for node source package
   //    Example: https://github.com/santoslab/ros-examples/blob/main/tempControlcpp_ws/src/tc_cpp_pkg/package.xml
-  def genCppPackageFile(modelName: String): (ISZ[String], ST) = {
+  def genCppPackageFile(modelName: String): (ISZ[String], ST, B, ISZ[Marker]) = {
     val top_level_package_nameT: String = genCppPackageName(modelName)
     val fileName: String = "package.xml"
+
+    val startMarker: String = "<!-- Additions within these tags will be preserved when re-running Codegen -->"
+    val endMarker: String = "<!-- Additions within these tags will be preserved when re-running Codegen -->"
 
     val packages: ISZ[String] = IS(s"${top_level_package_nameT}_interfaces")
     val pkgDependencies: ISZ[ST] = genPackageFilePkgDependencies(packages)
@@ -356,6 +368,10 @@ object Generator {
           |    <depend>rclcpp</depend>
           |    ${(pkgDependencies, "\n")}
           |
+          |    ${startMarker}
+          |
+          |    ${endMarker}
+          |
           |    <test_depend>ament_lint_auto</test_depend>
           |    <test_depend>ament_lint_common</test_depend>
           |
@@ -367,7 +383,7 @@ object Generator {
 
     val filePath: ISZ[String] = IS("src", top_level_package_nameT, fileName)
 
-    return (filePath, setupFileBody)
+    return (filePath, setupFileBody, F, IS(Marker(startMarker, endMarker)))
   }
 
 
@@ -375,7 +391,7 @@ object Generator {
   //  L a u n c h  File Setup Files
   //================================================
 
-  def genLaunchCMakeListsFile(modelName: String): (ISZ[String], ST) = {
+  def genLaunchCMakeListsFile(modelName: String): (ISZ[String], ST, B, ISZ[Marker]) = {
     val top_level_package_nameT: String = genCppPackageName(modelName)
     val fileName: String = "CMakeLists.txt"
 
@@ -399,12 +415,15 @@ object Generator {
 
     val filePath: ISZ[String] = IS("src", s"${top_level_package_nameT}_bringup", fileName)
 
-    return (filePath, setupFileBody)
+    return (filePath, setupFileBody, T, IS())
   }
 
-  def genLaunchPackageFile(modelName: String): (ISZ[String], ST) = {
+  def genLaunchPackageFile(modelName: String): (ISZ[String], ST, B, ISZ[Marker]) = {
     val top_level_package_nameT: String = genCppPackageName(modelName)
     val fileName: String = "package.xml"
+
+    val startMarker: String = "<!-- Additions within these tags will be preserved when re-running Codegen -->"
+    val endMarker: String = "<!-- Additions within these tags will be preserved when re-running Codegen -->"
 
     val setupFileBody =
       st"""<?xml version="1.0"?>
@@ -420,6 +439,10 @@ object Generator {
           |
           |    <exec_depend>${top_level_package_nameT}</exec_depend>
           |
+          |    ${startMarker}
+          |
+          |    ${endMarker}
+          |
           |    <test_depend>ament_lint_auto</test_depend>
           |    <test_depend>ament_lint_common</test_depend>
           |
@@ -431,7 +454,7 @@ object Generator {
 
     val filePath: ISZ[String] = IS("src", s"${top_level_package_nameT}_bringup", fileName)
 
-    return (filePath, setupFileBody)
+    return (filePath, setupFileBody, F, IS(Marker(startMarker, endMarker)))
   }
 
 
@@ -562,32 +585,16 @@ object Generator {
   // For example, see https://github.com/santoslab/ros-examples/blob/main/tempControl_ws/src/tc_bringup/launch/tc.launch.py
   // Creates a launch file for each system component in the model
   def genXmlFormatLaunchFiles(modelName: String, threadComponents: ISZ[AadlThread],
-                              systemComponents: ISZ[AadlSystem]): ISZ[(ISZ[String], ST)] = {
+                              systemComponents: ISZ[AadlSystem]): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
     val top_level_package_nameT: String = genCppPackageName(modelName)
 
-    var launchFiles: ISZ[(ISZ[String], ST)] = IS()
+    var launchFiles: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
 
     for (system <- systemComponents) {
       val fileName = genXmlLaunchFileName(system.identifier)
 
-
-
       val launch_decls: ISZ[ST] = genXmlFormatLaunchDecls(system, top_level_package_nameT)
 
-
-
-/*
-      var node_decls: ISZ[ST] = IS()
-
-      for (thread <- threadComponents) {
-        val threadPath: String = thread.pathAsString(",")
-        val systemPath: String = system.pathAsString(",")
-
-        if (threadPath.size > systemPath.size && ops.StringOps(threadPath).substring(0, systemPath.size) == systemPath) {
-          node_decls = node_decls :+ genXmlFormatLaunchNodeDecl(top_level_package_nameT, thread)
-        }
-      }
-*/
       val launchFileBody =
         st"""<launch>
             |    ${(launch_decls, "\n")}
@@ -596,7 +603,7 @@ object Generator {
 
       val filePath: ISZ[String] = IS("src", s"${top_level_package_nameT}_bringup", "launch", fileName)
 
-      launchFiles = launchFiles :+ (filePath, launchFileBody)
+      launchFiles = launchFiles :+ (filePath, launchFileBody, T, IS())
     }
 
     return launchFiles
@@ -609,26 +616,26 @@ object Generator {
   // ROS2 data/message types are defined in a "{package_name}_interfaces" package according to convention
   // The "Empty" datatype, which has no data fields, is used for event ports
 
-  def genMsgFiles(modelName: String, datatypeMap: Map[AadlType, (String, ISZ[String])]): ISZ[(ISZ[String], ST)] = {
-    var msg_files: ISZ[(ISZ[String], ST)] = IS()
+  def genMsgFiles(modelName: String, datatypeMap: Map[AadlType, (String, ISZ[String])]): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
+    var msg_files: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
     for (datatype <- datatypeMap.entries) {
       msg_files = msg_files :+ genMsgFile(modelName, datatype._2._1, datatype._2._2)
     }
-    msg_files = msg_files :+ (ISZ("src", s"${genCppPackageName(modelName)}_interfaces", "msg", "Empty.msg"), st"")
+    msg_files = msg_files :+ (ISZ("src", s"${genCppPackageName(modelName)}_interfaces", "msg", "Empty.msg"), st"", T, IS())
     return msg_files
   }
 
-  def genMsgFile(modelName: String, datatypeName: String, datatypeContent: ISZ[String]): (ISZ[String], ST) = {
+  def genMsgFile(modelName: String, datatypeName: String, datatypeContent: ISZ[String]): (ISZ[String], ST, B, ISZ[Marker]) = {
     val top_level_package_nameT: String = genCppPackageName(modelName)
 
     val fileBody = st"${(datatypeContent, "\n")}"
 
     val filePath: ISZ[String] = IS("src", s"${top_level_package_nameT}_interfaces", "msg", s"${datatypeName}.msg")
 
-    return (filePath, fileBody)
+    return (filePath, fileBody, T, IS())
   }
 
-  def genInterfacesCMakeListsFile(modelName: String, datatypeMap: Map[AadlType, (String, ISZ[String])]): (ISZ[String], ST) = {
+  def genInterfacesCMakeListsFile(modelName: String, datatypeMap: Map[AadlType, (String, ISZ[String])]): (ISZ[String], ST, B, ISZ[Marker]) = {
     val top_level_package_nameT: String = genCppPackageName(modelName)
     val fileName: String = "CMakeLists.txt"
     var msgTypes: ISZ[String] = IS()
@@ -660,10 +667,10 @@ object Generator {
 
     val filePath: ISZ[String] = IS("src", s"${top_level_package_nameT}_interfaces", fileName)
 
-    return (filePath, setupFileBody)
+    return (filePath, setupFileBody, T, IS())
   }
 
-  def genInterfacesPackageFile(modelName: String): (ISZ[String], ST) = {
+  def genInterfacesPackageFile(modelName: String): (ISZ[String], ST, B, ISZ[Marker]) = {
     val top_level_package_nameT: String = genCppPackageName(modelName)
     val fileName: String = "package.xml"
 
@@ -694,7 +701,7 @@ object Generator {
 
     val filePath: ISZ[String] = IS("src", s"${top_level_package_nameT}_interfaces", fileName)
 
-    return (filePath, setupFileBody)
+    return (filePath, setupFileBody, T, IS())
   }
 
 
@@ -1510,7 +1517,8 @@ object Generator {
 
 
   def genCppBaseNodeHeaderFile(packageName: String, component: AadlThread, connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
-                               datatypeMap: Map[AadlType, (String, ISZ[String])], strictAADLMode: B, reporter: Reporter): (ISZ[String], ST) = {
+                               datatypeMap: Map[AadlType, (String, ISZ[String])], strictAADLMode: B,
+                               reporter: Reporter): (ISZ[String], ST, B, ISZ[Marker]) = {
     val nodeName = s"${genNodeName(component)}_base"
     val fileName = genCppNodeSourceHeaderName(nodeName)
 
@@ -1611,9 +1619,9 @@ object Generator {
           |${(typeIncludes, "\n")}
           |${(stdIncludes, "\n")}
           |
-          |//=================================================
-          |//  D O   N O T   E D I T   T H I S   F I L E
-          |//=================================================
+          |//========================================================
+          |// Re-running Codegen will overwrite changes to this file
+          |//========================================================
           |
           |class ${nodeName} : public rclcpp::Node
           |{
@@ -1763,11 +1771,11 @@ object Generator {
 
     val filePath: ISZ[String] = IS("src", packageName, "include", packageName, "base_headers", fileName)
 
-    return (filePath, fileBody)
+    return (filePath, fileBody, T, IS())
   }
 
   def genCppBaseNodeCppFile(packageName: String, component: AadlThread, connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
-                            datatypeMap: Map[AadlType, (String, ISZ[String])], strictAADLMode: B, reporter: Reporter): (ISZ[String], ST) = {
+                            datatypeMap: Map[AadlType, (String, ISZ[String])], strictAADLMode: B, reporter: Reporter): (ISZ[String], ST, B, ISZ[Marker]) = {
     val nodeName = s"${genNodeName(component)}_base"
     val fileName = genCppNodeSourceName(nodeName)
 
@@ -1852,9 +1860,9 @@ object Generator {
     var fileBody =
       st"""#include "${packageName}/base_headers/${nodeName}${cpp_src_node_header_name_suffix}"
           |
-          |//=================================================
-          |//  D O   N O T   E D I T   T H I S   F I L E
-          |//=================================================
+          |//========================================================
+          |// Re-running Codegen will overwrite changes to this file
+          |//========================================================
           |
           |${nodeName}::${nodeName}() : Node("${genNodeName(component)}")
           |{
@@ -1972,13 +1980,16 @@ object Generator {
 
     val filePath: ISZ[String] = IS("src", packageName, "src", "base_code", fileName)
 
-    return (filePath, fileBody)
+    return (filePath, fileBody, T, IS())
   }
 
   def genCppUserNodeHeaderFile(packageName: String, component: AadlThread, datatypeMap: Map[AadlType, (String, ISZ[String])],
-                               strictAADLMode: B, reporter: Reporter): (ISZ[String], ST) = {
+                               strictAADLMode: B, reporter: Reporter): (ISZ[String], ST, B, ISZ[Marker]) = {
     val nodeName = genNodeName(component)
     val fileName = genCppNodeSourceHeaderName(nodeName)
+
+    val startMarker: String = "// Additions within these tags will be preserved when re-running Codegen"
+    val endMarker: String = "// Additions within these tags will be preserved when re-running Codegen"
 
     var subscriptionHandlers: ISZ[ST] = IS()
     if (isSporadic(component)) {
@@ -2028,17 +2039,19 @@ object Generator {
           |    //=================================================
           |    //  Include any additional declarations here
           |    //=================================================
+          |    ${startMarker}
           |
+          |    ${endMarker}
           |};
           """
 
     val filePath: ISZ[String] = IS("src", packageName, "include", packageName, "user_headers", fileName)
 
-    return (filePath, fileBody)
+    return (filePath, fileBody, F, IS(Marker(startMarker, endMarker)))
   }
 
   def genCppUserNodeCppFile(packageName: String, component: AadlThread, datatypeMap: Map[AadlType, (String, ISZ[String])],
-                            hasConverterFiles: B, strictAADLMode: B, reporter: Reporter): (ISZ[String], ST) = {
+                            hasConverterFiles: B, strictAADLMode: B, reporter: Reporter): (ISZ[String], ST, B, ISZ[Marker]) = {
     val nodeName = genNodeName(component)
     val fileName = genCppNodeSourceName(nodeName)
 
@@ -2073,6 +2086,10 @@ object Generator {
     val fileBody =
       st"""${includeFiles}
           |
+          |//===========================================================
+          |// This file will not be overwritten when re-running Codegen
+          |//===========================================================
+          |
           |//=================================================
           |//  I n i t i a l i z e    E n t r y    P o i n t
           |//=================================================
@@ -2091,19 +2108,19 @@ object Generator {
 
     val filePath: ISZ[String] = IS("src", packageName, "src", "user_code", fileName)
 
-    return (filePath, fileBody)
+    return (filePath, fileBody, F, IS())
   }
 
-  def genCppNodeRunnerFile(packageName: String, component: AadlThread): (ISZ[String], ST) = {
+  def genCppNodeRunnerFile(packageName: String, component: AadlThread): (ISZ[String], ST, B, ISZ[Marker]) = {
     val nodeName = genNodeName(component)
     val fileName = genCppNodeRunnerName(nodeName)
 
     val fileBody =
       st"""#include "${packageName}/user_headers/${nodeName}${cpp_src_node_header_name_suffix}"
           |
-          |//=================================================
-          |//  D O   N O T   E D I T   T H I S   F I L E
-          |//=================================================
+          |//========================================================
+          |// Re-running Codegen will overwrite changes to this file
+          |//========================================================
           |
           |${nodeName}::${nodeName}() : ${nodeName}_base()
           |{
@@ -2127,14 +2144,15 @@ object Generator {
 
     val filePath: ISZ[String] = IS("src", packageName, "src", "base_code", fileName)
 
-    return (filePath, fileBody)
+    return (filePath, fileBody, T, IS())
   }
 
   def genCppNodeFiles(modelName: String, threadComponents: ISZ[AadlThread], connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
-                      datatypeMap: Map[AadlType, (String, ISZ[String])], hasConverterFiles: B, strictAADLMode: B, reporter: Reporter): ISZ[(ISZ[String], ST)] = {
+                      datatypeMap: Map[AadlType, (String, ISZ[String])], hasConverterFiles: B, strictAADLMode: B,
+                      reporter: Reporter): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
     val top_level_package_nameT: String = genCppPackageName(modelName)
 
-    var cpp_files: ISZ[(ISZ[String], ST)] = IS()
+    var cpp_files: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
 
     for (comp <- threadComponents) {
       cpp_files =
@@ -2153,7 +2171,7 @@ object Generator {
   }
 
   def genCppEnumConverterHeaderFile(packageName: String, enumTypes: ISZ[(String, AadlType)],
-                                    strictAADLMode: B): (ISZ[String], ST) = {
+                                    strictAADLMode: B): (ISZ[String], ST, B, ISZ[Marker]) = {
     var includes: ISZ[ST] = IS()
     var converterHeaders: ISZ[ST] = IS()
 
@@ -2186,7 +2204,7 @@ object Generator {
 
     val filePath: ISZ[String] = IS("src", packageName, "include", packageName, "base_headers", "enum_converter.hpp")
 
-    return (filePath, fileBody)
+    return (filePath, fileBody, T, IS())
   }
 
   def genCppEnumConverters(packageName: String, enumTypes: ISZ[(String, AadlType)], strictAADLMode: B): ISZ[ST] = {
@@ -2232,20 +2250,24 @@ object Generator {
   }
 
   def genCppEnumConverterFile(packageName: String, enumTypes: ISZ[(String, AadlType)],
-                              strictAADLMode: B): (ISZ[String], ST) = {
+                              strictAADLMode: B): (ISZ[String], ST, B, ISZ[Marker]) = {
     val fileBody =
       st"""#include "${packageName}/base_headers/enum_converter.hpp"
+          |
+          |//========================================================
+          |// Re-running Codegen will overwrite changes to this file
+          |//========================================================
           |
           |${(genCppEnumConverters(packageName, enumTypes, strictAADLMode), "\n")}
         """
 
     val filePath: ISZ[String] = IS("src", packageName, "src", "base_code", "enum_converter.cpp")
 
-    return (filePath, fileBody)
+    return (filePath, fileBody, T, IS())
   }
 
   def genCppEnumConverterFiles(modelName: String, datatypeMap: Map[AadlType, (String, ISZ[String])],
-                               strictAADLMode: B): ISZ[(ISZ[String], ST)] = {
+                               strictAADLMode: B): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
     var enumTypes: ISZ[(String, AadlType)] = IS()
 
     for (key <- datatypeMap.keys) {
@@ -2262,7 +2284,7 @@ object Generator {
       return IS()
     }
 
-    var files: ISZ[(ISZ[String], ST)] = IS()
+    var files: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
     val packageName: String = genCppPackageName(modelName)
 
     files = files :+ genCppEnumConverterHeaderFile(packageName, enumTypes, strictAADLMode)
@@ -2287,10 +2309,9 @@ object Generator {
     return files
   }
  // TODO: Python pkgs
-  def genPyLaunchPkg(modelName: String, threadComponents: ISZ[AadlThread]): ISZ[(ISZ[String], ST)] = {
-    var files: ISZ[(ISZ[String], ST)] = IS()
+  def genPyLaunchPkg(modelName: String, threadComponents: ISZ[AadlThread]): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
+    var files: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
 
-    // TODO
     //files = files :+ genXmlFormatLaunchFile(modelName, threadComponents)
     files = files :+ genLaunchCMakeListsFile(modelName)
     files = files :+ genLaunchPackageFile(modelName)
@@ -2299,10 +2320,10 @@ object Generator {
   }
 
   def genCppNodePkg(modelName: String, threadComponents: ISZ[AadlThread], connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
-                    datatypeMap: Map[AadlType, (String, ISZ[String])], strictAADLMode: B, reporter: Reporter): ISZ[(ISZ[String], ST)] = {
-    var files: ISZ[(ISZ[String], ST)] = ISZ()
+                    datatypeMap: Map[AadlType, (String, ISZ[String])], strictAADLMode: B, reporter: Reporter): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
+    var files: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = ISZ()
 
-    val converterFiles: ISZ[(ISZ[String], ST)] = genCppEnumConverterFiles(modelName, datatypeMap, strictAADLMode)
+    val converterFiles: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = genCppEnumConverterFiles(modelName, datatypeMap, strictAADLMode)
     val hasConverterFiles: B = (converterFiles.size > 0)
 
     files = files ++
@@ -2314,8 +2335,8 @@ object Generator {
     return files
   }
 
-  def genXmlLaunchPkg(modelName: String, threadComponents: ISZ[AadlThread], systemComponents: ISZ[AadlSystem]): ISZ[(ISZ[String], ST)] = {
-    var files: ISZ[(ISZ[String], ST)] = IS()
+  def genXmlLaunchPkg(modelName: String, threadComponents: ISZ[AadlThread], systemComponents: ISZ[AadlSystem]): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
+    var files: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
 
     files = files ++ genXmlFormatLaunchFiles(modelName, threadComponents, systemComponents)
     files = files :+ genLaunchCMakeListsFile(modelName)
@@ -2326,8 +2347,8 @@ object Generator {
 
   // The same datatype package will work regardless of other packages' types
   // ROS2 data/message types are defined in a "{package_name}_interfaces" package according to convention
-  def genInterfacesPkg(modelName: String, datatypeMap: Map[AadlType, (String, ISZ[String])]): ISZ[(ISZ[String], ST)] = {
-    var files: ISZ[(ISZ[String], ST)] = IS()
+  def genInterfacesPkg(modelName: String, datatypeMap: Map[AadlType, (String, ISZ[String])]): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
+    var files: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
 
     files = files ++ genMsgFiles(modelName, datatypeMap)
     files = files :+ genInterfacesCMakeListsFile(modelName, datatypeMap)
