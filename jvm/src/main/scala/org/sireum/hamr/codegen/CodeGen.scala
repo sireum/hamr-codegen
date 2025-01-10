@@ -121,7 +121,7 @@ object CodeGen {
     if (~reporter.hasError && runRos2) {
       val results = Ros2Codegen().run(rmodel, modOptions, aadlTypes, symbolTable, plugins, reporter)
       if (!reporter.hasError) {
-        writeOutResources(results.fileResources, reporter)
+        writeOutResources(results.fileResources, T, reporter)
       }
       if (!modOptions.parseableMessages) {
         reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
@@ -133,7 +133,7 @@ object CodeGen {
       reporter.info(None(), toolName, "Generating Microkit artifacts...")
       val results = MicrokitCodegen().run(rmodel, modOptions, aadlTypes, symbolTable, plugins, reporter)
       if (!reporter.hasError) {
-        writeOutResources(results.resources, reporter)
+        writeOutResources(results.resources, F, reporter)
       }
       if (!modOptions.parseableMessages) {
         reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
@@ -192,7 +192,7 @@ object CodeGen {
         // doesn't matter what 'o.writeOutResources' is, sergen/slangcheck needs the
         // resources to be written out
         if (!wroteOutArsitResources) {
-          writeOutResources(arsitResources, reporter)
+          writeOutResources(arsitResources, F, reporter)
           wroteOutArsitResources = T
         }
 
@@ -214,7 +214,7 @@ object CodeGen {
         // doesn't matter what 'o.writeOutResources' is, sergen/slangcheck needs the
         // resources to be written out
         if (!wroteOutArsitResources) {
-          writeOutResources(arsitResources, reporter)
+          writeOutResources(arsitResources, F, reporter)
           wroteOutArsitResources = T
         }
 
@@ -232,7 +232,7 @@ object CodeGen {
         // doesn't matter what 'o.writeOutResources' is, proyek ive needs the
         // resources to be written out
         if (!wroteOutArsitResources) {
-          writeOutResources(arsitResources, reporter)
+          writeOutResources(arsitResources, F, reporter)
           wroteOutArsitResources = T
         }
 
@@ -272,7 +272,7 @@ object CodeGen {
         // doesn't matter what 'o.writeOutResources' is, transpiler needs the
         // resources to be written out
         if (!wroteOutArsitResources) {
-          writeOutResources(arsitResources, reporter)
+          writeOutResources(arsitResources, F, reporter)
           wroteOutArsitResources = T
         }
 
@@ -319,10 +319,10 @@ object CodeGen {
 
     if (!reporter.hasError && shouldWriteOutResources) {
       if (!wroteOutArsitResources) {
-        writeOutResources(arsitResources, reporter)
+        writeOutResources(arsitResources, F, reporter)
         wroteOutArsitResources = T
       }
-      writeOutResources(actResources, reporter)
+      writeOutResources(actResources, F, reporter)
     }
 
     reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
@@ -436,7 +436,9 @@ object CodeGen {
     return ret
   }
 
-  def writeOutResources(resources: IS[Z, FileResource], reporter: Reporter): Unit = {
+  // With invertMarkers enabled, edits made to the existing file within the markers will be carried over into the
+  // freshly generated file.  With it disabled, edits made outside of the markers will be carried over.
+  def writeOutResources(resources: IS[Z, FileResource], invertMarkers: B, reporter: Reporter): Unit = {
     def render(i: IResource): String = {
       val ret: String = {
         val lineSep: String = if (Os.isWin) "\r\n" else "\n" // ST render uses System.lineSep
@@ -477,10 +479,17 @@ object CodeGen {
                     |  ${(missingMarkers, "\n")}"""
               reporter.error(None(), toolName, msg.render)
             } else {
-              val replacements: ISZ[(Z, Z, String)] = oldSections.entries.map((oldEntry: (Marker, (Z, Z, String))) =>
-                ((oldEntry._2._1, oldEntry._2._2, newSections.get(oldEntry._1).get._3)))
-              val content: String = StringUtil.replaceSections(p.read, replacements, reporter)
-              p.writeOver(content)
+              if (invertMarkers) {
+                val replacements: ISZ[(Z, Z, String)] = newSections.entries.map((newEntry: (Marker, (Z, Z, String))) =>
+                  ((newEntry._2._1, newEntry._2._2, oldSections.get(newEntry._1).get._3)))
+                val content: String = StringUtil.replaceSections(newContent, replacements, reporter)
+                p.writeOver(content)
+              } else {
+                val replacements: ISZ[(Z, Z, String)] = oldSections.entries.map((oldEntry: (Marker, (Z, Z, String))) =>
+                  ((oldEntry._2._1, oldEntry._2._2, newSections.get(oldEntry._1).get._3)))
+                val content: String = StringUtil.replaceSections(p.read, replacements, reporter)
+                p.writeOver(content)
+              }
               reporter.info(None(), toolName, s"Wrote and preserved existing content: ${p}")
             }
 
