@@ -65,7 +65,7 @@ jobs:
           # via workflow dispatch
           VERBOSE_DEBUG: ${{ ( runner.debug == '1' || inputs.verbose == '1' ) && ',verbose' || '' }}
         run: |
-          [ -d /opt/ros2/jazzy ] && export ROS2_HOME=/opt/ros2/jazzy
+          [ -d /opt/ros/jazzy ] && export ROS2_HOME=/opt/ros/jazzy
 
           export COURSIER_CACHE=$GITHUB_WORKSPACE/cache/coursier
           cd $GITHUB_WORKSPACE
