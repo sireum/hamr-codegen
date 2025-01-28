@@ -52,12 +52,21 @@ jobs:
         with:
           path: bin/linux/osate
           key: ${{ runner.os }}-${{ hashFiles('jvm/src/main/resources/phantom_versions.properties') }}-osate
+      - name: Install ROS2 Jazzy
+        run: |
+          #apt update -y && apt install -y sudo
+          sudo apt update -y && sudo DEBIAN_FRONTEND=noninteractive apt install -y software-properties-common curl
+          sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
+          sudo apt update -y && sudo DEBIAN_FRONTEND=noninteractive apt install -y build-essential python3-colcon-common-extensions ros-jazzy-ros-base
       - name: Test
         env:
           # add verbose flag if workflow is restarted with "enable debug logging" checked or if requested
           # via workflow dispatch
           VERBOSE_DEBUG: ${{ ( runner.debug == '1' || inputs.verbose == '1' ) && ',verbose' || '' }}
         run: |
+          [ -d /opt/ros2/jazzy ] && export ROS2_HOME=/opt/ros2/jazzy
+
           export COURSIER_CACHE=$GITHUB_WORKSPACE/cache/coursier
           cd $GITHUB_WORKSPACE
           
