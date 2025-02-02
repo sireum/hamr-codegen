@@ -31,6 +31,8 @@ object MakefileTemplate {
           |export TOP_DIR := $$(abspath $$(dir $${MAKEFILE_LIST}))
           |export TOP_BUILD_DIR := $$(abspath build)
           |
+          |export CRATES_DIR := $$(TOP_DIR)/crates
+          |
           |export TARGET := aarch64-none-elf
           |
           |# By default we make a debug build so that the client debug prints can be seen.

@@ -2,6 +2,14 @@
 package org.sireum.hamr.codegen.microkit.util
 
 import org.sireum._
+import org.sireum.hamr.codegen.common.properties.{HamrProperties, PropertyUtil}
+import org.sireum.hamr.codegen.common.symbols.{AadlFeatureData, AadlThread, GclAnnexClauseInfo, GclAnnexLibInfo, SymbolTable}
+import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, ArrayType, RecordType}
+import org.sireum.hamr.codegen.microkit.MicrokitCodegen
+import org.sireum.hamr.ir
+import org.sireum.hamr.ir.GclStateVar
+import org.sireum.lang.ast.Param
+import org.sireum.message.{Position, Reporter}
 
 object Util {
 
@@ -28,6 +36,86 @@ object Util {
 
   @pure def toPreprocessorName(s: String): String = {
     return ops.StringOps(ops.StringOps(s).replaceAllLiterally(".", "_")).toUpper
+  }
+
+  @pure def getAllTouchedTypes(aadlTypes: AadlTypes, symbolTable: SymbolTable, reporter: Reporter): ISZ[AadlType] = {
+    var ret: Set[AadlType] = Set.empty
+
+    def add(posOpt: Option[Position], aadlType: AadlType): Unit = {
+      aadlType.name match {
+        case "Base_Types::Integer" =>
+          reporter.error(posOpt, MicrokitCodegen.toolName, "Unbounded Integer is not supported for Microkit")
+        case "Base_Types::Float" =>
+          reporter.error(posOpt, MicrokitCodegen.toolName, "Unbounded Float is not supported for Microkit")
+        case _ =>
+          aadlType match {
+            case t: ArrayType => add(posOpt, t.baseType)
+            case t: RecordType =>
+              for (f <- t.fields.values) {
+                add(posOpt, f)
+              }
+            case _ =>
+          }
+          ret = ret + aadlType
+      }
+    }
+
+    for(thread <- symbolTable.getThreads()) {
+      for (port <- thread.getPorts()) {
+        port match {
+          case d: AadlFeatureData => add(port.feature.identifier.pos, d.aadlType)
+          case _ =>
+        }
+      }
+    }
+    def processState(s: GclStateVar): Unit = {
+      add(s.posOpt, aadlTypes.typeMap.get(s.classifier).get)
+    }
+    def processParam(p: Param): Unit = {
+      p.tipe.typedOpt match {
+        case Some(typed: org.sireum.lang.ast.Typed.Name) =>
+          val name = st"${(typed.ids, "::")}".render
+          add(p.id.attr.posOpt, aadlTypes.typeMap.get(name).get)
+        case _ =>
+      }
+    }
+
+    for (annexes <- symbolTable.annexClauseInfos.values; a <- annexes) {
+      a match {
+        case g: GclAnnexClauseInfo =>
+          for (s <- g.annex.state) {
+            processState(s)
+          }
+          for (m <- g.annex.methods; p <- m.method.sig.params) {
+            processParam(p)
+          }
+      }
+    }
+    for (gclLib <- symbolTable.annexLibInfos) {
+      gclLib match {
+        case lib: GclAnnexLibInfo =>
+          for (m <- lib.annex.methods;
+               p <- m.method.sig.params) {
+            processParam(p)
+          }
+        case _ =>
+      }
+    }
+    return ret.elements
+  }
+
+  def isRust(aadlThread: AadlThread): B = {
+    PropertyUtil.getDiscreetPropertyValue(aadlThread.properties, HamrProperties.HAMR__MICROKIT_LANGUAGE) match {
+      case Some(ir.ValueProp("Rust")) => return T
+      case _ => return F
+    }
+  }
+
+  def isC(aadlThread: AadlThread): B = {
+    PropertyUtil.getDiscreetPropertyValue(aadlThread.properties, HamrProperties.HAMR__MICROKIT_LANGUAGE) match {
+      case Some(ir.ValueProp("C")) => return T
+      case _ => return !isRust(aadlThread)
+    }
   }
 
   @pure def bytesToKiBytes(bytes: Z): Z = {

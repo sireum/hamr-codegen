@@ -6,7 +6,7 @@ import org.sireum._
 import org.sireum.hamr.codegen.microkit.util.Util
 
 object VmUser {
-  def vmUserCode(componentPath: ST,
+  def vmUserCode(componentPath: String,
                  guestRamVaddr: ST
                 ): ST = {
     val content: ST =

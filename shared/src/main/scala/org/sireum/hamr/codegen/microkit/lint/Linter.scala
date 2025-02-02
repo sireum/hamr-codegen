@@ -6,6 +6,7 @@ import org.sireum.hamr.codegen.common.symbols.{AadlData, AadlFeatureData, AadlPr
 import org.sireum.hamr.codegen.common.types.{AadlTypes, BaseType}
 import org.sireum.hamr.codegen.common.util.HamrCli
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen
+import org.sireum.hamr.codegen.microkit.util.Util
 import org.sireum.hamr.ir.Aadl
 import org.sireum.message.Reporter
 
@@ -13,6 +14,8 @@ object Linter {
 
   def lint(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, reporter: Reporter): B = {
     val allProcesses = symbolTable.getProcesses()
+
+    Util.getAllTouchedTypes(types, symbolTable, reporter)
 
     for (p <- allProcesses) {
       p.getBoundProcessor(symbolTable) match {
@@ -78,22 +81,6 @@ object Linter {
       for(p <- t.getPorts()) {
         if (symbolTable.getInConnections(p.path).size > 1) {
           reporter.error(p.feature.identifier.pos, MicrokitCodegen.toolName, "Fan in connections (including event ports) are disallowed for Microkit")
-        }
-
-        p match {
-          case i: AadlFeatureData =>
-            i.aadlType match {
-              case b: BaseType =>
-                b.classifier match {
-                  case ISZ("Base_Types::Integer") =>
-                    reporter.error(p.feature.identifier.pos, MicrokitCodegen.toolName, "Unbounded Integer is not supported for Microkit")
-                  case ISZ("Base_Types::Float") =>
-                    reporter.error(p.feature.identifier.pos, MicrokitCodegen.toolName, "Unbounded Float is not supported for Microkit")
-                  case _ =>
-                }
-              case _ =>
-            }
-          case _ =>
         }
       }
     }

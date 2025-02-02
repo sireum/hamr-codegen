@@ -61,6 +61,14 @@ object MicrokitCodegen {
 
   def run(model: Aadl, options: CodegenOption, types: AadlTypes, symbolTable: SymbolTable, plugins: MSZ[Plugin], reporter: Reporter): CodeGenResults = {
 
+    val modelIsRusty: B = symbolTable.getThreads().filter(p => Util.isRust(p)).nonEmpty
+
+    val baseTypesIncludePath = s"${options.sel4OutputDir.get}/${TypeUtil.cTypesDir}/${MicrokitCodegen.dirInclude}"
+
+    @pure def getName(ids: ISZ[String]): ST = {
+      return st"${(ops.ISZOps(ids).drop(1), "_")}"
+    }
+
     def addPacerComponent(): Unit = {
       xmlProtectionDomains = xmlProtectionDomains :+
         ProtectionDomain(
@@ -81,6 +89,7 @@ object MicrokitCodegen {
         relativePath = Some(s"${MicrokitCodegen.dirComponents}/${ops.StringOps(MicrokitCodegen.pacerName).toLower}"),
         hasHeader = F,
         isVM = F,
+        isRustic = F,
         hasUserContent = F)
       makefileContainers = makefileContainers :+ mk
 
@@ -102,36 +111,33 @@ object MicrokitCodegen {
       resources = resources :+ ResourceUtil.createResource(path, content, T)
     }
 
-
-    @pure def getName(ids: ISZ[String]): ST = {
-      return st"${(ops.ISZOps(ids).drop(1), "_")}"
-    }
-
     def processTypes(): Map[AadlType, TypeStore] = {
       var ret: Map[AadlType, TypeStore] = Map.empty
 
-      val (name, _, _) = TypeUtil.processDatatype(TypeUtil.eventPortType, reporter)
-      ret = ret + TypeUtil.eventPortType ~> DefaultTypeStore(typeName = name, aadlType = TypeUtil.eventPortType)
+      val eventType = TypeUtil.processDatatype(TypeUtil.eventPortType, reporter)
+      ret = ret + TypeUtil.eventPortType ~> DefaultTypeStore(typeName = eventType.c.name, aadlType = TypeUtil.eventPortType)
 
       if (types.rawConnections) {
         reporter.error(None(), MicrokitCodegen.toolName, "Raw connections are not currently supported")
         return ret
       }
 
+      val touchedTypes: ISZ[TypeUtil.UberTypeProvider] =
+        for (t <- Util.getAllTouchedTypes(types, symbolTable, reporter)) yield TypeUtil.processDatatype(t, reporter)
+
       var forwardDefs: ISZ[ST] = ISZ()
       var defs: ISZ[ST] = ISZ()
-      for (t <- ops.ISZOps(types.typeMap.values).sortWith((a, b) => CommonTypeUtil.isEnumTypeH(a))) {
-        val (name, forwardDecl, typeDef) = TypeUtil.processDatatype(t, reporter)
-        ret = ret + t ~> DefaultTypeStore(typeName = name, aadlType = t)
-        if (!CommonTypeUtil.isBaseTypeH(t)) {
-          if (forwardDecl.nonEmpty) {
-            forwardDefs = forwardDefs :+ forwardDecl.get
+      for (t <- ops.ISZOps(touchedTypes).sortWith((a, b) => CommonTypeUtil.isEnumTypeH(a.c.aadlType))) {
+        ret = ret + t.c.aadlType ~> DefaultTypeStore(typeName = t.c.name, aadlType = t.c.aadlType)
+        if (!CommonTypeUtil.isBaseTypeH(t.c.aadlType)) {
+          if (t.c.cForwardDeclaration.nonEmpty) {
+            forwardDefs = forwardDefs :+ t.c.cForwardDeclaration.get
           }
-          defs = defs :+ typeDef
+          defs = defs :+ t.c.cTypeDeclaration.get
         }
       }
 
-      val content =
+      val cContent =
         st"""#pragma once
             |
             |#include <stdbool.h>
@@ -144,9 +150,55 @@ object MicrokitCodegen {
             |${(defs, "\n\n")}
             |"""
 
-      val outputdir = s"${options.sel4OutputDir.get}/${TypeUtil.typesDir}/${MicrokitCodegen.dirInclude}"
-      val path = s"$outputdir/${TypeUtil.aadlTypesFilename}"
-      resources = resources :+ ResourceUtil.createResourceH(path, content, T, T)
+      val outputdir = s"${options.sel4OutputDir.get}/${TypeUtil.cTypesDir}/${MicrokitCodegen.dirInclude}"
+      val path = s"$outputdir/${TypeUtil.cAadlTypesFilename}"
+      resources = resources :+ ResourceUtil.createResourceH(path, cContent, T, T)
+
+      val cEventCounterPath = s"$baseTypesIncludePath/${TypeUtil.cEventCounterFilename}"
+      resources = resources :+ ResourceUtil.createResourceH(
+        path = cEventCounterPath, content = TypeUtil.cEventCounterContent, overwrite = T, isDatatype = T)
+
+      if (modelIsRusty) {
+        val rustAadlTypesContent =
+          st"""#![allow(non_camel_case_types)]
+              |#![allow(non_snake_case)]
+              |#![allow(non_upper_case_globals)]
+              |
+              |${Util.doNotEdit}
+              |
+              |${(for (t <- touchedTypes) yield t.rust.rustTypeDeclaration, "\n\n")}
+              |"""
+        val rustTypesDir = s"${options.sel4OutputDir.get}/${TypeUtil.rustTypesDir}"
+        val outRustTypesPath = s"$rustTypesDir/src/${TypeUtil.rustAadlTypesFilename}"
+        resources = resources :+ ResourceUtil.createResourceH(outRustTypesPath, rustAadlTypesContent, T, T)
+
+        val rustEventCounterPath = s"$rustTypesDir/src/${TypeUtil.rustEventCounterFilename}"
+        resources = resources :+ ResourceUtil.createResourceH(rustEventCounterPath, TypeUtil.rustEventCounterContent, T, T)
+
+        val rustMicrokitTypesPath = s"$rustTypesDir/src/${TypeUtil.rustMicrokitTypesFilename}"
+        resources = resources :+ ResourceUtil.createResourceH(rustMicrokitTypesPath, TypeUtil.rustMicrokitTypesContent, T, T)
+
+        val rustAllTypesContents =
+          st"""#![no_std]
+              |#![allow(non_camel_case_types)]
+              |
+              |${Util.doNotEdit}
+              |
+              |mod ${TypeUtil.aadlTypesFilenamePrefix};
+              |pub use ${TypeUtil.aadlTypesFilenamePrefix}::*;
+              |
+              |mod ${TypeUtil.eventCounterFilenamePrefix};
+              |pub use ${TypeUtil.eventCounterFilenamePrefix}::*;
+              |
+              |mod ${TypeUtil.rustMicrokitTypesPrefix};
+              |pub use ${TypeUtil.rustMicrokitTypesPrefix}::*;
+              |"""
+        val rustAllTypesPath = s"$rustTypesDir/src/${TypeUtil.rustTypesFilename}"
+        resources = resources :+ ResourceUtil.createResourceH(rustAllTypesPath, rustAllTypesContents, T, T)
+
+        val rustTypesCargoPath = s"$rustTypesDir/Cargo.toml"
+        resources = resources :+ ResourceUtil.createResource(rustTypesCargoPath, TypeUtil.rustCargoContent, F)
+      }
 
       return ret
     }
@@ -159,7 +211,7 @@ object MicrokitCodegen {
         for (srcPort <- srcThread.getPorts()
              if srcPort.direction == Direction.Out && symbolTable.outConnections.contains(srcPort.path)) {
 
-          var receiverContributions: Map[ISZ[String], ConnectionContributions] = Map.empty
+          var receiverContributions: Map[ISZ[String], UberConnectionContributions] = Map.empty
 
           for (outConnection <- symbolTable.getOutConnections(srcPort.path)) {
             symbolTable.componentMap.get(outConnection.dst.component.name).get match {
@@ -178,8 +230,8 @@ object MicrokitCodegen {
 
           val senderContributions = ConnectionUtil.processOutPort(srcPort, receiverContributions, typeStore)
 
-          val typeApiContributions:ISZ[TypeApiContributions] =
-            (Set.empty[TypeApiContributions] ++ (for(rc <- receiverContributions.values) yield
+          val typeApiContributions: ISZ[TypeApiContributions] =
+            (Set.empty[TypeApiContributions] ++ (for (rc <- receiverContributions.values) yield
               TypeUtil.getTypeApiContributions(rc.aadlType, typeStore.get(rc.aadlType).get, rc.queueSize))).elements
 
           ret = ret :+
@@ -226,69 +278,77 @@ object MicrokitCodegen {
           ret = ret :+
             DefaultConnectionStore(
               systemContributions =
-              DefaultSystemContributions(
-                sharedMemoryRegionContributions = receiverContributions.sharedMemoryMapping,
-                channelContributions = ISZ()),
+                DefaultSystemContributions(
+                  sharedMemoryRegionContributions = receiverContributions.sharedMemoryMapping,
+                  channelContributions = ISZ()),
               typeApiContributions = ISZ(typeApiContributions),
               senderName = srcThread.path,
               senderContributions = None(),
-              receiverContributions = Map.empty[ISZ[String], ConnectionContributions] +
+              receiverContributions = Map.empty[ISZ[String], UberConnectionContributions] +
                 srcThread.path ~> receiverContributions)
-
         }
-
       } // end processing connections for threads
       return ret
     }
 
     def processThread(t: AadlThread,
-                      connectionStore: ISZ[ConnectionStore]):
-    (MicrokitDomain, ISZ[MemoryRegion], Z) = {
+                      connectionStore: ISZ[ConnectionStore]): (MicrokitDomain, ISZ[MemoryRegion], Z) = {
 
       var retMemoryRegions: ISZ[MemoryRegion] = ISZ()
 
       val isVM = t.toVirtualMachine(symbolTable)
+      val isRustic = Util.isRust(t)
 
-      val threadId = getName(t.path)
-      val threadMonId = st"${getName(t.path)}_MON"
+      val threadId = getName(t.path).render
+      val threadMonId = st"${threadId}_MON"
 
-      var headerImports: ISZ[String] = ISZ()
-      var userMethodSignatures: ISZ[ST] = ISZ()
-      var userMethodDefaultImpls: ISZ[ST] = ISZ()
-      var vaddrs: ISZ[GlobalVarContribution] = ISZ()
-      var codeApiMethodSigs: ISZ[ST] = ISZ()
-      var codeApiMethods: ISZ[ST] = ISZ()
-      var initContributions: ISZ[ST] = ISZ()
-      var computeContributions: ISZ[ST] = ISZ()
-      var nextMemAddressInKiBytes = 262144
       var sharedMemoryRegions: ISZ[MemoryRegion] = ISZ()
+      var cHeaderImports: ISZ[String] = ISZ()
+      var cUserMethodSignatures: ISZ[ST] = ISZ()
+      var cUserMethodDefaultImpls: ISZ[ST] = ISZ()
+      var cVaddrs: ISZ[GlobalVarContribution] = ISZ()
+      var cCodeApiMethodSigs: ISZ[ST] = ISZ()
+      var cCodeApiMethods: ISZ[ST] = ISZ()
+      var cBridgeInitContributions: ISZ[ST] = ISZ()
+      var cComputeContributions: ISZ[ST] = ISZ()
+      var nextMemAddressInKiBytes = 262144
+
+      var rustExternMethods: ISZ[ST] = ISZ()
+      var rustUnsafeMethods: ISZ[ST] = ISZ()
 
       val initializeMethodName = st"${threadId}_initialize"
 
       for (entry <- connectionStore) {
 
         if (entry.senderName == t.path && entry.senderContributions.nonEmpty) {
-          headerImports = headerImports ++ entry.senderContributions.get.headerImportContributions
-          userMethodSignatures = userMethodSignatures ++ entry.senderContributions.get.userMethodSignatures
-          userMethodDefaultImpls = userMethodDefaultImpls ++ entry.senderContributions.get.userMethodDefaultImpls
-          codeApiMethodSigs = codeApiMethodSigs ++ entry.senderContributions.get.apiMethodSigs
-          codeApiMethods = codeApiMethods ++ entry.senderContributions.get.apiMethods
-          vaddrs = vaddrs ++ entry.senderContributions.get.globalVarContributions
-          initContributions = initContributions ++ entry.senderContributions.get.initContributions
-          computeContributions = computeContributions ++ entry.senderContributions.get.computeContributions
           sharedMemoryRegions = sharedMemoryRegions ++ entry.senderContributions.get.sharedMemoryMapping
+
+          cHeaderImports = cHeaderImports ++ entry.senderContributions.get.cContributions.cHeaderImportContributions
+          cUserMethodSignatures = cUserMethodSignatures ++ entry.senderContributions.get.cContributions.cUserMethodSignatures
+          cUserMethodDefaultImpls = cUserMethodDefaultImpls ++ entry.senderContributions.get.cContributions.cUserMethodDefaultImpls
+          cCodeApiMethodSigs = cCodeApiMethodSigs ++ entry.senderContributions.get.cContributions.cApiMethodSigs
+          cCodeApiMethods = cCodeApiMethods ++ entry.senderContributions.get.cContributions.cApiMethods
+          cVaddrs = cVaddrs ++ entry.senderContributions.get.cContributions.cGlobalVarContributions
+          cBridgeInitContributions = cBridgeInitContributions ++ entry.senderContributions.get.cContributions.cInitContributions
+          cComputeContributions = cComputeContributions ++ entry.senderContributions.get.cContributions.cComputeContributions
+
+          rustExternMethods = rustExternMethods ++ entry.senderContributions.get.rustContributions.rustExternApis
+          rustUnsafeMethods = rustUnsafeMethods ++ entry.senderContributions.get.rustContributions.rustUnsafeExternApisWrappers
         }
         if (entry.receiverContributions.contains(t.path)) {
           val c = entry.receiverContributions.get(t.path).get
-          headerImports = headerImports ++ c.headerImportContributions
-          userMethodSignatures = userMethodSignatures ++ c.userMethodSignatures
-          userMethodDefaultImpls = userMethodDefaultImpls ++ c.userMethodDefaultImpls
-          codeApiMethodSigs = codeApiMethodSigs ++ c.apiMethodSigs
-          codeApiMethods = codeApiMethods ++ c.apiMethods
-          vaddrs = vaddrs ++ c.globalVarContributions
-          initContributions = initContributions ++ c.initContributions
-          computeContributions = computeContributions ++ c.computeContributions
           sharedMemoryRegions = sharedMemoryRegions ++ c.sharedMemoryMapping
+          cHeaderImports = cHeaderImports ++ c.cContributions.cHeaderImportContributions
+          cUserMethodSignatures = cUserMethodSignatures ++ c.cContributions.cUserMethodSignatures
+          cUserMethodDefaultImpls = cUserMethodDefaultImpls ++ c.cContributions.cUserMethodDefaultImpls
+          cCodeApiMethodSigs = cCodeApiMethodSigs ++ c.cContributions.cApiMethodSigs
+          cCodeApiMethods = cCodeApiMethods ++ c.cContributions.cApiMethods
+          cVaddrs = cVaddrs ++ c.cContributions.cGlobalVarContributions
+          cBridgeInitContributions = cBridgeInitContributions ++ c.cContributions.cInitContributions
+          cComputeContributions = cComputeContributions ++ c.cContributions.cComputeContributions
+
+          rustExternMethods = rustExternMethods ++ c.rustContributions.rustExternApis
+          rustUnsafeMethods = rustUnsafeMethods ++ c.rustContributions.rustUnsafeExternApisWrappers
         }
       }
 
@@ -305,10 +365,11 @@ object MicrokitCodegen {
       }
 
       val mk = MakefileContainer(
-        resourceSuffix = threadId.render,
-        relativePath = Some(s"${MicrokitCodegen.dirComponents}/${threadId.render}"),
+        resourceSuffix = threadId,
+        relativePath = Some(s"${MicrokitCodegen.dirComponents}/$threadId"),
         hasHeader = T,
         isVM = isVM,
+        isRustic = isRustic,
         hasUserContent = !isVM)
       makefileContainers = makefileContainers :+ mk
 
@@ -327,7 +388,7 @@ object MicrokitCodegen {
 
       var vms: ISZ[MicrokitDomain] = ISZ()
       if (isVM) {
-        val vmName = s"${threadId.render}"
+        val vmName = threadId
 
         val guestRam = VirtualMachineMemoryRegion(
           typ = VirtualMemoryRegionType.RAM,
@@ -338,7 +399,7 @@ object MicrokitCodegen {
 
         val hostVaddr = VMRamVaddr("uintptr_t", guestRam.vmmVaddrName)
 
-        vaddrs = vaddrs :+ hostVaddr
+        cVaddrs = cVaddrs :+ hostVaddr
 
         childMemMaps = childMemMaps :+ MemoryMap(
           memoryRegion = guestRam.name,
@@ -356,7 +417,7 @@ object MicrokitCodegen {
           threadPath = t.path,
           sizeInKiBytes = 4, // 0x1000
           physicalAddressInKiBytes = Some(131328) // 0x8040000
-          )
+        )
         retMemoryRegions = retMemoryRegions :+ gicRegion
 
         val serialRegion = VirtualMachineMemoryRegion(
@@ -401,7 +462,7 @@ object MicrokitCodegen {
 
         val boardPath = s"${options.sel4OutputDir.get}/${mk.relativePathVmBoardDir}/qemu_virt_aarch64"
 
-        val vmmMake = VmMakefileTemplate.Makefile(threadId.render)
+        val vmmMake = VmMakefileTemplate.Makefile(threadId)
         resources = resources :+ ResourceUtil.createResource(s"${boardPath}/Makefile", vmmMake, T)
 
 
@@ -410,7 +471,7 @@ object MicrokitCodegen {
           guestInitRamDiskVaddrInHex = "0x4d700000",
           maxIrqs = 1
         )
-        resources = resources :+ ResourceUtil.createResource(s"${options.sel4OutputDir.get}/${mk.relativePathIncludeDir}/${threadId.render}_user.h", vmm_config, T)
+        resources = resources :+ ResourceUtil.createResource(s"${options.sel4OutputDir.get}/${mk.relativePathIncludeDir}/${threadId}_user.h", vmm_config, T)
       }
 
       val childStackSizeInKiBytes: Option[Z] = t.stackSizeInBytes() match {
@@ -433,15 +494,15 @@ object MicrokitCodegen {
       }
 
       val child =
-          ProtectionDomain(
-            name = threadId.render,
-            schedulingDomain = Some(schedulingDomain),
-            id = Some(s"1"),
-            stackSizeInKiBytes = childStackSizeInKiBytes,
-            memMaps = childMemMaps,
-            irqs = childIrqs,
-            programImage = mk.elfName,
-            children = vms)
+        ProtectionDomain(
+          name = threadId,
+          schedulingDomain = Some(schedulingDomain),
+          id = Some(s"1"),
+          stackSizeInKiBytes = childStackSizeInKiBytes,
+          memMaps = childMemMaps,
+          irqs = childIrqs,
+          programImage = mk.elfName,
+          children = vms)
 
       xmlProtectionDomains = xmlProtectionDomains :+
         ProtectionDomain(
@@ -459,6 +520,11 @@ object MicrokitCodegen {
       xmlChannels = xmlChannels :+ Channel(
         firstPD = MicrokitCodegen.pacerName, firstId = pacerChannelId,
         secondPD = threadMonId.render, secondId = pacerChannelId)
+
+      ///////////////////////////////////////////////////////////////////////////////////////////////////
+      // C Monitor
+      ///////////////////////////////////////////////////////////////////////////////////////////////////
+
       val threadMonCaps = s"PORT_TO_${ops.StringOps(threadMonId.render).toUpper}"
 
       codePacerDefines = codePacerDefines :+ st"""#define $threadMonCaps $pacerChannelId"""
@@ -471,11 +537,9 @@ object MicrokitCodegen {
 
       xmlChannels = xmlChannels :+ Channel(
         firstPD = threadMonId.render, firstId = monChannelId,
-        secondPD = threadId.render, secondId = monChannelId)
+        secondPD = threadId, secondId = monChannelId)
 
-      val headerFileName = s"${threadId.render}.h"
-
-      val monImplSource =
+      val cMonitorSource =
         st"""#include <microkit.h>
             |
             |${Util.doNotEdit}
@@ -500,31 +564,35 @@ object MicrokitCodegen {
             |  }
             |}"""
 
-      val monImplPath = s"${options.sel4OutputDir.get}/${mk.relativePathSrcDir}/${mk.monImplFilename}"
-      resources = resources :+ ResourceUtil.createResource(monImplPath, monImplSource, T)
+      val cMonitorPath = s"${options.sel4OutputDir.get}/${mk.relativePathSrcDir}/${mk.monImplFilename}"
+      resources = resources :+ ResourceUtil.createResource(cMonitorPath, cMonitorSource, T)
 
-      val userNotifyMethodName = st"${threadId}_notify"
-        initContributions = initContributions :+ st"$initializeMethodName();"
-        userMethodSignatures = st"void ${initializeMethodName}(void)" +: userMethodSignatures
-        userMethodSignatures = userMethodSignatures :+ st"void ${userNotifyMethodName}(microkit_channel channel)"
+      ///////////////////////////////////////////////////////////////////////////////////////////////////
+      // C Bridge
+      ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-        userMethodDefaultImpls =
-          st"""void $initializeMethodName(void) {
-              |  printf("%s: $initializeMethodName invoked\n", microkit_name);
-              |}""" +: userMethodDefaultImpls
+      val cUserNotifyMethodName = st"${threadId}_notify"
+      cBridgeInitContributions = cBridgeInitContributions :+ st"$initializeMethodName();"
+      cUserMethodSignatures = st"void ${initializeMethodName}(void)" +: cUserMethodSignatures
+      cUserMethodSignatures = cUserMethodSignatures :+ st"void ${cUserNotifyMethodName}(microkit_channel channel)"
 
-        if (t.isPeriodic()) {
-          val timeTriggeredMethodName = st"${threadId}_timeTriggered"
-          userMethodSignatures = userMethodSignatures :+ st"void ${timeTriggeredMethodName}(void)"
-          computeContributions = computeContributions :+ st"${timeTriggeredMethodName}();"
-          userMethodDefaultImpls = userMethodDefaultImpls :+
-            st"""void $timeTriggeredMethodName(void) {
-                |  printf("%s: $timeTriggeredMethodName invoked\n", microkit_name);
-                |}"""
-        }
+      cUserMethodDefaultImpls =
+        st"""void $initializeMethodName(void) {
+            |  printf("%s: $initializeMethodName invoked\n", microkit_name);
+            |}""" +: cUserMethodDefaultImpls
 
-      userMethodDefaultImpls = userMethodDefaultImpls :+
-        st"""void $userNotifyMethodName(microkit_channel channel) {
+      if (t.isPeriodic()) {
+        val timeTriggeredMethodName = st"${threadId}_timeTriggered"
+        cUserMethodSignatures = cUserMethodSignatures :+ st"void ${timeTriggeredMethodName}(void)"
+        cComputeContributions = cComputeContributions :+ st"${timeTriggeredMethodName}();"
+        cUserMethodDefaultImpls = cUserMethodDefaultImpls :+
+          st"""void $timeTriggeredMethodName(void) {
+              |  printf("%s: $timeTriggeredMethodName invoked\n", microkit_name);
+              |}"""
+      }
+
+      cUserMethodDefaultImpls = cUserMethodDefaultImpls :+
+        st"""void $cUserNotifyMethodName(microkit_channel channel) {
             |  // this method is called when the monitor does not handle the passed in channel
             |  switch (channel) {
             |    default:
@@ -533,58 +601,68 @@ object MicrokitCodegen {
             |}"""
 
       var vaddrEntries: ISZ[ST] = ISZ()
-      for (v <- vaddrs) {
+      for (v <- cVaddrs) {
         if (!v.isInstanceOf[VMRamVaddr]) {
           vaddrEntries = vaddrEntries :+ v.pretty
         }
       }
 
-      val implSource =
-        st"""#include "$headerFileName"
+      val cHeaderFileName = s"${threadId}.h"
+
+      val cBridgeSource =
+        st"""#include "$cHeaderFileName"
             |
             |${Util.doNotEdit}
             |
-            |${(for (u <- userMethodSignatures) yield st"$u;", "\n")}
+            |${(for (u <- cUserMethodSignatures) yield st"$u;", "\n")}
             |
             |${(vaddrEntries, "\n")}
             |
             |#define PORT_FROM_MON $monChannelId
             |
-            |${(codeApiMethods, "\n\n")}
+            |${(cCodeApiMethods, "\n\n")}
             |
             |void init(void) {
-            |  ${(initContributions, "\n\n")}
+            |  ${(cBridgeInitContributions, "\n\n")}
             |}
             |
             |void notified(microkit_channel channel) {
             |  switch (channel) {
             |    case PORT_FROM_MON:
-            |      ${(computeContributions, "\n\n")}
+            |      ${(cComputeContributions, "\n\n")}
             |      break;
             |    default:
-            |      ${userNotifyMethodName}(channel);
+            |      ${cUserNotifyMethodName}(channel);
             |  }
             |}
             |"""
 
-      val implPath = s"${options.sel4OutputDir.get}/${mk.relativePathSrcDir}/${mk.cImplFilename}"
-      resources = resources :+ ResourceUtil.createResource(implPath, implSource, T)
+      val cBridgePath = s"${options.sel4OutputDir.get}/${mk.relativePathSrcDir}/${mk.cImplFilename}"
+      resources = resources :+ ResourceUtil.createResource(cBridgePath, cBridgeSource, T)
 
-      val userImplPath = s"${options.sel4OutputDir.get}/${mk.relativePathSrcDir}/${mk.cUserImplFilename}"
-      val userImplSource: ST =
+      ///////////////////////////////////////////////////////////////////////////////////////////////////
+      // C User
+      ///////////////////////////////////////////////////////////////////////////////////////////////////
+
+      val cUserImplPath = s"${options.sel4OutputDir.get}/${mk.relativePathSrcDir}/${mk.cUserImplFilename}"
+      val cUserImplSource: ST =
         if (isVM) {
-          val cand = vaddrs.filter(f => f.isInstanceOf[VMRamVaddr])
-          assert (cand.size == 1, s"didn't find a guest ram vaddr for ${t.identifier}: ${cand.size}")
+          val cand = cVaddrs.filter(f => f.isInstanceOf[VMRamVaddr])
+          assert(cand.size == 1, s"didn't find a guest ram vaddr for ${t.identifier}: ${cand.size}")
           VmUser.vmUserCode(threadId, cand(0).pretty)
         } else {
-          st"""#include "$headerFileName"
+          st"""#include "$cHeaderFileName"
               |
               |${Util.safeToEdit}
               |
-              |${(userMethodDefaultImpls, "\n\n")}
+              |${(cUserMethodDefaultImpls, "\n\n")}
               |"""
         }
-      resources = resources :+ ResourceUtil.createResource(userImplPath, userImplSource, F)
+      resources = resources :+ ResourceUtil.createResource(cUserImplPath, cUserImplSource, F)
+
+      ///////////////////////////////////////////////////////////////////////////////////////////////////
+      // C API
+      ///////////////////////////////////////////////////////////////////////////////////////////////////
 
       val utilIncludes: ST =
         if (isVM)
@@ -594,23 +672,72 @@ object MicrokitCodegen {
           st"""#include <printf.h>
               |#include <util.h>"""
 
-      val himports: ISZ[ST] = for (h <- headerImports) yield st"#include <$h>"
-      val headerSource =
+      val himports: ISZ[ST] = for (h <- cHeaderImports) yield st"#include <$h>"
+      val cApiContent =
         st"""#pragma once
             |
             |$utilIncludes
             |#include <stdint.h>
             |#include <microkit.h>
-            |#include <${TypeUtil.allTypesFilename}>
+            |#include <${TypeUtil.cAllTypesFilename}>
             |
             |${Util.doNotEdit}
             |
             |${(himports, "\n")}
             |
-            |${(codeApiMethodSigs, ";\n")};
+            |${(cCodeApiMethodSigs, ";\n")};
             |"""
-      val headerPath = s"${options.sel4OutputDir.get}/${mk.relativePathIncludeDir}/${mk.cHeaderFilename}"
-      resources = resources :+ ResourceUtil.createResource(headerPath, headerSource, T)
+      val cApiPath = s"${options.sel4OutputDir.get}/${mk.relativePathIncludeDir}/${mk.cHeaderFilename}"
+      resources = resources :+ ResourceUtil.createResource(cApiPath, cApiContent, T)
+
+      if (isRustic && !isVM) {
+        val rustComponentPath = s"${options.sel4OutputDir.get}/crates/$threadId"
+        val rustComponentSrcPath = s"$rustComponentPath/src/"
+
+        var rustUserMethods: ISZ[ST] = ISZ()
+        if (t.isPeriodic()) {
+          rustUserMethods = rustUserMethods :+
+            st"""#[no_mangle]
+                |pub extern "C" fn ${threadId}_timeTriggered() {
+                |  info!("timeTriggered invoked");
+                |}"""
+        }
+        val rustUserContent = RustUtil.rustUserContent(threadId, rustUserMethods)
+        val rustUserContentPath = s"$rustComponentSrcPath/$threadId.rs"
+        resources = resources :+ ResourceUtil.createResource(rustUserContentPath, rustUserContent, F)
+
+        val rustApiContent =
+          st"""#![allow(dead_code)]
+              |#![allow(non_snake_case)]
+              |
+              |${Util.doNotEdit}
+              |
+              |use types::*;
+              |
+              |extern "C" {
+              |  ${(for(r <- rustExternMethods) yield st"$r;", "\n")}
+              |}
+              |
+              |${(rustUnsafeMethods, "\n\n")}
+              |"""
+        val rustApiPath = s"$rustComponentSrcPath/api.rs"
+        resources = resources :+ ResourceUtil.createResource(rustApiPath, rustApiContent, T)
+
+        val rustLoggingContent = RustUtil.rustLoggingContent
+        val rustLoggingPath = s"$rustComponentSrcPath/logging.rs"
+        resources = resources :+ ResourceUtil.createResource(rustLoggingPath, rustLoggingContent, T)
+
+        val rustToolchainPath = s"$rustComponentPath/rust-toolchain.toml"
+        resources = resources :+ ResourceUtil.createResource(rustToolchainPath, RustUtil.rustToolchainContent, F)
+
+        val rustComponentMakefile = RustUtil.makefileComponent()
+        val rustComponentMakefilePath = s"$rustComponentPath/Makefile"
+        resources = resources :+ ResourceUtil.createResource(rustComponentMakefilePath, rustComponentMakefile, F)
+
+        val rustCargoContent = RustUtil.cargoComponentToml(threadId)
+        val rustCargoPath = s"$rustComponentPath/Cargo.toml"
+        resources = resources :+ ResourceUtil.createResource(rustCargoPath, rustCargoContent, F)
+      }
 
       return (child, retMemoryRegions, computeExecutionTime)
     } // end processThread
@@ -635,15 +762,13 @@ object MicrokitCodegen {
 
     val typeStore = processTypes()
 
-    var typeHeaderFilenames: ISZ[String] = ISZ(TypeUtil.aadlTypesFilename)
+    var typeHeaderFilenames: ISZ[String] = ISZ(TypeUtil.cAadlTypesFilename)
     var typeImplFilenames: ISZ[String] = ISZ()
     var typeObjectNames: ISZ[String] = ISZ()
 
-    val baseTypesIncludePath = s"${options.sel4OutputDir.get}/${TypeUtil.typesDir}/${MicrokitCodegen.dirInclude}"
-
     val connectionStore = processConnections(typeStore)
     for (entry <- connectionStore) {
-      val srcPath = s"${options.sel4OutputDir.get}/${TypeUtil.typesDir}/${MicrokitCodegen.dirSrc}"
+      val srcPath = s"${options.sel4OutputDir.get}/${TypeUtil.cTypesDir}/${MicrokitCodegen.dirSrc}"
 
       for (tc <- entry.typeApiContributions) {
         typeHeaderFilenames = typeHeaderFilenames :+ tc.headerFilename
@@ -661,9 +786,6 @@ object MicrokitCodegen {
       }
     }
 
-    val eventCounterPath = s"$baseTypesIncludePath/${TypeUtil.eventCounterFilename}"
-    resources = resources :+ ResourceUtil.createResourceH(
-      path = eventCounterPath, content = TypeUtil.eventCounterContent, overwrite = T, isDatatype = T)
 
     val allTypesContent =
       st"""#pragma once
@@ -672,7 +794,7 @@ object MicrokitCodegen {
           |
           |${(for (i <- typeHeaderFilenames) yield st"#include <$i>", "\n")}
           |"""
-    val allTypesPath = s"$baseTypesIncludePath/${TypeUtil.allTypesFilename}"
+    val allTypesPath = s"$baseTypesIncludePath/${TypeUtil.cAllTypesFilename}"
     resources = resources :+ ResourceUtil.createResourceH(
       path = allTypesPath, content = allTypesContent, overwrite = T, isDatatype = T)
 
@@ -696,7 +818,7 @@ object MicrokitCodegen {
     }
 
     var xmlScheds: ISZ[SchedulingDomain] = ISZ()
-    for (x <- ops.ISZOps(xmlSchedulingDomains).sortWith((a,b) => a.id < b.id)) {
+    for (x <- ops.ISZOps(xmlSchedulingDomains).sortWith((a, b) => a.id < b.id)) {
       xmlScheds = xmlScheds :+ pacerSlot :+ x
     }
     xmlScheds = xmlScheds :+ SchedulingDomain(id = 0, length = framePeriod - usedBudget)

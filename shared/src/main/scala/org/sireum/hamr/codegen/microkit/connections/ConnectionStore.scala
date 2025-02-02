@@ -16,18 +16,17 @@ import org.sireum.hamr.codegen.microkit.util.Util.TAB
 
   def senderName: ISZ[String]
 
-  def senderContributions: Option[ConnectionContributions]
+  def senderContributions: Option[UberConnectionContributions]
 
   // component path -> contributions
-  def receiverContributions: Map[ISZ[String], ConnectionContributions]
+  def receiverContributions: Map[ISZ[String], UberConnectionContributions]
 }
 
-@datatype class DefaultConnectionStore (//val connectionPath: ISZ[String],
-                                        val systemContributions: SystemContributions,
+@datatype class DefaultConnectionStore (val systemContributions: SystemContributions,
                                         val typeApiContributions: ISZ[TypeApiContributions],
                                         val senderName: ISZ[String],
-                                        val senderContributions: Option[ConnectionContributions],
-                                        val receiverContributions: Map[ISZ[String], ConnectionContributions]) extends ConnectionStore
+                                        val senderContributions: Option[UberConnectionContributions],
+                                        val receiverContributions: Map[ISZ[String], UberConnectionContributions]) extends ConnectionStore
 
 @sig trait SystemContributions {
   def sharedMemoryRegionContributions: ISZ[MemoryRegion]
@@ -57,7 +56,7 @@ import org.sireum.hamr.codegen.microkit.util.Util.TAB
 
   @pure def buildEntry: ST = {
     return (
-      st"""$objectName: $$(TOP_DIR)/${TypeUtil.typesDir}/src/$implementationFilename Makefile
+      st"""$objectName: $$(TOP_DIR)/${TypeUtil.cTypesDir}/src/$implementationFilename Makefile
           |${TAB}$$(CC) -c $$(CFLAGS) $$< -o $$@ $$(TOP_INCLUDE)
         """)
   }
@@ -95,46 +94,68 @@ import org.sireum.hamr.codegen.microkit.util.Util.TAB
 
   def portPriority: Option[Z]
 
-  def headerImportContributions: ISZ[String]
-
-  def implementationImportContributions: ISZ[String]
-
-  def userMethodSignatures: ISZ[ST]
-
-  def userMethodDefaultImpls: ISZ[ST]
-
-  def defineContributions: ISZ[ST]
-
-  def globalVarContributions: ISZ[GlobalVarContribution]
-
-  def apiMethodSigs: ISZ[ST]
-
-  def apiMethods: ISZ[ST]
-
-  def initContributions: ISZ[ST]
-
-  def computeContributions: ISZ[ST]
-
-  def sharedMemoryMapping: ISZ[MemoryRegion]
-
   def aadlType: AadlType
 
   def queueSize: Z
+
+  def sharedMemoryMapping: ISZ[MemoryRegion]
 }
 
-@datatype class DefaultConnectionContributions(val portName: ISZ[String],
-                                               val portPriority: Option[Z],
-                                               val headerImportContributions: ISZ[String],
-                                               val implementationImportContributions: ISZ[String],
-                                               val userMethodSignatures: ISZ[ST],
-                                               val userMethodDefaultImpls: ISZ[ST],
-                                               val defineContributions: ISZ[ST],
-                                               val globalVarContributions: ISZ[GlobalVarContribution],
-                                               val apiMethodSigs: ISZ[ST],
-                                               val apiMethods: ISZ[ST],
-                                               val initContributions: ISZ[ST],
-                                               val computeContributions: ISZ[ST],
-                                               val sharedMemoryMapping: ISZ[MemoryRegion],
+@sig trait cLangConnectionContributions {
 
-                                               val aadlType: AadlType,
-                                               val queueSize: Z) extends ConnectionContributions
+  def cHeaderImportContributions: ISZ[String]
+
+  def cImplementationImportContributions: ISZ[String]
+
+  def cUserMethodSignatures: ISZ[ST]
+
+  def cUserMethodDefaultImpls: ISZ[ST]
+
+  def cDefineContributions: ISZ[ST]
+
+  def cGlobalVarContributions: ISZ[GlobalVarContribution]
+
+  def cApiMethodSigs: ISZ[ST]
+
+  def cApiMethods: ISZ[ST]
+
+  def cInitContributions: ISZ[ST]
+
+  def cComputeContributions: ISZ[ST]
+}
+
+@datatype class cConnectionContributions (val cHeaderImportContributions: ISZ[String],
+                                          val cApiMethodSigs: ISZ[ST],
+
+                                          val cUserMethodSignatures: ISZ[ST],
+                                          val cGlobalVarContributions: ISZ[GlobalVarContribution],
+                                          val cDefineContributions: ISZ[ST],
+                                          val cApiMethods: ISZ[ST],
+
+                                          val cImplementationImportContributions: ISZ[String],
+
+                                          val cInitContributions: ISZ[ST],
+                                          val cComputeContributions: ISZ[ST],
+
+                                          val cUserMethodDefaultImpls: ISZ[ST]) extends cLangConnectionContributions
+
+@sig trait rustLangConnectionContributions {
+  def rustExternApis: ISZ[ST]
+
+  def rustUnsafeExternApisWrappers: ISZ[ST]
+}
+
+@datatype class rustConnectionsContributions(val rustExternApis: ISZ[ST],
+                                             val rustUnsafeExternApisWrappers: ISZ[ST]) extends rustLangConnectionContributions
+
+@datatype class UberConnectionContributions(val portName: ISZ[String],
+                                            val portPriority: Option[Z],
+
+                                            val aadlType: AadlType,
+                                            val queueSize: Z,
+
+                                            val sharedMemoryMapping: ISZ[MemoryRegion],
+
+                                            val cContributions: cLangConnectionContributions,
+
+                                            val rustContributions: rustLangConnectionContributions) extends ConnectionContributions
