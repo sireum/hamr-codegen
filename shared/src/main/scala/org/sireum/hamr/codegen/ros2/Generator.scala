@@ -1664,9 +1664,15 @@ object Generator {
             }
           }
           else {
-            // Out ports with no connections should still publish to a topic (for other non-generated components
-            // to subscribe to, for example)
-            publisherHeaders = publisherHeaders :+ genCppTopicPublisherVarHeader(p, portDatatype, 1)
+            if (connectionMap.get(p.path).nonEmpty) {
+              val inputPorts = connectionMap.get(p.path).get
+              publisherHeaders = publisherHeaders :+ genCppTopicPublisherVarHeader(p, portDatatype, inputPorts.size)
+            }
+            else {
+              // Out ports with no connections should still publish to a topic (for other non-generated components
+              // to subscribe to, for example)
+              publisherHeaders = publisherHeaders :+ genCppTopicPublisherVarHeader(p, portDatatype, 1)
+            }
           }
         }
       }
@@ -2041,6 +2047,21 @@ object Generator {
             publisherMethods = publisherMethods :+
               genCppTopicPublishMethod(p, nodeName, portDatatype, 1)
           }
+          else {
+            if (connectionMap.get(p.path).nonEmpty) {
+              val inputPorts = connectionMap.get(p.path).get
+              val inputPortNames = getPortNames(inputPorts)
+              publishers = publishers :+ genCppTopicPublisher(p, portDatatype, inputPortNames)
+              publisherMethods = publisherMethods :+
+                genCppTopicPublishMethod(p, nodeName, portDatatype, inputPortNames.size)
+            }
+            else {
+              // Out ports with no connections should still publish to a topic
+              publishers = publishers :+ genCppTopicPublisher(p, portDatatype, getPortNames(IS(p.path.toISZ)))
+              publisherMethods = publisherMethods :+
+                genCppTopicPublishMethod(p, nodeName, portDatatype, 1)
+            }
+          }
         }
       }
     }
@@ -2351,7 +2372,6 @@ object Generator {
     for (comp <- threadComponents) {
       cpp_files =
         cpp_files :+ genCppBaseNodeHeaderFile(top_level_package_nameT, comp, connectionMap, datatypeMap, strictAADLMode,
-                                              invertTopicBinding, reporter)
       cpp_files =
         cpp_files :+ genCppBaseNodeCppFile(top_level_package_nameT, comp, connectionMap, datatypeMap, strictAADLMode,
                                            invertTopicBinding, reporter)
