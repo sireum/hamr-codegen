@@ -65,6 +65,7 @@ object HamrCli {
     val ros2Dir: Option[String],
     val ros2NodesLanguage: CodegenNodesCodeLanguage.Type,
     val ros2LaunchLanguage: CodegenLaunchCodeLanguage.Type,
+    val invertTopicBinding: B,
     val experimentalOptions: ISZ[String]
   ) extends HamrCodegenCliTopOption
 }
@@ -205,6 +206,10 @@ import HamrCli._
           |-p, --ros2-launch-language    
           |                          The programming language for the launch file (expects
           |                           one of { Python, Xml }; default: Python)
+          |    --invert-topic-binding
+          |                          By default, topic names are based on in ports, and fan
+          |                           out ports would have multiple publishers.  This option
+          |                           inverts that behavior."
           |
           |Experimental Options:
           |-x, --experimental-options    
@@ -237,6 +242,7 @@ import HamrCli._
     var ros2Dir: Option[String] = None[String]()
     var ros2NodesLanguage: CodegenNodesCodeLanguage.Type = CodegenNodesCodeLanguage.Python
     var ros2LaunchLanguage: CodegenLaunchCodeLanguage.Type = CodegenLaunchCodeLanguage.Python
+    var invertTopicBinding: B = false
     var experimentalOptions: ISZ[String] = ISZ[String]()
     var j = i
     var isOption = T
@@ -408,7 +414,13 @@ import HamrCli._
              case Some(v) => ros2LaunchLanguage = v
              case _ => return None()
            }
-         } else if (arg == "-x" || arg == "--experimental-options") {
+         } else if (arg == "--invert-topic-binding") {
+          val o: Option[B] = { j = j - 1; Some(!invertTopicBinding) }
+          o match {
+            case Some(v) => invertTopicBinding = v
+            case _ => return None()
+          }
+        } else if (arg == "-x" || arg == "--experimental-options") {
            val o: Option[ISZ[String]] = parseStrings(args, j + 1, ';')
            o match {
              case Some(v) => experimentalOptions = v
@@ -423,7 +435,7 @@ import HamrCli._
         isOption = F
       }
     }
-    return Some(CodegenOption(help, parseArguments(args, j), msgpack, verbose, runtimeMonitoring, platform, outputDir, parseableMessages, slangOutputDir, packageName, noProyekIve, noEmbedArt, devicesAsThreads, genSbtMill, slangAuxCodeDirs, slangOutputCDir, excludeComponentImpl, bitWidth, maxStringSize, maxArraySize, runTranspiler, sel4OutputDir, sel4AuxCodeDirs, workspaceRootDir, strictAadlMode, ros2OutputWorkspaceDir, ros2Dir, ros2NodesLanguage, ros2LaunchLanguage, experimentalOptions))
+    return Some(CodegenOption(help, parseArguments(args, j), msgpack, verbose, runtimeMonitoring, platform, outputDir, parseableMessages, slangOutputDir, packageName, noProyekIve, noEmbedArt, devicesAsThreads, genSbtMill, slangAuxCodeDirs, slangOutputCDir, excludeComponentImpl, bitWidth, maxStringSize, maxArraySize, runTranspiler, sel4OutputDir, sel4AuxCodeDirs, workspaceRootDir, strictAadlMode, ros2OutputWorkspaceDir, ros2Dir, ros2NodesLanguage, ros2LaunchLanguage, invertTopicBinding, experimentalOptions))
   }
 
   def parseArguments(args: ISZ[String], i: Z): ISZ[String] = {

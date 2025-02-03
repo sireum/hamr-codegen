@@ -120,7 +120,10 @@ object CommonCli {
         description = "The programming language for the generated node files"),
       Opt(name = "ros2LaunchLanguage", longKey = "ros2-launch-language", shortKey = Some('p'),
         tpe = Type.Choice(name = "LaunchCodeLanguage", sep = None(), elements = ISZ("Python", "Xml")),
-        description = "The programming language for the launch file")
+        description = "The programming language for the launch file"),
+      Opt(name = "invertTopicBinding", longKey = "invert-topic-binding", shortKey = None(),
+        tpe = Type.Flag(F),
+        description = "By default, topic names are based on in ports, and fan out ports would have multiple publishers.  This option inverts that behavior.")
     )),
     OptGroup(name = "Experimental", opts = ISZ(
       Opt(name = "experimentalOptions", longKey = "experimental-options", shortKey = Some('x'),
