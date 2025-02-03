@@ -207,9 +207,15 @@ import HamrCli._
           |                          The programming language for the launch file (expects
           |                           one of { Python, Xml }; default: Python)
           |    --invert-topic-binding
+<<<<<<< HEAD
           |                          By default, topic names are based on in ports, and
           |                           fan out ports would have multiple publishers.  This
           |                           option inverts that behavior.
+=======
+          |                          By default, topic names are based on in ports, and fan
+          |                           out ports would have multiple publishers.  This option
+          |                           inverts that behavior."
+>>>>>>> b76ef58 (Added ROS2 codegen option (invertTopicBinding) and added topic inversion option into generator)
           |
           |Experimental Options:
           |-x, --experimental-options    
