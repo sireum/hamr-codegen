@@ -33,14 +33,16 @@ import org.sireum.ops.ISZOps
 
     val modelName = getModelName(symbolTable)
 
-    mapConnections(symbolTable.rootSystem, symbolTable, reporter)
+    mapConnections(symbolTable.rootSystem, symbolTable, options.invertTopicBinding, reporter)
 
     mapDatatypes(aadlTypes, reporter)
 
     var files: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
 
     options.ros2NodesLanguage.name match {
-      case "Cpp" => files = Generator.genCppNodePkg(modelName, threadComponents, connectionMap, datatypeMap, options.strictAadlMode, reporter)
+      case "Cpp" => files =
+        Generator.genCppNodePkg(modelName, threadComponents, connectionMap, datatypeMap, options.strictAadlMode,
+                                options.invertTopicBinding, reporter)
       //case "Python" => files = Generator.genPyNodePkg(modelName, threadComponents, connectionMap, options.strictAadlMode)
       case _ => reporter.error(None(), toolName, s"Unknown code type: ${options.ros2NodesLanguage.name}")
     }
@@ -72,9 +74,9 @@ import org.sireum.ops.ISZOps
   }
 
   // Also adds threads to threadComponents
-  def mapConnections(c: AadlComponent, symbolTable: SymbolTable, reporter: Reporter): Unit = {
+  def mapConnections(c: AadlComponent, symbolTable: SymbolTable, invertTopicBinding: B, reporter: Reporter): Unit = {
     for(ci <- c.connectionInstances) {
-      processConnection(ci, c.component, symbolTable, reporter)
+      processConnection(ci, c.component, symbolTable, invertTopicBinding, reporter)
     }
 
     c match {
@@ -86,12 +88,13 @@ import org.sireum.ops.ISZOps
     }
 
     for (sc <- c.subComponents) {
-      mapConnections(sc, symbolTable, reporter)
+      mapConnections(sc, symbolTable, invertTopicBinding, reporter)
     }
   }
 
   // Checks if a connection is allowed, and if so, processes it
-  def processConnection(c: ConnectionInstance, srcComponent: Component, symbolTable: SymbolTable, reporter: Reporter): B = {
+  def processConnection(c: ConnectionInstance, srcComponent: Component, symbolTable: SymbolTable, invertTopicBinding: B,
+                        reporter: Reporter): B = {
     val str = s"${CommonUtil.getName(c.name)}  from  ${CommonUtil.getName(srcComponent.identifier)}"
 
     if (c.src.component == c.dst.component) {
@@ -120,16 +123,33 @@ import org.sireum.ops.ISZOps
     val srcName = c.src.feature.get.name
     val dstName = c.dst.feature.get.name
 
-    if (connectionMap.contains(srcName) && ISZOps(connectionMap.get(srcName).get).contains(dstName)) {
-      reporter.info(None(), toolName, s"Skipping: already handled connection: ${srcName} to ${dstName}")
-      return F
+    if (invertTopicBinding) {
+      if (connectionMap.contains(dstName) && ISZOps(connectionMap.get(dstName).get).contains(srcName)) {
+        reporter.info(None(), toolName, s"Skipping: already handled connection: ${srcName} to ${dstName}")
+        return F
+      }
+    }
+    else {
+      if (connectionMap.contains(srcName) && ISZOps(connectionMap.get(srcName).get).contains(dstName)) {
+        reporter.info(None(), toolName, s"Skipping: already handled connection: ${srcName} to ${dstName}")
+        return F
+      }
     }
 
-    val seq: ISZ[ISZ[String]] =
-      if (!connectionMap.contains(srcName)) ISZ(dstName)
-      else connectionMap.get(srcName).get :+ dstName
+    if (invertTopicBinding) {
+      val seq: ISZ[ISZ[String]] =
+        if (!connectionMap.contains(dstName)) ISZ(srcName)
+        else connectionMap.get(dstName).get :+ srcName
 
-    connectionMap = connectionMap + (srcName ~> seq)
+      connectionMap = connectionMap + (dstName ~> seq)
+    }
+    else {
+      val seq: ISZ[ISZ[String]] =
+        if (!connectionMap.contains(srcName)) ISZ(dstName)
+        else connectionMap.get(srcName).get :+ dstName
+
+      connectionMap = connectionMap + (srcName ~> seq)
+    }
 
     return T
   }
