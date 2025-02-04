@@ -248,26 +248,10 @@ object TypeUtil {
 
         val cBaseType: String = getC_TypeName(a, reporter)
 
-        val dim: Z = a.dimensions match {
-          case ISZ() =>
-            reporter.error(None(), MicrokitCodegen.toolName, s"Unbounded arrays are not currently supported: ${a.name}")
-            0
-          case ISZ(d) =>
-            if (d <= 0) {
-              reporter.error(None(), MicrokitCodegen.toolName, s"Array dimension must by >= 1: ${a.name}")
-            }
-            d
-          case _ =>
-            reporter.error(None(), MicrokitCodegen.toolName, s"Multi dimensional arrays are not currently supported: ${a.name}")
-            0
-        }
+        assert (a.dimensions.size == 1 && a.dimensions(0) >= 0, "Linter should have disallowed other variants")
+        val dim: Z = a.dimensions(0)
 
-        val byteSize: Z = a.bitSize match {
-          case Some(b) => b / 8
-          case _ =>
-            reporter.error(None(), MicrokitCodegen.toolName, s"Bit size must be specified for ${a.name}")
-            0
-        }
+        val byteSize: Z = a.bitSize.get / 8 // linter guarantees bit size will be > 0
 
         val byteSizeName = getArrayByteSizeDefineName(a)
         val dimName = getArrayDimDefineName(a)
@@ -365,15 +349,6 @@ object TypeUtil {
       case "Base_Types::Character" => return Some("char")
       case "Base_Types::String" => return Some("char*")
 
-      /*
-      case "Base_Types::Float" =>
-        reporter.error(None(), MicrokitCodegen.toolName, "Unbounded Base_Types::Float is not supported in Microkit")
-        return None[String]()
-
-      case "Base_Types::Integer" =>
-        reporter.error(None(), MicrokitCodegen.toolName, "Unbounded Base_Types::Integer is not supported in Microkit")
-        return None[String]()
-     */
       case x =>
         halt(s"Unexpected base types: $x")
     }
@@ -398,16 +373,6 @@ object TypeUtil {
 
       case "Base_Types::Character" => return Some("cty::c_char")
       case "Base_Types::String" => return Some("String")
-
-      /*
-      case "Base_Types::Float" =>
-        reporter.error(None(), MicrokitCodegen.toolName, "Unbounded Base_Types::Float is not supported in Microkit")
-        return None[String]()
-
-      case "Base_Types::Integer" =>
-        reporter.error(None(), MicrokitCodegen.toolName, "Unbounded Base_Types::Integer is not supported in Microkit")
-        return None[String]()
-      */
 
       case x =>
         halt(s"Unexpected base type: $x")

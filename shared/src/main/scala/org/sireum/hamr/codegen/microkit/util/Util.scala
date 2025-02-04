@@ -49,7 +49,22 @@ object Util {
           reporter.error(posOpt, MicrokitCodegen.toolName, "Unbounded Float is not supported for Microkit")
         case _ =>
           aadlType match {
-            case t: ArrayType => add(posOpt, t.baseType)
+            case t: ArrayType =>
+              t.dimensions match {
+                case ISZ() =>
+                  reporter.error(None(), MicrokitCodegen.toolName, s"Unbounded arrays are not currently supported: ${t.name}")
+                case ISZ(dim) =>
+                  if (dim <= 0) {
+                    reporter.error(None(), MicrokitCodegen.toolName, s"Array dimension must by >= 1: ${t.name}")
+                  }
+                case _ =>
+                  reporter.error(None(), MicrokitCodegen.toolName, s"Multi dimensional arrays are not currently supported: ${t.name}")
+              }
+              if (t.bitSize.isEmpty || t.bitSize.get <= 0) {
+                reporter.error(None(), MicrokitCodegen.toolName, s"Bit size > 0 must be specified for ${t.name}")
+              }
+
+              add(posOpt, t.baseType)
             case t: RecordType =>
               for (f <- t.fields.values) {
                 add(posOpt, f)

@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        testSuffix: ${{ fromJSON('["BaseBehaviorTestStatic,BaseBehaviorTestDynamic,CodeGenTest_Base","HamrTranspileTests,GumboTest,CodegenTest_CASE,Ros2Tests"]') }}
+        testSuffix: ${{ fromJSON('["BaseBehaviorTestStatic,BaseBehaviorTestDynamic,CodeGenTest_Base","HamrTranspileTests,GumboTest,CodegenTest_CASE,MicrokitTests,Ros2Tests"]') }}
     name: '${{ matrix.testSuffix }}'
     steps:
       - name: Checkout

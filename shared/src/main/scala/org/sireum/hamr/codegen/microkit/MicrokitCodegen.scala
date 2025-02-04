@@ -123,7 +123,8 @@ object MicrokitCodegen {
       }
 
       val touchedTypes: ISZ[TypeUtil.UberTypeProvider] =
-        for (t <- Util.getAllTouchedTypes(types, symbolTable, reporter)) yield TypeUtil.processDatatype(t, reporter)
+        for (t <- Util.getAllTouchedTypes(types, symbolTable, reporter))
+          yield TypeUtil.processDatatype(t, reporter)
 
       var forwardDefs: ISZ[ST] = ISZ()
       var defs: ISZ[ST] = ISZ()
@@ -166,7 +167,7 @@ object MicrokitCodegen {
               |
               |${Util.doNotEdit}
               |
-              |${(for (t <- touchedTypes) yield t.rust.rustTypeDeclaration, "\n\n")}
+              |${(for (t <- touchedTypes.filter(t => t.rust.rustTypeDeclaration.nonEmpty)) yield t.rust.rustTypeDeclaration, "\n\n")}
               |"""
         val rustTypesDir = s"${options.sel4OutputDir.get}/${TypeUtil.rustTypesDir}"
         val outRustTypesPath = s"$rustTypesDir/src/${TypeUtil.rustAadlTypesFilename}"
