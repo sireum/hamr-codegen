@@ -3,7 +3,7 @@ package org.sireum.hamr.codegen.microkit.connections
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.types.AadlType
-import org.sireum.hamr.codegen.microkit.types.TypeUtil
+import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
 import org.sireum.hamr.codegen.microkit.util.MemoryRegion
 import org.sireum.hamr.codegen.microkit.util.Util.TAB
 
@@ -56,7 +56,7 @@ import org.sireum.hamr.codegen.microkit.util.Util.TAB
 
   @pure def buildEntry: ST = {
     return (
-      st"""$objectName: $$(TOP_DIR)/${TypeUtil.cTypesDir}/src/$implementationFilename Makefile
+      st"""$objectName: $$(TOP_DIR)/${MicrokitTypeUtil.cTypesDir}/src/$implementationFilename Makefile
           |${TAB}$$(CC) -c $$(CFLAGS) $$< -o $$@ $$(TOP_INCLUDE)
         """)
   }

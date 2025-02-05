@@ -2,14 +2,19 @@
 package org.sireum.hamr.codegen.microkit.types
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypeNameProvider, ArrayType, BaseType, EnumType, RecordType, SlangType, TypeKind, TypeUtil => CommonTypeUtil}
+import org.sireum.CircularQueue.Policy
+import org.sireum.hamr.codegen.common.symbols.{AadlFeatureData, GclAnnexClauseInfo, GclAnnexLibInfo, SymbolTable}
+import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypeNameProvider, AadlTypes, ArrayType, BaseType, BitType, EnumType, RecordType, SlangType, TypeKind, TypeUtil}
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen
 import org.sireum.hamr.codegen.microkit.connections._
 import org.sireum.hamr.codegen.microkit.util.Util
 import org.sireum.hamr.codegen.microkit.util.Util.brand
-import org.sireum.message.Reporter
+import org.sireum.hamr.ir
+import org.sireum.hamr.ir.GclStateVar
+import org.sireum.lang.ast.Param
+import org.sireum.message.{Position, Reporter}
 
-object TypeUtil {
+object MicrokitTypeUtil {
 
   @sig trait TypeProvider {
     def name: String
@@ -25,7 +30,6 @@ object TypeUtil {
     def cSimpleName: String
     def cQualifiedName: String
 
-    def cForwardDeclaration: Option[ST]
     def cTypeDeclaration: Option[ST]
 
     def cDefaultValue: ST
@@ -49,7 +53,6 @@ object TypeUtil {
   @datatype class cTypeProvider (val aadlType: AadlType,
                                  val cSimpleName: String,
                                  val cQualifiedName: String,
-                                 val cForwardDeclaration: Option[ST],
                                  val cTypeDeclaration: Option[ST],
                                  val cDefaultValue: ST) extends cLangTypeProvider
 
@@ -138,13 +141,12 @@ object TypeUtil {
                                  |path = "src/sb_types.rs""""
 
   def getTypeApiContributions(aadlType: AadlType, typeStore: TypeStore, queueSize: Z): TypeApiContributions = {
-    val typeName = typeStore.typeName
-
+    val queueElementTypeName = typeStore.getCTypeName(aadlType)
     return DefaultTypeApiContributions(
       aadlType = aadlType,
-      simpleFilename = QueueTemplate.getTypeQueueName(typeName, queueSize),
-      header = QueueTemplate.header(typeName, queueSize),
-      implementation = QueueTemplate.implementation(typeName, queueSize, aadlType))
+      simpleFilename = QueueTemplate.getTypeQueueName(queueElementTypeName, queueSize),
+      header = QueueTemplate.header(queueElementTypeName, queueSize),
+      implementation = QueueTemplate.implementation(aadlType, queueElementTypeName, queueSize))
   }
 
   def processDatatype(aadlType: AadlType, reporter: Reporter): UberTypeProvider = {
@@ -166,6 +168,37 @@ object TypeUtil {
       }
     }
 
+    def processArray(cName: String, cBaseType: String, cContainer: String,
+                     byteSizeName: String, byteSize: Z, dimName: String, dim: Z,
+                     rustTypeName: String, rustQualifiedTypeName: String, rustBaseType: String): (cTypeProvider, rustTypeProvider) = {
+      val ctype = cTypeProvider(
+        aadlType = aadlType,
+        cSimpleName = cName,
+        cQualifiedName = cName,
+        cTypeDeclaration = Some(st"""#define $byteSizeName $byteSize
+                                    |#define $dimName $dim
+                                    |
+                                    |typedef $cBaseType $cName [$dimName];
+                                    |
+                                    |typedef
+                                    |  struct $cContainer{
+                                    |    $cName f;
+                                    |  } $cContainer;"""),
+        cDefaultValue = st"not yet")
+
+      val rustType = rustTypeProvider(
+        aadlType = aadlType,
+        rustName = rustTypeName,
+        rustQualifiedName = rustQualifiedTypeName,
+        rustTypeDeclaration = Some(
+          st"""pub const $byteSizeName: usize = $byteSize;
+              |pub const $dimName: usize = $dim;
+              |
+              |pub type $rustTypeName = [$rustBaseType; $dimName];"""))
+
+      return (ctype, rustType)
+    }
+
     aadlType match {
       case rt: RecordType =>
         val cTypeName = rt.nameProvider.qualifiedCTypeName
@@ -174,10 +207,9 @@ object TypeUtil {
             aadlType = aadlType,
             cSimpleName = cTypeName,
             cQualifiedName = cTypeName,
-            cForwardDeclaration = Some(st"typedef struct $cTypeName $cTypeName;"),
-            cTypeDeclaration = Some(st"""struct $cTypeName {
-                                   |  ${(cFields, "\n")}
-                                   |};"""),
+            cTypeDeclaration = Some(st"""typedef struct $cTypeName {
+                                        |  ${(cFields, "\n")}
+                                        |} $cTypeName;"""),
             cDefaultValue = st"not yet")
 
         val rustTypeName = rt.nameProvider.rustTypeName
@@ -197,12 +229,13 @@ object TypeUtil {
         return UberTypeProvider(ctype, rustType)
 
       case b: BaseType =>
+        assert (b.name != "Base_Types::String", "This should be an AadlType by now")
+
         val cTypeName = translateBaseTypeToC(aadlType.name, reporter).get
         val ctype = cTypeProvider(
           aadlType = aadlType,
           cSimpleName = cTypeName,
           cQualifiedName = cTypeName,
-          cForwardDeclaration = None(),
           cTypeDeclaration = None(),
           cDefaultValue = st"not yet")
 
@@ -221,7 +254,6 @@ object TypeUtil {
           aadlType = aadlType,
           cSimpleName = cTypeName,
           cQualifiedName = cTypeName,
-          cForwardDeclaration = None(),
           cTypeDeclaration = Some(st"""typedef
                                       |  enum {${(e.values, ", ")}} $cTypeName;"""),
           cDefaultValue = st"not yet")
@@ -253,38 +285,18 @@ object TypeUtil {
 
         val byteSize: Z = a.bitSize.get / 8 // linter guarantees bit size will be > 0
 
-        val byteSizeName = getArrayByteSizeDefineName(a)
-        val dimName = getArrayDimDefineName(a)
-
-        val ctype = cTypeProvider(
-          aadlType = aadlType,
-          cSimpleName = cName,
-          cQualifiedName = cName,
-          cForwardDeclaration = None(),
-          cTypeDeclaration = Some(st"""#define $byteSizeName $byteSize
-                                      |#define $dimName $dim
-                                      |
-                                      |typedef $cBaseType $cName [$dimName];
-                                      |
-                                      |typedef
-                                      |  struct $container{
-                                      |    $cName f;
-                                      |  } $container;"""),
-          cDefaultValue = st"not yet")
+        val byteSizeName = getArrayStringByteSizeDefineName(a)
+        val dimName = getArrayStringDimDefineName(a)
 
         val rustTypeName = aadlType.nameProvider.rustTypeName
         val rustQualifiedTypeName = aadlType.nameProvider.qualifiedRustTypeName
         val rustBaseType: String = getRust_TypeName(a, reporter)
 
-        val rustType = rustTypeProvider(
-          aadlType = aadlType,
-          rustName = rustTypeName,
-          rustQualifiedName = rustQualifiedTypeName,
-          rustTypeDeclaration = Some(
-            st"""pub const $byteSizeName: usize = $byteSize;
-                |pub const $dimName: usize = $dim;
-                |
-                |pub type $rustTypeName = [$rustBaseType; $dimName];"""))
+        val (ctype, rustType) = processArray(
+          cName = cName, cBaseType = cBaseType, cContainer = container,
+          byteSizeName = byteSizeName, byteSize = byteSize, dimName = dimName, dim = dim,
+          rustTypeName = rustTypeName, rustQualifiedTypeName = rustQualifiedTypeName, rustBaseType = rustBaseType
+        )
 
         return UberTypeProvider(ctype, rustType)
 
@@ -292,11 +304,13 @@ object TypeUtil {
     }
   }
 
-  @pure def getArrayByteSizeDefineName(a: ArrayType): String = {
+  @pure def getArrayStringByteSizeDefineName(a: AadlType): String = {
+    assert (a.isInstanceOf[ArrayType] || a.isInstanceOf[BaseType])
     return s"${a.nameProvider.qualifiedCTypeName}_SIZE"
   }
 
-  @pure def getArrayDimDefineName(a: ArrayType): String = {
+  @pure def getArrayStringDimDefineName(a: AadlType): String = {
+    assert (a.isInstanceOf[ArrayType] || a.isInstanceOf[BaseType])
     return s"${a.nameProvider.qualifiedCTypeName}_DIM"
   }
 
@@ -347,7 +361,7 @@ object TypeUtil {
       case "Base_Types::Float_64" => return Some("double")
 
       case "Base_Types::Character" => return Some("char")
-      case "Base_Types::String" => return Some("char*")
+      case "Base_Types::String" => return Some("String")
 
       case x =>
         halt(s"Unexpected base types: $x")
@@ -369,13 +383,184 @@ object TypeUtil {
       case "Base_Types::Unsigned_64" => return Some(s"cty::uint64_t")
 
       case "Base_Types::Float_32" => return Some("cty::c_float")
-      case "Base_Types::Float_64" => return Some("cty::double")
+      case "Base_Types::Float_64" => return Some("cty::c_double")
 
       case "Base_Types::Character" => return Some("cty::c_char")
       case "Base_Types::String" => return Some("String")
 
       case x =>
         halt(s"Unexpected base type: $x")
+    }
+  }
+
+  @pure def getAllTouchedTypes(aadlTypes: AadlTypes, symbolTable: SymbolTable, reporter: Reporter): ISZ[AadlType] = {
+    var ret: Set[AadlType] = Set.empty
+
+    var maxStringDim: Z = 0
+    var maxString: Option[BaseType] = None()
+    def add(posOpt: Option[Position], aadlType: AadlType): Unit = {
+      aadlType.name match {
+        case "Base_Types::Integer" =>
+          reporter.error(posOpt, MicrokitCodegen.toolName, "Unbounded Integer is not supported for Microkit")
+        case "Base_Types::Float" =>
+          reporter.error(posOpt, MicrokitCodegen.toolName, "Unbounded Float is not supported for Microkit")
+        case "Base_Types::String" =>
+          TypeUtil.getArrayDimensions(aadlType.container.get) match {
+            case ISZ() =>
+            case ISZ(dim) =>
+              if (dim <= 0) {
+                reporter.error(None(), MicrokitCodegen.toolName, s"String dimension must be > 0")
+              } else {
+                if (dim > maxStringDim) {
+                  maxStringDim = dim
+                  maxString = Some(aadlType.asInstanceOf[BaseType])
+                }
+              }
+            case _ =>
+              reporter.error(None(), MicrokitCodegen.toolName, s"Only a single dimension is allowed for Strings")
+          }
+        // don't add to ret as strings are treated as arrays by introducing an ArrayType
+        case _ =>
+          aadlType match {
+            case t: ArrayType =>
+              t.dimensions match {
+                case ISZ() =>
+                  reporter.error(None(), MicrokitCodegen.toolName, s"Unbounded arrays are not currently supported: ${t.name}")
+                case ISZ(dim) =>
+                  if (dim <= 0) {
+                    reporter.error(None(), MicrokitCodegen.toolName, s"Array dimension must by >= 1: ${t.name}")
+                  }
+                case _ =>
+                  reporter.error(None(), MicrokitCodegen.toolName, s"Multi dimensional arrays are not currently supported: ${t.name}")
+              }
+              if (t.bitSize.isEmpty || t.bitSize.get <= 0) {
+                reporter.error(None(), MicrokitCodegen.toolName, s"Bit size > 0 must be specified for ${t.name}")
+              }
+
+              add(posOpt, t.baseType)
+            case t: RecordType =>
+              for (f <- t.fields.values) {
+                add(posOpt, f)
+              }
+            case _ =>
+          }
+          ret = ret + aadlType
+      }
+    }
+
+    for(thread <- symbolTable.getThreads()) {
+      for (port <- thread.getPorts()) {
+        port match {
+          case d: AadlFeatureData => add(port.feature.identifier.pos, d.aadlType)
+          case _ =>
+        }
+      }
+    }
+    def processState(s: GclStateVar): Unit = {
+      add(s.posOpt, aadlTypes.typeMap.get(s.classifier).get)
+    }
+    def processParam(p: Param): Unit = {
+      p.tipe.typedOpt match {
+        case Some(typed: org.sireum.lang.ast.Typed.Name) =>
+          val name = st"${(typed.ids, "::")}".render
+          add(p.id.attr.posOpt, aadlTypes.typeMap.get(name).get)
+        case _ =>
+      }
+    }
+
+    for (annexes <- symbolTable.annexClauseInfos.values; a <- annexes) {
+      a match {
+        case g: GclAnnexClauseInfo =>
+          for (s <- g.annex.state) {
+            processState(s)
+          }
+          for (m <- g.annex.methods; p <- m.method.sig.params) {
+            processParam(p)
+          }
+      }
+    }
+    for (gclLib <- symbolTable.annexLibInfos) {
+      gclLib match {
+        case lib: GclAnnexLibInfo =>
+          for (m <- lib.annex.methods;
+               p <- m.method.sig.params) {
+            processParam(p)
+          }
+        case _ =>
+      }
+    }
+
+    var optStringType: Option[AadlType] = None()
+    maxString match {
+      case Some(b)=>
+        // +1 for the null character
+        val size: Z = 1 + (if (maxStringDim == 0) 100 else maxStringDim)
+        var container = b.container.get
+        container = container(properties = ir.Property(
+          name = ir.Name(ISZ("Data_Model::Dimension"), None()),
+          propertyValues = ISZ(ir.UnitProp((size).string, None())),
+          appliesTo = ISZ()) +: container.properties.filter(p => p.name.name != ISZ("Data_Model::Dimension")))
+        optStringType = Some(ArrayType(
+          classifier = ISZ("Base_Types::String"),
+          nameProvider = b.nameProvider,
+          container = Some(container),
+          bitSize = Some(size * 8),
+          dimensions = ISZ(size),
+          baseType = BaseType(
+            classifier = ISZ("Base_Types::Character"),
+            nameProvider = b.nameProvider,
+            container = None(),
+            bitSize = Some(8),
+            slangType = SlangType.C)))
+        ret = ret + optStringType.get
+      case _ =>
+    }
+
+    if (ret.isEmpty) {
+      return ISZ()
+    } else {
+
+      def getRep(t: AadlType): AadlType = {
+        for(e <- ret.elements if t.name == e.name) {
+          return e
+        }
+        halt(s"Infeasible: $t")
+      }
+
+      var poset = Poset.empty[AadlType]
+      for (t <- ret.elements) {
+        t match {
+          case t: EnumType => poset = poset.addNode(t)
+          case t: BaseType => poset = poset.addNode(t)
+          case t: BitType => poset = poset.addNode(t)
+          case t: ArrayType =>
+            val parent = getRep(t.baseType)
+            poset = poset.addNode(t)
+            poset = poset.addParents(t, ISZ(parent))
+          case t: RecordType =>
+            val parents: ISZ[AadlType] = for (f <- t.fields.values) yield getRep(f)
+            poset = poset.addNode(t)
+            poset = poset.addParents(t, parents)
+        }
+      }
+      var inDegrees: Map[AadlType, Z] = Map.empty[AadlType, Z] ++ (for (e <- poset.nodes.keys) yield (e ~> poset.parentsOf(e).size))
+      val queue = CircularQueue.create(max = ret.elements.size, default = ret.elements(0), scrub = F, policy = Policy.NoDrop)
+      for (root <- poset.rootNodes) {
+        queue.enqueue(root)
+      }
+      var ordered: ISZ[AadlType] = ISZ()
+      while (queue.nonEmpty) {
+        val node = queue.dequeue()
+        ordered = ordered :+ node
+        for (child <- poset.childrenOf(node).elements) {
+          val update = inDegrees.get(child).get - 1
+          inDegrees = inDegrees + child ~> (update)
+          if (update == 0) {
+            queue.enqueue(child)
+          }
+        }
+      }
+      return ordered
     }
   }
 }

@@ -229,7 +229,7 @@ object QueueTemplate {
     val optEventData: Option[ST]=
       if (isEventPort) None()
       else Some(st", $queueElementTypeName *data")
-    return st"bool $methodName(${TypeUtil.eventCounterTypename} *numDropped$optEventData)"
+    return st"bool $methodName(${MicrokitTypeUtil.eventCounterTypename} *numDropped$optEventData)"
   }
 
   def getClientGetter_C_MethodPoll(portName: String,
@@ -259,8 +259,8 @@ object QueueTemplate {
     val methodName = st"${if (unsafe) "unsafe_" else ""}${getClientGetterPollMethodName(portName)}"
     val optEventData: Option[ST]=
       if (isEventPort) None()
-      else Some(st", data: *mut types::$queueElementTypeName")
-    return st"pub fn $methodName(num_dropped: *mut types::${TypeUtil.eventCounterTypename}$optEventData)"
+      else Some(st", data: *mut $queueElementTypeName")
+    return st"pub fn $methodName(num_dropped: *mut ${MicrokitTypeUtil.eventCounterTypename}$optEventData)"
   }
 
   def getClientGetter_rust_UnsafeMethodPoll(portName: String,
@@ -293,8 +293,8 @@ object QueueTemplate {
 
     val (copyInfra, copyUser): (ST, ST) = aadlType match {
       case a: ArrayType => (
-        st"memcpy(&$lastName, &fresh_data, ${TypeUtil.getArrayByteSizeDefineName(a)})",
-        st"memcpy(data, &$lastName, ${TypeUtil.getArrayByteSizeDefineName(a)})")
+        st"memcpy(&$lastName, &fresh_data, ${MicrokitTypeUtil.getArrayStringByteSizeDefineName(a)})",
+        st"memcpy(data, &$lastName, ${MicrokitTypeUtil.getArrayStringByteSizeDefineName(a)})")
       case _ => (
         st"$lastName = fresh_data",
         st"*data = $lastName")
@@ -304,7 +304,7 @@ object QueueTemplate {
       st"""${queueElementTypeName} $lastName;
           |
           |$methodSig {
-          |  ${TypeUtil.eventCounterTypename} numDropped;
+          |  ${MicrokitTypeUtil.eventCounterTypename} numDropped;
           |  ${queueElementTypeName} fresh_data;
           |  bool isFresh = $apiMethodName(($queueTypeName *) &$recvQueueMemVarName, &numDropped, &fresh_data);
           |  if (isFresh) {
@@ -353,7 +353,7 @@ object QueueTemplate {
       if(isEventPort) None() else Some(st", data")
     return (
       st"""$methodSig {
-          |  ${TypeUtil.eventCounterTypename} numDropped;
+          |  ${MicrokitTypeUtil.eventCounterTypename} numDropped;
           |  return $methodName (&numDropped$optEventData);
           |}""")
   }
@@ -444,14 +444,14 @@ object QueueTemplate {
           |// receiver dequeue can fail and drop data if the sender writes while the
           |// receiver is reading. This situation is detected unless the sender gets
           |// ahead of a receiver by more than COUNTER_MAX. Since COUNTER_MAX is typically
-          |// 2^64 (see ${TypeUtil.cEventCounterFilename}), this is extremely unlikely. If it does happen the
+          |// 2^64 (see ${MicrokitTypeUtil.cEventCounterFilename}), this is extremely unlikely. If it does happen the
           |// only adverse effect is that the receiver will not detect all dropped
           |// elements.
           |
           |#pragma once
           |
-          |#include <${TypeUtil.cEventCounterFilename}>
-          |#include <${TypeUtil.cAadlTypesFilename}>
+          |#include <${MicrokitTypeUtil.cEventCounterFilename}>
+          |#include <${MicrokitTypeUtil.cAadlTypesFilename}>
           |
           |#include <stdbool.h>
           |#include <stddef.h>
@@ -463,7 +463,7 @@ object QueueTemplate {
           |#include <libvmm/util/util.h>
           |#endif
           |
-          |// Queue size must be an integer factor of the size for ${TypeUtil.eventCounterTypename} (an unsigned
+          |// Queue size must be an integer factor of the size for ${MicrokitTypeUtil.eventCounterTypename} (an unsigned
           |// integer type). Since we are using standard C unsigned integers for the
           |// counter, picking a queue size that is a power of 2 is a good choice. We
           |// could alternatively set the size of our counter to the largest possible
@@ -484,12 +484,12 @@ object QueueTemplate {
           |  // Number of elements enqueued by the sender. The implementation depends
           |  // on C's standard module behaviour for unsigned integers. The counter never
           |  // overflows. It just wraps modulo the size of the counter type. The counter
-          |  // is typically very large (see ${TypeUtil.cEventCounterFilename}), so this should happen very
+          |  // is typically very large (see ${MicrokitTypeUtil.cEventCounterFilename}), so this should happen very
           |  // infrequently. Depending in C to initialize this to zero.
-          |  _Atomic ${TypeUtil.eventCounterTypename} numSent;
+          |  _Atomic ${MicrokitTypeUtil.eventCounterTypename} numSent;
           |
           |  // Queue of elements of type ${queueElementTypeName}
-          |  // (see ${TypeUtil.cTypesFilename}) implemented as a ring buffer.
+          |  // (see ${MicrokitTypeUtil.cTypesFilename}) implemented as a ring buffer.
           |  // No initialization necessary.
           |  ${queueElementTypeName} elt[${queueSizeMacroName}];
           |
@@ -522,7 +522,7 @@ object QueueTemplate {
           |  // counter never overflows. It just wraps modulo the size of the counter
           |  // type. The counter is typically very large (see counter.h), so this should
           |  // happen very infrequently.
-          |  ${TypeUtil.eventCounterTypename} numRecv;
+          |  ${MicrokitTypeUtil.eventCounterTypename} numRecv;
           |
           |  // Pointer to the actual queue. This is the seL4 dataport (shared memory)
           |  // that is shared by the sender and all receivers.
@@ -554,11 +554,11 @@ object QueueTemplate {
           |// If the sender ever gets ahead of a receiver by more than COUNTER_MAX,
           |// ${queueName}_dequeue will fail to count a multiple of COUNTER_MAX in
           |// numDropped. Since COUNTER_MAX is very large (typically on the order of 2^64,
-          |// see ${TypeUtil.cEventCounterFilename}), this is very unlikely.  If the sender is ever this far
+          |// see ${MicrokitTypeUtil.cEventCounterFilename}), this is very unlikely.  If the sender is ever this far
           |// ahead of a receiver the system is probably in a very bad state.
           |bool ${queueName}_dequeue(
           |  ${recvQueueTypeName} *recvQueue,
-          |  ${TypeUtil.eventCounterTypename} *numDropped,
+          |  ${MicrokitTypeUtil.eventCounterTypename} *numDropped,
           |  ${queueElementTypeName} *data);
           |
           |// Is queue empty? If the queue is not empty, it will stay that way until the
@@ -569,13 +569,9 @@ object QueueTemplate {
     return r
   }
 
-  def implementation( //queueHeaderFilename: String,
-                      queueElementTypeName: String,
-                      queueSize: Z,
-                      aadlType: AadlType
-
-                      //counterTypeName: String
-                    ): ST = {
+  def implementation(aadlType: AadlType,
+                     queueElementTypeName: String,
+                     queueSize: Z): ST = {
 
     val queueName = getTypeQueueName(queueElementTypeName, queueSize)
     val queueTypeName = getTypeQueueTypeName(queueElementTypeName, queueSize)
@@ -594,14 +590,14 @@ object QueueTemplate {
 
     val enqueue: ST = {
       aadlType match {
-        case a: ArrayType => st"memcpy(&queue->elt[index], data, ${TypeUtil.getArrayByteSizeDefineName(a)})"
+        case a: ArrayType => st"memcpy(&queue->elt[index], data, ${MicrokitTypeUtil.getArrayStringByteSizeDefineName(a)})"
         case _ => st"queue->elt[index] = *data"
       }
     }
 
     val dequeue: ST = {
       aadlType match {
-        case a: ArrayType => st"memcpy(data, &queue->elt[index], ${TypeUtil.getArrayByteSizeDefineName(a)})"
+        case a: ArrayType => st"memcpy(data, &queue->elt[index], ${MicrokitTypeUtil.getArrayStringByteSizeDefineName(a)})"
         case _ => st"*data = queue->elt[index]"
       }
     }
@@ -670,21 +666,21 @@ object QueueTemplate {
           |
           |bool ${dequeueMethodName}(
           |  ${recvQueueTypeName} *recvQueue,
-          |  ${TypeUtil.eventCounterTypename} *numDropped,
+          |  ${MicrokitTypeUtil.eventCounterTypename} *numDropped,
           |  ${queueElementTypeName} *data) {
           |
-          |  ${TypeUtil.eventCounterTypename} *numRecv = &recvQueue->numRecv;
+          |  ${MicrokitTypeUtil.eventCounterTypename} *numRecv = &recvQueue->numRecv;
           |  ${queueTypeName} *queue = recvQueue->queue;
           |
           |  // Get a copy of numSent so we can see if it changes during read
-          |  ${TypeUtil.eventCounterTypename} numSent = queue->numSent;
+          |  ${MicrokitTypeUtil.eventCounterTypename} numSent = queue->numSent;
           |
           |  // Acquire memory fence - ensure read of queue->numSent BEFORE reading data
           |  __atomic_thread_fence(__ATOMIC_ACQUIRE);
           |
           |  // How many new elements have been sent? Since we are using unsigned
           |  // integers, this correctly computes the value as counters wrap.
-          |  ${TypeUtil.eventCounterTypename} numNew = numSent - *numRecv;
+          |  ${MicrokitTypeUtil.eventCounterTypename} numNew = numSent - *numRecv;
           |  if (0 == numNew) {
           |    // Queue is empty
           |    return false;
@@ -700,7 +696,7 @@ object QueueTemplate {
           |  *numRecv += *numDropped + 1;
           |
           |  // UNUSED - number of elements left to be consumed
-          |  //${TypeUtil.eventCounterTypename} numRemaining = numSent - *numRecv;
+          |  //${MicrokitTypeUtil.eventCounterTypename} numRemaining = numSent - *numRecv;
           |
           |  size_t index = (*numRecv - 1) % ${queueSizeMacroName};
           |  $dequeue; // Copy data

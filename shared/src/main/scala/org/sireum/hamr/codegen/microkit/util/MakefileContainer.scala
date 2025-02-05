@@ -2,7 +2,7 @@
 package org.sireum.hamr.codegen.microkit.util
 
 import org.sireum._
-import org.sireum.hamr.codegen.microkit.types.TypeUtil
+import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
 
 @datatype class MakefileContainer(val resourceSuffix: String,
                                   val relativePath: Option[String],
@@ -59,9 +59,9 @@ import org.sireum.hamr.codegen.microkit.types.TypeUtil
   @strictpure def relativePathVmBoardDir: String = if (relativePath.nonEmpty) s"${relativePathDir}/board" else ""
 
   @pure def OBJSEntry: ST = {
-    var ret = st"${ops.StringOps(resourceSuffix).toUpper}_OBJS := $$(${TypeUtil.make_TYPE_OBJS}) $objName"
+    var ret = st"${ops.StringOps(resourceSuffix).toUpper}_OBJS := $$(${MicrokitTypeUtil.make_TYPE_OBJS}) $objName"
     if (hasUserContent) {
-      ret = st"""${ops.StringOps(s"${resourceSuffix}_MON").toUpper}_OBJS := $$(${TypeUtil.make_TYPE_OBJS}) $monObjName
+      ret = st"""${ops.StringOps(s"${resourceSuffix}_MON").toUpper}_OBJS := $$(${MicrokitTypeUtil.make_TYPE_OBJS}) $monObjName
                 |$ret"""
     }
     return ret
@@ -121,10 +121,10 @@ import org.sireum.hamr.codegen.microkit.types.TypeUtil
     if (hasUserContent) {
       val elfEntry: ST =
         if (isRustic) {
-          st"""$elfName: $$(${Util.make_UTIL_OBJS}) $$(${TypeUtil.make_TYPE_OBJS}) $userRusticName $objName
+          st"""$elfName: $$(${Util.make_UTIL_OBJS}) $$(${MicrokitTypeUtil.make_TYPE_OBJS}) $userRusticName $objName
               |${TAB}$$(LD) $$(LDFLAGS) -L $${CRATES_DIR}/$resourceSuffix/target/aarch64-unknown-none/release $$(filter %.o, $$^) $$(LIBS) -l$resourceSuffix -o $$@"""
         } else {
-          st"""$elfName: $$(${Util.make_UTIL_OBJS}) $$(${TypeUtil.make_TYPE_OBJS}) $userObjName $objName
+          st"""$elfName: $$(${Util.make_UTIL_OBJS}) $$(${MicrokitTypeUtil.make_TYPE_OBJS}) $userObjName $objName
               |${TAB}$$(LD) $$(LDFLAGS) $$^ $$(LIBS) -o $$@"""
         }
 
@@ -139,13 +139,13 @@ import org.sireum.hamr.codegen.microkit.types.TypeUtil
         st"""$monElfName: $monObjName
             |${TAB}$$(LD) $$(LDFLAGS) $$^ $$(LIBS) -o $$@
             |
-            |$elfName: $$(${TypeUtil.make_TYPE_OBJS}) $vmArchive
+            |$elfName: $$(${MicrokitTypeUtil.make_TYPE_OBJS}) $vmArchive
             |${TAB}$$(LD) $$(LDFLAGS)  --start-group -lmicrokit -Tmicrokit.ld $$(TYPE_OBJS) $vmArchive --end-group -o $$@"""
       return ret
     }
     else {
       val ret =
-        st"""$elfName: $$(${Util.make_UTIL_OBJS}) $$(${TypeUtil.make_TYPE_OBJS}) $objName
+        st"""$elfName: $$(${Util.make_UTIL_OBJS}) $$(${MicrokitTypeUtil.make_TYPE_OBJS}) $objName
             |${TAB}$$(LD) $$(LDFLAGS) $$^ $$(LIBS) -o $$@"""
       return ret
     }

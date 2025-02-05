@@ -88,13 +88,14 @@ object RustUtil {
                 |[dependencies]
                 |log = "0.4.17"
                 |types = { path = "../types" }
+                |cty = "0.2.2"
                 |
                 |[target.'cfg(not(unix))'.dependencies]
                 |sel4 = { git = "https://github.com/seL4/rust-sel4", features = ["single-threaded"] }
                 |sel4-logging = { git = "https://github.com/seL4/rust-sel4" }
                 |
                 |[lib]
-                |path = "src/$componentName.rs"
+                |path = "src/${componentName}_user.rs"
                 |crate-type = ["staticlib"]""")
   }
 

@@ -3,7 +3,7 @@ package org.sireum.hamr.codegen.microkit.util
 
 import org.sireum._
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen
-import org.sireum.hamr.codegen.microkit.types.TypeUtil
+import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
 import org.sireum.hamr.codegen.microkit.util.Util.TAB
 
 object MakefileTemplate {

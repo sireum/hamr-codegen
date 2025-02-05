@@ -11,7 +11,7 @@ import org.sireum.hamr.codegen.common.util.{CodeGenResults, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen.{pacerSchedulingDomain, toolName}
 import org.sireum.hamr.codegen.microkit.connections._
 import org.sireum.hamr.codegen.microkit.lint.Linter
-import org.sireum.hamr.codegen.microkit.types.{DefaultTypeStore, TypeStore, TypeUtil}
+import org.sireum.hamr.codegen.microkit.types.{DefaultTypeStore, TypeStore, MicrokitTypeUtil}
 import org.sireum.hamr.codegen.microkit.util._
 import org.sireum.hamr.codegen.microkit.vm.{VmMakefileTemplate, VmUser, VmUtil}
 import org.sireum.hamr.ir.{Aadl, Direction}
@@ -63,7 +63,7 @@ object MicrokitCodegen {
 
     val modelIsRusty: B = symbolTable.getThreads().filter(p => Util.isRust(p)).nonEmpty
 
-    val baseTypesIncludePath = s"${options.sel4OutputDir.get}/${TypeUtil.cTypesDir}/${MicrokitCodegen.dirInclude}"
+    val baseTypesIncludePath = s"${options.sel4OutputDir.get}/${MicrokitTypeUtil.cTypesDir}/${MicrokitCodegen.dirInclude}"
 
     @pure def getName(ids: ISZ[String]): ST = {
       return st"${(ops.ISZOps(ids).drop(1), "_")}"
@@ -111,29 +111,29 @@ object MicrokitCodegen {
       resources = resources :+ ResourceUtil.createResource(path, content, T)
     }
 
-    def processTypes(): Map[AadlType, TypeStore] = {
-      var ret: Map[AadlType, TypeStore] = Map.empty
+    def processTypes(): TypeStore = {
+      var ret: Map[AadlType, (String, String)] = Map.empty
 
-      val eventType = TypeUtil.processDatatype(TypeUtil.eventPortType, reporter)
-      ret = ret + TypeUtil.eventPortType ~> DefaultTypeStore(typeName = eventType.c.name, aadlType = TypeUtil.eventPortType)
+      val eventType = MicrokitTypeUtil.processDatatype(MicrokitTypeUtil.eventPortType, reporter)
+      ret = ret + MicrokitTypeUtil.eventPortType ~> (eventType.c.name, eventType.rust.rustName)
 
       if (types.rawConnections) {
         reporter.error(None(), MicrokitCodegen.toolName, "Raw connections are not currently supported")
-        return ret
+        return DefaultTypeStore(ret, None())
       }
 
-      val touchedTypes: ISZ[TypeUtil.UberTypeProvider] =
-        for (t <- Util.getAllTouchedTypes(types, symbolTable, reporter))
-          yield TypeUtil.processDatatype(t, reporter)
+      val touchedTypes: ISZ[MicrokitTypeUtil.UberTypeProvider] =
+        for (t <- MicrokitTypeUtil.getAllTouchedTypes(types, symbolTable, reporter))
+          yield MicrokitTypeUtil.processDatatype(t, reporter)
 
-      var forwardDefs: ISZ[ST] = ISZ()
       var defs: ISZ[ST] = ISZ()
+      var optStringType: Option[AadlType] = None()
       for (t <- ops.ISZOps(touchedTypes).sortWith((a, b) => CommonTypeUtil.isEnumTypeH(a.c.aadlType))) {
-        ret = ret + t.c.aadlType ~> DefaultTypeStore(typeName = t.c.name, aadlType = t.c.aadlType)
+        ret = ret + t.c.aadlType ~> (t.c.name, t.rust.rustName)
+        if (t.c.aadlType.name == "Base_Types::String") {
+          optStringType = Some(t.c.aadlType)
+        }
         if (!CommonTypeUtil.isBaseTypeH(t.c.aadlType)) {
-          if (t.c.cForwardDeclaration.nonEmpty) {
-            forwardDefs = forwardDefs :+ t.c.cForwardDeclaration.get
-          }
           defs = defs :+ t.c.cTypeDeclaration.get
         }
       }
@@ -146,18 +146,16 @@ object MicrokitCodegen {
             |
             |${Util.doNotEdit}
             |
-            |${(forwardDefs, "\n\n")}
-            |
             |${(defs, "\n\n")}
             |"""
 
-      val outputdir = s"${options.sel4OutputDir.get}/${TypeUtil.cTypesDir}/${MicrokitCodegen.dirInclude}"
-      val path = s"$outputdir/${TypeUtil.cAadlTypesFilename}"
+      val outputdir = s"${options.sel4OutputDir.get}/${MicrokitTypeUtil.cTypesDir}/${MicrokitCodegen.dirInclude}"
+      val path = s"$outputdir/${MicrokitTypeUtil.cAadlTypesFilename}"
       resources = resources :+ ResourceUtil.createResourceH(path, cContent, T, T)
 
-      val cEventCounterPath = s"$baseTypesIncludePath/${TypeUtil.cEventCounterFilename}"
+      val cEventCounterPath = s"$baseTypesIncludePath/${MicrokitTypeUtil.cEventCounterFilename}"
       resources = resources :+ ResourceUtil.createResourceH(
-        path = cEventCounterPath, content = TypeUtil.cEventCounterContent, overwrite = T, isDatatype = T)
+        path = cEventCounterPath, content = MicrokitTypeUtil.cEventCounterContent, overwrite = T, isDatatype = T)
 
       if (modelIsRusty) {
         val rustAadlTypesContent =
@@ -169,15 +167,15 @@ object MicrokitCodegen {
               |
               |${(for (t <- touchedTypes.filter(t => t.rust.rustTypeDeclaration.nonEmpty)) yield t.rust.rustTypeDeclaration, "\n\n")}
               |"""
-        val rustTypesDir = s"${options.sel4OutputDir.get}/${TypeUtil.rustTypesDir}"
-        val outRustTypesPath = s"$rustTypesDir/src/${TypeUtil.rustAadlTypesFilename}"
+        val rustTypesDir = s"${options.sel4OutputDir.get}/${MicrokitTypeUtil.rustTypesDir}"
+        val outRustTypesPath = s"$rustTypesDir/src/${MicrokitTypeUtil.rustAadlTypesFilename}"
         resources = resources :+ ResourceUtil.createResourceH(outRustTypesPath, rustAadlTypesContent, T, T)
 
-        val rustEventCounterPath = s"$rustTypesDir/src/${TypeUtil.rustEventCounterFilename}"
-        resources = resources :+ ResourceUtil.createResourceH(rustEventCounterPath, TypeUtil.rustEventCounterContent, T, T)
+        val rustEventCounterPath = s"$rustTypesDir/src/${MicrokitTypeUtil.rustEventCounterFilename}"
+        resources = resources :+ ResourceUtil.createResourceH(rustEventCounterPath, MicrokitTypeUtil.rustEventCounterContent, T, T)
 
-        val rustMicrokitTypesPath = s"$rustTypesDir/src/${TypeUtil.rustMicrokitTypesFilename}"
-        resources = resources :+ ResourceUtil.createResourceH(rustMicrokitTypesPath, TypeUtil.rustMicrokitTypesContent, T, T)
+        val rustMicrokitTypesPath = s"$rustTypesDir/src/${MicrokitTypeUtil.rustMicrokitTypesFilename}"
+        resources = resources :+ ResourceUtil.createResourceH(rustMicrokitTypesPath, MicrokitTypeUtil.rustMicrokitTypesContent, T, T)
 
         val rustAllTypesContents =
           st"""#![no_std]
@@ -185,26 +183,26 @@ object MicrokitCodegen {
               |
               |${Util.doNotEdit}
               |
-              |mod ${TypeUtil.aadlTypesFilenamePrefix};
-              |pub use ${TypeUtil.aadlTypesFilenamePrefix}::*;
+              |mod ${MicrokitTypeUtil.aadlTypesFilenamePrefix};
+              |pub use ${MicrokitTypeUtil.aadlTypesFilenamePrefix}::*;
               |
-              |mod ${TypeUtil.eventCounterFilenamePrefix};
-              |pub use ${TypeUtil.eventCounterFilenamePrefix}::*;
+              |mod ${MicrokitTypeUtil.eventCounterFilenamePrefix};
+              |pub use ${MicrokitTypeUtil.eventCounterFilenamePrefix}::*;
               |
-              |mod ${TypeUtil.rustMicrokitTypesPrefix};
-              |pub use ${TypeUtil.rustMicrokitTypesPrefix}::*;
+              |mod ${MicrokitTypeUtil.rustMicrokitTypesPrefix};
+              |pub use ${MicrokitTypeUtil.rustMicrokitTypesPrefix}::*;
               |"""
-        val rustAllTypesPath = s"$rustTypesDir/src/${TypeUtil.rustTypesFilename}"
+        val rustAllTypesPath = s"$rustTypesDir/src/${MicrokitTypeUtil.rustTypesFilename}"
         resources = resources :+ ResourceUtil.createResourceH(rustAllTypesPath, rustAllTypesContents, T, T)
 
         val rustTypesCargoPath = s"$rustTypesDir/Cargo.toml"
-        resources = resources :+ ResourceUtil.createResource(rustTypesCargoPath, TypeUtil.rustCargoContent, F)
+        resources = resources :+ ResourceUtil.createResource(rustTypesCargoPath, MicrokitTypeUtil.rustCargoContent, F)
       }
 
-      return ret
+      return DefaultTypeStore(ret, optStringType)
     }
 
-    def processConnections(typeStore: Map[AadlType, TypeStore]): ISZ[ConnectionStore] = {
+    def processConnections(typeStore: TypeStore): ISZ[ConnectionStore] = {
       var ret: ISZ[ConnectionStore] = ISZ()
 
       for (srcThread <- symbolTable.getThreads()) {
@@ -233,7 +231,7 @@ object MicrokitCodegen {
 
           val typeApiContributions: ISZ[TypeApiContributions] =
             (Set.empty[TypeApiContributions] ++ (for (rc <- receiverContributions.values) yield
-              TypeUtil.getTypeApiContributions(rc.aadlType, typeStore.get(rc.aadlType).get, rc.queueSize))).elements
+              MicrokitTypeUtil.getTypeApiContributions(rc.aadlType, typeStore, rc.queueSize))).elements
 
           ret = ret :+
             DefaultConnectionStore(
@@ -252,7 +250,7 @@ object MicrokitCodegen {
         for (unconnectedOutPort <- srcThread.getPorts().filter(p => p.direction == Direction.Out).filter(p => !symbolTable.outConnections.contains(p.path))) {
           val senderContributions = ConnectionUtil.processOutPort(unconnectedOutPort, Map.empty, typeStore)
           val typeApiContributions =
-            TypeUtil.getTypeApiContributions(senderContributions.aadlType, typeStore.get(senderContributions.aadlType).get, senderContributions.queueSize)
+            MicrokitTypeUtil.getTypeApiContributions(senderContributions.aadlType, typeStore, senderContributions.queueSize)
 
           ret = ret :+
             DefaultConnectionStore(
@@ -274,7 +272,7 @@ object MicrokitCodegen {
             typeStore = typeStore, symbolTable = symbolTable)
 
           val typeApiContributions =
-            TypeUtil.getTypeApiContributions(receiverContributions.aadlType, typeStore.get(receiverContributions.aadlType).get, receiverContributions.queueSize)
+            MicrokitTypeUtil.getTypeApiContributions(receiverContributions.aadlType, typeStore, receiverContributions.queueSize)
 
           ret = ret :+
             DefaultConnectionStore(
@@ -680,7 +678,7 @@ object MicrokitCodegen {
             |$utilIncludes
             |#include <stdint.h>
             |#include <microkit.h>
-            |#include <${TypeUtil.cAllTypesFilename}>
+            |#include <${MicrokitTypeUtil.cAllTypesFilename}>
             |
             |${Util.doNotEdit}
             |
@@ -704,7 +702,7 @@ object MicrokitCodegen {
                 |}"""
         }
         val rustUserContent = RustUtil.rustUserContent(threadId, rustUserMethods)
-        val rustUserContentPath = s"$rustComponentSrcPath/$threadId.rs"
+        val rustUserContentPath = s"$rustComponentSrcPath/${threadId}_user.rs"
         resources = resources :+ ResourceUtil.createResource(rustUserContentPath, rustUserContent, F)
 
         val rustApiContent =
@@ -763,13 +761,13 @@ object MicrokitCodegen {
 
     val typeStore = processTypes()
 
-    var typeHeaderFilenames: ISZ[String] = ISZ(TypeUtil.cAadlTypesFilename)
+    var typeHeaderFilenames: ISZ[String] = ISZ(MicrokitTypeUtil.cAadlTypesFilename)
     var typeImplFilenames: ISZ[String] = ISZ()
     var typeObjectNames: ISZ[String] = ISZ()
 
     val connectionStore = processConnections(typeStore)
     for (entry <- connectionStore) {
-      val srcPath = s"${options.sel4OutputDir.get}/${TypeUtil.cTypesDir}/${MicrokitCodegen.dirSrc}"
+      val srcPath = s"${options.sel4OutputDir.get}/${MicrokitTypeUtil.cTypesDir}/${MicrokitCodegen.dirSrc}"
 
       for (tc <- entry.typeApiContributions) {
         typeHeaderFilenames = typeHeaderFilenames :+ tc.headerFilename
@@ -795,7 +793,7 @@ object MicrokitCodegen {
           |
           |${(for (i <- typeHeaderFilenames) yield st"#include <$i>", "\n")}
           |"""
-    val allTypesPath = s"$baseTypesIncludePath/${TypeUtil.cAllTypesFilename}"
+    val allTypesPath = s"$baseTypesIncludePath/${MicrokitTypeUtil.cAllTypesFilename}"
     resources = resources :+ ResourceUtil.createResourceH(
       path = allTypesPath, content = allTypesContent, overwrite = T, isDatatype = T)
 
