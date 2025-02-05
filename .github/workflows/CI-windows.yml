@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        testSuffix: ${{ fromJSON('["BaseBehaviorTestStatic,BaseBehaviorTestDynamic","HamrTranspileTests,GumboTest,MicrokitTests","CodeGenTest_Base","CodegenTest_CASE,Ros2Tests"]') }}
+        testSuffix: ${{ fromJSON('["BaseBehaviorTestStatic,BaseBehaviorTestDynamic","MicrokitTests,HamrTranspileTests,GumboTest","CodeGenTest_Base","CodegenTest_CASE,Ros2Tests"]') }}
     name: '${{ matrix.testSuffix }}'
     steps:
       - name: Support longpaths
