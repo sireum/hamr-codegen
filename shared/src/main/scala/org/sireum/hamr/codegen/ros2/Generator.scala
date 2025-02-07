@@ -2372,6 +2372,7 @@ object Generator {
     for (comp <- threadComponents) {
       cpp_files =
         cpp_files :+ genCppBaseNodeHeaderFile(top_level_package_nameT, comp, connectionMap, datatypeMap, strictAADLMode,
+                                              invertTopicBinding, reporter)
       cpp_files =
         cpp_files :+ genCppBaseNodeCppFile(top_level_package_nameT, comp, connectionMap, datatypeMap, strictAADLMode,
                                            invertTopicBinding, reporter)
