@@ -3,10 +3,16 @@
 package org.sireum.hamr.codegen.ros2
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlPort, AadlThread, Dispatch_Protocol}
+import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlPort, AadlThread, Dispatch_Protocol}
+import org.sireum.hamr.codegen.common.types.AadlType
 import org.sireum.hamr.ir.Direction
+import org.sireum.message.Reporter
+import org.sireum.ops.ISZOps
 
 object GeneratorPy {
+
+  val toolName: String = "Ros2Codegen"
+
   val node_executable_filename_suffix: String = "_exe"
   val launch_node_decl_suffix: String = "_node"
   val py_launch_file_name_suffix: String = ".launch.py"
@@ -56,6 +62,31 @@ object GeneratorPy {
       names = names :+ seqToString(name, "_")
     }
     return names
+  }
+
+  def genPortDatatype(port: AadlPort, packageName: String, datatypeMap: Map[AadlType, (String, ISZ[String])], reporter: Reporter): String = {
+    val s: String = port match {
+      case dp: AadlDataPort =>
+        val dtype = datatypeMap.get(dp.aadlType)
+        if (dtype.nonEmpty) {
+          s"${dtype.get._1}"
+        }
+        else {
+          reporter.error(None(), toolName, s"Port ${port.identifier}: datatype unknown, setting datatype to Empty")
+          s"Empty"
+        }
+      case edp: AadlEventDataPort =>
+        val dtype = datatypeMap.get(edp.aadlType)
+        if (dtype.nonEmpty) {
+          s"${dtype.get._1}"
+        }
+        else {
+          reporter.error(None(), toolName, s"Port ${port.identifier}: datatype unknown, setting datatype to Empty")
+          s"Empty"
+        }
+      case _ => s"Empty"
+    }
+    return s
   }
 
   def seqToString(seq: ISZ[String], separator: String): String = {
@@ -304,55 +335,61 @@ object GeneratorPy {
   //            'fanCmd',
   //            self.handle_fanCmd,
   //            10)
-  def genPyTopicSubscrptionStrict(inPort: AadlPort, nodeName: String, isSporadic: B): ST = {
+  def genPyTopicSubscriptionStrict(inPort: AadlPort, isSporadic: B, portType: String): ST = {
     val topicName = seqToString(inPort.path, "_")
     val portName = inPort.identifier
 
     val handler: ST =
       if (!isSporadic || inPort.isInstanceOf[AadlDataPort]) {
-        st"enqueue(infrastructureIn_${portName}, msg)"
+        st"self.enqueue(infrastructureIn_${portName}, msg)"
       }
       else {
         // TODO: CPP to Py
-        st"""enqueue(infrastructureIn_${portName}, msg)
-          |
-          |"""
+        st"""self.enqueue(infrastructureIn_${portName}, msg);
+            |std::thread([this]() {
+            |    threading.Lock()
+            |    self.receiveInputs(infrastructureIn_${portName}, applicationIn_${portName});
+            |    if (applicationIn_${portName}.empty()) return;
+            |    self.handle_${portName}_base(applicationIn_${portName}.front());
+            |    applicationIn_${portName}.pop();
+            |    self.sendOutputs();
+            |}).detach();"""
       }
 
     // Int32 is a placeholder message value
     val portCode: ST =
       st"""self.${topicName}_subscription_ = self.create_subscription(
-         |                                  Int32,
+         |                                  ${portType},
          |                                  "${topicName}",
          |                                  self.${handler},
          |                                  1,
-         |                                  ${subscription_options_name})
+         |                                  callback_group=self.${subscription_options_name})
          |"""
     return portCode
   }
 
-  def genPyGetApplicationInValue(inPort: AadlPort, nodeName: String): ST = {
+  def genPyGetApplicationInValue(inPort: AadlPort, portType: String): ST = {
     val portName = inPort.identifier
 
     // Int32 is a placeholder message value
     val subscriptionMessageHeader: ST =
       st"""self.get_${portName}()
          |  MsgType msg = applicationIn_${portName}.front()
-         |  return (Int32)msg
+         |  return get<${portType}>(msg)
          |"""
     return subscriptionMessageHeader
   }
 
-  def genPySubscriptionHandlerBaseSporadic(inPort: AadlPort, nodeName: String): ST = {
+  def genPySubscriptionHandlerBaseSporadic(inPort: AadlPort, portType: String): ST = {
     val handlerName = inPort.identifier
 
     // Int32 is a placeholder message value
     val handlerCode: ST =
       st"""def handle_${handlerName}_base(self, msg):
-         |  if isinstance(&msg, Int32):
+         |  if isinstance(get_if<${portType}>(&msg), Int32):
          |    handle_${handlerName}(*typedMsg)
          |  else:
-         |    PRINT_ERROR("Sending out wrong type of variable on port ${handlerName}.\nThis shouldn't be possible.  If you are seeing this message, please notify this tool's current maintainer.")
+         |    this.get_logger().error("Sending out wrong type of variable on port ${handlerName}.\nThis shouldn't be possible.  If you are seeing this message, please notify this tool's current maintainer.")
          |"""
     return handlerCode
   }
@@ -363,7 +400,7 @@ object GeneratorPy {
   //     "${inPortName}",
   //     10,
   //     callback_group=self.${callback_group_name})
-  def genPyTopicPublisher(outPort: AadlPort, inPortNames: ISZ[String]): ST = {
+  def genPyTopicPublisher(outPort: AadlPort, portType: String, inPortNames: ISZ[String]): ST = {
     val portName = seqToString(outPort.path, "_")
 
     if (inPortNames.size == 1) {
@@ -372,7 +409,7 @@ object GeneratorPy {
       // Int32 is a placeholder message value
       val portCode: ST =
         st"""self.${portName}_publisher_ = self.create_publisher(
-           |                              Int32,
+           |                              ${portType},
            |                              "${inPortName}",
            |                              1)
            |"""
@@ -386,7 +423,7 @@ object GeneratorPy {
     for (inPortName <- inPortNames) {
       outputInstances = outputInstances :+
         st"""self.${portName}_publisher_${counter} = self.create_publisher(
-           |                    Int32,
+           |                    ${portType}
            |                    "${inPortName}",
            |                    1)
            |"""
@@ -399,7 +436,7 @@ object GeneratorPy {
     return fanPortCode
   }
 
-  def genPyTopicPublishMethodStrict(outPort: AadlPort, nodeName: String, inputPortCount: Z): ST = {
+  def genPyTopicPublishMethodStrict(outPort: AadlPort, portType: String, inputPortCount: Z): ST = {
     val portName = seqToString(outPort.path, "_")
     val handlerName = outPort.identifier
 
@@ -418,21 +455,21 @@ object GeneratorPy {
     // Int32 is a placeholder message value
     val publisherCode: ST =
       st"""def sendOut_${handlerName}(self, msg):
-         |  if isinstance(&msg, Int32):
+         |  if isinstance(get_if<${portType}>(&msg), Int32):
          |    ${(publishers, "\n")}
          |   else:
-         |    PRINT_ERROR("Sending out wrong type of variable on port ${handlerName}.\nThis shouldn't be possible.  If you are seeing this message, please notify this tool's current maintainer.")
+         |    this.get_logger().error("Sending out wrong type of variable on port ${handlerName}.\nThis shouldn't be possible.  If you are seeing this message, please notify this tool's current maintainer.")
          |"""
     return publisherCode
   }
 
-  def genPyPutMsgMethodStrict(outPort: AadlPort, nodeName: String): ST = {
+  def genPyPutMsgMethodStrict(outPort: AadlPort): ST = {
     val handlerName = outPort.identifier
 
     // Int32 is a placeholder message value
     val putMsgCode: ST =
       st"""def put_${handlerName}(self, msg):
-         |  enqueue(applicationOut_${handlerName}, msg)
+         |  self.enqueue(applicationOut_${handlerName}, msg)
          |"""
     return putMsgCode
   }
@@ -443,28 +480,31 @@ object GeneratorPy {
   //            'fanCmd',
   //            self.handle_fanCmd,
   //            10)
-  def genPyTopicSubscription(inPort: AadlPort, nodeName: String): ST = {
+  def genPyTopicSubscription(inPort: AadlPort, portType: String): ST = {
     val topicName = seqToString(inPort.path, "_")
     val portName = inPort.identifier
 
     // Int32 in a placeholder message value
     val portCode: ST =
       st"""self.${topicName}_subscription_ = self.create_subscription(
-         |  Int32,
+         |  ${portType},
          |  "${topicName}",
+         |  self.handle_${portName},
          |  1,
-         |  ${subscription_options_name}
+         |  callback_group=self.${subscription_options_name}
          |"""
     return portCode
   }
 
-  def genPySubscriptionHandlerPeriodic(inPort: AadlPort, nodeName: String): ST = {
+  def genPySubscriptionHandlerPeriodic(inPort: AadlPort, portType: String): ST = {
     val handlerName = inPort.identifier
 
     // Int32 is a placeholder message value
     val subscriptionHandlerHeader: ST =
       st"""def handle_${handlerName}(self, msg):
-         |  self.${handlerName}_msg_holder = msg
+         |  msgNew = ${portType}()
+         |  msgNew = msg.data
+         |  self.${handlerName}_msg_holder = msgNew
          |"""
     return subscriptionHandlerHeader
   }
@@ -475,9 +515,19 @@ object GeneratorPy {
     // Int32 is a placeholder message value
     val subscriptionMessage: ST =
       st"""def get_${portName}():
-         |  return ${portName}_msg_holder
+         |  return self.${portName}_msg_holder
          |"""
     return subscriptionMessage
+  }
+
+  def genPyFileMsgTypeIncludes(packageName: String, msgTypes: ISZ[String]): ISZ[ST] = {
+    var includes: ISZ[ST] = IS()
+
+    for (msgType <- msgTypes) {
+      includes = includes :+ st"from ${packageName}_interfaces.msg import ${msgType}"
+    }
+
+    return includes
   }
 
   def genPyTopicPublishMethod(outPort: AadlPort, nodeName: String, inputPortCount: Z): ST = {
@@ -514,7 +564,7 @@ object GeneratorPy {
     val period = component.period.get
 
     val timer: ST =
-      st"""self.periodTimer_ = self.create_wall_timer(${period}, self.timeTriggeredCaller, ${callback_group_name})"""
+      st"""self.periodTimer_ = self.create_wall_timer(${period}, self.timeTriggeredCaller, callback_group=self.${callback_group_name})"""
     return timer
   }
 
@@ -522,7 +572,7 @@ object GeneratorPy {
     val period = component.period.get
 
     val timer: ST =
-      st"""self.periodTimer_ = self.create_wall_timer(${period}, self.timeTriggered, ${callback_group_name})"""
+      st"""self.periodTimer_ = self.create_wall_timer(${period}, self.timeTriggered, callback_group=self.${callback_group_name})"""
     return timer
   }
 
@@ -571,9 +621,9 @@ object GeneratorPy {
   def genPyTimeTriggeredCaller(nodeName: String): ST = {
     val timeTriggered: ST =
       st"""def timeTriggeredCaller(self):
-        | receiveInputs()
+        | self.receiveInputs()
         | timeTriggered()
-        | sendOutputs()
+        | self.sendOutputs()
       """
     return timeTriggered
   }
@@ -584,13 +634,13 @@ object GeneratorPy {
         | if !infrastructureQueue.empty():
         |   eventMsg = infrastructureQueue.front()
         |   infrastructureQueue.pop()
-        |   enqueue(applicationQueue, eventMsg)
+        |   self.enqueue(applicationQueue, eventMsg)
         |
         | for port in inDataPortTupleVector:
         |   infrastructureQueue = std::get<0>(port)
         |   if !infrastructureQueue.empty():
         |      msg = infrastructureQueue.front()
-        |      enqueue(*std::get<1>(port), msg)
+        |      self.enqueue(*std::get<1>(port), msg)
       """
     return method
   }
@@ -602,14 +652,14 @@ object GeneratorPy {
         |   auto infrastructureQueue = std::get<0>(port)
         |   if !infrastructureQueue.empty():
         |     msg = infrastructureQueue.front()
-        |     enqueue(*std::get<1>(port), msg)
+        |     self.enqueue(*std::get<1>(port), msg)
         |
         | for port in inEventPortTupleVector:
         |   auto infrastructureQueue = std::get<0>(port)
         |     if !infrastructureQueue.empty():
         |       msg = infrastructureQueue.front()
         |       infrastructureQueue->pop()
-        |       enqueue(*std::get<1>(port), msg)
+        |       self.enqueue(*std::get<1>(port), msg)
       """
     return method
   }
@@ -645,7 +695,7 @@ object GeneratorPy {
   }
 
   def genPyBaseNodePyFile(packageName: String, component: AadlThread, connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
-                          strictAADLMode: B): (ISZ[String], ST) = {
+                          datatypeMap: Map[AadlType, (String, ISZ[String])], strictAADLMode: B, reporter: Reporter): (ISZ[String], ST) = {
     val nodeName = s"${component.pathAsString("_")}_base"
     val fileName = genPyNodeSourceName(nodeName)
 
@@ -659,19 +709,24 @@ object GeneratorPy {
     var inTuplePortNames: ISZ[String] = IS()
     var strictPutMsgMethods: ISZ[ST] = IS()
     var strictSubscriptionHandlerBaseMethods: ISZ[ST] = IS()
+    var msgTypes: ISZ[String] = IS()
 
     var hasInPorts = F
     for (p <- component.getPorts()) {
+      val portDatatype: String = genPortDatatype(p, packageName, datatypeMap, reporter)
+      if (!ISZOps(msgTypes).contains(portDatatype)) {
+        msgTypes = msgTypes :+ portDatatype
+      }
       if (strictAADLMode) {
         if (p.direction == Direction.In) {
-          subscribers = subscribers :+ genPyTopicSubscrptionStrict(p, nodeName, isSporadic(component))
+          subscribers = subscribers :+ genPyTopicSubscriptionStrict(p, isSporadic(component), portDatatype)
           if (!isSporadic(component) || p.isInstanceOf[AadlDataPort]) {
             inTuplePortNames = inTuplePortNames :+ p.identifier
-            subscriptionMessageGetters = subscriptionMessageGetters :+ genPyGetApplicationInValue(p, nodeName)
+            subscriptionMessageGetters = subscriptionMessageGetters :+ genPyGetApplicationInValue(p, portDatatype)
           }
           else {
             strictSubscriptionHandlerBaseMethods = strictSubscriptionHandlerBaseMethods :+
-              genPySubscriptionHandlerBaseSporadic(p, nodeName)
+              genPySubscriptionHandlerBaseSporadic(p, portDatatype)
           }
           hasInPorts = T
         }
@@ -680,23 +735,23 @@ object GeneratorPy {
           if (connectionMap.get(p.path).nonEmpty) {
             val inputPorts = connectionMap.get(p.path).get
             val inputPortNames = getPortNames(inputPorts)
-            publishers = publishers :+ genPyTopicPublisher(p, inputPortNames)
+            publishers = publishers :+ genPyTopicPublisher(p, portDatatype, inputPortNames)
             publisherMethods = publisherMethods :+
-              genPyTopicPublishMethodStrict(p, nodeName, inputPortNames.size)
+              genPyTopicPublishMethodStrict(p, portDatatype, inputPortNames.size)
           }
           else {
             publisherMethods = publisherMethods :+
-              genPyTopicPublishMethodStrict(p, nodeName, 0)
+              genPyTopicPublishMethodStrict(p, portDatatype, 0)
           }
-          strictPutMsgMethods = strictPutMsgMethods :+ genPyPutMsgMethodStrict(p, nodeName)
+          strictPutMsgMethods = strictPutMsgMethods :+ genPyPutMsgMethodStrict(p)
         }
       }
       else {
         if (p.direction == Direction.In) {
-          subscribers = subscribers :+ genPyTopicSubscription(p, nodeName)
+          subscribers = subscribers :+ genPyTopicSubscription(p, portDatatype)
           if (!isSporadic(component) || p.isInstanceOf[AadlDataPort]) {
             subscriberMethods = subscriberMethods :+
-              genPySubscriptionHandlerPeriodic(p, nodeName)
+              genPySubscriptionHandlerPeriodic(p, portDatatype)
             subscriptionMessageGetters = subscriptionMessageGetters :+ genPyGetSubscriptionMessage(p, nodeName)
           }
           hasInPorts = T
@@ -705,7 +760,7 @@ object GeneratorPy {
           if (connectionMap.get(p.path).nonEmpty) {
             val inputPorts = connectionMap.get(p.path).get
             val inputPortNames = getPortNames(inputPorts)
-            publishers = publishers :+ genPyTopicPublisher(p, inputPortNames)
+            publishers = publishers :+ genPyTopicPublisher(p, portDatatype, inputPortNames)
             publisherMethods = publisherMethods :+
               genPyTopicPublishMethod(p, nodeName, inputPortNames.size)
           }
@@ -713,10 +768,24 @@ object GeneratorPy {
       }
     }
 
+    val typeIncludes: ISZ[ST] = genPyFileMsgTypeIncludes(packageName, msgTypes)
+    var stdIncludes: ST =
+      st"""from queue import Queue"""
+
+    if (strictAADLMode) {
+      stdIncludes =
+        st"""${stdIncludes}
+            |#include <vector>
+            |#include <variant>
+            |import threading"""
+    }
+
     var fileBody =
       st"""#!/usr/bin/env python3
         |import rclpy
         |from rclpy.node import Node
+        |${(stdIncludes, "\n")}
+        |${(typeIncludes, "\n")}
         |
         |//=================================================
         |//  D O   N O T   E D I T   T H I S   F I L E
@@ -828,12 +897,12 @@ object GeneratorPy {
             |${genPySendOutputs(nodeName)}"""
     }
 
-    val filePath: ISZ[String] = IS("src", packageName, "src", "base_code", fileName)
+    val filePath: ISZ[String] = IS("src", packageName, packageName, "base_code", fileName)
 
     return (filePath, fileBody)
   }
 
-  def genPySubscriptionHandlerSporadicStrict(inPort: AadlPort, nodeName: String): ST = {
+  def genPySubscriptionHandlerSporadicStrict(inPort: AadlPort): ST = {
     val handlerName = inPort.identifier
 
     // Int32 is a placeholder message value
@@ -846,7 +915,7 @@ object GeneratorPy {
     return subscriptionHandlerHeader
   }
 
-  def genPySubscriptionHandlerSporadic(inPort: AadlPort, nodeName: String): ST = {
+  def genPySubscriptionHandlerSporadic(inPort: AadlPort): ST = {
     val handlerName = inPort.identifier
 
     // Int32 is a placeholder message value
@@ -859,7 +928,7 @@ object GeneratorPy {
     return subscriptionHandlerHeader
   }
 
-  def genPyTimeTriggeredMethod(nodeName: String): ST = {
+  def genPyTimeTriggeredMethod(): ST = {
     val timeTriggered: ST =
       st"""def timeTriggered(self)
           |{
@@ -880,17 +949,17 @@ object GeneratorPy {
         if (p.direction == Direction.In && !p.isInstanceOf[AadlDataPort]) {
           if (strictAADLMode) {
             subscriptionHandlers = subscriptionHandlers :+
-              genPySubscriptionHandlerSporadicStrict(p, nodeName)
+              genPySubscriptionHandlerSporadicStrict(p)
           }
           else {
             subscriptionHandlers = subscriptionHandlers :+
-              genPySubscriptionHandlerSporadic(p, nodeName)
+              genPySubscriptionHandlerSporadic(p)
           }
         }
       }
     }
     else {
-      subscriptionHandlers = subscriptionHandlers :+ genPyTimeTriggeredMethod(nodeName)
+      subscriptionHandlers = subscriptionHandlers :+ genPyTimeTriggeredMethod()
     }
 
     val fileBody =
@@ -902,7 +971,7 @@ object GeneratorPy {
           |//=================================================
           |def initialize(self)
           |{
-          |    PRINT_INFO("Initialize Entry Point invoked");
+          |    self.get_logger().info("Initialize Entry Point invoked");
           |
           |    // Initialize the node
           |}
@@ -913,7 +982,7 @@ object GeneratorPy {
           |${(subscriptionHandlers, "\n")}
         """
 
-    val filePath: ISZ[String] = IS("src", packageName, "src", "user_code", fileName)
+    val filePath: ISZ[String] = IS("src", packageName, packageName, "user_code", fileName)
 
     return (filePath, fileBody)
   }
@@ -932,42 +1001,44 @@ object GeneratorPy {
       st"""#!/usr/bin/env python3
           |import rclpy
           |from rclpy.node import Node
-          |//=================================================
-          |//  D O   N O T   E D I T   T H I S   F I L E
-          |//=================================================
+          |from ${packageName}.user_code.${nodeName}_src import ${nodeName}
+          |#=================================================
+          |#  D O   N O T   E D I T   T H I S   F I L E
+          |#=================================================
           |
-          |${nodeName}::${nodeName}() : ${nodeName}_base()
-          |{
-          |    // Invoke initialize entry point
-          |    initialize();
+          |class ${nodeName}(${nodeName}_base):
+          |  def __init__(self):
+          |    # invoke initialize entry point
+          |    super().__init__()
           |
-          |    PRINT_INFO("${nodeName} infrastructure set up");
-          |}
+          |    ${nodeName}()
           |
-          |int main(int argc, char **argv)
-          |{
-          |    rclcpp::init(argc, argv);
-          |    auto executor = rclcpp::executors::MultiThreadedExecutor();
-          |    auto node = std::make_shared<${nodeName}>();
-          |    executor.add_node(node);
-          |    executor.spin();
-          |    rclcpp::shutdown();
-          |    return 0;
-          |}
+          |    self.get_logger().info("${nodeName} infrastructure set up")
+          |
+          |def main(args=None):
+          |  rclpy.init(args=args)
+          |  node =  ${nodeName}()
+          |  executor = MultiThreadedExecutor()
+          |  executor.add_node(node)
+          |  executor.spin()
+          |  rclpy.shutdown()
+          |
+          |if __name__ == "__main__":
+          |  main()
         """
 
-    val filePath: ISZ[String] = IS("src", packageName, "src", "base_code", fileName)
+    val filePath: ISZ[String] = IS("src", packageName, packageName, "base_code", fileName)
 
     return (filePath, fileBody)
   }
 
   def genPyNodeFiles(modelName: String, threadComponents: ISZ[AadlThread], connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
-                     strictAADLMode: B): ISZ[(ISZ[String], ST)] = {
+                     datatypeMap: Map[AadlType, (String, ISZ[String])], strictAADLMode: B, reporter: Reporter): ISZ[(ISZ[String], ST)] = {
     val top_level_package_nameT: String = genPyPackageName(modelName)
     var py_files: ISZ[(ISZ[String], ST)] = IS()
     for (comp <- threadComponents) {
       py_files =
-        py_files :+ genPyBaseNodePyFile(top_level_package_nameT, comp, connectionMap, strictAADLMode)
+        py_files :+ genPyBaseNodePyFile(top_level_package_nameT, comp, connectionMap, datatypeMap, strictAADLMode, reporter)
       py_files =
         py_files :+ genPyUserNodePyFile(top_level_package_nameT, comp, strictAADLMode)
       py_files :+ genPyNodeRunnerFile(top_level_package_nameT, comp)
@@ -981,13 +1052,13 @@ object GeneratorPy {
 
   // TODO: Python pkgs
   def genPyNodePkg(modelName: String, threadComponents: ISZ[AadlThread], connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
-                   strictAADLMode: B): ISZ[(ISZ[String], ST)] = {
+                   datatypeMap: Map[AadlType, (String, ISZ[String])], strictAADLMode: B, reporter: Reporter): ISZ[(ISZ[String], ST)] = {
     var files: ISZ[(ISZ[String], ST)] = IS()
 
     files = files :+ genPyFormatLaunchFile(modelName, threadComponents)
     files = files :+ genPySetupFile(modelName, threadComponents)
 
-    for(file <- genPyNodeFiles(modelName, threadComponents, connectionMap, strictAADLMode)) {
+    for(file <- genPyNodeFiles(modelName, threadComponents, connectionMap, datatypeMap, strictAADLMode, reporter)) {
       files = files :+ file
     }
 
