@@ -368,13 +368,29 @@ object GeneratorPy {
     return portCode
   }
 
+  def genPyInfrastructureInQueue(inPort: AadlPort): ST = {
+    val portName = inPort.identifier
+
+    val inMsgQueue: ST =
+      st"self.infrastructureIn_${portName} = Queue()"
+    return inMsgQueue
+  }
+
+  def genPyApplicationInQueue(inPort: AadlPort): ST = {
+    val portName = inPort.identifier
+
+    val inMsgQueue: ST =
+      st"self.applicationIn_${portName} = Queue()"
+    return inMsgQueue
+  }
+
   def genPyGetApplicationInValue(inPort: AadlPort, portType: String): ST = {
     val portName = inPort.identifier
 
     // Int32 is a placeholder message value
     val subscriptionMessageHeader: ST =
       st"""self.get_${portName}()
-         |  MsgType msg = applicationIn_${portName}.front()
+         |  msg = applicationIn_${portName}.front()
          |  return get<${portType}>(msg)
          |"""
     return subscriptionMessageHeader
@@ -520,6 +536,30 @@ object GeneratorPy {
     return subscriptionMessage
   }
 
+  def genPySubscriptionMessageVar(inPort: AadlPort): ST = {
+    val portName = inPort.identifier
+
+    val subscriptionMessageVar: ST =
+      st"self.${portName}_msg_holder;"
+    return subscriptionMessageVar
+  }
+
+  def genPyInfrastructureOutQueue(inPort: AadlPort): ST = {
+    val portName = inPort.identifier
+
+    val outMsgQueue: ST =
+      st"self.infrastructureOut_${portName} = Queue()"
+    return outMsgQueue
+  }
+
+  def genPyApplicationOutQueue(inPort: AadlPort): ST = {
+    val portName = inPort.identifier
+
+    val outMsgQueue: ST =
+      st"self.applicationOut_${portName} = Queue()"
+    return outMsgQueue
+  }
+
   def genPyFileMsgTypeIncludes(packageName: String, msgTypes: ISZ[String]): ISZ[ST] = {
     var includes: ISZ[ST] = IS()
 
@@ -580,12 +620,13 @@ object GeneratorPy {
     var tuples: ISZ[String] = IS()
 
     for (name <- portNames) {
-      tuples = tuples :+ s"{&infrastructureIn_${name}, &applicationIn_${name}}"
+      tuples = tuples :+ s"[self.infrastructureIn_${name}, self.applicationIn_${name}]"
     }
 
     val vector: ST =
-      st"""inDataPortTupleVector =
-        | ${(tuples, ",\n")}
+      st"""inDataPortTupleVector = [
+        |   ${(tuples, ",\n")}
+        | ]
       """
     return vector
   }
@@ -594,12 +635,13 @@ object GeneratorPy {
     var tuples: ISZ[String] = IS()
 
     for (name <- portNames) {
-      tuples = tuples :+ s"{&infrastructureIn_${name}, &applicationIn_${name}}"
+      tuples = tuples :+ s"[self.infrastructureIn_${name}, self.applicationIn_${name}]"
     }
 
      val vector: ST =
-       st"""inEventPortTupleVector =
-         |  ${(tuples, ",\n")}
+       st"""inEventPortTupleVector = [
+         |   ${(tuples, ",\n")}
+         |  ]
        """
      return vector
   }
@@ -608,12 +650,13 @@ object GeneratorPy {
     var tuples: ISZ[String] = IS()
 
     for (name <- portNames) {
-      tuples = tuples :+ s"{&applicationOut_${name}, &infrastructureOut_${name}, &self.sendOut_${name}}"
+      tuples = tuples :+ s"[self.applicationOut_${name}, self.infrastructureOut_${name}, self.sendOut_${name}]"
     }
 
     val vector: ST =
-      st"""outPortTupleVector =
-        | ${(tuples, ",\n")}
+      st"""outPortTupleVector = [
+        |   ${(tuples, ",\n")}
+        | ]
       """
     return vector
   }
@@ -637,10 +680,10 @@ object GeneratorPy {
         |   self.enqueue(applicationQueue, eventMsg)
         |
         | for port in inDataPortTupleVector:
-        |   infrastructureQueue = std::get<0>(port)
+        |   infrastructureQueue = port[0]
         |   if !infrastructureQueue.empty():
         |      msg = infrastructureQueue.front()
-        |      self.enqueue(*std::get<1>(port), msg)
+        |      self.enqueue(*port[1], msg)
       """
     return method
   }
@@ -649,17 +692,17 @@ object GeneratorPy {
     val method: ST =
       st"""def receiveInputs(self):
         | for port in inDataPortTupleVector:
-        |   auto infrastructureQueue = std::get<0>(port)
+        |   infrastructureQueue = port[0]
         |   if !infrastructureQueue.empty():
         |     msg = infrastructureQueue.front()
-        |     self.enqueue(*std::get<1>(port), msg)
+        |     self.enqueue(*port[1], msg)
         |
         | for port in inEventPortTupleVector:
-        |   auto infrastructureQueue = std::get<0>(port)
-        |     if !infrastructureQueue.empty():
-        |       msg = infrastructureQueue.front()
-        |       infrastructureQueue->pop()
-        |       self.enqueue(*std::get<1>(port), msg)
+        |   infrastructureQueue = port[0]
+        |   if !infrastructureQueue.empty():
+        |     msg = infrastructureQueue.front()
+        |     infrastructureQueue.pop()
+        |     self.enqueue(*port[1], msg)
       """
     return method
   }
@@ -678,18 +721,18 @@ object GeneratorPy {
     val method: ST =
       st"""def sendOutputs(self):
           | for port in outPortTupleVector:
-          |   applicationQueue = std::get<0>(port)
+          |   applicationQueue = port[0]
           |   if applicationQueue.size() != 0:
           |     msg = applicationQueue.front()
           |     applicationQueue.pop()
-          |     enqueue(*std::get<1>(port), msg)
+          |     enqueue(*port[1], msg)
           |
           | for port in outPortTupleVector:
-          |   infrastructureQueue = std::get<1>(port)
+          |   infrastructureQueue = port[1]
           |   if infrastructureQueue.size() != 0:
           |     msg = infrastructureQueue.front()
           |     infrastructureQueue.pop()
-          |     (this->*std::get<2>(port))(msg)
+          |     (this->*port[2])(msg)
         """
     return method
   }
@@ -711,6 +754,9 @@ object GeneratorPy {
     var strictSubscriptionHandlerBaseMethods: ISZ[ST] = IS()
     var msgTypes: ISZ[String] = IS()
 
+    var inMsgVars: ISZ[ST] = IS()
+    var outMsgVars: ISZ[ST] = IS()
+
     var hasInPorts = F
     for (p <- component.getPorts()) {
       val portDatatype: String = genPortDatatype(p, packageName, datatypeMap, reporter)
@@ -720,6 +766,8 @@ object GeneratorPy {
       if (strictAADLMode) {
         if (p.direction == Direction.In) {
           subscribers = subscribers :+ genPyTopicSubscriptionStrict(p, isSporadic(component), portDatatype)
+          inMsgVars = inMsgVars :+ genPyInfrastructureInQueue(p)
+          inMsgVars = inMsgVars :+ genPyApplicationInQueue(p)
           if (!isSporadic(component) || p.isInstanceOf[AadlDataPort]) {
             inTuplePortNames = inTuplePortNames :+ p.identifier
             subscriptionMessageGetters = subscriptionMessageGetters :+ genPyGetApplicationInValue(p, portDatatype)
@@ -753,10 +801,13 @@ object GeneratorPy {
             subscriberMethods = subscriberMethods :+
               genPySubscriptionHandlerPeriodic(p, portDatatype)
             subscriptionMessageGetters = subscriptionMessageGetters :+ genPyGetSubscriptionMessage(p, nodeName)
+            inMsgVars = inMsgVars :+ genPySubscriptionMessageVar(p)
           }
           hasInPorts = T
         }
         else {
+          outMsgVars = outMsgVars :+ genPyInfrastructureOutQueue(p)
+          outMsgVars = outMsgVars :+ genPyApplicationOutQueue(p)
           if (connectionMap.get(p.path).nonEmpty) {
             val inputPorts = connectionMap.get(p.path).get
             val inputPortNames = getPortNames(inputPorts)
@@ -775,8 +826,7 @@ object GeneratorPy {
     if (strictAADLMode) {
       stdIncludes =
         st"""${stdIncludes}
-            |#include <vector>
-            |#include <variant>
+            |from typing import Union
             |import threading"""
     }
 
@@ -787,9 +837,9 @@ object GeneratorPy {
         |${(stdIncludes, "\n")}
         |${(typeIncludes, "\n")}
         |
-        |//=================================================
-        |//  D O   N O T   E D I T   T H I S   F I L E
-        |//=================================================
+        |#=================================================
+        |#  D O   N O T   E D I T   T H I S   F I L E
+        |#=================================================
         |
         |class ${nodeName}(Node):
         |   def __init__(self):
@@ -797,6 +847,13 @@ object GeneratorPy {
         |
         |       ${genPyCallbackGroupVar()}
       """
+
+    if (strictAADLMode) {
+      fileBody =
+        st"""${fileBody}
+            |    MsgType = Union[${(msgTypes, ", ")}]
+          """
+    }
 
     if (hasInPorts) {
       fileBody =
@@ -807,21 +864,21 @@ object GeneratorPy {
 
     fileBody =
       st"""${fileBody}
-         |  // Setting up connections
+         |  # Setting up connections
          |  ${(subscribers ++ publishers, "\n")}"""
 
     if(!isSporadic(component)) {
       if (strictAADLMode) {
         fileBody =
           st"""${fileBody}
-             |  // timeTriggeredCaller callback timer
+             |  # timeTriggeredCaller callback timer
              |  ${genPyTimeTriggeredStrict(nodeName, component)}
            """
       }
       else {
         fileBody =
           st"""${fileBody}
-             |  // timeTriggered callback timer
+             |  # timeTriggered callback timer
              |  ${genPyTimeTriggeredTimer(nodeName, component)}
            """
       }
@@ -830,29 +887,43 @@ object GeneratorPy {
     if(strictAADLMode) {
       fileBody =
         st"""${fileBody}
-           |  // Used by receiveInputs
+           |  # Used by receiveInputs
            |  ${genPyInDataPortTupleVector(inTuplePortNames)}"""
 
       if (!isSporadic(component)) {
         fileBody =
           st"""${fileBody}
-             |  // Used by receiveInputs
+             |  # Used by receiveInputs
              |  ${genPyInEventPortTupleVector(inTuplePortNames)}"""
       }
 
       fileBody =
         st"""${fileBody}
-           |  // Used by sendOutputs
+           |  # Used by sendOutputs
            |  ${genPyOutPortTupleVector(nodeName, outPortNames)}"""
     }
 
     if (subscriberMethods.size > 0 || publisherMethods.size > 0) {
       fileBody =
         st"""${fileBody}
-            |//=================================================
-            |//  C o m m u n i c a t i o n
-            |//=================================================
+            |#=================================================
+            |#  C o m m u n i c a t i o n
+            |#=================================================
           """
+
+      if (inMsgVars.size > 0) {
+        fileBody =
+          st"""${fileBody}
+              |    ${(inMsgVars, "\n")}
+          """
+      }
+
+      if (outMsgVars.size > 0) {
+        fileBody =
+          st"""${fileBody}
+              |    ${(outMsgVars, "\n")}
+          """
+      }
 
       if (subscriberMethods.size > 0) {
         fileBody =
@@ -909,7 +980,7 @@ object GeneratorPy {
     val subscriptionHandlerHeader: ST =
       st"""def handle_${handlerName}(self, msg)
           |{
-          |    // Handle ${handlerName} msg
+          |    # Handle ${handlerName} msg
           |}
         """
     return subscriptionHandlerHeader
@@ -922,7 +993,7 @@ object GeneratorPy {
     val subscriptionHandlerHeader: ST =
       st"""def handle_${handlerName}(self, msg)
           |{
-          |    // Handle ${handlerName} msg
+          |    # Handle ${handlerName} msg
           |}
         """
     return subscriptionHandlerHeader
@@ -932,7 +1003,7 @@ object GeneratorPy {
     val timeTriggered: ST =
       st"""def timeTriggered(self)
           |{
-          |    // Handle communication
+          |    # Handle communication
           |}
         """
     return timeTriggered
@@ -966,19 +1037,19 @@ object GeneratorPy {
       st"""#!/usr/bin/env python3
           |import rclpy
           |from rclpy.node import Node
-          |//=================================================
-          |//  I n i t i a l i z e    E n t r y    P o i n t
-          |//=================================================
+          |#=================================================
+          |#  I n i t i a l i z e    E n t r y    P o i n t
+          |#=================================================
           |def initialize(self)
           |{
           |    self.get_logger().info("Initialize Entry Point invoked");
           |
-          |    // Initialize the node
+          |    # Initialize the node
           |}
           |
-          |//=================================================
-          |//  C o m p u t e    E n t r y    P o i n t
-          |//=================================================
+          |#=================================================
+          |#  C o m p u t e    E n t r y    P o i n t
+          |#=================================================
           |${(subscriptionHandlers, "\n")}
         """
 
@@ -1041,7 +1112,8 @@ object GeneratorPy {
         py_files :+ genPyBaseNodePyFile(top_level_package_nameT, comp, connectionMap, datatypeMap, strictAADLMode, reporter)
       py_files =
         py_files :+ genPyUserNodePyFile(top_level_package_nameT, comp, strictAADLMode)
-      py_files :+ genPyNodeRunnerFile(top_level_package_nameT, comp)
+      py_files =
+        py_files :+ genPyNodeRunnerFile(top_level_package_nameT, comp)
     }
     return py_files
   }
@@ -1055,12 +1127,9 @@ object GeneratorPy {
                    datatypeMap: Map[AadlType, (String, ISZ[String])], strictAADLMode: B, reporter: Reporter): ISZ[(ISZ[String], ST)] = {
     var files: ISZ[(ISZ[String], ST)] = IS()
 
-    files = files :+ genPyFormatLaunchFile(modelName, threadComponents)
+    //files = files :+ genPyFormatLaunchFile(modelName, threadComponents)
     files = files :+ genPySetupFile(modelName, threadComponents)
-
-    for(file <- genPyNodeFiles(modelName, threadComponents, connectionMap, datatypeMap, strictAADLMode, reporter)) {
-      files = files :+ file
-    }
+    files = files ++ genPyNodeFiles(modelName, threadComponents, connectionMap, datatypeMap, strictAADLMode, reporter)
 
     return files
   }
