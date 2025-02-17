@@ -64,6 +64,8 @@ jobs:
           # via workflow dispatch
           VERBOSE_DEBUG: ${{ ( runner.debug == '1' || inputs.verbose == '1' ) && ',verbose' || '' }}
         run: |
+          export SEL4_CAMKES_ENV=true 
+          
           # github sets HOME to /github/home but some tools (Sireum's Os.home, Haskell) use
           # the containers /root instead leading to inconsistent installs. Setting HOME
           # to be root resolves the issue
