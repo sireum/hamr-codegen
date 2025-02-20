@@ -66,19 +66,23 @@ object QueueTemplate {
 
   ///// SENDER APIs
 
-  def getClientPutMethodSig(portName: String,
-                            queueElementTypeName: String,
-                            isEventPort: B): ST = {
+
+
+
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  def getClientPut_C_MethodSig(portName: String,
+                               queueElementTypeName: String,
+                               isEventPort: B): ST = {
     val param: Option[ST] = if (isEventPort) None() else Some(st"const $queueElementTypeName *data")
     val methodName = st"put_${portName}"
     return st"""bool $methodName($param)"""
   }
 
-  def getClientPutMethod(portName: String,
-                         queueElementTypeName: String,
-                         entries: ISZ[ST],
-                         isEventPort: B): ST = {
-    val methodSig = getClientPutMethodSig(portName, queueElementTypeName, isEventPort)
+  def getClientPut_C_Method(portName: String,
+                            queueElementTypeName: String,
+                            entries: ISZ[ST],
+                            isEventPort: B): ST = {
+    val methodSig = getClientPut_C_MethodSig(portName, queueElementTypeName, isEventPort)
     return (
       st"""$methodSig {
           |  ${(entries, "\n\n")}
@@ -86,6 +90,28 @@ object QueueTemplate {
           |  return true;
           |}""")
   }
+
+  def getClientPut_rust_MethodSig(portName: String,
+                                  queueElementTypeName: String,
+                                  isEventPort: B,
+                                  unsafe: B): ST = {
+    val param: Option[ST] = if (isEventPort) None() else Some(st"data: *mut $queueElementTypeName")
+    val methodName = st"${if(unsafe) "unsafe_" else ""}put_${portName}"
+    return st"""pub fn $methodName($param) -> bool"""
+  }
+
+  def getClientPut_rust_UnsafeMethod(portName: String,
+                                     queueElementTypeName: String,
+                                     isEventPort: B): ST = {
+    val externMethodName = s"put_$portName"
+    val unsafeMethodSig = getClientPut_rust_MethodSig(portName, queueElementTypeName, isEventPort, T)
+    return (
+      st"""$unsafeMethodSig {
+          |  return unsafe { $externMethodName(data) };
+          |}""")
+  }
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 
   def getClientPutEntry(sharedMemoryVarName: String,
                         queueElementTypeName: String,
@@ -136,50 +162,82 @@ object QueueTemplate {
   }
 
 
-  def getClientIsEmptyMethodName(portName: String): ST = {
-    return st"${portName}_is_empty"
-  }
-
-  def getClientIsEmptyMethodSig(portName: String): ST = {
-    return st"bool ${getClientIsEmptyMethodName(portName)}(void)"
-  }
-
-  def getClientIsEmptyMethod(portName: String,
-                             queueElementTypeName: String,
-                             queueSize: Z): ST = {
-    val methodName = getQueueIsEmptyMethodName(queueElementTypeName, queueSize)
-    val recvQueueMemVarName = getClientRecvQueueName(portName)
-
-    return st"""${getClientIsEmptyMethodSig(portName)} {
-               |  return ${methodName}(&$recvQueueMemVarName);
-               |}"""
-  }
-
   def getClientDequeueSharedVarName(portName: String,
                                     queueSize: Z): String = {
     return s"${portName}_queue_${queueSize}"
   }
 
-  def getClientGetterMethodName(portName: String): ST = {
+  def getClientGetterPollMethodName(portName: String): ST = {
     return st"get_${portName}_poll"
   }
 
-  def getClientGetterMethodPollSig(portName: String,
-                                   queueElementTypeName: String,
-                                   isEventPort: B): ST = {
-    val methodName = getClientGetterMethodName(portName)
+  def getClientGetterMethodName(portName: String): ST = {
+    return st"get_${portName}"
+  }
+
+
+  //////////////////////////////////////////////////////////////////////////////
+  // BEGIN client isEmpty
+  //////////////////////////////////////////////////////////////////////////////
+  def getClientIsEmptyMethodName(portName: String): ST = {
+    return st"${portName}_is_empty"
+  }
+
+  def getClientIsEmpty_C_MethodSig(portName: String): ST = {
+    return st"bool ${getClientIsEmptyMethodName(portName)}(void)"
+  }
+
+  def getClientIsEmpty_C_Method(portName: String,
+                                queueElementTypeName: String,
+                                queueSize: Z): ST = {
+    val methodName = getQueueIsEmptyMethodName(queueElementTypeName, queueSize)
+    val recvQueueMemVarName = getClientRecvQueueName(portName)
+
+    return st"""${getClientIsEmpty_C_MethodSig(portName)} {
+               |  return ${methodName}(&$recvQueueMemVarName);
+               |}"""
+  }
+
+  def getClientIsEmpty_rust_MethodSig(portName: String,
+                                      unsafe: B): ST = {
+    val methodName = getClientIsEmptyMethodName(portName)
+    return st"pub fn ${if (unsafe) "unsafe_" else ""}${methodName}() -> bool"
+  }
+
+  def getClientIsEmpty_rust_UnsafeMethod(portName: String): ST = {
+    val methodName = getClientIsEmptyMethodName(portName)
+    val methodSigUnsafe = getClientIsEmpty_rust_MethodSig(portName, T)
+
+    return st"""$methodSigUnsafe {
+               |  return unsafe { ${methodName}() };
+               |}"""
+  }
+  //////////////////////////////////////////////////////////////////////////////
+  // END client isEmpty
+  //////////////////////////////////////////////////////////////////////////////
+
+
+
+
+  //////////////////////////////////////////////////////////////////////////////
+  // BEGIN client poll
+  //////////////////////////////////////////////////////////////////////////////
+  def getClientGetter_C_MethodPollSig(portName: String,
+                                      queueElementTypeName: String,
+                                      isEventPort: B): ST = {
+    val methodName = getClientGetterPollMethodName(portName)
     val optEventData: Option[ST]=
       if (isEventPort) None()
       else Some(st", $queueElementTypeName *data")
-    return st"bool $methodName(${TypeUtil.eventCounterTypename} *numDropped$optEventData)"
+    return st"bool $methodName(${MicrokitTypeUtil.eventCounterTypename} *numDropped$optEventData)"
   }
 
-  def getClientGetterMethodPoll(portName: String,
-                                queueElementTypeName: String,
-                                queueSize: Z,
-                                isEventPort: B): ST = {
+  def getClientGetter_C_MethodPoll(portName: String,
+                                   queueElementTypeName: String,
+                                   queueSize: Z,
+                                   isEventPort: B): ST = {
     val apiMethodName = getQueueDequeueMethodName(queueElementTypeName, queueSize)
-    val methodSig = getClientGetterMethodPollSig(portName, queueElementTypeName, isEventPort)
+    val methodSig = getClientGetter_C_MethodPollSig(portName, queueElementTypeName, isEventPort)
     val recvQueueMemVarName = getClientRecvQueueName(portName)
     val queueTypeName = getTypeRecvQueueTypeName(queueElementTypeName, queueSize)
     val optEvent: Option[ST] =
@@ -194,13 +252,40 @@ object QueueTemplate {
           |}""")
   }
 
+  def getClientGetter_rust_MethodPollSig(portName: String,
+                                         queueElementTypeName: String,
+                                         isEventPort: B,
+                                         unsafe: B): ST = {
+    val methodName = st"${if (unsafe) "unsafe_" else ""}${getClientGetterPollMethodName(portName)}"
+    val optEventData: Option[ST]=
+      if (isEventPort) None()
+      else Some(st", data: *mut $queueElementTypeName")
+    return st"pub fn $methodName(num_dropped: *mut ${MicrokitTypeUtil.eventCounterTypename}$optEventData)"
+  }
 
-  def getClientDataGetterMethod(portName: String,
-                                queueElementTypeName: String,
-                                queueSize: Z,
-                                aadlType: AadlType): ST = {
+  def getClientGetter_rust_UnsafeMethodPoll(portName: String,
+                                            queueElementTypeName: String,
+                                            queueSize: Z,
+                                            isEventPort: B): ST = {
+    val methodName = getClientGetterPollMethodName(portName)
+    val methodSigUnsafe = getClientGetter_rust_MethodPollSig(portName, queueElementTypeName, isEventPort, T)
+    return (
+      st"""$methodSigUnsafe {
+          |  return unsafe { $methodName(num_dropped, data) };
+          |}""")
+  }
+  //////////////////////////////////////////////////////////////////////////////
+  // END client poll
+  //////////////////////////////////////////////////////////////////////////////
+
+
+
+  def getClientDataGetter_C_Method(portName: String,
+                                   queueElementTypeName: String,
+                                   queueSize: Z,
+                                   aadlType: AadlType): ST = {
     val apiMethodName = getQueueDequeueMethodName(queueElementTypeName, queueSize)
-    val methodSig = getClientGetterMethodSig(portName, queueElementTypeName, F)
+    val methodSig = getClientGetter_C_MethodSig(portName, queueElementTypeName, F)
     val recvQueueMemVarName = getClientRecvQueueName(portName)
     val queueTypeName = getTypeRecvQueueTypeName(queueElementTypeName, queueSize)
 
@@ -208,8 +293,8 @@ object QueueTemplate {
 
     val (copyInfra, copyUser): (ST, ST) = aadlType match {
       case a: ArrayType => (
-        st"memcpy(&$lastName, &fresh_data, ${TypeUtil.getArrayByteSizeDefineName(a)})",
-        st"memcpy(data, &$lastName, ${TypeUtil.getArrayByteSizeDefineName(a)})")
+        st"memcpy(&$lastName, &fresh_data, ${MicrokitTypeUtil.getArrayStringByteSizeDefineName(a)})",
+        st"memcpy(data, &$lastName, ${MicrokitTypeUtil.getArrayStringByteSizeDefineName(a)})")
       case _ => (
         st"$lastName = fresh_data",
         st"*data = $lastName")
@@ -219,7 +304,7 @@ object QueueTemplate {
       st"""${queueElementTypeName} $lastName;
           |
           |$methodSig {
-          |  ${TypeUtil.eventCounterTypename} numDropped;
+          |  ${MicrokitTypeUtil.eventCounterTypename} numDropped;
           |  ${queueElementTypeName} fresh_data;
           |  bool isFresh = $apiMethodName(($queueTypeName *) &$recvQueueMemVarName, &numDropped, &fresh_data);
           |  if (isFresh) {
@@ -230,28 +315,77 @@ object QueueTemplate {
           |}""")
   }
 
-  def getClientGetterMethodSig(portName: String,
-                               queueElementTypeName: String,
-                               isEventPort: B): ST = {
+  def getClientDataGetter_rust_UnsafeMethod(portName: String,
+                                            queueElementTypeName: String,
+                                            queueSize: Z,
+                                            aadlType: AadlType): ST = {
+    val externMethodName = getClientGetterMethodName(portName)
+    val unsafeMethodSig = getClientGetter_rust_MethodSig(
+      portName = portName, queueElementTypeName = queueElementTypeName, isEventPort = F, unsafe = T)
+    return (
+      st"""$unsafeMethodSig {
+          |  return unsafe { $externMethodName(data) };
+          |}""")
+  }
+
+
+
+  /////////////////////////////////////////////////////////////////////////////////////////////
+  // BEGIN client getter
+  /////////////////////////////////////////////////////////////////////////////////////////////
+
+  def getClientGetter_C_MethodSig(portName: String,
+                                  queueElementTypeName: String,
+                                  isEventPort: B): ST = {
+    val methodName = getClientGetterMethodName(portName)
     val optEventDataPort: Option[ST] =
       if (isEventPort) None()
       else Some(st"$queueElementTypeName *data")
-    return st"bool get_${portName}($optEventDataPort)"
+    return st"bool $methodName($optEventDataPort)"
   }
 
-  def getClientGetterMethod(portName: String,
-                            queueElementTypeName: String,
-                            isEventPort: B): ST = {
-    val methodSig = getClientGetterMethodSig(portName, queueElementTypeName, isEventPort)
-    val methodName = getClientGetterMethodName(portName)
+  def getClientGetter_C_Method(portName: String,
+                               queueElementTypeName: String,
+                               isEventPort: B): ST = {
+    val methodSig = getClientGetter_C_MethodSig(portName, queueElementTypeName, isEventPort)
+    val methodName = getClientGetterPollMethodName(portName)
     val optEventData: Option[ST] =
       if(isEventPort) None() else Some(st", data")
     return (
       st"""$methodSig {
-          |  ${TypeUtil.eventCounterTypename} numDropped;
+          |  ${MicrokitTypeUtil.eventCounterTypename} numDropped;
           |  return $methodName (&numDropped$optEventData);
           |}""")
   }
+
+
+  def getClientGetter_rust_MethodSig(portName: String,
+                                     queueElementTypeName: String,
+                                     isEventPort: B,
+                                     unsafe: B): ST = {
+    val methodName = getClientGetterMethodName(portName)
+    val optEventDataPort: Option[ST] =
+      if (isEventPort) None()
+      else Some(st"data: *mut $queueElementTypeName")
+    return st"pub fn ${if (unsafe) "unsafe_" else ""}$methodName($optEventDataPort) -> bool"
+  }
+
+  def getClientGetter_rust_UnsafeMethod(portName: String,
+                                        queueElementTypeName: String,
+                                        isEventPort: B): ST = {
+    val methodName = getClientGetterMethodName(portName)
+    val methodSigUnsafe = getClientGetter_rust_MethodSig(portName, queueElementTypeName, isEventPort, T)
+    val optEventData: Option[ST] =
+      if(isEventPort) None() else Some(st"data")
+    return (
+      st"""$methodSigUnsafe {
+          |  return unsafe { $methodName($optEventData) };
+          |}""")
+  }
+  /////////////////////////////////////////////////////////////////////////////////////////////
+  // END client getter
+  /////////////////////////////////////////////////////////////////////////////////////////////
+
 
   def getClientEventHandlerMethodName(portName: String): ST = {
     return st"handle_$portName"
@@ -310,14 +444,14 @@ object QueueTemplate {
           |// receiver dequeue can fail and drop data if the sender writes while the
           |// receiver is reading. This situation is detected unless the sender gets
           |// ahead of a receiver by more than COUNTER_MAX. Since COUNTER_MAX is typically
-          |// 2^64 (see ${TypeUtil.eventCounterFilename}), this is extremely unlikely. If it does happen the
+          |// 2^64 (see ${MicrokitTypeUtil.cEventCounterFilename}), this is extremely unlikely. If it does happen the
           |// only adverse effect is that the receiver will not detect all dropped
           |// elements.
           |
           |#pragma once
           |
-          |#include <${TypeUtil.eventCounterFilename}>
-          |#include <${TypeUtil.aadlTypesFilename}>
+          |#include <${MicrokitTypeUtil.cEventCounterFilename}>
+          |#include <${MicrokitTypeUtil.cAadlTypesFilename}>
           |
           |#include <stdbool.h>
           |#include <stddef.h>
@@ -329,7 +463,7 @@ object QueueTemplate {
           |#include <libvmm/util/util.h>
           |#endif
           |
-          |// Queue size must be an integer factor of the size for ${TypeUtil.eventCounterTypename} (an unsigned
+          |// Queue size must be an integer factor of the size for ${MicrokitTypeUtil.eventCounterTypename} (an unsigned
           |// integer type). Since we are using standard C unsigned integers for the
           |// counter, picking a queue size that is a power of 2 is a good choice. We
           |// could alternatively set the size of our counter to the largest possible
@@ -350,12 +484,12 @@ object QueueTemplate {
           |  // Number of elements enqueued by the sender. The implementation depends
           |  // on C's standard module behaviour for unsigned integers. The counter never
           |  // overflows. It just wraps modulo the size of the counter type. The counter
-          |  // is typically very large (see ${TypeUtil.eventCounterFilename}), so this should happen very
+          |  // is typically very large (see ${MicrokitTypeUtil.cEventCounterFilename}), so this should happen very
           |  // infrequently. Depending in C to initialize this to zero.
-          |  _Atomic ${TypeUtil.eventCounterTypename} numSent;
+          |  _Atomic ${MicrokitTypeUtil.eventCounterTypename} numSent;
           |
           |  // Queue of elements of type ${queueElementTypeName}
-          |  // (see ${TypeUtil.typesFilename}) implemented as a ring buffer.
+          |  // (see ${MicrokitTypeUtil.cTypesFilename}) implemented as a ring buffer.
           |  // No initialization necessary.
           |  ${queueElementTypeName} elt[${queueSizeMacroName}];
           |
@@ -388,7 +522,7 @@ object QueueTemplate {
           |  // counter never overflows. It just wraps modulo the size of the counter
           |  // type. The counter is typically very large (see counter.h), so this should
           |  // happen very infrequently.
-          |  ${TypeUtil.eventCounterTypename} numRecv;
+          |  ${MicrokitTypeUtil.eventCounterTypename} numRecv;
           |
           |  // Pointer to the actual queue. This is the seL4 dataport (shared memory)
           |  // that is shared by the sender and all receivers.
@@ -420,11 +554,11 @@ object QueueTemplate {
           |// If the sender ever gets ahead of a receiver by more than COUNTER_MAX,
           |// ${queueName}_dequeue will fail to count a multiple of COUNTER_MAX in
           |// numDropped. Since COUNTER_MAX is very large (typically on the order of 2^64,
-          |// see ${TypeUtil.eventCounterFilename}), this is very unlikely.  If the sender is ever this far
+          |// see ${MicrokitTypeUtil.cEventCounterFilename}), this is very unlikely.  If the sender is ever this far
           |// ahead of a receiver the system is probably in a very bad state.
           |bool ${queueName}_dequeue(
           |  ${recvQueueTypeName} *recvQueue,
-          |  ${TypeUtil.eventCounterTypename} *numDropped,
+          |  ${MicrokitTypeUtil.eventCounterTypename} *numDropped,
           |  ${queueElementTypeName} *data);
           |
           |// Is queue empty? If the queue is not empty, it will stay that way until the
@@ -435,13 +569,9 @@ object QueueTemplate {
     return r
   }
 
-  def implementation( //queueHeaderFilename: String,
-                      queueElementTypeName: String,
-                      queueSize: Z,
-                      aadlType: AadlType
-
-                      //counterTypeName: String
-                    ): ST = {
+  def implementation(aadlType: AadlType,
+                     queueElementTypeName: String,
+                     queueSize: Z): ST = {
 
     val queueName = getTypeQueueName(queueElementTypeName, queueSize)
     val queueTypeName = getTypeQueueTypeName(queueElementTypeName, queueSize)
@@ -460,14 +590,14 @@ object QueueTemplate {
 
     val enqueue: ST = {
       aadlType match {
-        case a: ArrayType => st"memcpy(&queue->elt[index], data, ${TypeUtil.getArrayByteSizeDefineName(a)})"
+        case a: ArrayType => st"memcpy(&queue->elt[index], data, ${MicrokitTypeUtil.getArrayStringByteSizeDefineName(a)})"
         case _ => st"queue->elt[index] = *data"
       }
     }
 
     val dequeue: ST = {
       aadlType match {
-        case a: ArrayType => st"memcpy(data, &queue->elt[index], ${TypeUtil.getArrayByteSizeDefineName(a)})"
+        case a: ArrayType => st"memcpy(data, &queue->elt[index], ${MicrokitTypeUtil.getArrayStringByteSizeDefineName(a)})"
         case _ => st"*data = queue->elt[index]"
       }
     }
@@ -536,21 +666,21 @@ object QueueTemplate {
           |
           |bool ${dequeueMethodName}(
           |  ${recvQueueTypeName} *recvQueue,
-          |  ${TypeUtil.eventCounterTypename} *numDropped,
+          |  ${MicrokitTypeUtil.eventCounterTypename} *numDropped,
           |  ${queueElementTypeName} *data) {
           |
-          |  ${TypeUtil.eventCounterTypename} *numRecv = &recvQueue->numRecv;
+          |  ${MicrokitTypeUtil.eventCounterTypename} *numRecv = &recvQueue->numRecv;
           |  ${queueTypeName} *queue = recvQueue->queue;
           |
           |  // Get a copy of numSent so we can see if it changes during read
-          |  ${TypeUtil.eventCounterTypename} numSent = queue->numSent;
+          |  ${MicrokitTypeUtil.eventCounterTypename} numSent = queue->numSent;
           |
           |  // Acquire memory fence - ensure read of queue->numSent BEFORE reading data
           |  __atomic_thread_fence(__ATOMIC_ACQUIRE);
           |
           |  // How many new elements have been sent? Since we are using unsigned
           |  // integers, this correctly computes the value as counters wrap.
-          |  ${TypeUtil.eventCounterTypename} numNew = numSent - *numRecv;
+          |  ${MicrokitTypeUtil.eventCounterTypename} numNew = numSent - *numRecv;
           |  if (0 == numNew) {
           |    // Queue is empty
           |    return false;
@@ -566,7 +696,7 @@ object QueueTemplate {
           |  *numRecv += *numDropped + 1;
           |
           |  // UNUSED - number of elements left to be consumed
-          |  //${TypeUtil.eventCounterTypename} numRemaining = numSent - *numRecv;
+          |  //${MicrokitTypeUtil.eventCounterTypename} numRemaining = numSent - *numRecv;
           |
           |  size_t index = (*numRecv - 1) % ${queueSizeMacroName};
           |  $dequeue; // Copy data

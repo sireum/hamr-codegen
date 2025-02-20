@@ -3,11 +3,12 @@
 package org.sireum.hamr.codegen.ros2
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlPort, AadlThread, Dispatch_Protocol}
+import org.sireum.hamr.codegen.common.containers.Marker
+import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlDataPort, AadlEventDataPort, AadlPort, AadlProcess, AadlSystem, AadlThread, Dispatch_Protocol}
 import org.sireum.hamr.codegen.common.types.{AadlType, ArrayType, BaseType, EnumType, RecordType}
 import org.sireum.hamr.ir.Direction
 import org.sireum.message.Reporter
-import org.sireum.ops.ISZOps
+import org.sireum.ops.{ISZOps, StringOps}
 
 object Generator {
 
@@ -25,14 +26,13 @@ object Generator {
   val cpp_src_node_header_name_suffix: String = "_src.hpp"
   val cpp_node_runner_name_suffix: String = "_runner.cpp"
 
-  // TODO: Reentrant or mutually exclusive (or single-threaded executor)?
   // This value will work for Python and C++ code
   val callback_group_type: String = "Reentrant"
-  // TODO: Confirm this name (and maybe remove based on how callback groups are done)
   val callback_group_name: String = "cb_group_"
   val subscription_options_name: String = "subscription_options_"
   // Mutex is used for thread locking in C++
   val mutex_name: String = "mutex_"
+
 
   def genPyLaunchFileName(compNameS: String): String = {
     // create launch file name
@@ -88,14 +88,44 @@ object Generator {
     return executableFileNameT
   }
 
+  def genNodeName(component: AadlThread): String = {
+    var name: ST = st""
+    var i: Z = 1
+    while (i < component.path.size) {
+      name = st"${name}_${component.path.apply(i)}"
+      i = i + 1
+    }
+    return ops.StringOps(name.render).substring(1, name.render.size)
+  }
+
+  def genPortName(port: AadlPort): String = {
+    var name: ST = st""
+    var i: Z = 1
+    while (i < port.path.size) {
+      name = st"${name}_${port.path.apply(i)}"
+      i = i + 1
+    }
+    return ops.StringOps(name.render).substring(1, name.render.size)
+  }
+
+  def isEventPort(portType: String): B = {
+    return ops.StringOps(portType).substring(portType.size - 7, portType.size) == "::Empty"
+  }
+
   def isSporadic(component: AadlThread): B = {
     return component.dispatchProtocol == Dispatch_Protocol.Sporadic
   }
 
   def getPortNames(portNames: ISZ[ISZ[String]]): ISZ[String] = {
     var names: ISZ[String] = IS()
-    for (name <- portNames) {
-      names = names :+ seqToString(name, "_")
+    for (portName <- portNames) {
+      var name: ST = st""
+      var i: Z = 1
+      while (i < portName.size) {
+        name = st"${name}_${portName.apply(i)}"
+        i = i + 1
+      }
+      names = names :+ ops.StringOps(name.render).substring(1, name.render.size)
     }
     return names
   }
@@ -187,9 +217,9 @@ object Generator {
     // build entry point declarations
     var entry_point_decls: ISZ[ST] = IS()
     for (comp <- threadComponents) {
-      val launch_node_decl_nameT = genPyFormatLaunchNodeDeclName(comp.pathAsString("_"))
+      val launch_node_decl_nameT = genPyFormatLaunchNodeDeclName(genNodeName(comp))
       entry_point_decls =
-        entry_point_decls :+ genPySetupEntryPointDecl(modelName, comp.pathAsString("_"))
+        entry_point_decls :+ genPySetupEntryPointDecl(modelName, genNodeName(comp))
     }
 
     val setupFileBody =
@@ -236,13 +266,17 @@ object Generator {
   //================================================
 
   def genCppCMakeListsEntryPointDecl(modelName: String,
-                                     componentName: String): ST = {
+                                     componentName: String, hasEnumConverter: B): ST = {
     val node_executable_file_nameT = genExecutableFileName(componentName)
 
     var source_files: ISZ[String] = IS()
     source_files = source_files :+ s"src/base_code/${componentName}_runner.cpp"
     source_files = source_files :+ s"src/user_code/${componentName}_src.cpp"
     source_files = source_files :+ s"src/base_code/${componentName}_base_src.cpp"
+
+    if (hasEnumConverter) {
+      source_files = source_files :+s"src/base_code/enum_converter.cpp"
+    }
 
     val packages: ISZ[String] = IS(s"${genCppPackageName(modelName)}_interfaces")
 
@@ -254,18 +288,21 @@ object Generator {
 
   //  Setup file for node source package
   //    Example: https://github.com/santoslab/ros-examples/blob/main/tempControlcpp_ws/src/tc_cpp_pkg/CMakeLists.txt
-  def genCppCMakeListsFile(modelName: String, threadComponents: ISZ[AadlThread]): (ISZ[String], ST) = {
+  def genCppCMakeListsFile(modelName: String, threadComponents: ISZ[AadlThread], hasEnumConverter: B): (ISZ[String], ST, B, ISZ[Marker]) = {
     val top_level_package_nameT: String = genCppPackageName(modelName)
     val fileName: String = "CMakeLists.txt"
+
+    val startMarker: String = "# Additions within these tags will be preserved when re-running Codegen"
+    val endMarker: String = "# Additions within these tags will be preserved when re-running Codegen"
 
     // build entry point declarations
     var entry_point_decls: ISZ[ST] = IS()
     var entry_point_executables: ISZ[String] = IS()
     for (comp <- threadComponents) {
       entry_point_decls =
-        entry_point_decls :+ genCppCMakeListsEntryPointDecl(modelName, comp.pathAsString("_"))
+        entry_point_decls :+ genCppCMakeListsEntryPointDecl(modelName, genNodeName(comp), hasEnumConverter)
       entry_point_executables =
-        entry_point_executables :+ genExecutableFileName(comp.pathAsString("_"))
+        entry_point_executables :+ genExecutableFileName(genNodeName(comp))
     }
 
     val packages: ISZ[String] = IS(s"${top_level_package_nameT}_interfaces")
@@ -283,6 +320,10 @@ object Generator {
           |find_package(rclcpp REQUIRED)
           |${(pkgRequirements, "\n")}
           |
+          |${startMarker}
+          |
+          |${endMarker}
+          |
           |include_directories(include)
           |
           |${(entry_point_decls, "\n\n")}
@@ -297,14 +338,17 @@ object Generator {
 
     val filePath: ISZ[String] = IS("src", top_level_package_nameT, fileName)
 
-    return (filePath, setupFileBody)
+    return (filePath, setupFileBody, F, IS(Marker(startMarker, endMarker)))
   }
 
   //  Setup file for node source package
   //    Example: https://github.com/santoslab/ros-examples/blob/main/tempControlcpp_ws/src/tc_cpp_pkg/package.xml
-  def genCppPackageFile(modelName: String): (ISZ[String], ST) = {
+  def genCppPackageFile(modelName: String): (ISZ[String], ST, B, ISZ[Marker]) = {
     val top_level_package_nameT: String = genCppPackageName(modelName)
     val fileName: String = "package.xml"
+
+    val startMarker: String = "<!-- Additions within these tags will be preserved when re-running Codegen -->"
+    val endMarker: String = "<!-- Additions within these tags will be preserved when re-running Codegen -->"
 
     val packages: ISZ[String] = IS(s"${top_level_package_nameT}_interfaces")
     val pkgDependencies: ISZ[ST] = genPackageFilePkgDependencies(packages)
@@ -324,6 +368,10 @@ object Generator {
           |    <depend>rclcpp</depend>
           |    ${(pkgDependencies, "\n")}
           |
+          |    ${startMarker}
+          |
+          |    ${endMarker}
+          |
           |    <test_depend>ament_lint_auto</test_depend>
           |    <test_depend>ament_lint_common</test_depend>
           |
@@ -335,7 +383,7 @@ object Generator {
 
     val filePath: ISZ[String] = IS("src", top_level_package_nameT, fileName)
 
-    return (filePath, setupFileBody)
+    return (filePath, setupFileBody, F, IS(Marker(startMarker, endMarker)))
   }
 
 
@@ -343,7 +391,7 @@ object Generator {
   //  L a u n c h  File Setup Files
   //================================================
 
-  def genLaunchCMakeListsFile(modelName: String): (ISZ[String], ST) = {
+  def genLaunchCMakeListsFile(modelName: String): (ISZ[String], ST, B, ISZ[Marker]) = {
     val top_level_package_nameT: String = genCppPackageName(modelName)
     val fileName: String = "CMakeLists.txt"
 
@@ -367,12 +415,15 @@ object Generator {
 
     val filePath: ISZ[String] = IS("src", s"${top_level_package_nameT}_bringup", fileName)
 
-    return (filePath, setupFileBody)
+    return (filePath, setupFileBody, T, IS())
   }
 
-  def genLaunchPackageFile(modelName: String): (ISZ[String], ST) = {
+  def genLaunchPackageFile(modelName: String): (ISZ[String], ST, B, ISZ[Marker]) = {
     val top_level_package_nameT: String = genCppPackageName(modelName)
     val fileName: String = "package.xml"
+
+    val startMarker: String = "<!-- Additions within these tags will be preserved when re-running Codegen -->"
+    val endMarker: String = "<!-- Additions within these tags will be preserved when re-running Codegen -->"
 
     val setupFileBody =
       st"""<?xml version="1.0"?>
@@ -388,6 +439,10 @@ object Generator {
           |
           |    <exec_depend>${top_level_package_nameT}</exec_depend>
           |
+          |    ${startMarker}
+          |
+          |    ${endMarker}
+          |
           |    <test_depend>ament_lint_auto</test_depend>
           |    <test_depend>ament_lint_common</test_depend>
           |
@@ -399,7 +454,7 @@ object Generator {
 
     val filePath: ISZ[String] = IS("src", s"${top_level_package_nameT}_bringup", fileName)
 
-    return (filePath, setupFileBody)
+    return (filePath, setupFileBody, F, IS(Marker(startMarker, endMarker)))
   }
 
 
@@ -427,7 +482,7 @@ object Generator {
   def genPyFormatLaunchNodeDecl(launch_node_decl_nameT: String,
                                 top_level_package_nameT: String,
                                 component: AadlThread): ST = {
-    val node_executable_file_nameT = genExecutableFileName(component.pathAsString("_"))
+    val node_executable_file_nameT = genExecutableFileName(genNodeName(component))
     val s =
       st"""
           |${launch_node_decl_nameT} = Node(
@@ -455,7 +510,7 @@ object Generator {
     var ld_entries: ISZ[ST] = IS()
 
     for (comp <- threadComponents) {
-      val launch_node_decl_nameT = genPyFormatLaunchNodeDeclName(comp.pathAsString("_"))
+      val launch_node_decl_nameT = genPyFormatLaunchNodeDeclName(genNodeName(comp))
       node_decls = node_decls :+ genPyFormatLaunchNodeDecl(launch_node_decl_nameT, top_level_package_nameT, comp)
       ld_entries = ld_entries :+ genPyFormatLaunchAddAction(launch_node_decl_nameT)
     }
@@ -482,12 +537,12 @@ object Generator {
   //  L a u n c h  File (XML Format)
   //================================================
 
-  // genLaunchNodeDecl() - generate node declaration
+  // Generate node launch code
   //   Example:
   //     <node pkg="tc_cpp_pkg" exec="tc_test_exe"></node>
   def genXmlFormatLaunchNodeDecl(top_level_package_nameT: String,
-                                 component: AadlThread): ST = {
-    val node_executable_file_nameT = genExecutableFileName(component.pathAsString("_"))
+                                 thread: AadlThread): ST = {
+    val node_executable_file_nameT = genExecutableFileName(genNodeName(thread))
     val s =
       st"""
           |<node pkg="${top_level_package_nameT}" exec="${node_executable_file_nameT}">
@@ -496,27 +551,62 @@ object Generator {
     return s
   }
 
-  // For example, see https://github.com/santoslab/ros-examples/blob/main/tempControl_ws/src/tc_bringup/launch/tc.launch.py
-  def genXmlFormatLaunchFile(modelName: String, threadComponents: ISZ[AadlThread]): (ISZ[String], ST) = {
-    val fileName = genXmlLaunchFileName(modelName)
+  // Generate system launch code (including a system launch file)
+  //   Example:
+  //     <include file="$(find-pkg-share gazebo_ros)/launch/gazebo.launch.py"/>
+  def genXmlFormatLaunchSystemDecl(top_level_package_nameT: String,
+                                   system: AadlSystem): ST = {
+    val launchFileName: String = genXmlLaunchFileName(system.identifier)
+    val s =
+      st"""
+          |<include file="$$(find-pkg-share ${top_level_package_nameT}_bringup)/launch/${launchFileName}"/>
+        """
+    return s
+  }
 
-    val top_level_package_nameT: String = genCppPackageName(modelName)
+  def genXmlFormatLaunchDecls(component: AadlComponent, packageName: String): ISZ[ST] = {
+    var launch_decls: ISZ[ST] = IS()
 
-    var node_decls: ISZ[ST] = IS()
-
-    for (comp <- threadComponents) {
-      node_decls = node_decls :+ genXmlFormatLaunchNodeDecl(top_level_package_nameT, comp)
+    for (comp <- component.subComponents) {
+      comp match {
+        case thread: AadlThread =>
+          launch_decls = launch_decls :+ genXmlFormatLaunchNodeDecl(packageName, thread)
+        case system: AadlSystem =>
+          launch_decls = launch_decls :+ genXmlFormatLaunchSystemDecl(packageName, system)
+        case process: AadlProcess =>
+          launch_decls = launch_decls ++ genXmlFormatLaunchDecls(process, packageName)
+        case _ =>
+      }
     }
 
-    val launchFileBody =
-      st"""<launch>
-          |    ${(node_decls, "\n")}
-          |</launch>
+    return launch_decls
+  }
+
+  // For example, see https://github.com/santoslab/ros-examples/blob/main/tempControl_ws/src/tc_bringup/launch/tc.launch.py
+  // Creates a launch file for each system component in the model
+  def genXmlFormatLaunchFiles(modelName: String, threadComponents: ISZ[AadlThread],
+                              systemComponents: ISZ[AadlSystem]): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
+    val top_level_package_nameT: String = genCppPackageName(modelName)
+
+    var launchFiles: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
+
+    for (system <- systemComponents) {
+      val fileName = genXmlLaunchFileName(system.identifier)
+
+      val launch_decls: ISZ[ST] = genXmlFormatLaunchDecls(system, top_level_package_nameT)
+
+      val launchFileBody =
+        st"""<launch>
+            |    ${(launch_decls, "\n")}
+            |</launch>
         """
 
-    val filePath: ISZ[String] = IS("src", s"${top_level_package_nameT}_bringup", "launch", fileName)
+      val filePath: ISZ[String] = IS("src", s"${top_level_package_nameT}_bringup", "launch", fileName)
 
-    return (filePath, launchFileBody)
+      launchFiles = launchFiles :+ (filePath, launchFileBody, T, IS())
+    }
+
+    return launchFiles
   }
 
 
@@ -526,26 +616,26 @@ object Generator {
   // ROS2 data/message types are defined in a "{package_name}_interfaces" package according to convention
   // The "Empty" datatype, which has no data fields, is used for event ports
 
-  def genMsgFiles(modelName: String, datatypeMap: Map[AadlType, (String, ISZ[String])]): ISZ[(ISZ[String], ST)] = {
-    var msg_files: ISZ[(ISZ[String], ST)] = IS()
+  def genMsgFiles(modelName: String, datatypeMap: Map[AadlType, (String, ISZ[String])]): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
+    var msg_files: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
     for (datatype <- datatypeMap.entries) {
       msg_files = msg_files :+ genMsgFile(modelName, datatype._2._1, datatype._2._2)
     }
-    msg_files = msg_files :+ (ISZ("src", s"${genCppPackageName(modelName)}_interfaces", "msg", "Empty.msg"), st"")
+    msg_files = msg_files :+ (ISZ("src", s"${genCppPackageName(modelName)}_interfaces", "msg", "Empty.msg"), st"", T, IS())
     return msg_files
   }
 
-  def genMsgFile(modelName: String, datatypeName: String, datatypeContent: ISZ[String]): (ISZ[String], ST) = {
+  def genMsgFile(modelName: String, datatypeName: String, datatypeContent: ISZ[String]): (ISZ[String], ST, B, ISZ[Marker]) = {
     val top_level_package_nameT: String = genCppPackageName(modelName)
 
     val fileBody = st"${(datatypeContent, "\n")}"
 
     val filePath: ISZ[String] = IS("src", s"${top_level_package_nameT}_interfaces", "msg", s"${datatypeName}.msg")
 
-    return (filePath, fileBody)
+    return (filePath, fileBody, T, IS())
   }
 
-  def genInterfacesCMakeListsFile(modelName: String, datatypeMap: Map[AadlType, (String, ISZ[String])]): (ISZ[String], ST) = {
+  def genInterfacesCMakeListsFile(modelName: String, datatypeMap: Map[AadlType, (String, ISZ[String])]): (ISZ[String], ST, B, ISZ[Marker]) = {
     val top_level_package_nameT: String = genCppPackageName(modelName)
     val fileName: String = "CMakeLists.txt"
     var msgTypes: ISZ[String] = IS()
@@ -577,10 +667,10 @@ object Generator {
 
     val filePath: ISZ[String] = IS("src", s"${top_level_package_nameT}_interfaces", fileName)
 
-    return (filePath, setupFileBody)
+    return (filePath, setupFileBody, T, IS())
   }
 
-  def genInterfacesPackageFile(modelName: String): (ISZ[String], ST) = {
+  def genInterfacesPackageFile(modelName: String): (ISZ[String], ST, B, ISZ[Marker]) = {
     val top_level_package_nameT: String = genCppPackageName(modelName)
     val fileName: String = "package.xml"
 
@@ -611,7 +701,7 @@ object Generator {
 
     val filePath: ISZ[String] = IS("src", s"${top_level_package_nameT}_interfaces", fileName)
 
-    return (filePath, setupFileBody)
+    return (filePath, setupFileBody, T, IS())
   }
 
 
@@ -669,11 +759,25 @@ object Generator {
 
   // Example:
   //  rclcpp::Subscription<example_interfaces::msg::Int32>::SharedPtr temp_control_currentTemp_subscription;
-  def genCppTopicSubscriptionVarHeader(inPort: AadlPort, portType: String): ST = {
-    val portName = seqToString(inPort.path, "_")
+  def genCppTopicSubscriptionVarHeader(inPort: AadlPort, portType: String, outputPortCount: Z): ST = {
+    val portName = genPortName(inPort)
+
+    if (outputPortCount == 1) {
+      val varHeader: ST =
+        st"rclcpp::Subscription<${portType}>::SharedPtr ${portName}_subscription_;"
+      return varHeader
+    }
+
+    // If the port is a fan in port
+    var inPortHeaders: ISZ[ST] = IS()
+    for (i <- 1 to outputPortCount) {
+      inPortHeaders = inPortHeaders :+
+        st"rclcpp::Subscription<${portType}>::SharedPtr ${portName}_subscription_${i};"
+    }
 
     val varHeader: ST =
-      st"rclcpp::Subscription<${portType}>::SharedPtr ${portName}_subscription_;"
+      st"${(inPortHeaders, "\n")}"
+
     return varHeader
   }
 
@@ -682,46 +786,88 @@ object Generator {
   //    "temp_control_currentTemp",
   //     1,
   //     std::bind(&TempControl::handle_currentTemp, this, std::placeholders::_1));
-  def genCppTopicSubscription(inPort: AadlPort, nodeName: String, portType: String): ST = {
-    val topicName = seqToString(inPort.path, "_")
-    val portName = inPort.identifier
+  def genCppTopicSubscription(inPort: AadlPort, nodeName: String, portType: String, outPortNames: ISZ[String]): ST = {
+    val portName = genPortName(inPort)
+    val handlerName = inPort.identifier
 
-    val portCode: ST =
-      st"""${topicName}_subscription_ = this->create_subscription<${portType}>(
-          |    "${topicName}",
-          |    1,
-          |    std::bind(&${nodeName}::handle_${portName}, this, std::placeholders::_1), ${subscription_options_name});
-        """
-    return portCode
+    var handler: ST = st""
+    if (isEventPort(portType)) {
+      handler = st"&${nodeName}::event_handle_${handlerName}"
+    }
+    else {
+      handler = st"&${nodeName}::handle_${handlerName}"
+    }
+
+    if (outPortNames.size == 1) {
+      val topicName = outPortNames.apply(0)
+      val portCode: ST =
+        st"""${portName}_subscription_ = this->create_subscription<${portType}>(
+            |    "${topicName}",
+            |    1,
+            |    std::bind(${handler}, this, std::placeholders::_1), ${subscription_options_name});
+          """
+
+      return portCode
+    }
+
+    // If the port is a fan in port
+    var inputInstances: ISZ[ST] = IS()
+    var counter = 1
+
+    for (outPortName <- outPortNames) {
+      inputInstances = inputInstances :+
+        st"""${portName}_subscription_${counter} = this->create_subscription<${portType}>(
+            |    "${outPortName}",
+            |    1,
+            |    std::bind(${handler}, this, std::placeholders::_1), ${subscription_options_name});
+          """
+
+      counter = counter + 1
+    }
+
+    val fanPortCode: ST =
+      st"${(inputInstances, "\n")}"
+
+    return fanPortCode
   }
 
-  def genCppTopicSubscriptionStrict(inPort: AadlPort, isSporadic: B, portType: String): ST = {
-    val topicName = seqToString(inPort.path, "_")
-    val portName = inPort.identifier
+  def genCppTopicSubscriptionStrict(inPort: AadlPort, nodeName: String, portType: String, outPortNames: ISZ[String]): ST = {
+    val portName = genPortName(inPort)
+    val handlerName = inPort.identifier
 
-    val handler: ST =
-      if (!isSporadic || inPort.isInstanceOf[AadlDataPort]) st"enqueue(infrastructureIn_${portName}, msg);"
-      else
-        st"""enqueue(infrastructureIn_${portName}, msg);
-            |std::thread([this]() {
-            |    std::lock_guard<std::mutex> lock(mutex_);
-            |    receiveInputs(infrastructureIn_${portName}, applicationIn_${portName});
-            |    if (applicationIn_${portName}.empty()) return;
-            |    handle_${portName}_base(applicationIn_${portName}.front());
-            |    applicationIn_${portName}.pop();
-            |    sendOutputs();
-            |}).detach();"""
+    val handler: ST = st"${nodeName}::accept_${handlerName}"
 
-    val portCode: ST =
-      st"""${topicName}_subscription_ = this->create_subscription<${portType}>(
-          |    "${topicName}",
-          |    1,
-          |    [this](${portType} msg) {
-          |        ${handler}
-          |    },
-          |    ${subscription_options_name});
+    if (outPortNames.size == 1) {
+      val topicName = outPortNames.apply(0)
+
+      val portCode: ST =
+        st"""${portName}_subscription_ = this->create_subscription<${portType}>(
+            |    "${topicName}",
+            |    1,
+            |    std::bind(&${handler}, this, std::placeholders::_1), ${subscription_options_name});
         """
-    return portCode
+      return portCode
+    }
+
+    // If the port is a fan in port
+    var inputInstances: ISZ[ST] = IS()
+    var counter = 1
+
+    for (outPortName <- outPortNames) {
+      inputInstances = inputInstances :+
+        st"""${portName}_subscription_${counter} = this->create_subscription<${portType}>(
+            |    "${outPortName}",
+            |    1,
+            |    std::bind(&${handler}, this, std::placeholders::_1), ${subscription_options_name});
+        """
+
+      counter = counter + 1
+    }
+
+    val fanPortCode: ST =
+      st"${(inputInstances, "\n")}"
+
+    return fanPortCode
   }
 
   def genCppSubscriptionHandlerHeaderStrictS(nodeName: String, isSporadic: B): ST = {
@@ -741,10 +887,39 @@ object Generator {
     return portCode
   }
 
+  def genCppMessageAcceptorHeader(inPort: AadlPort, portType: String): ST = {
+    val handlerName = inPort.identifier
+
+    return st"void accept_${handlerName}(${portType} msg);"
+  }
+
+  def genCppMessageAcceptor(inPort: AadlPort, nodeName: String, isSporadic: B, portType: String): ST = {
+    val handlerName = inPort.identifier
+
+    val handler: ST =
+    if (!isSporadic || inPort.isInstanceOf[AadlDataPort]) st"enqueue(infrastructureIn_${handlerName}, msg);"
+    else
+      st"""enqueue(infrastructureIn_${handlerName}, msg);
+          |std::thread([this]() {
+          |    std::lock_guard<std::mutex> lock(mutex_);
+          |    receiveInputs(infrastructureIn_${handlerName}, applicationIn_${handlerName});
+          |    if (applicationIn_${handlerName}.empty()) return;
+          |    handle_${handlerName}_base(applicationIn_${handlerName}.front());
+          |    applicationIn_${handlerName}.pop();
+          |    sendOutputs();
+          |}).detach();"""
+
+    return st"""void ${nodeName}::accept_${handlerName}(${portType} msg)
+               |{
+               |    ${handler}
+               |}
+               |"""
+  }
+
   // Example:
   //  rclcpp::Publisher<example_interfaces::msg::Int32>::SharedPtr temp_control_currentTemp_publisher;
   def genCppTopicPublisherVarHeader(outPort: AadlPort, portType: String, inputPortCount: Z): ST = {
-    val portName = seqToString(outPort.path, "_")
+    val portName = genPortName(outPort)
 
     if (inputPortCount == 1) {
       val varHeader: ST =
@@ -771,7 +946,7 @@ object Generator {
   //    "operator_interface_currentTemp",
   //     1);
   def genCppTopicPublisher(outPort: AadlPort, portType: String, inPortNames: ISZ[String]): ST = {
-    val portName = seqToString(outPort.path, "_")
+    val portName = genPortName(outPort)
 
     if (inPortNames.size == 1) {
       val inPortName = inPortNames.apply(0)
@@ -803,14 +978,18 @@ object Generator {
     return fanPortCode
   }
 
-  // TODO: Probably use MsgType if strict....?
   // Example:
   //  void put_currentTemp(example_interfaces::msg::Int32 msg);
   def genCppPutMsgMethodHeader(outPort: AadlPort, portType: String): ST = {
     val handlerName = outPort.identifier
 
-    val publisherHeader: ST =
-      st"void put_${handlerName}(${portType} msg);"
+    var publisherHeader: ST = st"void put_${handlerName}("
+
+    if (!isEventPort(portType)) {
+      publisherHeader = st"${publisherHeader}${portType} msg"
+    }
+
+    publisherHeader = st"${publisherHeader});"
     return publisherHeader
   }
 
@@ -830,7 +1009,7 @@ object Generator {
   //    temp_control_currentTemp_publisher->publish(msg);
   //  }
   def genCppTopicPublishMethod(outPort: AadlPort, nodeName: String, portType: String, inputPortCount: Z): ST = {
-    val portName = seqToString(outPort.path, "_")
+    val portName = genPortName(outPort)
     val handlerName = outPort.identifier
 
     var publishers: ISZ[ST] = IS()
@@ -845,18 +1024,32 @@ object Generator {
       }
     }
 
-    val publisherCode: ST =
-      st"""void ${nodeName}::put_${handlerName}(${portType} msg)
-          |{
-          |    ${(publishers, "\n")}
-          |}
-         """
+    var publisherCode: ST = st""
+
+    if (isEventPort(portType)) {
+      publisherCode =
+        st"""void ${nodeName}::put_${handlerName}()
+            |{
+            |    ${portType} msg = ${portType}();
+            |
+            |    ${(publishers, "\n")}
+            |}
+          """
+    }
+    else {
+      publisherCode =
+        st"""void ${nodeName}::put_${handlerName}(${portType} msg)
+            |{
+            |    ${(publishers, "\n")}
+            |}
+          """
+    }
 
     return publisherCode
   }
 
   def genCppTopicPublishMethodStrict(outPort: AadlPort, nodeName: String, portType: String, inputPortCount: Z): ST = {
-    val portName = seqToString(outPort.path, "_")
+    val portName = genPortName(outPort)
     val handlerName = outPort.identifier
 
     var publishers: ISZ[ST] = IS()
@@ -889,12 +1082,25 @@ object Generator {
   def genCppPutMsgMethodStrict(outPort: AadlPort, nodeName: String, portType: String): ST = {
     val handlerName = outPort.identifier
 
-    val putMsgCode: ST =
-      st"""void ${nodeName}::put_${handlerName}(${portType} msg)
-          |{
-          |    enqueue(applicationOut_${handlerName}, msg);
-          |}
+    var putMsgCode: ST = st""
+
+    if (isEventPort(portType)) {
+      putMsgCode =
+        st"""void ${nodeName}::put_${handlerName}()
+            |{
+            |    enqueue(applicationOut_${handlerName}, ${portType}());
+            |}
         """
+    }
+    else {
+      putMsgCode =
+        st"""void ${nodeName}::put_${handlerName}(${portType} msg)
+            |{
+            |    enqueue(applicationOut_${handlerName}, msg);
+            |}
+        """
+    }
+
     return putMsgCode
   }
 
@@ -903,17 +1109,42 @@ object Generator {
   def genCppSubscriptionHandlerVirtualHeader(inPort: AadlPort, portType: String): ST = {
     val handlerName = inPort.identifier
 
-    val subscriptionHandlerHeader: ST =
-      st"virtual void handle_${handlerName}(const ${portType}::SharedPtr msg) = 0;"
+    var subscriptionHandlerHeader: ST = st""
+    if (isEventPort(portType)) {
+      subscriptionHandlerHeader = st"""void event_handle_${handlerName}(const ${portType}::SharedPtr msg);
+                                      |virtual void handle_${handlerName}() = 0;"""
+    }
+    else {
+      subscriptionHandlerHeader = st"virtual void handle_${handlerName}(const ${portType}::SharedPtr msg) = 0;"
+    }
     return subscriptionHandlerHeader
   }
 
   def genCppSubscriptionHandlerVirtualHeaderStrict(inPort: AadlPort, portType: String): ST = {
     val handlerName = inPort.identifier
 
-    val subscriptionHandlerHeader: ST =
-      st"virtual void handle_${handlerName}(const ${portType} msg) = 0;"
+    var subscriptionHandlerHeader: ST = st""
+    if (isEventPort(portType)) {
+      subscriptionHandlerHeader = st"virtual void handle_${handlerName}() = 0;"
+    }
+    else {
+      subscriptionHandlerHeader = st"virtual void handle_${handlerName}(const ${portType} msg) = 0;"
+    }
+
     return subscriptionHandlerHeader
+  }
+
+  def genCppEventPortHandler(inPort: AadlPort, nodeName: String, portType: String): ST = {
+    val handlerName = inPort.identifier
+
+    val handler: ST = st"""void ${nodeName}::event_handle_${handlerName}(const ${portType}::SharedPtr msg)
+                                    |{
+                                    |    (void)msg;
+                                    |    handle_${handlerName}();
+                                    |}
+                                    """
+
+    return handler
   }
 
   // Example:
@@ -921,24 +1152,44 @@ object Generator {
   def genCppSubscriptionHandlerSporadic(inPort: AadlPort, nodeName: String, portType: String): ST = {
     val handlerName = inPort.identifier
 
-    val subscriptionHandlerHeader: ST =
-      st"""void ${nodeName}::handle_${handlerName}(const ${portType}::SharedPtr msg)
-          |{
-          |    // Handle ${handlerName} msg
-          |}
-        """
+    var subscriptionHandlerHeader: ST = st""
+    if (isEventPort(portType)) {
+      subscriptionHandlerHeader = st"""void ${nodeName}::handle_${handlerName}()
+                                      |{
+                                      |    // Handle ${handlerName} event
+                                      |}
+                                    """
+    }
+    else {
+      subscriptionHandlerHeader = st"""void ${nodeName}::handle_${handlerName}(const ${portType}::SharedPtr msg)
+                                      |{
+                                      |    // Handle ${handlerName} msg
+                                      |}
+                                    """
+    }
+
     return subscriptionHandlerHeader
   }
 
   def genCppSubscriptionHandlerSporadicStrict(inPort: AadlPort, nodeName: String, portType: String): ST = {
     val handlerName = inPort.identifier
 
-    val subscriptionHandlerHeader: ST =
-      st"""void ${nodeName}::handle_${handlerName}(const ${portType} msg)
-          |{
-          |    // Handle ${handlerName} msg
-          |}
-        """
+    var subscriptionHandlerHeader: ST = st""
+    if (isEventPort(portType)) {
+      subscriptionHandlerHeader = st"""void ${nodeName}::handle_${handlerName}()
+                                      |{
+                                      |    // Handle ${handlerName} event
+                                      |}
+                                    """
+    }
+    else {
+      subscriptionHandlerHeader = st"""void ${nodeName}::handle_${handlerName}(const ${portType} msg)
+                                      |{
+                                      |    // Handle ${handlerName} msg
+                                      |}
+                                    """
+    }
+
     return subscriptionHandlerHeader
   }
 
@@ -956,16 +1207,26 @@ object Generator {
   def genCppSubscriptionHandlerBaseSporadic(inPort: AadlPort, nodeName: String, portType: String): ST = {
     val handlerName = inPort.identifier
 
-    val handlerCode: ST =
-      st"""void ${nodeName}::handle_${handlerName}_base(MsgType msg)
-          |{
-          |    if (auto typedMsg = std::get_if<${portType}>(&msg)) {
-          |        handle_${handlerName}(*typedMsg);
-          |    } else {
-          |        PRINT_ERROR("Sending out wrong type of variable on port ${handlerName}.\nThis shouldn't be possible.  If you are seeing this message, please notify this tool's current maintainer.");
-          |    }
-          |}
-         """
+    var handlerCode: ST = st""
+    if (isEventPort(portType)) {
+      handlerCode = st"""void ${nodeName}::handle_${handlerName}_base(MsgType msg)
+                        |{
+                        |    (void)msg;
+                        |    handle_${handlerName}();
+                        |}
+                      """
+    }
+    else {
+      handlerCode = st"""void ${nodeName}::handle_${handlerName}_base(MsgType msg)
+                        |{
+                        |    if (auto typedMsg = std::get_if<${portType}>(&msg)) {
+                        |        handle_${handlerName}(*typedMsg);
+                        |    } else {
+                        |        PRINT_ERROR("Receiving wrong type of variable on port ${handlerName}.\nThis shouldn't be possible.  If you are seeing this message, please notify this tool's current maintainer.");
+                        |    }
+                        |}
+                      """
+    }
 
     return handlerCode
   }
@@ -975,16 +1236,28 @@ object Generator {
   def genCppSubscriptionHandlerHeader(inPort: AadlPort, portType: String): ST = {
     val handlerName = inPort.identifier
 
-    val subscriptionHandlerHeader: ST =
-      st"void handle_${handlerName}(const ${portType}::SharedPtr msg);"
+    var subscriptionHandlerHeader: ST = st""
+    if (isEventPort(portType)) {
+      subscriptionHandlerHeader = st"void handle_${handlerName}();"
+    }
+    else {
+      subscriptionHandlerHeader = st"void handle_${handlerName}(const ${portType}::SharedPtr msg);"
+    }
+
     return subscriptionHandlerHeader
   }
 
   def genCppSubscriptionHandlerHeaderStrict(inPort: AadlPort, portType: String): ST = {
     val handlerName = inPort.identifier
 
-    val subscriptionHandlerHeader: ST =
-      st"void handle_${handlerName}(const ${portType} msg);"
+    var subscriptionHandlerHeader: ST = st""
+    if (isEventPort(portType)) {
+      subscriptionHandlerHeader = st"void handle_${handlerName}();"
+    }
+    else {
+      subscriptionHandlerHeader = st"void handle_${handlerName}(const ${portType} msg);"
+    }
+
     return subscriptionHandlerHeader
   }
 
@@ -1065,7 +1338,8 @@ object Generator {
       st"""${portType} ${nodeName}::get_${portName}() {
           |    MsgType msg = applicationIn_${portName}.front();
           |    return std::get<${portType}>(msg);
-          |}"""
+          |}
+        """
     return subscriptionMessageHeader
   }
 
@@ -1316,9 +1590,11 @@ object Generator {
     return vector
   }
 
+
   def genCppBaseNodeHeaderFile(packageName: String, component: AadlThread, connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
-                               datatypeMap: Map[AadlType, (String, ISZ[String])], strictAADLMode: B, reporter: Reporter): (ISZ[String], ST) = {
-    val nodeName = s"${component.pathAsString("_")}_base"
+                               datatypeMap: Map[AadlType, (String, ISZ[String])], strictAADLMode: B,
+                               invertTopicBinding: B, reporter: Reporter): (ISZ[String], ST, B, ISZ[Marker]) = {
+    val nodeName = s"${genNodeName(component)}_base"
     val fileName = genCppNodeSourceHeaderName(nodeName)
 
     var subscriptionHeaders: ISZ[ST] = IS()
@@ -1327,6 +1603,7 @@ object Generator {
     var subscriptionHandlerHeaders: ISZ[ST] = IS()
     var inMsgVars: ISZ[ST] = IS()
     var outMsgVars: ISZ[ST] = IS()
+    var subscriptionMessageAcceptorHeaders: ISZ[ST] = IS()
     var subscriptionMessageGetterHeaders: ISZ[ST] = IS()
     var strictPublisherHeaders: ISZ[ST] = IS()
     var msgTypes: ISZ[String] = IS()
@@ -1338,7 +1615,23 @@ object Generator {
       }
       if (strictAADLMode) {
         if (p.direction == Direction.In) {
-          subscriptionHeaders = subscriptionHeaders :+ genCppTopicSubscriptionVarHeader(p, portDatatype)
+          if (invertTopicBinding) {
+            if (connectionMap.get(p.path).nonEmpty) {
+              val outputPorts = connectionMap.get(p.path).get
+              subscriptionHeaders = subscriptionHeaders :+ genCppTopicSubscriptionVarHeader(p, portDatatype, outputPorts.size)
+            }
+            else {
+              // In ports with no connections should still subscribe to a topic (for other non-generated components
+              // to publish to, for example)
+              subscriptionHeaders = subscriptionHeaders :+ genCppTopicSubscriptionVarHeader(p, portDatatype, 1)
+            }
+          }
+          else {
+            subscriptionHeaders = subscriptionHeaders :+ genCppTopicSubscriptionVarHeader(p, portDatatype, 1)
+          }
+          subscriptionMessageAcceptorHeaders = subscriptionMessageAcceptorHeaders :+
+            genCppMessageAcceptorHeader(p, portDatatype)
+
           inMsgVars = inMsgVars :+ genCppInfrastructureInQueue(p)
           inMsgVars = inMsgVars :+ genCppApplicationInQueue(p)
           if (!p.isInstanceOf[AadlDataPort] && isSporadic(component)) {
@@ -1355,17 +1648,39 @@ object Generator {
           outMsgVars = outMsgVars :+ genCppInfrastructureOutQueue(p)
           outMsgVars = outMsgVars :+ genCppApplicationOutQueue(p)
           strictPublisherHeaders = strictPublisherHeaders :+ genCppTopicPublishMethodHeaderStrict(p)
-          putMethodHeaders = putMethodHeaders :+
-            genCppPutMsgMethodHeader(p, portDatatype)
-          if (connectionMap.get(p.path).nonEmpty) {
-            val inputPorts = connectionMap.get(p.path).get
-            publisherHeaders = publisherHeaders :+ genCppTopicPublisherVarHeader(p, portDatatype, inputPorts.size)
+          putMethodHeaders = putMethodHeaders :+ genCppPutMsgMethodHeader(p, portDatatype)
+          if (invertTopicBinding) {
+            publisherHeaders = publisherHeaders :+ genCppTopicPublisherVarHeader(p, portDatatype, 1)
+          }
+          else {
+            if (connectionMap.get(p.path).nonEmpty) {
+              val inputPorts = connectionMap.get(p.path).get
+              publisherHeaders = publisherHeaders :+ genCppTopicPublisherVarHeader(p, portDatatype, inputPorts.size)
+            }
+            else {
+              // Out ports with no connections should still publish to a topic (for other non-generated components
+              // to subscribe to, for example)
+              publisherHeaders = publisherHeaders :+ genCppTopicPublisherVarHeader(p, portDatatype, 1)
+            }
           }
         }
       }
       else {
         if (p.direction == Direction.In) {
-          subscriptionHeaders = subscriptionHeaders :+ genCppTopicSubscriptionVarHeader(p, portDatatype)
+          if (invertTopicBinding) {
+            if (connectionMap.get(p.path).nonEmpty) {
+              val outputPorts = connectionMap.get(p.path).get
+              subscriptionHeaders = subscriptionHeaders :+ genCppTopicSubscriptionVarHeader(p, portDatatype, outputPorts.size)
+            }
+            else {
+              // In ports with no connections should still subscribe to a topic (for other non-generated components
+              // to publish to, for example)
+              subscriptionHeaders = subscriptionHeaders :+ genCppTopicSubscriptionVarHeader(p, portDatatype, 1)
+            }
+          }
+          else {
+            subscriptionHeaders = subscriptionHeaders :+ genCppTopicSubscriptionVarHeader(p, portDatatype, 1)
+          }
           if (isSporadic(component) && !p.isInstanceOf[AadlDataPort]) {
             subscriptionHandlerHeaders = subscriptionHandlerHeaders :+
               genCppSubscriptionHandlerVirtualHeader(p, portDatatype)
@@ -1378,11 +1693,21 @@ object Generator {
           }
         }
         else {
-          if (connectionMap.get(p.path).nonEmpty) {
-            val inputPorts = connectionMap.get(p.path).get
-            publisherHeaders = publisherHeaders :+ genCppTopicPublisherVarHeader(p, portDatatype, inputPorts.size)
-            putMethodHeaders = putMethodHeaders :+
-              genCppPutMsgMethodHeader(p, portDatatype)
+          if (invertTopicBinding) {
+            publisherHeaders = publisherHeaders :+ genCppTopicPublisherVarHeader(p, portDatatype, 1)
+            putMethodHeaders = putMethodHeaders :+ genCppPutMsgMethodHeader(p, portDatatype)
+          }
+          else {
+            if (connectionMap.get(p.path).nonEmpty) {
+              val inputPorts = connectionMap.get(p.path).get
+              publisherHeaders = publisherHeaders :+ genCppTopicPublisherVarHeader(p, portDatatype, inputPorts.size)
+              putMethodHeaders = putMethodHeaders :+ genCppPutMsgMethodHeader(p, portDatatype)
+            }
+            else {
+              // Out ports with no connections should still publish to a topic
+              publisherHeaders = publisherHeaders :+ genCppTopicPublisherVarHeader(p, portDatatype, 1)
+              putMethodHeaders = putMethodHeaders :+ genCppPutMsgMethodHeader(p, portDatatype)
+            }
           }
         }
       }
@@ -1409,9 +1734,9 @@ object Generator {
           |${(typeIncludes, "\n")}
           |${(stdIncludes, "\n")}
           |
-          |//=================================================
-          |//  D O   N O T   E D I T   T H I S   F I L E
-          |//=================================================
+          |//========================================================
+          |// Re-running Codegen will overwrite changes to this file
+          |//========================================================
           |
           |class ${nodeName} : public rclcpp::Node
           |{
@@ -1453,6 +1778,13 @@ object Generator {
         """
 
     if (strictAADLMode) {
+      if (subscriptionMessageAcceptorHeaders.size > 0) {
+        fileBody =
+          st"""${fileBody}
+              |    ${(subscriptionMessageAcceptorHeaders, "\n")}
+          """
+      }
+
       val receiveInputsHeader: ST = if (isSporadic(component)) genCppReceiveInputsSporadicHeader()
                               else genCppReceiveInputsPeriodicHeader()
 
@@ -1561,12 +1893,14 @@ object Generator {
 
     val filePath: ISZ[String] = IS("src", packageName, "include", packageName, "base_headers", fileName)
 
-    return (filePath, fileBody)
+    return (filePath, fileBody, T, IS())
   }
 
+  // TODO: invertTopicBinding
   def genCppBaseNodeCppFile(packageName: String, component: AadlThread, connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
-                            datatypeMap: Map[AadlType, (String, ISZ[String])], strictAADLMode: B, reporter: Reporter): (ISZ[String], ST) = {
-    val nodeName = s"${component.pathAsString("_")}_base"
+                            datatypeMap: Map[AadlType, (String, ISZ[String])], strictAADLMode: B,
+                            invertTopicBinding: B, reporter: Reporter): (ISZ[String], ST, B, ISZ[Marker]) = {
+    val nodeName = s"${genNodeName(component)}_base"
     val fileName = genCppNodeSourceName(nodeName)
 
     var subscribers: ISZ[ST] = IS()
@@ -1574,10 +1908,12 @@ object Generator {
     var subscriberMethods: ISZ[ST] = IS()
     var publisherMethods: ISZ[ST] = IS()
     var subscriptionMessageGetters: ISZ[ST] = IS()
+    var eventPortHandlers: ISZ[ST] = IS()
 
     var outPortNames: ISZ[String] = IS()
-    var inTuplePortNames: ISZ[String] = IS()
+    var inPortNames: ISZ[String] = IS()
     var strictPutMsgMethods: ISZ[ST] = IS()
+    var strictSubscriptionMessageAcceptorMethods: ISZ[ST] = IS()
     var strictSubscriptionHandlerBaseMethods: ISZ[ST] = IS()
 
     var hasInPorts = F
@@ -1585,37 +1921,87 @@ object Generator {
       val portDatatype: String = genPortDatatype(p, packageName, datatypeMap, reporter)
       if (strictAADLMode) {
         if (p.direction == Direction.In) {
-          subscribers = subscribers :+ genCppTopicSubscriptionStrict(p, isSporadic(component), portDatatype)
+          if (invertTopicBinding) {
+            if (connectionMap.get(p.path).nonEmpty) {
+              val outputPorts = connectionMap.get(p.path).get
+              val outputPortNames = getPortNames(outputPorts)
+
+              subscribers = subscribers :+
+                genCppTopicSubscriptionStrict(p, nodeName, portDatatype, outputPortNames)
+              // TODO: Add helper method?  If so, remember to add header
+            }
+            else {
+              // In ports with no connections should still subscribe to a topic
+              subscribers = subscribers :+
+                genCppTopicSubscriptionStrict(p, nodeName, portDatatype, getPortNames(IS(p.path.toISZ)))
+            }
+          }
+          else {
+            subscribers = subscribers :+
+              genCppTopicSubscriptionStrict(p, nodeName, portDatatype, getPortNames(IS(p.path.toISZ)))
+          }
+
+          strictSubscriptionMessageAcceptorMethods = strictSubscriptionMessageAcceptorMethods :+
+            genCppMessageAcceptor(p, nodeName, isSporadic(component), portDatatype)
+
           if (!isSporadic(component) || p.isInstanceOf[AadlDataPort]) {
-            inTuplePortNames = inTuplePortNames :+ p.identifier
+            inPortNames = inPortNames :+ p.identifier
             subscriptionMessageGetters = subscriptionMessageGetters :+ genCppGetApplicationInValue(p, nodeName, portDatatype)
           }
           else {
             strictSubscriptionHandlerBaseMethods = strictSubscriptionHandlerBaseMethods :+
               genCppSubscriptionHandlerBaseSporadic(p, nodeName, portDatatype)
           }
+
           hasInPorts = T
         }
         else {
           outPortNames = outPortNames :+ p.identifier
-          if (connectionMap.get(p.path).nonEmpty) {
-            val inputPorts = connectionMap.get(p.path).get
-            val inputPortNames = getPortNames(inputPorts)
-            publishers = publishers :+ genCppTopicPublisher(p, portDatatype, inputPortNames)
+          if (invertTopicBinding) {
+            publishers = publishers :+ genCppTopicPublisher(p, portDatatype, getPortNames(IS(p.path.toISZ)))
             publisherMethods = publisherMethods :+
-              genCppTopicPublishMethodStrict(p, nodeName, portDatatype, inputPortNames.size)
+              genCppTopicPublishMethodStrict(p, nodeName, portDatatype, 1)
           }
           else {
-            // TODO: Why is this 0?  It should probably be 1
-            publisherMethods = publisherMethods :+
-              genCppTopicPublishMethodStrict(p, nodeName, portDatatype, 0)
+            if (connectionMap.get(p.path).nonEmpty) {
+              val inputPorts = connectionMap.get(p.path).get
+              val inputPortNames = getPortNames(inputPorts)
+              publishers = publishers :+ genCppTopicPublisher(p, portDatatype, inputPortNames)
+              publisherMethods = publisherMethods :+
+                genCppTopicPublishMethodStrict(p, nodeName, portDatatype, inputPortNames.size)
+            }
+            else {
+              // Out ports with no connections should still publish to a topic
+              publishers = publishers :+ genCppTopicPublisher(p, portDatatype, getPortNames(IS(p.path.toISZ)))
+              publisherMethods = publisherMethods :+
+                genCppTopicPublishMethodStrict(p, nodeName, portDatatype, 1)
+            }
           }
           strictPutMsgMethods = strictPutMsgMethods :+ genCppPutMsgMethodStrict(p, nodeName, portDatatype)
         }
       }
       else {
         if (p.direction == Direction.In) {
-          subscribers = subscribers :+ genCppTopicSubscription(p, nodeName, portDatatype)
+          if (invertTopicBinding) {
+            if (connectionMap.get(p.path).nonEmpty) {
+              val outputPorts = connectionMap.get(p.path).get
+              val outputPortNames = getPortNames(outputPorts)
+              subscribers = subscribers :+ genCppTopicSubscription(p, nodeName, portDatatype, outputPortNames)
+            }
+            else {
+              // In ports with no connections should still subscribe to a topic
+              subscribers = subscribers :+
+                genCppTopicSubscription(p, nodeName, portDatatype, getPortNames(IS(p.path.toISZ)))
+            }
+          }
+          else {
+            subscribers = subscribers :+
+              genCppTopicSubscription(p, nodeName, portDatatype, getPortNames(IS(p.path.toISZ)))
+          }
+          // Specifically for event ports, not eventdata ports (no data to be handled)
+          if (isEventPort(portDatatype)) {
+            eventPortHandlers = eventPortHandlers :+ genCppEventPortHandler(p, nodeName, portDatatype)
+          }
           if (!isSporadic(component) || p.isInstanceOf[AadlDataPort]) {
             subscriberMethods = subscriberMethods :+
               genCppSubscriptionHandlerPeriodic(p, nodeName, portDatatype)
@@ -1624,12 +2010,25 @@ object Generator {
           hasInPorts = T
         }
         else {
-          if (connectionMap.get(p.path).nonEmpty) {
-            val inputPorts = connectionMap.get(p.path).get
-            val inputPortNames = getPortNames(inputPorts)
-            publishers = publishers :+ genCppTopicPublisher(p, portDatatype, inputPortNames)
+          if (invertTopicBinding) {
+            publishers = publishers :+ genCppTopicPublisher(p, portDatatype, getPortNames(IS(p.path.toISZ)))
             publisherMethods = publisherMethods :+
-              genCppTopicPublishMethod(p, nodeName, portDatatype, inputPortNames.size)
+              genCppTopicPublishMethod(p, nodeName, portDatatype, 1)
+          }
+          else {
+            if (connectionMap.get(p.path).nonEmpty) {
+              val inputPorts = connectionMap.get(p.path).get
+              val inputPortNames = getPortNames(inputPorts)
+              publishers = publishers :+ genCppTopicPublisher(p, portDatatype, inputPortNames)
+              publisherMethods = publisherMethods :+
+                genCppTopicPublishMethod(p, nodeName, portDatatype, inputPortNames.size)
+            }
+            else {
+              // Out ports with no connections should still publish to a topic
+              publishers = publishers :+ genCppTopicPublisher(p, portDatatype, getPortNames(IS(p.path.toISZ)))
+              publisherMethods = publisherMethods :+
+                genCppTopicPublishMethod(p, nodeName, portDatatype, 1)
+            }
           }
         }
       }
@@ -1638,11 +2037,11 @@ object Generator {
     var fileBody =
       st"""#include "${packageName}/base_headers/${nodeName}${cpp_src_node_header_name_suffix}"
           |
-          |//=================================================
-          |//  D O   N O T   E D I T   T H I S   F I L E
-          |//=================================================
+          |//========================================================
+          |// Re-running Codegen will overwrite changes to this file
+          |//========================================================
           |
-          |${nodeName}::${nodeName}() : Node("${component.pathAsString("_")}")
+          |${nodeName}::${nodeName}() : Node("${genNodeName(component)}")
           |{
           |    ${genCppCallbackGroupVar()}"""
 
@@ -1679,13 +2078,13 @@ object Generator {
       fileBody =
         st"""${fileBody}
             |    // Used by receiveInputs
-            |    ${genCppInDataPortTupleVector(inTuplePortNames)}"""
+            |    ${genCppInDataPortTupleVector(inPortNames)}"""
 
       if (!isSporadic(component)) {
         fileBody =
           st"""${fileBody}
               |    // Used by receiveInputs
-              |    ${genCppInEventPortTupleVector(inTuplePortNames)}"""
+              |    ${genCppInEventPortTupleVector(inPortNames)}"""
       }
 
       fileBody =
@@ -1707,6 +2106,12 @@ object Generator {
             |//=================================================
           """
 
+      if (strictSubscriptionMessageAcceptorMethods.size > 0) {
+        fileBody =
+          st"""${fileBody}
+              |${(strictSubscriptionMessageAcceptorMethods, "\n")}"""
+      }
+
       if (subscriberMethods.size > 0) {
         fileBody =
           st"""${fileBody}
@@ -1717,6 +2122,12 @@ object Generator {
         fileBody =
           st"""${fileBody}
               |${(subscriptionMessageGetters, "\n")}"""
+      }
+
+      if (eventPortHandlers.size > 0) {
+        fileBody =
+          st"""${fileBody}
+              |${(eventPortHandlers, "\n")}"""
       }
 
       if (strictSubscriptionHandlerBaseMethods.size > 0) {
@@ -1752,13 +2163,16 @@ object Generator {
 
     val filePath: ISZ[String] = IS("src", packageName, "src", "base_code", fileName)
 
-    return (filePath, fileBody)
+    return (filePath, fileBody, T, IS())
   }
 
   def genCppUserNodeHeaderFile(packageName: String, component: AadlThread, datatypeMap: Map[AadlType, (String, ISZ[String])],
-                               strictAADLMode: B, reporter: Reporter): (ISZ[String], ST) = {
-    val nodeName = component.pathAsString("_")
+                               strictAADLMode: B, reporter: Reporter): (ISZ[String], ST, B, ISZ[Marker]) = {
+    val nodeName = genNodeName(component)
     val fileName = genCppNodeSourceHeaderName(nodeName)
+
+    val startMarker: String = "// Additions within these tags will be preserved when re-running Codegen"
+    val endMarker: String = "// Additions within these tags will be preserved when re-running Codegen"
 
     var subscriptionHandlers: ISZ[ST] = IS()
     if (isSporadic(component)) {
@@ -1808,18 +2222,20 @@ object Generator {
           |    //=================================================
           |    //  Include any additional declarations here
           |    //=================================================
+          |    ${startMarker}
           |
+          |    ${endMarker}
           |};
           """
 
     val filePath: ISZ[String] = IS("src", packageName, "include", packageName, "user_headers", fileName)
 
-    return (filePath, fileBody)
+    return (filePath, fileBody, F, IS(Marker(startMarker, endMarker)))
   }
 
   def genCppUserNodeCppFile(packageName: String, component: AadlThread, datatypeMap: Map[AadlType, (String, ISZ[String])],
-                            strictAADLMode: B, reporter: Reporter): (ISZ[String], ST) = {
-    val nodeName = component.pathAsString("_")
+                            hasConverterFiles: B, strictAADLMode: B, reporter: Reporter): (ISZ[String], ST, B, ISZ[Marker]) = {
+    val nodeName = genNodeName(component)
     val fileName = genCppNodeSourceName(nodeName)
 
     var subscriptionHandlers: ISZ[ST] = IS()
@@ -1842,8 +2258,20 @@ object Generator {
       subscriptionHandlers = subscriptionHandlers :+ genCppTimeTriggeredMethod(nodeName)
     }
 
+    var includeFiles: ST = st"#include \"${packageName}/user_headers/${nodeName}${cpp_src_node_header_name_suffix}\""
+
+    if (hasConverterFiles) {
+      includeFiles =
+        st"""${includeFiles}
+            |#include "${packageName}/base_headers/enum_converter.hpp""""
+    }
+
     val fileBody =
-      st"""#include "${packageName}/user_headers/${nodeName}${cpp_src_node_header_name_suffix}"
+      st"""${includeFiles}
+          |
+          |//===========================================================
+          |// This file will not be overwritten when re-running Codegen
+          |//===========================================================
           |
           |//=================================================
           |//  I n i t i a l i z e    E n t r y    P o i n t
@@ -1863,19 +2291,19 @@ object Generator {
 
     val filePath: ISZ[String] = IS("src", packageName, "src", "user_code", fileName)
 
-    return (filePath, fileBody)
+    return (filePath, fileBody, F, IS())
   }
 
-  def genCppNodeRunnerFile(packageName: String, component: AadlThread): (ISZ[String], ST) = {
-    val nodeName = component.pathAsString("_")
+  def genCppNodeRunnerFile(packageName: String, component: AadlThread): (ISZ[String], ST, B, ISZ[Marker]) = {
+    val nodeName = genNodeName(component)
     val fileName = genCppNodeRunnerName(nodeName)
 
     val fileBody =
       st"""#include "${packageName}/user_headers/${nodeName}${cpp_src_node_header_name_suffix}"
           |
-          |//=================================================
-          |//  D O   N O T   E D I T   T H I S   F I L E
-          |//=================================================
+          |//========================================================
+          |// Re-running Codegen will overwrite changes to this file
+          |//========================================================
           |
           |${nodeName}::${nodeName}() : ${nodeName}_base()
           |{
@@ -1899,28 +2327,155 @@ object Generator {
 
     val filePath: ISZ[String] = IS("src", packageName, "src", "base_code", fileName)
 
-    return (filePath, fileBody)
+    return (filePath, fileBody, T, IS())
   }
 
   def genCppNodeFiles(modelName: String, threadComponents: ISZ[AadlThread], connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
-                      datatypeMap: Map[AadlType, (String, ISZ[String])], strictAADLMode: B, reporter: Reporter): ISZ[(ISZ[String], ST)] = {
+                      datatypeMap: Map[AadlType, (String, ISZ[String])], hasConverterFiles: B, strictAADLMode: B,
+                      invertTopicBinding: B, reporter: Reporter): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
     val top_level_package_nameT: String = genCppPackageName(modelName)
 
-    var cpp_files: ISZ[(ISZ[String], ST)] = IS()
+    var cpp_files: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
+
     for (comp <- threadComponents) {
       cpp_files =
-        cpp_files :+ genCppBaseNodeHeaderFile(top_level_package_nameT, comp, connectionMap, datatypeMap, strictAADLMode, reporter)
+        cpp_files :+ genCppBaseNodeHeaderFile(top_level_package_nameT, comp, connectionMap, datatypeMap, strictAADLMode,
+                                              invertTopicBinding, reporter)
       cpp_files =
-        cpp_files :+ genCppBaseNodeCppFile(top_level_package_nameT, comp, connectionMap, datatypeMap, strictAADLMode, reporter)
+        cpp_files :+ genCppBaseNodeCppFile(top_level_package_nameT, comp, connectionMap, datatypeMap, strictAADLMode,
+                                           invertTopicBinding, reporter)
       cpp_files =
         cpp_files :+ genCppUserNodeHeaderFile(top_level_package_nameT, comp, datatypeMap, strictAADLMode, reporter)
       cpp_files =
-        cpp_files :+ genCppUserNodeCppFile(top_level_package_nameT, comp, datatypeMap, strictAADLMode, reporter)
+        cpp_files :+ genCppUserNodeCppFile(top_level_package_nameT, comp, datatypeMap, hasConverterFiles, strictAADLMode, reporter)
       cpp_files =
         cpp_files :+ genCppNodeRunnerFile(top_level_package_nameT, comp)
     }
 
     return cpp_files
+  }
+
+  def genCppEnumConverterHeaderFile(packageName: String, enumTypes: ISZ[(String, AadlType)],
+                                    strictAADLMode: B): (ISZ[String], ST, B, ISZ[Marker]) = {
+    var includes: ISZ[ST] = IS()
+    var converterHeaders: ISZ[ST] = IS()
+
+    for (enum <- enumTypes) {
+      val enumName: String = ops.StringOps(enum._2.classifier.apply(enum._2.classifier.size - 1)).replaceAllLiterally("_", "")
+
+      includes = includes :+ st"#include \"${packageName}_interfaces/msg/${enum._1}.hpp\""
+
+      if (strictAADLMode) {
+        converterHeaders = converterHeaders :+
+          st"const char* enumToString(${packageName}_interfaces::msg::${enumName} value);"
+      }
+      else {
+        converterHeaders = converterHeaders :+
+          st"const char* enumToString(${packageName}_interfaces::msg::${enumName}* value);"
+      }
+    }
+
+    val fileBody =
+      st"""#ifndef ENUM_CONVERTER_HPP
+          |#define ENUM_CONVERTER_HPP
+          |
+          |#include <string>
+          |${(includes, "\n")}
+          |
+          |${(converterHeaders, "\n")}
+          |
+          |#endif
+        """
+
+    val filePath: ISZ[String] = IS("src", packageName, "include", packageName, "base_headers", "enum_converter.hpp")
+
+    return (filePath, fileBody, T, IS())
+  }
+
+  def genCppEnumConverters(packageName: String, enumTypes: ISZ[(String, AadlType)], strictAADLMode: B): ISZ[ST] = {
+    var converters: ISZ[ST] = IS()
+
+    for (enum <- enumTypes) {
+      val enumName: String = ops.StringOps(enum._2.classifier.apply(enum._2.classifier.size - 1)).replaceAllLiterally("_", "")
+      val enumValues: ISZ[String] = enum._2.asInstanceOf[EnumType].values
+
+      var cases: ISZ[ST] = IS()
+
+      for (value <- enumValues) {
+        cases = cases :+
+          st"""case ${packageName}_interfaces::msg::${enumName}::${StringOps(enum._1).toUpper}_${StringOps(value).toUpper}:
+              |    return "${enumName} ${value}";"""
+      }
+
+      if (strictAADLMode) {
+        converters = converters :+
+          st"""const char* enumToString(${packageName}_interfaces::msg::${enumName} value) {
+              |    switch (value.${enum._1}) {
+              |        ${(cases, "\n")}
+              |        default:
+              |            return "Unknown value for ${enumName}";
+              |    }
+              |}
+        """
+      }
+      else {
+        converters = converters :+
+          st"""const char* enumToString(${packageName}_interfaces::msg::${enumName}* value) {
+              |    switch (value->${enum._1}) {
+              |        ${(cases, "\n")}
+              |        default:
+              |            return "Unknown value for ${enumName}";
+              |    }
+              |}
+        """
+      }
+    }
+
+    return converters
+  }
+
+  def genCppEnumConverterFile(packageName: String, enumTypes: ISZ[(String, AadlType)],
+                              strictAADLMode: B): (ISZ[String], ST, B, ISZ[Marker]) = {
+    val fileBody =
+      st"""#include "${packageName}/base_headers/enum_converter.hpp"
+          |
+          |//========================================================
+          |// Re-running Codegen will overwrite changes to this file
+          |//========================================================
+          |
+          |${(genCppEnumConverters(packageName, enumTypes, strictAADLMode), "\n")}
+        """
+
+    val filePath: ISZ[String] = IS("src", packageName, "src", "base_code", "enum_converter.cpp")
+
+    return (filePath, fileBody, T, IS())
+  }
+
+  def genCppEnumConverterFiles(modelName: String, datatypeMap: Map[AadlType, (String, ISZ[String])],
+                               strictAADLMode: B): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
+    var enumTypes: ISZ[(String, AadlType)] = IS()
+
+    for (key <- datatypeMap.keys) {
+      key match {
+        case _: EnumType =>
+          val datatype: String = datatypeMap.get(key).get._2.apply(0)
+          val datatypeName: String = StringOps(datatype).substring(StringOps(datatype).indexOf(' ') + 1, datatype.size)
+          enumTypes = enumTypes :+ (datatypeName, key)
+        case x =>
+      }
+    }
+
+    if (enumTypes.size == 0) {
+      return IS()
+    }
+
+    var files: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
+    val packageName: String = genCppPackageName(modelName)
+
+    files = files :+ genCppEnumConverterHeaderFile(packageName, enumTypes, strictAADLMode)
+    files = files :+ genCppEnumConverterFile(packageName, enumTypes, strictAADLMode)
+
+    return files
   }
 
 
@@ -1939,10 +2494,9 @@ object Generator {
     return files
   }
  // TODO: Python pkgs
-  def genPyLaunchPkg(modelName: String, threadComponents: ISZ[AadlThread]): ISZ[(ISZ[String], ST)] = {
-    var files: ISZ[(ISZ[String], ST)] = IS()
+  def genPyLaunchPkg(modelName: String, threadComponents: ISZ[AadlThread]): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
+    var files: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
 
-    // TODO
     //files = files :+ genXmlFormatLaunchFile(modelName, threadComponents)
     files = files :+ genLaunchCMakeListsFile(modelName)
     files = files :+ genLaunchPackageFile(modelName)
@@ -1951,20 +2505,27 @@ object Generator {
   }
 
   def genCppNodePkg(modelName: String, threadComponents: ISZ[AadlThread], connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
-                    datatypeMap: Map[AadlType, (String, ISZ[String])], strictAADLMode: B, reporter: Reporter): ISZ[(ISZ[String], ST)] = {
-    var files: ISZ[(ISZ[String], ST)] = ISZ()
+                    datatypeMap: Map[AadlType, (String, ISZ[String])], strictAADLMode: B, invertTopicBinding: B,
+                    reporter: Reporter): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
+    var files: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = ISZ()
 
-    files = files ++ genCppNodeFiles(modelName, threadComponents, connectionMap, datatypeMap, strictAADLMode, reporter)
-    files = files :+ genCppCMakeListsFile(modelName, threadComponents)
+    val converterFiles: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = genCppEnumConverterFiles(modelName, datatypeMap, strictAADLMode)
+    val hasConverterFiles: B = (converterFiles.size > 0)
+
+    files = files ++
+      genCppNodeFiles(modelName, threadComponents, connectionMap, datatypeMap, hasConverterFiles, strictAADLMode,
+                      invertTopicBinding, reporter)
+    files = files ++ converterFiles
+    files = files :+ genCppCMakeListsFile(modelName, threadComponents, hasConverterFiles)
     files = files :+ genCppPackageFile(modelName)
 
     return files
   }
 
-  def genXmlLaunchPkg(modelName: String, threadComponents: ISZ[AadlThread]): ISZ[(ISZ[String], ST)] = {
-    var files: ISZ[(ISZ[String], ST)] = IS()
+  def genXmlLaunchPkg(modelName: String, threadComponents: ISZ[AadlThread], systemComponents: ISZ[AadlSystem]): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
+    var files: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
 
-    files = files :+ genXmlFormatLaunchFile(modelName, threadComponents)
+    files = files ++ genXmlFormatLaunchFiles(modelName, threadComponents, systemComponents)
     files = files :+ genLaunchCMakeListsFile(modelName)
     files = files :+ genLaunchPackageFile(modelName)
 
@@ -1973,8 +2534,8 @@ object Generator {
 
   // The same datatype package will work regardless of other packages' types
   // ROS2 data/message types are defined in a "{package_name}_interfaces" package according to convention
-  def genInterfacesPkg(modelName: String, datatypeMap: Map[AadlType, (String, ISZ[String])]): ISZ[(ISZ[String], ST)] = {
-    var files: ISZ[(ISZ[String], ST)] = IS()
+  def genInterfacesPkg(modelName: String, datatypeMap: Map[AadlType, (String, ISZ[String])]): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
+    var files: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
 
     files = files ++ genMsgFiles(modelName, datatypeMap)
     files = files :+ genInterfacesCMakeListsFile(modelName, datatypeMap)

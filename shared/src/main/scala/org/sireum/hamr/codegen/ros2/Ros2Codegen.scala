@@ -4,9 +4,9 @@ package org.sireum.hamr.codegen.ros2
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
-import org.sireum.hamr.codegen.common.containers.FileResource
+import org.sireum.hamr.codegen.common.containers.{FileResource, IResource, Marker}
 import org.sireum.hamr.codegen.common.plugin.Plugin
-import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlThread, SymbolTable}
+import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlSystem, AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, ArrayType, BaseType, EnumType, RecordType}
 import org.sireum.hamr.codegen.common.util.HamrCli.CodegenOption
 import org.sireum.hamr.codegen.common.util.ResourceUtil
@@ -24,6 +24,7 @@ import org.sireum.ops.ISZOps
 
   var resources: ISZ[FileResource] = ISZ()
   var threadComponents: ISZ[AadlThread] = ISZ()
+  var systemComponents: ISZ[AadlSystem] = ISZ()
   var connectionMap: Map[ISZ[String], ISZ[ISZ[String]]] = Map.empty
   var datatypeMap: Map[AadlType, (String, ISZ[String])] = Map.empty
 
@@ -32,20 +33,22 @@ import org.sireum.ops.ISZOps
 
     val modelName = getModelName(symbolTable)
 
-    mapConnections(symbolTable.rootSystem, symbolTable, reporter)
+    mapConnections(symbolTable.rootSystem, symbolTable, options.invertTopicBinding, reporter)
 
     mapDatatypes(aadlTypes, reporter)
 
-    var files: ISZ[(ISZ[String], ST)] = IS()
+    var files: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
 
     options.ros2NodesLanguage.name match {
-      case "Cpp" => files = Generator.genCppNodePkg(modelName, threadComponents, connectionMap, datatypeMap, options.strictAadlMode, reporter)
-      case "Python" => files = Generator.genPyNodePkg(modelName, threadComponents, connectionMap, options.strictAadlMode)
+      case "Cpp" => files =
+        Generator.genCppNodePkg(modelName, threadComponents, connectionMap, datatypeMap, options.strictAadlMode,
+                                options.invertTopicBinding, reporter)
+      //case "Python" => files = Generator.genPyNodePkg(modelName, threadComponents, connectionMap, options.strictAadlMode)
       case _ => reporter.error(None(), toolName, s"Unknown code type: ${options.ros2NodesLanguage.name}")
     }
 
     options.ros2LaunchLanguage.name match {
-      case "Xml" => files = files ++ Generator.genXmlLaunchPkg(modelName, threadComponents)
+      case "Xml" => files = files ++ Generator.genXmlLaunchPkg(modelName, threadComponents, systemComponents)
       case "Python" => files = files ++ Generator.genPyLaunchPkg(modelName, threadComponents)
       case _ => reporter.error(None(), toolName, s"Unknown code type: ${options.ros2NodesLanguage.name}")
     }
@@ -64,33 +67,34 @@ import org.sireum.ops.ISZOps
         case _ => filePath
       }
 
-      resources = resources :+ ResourceUtil.createResource(
-        path = absPath,
-        content = file._2,
-        overwrite = T
-      )
+      resources = resources :+ IResource(absPath, file._2, file._4, file._3, F, F, F)
     }
 
     return Ros2Results(fileResources = resources)
   }
 
   // Also adds threads to threadComponents
-  def mapConnections(c: AadlComponent, symbolTable: SymbolTable, reporter: Reporter): Unit = {
+  def mapConnections(c: AadlComponent, symbolTable: SymbolTable, invertTopicBinding: B, reporter: Reporter): Unit = {
     for(ci <- c.connectionInstances) {
-      processConnection(ci, c.component, symbolTable, reporter)
+      processConnection(ci, c.component, symbolTable, invertTopicBinding, reporter)
     }
 
-    if (c.isInstanceOf[AadlThread]) {
-      threadComponents = threadComponents :+ c.asInstanceOf[AadlThread]
+    c match {
+      case thread: AadlThread =>
+        threadComponents = threadComponents :+ thread
+      case system: AadlSystem =>
+        systemComponents = systemComponents :+ system
+      case _ =>
     }
 
     for (sc <- c.subComponents) {
-      mapConnections(sc, symbolTable, reporter)
+      mapConnections(sc, symbolTable, invertTopicBinding, reporter)
     }
   }
 
   // Checks if a connection is allowed, and if so, processes it
-  def processConnection(c: ConnectionInstance, srcComponent: Component, symbolTable: SymbolTable, reporter: Reporter): B = {
+  def processConnection(c: ConnectionInstance, srcComponent: Component, symbolTable: SymbolTable, invertTopicBinding: B,
+                        reporter: Reporter): B = {
     val str = s"${CommonUtil.getName(c.name)}  from  ${CommonUtil.getName(srcComponent.identifier)}"
 
     if (c.src.component == c.dst.component) {
@@ -119,16 +123,33 @@ import org.sireum.ops.ISZOps
     val srcName = c.src.feature.get.name
     val dstName = c.dst.feature.get.name
 
-    if (connectionMap.contains(srcName) && ISZOps(connectionMap.get(srcName).get).contains(dstName)) {
-      reporter.info(None(), toolName, s"Skipping: already handled connection: ${srcName} to ${dstName}")
-      return F
+    if (invertTopicBinding) {
+      if (connectionMap.contains(dstName) && ISZOps(connectionMap.get(dstName).get).contains(srcName)) {
+        reporter.info(None(), toolName, s"Skipping: already handled connection: ${srcName} to ${dstName}")
+        return F
+      }
+    }
+    else {
+      if (connectionMap.contains(srcName) && ISZOps(connectionMap.get(srcName).get).contains(dstName)) {
+        reporter.info(None(), toolName, s"Skipping: already handled connection: ${srcName} to ${dstName}")
+        return F
+      }
     }
 
-    val seq: ISZ[ISZ[String]] =
-      if (!connectionMap.contains(srcName)) ISZ(dstName)
-      else connectionMap.get(srcName).get :+ dstName
+    if (invertTopicBinding) {
+      val seq: ISZ[ISZ[String]] =
+        if (!connectionMap.contains(dstName)) ISZ(srcName)
+        else connectionMap.get(dstName).get :+ srcName
 
-    connectionMap = connectionMap + (srcName ~> seq)
+      connectionMap = connectionMap + (dstName ~> seq)
+    }
+    else {
+      val seq: ISZ[ISZ[String]] =
+        if (!connectionMap.contains(srcName)) ISZ(dstName)
+        else connectionMap.get(srcName).get :+ dstName
+
+      connectionMap = connectionMap + (srcName ~> seq)
+    }
 
     return T
   }
@@ -220,13 +241,13 @@ import org.sireum.ops.ISZOps
       msg = s"${baseType}[${arr.dimensions.apply(0)}] arr"
     } else {
       var length: Z = 1
-      msg = s"int16[${arr.dimensions.size}] DIMENSIONS = ["
+      var index: Z = 0
       for (dim <- arr.dimensions) {
         length = length * dim
-        msg = s"${msg}${dim},"
+        msg = s"${msg}int16 DIM_${index} = ${dim}\n"
+        index = index + 1
       }
-      msg = ops.StringOps(msg).substring(0, msg.size - 1)
-      msg = s"${msg}]\n${baseType}[${length}] arr"
+      msg = s"${msg}\n${baseType}[${length}] arr"
     }
 
     datatypeMap = datatypeMap + (t ~> (s, ISZ(msg)))

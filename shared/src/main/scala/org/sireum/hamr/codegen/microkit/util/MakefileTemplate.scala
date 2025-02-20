@@ -3,7 +3,7 @@ package org.sireum.hamr.codegen.microkit.util
 
 import org.sireum._
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen
-import org.sireum.hamr.codegen.microkit.types.TypeUtil
+import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
 import org.sireum.hamr.codegen.microkit.util.Util.TAB
 
 object MakefileTemplate {
@@ -30,6 +30,8 @@ object MakefileTemplate {
           |
           |export TOP_DIR := $$(abspath $$(dir $${MAKEFILE_LIST}))
           |export TOP_BUILD_DIR := $$(abspath build)
+          |
+          |export CRATES_DIR := $$(TOP_DIR)/crates
           |
           |export TARGET := aarch64-none-elf
           |

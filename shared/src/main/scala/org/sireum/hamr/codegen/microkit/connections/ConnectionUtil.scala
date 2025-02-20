@@ -4,7 +4,7 @@ package org.sireum.hamr.codegen.microkit.connections
 import org.sireum._
 import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlEventPort, AadlFeatureEvent, AadlPort, AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlType
-import org.sireum.hamr.codegen.microkit.types.{QueueTemplate, TypeStore, TypeUtil}
+import org.sireum.hamr.codegen.microkit.types.{QueueTemplate, TypeStore, MicrokitTypeUtil}
 import org.sireum.hamr.codegen.microkit.util._
 import org.sireum.hamr.ir.{ConnectionInstance, Name}
 
@@ -12,7 +12,7 @@ object ConnectionUtil {
 
   def getPortType(p: AadlPort): AadlType = {
     val ret: AadlType = p match {
-      case _: AadlEventPort => TypeUtil.eventPortType
+      case _: AadlEventPort => MicrokitTypeUtil.eventPortType
       case p: AadlEventDataPort => p.aadlType
       case p: AadlDataPort => p.aadlType
       case _ => halt("Infeasible")
@@ -24,9 +24,8 @@ object ConnectionUtil {
                     dstPort: AadlPort,
                     srcPort: Option[AadlPort],
                     outConnection: Option[ConnectionInstance],
-                    typeStore: Map[AadlType, TypeStore],
-                    symbolTable: SymbolTable,
-                   ): DefaultConnectionContributions = {
+                    typeStore: TypeStore,
+                    symbolTable: SymbolTable): UberConnectionContributions = {
 
     val aadlType: AadlType = (dstPort, srcPort) match {
       case (p, None()) => getPortType(p)
@@ -40,7 +39,7 @@ object ConnectionUtil {
         assert(getPortType(srcPort) == getPortType(dstPort),
           s"Currently expecting connected ports to have the same type ${outConnection.get.name}")
 
-        getPortType(srcPort)
+        typeStore.getRepType(getPortType(srcPort))
     }
 
     val isDataPort = dstPort.isInstanceOf[AadlDataPort]
@@ -50,65 +49,77 @@ object ConnectionUtil {
     val dstQueueSize: Z = if (isDataPort) 1
     else dstPort.asInstanceOf[AadlFeatureEvent].queueSize
 
-    val typeName = typeStore.get(aadlType).get
+    val cTypeName = typeStore.getCTypeName(aadlType)
+    val rustTypeName = typeStore.getRustTypeName(aadlType)
 
-    val sharedMemTypeName = QueueTemplate.getTypeQueueTypeName(typeName.typeName, dstQueueSize)
+    val sharedMemTypeName = QueueTemplate.getTypeQueueTypeName(cTypeName, dstQueueSize)
 
     val sharedVarName = QueueTemplate.getClientDequeueSharedVarName(dstPort.identifier, dstQueueSize)
-    val recvQueueTypeName = QueueTemplate.getClientRecvQueueTypeName(typeName.typeName, dstQueueSize)
+    val recvQueueTypeName = QueueTemplate.getClientRecvQueueTypeName(cTypeName, dstQueueSize)
     val recvQueueVarName = QueueTemplate.getClientRecvQueueName(dstPort.identifier)
 
-    var methodApiSigs: ISZ[ST] = ISZ()
-    var methodApis: ISZ[ST] = ISZ()
+    var cMethodApiSigs: ISZ[ST] = ISZ()
+    var cMethodApis: ISZ[ST] = ISZ()
+    var rustExternApis: ISZ[ST] = ISZ()
+    var rustUnsafeExternApisWrappers: ISZ[ST] = ISZ()
+
     if (isEventPort || isEventDataPort) {
-      methodApiSigs = methodApiSigs :+
-        QueueTemplate.getClientIsEmptyMethodSig(dstPort.identifier) :+
-        QueueTemplate.getClientGetterMethodPollSig(dstPort.identifier, typeName.typeName, isEventPort) :+
-        QueueTemplate.getClientGetterMethodSig(dstPort.identifier, typeName.typeName, isEventPort)
-      methodApis = methodApis :+
-        QueueTemplate.getClientIsEmptyMethod(dstPort.identifier, typeName.typeName, dstQueueSize) :+
-        QueueTemplate.getClientGetterMethodPoll(dstPort.identifier, typeName.typeName, dstQueueSize, isEventPort) :+
-        QueueTemplate.getClientGetterMethod(dstPort.identifier, typeName.typeName, isEventPort)
+      cMethodApiSigs = cMethodApiSigs :+
+        QueueTemplate.getClientIsEmpty_C_MethodSig(dstPort.identifier) :+
+        QueueTemplate.getClientGetter_C_MethodPollSig(dstPort.identifier, cTypeName, isEventPort) :+
+        QueueTemplate.getClientGetter_C_MethodSig(dstPort.identifier, cTypeName, isEventPort)
+
+      cMethodApis = cMethodApis :+
+        QueueTemplate.getClientIsEmpty_C_Method(dstPort.identifier, cTypeName, dstQueueSize) :+
+        QueueTemplate.getClientGetter_C_MethodPoll(dstPort.identifier, cTypeName, dstQueueSize, isEventPort) :+
+        QueueTemplate.getClientGetter_C_Method(dstPort.identifier, cTypeName, isEventPort)
+
+      rustExternApis = rustExternApis :+
+        QueueTemplate.getClientIsEmpty_rust_MethodSig(dstPort.identifier, F) :+
+        QueueTemplate.getClientGetter_rust_MethodPollSig(dstPort.identifier, rustTypeName, isEventPort, F) :+
+        QueueTemplate.getClientGetter_rust_MethodSig(dstPort.identifier, rustTypeName, isEventPort, F)
+
+      rustUnsafeExternApisWrappers = rustUnsafeExternApisWrappers :+
+        QueueTemplate.getClientIsEmpty_rust_UnsafeMethod(dstPort.identifier) :+
+        QueueTemplate.getClientGetter_rust_UnsafeMethodPoll(dstPort.identifier, rustTypeName, dstQueueSize, isEventPort) :+
+        QueueTemplate.getClientGetter_rust_UnsafeMethod(dstPort.identifier, rustTypeName, isEventPort)
+
     } else {
-      methodApiSigs = methodApiSigs :+
-        QueueTemplate.getClientGetterMethodSig(dstPort.identifier, typeName.typeName, F)
-      methodApis = methodApis :+
-        QueueTemplate.getClientDataGetterMethod(dstPort.identifier, typeName.typeName, dstQueueSize, aadlType)
+      cMethodApiSigs = cMethodApiSigs :+
+        QueueTemplate.getClientGetter_C_MethodSig(dstPort.identifier, cTypeName, F)
+
+      cMethodApis = cMethodApis :+
+        QueueTemplate.getClientDataGetter_C_Method(dstPort.identifier, cTypeName, dstQueueSize, aadlType)
+
+      rustExternApis = rustExternApis :+
+        QueueTemplate.getClientGetter_rust_MethodSig(dstPort.identifier, rustTypeName, F, F)
+
+      rustUnsafeExternApisWrappers = rustUnsafeExternApisWrappers :+
+        QueueTemplate.getClientDataGetter_rust_UnsafeMethod(dstPort.identifier, rustTypeName, dstQueueSize, aadlType)
     }
 
-    var userMethodSignatures: ISZ[ST] = ISZ()
-    var userMethodDefaultImpls: ISZ[ST] = ISZ()
+    var cUserMethodSignatures: ISZ[ST] = ISZ()
+    var cUserMethodDefaultImpls: ISZ[ST] = ISZ()
     var computeContributions: ISZ[ST] = ISZ()
     if (!dstThread.toVirtualMachine(symbolTable)) {
       if (dstThread.isSporadic()) {
-        userMethodSignatures = userMethodSignatures :+ QueueTemplate.getClientEventHandlerMethodSig(dstPort.identifier)
+        cUserMethodSignatures = cUserMethodSignatures :+ QueueTemplate.getClientEventHandlerMethodSig(dstPort.identifier)
 
         if (isEventPort || isEventDataPort) {
           computeContributions = computeContributions :+ QueueTemplate.getClientSporadicComputeContributions(dstPort.identifier)
         }
 
-        userMethodDefaultImpls = userMethodDefaultImpls :+ QueueTemplate.getClientSporadicDefaultImplContributions(dstPort.identifier)
+        cUserMethodDefaultImpls = cUserMethodDefaultImpls :+ QueueTemplate.getClientSporadicDefaultImplContributions(dstPort.identifier)
       }
     }
 
     val memoryRegionName: ISZ[String] = if(srcPort.nonEmpty) srcPort.get.path else dstPort.path
 
-    return DefaultConnectionContributions(
+    return UberConnectionContributions(
       portName = dstPort.path,
       portPriority = None(),
-      headerImportContributions = ISZ(),
-      implementationImportContributions = ISZ(),
-      userMethodSignatures = userMethodSignatures,
-      userMethodDefaultImpls = userMethodDefaultImpls,
-      defineContributions = ISZ(),
-      globalVarContributions = ISZ(
-        PortVaddr(s"volatile $sharedMemTypeName", s"*$sharedVarName"),
-        QueueVaddr(recvQueueTypeName, recvQueueVarName)
-      ),
-      apiMethodSigs = methodApiSigs,
-      apiMethods = methodApis,
-      initContributions = ISZ(QueueTemplate.getClientRecvInitMethodCall(dstPort.identifier, typeName.typeName, dstQueueSize)),
-      computeContributions = computeContributions,
+      aadlType = aadlType,
+      queueSize = dstQueueSize,
       sharedMemoryMapping = ISZ(
         PortSharedMemoryRegion(
           outgoingPortPath = memoryRegionName,
@@ -118,24 +129,42 @@ object ConnectionUtil {
           sizeInKiBytes = Util.defaultPageSizeInKiBytes,
           physicalAddressInKiBytes = None())
       ),
-      aadlType = aadlType,
-      queueSize = dstQueueSize
+
+      cContributions = cConnectionContributions(
+        cHeaderImportContributions = ISZ(),
+        cImplementationImportContributions = ISZ(),
+        cUserMethodSignatures = cUserMethodSignatures,
+        cUserMethodDefaultImpls = cUserMethodDefaultImpls,
+        cDefineContributions = ISZ(),
+        cGlobalVarContributions = ISZ(
+          PortVaddr(s"volatile $sharedMemTypeName", s"*$sharedVarName"),
+          QueueVaddr(recvQueueTypeName, recvQueueVarName)
+        ),
+        cApiMethodSigs = cMethodApiSigs,
+        cApiMethods = cMethodApis,
+        cInitContributions = ISZ(QueueTemplate.getClientRecvInitMethodCall(dstPort.identifier, cTypeName, dstQueueSize)),
+        cComputeContributions = computeContributions),
+
+      rustContributions = rustConnectionsContributions(
+        rustExternApis = rustExternApis,
+        rustUnsafeExternApisWrappers = rustUnsafeExternApisWrappers
+      )
     )
   }
 
   def processOutPort(srcPort: AadlPort,
-                     receiverContributions: Map[ISZ[String], ConnectionContributions],
-                     typeStore: Map[AadlType, TypeStore]): DefaultConnectionContributions = {
+                     receiverContributions: Map[ISZ[String], UberConnectionContributions],
+                     typeStore: TypeStore): UberConnectionContributions = {
     val isEventPort = srcPort.isInstanceOf[AadlEventPort]
 
     var sharedMemoryMappings: ISZ[MemoryRegion] = ISZ()
-    var sharedMemoryVars: ISZ[GlobalVarContribution] = ISZ()
-    var initContributions: ISZ[ST] = ISZ()
+    var cSharedMemoryVars: ISZ[GlobalVarContribution] = ISZ()
+    var cInitContributions: ISZ[ST] = ISZ()
     var srcPutContributions: ISZ[ST] = ISZ()
 
     var uniqueQueueSizes: Set[Z] = Set.empty
 
-    val senderPortType: AadlType = getPortType(srcPort)
+    val senderPortType: AadlType = typeStore.getRepType(getPortType(srcPort))
 
     for (receiverContribution <- receiverContributions.values if !uniqueQueueSizes.contains(receiverContribution.queueSize)) {
       uniqueQueueSizes = uniqueQueueSizes + receiverContribution.queueSize
@@ -145,21 +174,21 @@ object ConnectionUtil {
         halt("Connected ports must have the same type")
       }
 
-      val typeName = typeStore.get(receiverContribution.aadlType).get
+      val cTypeName = typeStore.getCTypeName(receiverContribution.aadlType)
 
       val sharedMemVarName = QueueTemplate.getClientEnqueueSharedVarName(srcPort.identifier, receiverContribution.queueSize)
       srcPutContributions = srcPutContributions :+ QueueTemplate.getClientPutEntry(
         sharedMemoryVarName = sharedMemVarName,
-        queueElementTypeName = typeName.typeName,
+        queueElementTypeName = cTypeName,
         queueSize = receiverContribution.queueSize,
         isEventPort = isEventPort)
 
-      val sPortType: String = typeStore.get(receiverContribution.aadlType).get.typeName
-      val queueType = QueueTemplate.getTypeQueueTypeName(sPortType, receiverContribution.queueSize)
+      val cPortType: String = typeStore.getCTypeName(receiverContribution.aadlType)
+      val queueType = QueueTemplate.getTypeQueueTypeName(cPortType, receiverContribution.queueSize)
       val varName = QueueTemplate.getClientEnqueueSharedVarName(srcPort.identifier, receiverContribution.queueSize)
-      sharedMemoryVars = sharedMemoryVars :+ QueueVaddr(s"volatile $queueType", s"*$varName")
+      cSharedMemoryVars = cSharedMemoryVars :+ QueueVaddr(s"volatile $queueType", s"*$varName")
 
-      initContributions = initContributions :+ QueueTemplate.getQueueInitMethod(varName, sPortType, receiverContribution.queueSize)
+      cInitContributions = cInitContributions :+ QueueTemplate.getQueueInitMethod(varName, cPortType, receiverContribution.queueSize)
 
       sharedMemoryMappings = sharedMemoryMappings :+
         PortSharedMemoryRegion(
@@ -173,23 +202,24 @@ object ConnectionUtil {
     }
 
     if (receiverContributions.isEmpty) {
-      val typeName = typeStore.get(senderPortType).get
+      val cTypeName = typeStore.getCTypeName(senderPortType)
 
       val queueSize = 1
 
       val sharedMemVarName = QueueTemplate.getClientEnqueueSharedVarName(srcPort.identifier, queueSize)
       srcPutContributions = srcPutContributions :+ QueueTemplate.getClientPutEntry(
         sharedMemoryVarName = sharedMemVarName,
-        queueElementTypeName = typeName.typeName,
+        queueElementTypeName = cTypeName,
         queueSize = queueSize,
         isEventPort = isEventPort)
 
-      val sPortType: String = typeStore.get(senderPortType).get.typeName
-      val queueType = QueueTemplate.getTypeQueueTypeName(sPortType, queueSize)
+      val cPortType: String = typeStore.getCTypeName(senderPortType)
+      val rustPortType: String = typeStore.getRustTypeName(senderPortType)
+      val queueType = QueueTemplate.getTypeQueueTypeName(cPortType, queueSize)
       val varName = QueueTemplate.getClientEnqueueSharedVarName(srcPort.identifier, queueSize)
-      sharedMemoryVars = sharedMemoryVars :+ QueueVaddr(s"volatile $queueType", s"*$varName")
+      cSharedMemoryVars = cSharedMemoryVars :+ QueueVaddr(s"volatile $queueType", s"*$varName")
 
-      initContributions = initContributions :+ QueueTemplate.getQueueInitMethod(varName, sPortType, queueSize)
+      cInitContributions = cInitContributions :+ QueueTemplate.getQueueInitMethod(varName, rustPortType, queueSize)
 
       sharedMemoryMappings = sharedMemoryMappings :+
         PortSharedMemoryRegion(
@@ -202,28 +232,37 @@ object ConnectionUtil {
         )
     }
 
-    val sPortType: String = typeStore.get(senderPortType).get.typeName
-    val apiMethodSig = QueueTemplate.getClientPutMethodSig(srcPort.identifier, sPortType, isEventPort)
-    val apiMethod = QueueTemplate.getClientPutMethod(srcPort.identifier, sPortType, srcPutContributions, isEventPort)
+    val cPortType: String = typeStore.getCTypeName(senderPortType)
+    val rustPortType: String = typeStore.getRustTypeName(senderPortType)
+    val cApiMethodSig = QueueTemplate.getClientPut_C_MethodSig(srcPort.identifier, cPortType, isEventPort)
+    val cApiMethod = QueueTemplate.getClientPut_C_Method(srcPort.identifier, cPortType, srcPutContributions, isEventPort)
 
-    return DefaultConnectionContributions(
+    val rustApiMethodSig = QueueTemplate.getClientPut_rust_MethodSig(srcPort.identifier, rustPortType, isEventPort, F)
+    val rustUnsafeExternApisWrappers = QueueTemplate.getClientPut_rust_UnsafeMethod(srcPort.identifier, rustPortType, isEventPort)
+
+    return UberConnectionContributions(
       portName = srcPort.path,
       portPriority = None(),
-      headerImportContributions = ISZ(),
-      implementationImportContributions = ISZ(),
-      userMethodSignatures = ISZ(),
-      userMethodDefaultImpls = ISZ(),
-      defineContributions = ISZ(),
-      globalVarContributions = sharedMemoryVars,
-      apiMethodSigs = ISZ(apiMethodSig),
-      apiMethods = ISZ(apiMethod),
-      initContributions = initContributions,
-      computeContributions = ISZ(),
+      aadlType = senderPortType,
+      queueSize = 1, // outgoing port so queue size not relevant
       sharedMemoryMapping = sharedMemoryMappings,
 
-      aadlType = senderPortType,
-      queueSize = 1 // outgoing port so queue size not relevant
+      cContributions = cConnectionContributions(
+        cHeaderImportContributions = ISZ(),
+        cImplementationImportContributions = ISZ(),
+        cUserMethodSignatures = ISZ(),
+        cUserMethodDefaultImpls = ISZ(),
+        cDefineContributions = ISZ(),
+        cGlobalVarContributions = cSharedMemoryVars,
+        cApiMethodSigs = ISZ(cApiMethodSig),
+        cApiMethods = ISZ(cApiMethod),
+        cInitContributions = cInitContributions,
+        cComputeContributions = ISZ()),
+
+      rustContributions = rustConnectionsContributions(
+        rustExternApis = ISZ(rustApiMethodSig),
+        rustUnsafeExternApisWrappers = ISZ(rustUnsafeExternApisWrappers)
+      )
     )
   }
-
 }

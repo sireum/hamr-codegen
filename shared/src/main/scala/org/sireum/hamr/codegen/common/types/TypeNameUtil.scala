@@ -209,5 +209,27 @@ object TypeNameUtil {
     }
     return ret
   }
+
+
+  ////////////////////////////////////////////////////////////////////////
+  // RUST
+  ////////////////////////////////////////////////////////////////////////
+
+  def rustTypeName: String = {
+    val ret: String = kind match {
+      case TypeKind.Empty => "art_Empty"
+      case TypeKind.Base => TypeResolver.getSlangType(typeName).string
+      case TypeKind.Bit => TypeUtil.BIT_FINGERPRINT
+      case _ =>
+        val enumSuffix: String = if (isEnum) "_Type" else ""
+        val cPackageName = st"${(packageNameI, "_")}".render
+        StringUtil.sanitizeName(s"${basePackageName}_${cPackageName}_${typeName}${enumSuffix}")
+    }
+    return ret
+  }
+
+  def qualifiedRustTypeName: String = {
+    return s"types::${rustTypeName}"
+  }
 }
 
