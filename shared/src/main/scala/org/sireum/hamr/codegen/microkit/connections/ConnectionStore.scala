@@ -16,17 +16,13 @@ import org.sireum.hamr.codegen.microkit.util.Util.TAB
 
   def senderName: ISZ[String]
 
-  def senderContributions: Option[UberConnectionContributions]
-
-  // component path -> contributions
-  def receiverContributions: Map[ISZ[String], UberConnectionContributions]
+  def codeContributions: Map[ISZ[String], UberConnectionContributions]
 }
 
 @datatype class DefaultConnectionStore (val systemContributions: SystemContributions,
                                         val typeApiContributions: ISZ[TypeApiContributions],
                                         val senderName: ISZ[String],
-                                        val senderContributions: Option[UberConnectionContributions],
-                                        val receiverContributions: Map[ISZ[String], UberConnectionContributions]) extends ConnectionStore
+                                        val codeContributions: Map[ISZ[String], UberConnectionContributions]) extends ConnectionStore
 
 @sig trait SystemContributions {
   def sharedMemoryRegionContributions: ISZ[MemoryRegion]
@@ -103,41 +99,48 @@ import org.sireum.hamr.codegen.microkit.util.Util.TAB
 
 @sig trait cLangConnectionContributions {
 
-  def cHeaderImportContributions: ISZ[String]
+  def cBridge_EntrypointMethodSignatures: ISZ[ST]
 
-  def cImplementationImportContributions: ISZ[String]
+  def cUser_MethodDefaultImpls: ISZ[ST]
 
-  def cUserMethodSignatures: ISZ[ST]
+  def cBridge_GlobalVarContributions: ISZ[GlobalVarContribution]
 
-  def cUserMethodDefaultImpls: ISZ[ST]
+  def cPortApiMethodSigs: ISZ[ST]
 
-  def cDefineContributions: ISZ[ST]
+  def cBridge_PortApiMethods: ISZ[ST]
 
-  def cGlobalVarContributions: ISZ[GlobalVarContribution]
+  def cBridge_InitContributions: ISZ[ST]
 
-  def cApiMethodSigs: ISZ[ST]
-
-  def cApiMethods: ISZ[ST]
-
-  def cInitContributions: ISZ[ST]
-
-  def cComputeContributions: ISZ[ST]
+  def cBridge_ComputeContributions: ISZ[ST]
 }
 
-@datatype class cConnectionContributions (val cHeaderImportContributions: ISZ[String],
-                                          val cApiMethodSigs: ISZ[ST],
+object cConnectionContributions {
+  @pure def empty: cConnectionContributions = {
+    return cConnectionContributions(ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ())
+  }
+}
 
-                                          val cUserMethodSignatures: ISZ[ST],
-                                          val cGlobalVarContributions: ISZ[GlobalVarContribution],
-                                          val cDefineContributions: ISZ[ST],
-                                          val cApiMethods: ISZ[ST],
+@datatype class cConnectionContributions (val cPortApiMethodSigs: ISZ[ST],
 
-                                          val cImplementationImportContributions: ISZ[String],
+                                          val cBridge_EntrypointMethodSignatures: ISZ[ST],
+                                          val cBridge_GlobalVarContributions: ISZ[GlobalVarContribution],
+                                          val cBridge_PortApiMethods: ISZ[ST],
+                                          val cBridge_InitContributions: ISZ[ST],
+                                          val cBridge_ComputeContributions: ISZ[ST],
 
-                                          val cInitContributions: ISZ[ST],
-                                          val cComputeContributions: ISZ[ST],
-
-                                          val cUserMethodDefaultImpls: ISZ[ST]) extends cLangConnectionContributions
+                                          val cUser_MethodDefaultImpls: ISZ[ST]) extends cLangConnectionContributions {
+  @pure def combine(other: cLangConnectionContributions): cConnectionContributions = {
+    return cConnectionContributions(
+      cPortApiMethodSigs = this.cPortApiMethodSigs ++ other.cPortApiMethodSigs,
+      cBridge_EntrypointMethodSignatures = this.cBridge_EntrypointMethodSignatures ++ other.cBridge_EntrypointMethodSignatures,
+      cBridge_GlobalVarContributions = this.cBridge_GlobalVarContributions ++ other.cBridge_GlobalVarContributions,
+      cBridge_PortApiMethods = this.cBridge_PortApiMethods ++ other.cBridge_PortApiMethods,
+      cBridge_InitContributions = this.cBridge_InitContributions ++ other.cBridge_InitContributions,
+      cBridge_ComputeContributions = this.cBridge_ComputeContributions ++ other.cBridge_ComputeContributions,
+      cUser_MethodDefaultImpls = this.cUser_MethodDefaultImpls ++ other.cUser_MethodDefaultImpls
+    )
+  }
+}
 
 @sig trait rustLangConnectionContributions {
   def rustExternApis: ISZ[ST]
@@ -145,8 +148,21 @@ import org.sireum.hamr.codegen.microkit.util.Util.TAB
   def rustUnsafeExternApisWrappers: ISZ[ST]
 }
 
+object rustConnectionsContributions {
+  @pure def empty: rustConnectionsContributions = {
+    return rustConnectionsContributions(ISZ(), ISZ())
+  }
+}
+
 @datatype class rustConnectionsContributions(val rustExternApis: ISZ[ST],
-                                             val rustUnsafeExternApisWrappers: ISZ[ST]) extends rustLangConnectionContributions
+                                             val rustUnsafeExternApisWrappers: ISZ[ST]) extends rustLangConnectionContributions {
+  @pure def combine(other: rustLangConnectionContributions): rustConnectionsContributions = {
+    return rustConnectionsContributions(
+      rustExternApis = this.rustExternApis ++ other.rustExternApis,
+      rustUnsafeExternApisWrappers = this.rustUnsafeExternApisWrappers ++ other.rustUnsafeExternApisWrappers
+    )
+  }
+}
 
 @datatype class UberConnectionContributions(val portName: ISZ[String],
                                             val portPriority: Option[Z],

@@ -125,9 +125,9 @@ object GclUtil {
           val length32 = (rightPos.offset32 - u32"1") - (leftPos.offset32 + leftPos.length32 + u32"1");
           opPosOpt = Some(FlatPos(
             uriOpt = leftPos.uriOpt,
-            beginLine32 = leftPos.beginLine32,
-            beginColumn32 = leftPos.beginColumn32 + leftPos.length32 + u32"1",
-            endLine32 = rightPos.endLine32,
+            beginLine32 = leftPos.endLine32,
+            beginColumn32 = leftPos.endColumn32 + leftPos.length32 + u32"1",
+            endLine32 = rightPos.beginLine32,
             endColumn32 = rightPos.beginColumn32 - u32"1",
             offset32 = leftPos.offset32 + leftPos.length32 + u32"1",
             length32 = length32
