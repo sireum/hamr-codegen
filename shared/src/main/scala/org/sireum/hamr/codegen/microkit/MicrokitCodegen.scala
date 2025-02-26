@@ -210,7 +210,7 @@ object MicrokitCodegen {
         for (srcPort <- srcThread.getPorts()
              if srcPort.direction == Direction.Out && symbolTable.outConnections.contains(srcPort.path)) {
 
-          var receiverContributions: Map[ISZ[String], UberConnectionContributions] = Map.empty
+          var codeContributions: Map[ISZ[String], UberConnectionContributions] = Map.empty
 
           for (outConnection <- symbolTable.getOutConnections(srcPort.path)) {
             symbolTable.componentMap.get(outConnection.dst.component.name).get match {
@@ -218,7 +218,7 @@ object MicrokitCodegen {
 
                 val dstPort = symbolTable.featureMap.get(outConnection.dst.feature.get.name).get
 
-                receiverContributions = receiverContributions + dstThread.path ~>
+                codeContributions = codeContributions + dstThread.path ~>
                   ConnectionUtil.processInPort(dstThread, dstPort.asInstanceOf[AadlPort],
                     Some(srcPort), Some(outConnection), typeStore, symbolTable)
 
@@ -227,10 +227,11 @@ object MicrokitCodegen {
             }
           } // end processing out connections for the source port
 
-          val senderContributions = ConnectionUtil.processOutPort(srcPort, receiverContributions, typeStore)
+          val senderContributions = ConnectionUtil.processOutPort(srcPort, codeContributions, typeStore)
+          codeContributions = codeContributions + srcThread.path ~> senderContributions
 
           val typeApiContributions: ISZ[TypeApiContributions] =
-            (Set.empty[TypeApiContributions] ++ (for (rc <- receiverContributions.values) yield
+            (Set.empty[TypeApiContributions] ++ (for (rc <- codeContributions.values) yield
               MicrokitTypeUtil.getTypeApiContributions(rc.aadlType, typeStore, rc.queueSize))).elements
 
           ret = ret :+
@@ -241,50 +242,33 @@ object MicrokitCodegen {
                   channelContributions = ISZ()),
               typeApiContributions = typeApiContributions,
               senderName = srcThread.path,
-              senderContributions = Some(senderContributions),
-              receiverContributions = receiverContributions)
+              codeContributions = codeContributions)
         } // end processing connections for source port
 
-        // now handle unconnected ports
+        // now handle unconnected ports of the source thread
+        for (unconnectedPort <- srcThread.getPorts().filter(p => !symbolTable.inConnections.contains(p.path) && !symbolTable.outConnections.contains(p.path))) {
+          val srcThreadContributions: UberConnectionContributions =
+            if (unconnectedPort.direction == Direction.In) {
+              ConnectionUtil.processInPort(
+                dstThread = srcThread, dstPort = unconnectedPort,
+                srcPort = None(), outConnection = None(),
+                typeStore = typeStore, symbolTable = symbolTable)
+            } else {
+              ConnectionUtil.processOutPort(unconnectedPort, Map.empty, typeStore)
+            }
 
-        for (unconnectedOutPort <- srcThread.getPorts().filter(p => p.direction == Direction.Out).filter(p => !symbolTable.outConnections.contains(p.path))) {
-          val senderContributions = ConnectionUtil.processOutPort(unconnectedOutPort, Map.empty, typeStore)
           val typeApiContributions =
-            MicrokitTypeUtil.getTypeApiContributions(senderContributions.aadlType, typeStore, senderContributions.queueSize)
+            MicrokitTypeUtil.getTypeApiContributions(srcThreadContributions.aadlType, typeStore, srcThreadContributions.queueSize)
 
           ret = ret :+
             DefaultConnectionStore(
               systemContributions =
                 DefaultSystemContributions(
-                  sharedMemoryRegionContributions = senderContributions.sharedMemoryMapping,
+                  sharedMemoryRegionContributions = srcThreadContributions.sharedMemoryMapping,
                   channelContributions = ISZ()),
               typeApiContributions = ISZ(typeApiContributions),
               senderName = srcThread.path,
-              senderContributions = Some(senderContributions),
-              receiverContributions = Map.empty
-            )
-        }
-
-        for (unconnectedInPort <- srcThread.getPorts().filter(p => p.direction == Direction.In).filter(p => !symbolTable.inConnections.contains(p.path))) {
-          val receiverContributions = ConnectionUtil.processInPort(
-            dstThread = srcThread, dstPort = unconnectedInPort,
-            srcPort = None(), outConnection = None(),
-            typeStore = typeStore, symbolTable = symbolTable)
-
-          val typeApiContributions =
-            MicrokitTypeUtil.getTypeApiContributions(receiverContributions.aadlType, typeStore, receiverContributions.queueSize)
-
-          ret = ret :+
-            DefaultConnectionStore(
-              systemContributions =
-                DefaultSystemContributions(
-                  sharedMemoryRegionContributions = receiverContributions.sharedMemoryMapping,
-                  channelContributions = ISZ()),
-              typeApiContributions = ISZ(typeApiContributions),
-              senderName = srcThread.path,
-              senderContributions = None(),
-              receiverContributions = Map.empty[ISZ[String], UberConnectionContributions] +
-                srcThread.path ~> receiverContributions)
+              codeContributions = Map.empty[ISZ[String], UberConnectionContributions] + srcThread.path ~> srcThreadContributions)
         }
       } // end processing connections for threads
       return ret
@@ -301,54 +285,20 @@ object MicrokitCodegen {
       val threadId = getName(t.path).render
       val threadMonId = st"${threadId}_MON"
 
-      var sharedMemoryRegions: ISZ[MemoryRegion] = ISZ()
-      var cHeaderImports: ISZ[String] = ISZ()
-      var cUserMethodSignatures: ISZ[ST] = ISZ()
-      var cUserMethodDefaultImpls: ISZ[ST] = ISZ()
-      var cVaddrs: ISZ[GlobalVarContribution] = ISZ()
-      var cCodeApiMethodSigs: ISZ[ST] = ISZ()
-      var cCodeApiMethods: ISZ[ST] = ISZ()
-      var cBridgeInitContributions: ISZ[ST] = ISZ()
-      var cComputeContributions: ISZ[ST] = ISZ()
       var nextMemAddressInKiBytes = 262144
 
-      var rustExternMethods: ISZ[ST] = ISZ()
-      var rustUnsafeMethods: ISZ[ST] = ISZ()
+      var sharedMemoryRegions: ISZ[MemoryRegion] = ISZ()
+
+      var cCodeContributions = cConnectionContributions.empty
+      var rustCodeContributions = rustConnectionsContributions.empty
 
       val initializeMethodName = st"${threadId}_initialize"
 
-      for (entry <- connectionStore) {
-
-        if (entry.senderName == t.path && entry.senderContributions.nonEmpty) {
-          sharedMemoryRegions = sharedMemoryRegions ++ entry.senderContributions.get.sharedMemoryMapping
-
-          cHeaderImports = cHeaderImports ++ entry.senderContributions.get.cContributions.cHeaderImportContributions
-          cUserMethodSignatures = cUserMethodSignatures ++ entry.senderContributions.get.cContributions.cUserMethodSignatures
-          cUserMethodDefaultImpls = cUserMethodDefaultImpls ++ entry.senderContributions.get.cContributions.cUserMethodDefaultImpls
-          cCodeApiMethodSigs = cCodeApiMethodSigs ++ entry.senderContributions.get.cContributions.cApiMethodSigs
-          cCodeApiMethods = cCodeApiMethods ++ entry.senderContributions.get.cContributions.cApiMethods
-          cVaddrs = cVaddrs ++ entry.senderContributions.get.cContributions.cGlobalVarContributions
-          cBridgeInitContributions = cBridgeInitContributions ++ entry.senderContributions.get.cContributions.cInitContributions
-          cComputeContributions = cComputeContributions ++ entry.senderContributions.get.cContributions.cComputeContributions
-
-          rustExternMethods = rustExternMethods ++ entry.senderContributions.get.rustContributions.rustExternApis
-          rustUnsafeMethods = rustUnsafeMethods ++ entry.senderContributions.get.rustContributions.rustUnsafeExternApisWrappers
-        }
-        if (entry.receiverContributions.contains(t.path)) {
-          val c = entry.receiverContributions.get(t.path).get
-          sharedMemoryRegions = sharedMemoryRegions ++ c.sharedMemoryMapping
-          cHeaderImports = cHeaderImports ++ c.cContributions.cHeaderImportContributions
-          cUserMethodSignatures = cUserMethodSignatures ++ c.cContributions.cUserMethodSignatures
-          cUserMethodDefaultImpls = cUserMethodDefaultImpls ++ c.cContributions.cUserMethodDefaultImpls
-          cCodeApiMethodSigs = cCodeApiMethodSigs ++ c.cContributions.cApiMethodSigs
-          cCodeApiMethods = cCodeApiMethods ++ c.cContributions.cApiMethods
-          cVaddrs = cVaddrs ++ c.cContributions.cGlobalVarContributions
-          cBridgeInitContributions = cBridgeInitContributions ++ c.cContributions.cInitContributions
-          cComputeContributions = cComputeContributions ++ c.cContributions.cComputeContributions
-
-          rustExternMethods = rustExternMethods ++ c.rustContributions.rustExternApis
-          rustUnsafeMethods = rustUnsafeMethods ++ c.rustContributions.rustUnsafeExternApisWrappers
-        }
+      for (entry <- connectionStore if entry.codeContributions.contains(t.path)) {
+        val codeContributions = entry.codeContributions.get(t.path).get
+        cCodeContributions = cCodeContributions.combine(codeContributions.cContributions)
+        rustCodeContributions = rustCodeContributions.combine(codeContributions.rustContributions)
+        sharedMemoryRegions = sharedMemoryRegions ++ codeContributions.sharedMemoryMapping
       }
 
       val schedulingDomain: Z = t.getDomain(symbolTable) match {
@@ -398,7 +348,8 @@ object MicrokitCodegen {
 
         val hostVaddr = VMRamVaddr("uintptr_t", guestRam.vmmVaddrName)
 
-        cVaddrs = cVaddrs :+ hostVaddr
+        cCodeContributions = cCodeContributions(
+          cBridge_GlobalVarContributions = cCodeContributions.cBridge_GlobalVarContributions :+ hostVaddr)
 
         childMemMaps = childMemMaps :+ MemoryMap(
           memoryRegion = guestRam.name,
@@ -571,36 +522,41 @@ object MicrokitCodegen {
       ///////////////////////////////////////////////////////////////////////////////////////////////////
 
       val cUserNotifyMethodName = st"${threadId}_notify"
-      cBridgeInitContributions = cBridgeInitContributions :+ st"$initializeMethodName();"
-      cUserMethodSignatures = st"void ${initializeMethodName}(void)" +: cUserMethodSignatures
-      cUserMethodSignatures = cUserMethodSignatures :+ st"void ${cUserNotifyMethodName}(microkit_channel channel)"
 
-      cUserMethodDefaultImpls =
-        st"""void $initializeMethodName(void) {
-            |  printf("%s: $initializeMethodName invoked\n", microkit_name);
-            |}""" +: cUserMethodDefaultImpls
+      cCodeContributions = cCodeContributions(
+        cBridge_InitContributions = cCodeContributions.cBridge_InitContributions :+ st"$initializeMethodName();",
+        cBridge_EntrypointMethodSignatures =
+          st"void ${initializeMethodName}(void)" +:
+          cCodeContributions.cBridge_EntrypointMethodSignatures :+
+          st"void ${cUserNotifyMethodName}(microkit_channel channel)",
+        cUser_MethodDefaultImpls = st"""void $initializeMethodName(void) {
+                                      |  printf("%s: $initializeMethodName invoked\n", microkit_name);
+                                      |}""" +: cCodeContributions.cUser_MethodDefaultImpls
+      )
 
       if (t.isPeriodic()) {
         val timeTriggeredMethodName = st"${threadId}_timeTriggered"
-        cUserMethodSignatures = cUserMethodSignatures :+ st"void ${timeTriggeredMethodName}(void)"
-        cComputeContributions = cComputeContributions :+ st"${timeTriggeredMethodName}();"
-        cUserMethodDefaultImpls = cUserMethodDefaultImpls :+
-          st"""void $timeTriggeredMethodName(void) {
-              |  printf("%s: $timeTriggeredMethodName invoked\n", microkit_name);
-              |}"""
+        cCodeContributions = cCodeContributions(
+          cBridge_EntrypointMethodSignatures = cCodeContributions.cBridge_EntrypointMethodSignatures :+ st"void ${timeTriggeredMethodName}(void)",
+          cBridge_ComputeContributions = cCodeContributions.cBridge_ComputeContributions :+ st"${timeTriggeredMethodName}();",
+          cUser_MethodDefaultImpls =  cCodeContributions.cUser_MethodDefaultImpls :+
+            st"""void $timeTriggeredMethodName(void) {
+                |  printf("%s: $timeTriggeredMethodName invoked\n", microkit_name);
+                |}""")
       }
 
-      cUserMethodDefaultImpls = cUserMethodDefaultImpls :+
-        st"""void $cUserNotifyMethodName(microkit_channel channel) {
-            |  // this method is called when the monitor does not handle the passed in channel
-            |  switch (channel) {
-            |    default:
-            |      printf("%s: Unexpected channel %d\n", microkit_name, channel);
-            |  }
-            |}"""
+      cCodeContributions = cCodeContributions(
+        cUser_MethodDefaultImpls = cCodeContributions.cUser_MethodDefaultImpls :+
+          st"""void $cUserNotifyMethodName(microkit_channel channel) {
+              |  // this method is called when the monitor does not handle the passed in channel
+              |  switch (channel) {
+              |    default:
+              |      printf("%s: Unexpected channel %d\n", microkit_name, channel);
+              |  }
+              |}""")
 
       var vaddrEntries: ISZ[ST] = ISZ()
-      for (v <- cVaddrs) {
+      for (v <- cCodeContributions.cBridge_GlobalVarContributions) {
         if (!v.isInstanceOf[VMRamVaddr]) {
           vaddrEntries = vaddrEntries :+ v.pretty
         }
@@ -613,22 +569,22 @@ object MicrokitCodegen {
             |
             |${Util.doNotEdit}
             |
-            |${(for (u <- cUserMethodSignatures) yield st"$u;", "\n")}
+            |${(for (u <- cCodeContributions.cBridge_EntrypointMethodSignatures) yield st"$u;", "\n")}
             |
             |${(vaddrEntries, "\n")}
             |
             |#define PORT_FROM_MON $monChannelId
             |
-            |${(cCodeApiMethods, "\n\n")}
+            |${(cCodeContributions.cBridge_PortApiMethods, "\n\n")}
             |
             |void init(void) {
-            |  ${(cBridgeInitContributions, "\n\n")}
+            |  ${(cCodeContributions.cBridge_InitContributions, "\n\n")}
             |}
             |
             |void notified(microkit_channel channel) {
             |  switch (channel) {
             |    case PORT_FROM_MON:
-            |      ${(cComputeContributions, "\n\n")}
+            |      ${(cCodeContributions.cBridge_ComputeContributions, "\n\n")}
             |      break;
             |    default:
             |      ${cUserNotifyMethodName}(channel);
@@ -646,7 +602,7 @@ object MicrokitCodegen {
       val cUserImplPath = s"${options.sel4OutputDir.get}/${mk.relativePathSrcDir}/${mk.cUserImplFilename}"
       val cUserImplSource: ST =
         if (isVM) {
-          val cand = cVaddrs.filter(f => f.isInstanceOf[VMRamVaddr])
+          val cand = cCodeContributions.cBridge_GlobalVarContributions.filter(f => f.isInstanceOf[VMRamVaddr])
           assert(cand.size == 1, s"didn't find a guest ram vaddr for ${t.identifier}: ${cand.size}")
           VmUser.vmUserCode(threadId, cand(0).pretty)
         } else {
@@ -654,7 +610,7 @@ object MicrokitCodegen {
               |
               |${Util.safeToEdit}
               |
-              |${(cUserMethodDefaultImpls, "\n\n")}
+              |${(cCodeContributions.cUser_MethodDefaultImpls, "\n\n")}
               |"""
         }
       resources = resources :+ ResourceUtil.createResource(cUserImplPath, cUserImplSource, F)
@@ -671,7 +627,6 @@ object MicrokitCodegen {
           st"""#include <printf.h>
               |#include <util.h>"""
 
-      val himports: ISZ[ST] = for (h <- cHeaderImports) yield st"#include <$h>"
       val cApiContent =
         st"""#pragma once
             |
@@ -682,9 +637,8 @@ object MicrokitCodegen {
             |
             |${Util.doNotEdit}
             |
-            |${(himports, "\n")}
             |
-            |${(cCodeApiMethodSigs, ";\n")};
+            |${(cCodeContributions.cPortApiMethodSigs, ";\n")};
             |"""
       val cApiPath = s"${options.sel4OutputDir.get}/${mk.relativePathIncludeDir}/${mk.cHeaderFilename}"
       resources = resources :+ ResourceUtil.createResource(cApiPath, cApiContent, T)
@@ -714,10 +668,10 @@ object MicrokitCodegen {
               |use types::*;
               |
               |extern "C" {
-              |  ${(for(r <- rustExternMethods) yield st"$r;", "\n")}
+              |  ${(for (r <- rustCodeContributions.rustExternApis) yield st"$r;", "\n")}
               |}
               |
-              |${(rustUnsafeMethods, "\n\n")}
+              |${(rustCodeContributions.rustUnsafeExternApisWrappers, "\n\n")}
               |"""
         val rustApiPath = s"$rustComponentSrcPath/api.rs"
         resources = resources :+ ResourceUtil.createResource(rustApiPath, rustApiContent, T)

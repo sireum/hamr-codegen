@@ -98,12 +98,12 @@ object ConnectionUtil {
         QueueTemplate.getClientDataGetter_rust_UnsafeMethod(dstPort.identifier, rustTypeName, dstQueueSize, aadlType)
     }
 
-    var cUserMethodSignatures: ISZ[ST] = ISZ()
+    var cEntrypointMethodSignatures: ISZ[ST] = ISZ()
     var cUserMethodDefaultImpls: ISZ[ST] = ISZ()
     var computeContributions: ISZ[ST] = ISZ()
     if (!dstThread.toVirtualMachine(symbolTable)) {
       if (dstThread.isSporadic()) {
-        cUserMethodSignatures = cUserMethodSignatures :+ QueueTemplate.getClientEventHandlerMethodSig(dstPort.identifier)
+        cEntrypointMethodSignatures = cEntrypointMethodSignatures :+ QueueTemplate.getClientEventHandlerMethodSig(dstPort.identifier)
 
         if (isEventPort || isEventDataPort) {
           computeContributions = computeContributions :+ QueueTemplate.getClientSporadicComputeContributions(dstPort.identifier)
@@ -131,19 +131,16 @@ object ConnectionUtil {
       ),
 
       cContributions = cConnectionContributions(
-        cHeaderImportContributions = ISZ(),
-        cImplementationImportContributions = ISZ(),
-        cUserMethodSignatures = cUserMethodSignatures,
-        cUserMethodDefaultImpls = cUserMethodDefaultImpls,
-        cDefineContributions = ISZ(),
-        cGlobalVarContributions = ISZ(
+        cBridge_EntrypointMethodSignatures = cEntrypointMethodSignatures,
+        cUser_MethodDefaultImpls = cUserMethodDefaultImpls,
+        cBridge_GlobalVarContributions = ISZ(
           PortVaddr(s"volatile $sharedMemTypeName", s"*$sharedVarName"),
           QueueVaddr(recvQueueTypeName, recvQueueVarName)
         ),
-        cApiMethodSigs = cMethodApiSigs,
-        cApiMethods = cMethodApis,
-        cInitContributions = ISZ(QueueTemplate.getClientRecvInitMethodCall(dstPort.identifier, cTypeName, dstQueueSize)),
-        cComputeContributions = computeContributions),
+        cPortApiMethodSigs = cMethodApiSigs,
+        cBridge_PortApiMethods = cMethodApis,
+        cBridge_InitContributions = ISZ(QueueTemplate.getClientRecvInitMethodCall(dstPort.identifier, cTypeName, dstQueueSize)),
+        cBridge_ComputeContributions = computeContributions),
 
       rustContributions = rustConnectionsContributions(
         rustExternApis = rustExternApis,
@@ -234,7 +231,7 @@ object ConnectionUtil {
 
     val cPortType: String = typeStore.getCTypeName(senderPortType)
     val rustPortType: String = typeStore.getRustTypeName(senderPortType)
-    val cApiMethodSig = QueueTemplate.getClientPut_C_MethodSig(srcPort.identifier, cPortType, isEventPort)
+    val cPortApiMethodSig = QueueTemplate.getClientPut_C_MethodSig(srcPort.identifier, cPortType, isEventPort)
     val cApiMethod = QueueTemplate.getClientPut_C_Method(srcPort.identifier, cPortType, srcPutContributions, isEventPort)
 
     val rustApiMethodSig = QueueTemplate.getClientPut_rust_MethodSig(srcPort.identifier, rustPortType, isEventPort, F)
@@ -248,16 +245,13 @@ object ConnectionUtil {
       sharedMemoryMapping = sharedMemoryMappings,
 
       cContributions = cConnectionContributions(
-        cHeaderImportContributions = ISZ(),
-        cImplementationImportContributions = ISZ(),
-        cUserMethodSignatures = ISZ(),
-        cUserMethodDefaultImpls = ISZ(),
-        cDefineContributions = ISZ(),
-        cGlobalVarContributions = cSharedMemoryVars,
-        cApiMethodSigs = ISZ(cApiMethodSig),
-        cApiMethods = ISZ(cApiMethod),
-        cInitContributions = cInitContributions,
-        cComputeContributions = ISZ()),
+        cBridge_EntrypointMethodSignatures = ISZ(),
+        cUser_MethodDefaultImpls = ISZ(),
+        cBridge_GlobalVarContributions = cSharedMemoryVars,
+        cPortApiMethodSigs = ISZ(cPortApiMethodSig),
+        cBridge_PortApiMethods = ISZ(cApiMethod),
+        cBridge_InitContributions = cInitContributions,
+        cBridge_ComputeContributions = ISZ()),
 
       rustContributions = rustConnectionsContributions(
         rustExternApis = ISZ(rustApiMethodSig),
