@@ -49,7 +49,8 @@ object Ros2Codegen {
       case "Cpp" => files =
         Generator.genCppNodePkg(modelName, threadComponents, connectionMap, datatypeMap, options.strictAadlMode,
                                 options.invertTopicBinding, reporter)
-      //case "Python" => files = Generator.genPyNodePkg(modelName, threadComponents, connectionMap, options.strictAadlMode)
+      case "Python" => files = GeneratorPy.genPyNodePkg(modelName, threadComponents, connectionMap, datatypeMap, options.strictAadlMode,
+                                                      options.invertTopicBinding, reporter)
       case _ => reporter.error(None(), toolName, s"Unknown code type: ${options.ros2NodesLanguage.name}")
     }
 
@@ -59,7 +60,12 @@ object Ros2Codegen {
       case _ => reporter.error(None(), toolName, s"Unknown code type: ${options.ros2NodesLanguage.name}")
     }
 
-    files = files ++ Generator.genInterfacesPkg(modelName, datatypeMap)
+    //files = files ++ Generator.genInterfacesPkg(modelName, datatypeMap)
+    options.ros2NodesLanguage.name match {
+      case "Cpp" => files = files ++ Generator.genInterfacesPkg(modelName, datatypeMap)
+      case "Python" => files = files ++ GeneratorPy.genInterfacesPkg(modelName, datatypeMap)
+      case _ => reporter.error(None(), toolName, s"Unknown code type: ${options.ros2NodesLanguage.name}")
+    }
 
     for (file <- files) {
       var filePath: String = ""
