@@ -9,6 +9,7 @@ import org.sireum.lang.{ast => AST}
 import org.sireum.message.{FlatPos, Position, Reporter}
 import org.sireum.parser.ParseTree
 import org.sireum.parser.ParseTree.BinaryPrecedenceOps
+import org.sireum.U32._
 
 object GclUtil {
 
@@ -115,7 +116,25 @@ object GclUtil {
           "???"
       }
       val posOpt = mergePos(left.fullPosOpt, right.fullPosOpt)
-      return AST.Exp.Binary(left, o, right, AST.ResolvedAttr(posOpt = posOpt, resOpt = None(), typedOpt = None()), None())
+      var opPosOpt: Option[Position] =
+        if (op.posOpt.nonEmpty) op.posOpt
+        else if (left.posOpt.nonEmpty) left.posOpt
+        else right.posOpt
+      (left.posOpt, right.posOpt) match {
+        case (Some(leftPos: FlatPos), Some(rightPos: FlatPos)) if op.posOpt.isEmpty =>
+          val length32 = (rightPos.offset32 - u32"1") - (leftPos.offset32 + leftPos.length32 + u32"1");
+          opPosOpt = Some(FlatPos(
+            uriOpt = leftPos.uriOpt,
+            beginLine32 = leftPos.beginLine32,
+            beginColumn32 = leftPos.beginColumn32 + leftPos.length32 + u32"1",
+            endLine32 = rightPos.endLine32,
+            endColumn32 = rightPos.beginColumn32 - u32"1",
+            offset32 = leftPos.offset32 + leftPos.length32 + u32"1",
+            length32 = length32
+          ));
+        case _ =>
+      }
+      return AST.Exp.Binary(left, o, right, AST.ResolvedAttr(posOpt = posOpt, resOpt = None(), typedOpt = None()), opPosOpt)
     }
 
     override def transform(builder: BinaryBuilder, tree: Exp): Exp = {
