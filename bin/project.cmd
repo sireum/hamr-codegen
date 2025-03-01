@@ -26,7 +26,7 @@ val library = "library"
 
 val library_shared = s"${library}-shared"
 
-val slang_frontend_shared = "slang-frontend-shared"
+val slang_frontend = "slang-frontend"
 
 val air_shared = "hamr-air-shared"
 
@@ -37,7 +37,7 @@ var (codegenShared, codegenJvm) = moduleSharedJvmPub(
   baseDir = homeDir,
   jvmDeps = ISZ(library),
   jvmIvyDeps = ISZ(),
-  sharedDeps = ISZ(library_shared, slang_frontend_shared, air_shared),
+  sharedDeps = ISZ(library_shared, slang_frontend, air_shared),
   sharedIvyDeps = ISZ(),
   pubOpt = pub(
     desc = "HAMR AADL Code Generator",
