@@ -361,8 +361,8 @@ object GeneratorPy {
           |@pytest.mark.linter
           |def test_flake8():
           |    rc, errors = main_with_errors(argv=[])
-          |    assert rc == 0, \
-          |        'Found %d code style errors / warnings:\n' % len(errors) + \
+          |    assert rc == 0, \\
+          |        'Found %d code style errors / warnings:\n' % len(errors) + \\
           |        '\n'.join(errors)
       """
 
@@ -670,7 +670,7 @@ object GeneratorPy {
         st"""self.${portName}_subscription_ = self.create_subscription(
             |    ${portType},
             |    "${topicName}",
-            |    self.${handler},
+            |    ${handler},
             |    1,
             |    callback_group=self.${callback_group_name})
         """
@@ -686,7 +686,7 @@ object GeneratorPy {
         st"""self.${portName}_subscription_${counter} = self.create_subscription(
             |    ${portType},
             |    "${outPortName}",
-            |    self.${handler},
+            |    ${handler},
             |    1,
             |    callback_group=self.${callback_group_name})
         """
@@ -697,6 +697,41 @@ object GeneratorPy {
       st"${(inputInstances, "\n")}"
 
     return fanPortCode
+  }
+
+  def genPyThread(inPort: AadlPort, portType: String): ST = {
+    val handlerName = inPort.identifier
+
+    val thread: ST =
+      st"""def ${portType}_thread(self):
+        |    with self.lock_:
+        |        self.receiveInputs(infrastructureIn_${handlerName}, applicationIn_${handlerName})
+        |        if (applicationIn_${handlerName}.empty()) return
+        |        self.handle_${handlerName}_base(applicationIn_${handlerName}.front())
+        |        self.applicationIn_${handlerName}.pop()
+        |        self.sendOutputs()
+      """
+
+    return thread
+  }
+
+  def genPyMessageAcceptor(inPort: AadlPort, isSporadic: B, portType: String): ST = {
+    val handlerName = inPort.identifier
+
+    val handler: ST =
+      if (!isSporadic || inPort.isInstanceOf[AadlDataPort]) st"self.enqueue(infrastructureIn_${handlerName}, msg)"
+      else
+        st"""self.enqueue(infrastructureIn_${handlerName}, msg);
+            | thread = threading.Thread(target=${portType}_thread)
+            | thread.daemon = True
+            | thread.start()
+            """
+
+    return st"""def accept_${handlerName}(self, ${portType} msg):
+               |    typedMsg = ${portType}()
+               |    typedMsg.data = msg
+               |    ${handler}
+               |"""
   }
 
   def genPyInfrastructureInQueue(inPort: AadlPort): ST = {
@@ -995,7 +1030,7 @@ object GeneratorPy {
     }
     else {
       publisherCode =
-        st"""def put_${handlerName}(self, msg)
+        st"""def put_${handlerName}(self, msg):
           |    typedMsg = ${portType}()
           |    typedMsg.data = msg
           |    ${(publishers, "\n")}
@@ -1075,7 +1110,7 @@ object GeneratorPy {
     val timeTriggered: ST =
       st"""def timeTriggeredCaller(self):
         |    self.receiveInputs()
-        |    timeTriggered()
+        |    self.timeTriggered()
         |    self.sendOutputs()
       """
     return timeTriggered
@@ -1192,7 +1227,14 @@ object GeneratorPy {
             subscribers = subscribers :+ genPyTopicSubscriptionStrict(p, portDatatype, getPortNames(IS(p.path.toISZ)))
           }
 
-          //TODO: MessageAcceptors
+          if (isSporadic(component) && !p.isInstanceOf[AadlDataPort]) {
+            strictSubscriptionMessageAcceptorMethods = strictSubscriptionMessageAcceptorMethods :+
+              genPyThread(p, portDatatype)
+          }
+
+          strictSubscriptionMessageAcceptorMethods = strictSubscriptionMessageAcceptorMethods :+
+            genPyMessageAcceptor(p, isSporadic(component), portDatatype)
+
           inMsgVars = inMsgVars :+ genPyInfrastructureInQueue(p)
           inMsgVars = inMsgVars :+ genPyApplicationInQueue(p)
 
@@ -1321,6 +1363,7 @@ object GeneratorPy {
       fileBody =
         st"""${fileBody}
             |        MsgType = Union[${(msgTypes, ", ")}]
+            |        self.lock_ = threading.Lock()
           """
     }
 
@@ -1376,18 +1419,22 @@ object GeneratorPy {
       if (inMsgVars.size > 0) {
         fileBody =
           st"""${fileBody}
-              |    ${(inMsgVars, "\n")}
+              |        ${(inMsgVars, "\n")}
           """
       }
 
       if (outMsgVars.size > 0) {
         fileBody =
           st"""${fileBody}
-              |    ${(outMsgVars, "\n")}
+              |        ${(outMsgVars, "\n")}
           """
       }
 
-      //TODO: Add acceptor methods
+      if (strictSubscriptionMessageAcceptorMethods.size > 0) {
+        fileBody =
+          st"""${fileBody}
+              |${(strictSubscriptionMessageAcceptorMethods, "\n")}"""
+      }
 
       if (subscriberMethods.size > 0) {
         fileBody =
@@ -1605,8 +1652,6 @@ object GeneratorPy {
   def genPyEnumConverters(packageName: String, enumTypes: ISZ[(String, AadlType)], strictAADLMode: B): ISZ[ST] = {
     var converters: ISZ[ST] = IS()
 
-    //TODO: Refactor to Python
-
     for (enum <- enumTypes) {
       val enumName: String = ops.StringOps(enum._2.classifier.apply(enum._2.classifier.size - 1)).replaceAllLiterally("_", "")
       val enumValues: ISZ[String] = enum._2.asInstanceOf[EnumType].values
@@ -1615,30 +1660,31 @@ object GeneratorPy {
 
       for (value <- enumValues) {
         cases = cases :+
-          st"""case ${packageName}_interfaces::msg::${enumName}::${StringOps(enum._1).toUpper}_${StringOps(value).toUpper}:
-              |    return "${enumName} ${value}";"""
+          st"""case ${enumName}.${StringOps(enum._1).toUpper}_${StringOps(value).toUpper}:
+              |    return "${enumName} ${value}""""
       }
 
+      //Only difference was a pointer?
       if (strictAADLMode) {
         converters = converters :+
-          st"""const char* enumToString(${packageName}_interfaces::msg::${enumName} value) {
-              |    switch (value.${enum._1}) {
+          st"""def enumToString(value):
+              |    typedValue = ${enumName}()
+              |    typedValue.data = value
+              |    match (typedValue.${enum._1}) {
               |        ${(cases, "\n")}
-              |        default:
-              |            return "Unknown value for ${enumName}";
-              |    }
-              |}
+              |        case default:
+              |            return "Unknown value for ${enumName}"
         """
       }
       else {
         converters = converters :+
-          st"""const char* enumToString(${packageName}_interfaces::msg::${enumName}* value) {
-              |    switch (value->${enum._1}) {
+          st"""def enumToString(value):
+              |    typedValue = ${enumName}()
+              |    typedValue.data = value
+              |    match (typedValue.${enum._1}):
               |        ${(cases, "\n")}
-              |        default:
-              |            return "Unknown value for ${enumName}";
-              |    }
-              |}
+              |        case default:
+              |            return "Unknown value for ${enumName}"
         """
       }
     }
@@ -1649,14 +1695,16 @@ object GeneratorPy {
   def genPyEnumConverterFile(packageName: String, enumTypes: ISZ[(String, AadlType)],
                               strictAADLMode: B): (ISZ[String], ST, B, ISZ[Marker]) = {
     val fileBody =
-      st"""#========================================================
+      st"""from datatypes_system_py_pkg_interfaces.msg import MyEnum
+          |
+          |#========================================================
           |# Re-running Codegen will overwrite changes to this file
           |#========================================================
           |
           |${(genPyEnumConverters(packageName, enumTypes, strictAADLMode), "\n")}
         """
 
-    val filePath: ISZ[String] = IS("src", packageName, "src", "base_code", "enum_converter.py")
+    val filePath: ISZ[String] = IS("src", packageName, packageName, "base_code", "enum_converter.py")
 
     return (filePath, fileBody, T, IS())
   }
@@ -1699,6 +1747,7 @@ object GeneratorPy {
     val hasConverterFiles: B = (converterFiles.size > 0)
     val top_level_package_nameT: String = genPyPackageName(modelName)
 
+    files = files ++ converterFiles
     files = files ++ genPyNodeFiles(modelName, threadComponents, connectionMap, datatypeMap, hasConverterFiles, strictAADLMode,
                                     invertTopicBinding, reporter)
 
