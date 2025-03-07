@@ -11,7 +11,7 @@ import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.NameUtil
 import org.sireum.message.Reporter
 
-@record class SingletonBridgeCodeProviderPlugin extends BridgeCodeProviderPlugin {
+@datatype class SingletonBridgeCodeProviderPlugin extends BridgeCodeProviderPlugin {
   @strictpure def name: String = "Singleton Bridge Code Provider Plugin"
 
   @pure def generate(nameProvider: NameUtil.NameProvider,

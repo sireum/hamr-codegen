@@ -28,7 +28,7 @@ import org.sireum.ops.ISZOps
   var connectionMap: Map[ISZ[String], ISZ[ISZ[String]]] = Map.empty
   var datatypeMap: Map[AadlType, (String, ISZ[String])] = Map.empty
 
-  def run(model: Aadl, options: CodegenOption, aadlTypes: AadlTypes, symbolTable: SymbolTable, plugins: MSZ[Plugin], reporter: Reporter): Ros2Results = {
+  def run(model: Aadl, options: CodegenOption, aadlTypes: AadlTypes, symbolTable: SymbolTable, plugins: ISZ[Plugin], reporter: Reporter): Ros2Results = {
     assert(model.components.size == 1)
 
     val modelName = getModelName(symbolTable)

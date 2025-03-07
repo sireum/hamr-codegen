@@ -5,17 +5,19 @@ import org.sireum._
 import org.sireum.hamr.codegen.arsit.ProjectDirectories
 import org.sireum.hamr.codegen.arsit.plugin.DatatypeProviderPlugin
 import org.sireum.hamr.codegen.arsit.templates.{DatatypeTemplate, EnumTemplate, IDatatypeTemplate}
+import org.sireum.hamr.codegen.common.CommonUtil.Store
 import org.sireum.hamr.codegen.common.symbols.{AnnexClauseInfo, GclAnnexClauseInfo, SymbolTable}
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes}
 import org.sireum.message.Reporter
 
-@record class GumboDatatypeProviderPlugin extends DatatypeProviderPlugin {
+@datatype class GumboDatatypeProviderPlugin extends DatatypeProviderPlugin {
   @strictpure def name: String = "GUMBO Datatype Provider Plugin"
 
   @strictpure def canHandleDatatypeProvider(aadlType: AadlType,
                                             resolvedAnnexSubclauses: ISZ[AnnexClauseInfo],
                                             aadlTypes: AadlTypes,
-                                            symbolTable: SymbolTable): B =
+                                            symbolTable: SymbolTable,
+                                            store: Store): B =
     resolvedAnnexSubclauses.filter((f: AnnexClauseInfo) => f.isInstanceOf[GclAnnexClauseInfo]).nonEmpty
 
   @pure def handleDatatypeProvider(basePackageName: String,
@@ -27,7 +29,8 @@ import org.sireum.message.Reporter
                                    projectDirectories: ProjectDirectories,
                                    aadlTypes: AadlTypes,
                                    symbolTable: SymbolTable,
-                                   reporter: Reporter): DatatypeProviderPlugin.DatatypeContribution = {
+                                   store: Store,
+                                   reporter: Reporter): (DatatypeProviderPlugin.DatatypeContribution, Store) = {
 
     val subclauses = resolvedAnnexSubclauses.filter((f: AnnexClauseInfo) => f.isInstanceOf[GclAnnexClauseInfo])
     if (subclauses.size != 1) {
@@ -41,7 +44,7 @@ import org.sireum.message.Reporter
 
         val imports: ISZ[ST] = for (str <- (Set.empty[String] ++ GumboGen.imports).elements) yield st"$str"
 
-        return DatatypeProviderPlugin.PartialDatatypeContribution(
+        return (DatatypeProviderPlugin.PartialDatatypeContribution(
           slangSwitches = ISZ(),
           imports = imports,
           datatypeSingletonBlocks = ISZ(),
@@ -49,7 +52,7 @@ import org.sireum.message.Reporter
           payloadSingletonBlocks = ISZ(),
           preBlocks = ISZ(),
           postBlocks = ISZ(),
-          resources = ISZ())
+          resources = ISZ()), store)
 
       case en: EnumTemplate =>
         halt(s"Not expecting GUMBO contracts on enum types: ${aadlType.name}")

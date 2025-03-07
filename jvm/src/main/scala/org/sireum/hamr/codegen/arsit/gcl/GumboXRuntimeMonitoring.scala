@@ -6,6 +6,7 @@ import org.sireum.hamr.codegen.arsit.gcl.GumboXGenUtil.{GGParam, GGPortParam, GG
 import org.sireum.hamr.codegen.arsit.plugin.{EntryPointProviderPlugin, PlatformProviderPlugin}
 import org.sireum.hamr.codegen.arsit.templates.{ApiTemplate, EntryPointTemplate}
 import org.sireum.hamr.codegen.arsit.{EntryPoints, ProjectDirectories}
+import org.sireum.hamr.codegen.common.CommonUtil.Store
 import org.sireum.hamr.codegen.common.StringUtil
 import org.sireum.hamr.codegen.common.containers.{FileResource, Marker}
 import org.sireum.hamr.codegen.common.symbols._
@@ -17,17 +18,23 @@ import org.sireum.hamr.ir.GclSubclause
 
 object GumboXRuntimeMonitoring {
 
+  object RM_Container {
+    @pure def empty: RM_Container = {
+      return RM_Container(ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ())
+    }
+  }
+
   // a 'hand-me-down' container to allow the entry point plugin to communicate vision results
   // to the platform provider plugin
-  @record class RM_Container(var entrypointKinds: ISZ[ST],
-                             var entryPointHandlers: ISZ[ST],
-                             var componentModelInfos: ISZ[(String, ST)],
-                             var genTestCases: ISZ[ST],
-                             var testSuiteCases: ISZ[ST],
-                             var testSuiteCaseIds: ISZ[ST],
-                             var postInitVisionUpdates: ISZ[ST],
-                             var preComputeVisionUpdates: ISZ[ST],
-                             var postComputeVisionUpdates: ISZ[ST])
+  @datatype class RM_Container(val entrypointKinds: ISZ[ST],
+                               val entryPointHandlers: ISZ[ST],
+                               val componentModelInfos: ISZ[(String, ST)],
+                               val genTestCases: ISZ[ST],
+                               val testSuiteCases: ISZ[ST],
+                               val testSuiteCaseIds: ISZ[ST],
+                               val postInitVisionUpdates: ISZ[ST],
+                               val preComputeVisionUpdates: ISZ[ST],
+                               val postComputeVisionUpdates: ISZ[ST])
 
   def handleEntryPointProvider(component: AadlThreadOrDevice,
                                componentNames: NameProvider,
@@ -40,11 +47,13 @@ object GumboXRuntimeMonitoring {
                                hasStateVariables: B,
                                annexInfo: Option[(GclSubclause, GclSymbolTable)],
 
-                               rmContainer: RM_Container,
-
                                aadlTypes: AadlTypes,
-                               projectDirectories: ProjectDirectories
-                              ): EntryPointProviderPlugin.EntryPointContributions = {
+                               projectDirectories: ProjectDirectories,
+
+                               gumboStore: GumboXPluginStore): (EntryPointProviderPlugin.EntryPointContributions, GumboXPluginStore) = {
+
+    val localGumboStore = gumboStore
+    var rm_Container = localGumboStore.runtimeMonitoringContainer
 
     val epCompanionName: String = s"${componentNames.componentSingletonType}_EntryPoint_Companion"
     val bridgeDirectory: String = s"${projectDirectories.utilDir}/${componentNames.packagePath}"
@@ -52,7 +61,7 @@ object GumboXRuntimeMonitoring {
     var resources: ISZ[FileResource] = ISZ()
 
     val componentMI = GumboXRuntimeMonitoring.getComponentModelInfo(component, componentNames, annexInfo, aadlTypes)
-    rmContainer.componentModelInfos = rmContainer.componentModelInfos :+ componentMI
+    rm_Container = rm_Container(componentModelInfos = rm_Container.componentModelInfos :+ componentMI)
 
     val preInitMethodName = s"pre_${EntryPoints.initialise.name}"
     val postInitMethodName = s"post_${EntryPoints.initialise.name}"
@@ -204,16 +213,16 @@ object GumboXRuntimeMonitoring {
 
       val stateVars: ISZ[ST] = for (sv <- containers.outStateVars) yield st"""updates = updates + s"$${bridge_id}_Out_${sv.originName}" ~> postContainer.${sv.name}.string"""
 
-      rmContainer.postInitVisionUpdates = rmContainer.postInitVisionUpdates :+
+      rm_Container = rm_Container(postInitVisionUpdates = rm_Container.postInitVisionUpdates :+
         st"""case $postInitKindFQ =>
             |  var updates: Map[String, String] = Map.empty
             |  val postContainer = container.asInstanceOf[${containers.fqPostStateContainerName_PS}]
             |  ${(stateVars ++ outPorts, "\n")}
-            |  return updates"""
+            |  return updates""")
     }
 
     val optInit: ST =
-      if (gumboXGen.initializeEntryPointHolder.contains(component.path)) {
+      if (localGumboStore.initializeEntryPointHolder.contains(component.path)) {
 
         val simpleCepPreContainer = GumboXGen.getInitialize_IEP_Post_Container_MethodName(componentNames)
         st"""val result: B = ${(simpleCepPreContainer, ".")}(postContainer.get.asInstanceOf[${containers.fqPostStateContainerName_PS}])
@@ -242,16 +251,16 @@ object GumboXRuntimeMonitoring {
       val stateVars: ISZ[ST] =
         for (sv <- containers.inStateVars) yield st"""updates = updates + s"$${bridge_id}_In_${sv.name}" ~> preContainer.${sv.name}.string"""
 
-      rmContainer.preComputeVisionUpdates = rmContainer.preComputeVisionUpdates :+
+      rm_Container = rm_Container(preComputeVisionUpdates = rm_Container.preComputeVisionUpdates :+
         st"""case $preComputeKindFQ =>
             |  var updates: Map[String, String] = Map.empty
             |  val preContainer = container.asInstanceOf[${containers.fqPreStateContainerName_PS}]
             |  ${(stateVars ++ inPorts, "\n")}
-            |  return updates"""
+            |  return updates""")
     }
 
     val optPreCompute: ST =
-      gumboXGen.computeEntryPointHolder.get(component.path) match {
+      localGumboStore.computeEntryPointHolder.get(component.path) match {
         case Some(holder) if holder.CEP_Pre.nonEmpty =>
           val simpleCepPreContainer = st"${(GumboXGen.getCompute_CEP_Pre_Container_MethodName(componentNames), ".")}"
           st"""val result: B = ${simpleCepPreContainer}(preContainer.get.asInstanceOf[${containers.fqPreStateContainerName_PS}])
@@ -279,16 +288,16 @@ object GumboXRuntimeMonitoring {
 
       val stateVars: ISZ[ST] = for (sv <- containers.outStateVars) yield st"""updates = updates + s"$${bridge_id}_Out_${sv.originName}" ~> postContainer.${sv.name}.string"""
 
-      rmContainer.postComputeVisionUpdates = rmContainer.postComputeVisionUpdates :+
+      rm_Container = rm_Container(postComputeVisionUpdates = rm_Container.postComputeVisionUpdates :+
         st"""case $postComputeKindFQ =>
             |  var updates: Map[String, String] = Map.empty
             |  val postContainer = container.asInstanceOf[${containers.fqPostStateContainerName_PS}]
             |  ${(stateVars ++ outPorts, "\n")}
-            |  return updates"""
+            |  return updates""")
     }
 
     val optPostCompute: ST =
-      gumboXGen.computeEntryPointHolder.get(component.path) match {
+      localGumboStore.computeEntryPointHolder.get(component.path) match {
         case Some(holder) if holder.CEP_Post.nonEmpty =>
           val simpleCepPostContainer = st"${(GumboXGen.getCompute_CEP_Post_Container_MethodName(componentNames), ".")}"
           st"""val result: B = ${simpleCepPostContainer}(preContainer.get.asInstanceOf[${containers.fqPreStateContainerName_PS}], postContainer.get.asInstanceOf[${containers.fqPostStateContainerName_PS}])
@@ -299,10 +308,10 @@ object GumboXRuntimeMonitoring {
               |return T"""
       }
 
-    rmContainer.entrypointKinds = rmContainer.entrypointKinds :+
+    rm_Container = rm_Container(entrypointKinds = rm_Container.entrypointKinds :+
       st""""${componentNames.instanceName}_postInit"""" :+
       st""""${componentNames.instanceName}_preCompute"""" :+
-      st""""${componentNames.instanceName}_postCompute""""
+      st""""${componentNames.instanceName}_postCompute"""")
 
     val entryPointCases =
       st"""case $postInitKindFQ =>
@@ -313,13 +322,13 @@ object GumboXRuntimeMonitoring {
           |  $optPostCompute
           |"""
 
-    rmContainer.entryPointHandlers = rmContainer.entryPointHandlers :+ entryPointCases
+    rm_Container = rm_Container(entryPointHandlers = rm_Container.entryPointHandlers :+ entryPointCases)
 
     var postInitCases: ISZ[ST] = ISZ()
     var preComputeCases: ISZ[ST] = ISZ()
     var postComputeCases: ISZ[ST] = ISZ()
 
-    gumboXGen.initializeEntryPointHolder.get(component.path) match {
+    localGumboStore.initializeEntryPointHolder.get(component.path) match {
       case Some(holder) =>
         val simple_IEP_Post_container = st"${(GumboXGen.getInitialize_IEP_Post_Container_MethodName(componentNames), ".")}"
         postInitCases = postInitCases :+
@@ -331,7 +340,7 @@ object GumboXRuntimeMonitoring {
       case _ =>
     }
 
-    gumboXGen.computeEntryPointHolder.get(component.path) match {
+    localGumboStore.computeEntryPointHolder.get(component.path) match {
       case Some(holder) =>
         if (holder.CEP_Pre.nonEmpty) {
           val simple_CEP_Pre_container = st"${(GumboXGen.getCompute_CEP_Pre_Container_MethodName(componentNames), ".")}"
@@ -405,15 +414,16 @@ object GumboXRuntimeMonitoring {
         )
     }
 
-    rmContainer.genTestCases = rmContainer.genTestCases :+
+    rm_Container = rm_Container(genTestCases = rm_Container.genTestCases :+
       st"""${trans(postInitKindFQ, postInitKind, postInitCases)}
           |${trans(preComputeKindFQ, preComputeKind, preComputeCases)}
-          |${trans(postComputeKindFQ, postComputeKind, postComputeCases)}"""
+          |${trans(postComputeKindFQ, postComputeKind, postComputeCases)}""")
 
     // cid will be used in the pattern matching so must be upper-case, otherwise Scala will
     // treat it as a variable/capture
     val cid = ops.StringOps(s"${componentNames.componentSingletonType}_id").firstToUpper
-    rmContainer.testSuiteCaseIds = rmContainer.testSuiteCaseIds :+ st"val ${cid} = ${componentNames.archInstanceName}.id"
+    rm_Container = rm_Container(testSuiteCaseIds = rm_Container.testSuiteCaseIds :+
+      st"val ${cid} = ${componentNames.archInstanceName}.id")
 
     val baseName: String =
       if (component.isPeriodic()) ops.ISZOps(GumboXGen.createScalaTestGumboXClassName(componentNames)).last
@@ -441,7 +451,7 @@ object GumboXRuntimeMonitoring {
           |  println(s"Wrote: $${filename.toUri}")"""
     }
 
-    rmContainer.testSuiteCases = rmContainer.testSuiteCases :+ testSuiteCase
+    rm_Container = rm_Container(testSuiteCases = rm_Container.testSuiteCases :+ testSuiteCase)
 
     val epCompanionExt =
       st"""// #Sireum
@@ -497,12 +507,14 @@ object GumboXRuntimeMonitoring {
 
     val systemTestAPI = genSystemTestApi(componentNames, containers, projectDirectories)
 
-    return EntryPointProviderPlugin.EntryPointContributions(
-      imports = ISZ(),
-      bridgeCompanionBlocks = ISZ(),
-      entryPoint = gEntryPoint,
-      resources = resources :+ systemTestAPI
-    )
+    return (
+      EntryPointProviderPlugin.EntryPointContributions(
+        imports = ISZ(),
+        bridgeCompanionBlocks = ISZ(),
+        entryPoint = gEntryPoint,
+        resources = resources :+ systemTestAPI
+      ),
+      localGumboStore(runtimeMonitoringContainer = rm_Container))
   }
 
   def genSystemTestSuite(basePackage: String,
@@ -1395,8 +1407,6 @@ object GumboXRuntimeMonitoring {
 
     val inStateVars = GumboXGenUtil.stateVarsToParams(componentNames, annexInfo, T, aadlTypes).asInstanceOf[ISZ[GGStateVarParam]]
     val outStateVars = GumboXGenUtil.stateVarsToParams(componentNames, annexInfo, F, aadlTypes).asInstanceOf[ISZ[GGStateVarParam]]
-    val inPorts = GumboXGenUtil.inPortsToParams(component, componentNames)
-    val outPorts = GumboXGenUtil.outPortsToParams(component, componentNames)
 
     var stateElements = ISZ[ST]()
     for (sv <- inStateVars ++ outStateVars) {

@@ -7,6 +7,7 @@ import org.sireum.hamr.codegen.arsit.plugin.BehaviorEntryPointProviderPlugin
 import org.sireum.hamr.codegen.arsit.plugin.BehaviorEntryPointProviderPlugin.{BehaviorEntryPointContributions, ContractBlock, NonCaseContractBlock}
 import org.sireum.hamr.codegen.arsit.util.ArsitOptions
 import org.sireum.hamr.codegen.arsit.{EntryPoints, ProjectDirectories, Util}
+import org.sireum.hamr.codegen.common.CommonUtil.Store
 import org.sireum.hamr.codegen.common.containers.{FileResource, Marker}
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.types.AadlTypes
@@ -14,13 +15,9 @@ import org.sireum.hamr.codegen.common.util.NameUtil.NameProvider
 import org.sireum.hamr.codegen.common.util.ResourceUtil
 import org.sireum.message.Reporter
 
-@record class GumboPlugin extends BehaviorEntryPointProviderPlugin {
+@datatype class GumboPlugin extends BehaviorEntryPointProviderPlugin {
 
   val name: String = "Gumbo Plugin"
-
-  var handledAnnexLibraries: B = F
-  var handledStateVars: Set[AadlComponent] = Set.empty
-  var handledSubClauseFunctions: Set[AadlComponent] = Set.empty
 
   @strictpure def getAnnexLibraries(symbolTable: SymbolTable): ISZ[GclAnnexLibInfo] =
     symbolTable.annexLibInfos.filter(f => f.isInstanceOf[GclAnnexLibInfo]).map(m => m.asInstanceOf[GclAnnexLibInfo])
@@ -31,15 +28,17 @@ import org.sireum.message.Reporter
                                           resolvedAnnexSubclauses: ISZ[AnnexClauseInfo],
                                           arsitOptions: ArsitOptions,
                                           symbolTable: SymbolTable,
-                                          aadlTypes: AadlTypes): B = {
+                                          aadlTypes: AadlTypes,
 
-    val needToProcessGclAnnexLibraries = !handledAnnexLibraries && getAnnexLibraries(symbolTable).nonEmpty
+                                          store: Store): B = {
+    val localGumboStore = GumboXPluginStore.getGumboStore(store)
+    val needToProcessGclAnnexLibraries = !localGumboStore.handledAnnexLibraries && getAnnexLibraries(symbolTable).nonEmpty
 
     val needToProcessComponentsGclSubclause: B = resolvedAnnexSubclauses.filter(p => p.isInstanceOf[GclAnnexClauseInfo]) match {
       // GCL's symbol resolver ensures there's at most one GCL clause per component
       case ISZ(GclAnnexClauseInfo(annex, _)) =>
-        (annex.state.nonEmpty && !handledStateVars.contains(component)) ||
-          (annex.methods.nonEmpty && !handledSubClauseFunctions.contains(component)) ||
+        (annex.state.nonEmpty && !localGumboStore.handledStateVars.contains(component)) ||
+          (annex.methods.nonEmpty && !localGumboStore.handledSubClauseFunctions.contains(component)) ||
           (entryPoint == EntryPoints.initialise && annex.initializes.nonEmpty) ||
           (entryPoint == EntryPoints.compute && annex.compute.nonEmpty)
       case _ => F
@@ -61,7 +60,10 @@ import org.sireum.message.Reporter
                                        aadlTypes: AadlTypes,
                                        projectDirectories: ProjectDirectories,
                                        arsitOptions: ArsitOptions,
-                                       reporter: Reporter): BehaviorEntryPointContributions = {
+
+                                       store: Store,
+                                       reporter: Reporter): (BehaviorEntryPointContributions, Store) = {
+    var localGumboStore = GumboXPluginStore.getGumboStore(store)
 
     var imports: ISZ[String] = ISZ()
     var preMethodBlocks: ISZ[ST] = ISZ()
@@ -73,7 +75,7 @@ import org.sireum.message.Reporter
     var flows: ISZ[ST] = ISZ()
     var resources: ISZ[FileResource] = ISZ()
 
-    if (!handledAnnexLibraries) {
+    if (!localGumboStore.handledAnnexLibraries) {
       for (gclLib <- getAnnexLibraries(symbolTable)) {
         val (content, filename) = GumboGen.processGclLibrary(gclLib, symbolTable, aadlTypes, componentNames.basePackage)
         // TODO: treat libraries as datatype files since datatype invariants may use the libraries functions
@@ -81,7 +83,7 @@ import org.sireum.message.Reporter
         resources = resources :+ ResourceUtil.createResourceH(
           Util.pathAppend(projectDirectories.componentDir, filename), content, T, T)
       }
-      handledAnnexLibraries = T
+      localGumboStore = localGumboStore(handledAnnexLibraries = T)
     }
 
     var optSubclauseContractBlock: Option[ContractBlock] = None()
@@ -89,18 +91,18 @@ import org.sireum.message.Reporter
     resolvedAnnexSubclauses.filter(p => p.isInstanceOf[GclAnnexClauseInfo]) match {
       case ISZ(GclAnnexClauseInfo(annex, gclSymbolTable)) =>
 
-        if (annex.state.nonEmpty && !handledStateVars.contains(component)) {
+        if (annex.state.nonEmpty && !localGumboStore.handledStateVars.contains(component)) {
           val p = GumboGen(gclSymbolTable, symbolTable, aadlTypes, componentNames.basePackage).processStateVars(annex.state)
           preMethodBlocks = preMethodBlocks :+ p._1
           markers = markers :+ p._2
-          handledStateVars = handledStateVars + component
+          localGumboStore = localGumboStore(handledStateVars = localGumboStore.handledStateVars + component)
         }
 
-        if (annex.methods.nonEmpty && !handledSubClauseFunctions.contains(component)) {
+        if (annex.methods.nonEmpty && !localGumboStore.handledSubClauseFunctions.contains(component)) {
           val (content, marker) = GumboGen.processSubclauseFunctions(annex.methods, gclSymbolTable, symbolTable, aadlTypes, componentNames.basePackage)
           preMethodBlocks = preMethodBlocks :+ content
           markers = markers :+ marker
-          handledSubClauseFunctions = handledSubClauseFunctions + component
+          localGumboStore = localGumboStore(handledSubClauseFunctions = localGumboStore.handledSubClauseFunctions + component)
         }
 
         entryPoint match {
@@ -140,18 +142,20 @@ import org.sireum.message.Reporter
         }
     }
 
-    return (BehaviorEntryPointProviderPlugin.PartialMethodContributions(
-      imports = imports,
-      preMethodBlocks = preMethodBlocks,
-      markers = markers,
-      contractBlock = optSubclauseContractBlock,
-      resources = resources,
+    return (
+      BehaviorEntryPointProviderPlugin.PartialMethodContributions(
+        imports = imports,
+        preMethodBlocks = preMethodBlocks,
+        markers = markers,
+        contractBlock = optSubclauseContractBlock,
+        resources = resources,
 
 
-      tags = ISZ(),
-      preObjectBlocks = ISZ(),
-      optBody = None(),
-      postMethodBlocks = ISZ(),
-      postObjectBlocks = ISZ()))
+        tags = ISZ(),
+        preObjectBlocks = ISZ(),
+        optBody = None(),
+        postMethodBlocks = ISZ(),
+        postObjectBlocks = ISZ()),
+      store + GumboXPluginStore.key ~> localGumboStore)
   }
 }

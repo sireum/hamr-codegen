@@ -7,7 +7,7 @@ import org.sireum.hamr.codegen.arsit.plugin.BehaviorEntryPointProviderPlugin._
 import org.sireum.hamr.codegen.arsit.templates.StubTemplate
 import org.sireum.hamr.codegen.arsit.util.ArsitOptions
 import org.sireum.hamr.codegen.arsit.{EntryPoints, ProjectDirectories}
-import org.sireum.hamr.codegen.common.CommonUtil.toolName
+import org.sireum.hamr.codegen.common.CommonUtil.{Store, toolName}
 import org.sireum.hamr.codegen.common.containers.Marker
 import org.sireum.hamr.codegen.common.plugin.Plugin
 import org.sireum.hamr.codegen.common.symbols._
@@ -39,8 +39,10 @@ object BehaviorEntryPointProviders {
             projectDirs: ProjectDirectories,
             arsitOptions: ArsitOptions,
 
-            plugins: MSZ[Plugin],
-            reporter: Reporter): FullMethodContributions = {
+            plugins: ISZ[Plugin],
+            store: Store,
+            reporter: Reporter): (FullMethodContributions, Store) = {
+    var localStore = store
 
     var ret = BehaviorEntryPointProviderPlugin.emptyFullContributions
     var optMethod: Option[ST] = None()
@@ -48,7 +50,7 @@ object BehaviorEntryPointProviders {
     var noncases: ISZ[NonCaseContractBlock] = ISZ()
 
     @strictpure def canHandle(p: Plugin): B =
-      p.isInstanceOf[BehaviorEntryPointProviderPlugin] && p.asInstanceOf[BehaviorEntryPointProviderPlugin].canHandleBehaviorEntryPointProvider(entryPoint, optInEventPort, component, annexClauseInfos, arsitOptions, symbolTable, aadlTypes)
+      p.isInstanceOf[BehaviorEntryPointProviderPlugin] && p.asInstanceOf[BehaviorEntryPointProviderPlugin].canHandleBehaviorEntryPointProvider(entryPoint, optInEventPort, component, annexClauseInfos, arsitOptions, symbolTable, aadlTypes, localStore)
 
     var optBody: Option[ST] = None()
     for (p <- plugins if !reporter.hasError && canHandle(p)) {
@@ -56,8 +58,9 @@ object BehaviorEntryPointProviders {
         entryPoint, optInEventPort, component, componentNames, excludeImpl,
         methodSig, defaultMethodBody,
         annexClauseInfos,
-        symbolTable, aadlTypes, projectDirs, arsitOptions, reporter) match {
-        case b: FullMethodContributions =>
+        symbolTable, aadlTypes, projectDirs, arsitOptions, localStore, reporter) match {
+        case (b: FullMethodContributions, s) =>
+          localStore = s
           if (optMethod.nonEmpty) {
             reporter.error(None(), toolName, "A behavior entry point plugin has already contributed a method implementation")
           } else if (optBody.nonEmpty) {
@@ -77,7 +80,8 @@ object BehaviorEntryPointProviders {
               resources = ret.resources ++ b.resources
             )
           }
-        case b: PartialMethodContributions =>
+        case (b: PartialMethodContributions, s) =>
+          localStore = s
           if (b.optBody.nonEmpty) {
             if (optBody.nonEmpty) {
               reporter.error(None(), toolName, s"A behavior entry point plugin contributed a method body that cannot be combined with ${p.name}'s body")
@@ -107,7 +111,7 @@ object BehaviorEntryPointProviders {
     assert(optMethod.nonEmpty -->: (optBody.isEmpty && cases.isEmpty && noncases.isEmpty), "Sanity check: cannot combine methods with optional method bodies")
 
     if (optMethod.nonEmpty) {
-      return ret(method = optMethod.get)
+      return (ret(method = optMethod.get), localStore)
     } else {
       @pure def processNonCases(entries: ISZ[NonCaseContractBlock]): ST = {
         @strictpure def wrap(prefix: String, es: ISZ[ST]): Option[ST] =
@@ -148,7 +152,7 @@ object BehaviorEntryPointProviders {
             |}"""
       }
 
-      return ret(method = method)
+      return (ret(method = method), localStore)
     }
   }
 
@@ -162,14 +166,16 @@ object BehaviorEntryPointProviders {
                projectDirs: ProjectDirectories,
                arsitOptions: ArsitOptions,
 
-               plugins: MSZ[Plugin],
+               plugins: ISZ[Plugin],
+               store: Store,
                reporter: Reporter): ObjectContributions = {
 
     var ret = BehaviorEntryPointProviderPlugin.emptyObjectContributions
-    for (p <- plugins if !reporter.hasError && p.isInstanceOf[BehaviorEntryPointProviderPlugin] && p.asInstanceOf[BehaviorEntryPointProviderPlugin].canFinaliseBehaviorEntryPointProvider(component, annexClauseInfos, arsitOptions, symbolTable, aadlTypes)) {
+    for (p <- plugins if !reporter.hasError && p.isInstanceOf[BehaviorEntryPointProviderPlugin] &&
+      p.asInstanceOf[BehaviorEntryPointProviderPlugin].canFinaliseBehaviorEntryPointProvider(component, annexClauseInfos, arsitOptions, symbolTable, aadlTypes, store)) {
       p.asInstanceOf[BehaviorEntryPointProviderPlugin].finaliseBehaviorEntryPointProvider(
         component, nameProvider, annexClauseInfos,
-        symbolTable, aadlTypes, projectDirs, arsitOptions, reporter) match {
+        symbolTable, aadlTypes, projectDirs, arsitOptions, store, reporter) match {
         case Some(x) =>
           ret = ret(
             tags = ret.tags ++ x.tags,
