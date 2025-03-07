@@ -56,7 +56,7 @@ object Ros2Codegen {
 
     options.ros2LaunchLanguage.name match {
       case "Xml" => files = files ++ Generator.genXmlLaunchPkg(modelName, threadComponents, systemComponents)
-      case "Python" => files = files ++ Generator.genPyLaunchPkg(modelName, threadComponents)
+      case "Python" => files = files ++ GeneratorPy.genPyLaunchPkg(modelName, threadComponents)
       case _ => reporter.error(None(), toolName, s"Unknown code type: ${options.ros2NodesLanguage.name}")
     }
 
