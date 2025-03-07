@@ -140,7 +140,7 @@ object GumboGen {
   val InitializesRequiresMarker: Marker = Marker("// BEGIN INITIALIZES REQUIRES", "// END INITIALIZES REQUIRES")
   val InitializesFlowsMarker: Marker = Marker("// BEGIN INITIALIZES FLOWS", "// END INITIALIZES FLOWS")
 
-  var imports: ISZ[String] = ISZ()
+  var imports: ISZ[String] = ISZ() // singleton global var
 
   def resetImports(): Unit = {
     imports = ISZ()
@@ -693,7 +693,7 @@ object GumboGen {
 
         val eventPort = optInEvent.get
 
-        var handlerRequires = generalRequires
+        val handlerRequires = generalRequires
 
         if (generalFlows.nonEmpty) {
           val marker = genComputeMarkerCreator(eventPort.identifier, "FLOW")
@@ -862,7 +862,6 @@ object GumboGen {
       val key = st"${(paramTypeName, "::")}".render
 
       val aadlType = GclResolver.getAadlType(key, aadlTypes, p.id.attr.posOpt, Reporter.create).nameProvider
-      //val aadlType = aadlTypes.typeMap.get(key).get.nameProvider
       s"${p.id.value}: ${aadlType.qualifiedReferencedTypeName}"
     })
 

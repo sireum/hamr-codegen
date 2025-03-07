@@ -9,6 +9,10 @@ import org.sireum.hamr.ir.{Direction, Feature, FeatureEnd}
 
 object CommonUtil {
 
+  @sig trait StoreValue
+
+  type Store = Map[String, StoreValue]
+
   type IdPath = ISZ[String]
 
   val toolName: String = "HAMR Codegen"

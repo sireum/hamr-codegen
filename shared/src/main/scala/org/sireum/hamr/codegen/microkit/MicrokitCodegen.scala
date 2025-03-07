@@ -3,6 +3,7 @@ package org.sireum.hamr.codegen.microkit
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.containers.FileResource
+import org.sireum.hamr.codegen.common.CommonUtil.Store
 import org.sireum.hamr.codegen.common.plugin.Plugin
 import org.sireum.hamr.codegen.common.symbols.{AadlPort, AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, TypeUtil => CommonTypeUtil}
@@ -11,7 +12,7 @@ import org.sireum.hamr.codegen.common.util.{CodeGenResults, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen.{pacerSchedulingDomain, toolName}
 import org.sireum.hamr.codegen.microkit.connections._
 import org.sireum.hamr.codegen.microkit.lint.Linter
-import org.sireum.hamr.codegen.microkit.types.{DefaultTypeStore, TypeStore, MicrokitTypeUtil}
+import org.sireum.hamr.codegen.microkit.types.{DefaultTypeStore, MicrokitTypeUtil, TypeStore}
 import org.sireum.hamr.codegen.microkit.util._
 import org.sireum.hamr.codegen.microkit.vm.{VmMakefileTemplate, VmUser, VmUtil}
 import org.sireum.hamr.ir.{Aadl, Direction}
@@ -59,7 +60,7 @@ object MicrokitCodegen {
     return nextPacerChannelId + 1
   }
 
-  def run(model: Aadl, options: CodegenOption, types: AadlTypes, symbolTable: SymbolTable, plugins: MSZ[Plugin], reporter: Reporter): CodeGenResults = {
+  def run(model: Aadl, options: CodegenOption, types: AadlTypes, symbolTable: SymbolTable, plugins: ISZ[Plugin], store: Store, reporter: Reporter): (CodeGenResults, Store) = {
 
     val modelIsRusty: B = symbolTable.getThreads().filter(p => Util.isRust(p)).nonEmpty
 
@@ -697,14 +698,15 @@ object MicrokitCodegen {
 
 
     if (!Linter.lint(model, options, types, symbolTable, reporter)) {
-      return CodeGenResults(ISZ(), ISZ())
+      return (CodeGenResults(ISZ(), ISZ()), store)
     }
 
     val boundProcessors = symbolTable.getAllActualBoundProcessors()
     if (boundProcessors.size != 1) {
       reporter.error(None(), toolName, "Currently only handling models with exactly one actual bound processor")
-      return CodeGenResults(ISZ(), ISZ())
+      return (CodeGenResults(ISZ(), ISZ()), store)
     }
+
     var framePeriod: Z = 0
     boundProcessors(0).getFramePeriod() match {
       case Some(z) => framePeriod = z
@@ -767,7 +769,7 @@ object MicrokitCodegen {
 
     if (usedBudget > framePeriod) {
       reporter.error(None(), toolName, s"Frame period ${framePeriod} is too small for the used budget ${usedBudget}")
-      return CodeGenResults(ISZ(), ISZ())
+      return (CodeGenResults(ISZ(), ISZ()), store)
     }
 
     var xmlScheds: ISZ[SchedulingDomain] = ISZ()
@@ -827,6 +829,6 @@ object MicrokitCodegen {
     resources = resources :+ ResourceUtil.createResource(s"${utilIncludePath}/util.h", Util.utilh, T)
     resources = resources :+ ResourceUtil.createResource(s"${utilSrcPath}/util.c", Util.utilc, T)
 
-    return CodeGenResults(resources = resources, auxResources = ISZ())
+    return (CodeGenResults(resources = resources, auxResources = ISZ()), store)
   }
 }

@@ -6,6 +6,7 @@ import org.sireum.Os.Path
 import org.sireum.hamr.codegen.act.util.Util.ACT_INSTRUCTIONS_MESSAGE_KIND
 import org.sireum.hamr.codegen.arsit.Util.ARSIT_INSTRUCTIONS_MESSAGE_KIND
 import org.sireum.hamr.codegen.common.containers._
+import org.sireum.hamr.codegen.common.CommonUtil.Store
 import org.sireum.hamr.codegen.common.plugin.Plugin
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
 import org.sireum.hamr.codegen.common.types.AadlTypes
@@ -26,7 +27,7 @@ object CodeGen {
   def codeGen(model: Aadl,
               shouldWriteOutResources: B,
               options: CodegenOption,
-              plugins: MSZ[Plugin],
+              plugins: ISZ[Plugin],
               reporter: Reporter,
               transpilerCallback: (SireumSlangTranspilersCOption, Reporter) => Z,
               proyekIveCallback: SireumProyekIveOption => Z,
@@ -94,6 +95,8 @@ object CodeGen {
 
     var reporterIndex = z"0"
 
+    var store: Store = Map.empty
+
     if (modOptions.runtimeMonitoring && isTranspilerProject) {
       reporter.error(None(), toolName, "Runtime monitoring support for transpiled projects has not been added yet. Disable runtime-monitoring before transpiling")
       reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
@@ -131,14 +134,15 @@ object CodeGen {
 
     if (!reporter.hasError && runMicrokit) {
       reporter.info(None(), toolName, "Generating Microkit artifacts...")
-      val results = MicrokitCodegen().run(rmodel, modOptions, aadlTypes, symbolTable, plugins, reporter)
+      val results = MicrokitCodegen().run(rmodel, modOptions, aadlTypes, symbolTable, plugins, store, reporter)
+      store = results._2
       if (!reporter.hasError) {
-        writeOutResources(results.resources, F, reporter)
+        writeOutResources(results._1.resources, F, reporter)
       }
       if (!modOptions.parseableMessages) {
         reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
       }
-      return results
+      return results._1
     }
 
     if (!reporter.hasError && runArsit) {
@@ -175,10 +179,11 @@ object CodeGen {
       reporter.info(None(), toolName, "Generating Slang artifacts...")
       reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
 
-      val results = arsit.Arsit.run(rmodel, opt, aadlTypes, symbolTable, plugins, reporter)
+      val results = arsit.Arsit.run(rmodel, opt, aadlTypes, symbolTable, plugins, store, reporter)
+      store = results._2
 
-      arsitResources = arsitResources ++ results.resources
-      arsitAuxResources = arsitAuxResources ++ results.auxResources
+      arsitResources = arsitResources ++ results._1.resources
+      arsitAuxResources = arsitAuxResources ++ results._1.auxResources
 
       reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ(ARSIT_INSTRUCTIONS_MESSAGE_KIND))
 
@@ -280,7 +285,7 @@ object CodeGen {
           reporter.info(None(), toolName, "Transpiling project ...")
           reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
 
-          for (transpilerConfig <- Resource.projectTranspilerConfigs(results.auxResources) if !reporter.hasError) {
+          for (transpilerConfig <- Resource.projectTranspilerConfigs(results._1.auxResources) if !reporter.hasError) {
             // CTranspiler prints all the messages in the passed in reporter so
             // create a new one for each config
             val transpilerReporter = Reporter.create

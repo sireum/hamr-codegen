@@ -3,12 +3,14 @@
 package org.sireum.hamr.codegen.arsit.gcl
 
 import org.sireum._
+import org.sireum.hamr.codegen.arsit.gcl.GumboXGen.{ComputeEntryPointHolder, DataInvariantHolder, InitializeEntryPointHolder, IntegrationHolder}
+import org.sireum.hamr.codegen.arsit.gcl.GumboXRuntimeMonitoring.RM_Container
 import org.sireum.hamr.codegen.arsit.plugin.BehaviorEntryPointProviderPlugin.ObjectContributions
 import org.sireum.hamr.codegen.arsit.plugin._
 import org.sireum.hamr.codegen.arsit.templates.{EntryPointTemplate, IDatatypeTemplate}
 import org.sireum.hamr.codegen.arsit.util.{ArsitOptions, ReporterUtil}
 import org.sireum.hamr.codegen.arsit.{EntryPoints, Port, ProjectDirectories}
-import org.sireum.hamr.codegen.common.CommonUtil.IdPath
+import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, Store, StoreValue}
 import org.sireum.hamr.codegen.common.containers.FileResource
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes}
@@ -17,7 +19,42 @@ import org.sireum.hamr.codegen.common.util.ResourceUtil
 import org.sireum.hamr.ir.GclSubclause
 import org.sireum.message.Reporter
 
-@record class GumboXPlugin
+object GumboXPluginStore {
+  val key: String = "GumboXPluginStore"
+
+  @pure def empty: GumboXPluginStore = {
+    return GumboXPluginStore(
+      F, Set.empty, Set.empty,
+      ISZ(), Set.empty, Map.empty, Set.empty, Set.empty, ISZ(),
+      Map.empty, Map.empty, Map.empty, Map.empty,
+      RM_Container.empty)
+  }
+
+  @pure def getGumboStore(store: Store): GumboXPluginStore = {
+    return store.getOrElse(GumboXPluginStore.key, GumboXPluginStore.empty).asInstanceOf[GumboXPluginStore]
+  }
+}
+
+@datatype class GumboXPluginStore(val handledAnnexLibraries: B,
+                                  val handledStateVars: Set[AadlComponent],
+                                  val handledSubClauseFunctions: Set[AadlComponent],
+
+                                  val imports: ISZ[String],
+
+                                  val handledComponents: Set[IdPath],
+                                  val prePostContainerMap: Map[IdPath, GumboXGenUtil.Container],
+                                  val datatypesWithInvariants: Set[IdPath],
+                                  val componentsWithGclSubclauses: Set[IdPath],
+                                  val systemTestSuiteRenamings: ISZ[ST],
+
+                                  val dataInvariants: Map[String, DataInvariantHolder],
+                                  val integrationClauses: Map[IdPath, ISZ[(IdPath, IntegrationHolder)]],
+                                  val initializeEntryPointHolder: Map[IdPath, InitializeEntryPointHolder],
+                                  val computeEntryPointHolder: Map[IdPath, ComputeEntryPointHolder],
+
+                                  val runtimeMonitoringContainer: GumboXRuntimeMonitoring.RM_Container
+                                 ) extends StoreValue
+@datatype class GumboXPlugin
   extends ArsitInitializePlugin with DatatypeProviderPlugin
     with EntryPointProviderPlugin
     with BehaviorEntryPointProviderPlugin
@@ -28,35 +65,25 @@ import org.sireum.message.Reporter
 
   val gumboXGen: GumboXGen = GumboXGen()
 
-  var handledComponents: Set[IdPath] = Set.empty
-
-  var prePostContainerMap: Map[IdPath, GumboXGenUtil.Container] = Map.empty
-
-  val runtimeMonitoringContainer: GumboXRuntimeMonitoring.RM_Container = GumboXRuntimeMonitoring.RM_Container(ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ())
-
-  var datatypesWithInvariants: Set[IdPath] = Set.empty
-  var componentsWithGclSubclauses: Set[IdPath] = Set.empty
-
-  var systemTestSuiteRenamings: ISZ[ST] = ISZ()
-
-  @pure def modelHasGcl: B = {
-    return datatypesWithInvariants.nonEmpty || componentsWithGclSubclauses.nonEmpty
+  @pure def modelHasGcl(gumboStore: GumboXPluginStore): B = {
+    return gumboStore.datatypesWithInvariants.nonEmpty || gumboStore.componentsWithGclSubclauses.nonEmpty
   }
 
-  def getContainer(component: AadlThreadOrDevice, componentNames: NameProvider, annexInfo: Option[(GclSubclause, GclSymbolTable)], aadlTypes: AadlTypes): GumboXGenUtil.Container = {
-    return prePostContainerMap.getOrElse(component.path, GumboXGenUtil.generateContainer(component, componentNames, annexInfo, aadlTypes))
+  def getContainer(component: AadlThreadOrDevice, componentNames: NameProvider, annexInfo: Option[(GclSubclause, GclSymbolTable)], aadlTypes: AadlTypes, gumboStore: GumboXPluginStore): GumboXGenUtil.Container = {
+    return gumboStore.prePostContainerMap.getOrElse(component.path, GumboXGenUtil.generateContainer(component, componentNames, annexInfo, aadlTypes))
   }
 
   @pure def canHandle(component: AadlThreadOrDevice,
                       resolvedAnnexSubclauses: ISZ[AnnexClauseInfo],
                       symbolTable: SymbolTable,
-                      aadlTypes: AadlTypes): B = {
+                      aadlTypes: AadlTypes,
+                      store: GumboXPluginStore): B = {
 
     if (aadlTypes.rawConnections) {
       return F
     }
 
-    val datatypeInvariantsExist: B = datatypesWithInvariants.nonEmpty
+    val datatypeInvariantsExist: B = store.datatypesWithInvariants.nonEmpty
 
     val componentHasGumboSubclauseInfo: B =
       resolvedAnnexSubclauses.filter(p => p.isInstanceOf[GclAnnexClauseInfo]) match {
@@ -85,7 +112,10 @@ import org.sireum.message.Reporter
              symbolTable: SymbolTable,
              aadlTypes: AadlTypes,
              projectDirectories: ProjectDirectories,
-             reporter: Reporter): Unit = {
+
+             store: GumboXPluginStore,
+
+             reporter: Reporter): GumboXPluginStore = {
 
     val gclSubclauseInfo: Option[(GclSubclause, GclSymbolTable)] =
       resolvedAnnexSubclauses.filter(p => p.isInstanceOf[GclAnnexClauseInfo]) match {
@@ -93,11 +123,16 @@ import org.sireum.message.Reporter
         case _ => None()
       }
 
-    gumboXGen.processAnnex(component, componentNames,
-      gclSubclauseInfo,
-      componentNames.basePackage, symbolTable, aadlTypes, projectDirectories, reporter)
+    var gumboStore = store
 
-    handledComponents = handledComponents + component.path
+    gumboStore = gumboXGen.processAnnex(component, componentNames,
+      gclSubclauseInfo,
+      componentNames.basePackage, symbolTable, aadlTypes, projectDirectories,
+      gumboStore, reporter)
+
+    gumboStore = gumboStore(handledComponents = gumboStore.handledComponents + component.path)
+
+    return gumboStore
   }
 
   /******************************************************************************************
@@ -107,21 +142,24 @@ import org.sireum.message.Reporter
   @strictpure def canHandleArsitInitializePlugin(arsitOptions: ArsitOptions, aadlTypes: AadlTypes, symbolTable: SymbolTable): B =
     !aadlTypes.rawConnections
 
-  override def handleArsitInitializePlugin(projectDirectories: ProjectDirectories, arsitOptions: ArsitOptions, aadlTypes: AadlTypes, symbolTable: SymbolTable, reporter: Reporter): ISZ[FileResource] = {
+  override def handleArsitInitializePlugin(projectDirectories: ProjectDirectories,
+                                           arsitOptions: ArsitOptions, aadlTypes: AadlTypes, symbolTable: SymbolTable,
+                                           store: Store, reporter: Reporter): (ISZ[FileResource], Store) = {
+    var gumboStore = GumboXPluginStore.getGumboStore(store)
     for (aadlType <- aadlTypes.typeMap.entries if symbolTable.annexClauseInfos.contains(ISZ(aadlType._1));
          annex <- symbolTable.annexClauseInfos.get(ISZ(aadlType._1)).get) {
       if (annex.isInstanceOf[GclAnnexClauseInfo]) {
-        datatypesWithInvariants = datatypesWithInvariants + aadlType._2.nameProvider.classifier
+        gumboStore = gumboStore(datatypesWithInvariants = gumboStore.datatypesWithInvariants + aadlType._2.nameProvider.classifier)
       }
     }
 
     for (thread <- symbolTable.getThreads() if symbolTable.annexClauseInfos.contains(thread.path);
          annex <- symbolTable.annexClauseInfos.get(thread.path).get) {
       if (annex.isInstanceOf[GclAnnexClauseInfo]) {
-        componentsWithGclSubclauses = componentsWithGclSubclauses + thread.path
+        gumboStore = gumboStore(componentsWithGclSubclauses = gumboStore.componentsWithGclSubclauses + thread.path)
       }
     }
-    return ISZ()
+    return (ISZ(), store + (GumboXPluginStore.key ~> gumboStore))
   }
 
 
@@ -132,8 +170,8 @@ import org.sireum.message.Reporter
    * companion object
    ******************************************************************************************/
 
-  @pure def canHandleDatatypeProvider(aadlType: AadlType, resolvedAnnexSubclauses: ISZ[AnnexClauseInfo], aadlTypes: AadlTypes, symbolTable: SymbolTable): B = {
-    return datatypesWithInvariants.contains(aadlType.nameProvider.classifier)
+  @pure def canHandleDatatypeProvider(aadlType: AadlType, resolvedAnnexSubclauses: ISZ[AnnexClauseInfo], aadlTypes: AadlTypes, symbolTable: SymbolTable, store: Store): B = {
+    return GumboXPluginStore.getGumboStore(store).datatypesWithInvariants.contains(aadlType.nameProvider.classifier)
   }
 
   override def handleDatatypeProvider(basePackageName: String,
@@ -144,9 +182,12 @@ import org.sireum.message.Reporter
                                       projectDirectories: ProjectDirectories,
                                       aadlTypes: AadlTypes,
                                       symbolTable: SymbolTable,
-                                      reporter: Reporter): DatatypeProviderPlugin.DatatypeContribution = {
+                                      store: Store,
+                                      reporter: Reporter): (DatatypeProviderPlugin.DatatypeContribution, Store) = {
     for (a <- resolvedAnnexSubclauses if a.isInstanceOf[GclAnnexClauseInfo]) {
-      return gumboXGen.processDatatype(aadlType, a.asInstanceOf[GclAnnexClauseInfo], basePackageName, symbolTable, aadlTypes, projectDirectories, ReporterUtil.reporter)
+      // there should only be one Gumbo Annex Clause per component so just return once we found it
+      val ret = gumboXGen.processDatatype(aadlType, a.asInstanceOf[GclAnnexClauseInfo], basePackageName, symbolTable, aadlTypes, projectDirectories, GumboXPluginStore.getGumboStore(store), ReporterUtil.reporter)
+      return (ret._1, store + GumboXPluginStore.key ~> ret._2)
     }
     halt(s"Infeasible: why did ${name} offer to handle ${aadlType.name} if it doesn't have a GclSubclause attached to it?")
   }
@@ -168,11 +209,12 @@ import org.sireum.message.Reporter
                                             arsitOptions: ArsitOptions,
                                             symbolTable: SymbolTable,
                                             aadlTypes: AadlTypes,
+                                            store: Store,
                                             reporter: Reporter): ISZ[PlatformProviderPlugin.PlatformContributions] = {
 
     return GumboXRuntimeMonitoring.handlePlatformProviderPlugin(
-      rmContainer = runtimeMonitoringContainer,
-      hasGcl = modelHasGcl,
+      rmContainer = GumboXPluginStore.getGumboStore(store).runtimeMonitoringContainer,
+      hasGcl = modelHasGcl(GumboXPluginStore.getGumboStore(store)),
       basePackageName = arsitOptions.packageName,
       projectDirectories = projectDirectories)
   }
@@ -189,9 +231,7 @@ import org.sireum.message.Reporter
                                            arsitOptions: ArsitOptions,
                                            symbolTable: SymbolTable,
                                            aadlTypes: AadlTypes): B = {
-    return arsitOptions.runtimeMonitoring //&&
-    //!handledComponents.contains(component.path) &&
-    //canHandle(component, resolvedAnnexSubclauses, symbolTable, aadlTypes)
+    return arsitOptions.runtimeMonitoring
   }
 
   override def handleEntryPointProvider(component: AadlThreadOrDevice,
@@ -206,7 +246,8 @@ import org.sireum.message.Reporter
                                         symbolTable: SymbolTable,
                                         aadlTypes: AadlTypes,
                                         projectDirectories: ProjectDirectories,
-                                        reporter: Reporter): EntryPointProviderPlugin.EntryPointContributions = {
+                                        store: Store,
+                                        reporter: Reporter): (EntryPointProviderPlugin.EntryPointContributions, Store) = {
 
     var hasStateVariables: B = F
 
@@ -217,18 +258,24 @@ import org.sireum.message.Reporter
       case _ => None()
     }
 
-    val containers = getContainer(component, componentNames, annexInfo, aadlTypes)
+    var gumboStore = GumboXPluginStore.getGumboStore(store)
 
-    handle(component, componentNames, resolvedAnnexSubclauses, symbolTable, aadlTypes, projectDirectories, reporter)
+    val containers = getContainer(component, componentNames, annexInfo, aadlTypes, gumboStore)
+
+    gumboStore = handle(component, componentNames, resolvedAnnexSubclauses, symbolTable, aadlTypes, projectDirectories, gumboStore, reporter)
 
     if (arsitOptions.runtimeMonitoring) {
-      systemTestSuiteRenamings = systemTestSuiteRenamings :+
-        st"// import ${componentNames.packageName}.{${componentNames.componentSingletonType}_SystemTestAPI => nickname}"
+      gumboStore = gumboStore(systemTestSuiteRenamings = gumboStore.systemTestSuiteRenamings :+
+        st"// import ${componentNames.packageName}.{${componentNames.componentSingletonType}_SystemTestAPI => nickname}")
     }
 
-    return GumboXRuntimeMonitoring.handleEntryPointProvider(
-      component, componentNames, entryPointTemplate, gumboXGen, containers, hasStateVariables, annexInfo, runtimeMonitoringContainer, aadlTypes, projectDirectories
-    )
+    val r = GumboXRuntimeMonitoring.handleEntryPointProvider(
+      component, componentNames, entryPointTemplate, gumboXGen, containers, hasStateVariables, annexInfo,
+      aadlTypes, projectDirectories, gumboStore)
+    gumboStore = r._2
+
+    return (r._1,
+      store + GumboXPluginStore.key ~> gumboStore)
   }
 
   /******************************************************************************************
@@ -241,9 +288,11 @@ import org.sireum.message.Reporter
                                                    resolvedAnnexSubclauses: ISZ[AnnexClauseInfo],
                                                    arsitOptions: ArsitOptions,
                                                    symbolTable: SymbolTable,
-                                                   aadlTypes: AadlTypes): B = {
-    return !handledComponents.contains(component.path) &&
-      canHandle(component, resolvedAnnexSubclauses, symbolTable, aadlTypes)
+                                                   aadlTypes: AadlTypes,
+                                                   store: Store): B = {
+    val gumboStore = GumboXPluginStore.getGumboStore(store)
+    return !gumboStore.handledComponents.contains(component.path) &&
+      canHandle(component, resolvedAnnexSubclauses, symbolTable, aadlTypes, gumboStore)
   }
 
   override def handleBehaviorEntryPointProvider(entryPoint: EntryPoints.Type,
@@ -261,20 +310,23 @@ import org.sireum.message.Reporter
                                                 aadlTypes: AadlTypes,
                                                 projectDirectories: ProjectDirectories,
                                                 arsitOptions: ArsitOptions,
-                                                reporter: Reporter): BehaviorEntryPointProviderPlugin.BehaviorEntryPointContributions = {
 
-    handle(component, componentNames, resolvedAnnexSubclauses, symbolTable, aadlTypes, projectDirectories, reporter)
+                                                store: Store,
+                                                reporter: Reporter): (BehaviorEntryPointProviderPlugin.BehaviorEntryPointContributions, Store) = {
 
-    return BehaviorEntryPointProviderPlugin.emptyPartialContributions
+    val gumboStore = handle(component, componentNames, resolvedAnnexSubclauses, symbolTable, aadlTypes, projectDirectories, GumboXPluginStore.getGumboStore(store), reporter)
+
+    return (BehaviorEntryPointProviderPlugin.emptyPartialContributions, store + GumboXPluginStore.key ~> gumboStore)
   }
 
   override def canFinaliseBehaviorEntryPointProvider(component: AadlThreadOrDevice,
                                                      resolvedAnnexSubclauses: ISZ[AnnexClauseInfo],
                                                      arsitOptions: ArsitOptions,
                                                      symbolTable: SymbolTable,
-                                                     aadlTypes: AadlTypes): B = {
+                                                     aadlTypes: AadlTypes,
+                                                     store: Store): B = {
     return arsitOptions.runtimeMonitoring ||
-      canHandle(component, resolvedAnnexSubclauses, symbolTable, aadlTypes)
+      canHandle(component, resolvedAnnexSubclauses, symbolTable, aadlTypes, GumboXPluginStore.getGumboStore(store))
   }
 
   override def finaliseBehaviorEntryPointProvider(component: AadlThreadOrDevice,
@@ -285,6 +337,7 @@ import org.sireum.message.Reporter
                                                   aadlTypes: AadlTypes,
                                                   projectDirectories: ProjectDirectories,
                                                   arsitOptions: ArsitOptions,
+                                                  store: Store,
                                                   reporter: Reporter): Option[ObjectContributions] = {
 
     val annexInfo: Option[(GclSubclause, GclSymbolTable)] = resolvedAnnexSubclauses.filter(p => p.isInstanceOf[GclAnnexClauseInfo]) match {
@@ -294,14 +347,14 @@ import org.sireum.message.Reporter
 
     var resources = ISZ[FileResource]()
 
-    val gumbox = gumboXGen.finalise(component, componentNames, projectDirectories)
+    val gumbox = gumboXGen.finalise(component, componentNames, projectDirectories, GumboXPluginStore.getGumboStore(store))
 
-    val containers = getContainer(component, componentNames, annexInfo, aadlTypes)
+    val containers = getContainer(component, componentNames, annexInfo, aadlTypes, GumboXPluginStore.getGumboStore(store))
     val containersPath = s"${projectDirectories.dataDir}/${componentNames.packagePath}/${componentNames.componentSingletonType}_Containers.scala"
     resources = resources :+ ResourceUtil.createResourceH(containersPath, containers.genContainers(), T, T)
 
-    if (canHandle(component, resolvedAnnexSubclauses, symbolTable, aadlTypes)) {
-      val testHarness = gumboXGen.createTestHarness(component, componentNames, containers, annexInfo, arsitOptions.runSlangCheck, symbolTable, aadlTypes, projectDirectories)
+    if (canHandle(component, resolvedAnnexSubclauses, symbolTable, aadlTypes, GumboXPluginStore.getGumboStore(store))) {
+      val testHarness = gumboXGen.createTestHarness(component, componentNames, containers, annexInfo, arsitOptions.runSlangCheck, symbolTable, aadlTypes, projectDirectories, GumboXPluginStore.getGumboStore(store))
 
       val profilePath = s"${projectDirectories.testUtilDir}/${componentNames.packagePath}/${componentNames.componentSingletonType}_Profiles.scala"
       val profilesR = ResourceUtil.createResource(profilePath, containers.genProfiles(), T)
@@ -312,13 +365,15 @@ import org.sireum.message.Reporter
     return Some(gumbox(resources = gumbox.resources ++ resources))
   }
 
-  override def canHandleArsitFinalizePlugin(): B = {
-    return handledComponents.nonEmpty || systemTestSuiteRenamings.nonEmpty
+  override def canHandleArsitFinalizePlugin(store: Store): B = {
+    val gumboStore = GumboXPluginStore.getGumboStore(store)
+    return gumboStore.handledComponents.nonEmpty || gumboStore.systemTestSuiteRenamings.nonEmpty
   }
 
-  override def handleArsitFinalizePlugin(projectDirectories: ProjectDirectories, arsitOptions: ArsitOptions, symbolTable: SymbolTable, aadlTypes: AadlTypes, reporter: Reporter): ISZ[FileResource] = {
+  override def handleArsitFinalizePlugin(projectDirectories: ProjectDirectories, arsitOptions: ArsitOptions, symbolTable: SymbolTable, aadlTypes: AadlTypes, store: Store, reporter: Reporter): ISZ[FileResource] = {
     var resources: ISZ[FileResource] = ISZ()
-    if (handledComponents.nonEmpty) {
+    val gumboStore = GumboXPluginStore.getGumboStore(store)
+    if (gumboStore.handledComponents.nonEmpty) {
       val container: ST = GumboXGenUtil.getContainerSig(arsitOptions.packageName)
       val containerPath = s"${projectDirectories.dataDir}/${arsitOptions.packageName}/util/Container.scala"
       resources = resources :+ ResourceUtil.createResourceH(containerPath, container, T, T)
@@ -335,9 +390,9 @@ import org.sireum.message.Reporter
       val gumboXUtilPath = s"${projectDirectories.testUtilDir}/${arsitOptions.packageName}/GumboXUtil.scala"
       resources = resources :+ ResourceUtil.createResource(gumboXUtilPath, gumboXUtil, T)
     }
-    if (systemTestSuiteRenamings.nonEmpty) {
+    if (gumboStore.systemTestSuiteRenamings.nonEmpty) {
       resources = resources :+ GumboXRuntimeMonitoring.genSystemTest(
-        arsitOptions.packageName, systemTestSuiteRenamings, projectDirectories)
+        arsitOptions.packageName, gumboStore.systemTestSuiteRenamings, projectDirectories)
     }
     return resources
   }

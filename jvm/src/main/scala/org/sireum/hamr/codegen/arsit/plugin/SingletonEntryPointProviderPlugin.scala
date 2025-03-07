@@ -6,13 +6,14 @@ import org.sireum.hamr.codegen.arsit.templates.{ApiTemplate, EntryPointTemplate}
 import org.sireum.hamr.codegen.arsit.util.ArsitOptions
 import org.sireum.hamr.codegen.arsit.{EntryPoints, Port, ProjectDirectories}
 import org.sireum.hamr.codegen.common.CommonUtil
+import org.sireum.hamr.codegen.common.CommonUtil.Store
 import org.sireum.hamr.codegen.common.symbols.{AadlThreadOrDevice, AnnexClauseInfo, Dispatch_Protocol, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.NameUtil.NameProvider
 import org.sireum.hamr.ir.FeatureCategory
 import org.sireum.message.Reporter
 
-@record class SingletonEntryPointProviderPlugin extends EntryPointProviderPlugin {
+@datatype class SingletonEntryPointProviderPlugin extends EntryPointProviderPlugin {
 
   @strictpure def name: String = "Singleton Entry Point Provider Plugin"
 
@@ -25,14 +26,17 @@ import org.sireum.message.Reporter
 
                                      entryPointTemplate: EntryPointTemplate,
 
-                                     arsitOptions: ArsitOptions, symbolTable: SymbolTable, aadlTypes: AadlTypes, projectDirectories: ProjectDirectories, reporter: Reporter): EntryPointProviderPlugin.EntryPointContributions = {
+                                     arsitOptions: ArsitOptions, symbolTable: SymbolTable, aadlTypes: AadlTypes, projectDirectories: ProjectDirectories,
 
-    return EntryPointProviderPlugin.EntryPointContributions(
-      imports = ISZ(),
-      bridgeCompanionBlocks = ISZ(),
-      entryPoint = entryPointTemplate.generateDefault(),
-      resources = ISZ()
-    )
+                                     store: Store, reporter: Reporter): (EntryPointProviderPlugin.EntryPointContributions, Store) = {
+
+    return (
+      EntryPointProviderPlugin.EntryPointContributions(
+        imports = ISZ(),
+        bridgeCompanionBlocks = ISZ(),
+        entryPoint = entryPointTemplate.generateDefault(),
+        resources = ISZ()),
+      store)
   }
 }
 

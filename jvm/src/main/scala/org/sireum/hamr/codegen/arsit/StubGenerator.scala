@@ -11,6 +11,7 @@ import org.sireum.hamr.codegen.arsit.templates.{ApiTemplate, StubTemplate, TestT
 import org.sireum.hamr.codegen.arsit.util.ArsitOptions
 import org.sireum.hamr.codegen.arsit.util.ReporterUtil.reporter
 import org.sireum.hamr.codegen.common.CommonUtil
+import org.sireum.hamr.codegen.common.CommonUtil.Store
 import org.sireum.hamr.codegen.common.containers.{FileResource, Marker}
 import org.sireum.hamr.codegen.common.plugin.Plugin
 import org.sireum.hamr.codegen.common.symbols._
@@ -29,48 +30,50 @@ import org.sireum.hamr.ir._
   var seenComponents: HashSet[String] = HashSet.empty
   var resources: ISZ[FileResource] = ISZ()
 
-  def generate(plugins: MSZ[Plugin]): Result = {
+  def generate(plugins: ISZ[Plugin], store: Store): (Result, Store) = {
 
-    gen(rootSystem, plugins)
+    val localStore = gen(rootSystem, plugins, store)
 
-    return ArsitResult(
+    return (ArsitResult(
       resources = previousPhase.resources() ++ resources,
       auxResources = previousPhase.auxResources,
       maxPort = previousPhase.maxPort,
       maxComponent = previousPhase.maxComponent,
       maxConnection = previousPhase.maxConnection
-    )
+    ), localStore)
   }
 
-  def gen(m: AadlComponent, plugins: MSZ[Plugin]): Unit = {
+  def gen(m: AadlComponent, plugins: ISZ[Plugin], store: Store): Store = {
+    var localStore = store
     m match {
-      case s: AadlSystem => genContainer(s, plugins)
-      case s: AadlProcess => genContainer(s, plugins)
+      case s: AadlSystem => localStore = genContainer(s, plugins, localStore)
+      case s: AadlProcess => localStore = genContainer(s, plugins, localStore)
 
-      case s: AadlThreadGroup => genThreadGroup(s, plugins)
+      case s: AadlThreadGroup => localStore = genThreadGroup(s, plugins, localStore)
 
       case _ =>
         for (_c <- m.subComponents) {
-          gen(_c, plugins)
+          localStore = gen(_c, plugins, localStore)
         }
     }
+    return localStore
   }
 
-  def genContainer(m: AadlComponent, plugins: MSZ[Plugin]): Unit = {
+  def genContainer(m: AadlComponent, plugins: ISZ[Plugin], store: Store): Store = {
     assert(m.isInstanceOf[AadlSystem] || m.isInstanceOf[AadlProcess])
-
+    var localStore = store
     for (c <- m.subComponents) {
       c match {
-        case s: AadlSystem => genContainer(s, plugins)
-        case s: AadlProcess => genContainer(s, plugins)
+        case s: AadlSystem => localStore = genContainer(s, plugins, localStore)
+        case s: AadlProcess => localStore = genContainer(s, plugins, localStore)
 
-        case s: AadlThreadGroup => genThreadGroup(s, plugins)
+        case s: AadlThreadGroup => localStore = genThreadGroup(s, plugins, localStore)
 
-        case s: AadlThread => genThread(s, plugins)
+        case s: AadlThread => localStore = genThread(s, plugins, localStore)
 
         case s: AadlDevice =>
           if (arsitOptions.devicesAsThreads) {
-            genThread(s, plugins)
+            localStore = genThread(s, plugins, localStore)
           }
 
         case s: AadlSubprogram => // ignore
@@ -79,21 +82,26 @@ import org.sireum.hamr.ir._
           reporter.info(None(), Util.toolName, s"Skipping: ${c.component.category} component: ${c.path}")
       }
     }
+    return localStore
   }
 
-  def genThreadGroup(m: AadlThreadGroup, plugins: MSZ[Plugin]): Unit = {
-
+  def genThreadGroup(m: AadlThreadGroup, plugins: ISZ[Plugin], store: Store): Store = {
+    var localStore = store
     for (c <- m.subComponents) {
       c match {
-        case s: AadlThread => genThread(s, plugins)
+        case s: AadlThread => localStore = genThread(s, plugins, store)
 
         case x => halt(s"Unexpected Thread Group subcomponent: ${x}")
       }
     }
+    return localStore
   }
 
-  def genThread(m: AadlThreadOrDevice, plugins: MSZ[Plugin]): Unit = {
+  def genThread(m: AadlThreadOrDevice, plugins: ISZ[Plugin], store: Store): Store = {
+
     assert(!m.isInstanceOf[AadlDevice] || arsitOptions.devicesAsThreads)
+
+    var localStore = store
 
     val names = nameProvider(m.component, basePackage)
     val filename: String = Util.pathAppend(dirs.componentDir, ISZ(names.packagePath, s"${names.componentSingletonType}.scala"))
@@ -106,7 +114,7 @@ import org.sireum.hamr.ir._
     addResource(dirs.testBridgeDir, ISZ(names.packagePath, s"${names.testName}.scala"), bridgeTestSuite, F)
 
     if (seenComponents.contains(filename)) {
-      return
+      return localStore
     }
 
     val resolvedAnnexClauseInfos: ISZ[AnnexClauseInfo] = symbolTable.annexClauseInfos.get(m.path) match {
@@ -135,12 +143,13 @@ import org.sireum.hamr.ir._
 
       bridgeContributions.entryPointTemplate,
 
-      arsitOptions, symbolTable, aadlTypes, dirs, reporter)
+      arsitOptions, symbolTable, aadlTypes, dirs, localStore, reporter)
+    localStore = entryPointContributions._2
 
-    val bridgeCodeST = bridgeContributions.e(entryPointContributions)
+    val bridgeCodeST = bridgeContributions.e(entryPointContributions._1)
 
     addResource(dirs.bridgeDir, ISZ(names.packagePath, s"${names.bridge}.scala"), bridgeCodeST, T)
-    resources = resources ++ bridgeContributions.resources ++ entryPointContributions.resources
+    resources = resources ++ bridgeContributions.resources ++ entryPointContributions._1.resources
 
 
     val integrationContracts = GumboGen.processIntegrationContract(m, symbolTable, aadlTypes, basePackage)
@@ -185,9 +194,11 @@ import org.sireum.hamr.ir._
               val methodSig: String = BehaviorEntryPointElementProvider.genMethodSignature(entryPoint, names, Some(inEventPort))
               val defaultMethodBody: ST = BehaviorEntryPointElementProvider.genComputeMethodBody(Some(inEventPort), m, isFirst, arsitOptions.excludeImpl)
 
-              behaviorCodeContributions = behaviorCodeContributions :+ BehaviorEntryPointProviders.offer(
+              val bepp = BehaviorEntryPointProviders.offer(
                 entryPoint, Some(inEventPort), m, names, arsitOptions.excludeImpl, methodSig, defaultMethodBody, resolvedAnnexClauseInfos,
-                basePackage, symbolTable, aadlTypes, dirs, arsitOptions, plugins, reporter)
+                basePackage, symbolTable, aadlTypes, dirs, arsitOptions, plugins, localStore, reporter)
+              localStore = bepp._2
+              behaviorCodeContributions = behaviorCodeContributions :+ bepp._1
 
               isFirst = F
             }
@@ -198,10 +209,12 @@ import org.sireum.hamr.ir._
               case _ => BehaviorEntryPointElementProvider.genMethodBody(entryPoint, m, arsitOptions.excludeImpl)
             }
 
-            behaviorCodeContributions = behaviorCodeContributions :+ BehaviorEntryPointProviders.offer(entryPoint, None(),
+            val bepp = BehaviorEntryPointProviders.offer(entryPoint, None(),
               m, names,
               arsitOptions.excludeImpl, methodSig, defaultMethodBody, resolvedAnnexClauseInfos,
-              basePackage, symbolTable, aadlTypes, dirs, arsitOptions, plugins, reporter)
+              basePackage, symbolTable, aadlTypes, dirs, arsitOptions, plugins, localStore, reporter)
+            localStore = bepp._2
+            behaviorCodeContributions = behaviorCodeContributions :+ bepp._1
         }
       }
 
@@ -213,7 +226,7 @@ import org.sireum.hamr.ir._
       }
 
       behaviorCodeContributions = behaviorCodeContributions :+
-        BehaviorEntryPointProviders.finalise(resolvedAnnexClauseInfos, m, names, basePackage, symbolTable, aadlTypes, dirs, arsitOptions, plugins, reporter)
+        BehaviorEntryPointProviders.finalise(resolvedAnnexClauseInfos, m, names, basePackage, symbolTable, aadlTypes, dirs, arsitOptions, plugins, localStore, reporter)
 
       val markers = BehaviorEntryPointProviders.getMarkers(behaviorCodeContributions)
       val componentImpl: ST = BehaviorEntryPointElementProvider.genComponentImpl(names, behaviorCodeContributions)
@@ -224,6 +237,8 @@ import org.sireum.hamr.ir._
     }
 
     seenComponents = seenComponents + filename
+
+    return localStore
   }
 
   def genSubprograms(s: AadlComponent): Option[ST] = {

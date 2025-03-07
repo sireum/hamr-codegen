@@ -17,7 +17,7 @@ object BlessBehaviorProviderPlugin {
   }
 }
 
-@record class BlessBehaviorProviderPlugin extends BehaviorProviderPlugin {
+@datatype class BlessBehaviorProviderPlugin extends BehaviorProviderPlugin {
 
   @pure def name: String = {
     return "BLESS Behavior Provider Provider"

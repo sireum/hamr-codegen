@@ -6,6 +6,6 @@ import org.sireum._
 object Plugin {
 }
 
-@msig trait Plugin {
+@sig trait Plugin {
   @pure def name: String
 }

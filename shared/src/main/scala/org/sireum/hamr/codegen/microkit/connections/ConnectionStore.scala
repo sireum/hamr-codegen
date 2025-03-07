@@ -75,6 +75,7 @@ import org.sireum.hamr.codegen.microkit.util.Util.TAB
     return st"$typ $varName;"
   }
 }
+
 @datatype class PortVaddr(val typ: String,
                           val varName: String) extends GlobalVarContribution
 
