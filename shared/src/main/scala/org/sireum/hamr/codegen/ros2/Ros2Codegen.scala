@@ -4,12 +4,12 @@ package org.sireum.hamr.codegen.ros2
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
+import org.sireum.hamr.codegen.common.CommonUtil.Store
 import org.sireum.hamr.codegen.common.containers.{FileResource, IResource, Marker}
 import org.sireum.hamr.codegen.common.plugin.Plugin
 import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlSystem, AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, ArrayType, BaseType, EnumType, RecordType}
 import org.sireum.hamr.codegen.common.util.HamrCli.CodegenOption
-import org.sireum.hamr.codegen.common.util.ResourceUtil
 import org.sireum.hamr.ir
 import org.sireum.hamr.ir.{Aadl, Component, ConnectionInstance}
 import org.sireum.message.Reporter
@@ -28,7 +28,7 @@ import org.sireum.ops.ISZOps
   var connectionMap: Map[ISZ[String], ISZ[ISZ[String]]] = Map.empty
   var datatypeMap: Map[AadlType, (String, ISZ[String])] = Map.empty
 
-  def run(model: Aadl, options: CodegenOption, aadlTypes: AadlTypes, symbolTable: SymbolTable, plugins: ISZ[Plugin], reporter: Reporter): Ros2Results = {
+  def run(model: Aadl, options: CodegenOption, aadlTypes: AadlTypes, symbolTable: SymbolTable, plugins: ISZ[Plugin], store: Store, reporter: Reporter): (Ros2Results, Store) = {
     assert(model.components.size == 1)
 
     val modelName = getModelName(symbolTable)
@@ -70,7 +70,7 @@ import org.sireum.ops.ISZOps
       resources = resources :+ IResource(absPath, file._2, file._4, file._3, F, F, F)
     }
 
-    return Ros2Results(fileResources = resources)
+    return (Ros2Results(fileResources = resources), store)
   }
 
   // Also adds threads to threadComponents

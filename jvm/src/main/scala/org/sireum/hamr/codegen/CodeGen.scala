@@ -28,15 +28,26 @@ object CodeGen {
               shouldWriteOutResources: B,
               options: CodegenOption,
               plugins: ISZ[Plugin],
+              store: Store,
               reporter: Reporter,
               transpilerCallback: (SireumSlangTranspilersCOption, Reporter) => Z,
               proyekIveCallback: SireumProyekIveOption => Z,
               sergenCallback: (SireumToolsSergenOption, Reporter) => Z,
-              slangCheckCallback: (SireumToolsSlangcheckGeneratorOption, Reporter) => Z): CodeGenResults = {
+              slangCheckCallback: (SireumToolsSlangcheckGeneratorOption, Reporter) => Z): (CodeGenResults, Store) = {
 
+    @pure def finalizePlugins(aadlTypes: Option[AadlTypes], symbolTable: Option[SymbolTable],
+                              codegenResults: CodeGenResults, store: Store, reporter: Reporter): (CodeGenResults, Store) = {
+      var localStore = store
+      for(p <- plugins) {
+        localStore = p.finalizePlugin(model, aadlTypes, symbolTable, codegenResults, localStore, options, reporter)
+      }
+      return (codegenResults, localStore)
+    }
+
+    var localStore = store
     if (model.components.size != 1) {
       reporter.error(None(), toolName, s"Expecting exactly one root component but found ${model.components.size}")
-      return CodeGenResults.empty
+      return (CodeGenResults.empty, localStore)
     }
 
     var modOptions = options
@@ -95,12 +106,10 @@ object CodeGen {
 
     var reporterIndex = z"0"
 
-    var store: Store = Map.empty
-
     if (modOptions.runtimeMonitoring && isTranspilerProject) {
       reporter.error(None(), toolName, "Runtime monitoring support for transpiled projects has not been added yet. Disable runtime-monitoring before transpiling")
       reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
-      return CodeGenResults.empty
+      return finalizePlugins(None(), None(), CodeGenResults.empty, localStore, reporter)
     }
 
     var arsitResources: ISZ[FileResource] = ISZ()
@@ -111,38 +120,39 @@ object CodeGen {
     val result: Option[ModelElements] = ModelUtil.resolve(model, model.components(0).identifier.pos, packageName, modOptions, reporter)
     reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
     if (result.isEmpty) {
-      return CodeGenResults.empty
+      return finalizePlugins(None(), None(), CodeGenResults.empty, localStore, reporter)
     }
 
     val (rmodel, aadlTypes, symbolTable): (Aadl, AadlTypes, SymbolTable) = (result.get.model, result.get.types, result.get.symbolTable)
 
     if (modOptions.runtimeMonitoring && symbolTable.getThreads().isEmpty) {
       reporter.error(None(), toolName, "Model must contain threads in order to enable runtime monitoring")
-      return CodeGenResults.empty
+      return finalizePlugins(Some(aadlTypes), Some(symbolTable), CodeGenResults.empty, localStore, reporter)
     }
 
     if (~reporter.hasError && runRos2) {
-      val results = Ros2Codegen().run(rmodel, modOptions, aadlTypes, symbolTable, plugins, reporter)
+      val results = Ros2Codegen().run(rmodel, modOptions, aadlTypes, symbolTable, plugins, localStore, reporter)
+      localStore = results._2
       if (!reporter.hasError) {
-        writeOutResources(results.fileResources, T, reporter)
+        writeOutResources(results._1.fileResources, T, reporter)
       }
       if (!modOptions.parseableMessages) {
         reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
       }
-      return CodeGenResults(resources = results.fileResources, auxResources = ISZ())
+      return finalizePlugins(Some(aadlTypes), Some(symbolTable), CodeGenResults(resources = results._1.fileResources, auxResources = ISZ()), localStore, reporter)
     }
 
     if (!reporter.hasError && runMicrokit) {
       reporter.info(None(), toolName, "Generating Microkit artifacts...")
       val results = MicrokitCodegen().run(rmodel, modOptions, aadlTypes, symbolTable, plugins, store, reporter)
-      store = results._2
+      localStore = results._2
       if (!reporter.hasError) {
         writeOutResources(results._1.resources, F, reporter)
       }
       if (!modOptions.parseableMessages) {
         reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
       }
-      return results._1
+      return finalizePlugins(Some(aadlTypes), Some(symbolTable), results._1, localStore, reporter)
     }
 
     if (!reporter.hasError && runArsit) {
@@ -180,7 +190,7 @@ object CodeGen {
       reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
 
       val results = arsit.Arsit.run(rmodel, opt, aadlTypes, symbolTable, plugins, store, reporter)
-      store = results._2
+      localStore = results._2
 
       arsitResources = arsitResources ++ results._1.resources
       arsitAuxResources = arsitAuxResources ++ results._1.auxResources
@@ -346,9 +356,12 @@ object CodeGen {
       printMessages(reporter.errors, T, 0, ISZ())
     }
 
-    return CodeGenResults(
-      resources = arsitResources ++ actResources,
-      auxResources = arsitAuxResources ++ actAuxResources)
+    return finalizePlugins(
+      Some(aadlTypes), Some(symbolTable),
+      CodeGenResults(
+        resources = arsitResources ++ actResources,
+        auxResources = arsitAuxResources ++ actAuxResources), localStore,
+      reporter)
   }
 
   def printMessages(reporterMessages: ISZ[Message], verbose: B, messageIndex: Z, kindsToFilterOut: ISZ[String]): Z = {
