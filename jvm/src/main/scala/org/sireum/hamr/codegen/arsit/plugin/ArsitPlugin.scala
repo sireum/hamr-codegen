@@ -8,7 +8,7 @@ import org.sireum.hamr.codegen.arsit.plugin.BehaviorEntryPointProviderPlugin.{Be
 import org.sireum.hamr.codegen.arsit.templates.{EntryPointTemplate, IDatatypeTemplate}
 import org.sireum.hamr.codegen.arsit.util.ArsitOptions
 import org.sireum.hamr.codegen.arsit.{EntryPoints, Port, ProjectDirectories, plugin}
-import org.sireum.hamr.codegen.common.CommonUtil.toolName
+import org.sireum.hamr.codegen.common.CommonUtil.{Store, toolName}
 import org.sireum.hamr.codegen.common.containers.{FileResource, Marker}
 import org.sireum.hamr.codegen.common.plugin.Plugin
 import org.sireum.hamr.codegen.common.symbols.{AadlPort, AadlThreadOrDevice, AnnexClauseInfo, SymbolTable}
@@ -18,23 +18,23 @@ import org.sireum.message.Reporter
 
 object ArsitPlugin {
 
-  @strictpure def defaultPlugins: MSZ[Plugin] = MSZ(
+  @strictpure def defaultPlugins: ISZ[Plugin] = ISZ(
     SingletonBridgeCodeProviderPlugin(),
     SingletonEntryPointProviderPlugin(),
     DefaultArsitConfigurationPlugin()
   )
 
-  @strictpure def blessPlugins: MSZ[Plugin] = MSZ[Plugin](BlessBehaviorProviderPlugin())
+  @strictpure def blessPlugins: ISZ[Plugin] = ISZ[Plugin](BlessBehaviorProviderPlugin())
 
-  @strictpure def gumboPlugins: MSZ[Plugin] = MSZ[Plugin](
+  @strictpure def gumboPlugins: ISZ[Plugin] = ISZ[Plugin](
     GumboDatatypeProviderPlugin(),
     GumboPlugin(),
     GumboXPlugin())
 
-  @strictpure def gumboEnhancedPlugins: MSZ[Plugin] = gumboPlugins ++ defaultPlugins
+  @strictpure def gumboEnhancedPlugins: ISZ[Plugin] = gumboPlugins ++ defaultPlugins
 
 
-  @memoize def getBridgeCodeProvidersIndices(plugins: MSZ[Plugin]): ISZ[Z] = {
+  @memoize def getBridgeCodeProvidersIndices(plugins: ISZ[Plugin]): ISZ[Z] = {
     var ret: ISZ[Z] = ISZ()
     for (i <- 0 until plugins.size if plugins(i).isInstanceOf[BridgeCodeProviderPlugin]) {
       ret = ret :+ i
@@ -45,7 +45,7 @@ object ArsitPlugin {
     return ret
   }
 
-  def getEntryPointProviderIndices(plugins: MSZ[Plugin],
+  def getEntryPointProviderIndices(plugins: ISZ[Plugin],
                                    component: AadlThreadOrDevice,
                                    resolvedAnnexSubclauses: ISZ[AnnexClauseInfo],
                                    arsitOptions: ArsitOptions,
@@ -68,7 +68,7 @@ object ArsitPlugin {
     p.isInstanceOf[BehaviorProviderPlugin] &&
       p.asInstanceOf[BehaviorProviderPlugin].canHandleBehaviorProvider(component, resolvedAnnexSubclauses)
 
-  def canHandleBehaviorProviders(plugins: MSZ[Plugin],
+  def canHandleBehaviorProviders(plugins: ISZ[Plugin],
                                  component: AadlThreadOrDevice,
                                  resolvedAnnexSubclauses: ISZ[AnnexClauseInfo]): B = {
     for (p <- plugins if canHandleBP(p, component, resolvedAnnexSubclauses)) {
@@ -78,9 +78,9 @@ object ArsitPlugin {
   }
 }
 
-@msig trait ArsitPlugin extends Plugin
+@sig trait ArsitPlugin extends Plugin
 
-@msig trait ArsitInitializePlugin extends ArsitPlugin {
+@sig trait ArsitInitializePlugin extends ArsitPlugin {
   @pure def canHandleArsitInitializePlugin (arsitOptions: ArsitOptions,
                                             aadlTypes: AadlTypes,
                                             symbolTable: SymbolTable): B
@@ -89,7 +89,8 @@ object ArsitPlugin {
                                   arsitOptions: ArsitOptions,
                                   aadlTypes: AadlTypes,
                                   symbolTable: SymbolTable,
-                                  reporter: Reporter): ISZ[FileResource]
+                                  store: Store,
+                                  reporter: Reporter): (ISZ[FileResource], Store)
 }
 
 object PlatformProviderPlugin {
@@ -112,7 +113,7 @@ object PlatformProviderPlugin {
                                                 val resources: ISZ[FileResource]) extends PlatformContributions
 }
 
-@msig trait PlatformProviderPlugin extends ArsitPlugin {
+@sig trait PlatformProviderPlugin extends ArsitPlugin {
   @pure def canHandlePlatformProviderPlugin(arsitOptions: ArsitOptions,
                                             symbolTable: SymbolTable,
                                             aadlTypes: AadlTypes): B
@@ -122,10 +123,11 @@ object PlatformProviderPlugin {
                                          symbolTable: SymbolTable,
                                          aadlTypes: AadlTypes,
 
+                                         store: Store,
                                          reporter: Reporter): ISZ[PlatformProviderPlugin.PlatformContributions]
 }
 
-@msig trait BehaviorProviderPlugin extends ArsitPlugin {
+@sig trait BehaviorProviderPlugin extends ArsitPlugin {
 
   @pure def canHandleBehaviorProvider(component: AadlThreadOrDevice,
                                       resolvedAnnexSubclauses: ISZ[AnnexClauseInfo]): B
@@ -233,7 +235,7 @@ object BehaviorEntryPointProviderPlugin {
                                        val contractFlows: ISZ[ST]) extends ContractBlock
 }
 
-@msig trait BehaviorEntryPointProviderPlugin extends ArsitPlugin {
+@sig trait BehaviorEntryPointProviderPlugin extends ArsitPlugin {
 
   @pure def canHandleBehaviorEntryPointProvider(entryPoint: EntryPoints.Type, // the entry point
                                                 optInEventPort: Option[AadlPort], // handler's in event port
@@ -243,7 +245,9 @@ object BehaviorEntryPointProviderPlugin {
 
                                                 arsitOptions: ArsitOptions,
                                                 symbolTable: SymbolTable,
-                                                aadlTypes: AadlTypes): B
+                                                aadlTypes: AadlTypes,
+
+                                                store: Store): B
 
   // allows a plugin to provide contributions to the generated code for
   // an entrypoint (ie. where developers will add behavior code).
@@ -265,7 +269,9 @@ object BehaviorEntryPointProviderPlugin {
                                        aadlTypes: AadlTypes,
                                        projectDirectories: ProjectDirectories,
                                        arsitOptions: ArsitOptions,
-                                       reporter: Reporter): BehaviorEntryPointContributions
+
+                                       store: Store,
+                                       reporter: Reporter): (BehaviorEntryPointContributions, Store)
 
 
   @pure def canFinaliseBehaviorEntryPointProvider(component: AadlThreadOrDevice,
@@ -273,7 +279,9 @@ object BehaviorEntryPointProviderPlugin {
 
                                                   arsitOptions: ArsitOptions,
                                                   symbolTable: SymbolTable,
-                                                  aadlTypes: AadlTypes): B = {
+                                                  aadlTypes: AadlTypes,
+
+                                                  store: Store): B = {
     return F
   }
 
@@ -288,6 +296,8 @@ object BehaviorEntryPointProviderPlugin {
                                          aadlTypes: AadlTypes,
                                          projectDirectories: ProjectDirectories,
                                          arsitOptions: ArsitOptions,
+
+                                         store: Store,
                                          reporter: Reporter): Option[ObjectContributions] = {
     return None()
   }
@@ -299,7 +309,7 @@ object BridgeCodeProviderPlugin {
                                           val resources: ISZ[FileResource])
 }
 
-@msig trait BridgeCodeProviderPlugin extends ArsitPlugin {
+@sig trait BridgeCodeProviderPlugin extends ArsitPlugin {
   def generate(nameProvider: NameProvider,
                component: AadlThreadOrDevice,
                ports: ISZ[Port],
@@ -318,7 +328,7 @@ object EntryPointProviderPlugin {
                                           val resources: ISZ[FileResource])
 }
 
-@msig trait EntryPointProviderPlugin extends ArsitPlugin {
+@sig trait EntryPointProviderPlugin extends ArsitPlugin {
   @pure def canHandleEntryPointProvider(component: AadlThreadOrDevice,
                                         resolvedAnnexSubclauses: ISZ[AnnexClauseInfo],
 
@@ -338,7 +348,9 @@ object EntryPointProviderPlugin {
                                symbolTable: SymbolTable,
                                aadlTypes: AadlTypes,
                                projectDirectories: ProjectDirectories,
-                               reporter: Reporter): EntryPointProviderPlugin.EntryPointContributions
+
+                               store: Store,
+                               reporter: Reporter): (EntryPointProviderPlugin.EntryPointContributions, Store)
 }
 
 object DatatypeProviderPlugin {
@@ -360,11 +372,12 @@ object DatatypeProviderPlugin {
     PartialDatatypeContribution(ISZ(),ISZ(),ISZ(),ISZ(),ISZ(),ISZ(),ISZ(),ISZ())
 }
 
-@msig trait DatatypeProviderPlugin extends ArsitPlugin {
+@sig trait DatatypeProviderPlugin extends ArsitPlugin {
   @pure def canHandleDatatypeProvider(aadlType: AadlType,
                                       resolvedAnnexSubclauses: ISZ[AnnexClauseInfo],
                                       aadlTypes: AadlTypes,
-                                      symbolTable: SymbolTable): B
+                                      symbolTable: SymbolTable,
+                                      store: Store): B
 
   def handleDatatypeProvider(basePackageName: String,
                              aadlType: AadlType,
@@ -375,13 +388,15 @@ object DatatypeProviderPlugin {
                              projectDirectories: ProjectDirectories,
                              aadlTypes: AadlTypes,
                              symbolTable: SymbolTable,
-                             reporter: Reporter): DatatypeProviderPlugin.DatatypeContribution
+
+                             store: Store,
+                             reporter: Reporter): (DatatypeProviderPlugin.DatatypeContribution, Store)
 }
 
 
 object ArsitConfigurationPlugin {
 
-  @pure def getAdditionalPortIds(cliOpt: Z, plugins: MSZ[Plugin], reporter: Reporter): Z = {
+  @pure def getAdditionalPortIds(cliOpt: Z, plugins: ISZ[Plugin], reporter: Reporter): Z = {
     var maxId: Z = cliOpt
     var contributor: String = ""
     for (p <- plugins if p.isInstanceOf[ArsitConfigurationPlugin] &&
@@ -395,7 +410,7 @@ object ArsitConfigurationPlugin {
     return maxId
   }
 
-  @pure def getAdditionalComponentIds(cliOpt: Z, plugins: MSZ[Plugin], reporter: Reporter): Z = {
+  @pure def getAdditionalComponentIds(cliOpt: Z, plugins: ISZ[Plugin], reporter: Reporter): Z = {
     var maxId: Z = cliOpt
     var contributor: String = ""
     for (p <- plugins if p.isInstanceOf[ArsitConfigurationPlugin] &&
@@ -409,7 +424,7 @@ object ArsitConfigurationPlugin {
     return maxId
   }
 
-  @pure def getAdditionalConnectionIds(cliOpt: Z, plugins: MSZ[Plugin], reporter: Reporter): Z = {
+  @pure def getAdditionalConnectionIds(cliOpt: Z, plugins: ISZ[Plugin], reporter: Reporter): Z = {
     var maxId: Z = cliOpt
     var contributor: String = ""
     for (p <- plugins if p.isInstanceOf[plugin.ArsitConfigurationPlugin] &&
@@ -424,7 +439,7 @@ object ArsitConfigurationPlugin {
   }
 }
 
-@msig trait ArsitConfigurationPlugin extends ArsitPlugin {
+@sig trait ArsitConfigurationPlugin extends ArsitPlugin {
 
   @strictpure def addPortIds: Z = z"0"
 
@@ -435,13 +450,14 @@ object ArsitConfigurationPlugin {
 
 
 
-@msig trait ArsitFinalizePlugin extends ArsitPlugin {
-  @pure def canHandleArsitFinalizePlugin (): B
+@sig trait ArsitFinalizePlugin extends ArsitPlugin {
+  @pure def canHandleArsitFinalizePlugin (store: Store): B
 
   def handleArsitFinalizePlugin(projectDirectories: ProjectDirectories,
                                 arsitOptions: ArsitOptions,
                                 symbolTable: SymbolTable,
                                 aadlTypes: AadlTypes,
+                                store: Store,
                                 reporter: Reporter): ISZ[FileResource]
 }
 

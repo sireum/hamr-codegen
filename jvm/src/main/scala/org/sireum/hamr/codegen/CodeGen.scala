@@ -6,6 +6,7 @@ import org.sireum.Os.Path
 import org.sireum.hamr.codegen.act.util.Util.ACT_INSTRUCTIONS_MESSAGE_KIND
 import org.sireum.hamr.codegen.arsit.Util.ARSIT_INSTRUCTIONS_MESSAGE_KIND
 import org.sireum.hamr.codegen.common.containers._
+import org.sireum.hamr.codegen.common.CommonUtil.Store
 import org.sireum.hamr.codegen.common.plugin.Plugin
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
 import org.sireum.hamr.codegen.common.types.AadlTypes
@@ -26,16 +27,27 @@ object CodeGen {
   def codeGen(model: Aadl,
               shouldWriteOutResources: B,
               options: CodegenOption,
-              plugins: MSZ[Plugin],
+              plugins: ISZ[Plugin],
+              store: Store,
               reporter: Reporter,
               transpilerCallback: (SireumSlangTranspilersCOption, Reporter) => Z,
               proyekIveCallback: SireumProyekIveOption => Z,
               sergenCallback: (SireumToolsSergenOption, Reporter) => Z,
-              slangCheckCallback: (SireumToolsSlangcheckGeneratorOption, Reporter) => Z): CodeGenResults = {
+              slangCheckCallback: (SireumToolsSlangcheckGeneratorOption, Reporter) => Z): (CodeGenResults, Store) = {
 
+    @pure def finalizePlugins(aadlTypes: Option[AadlTypes], symbolTable: Option[SymbolTable],
+                              codegenResults: CodeGenResults, currentStore: Store): (CodeGenResults, Store) = {
+      var localStore = currentStore
+      for(p <- plugins) {
+        localStore = p.finalizePlugin(model, aadlTypes, symbolTable, codegenResults, localStore, options, reporter)
+      }
+      return (codegenResults, localStore)
+    }
+
+    var localStore = store
     if (model.components.size != 1) {
       reporter.error(None(), toolName, s"Expecting exactly one root component but found ${model.components.size}")
-      return CodeGenResults.empty
+      return (CodeGenResults.empty, localStore)
     }
 
     var modOptions = options
@@ -97,7 +109,7 @@ object CodeGen {
     if (modOptions.runtimeMonitoring && isTranspilerProject) {
       reporter.error(None(), toolName, "Runtime monitoring support for transpiled projects has not been added yet. Disable runtime-monitoring before transpiling")
       reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
-      return CodeGenResults.empty
+      return finalizePlugins(None(), None(), CodeGenResults.empty, localStore)
     }
 
     var arsitResources: ISZ[FileResource] = ISZ()
@@ -108,37 +120,39 @@ object CodeGen {
     val result: Option[ModelElements] = ModelUtil.resolve(model, model.components(0).identifier.pos, packageName, modOptions, reporter)
     reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
     if (result.isEmpty) {
-      return CodeGenResults.empty
+      return finalizePlugins(None(), None(), CodeGenResults.empty, localStore)
     }
 
     val (rmodel, aadlTypes, symbolTable): (Aadl, AadlTypes, SymbolTable) = (result.get.model, result.get.types, result.get.symbolTable)
 
     if (modOptions.runtimeMonitoring && symbolTable.getThreads().isEmpty) {
       reporter.error(None(), toolName, "Model must contain threads in order to enable runtime monitoring")
-      return CodeGenResults.empty
+      return finalizePlugins(Some(aadlTypes), Some(symbolTable), CodeGenResults.empty, localStore)
     }
 
     if (~reporter.hasError && runRos2) {
-      val results = Ros2Codegen().run(rmodel, modOptions, aadlTypes, symbolTable, plugins, reporter)
+      val results = Ros2Codegen().run(rmodel, modOptions, aadlTypes, symbolTable, plugins, localStore, reporter)
+      localStore = results._2
       if (!reporter.hasError) {
-        writeOutResources(results.fileResources, T, reporter)
+        writeOutResources(results._1.fileResources, T, reporter)
       }
       if (!modOptions.parseableMessages) {
         reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
       }
-      return CodeGenResults(resources = results.fileResources, auxResources = ISZ())
+      return finalizePlugins(Some(aadlTypes), Some(symbolTable), CodeGenResults(resources = results._1.fileResources, auxResources = ISZ()), localStore)
     }
 
     if (!reporter.hasError && runMicrokit) {
       reporter.info(None(), toolName, "Generating Microkit artifacts...")
-      val results = MicrokitCodegen().run(rmodel, modOptions, aadlTypes, symbolTable, plugins, reporter)
+      val results = MicrokitCodegen().run(rmodel, modOptions, aadlTypes, symbolTable, plugins, store, reporter)
+      localStore = results._2
       if (!reporter.hasError) {
-        writeOutResources(results.resources, F, reporter)
+        writeOutResources(results._1.resources, F, reporter)
       }
       if (!modOptions.parseableMessages) {
         reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
       }
-      return results
+      return finalizePlugins(Some(aadlTypes), Some(symbolTable), results._1, localStore)
     }
 
     if (!reporter.hasError && runArsit) {
@@ -175,10 +189,11 @@ object CodeGen {
       reporter.info(None(), toolName, "Generating Slang artifacts...")
       reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
 
-      val results = arsit.Arsit.run(rmodel, opt, aadlTypes, symbolTable, plugins, reporter)
+      val results = arsit.Arsit.run(rmodel, opt, aadlTypes, symbolTable, plugins, store, reporter)
+      localStore = results._2
 
-      arsitResources = arsitResources ++ results.resources
-      arsitAuxResources = arsitAuxResources ++ results.auxResources
+      arsitResources = arsitResources ++ results._1.resources
+      arsitAuxResources = arsitAuxResources ++ results._1.auxResources
 
       reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ(ARSIT_INSTRUCTIONS_MESSAGE_KIND))
 
@@ -280,7 +295,7 @@ object CodeGen {
           reporter.info(None(), toolName, "Transpiling project ...")
           reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
 
-          for (transpilerConfig <- Resource.projectTranspilerConfigs(results.auxResources) if !reporter.hasError) {
+          for (transpilerConfig <- Resource.projectTranspilerConfigs(results._1.auxResources) if !reporter.hasError) {
             // CTranspiler prints all the messages in the passed in reporter so
             // create a new one for each config
             val transpilerReporter = Reporter.create
@@ -341,9 +356,11 @@ object CodeGen {
       printMessages(reporter.errors, T, 0, ISZ())
     }
 
-    return CodeGenResults(
-      resources = arsitResources ++ actResources,
-      auxResources = arsitAuxResources ++ actAuxResources)
+    return finalizePlugins(
+      Some(aadlTypes), Some(symbolTable),
+      CodeGenResults(
+        resources = arsitResources ++ actResources,
+        auxResources = arsitAuxResources ++ actAuxResources), localStore)
   }
 
   def printMessages(reporterMessages: ISZ[Message], verbose: B, messageIndex: Z, kindsToFilterOut: ISZ[String]): Z = {

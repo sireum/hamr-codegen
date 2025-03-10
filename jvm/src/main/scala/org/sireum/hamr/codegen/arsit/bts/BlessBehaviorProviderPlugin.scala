@@ -3,7 +3,7 @@ package org.sireum.hamr.codegen.arsit.bts
 
 import org.sireum._
 import org.sireum.hamr.codegen.arsit.plugin.BehaviorProviderPlugin
-import org.sireum.hamr.codegen.common.containers.{EResource, IResource, FileResource}
+import org.sireum.hamr.codegen.common.containers.{EResource, FileResource, IResource}
 import org.sireum.hamr.codegen.common.symbols.{AadlThreadOrDevice, AnnexClauseInfo, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.ir._
@@ -17,7 +17,7 @@ object BlessBehaviorProviderPlugin {
   }
 }
 
-@record class BlessBehaviorProviderPlugin extends BehaviorProviderPlugin {
+@datatype class BlessBehaviorProviderPlugin extends BehaviorProviderPlugin {
 
   @pure def name: String = {
     return "BLESS Behavior Provider Provider"

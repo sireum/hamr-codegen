@@ -5,6 +5,7 @@ import org.sireum._
 import org.sireum.hamr.codegen.arsit.plugin.{ArsitConfigurationPlugin, ArsitFinalizePlugin, ArsitInitializePlugin, PlatformProviderPlugin}
 import org.sireum.hamr.codegen.arsit.templates._
 import org.sireum.hamr.codegen.arsit.util.{ArsitLibrary, ArsitOptions, ArsitPlatform, ReporterUtil}
+import org.sireum.hamr.codegen.common.CommonUtil.Store
 import org.sireum.hamr.codegen.common.containers.{FileResource, IResource, Resource}
 import org.sireum.hamr.codegen.common.plugin.Plugin
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
@@ -26,35 +27,39 @@ object Arsit {
   //   named according to the associated phase).
   //=================================================================
 
-  def run(model: ir.Aadl, o: ArsitOptions, aadlTypes: AadlTypes, symbolTable: SymbolTable, plugins: MSZ[Plugin], reporter: Reporter): ArsitResult = {
+  def run(model: ir.Aadl, o: ArsitOptions, aadlTypes: AadlTypes, symbolTable: SymbolTable, plugins: ISZ[Plugin], store: Store, reporter: Reporter): (ArsitResult, Store) = {
     ReporterUtil.resetReporter()
-    val ret = runInternal(model, o, aadlTypes, symbolTable, plugins)
+    val ret = runInternal(model, o, aadlTypes, symbolTable, plugins, store)
     ReporterUtil.addReports(reporter)
     return ret
   }
 
-  def runInternal(model: ir.Aadl, arsitOptions: ArsitOptions, aadlTypes: AadlTypes, symbolTable: SymbolTable, plugins: MSZ[Plugin]): ArsitResult = {
-
+  def runInternal(model: ir.Aadl, arsitOptions: ArsitOptions, aadlTypes: AadlTypes, symbolTable: SymbolTable, plugins: ISZ[Plugin], store: Store): (ArsitResult, Store) = {
     if (model.components.isEmpty) {
       ReporterUtil.reporter.error(None(), Util.toolName, "Model is empty")
-      return ArsitResult(ISZ(), ISZ(), 0, 0, 0)
+      return (ArsitResult(ISZ(), ISZ(), 0, 0, 0), store)
     }
 
     assert(model.components.size == 1, "Expecting a single root component")
 
     val projectDirectories = ProjectDirectories(arsitOptions)
 
+    var localStore = store
     var fileResources: ISZ[FileResource] = ISZ()
 
     for (p <- plugins if p.isInstanceOf[ArsitInitializePlugin] && p.asInstanceOf[ArsitInitializePlugin].canHandleArsitInitializePlugin(arsitOptions, aadlTypes, symbolTable)) {
-      fileResources = fileResources ++ p.asInstanceOf[ArsitInitializePlugin].handleArsitInitializePlugin(projectDirectories, arsitOptions, aadlTypes, symbolTable, ReporterUtil.reporter)
+      val t = p.asInstanceOf[ArsitInitializePlugin].handleArsitInitializePlugin(projectDirectories, arsitOptions, aadlTypes, symbolTable, localStore, ReporterUtil.reporter)
+      localStore = t._2
+      fileResources = fileResources ++ t._1
     }
 
-    val nixPhase =
-      nix.NixGenDispatch.generate(projectDirectories, symbolTable.rootSystem, arsitOptions, symbolTable, aadlTypes,
-        StubGenerator(projectDirectories, symbolTable.rootSystem, arsitOptions, symbolTable, aadlTypes,
-          ArchitectureGenerator(projectDirectories, symbolTable.rootSystem, arsitOptions, symbolTable, aadlTypes).generate(plugins)
-        ).generate(plugins))
+    val archPhase = ArchitectureGenerator(projectDirectories, symbolTable.rootSystem, arsitOptions, symbolTable, aadlTypes).generate(plugins, localStore)
+    localStore = archPhase._2
+
+    val stubPhase = StubGenerator(projectDirectories, symbolTable.rootSystem, arsitOptions, symbolTable, aadlTypes, archPhase._1).generate(plugins, localStore)
+    localStore = stubPhase._2
+
+    val nixPhase = nix.NixGenDispatch.generate(projectDirectories, symbolTable.rootSystem, arsitOptions, symbolTable, aadlTypes, stubPhase._1)
 
     fileResources = fileResources ++ nixPhase.resources
     var addAuxResources: ISZ[Resource] = nixPhase.auxResources
@@ -62,7 +67,7 @@ object Arsit {
     var plaformContributions: ISZ[(String, PlatformProviderPlugin.PlatformContributions)] = ISZ()
     for (p <- plugins if p.isInstanceOf[PlatformProviderPlugin] && p.asInstanceOf[PlatformProviderPlugin].canHandlePlatformProviderPlugin(arsitOptions, symbolTable, aadlTypes)) {
       plaformContributions = plaformContributions ++
-        (for (pc <- p.asInstanceOf[PlatformProviderPlugin].handlePlatformProviderPlugin(projectDirectories, arsitOptions, symbolTable, aadlTypes, ReporterUtil.reporter)) yield (p.name, pc))
+        (for (pc <- p.asInstanceOf[PlatformProviderPlugin].handlePlatformProviderPlugin(projectDirectories, arsitOptions, symbolTable, aadlTypes, localStore, ReporterUtil.reporter)) yield (p.name, pc))
     }
     for(pc <- plaformContributions) {
       fileResources = fileResources ++ pc._2.resources
@@ -81,8 +86,8 @@ object Arsit {
     fileResources = fileResources ++ createBuildArtifacts(
       CommonUtil.getLastName(model.components(0).identifier), arsitOptions, projectDirectories, fileResources, ReporterUtil.reporter)
 
-    for (p <- plugins if p.isInstanceOf[ArsitFinalizePlugin] && p.asInstanceOf[ArsitFinalizePlugin].canHandleArsitFinalizePlugin()) {
-      fileResources = fileResources ++ p.asInstanceOf[ArsitFinalizePlugin].handleArsitFinalizePlugin(projectDirectories, arsitOptions, symbolTable, aadlTypes, ReporterUtil.reporter)
+    for (p <- plugins if p.isInstanceOf[ArsitFinalizePlugin] && p.asInstanceOf[ArsitFinalizePlugin].canHandleArsitFinalizePlugin(localStore)) {
+      fileResources = fileResources ++ p.asInstanceOf[ArsitFinalizePlugin].handleArsitFinalizePlugin(projectDirectories, arsitOptions, symbolTable, aadlTypes, localStore, ReporterUtil.reporter)
     }
 
     if (!arsitOptions.noEmbedArt) { // sergen requires art.DataContent so only generate the script when art is being embedded
@@ -119,12 +124,12 @@ object Arsit {
     }
 
 
-    return ArsitResult(
+    return (ArsitResult(
       fileResources,
       addAuxResources,
       maxPortId,
       maxComponentId,
-      maxConnectionId)
+      maxConnectionId), localStore)
   }
 
   def copyArtFiles(maxPort: Z, maxComponent: Z, maxConnections: Z, outputDir: String): ISZ[FileResource] = {

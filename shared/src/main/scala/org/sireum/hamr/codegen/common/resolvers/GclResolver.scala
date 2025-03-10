@@ -1300,6 +1300,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           AST.Stmt.Adt(
             isRoot = F,
             isDatatype = T,
+            isUnclonable = F,
             id = AST.Id("TODO", AST.Attr(None())),
             typeParams = ISZ(),
             params = ISZ(),
@@ -1475,6 +1476,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             AST.Stmt.Adt(
               isRoot = F,
               isDatatype = T,
+              isUnclonable = F,
               id = AST.Id("Empty", AST.Attr(None())),
               typeParams = ISZ(),
               params = ISZ(),
@@ -1607,6 +1609,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
       val resolvedMsig = AST.MethodSig(
         purity = m.sig.purity,
+        annotations = ISZ(),
         id = m.sig.id,
         typeParams = m.sig.typeParams,
         hasParams = resolvedParams.nonEmpty,
@@ -1794,6 +1797,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           val methodAst: AST.Stmt.Method = {
             val methodSig = AST.MethodSig(
               purity = AST.Purity.Pure,
+              annotations = ISZ(),
               id = AST.Id(methodName, AST.Attr(None())),
               typeParams = typeParams,
               hasParams = params.nonEmpty,
@@ -2179,6 +2183,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         AST.Stmt.Adt(
           isRoot = F,
           isDatatype = T,
+          isUnclonable = F,
           id = AST.Id(simpleName, AST.Attr(None())),
           typeParams = ISZ(),
           params = adtParams,

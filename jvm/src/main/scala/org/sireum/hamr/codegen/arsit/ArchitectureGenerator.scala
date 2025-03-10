@@ -10,6 +10,7 @@ import org.sireum.hamr.codegen.arsit.templates._
 import org.sireum.hamr.codegen.arsit.util.ReporterUtil.reporter
 import org.sireum.hamr.codegen.arsit.util.{ArsitOptions, SchedulerUtil}
 import org.sireum.hamr.codegen.common.CommonUtil
+import org.sireum.hamr.codegen.common.CommonUtil.Store
 import org.sireum.hamr.codegen.common.containers._
 import org.sireum.hamr.codegen.common.plugin.Plugin
 import org.sireum.hamr.codegen.common.symbols._
@@ -37,7 +38,8 @@ import org.sireum.ops.ISZOps
 
   var resources: ISZ[FileResource] = ISZ()
 
-  def generate(plugins: MSZ[Plugin]): Result = {
+  def generate(plugins: ISZ[Plugin], store: Store): (Result, Store) = {
+    var localStore = store
     if (!types.rawConnections) {
       // TODO allow for customizations of base types
       for (aadlType <- types.typeMap.values if !aadlType.isInstanceOf[BaseType]) {
@@ -67,7 +69,7 @@ import org.sireum.ops.ISZOps
             aadlType,
             resolvedAnnexSubclauses,
             types,
-            symbolTable)) {
+            symbolTable, localStore)) {
 
           p.asInstanceOf[DatatypeProviderPlugin].handleDatatypeProvider(
             arsitOptions.packageName,
@@ -75,11 +77,13 @@ import org.sireum.ops.ISZOps
             defaultTemplate,
             resolvedAnnexSubclauses,
             aadlType.nameProvider.filePath,
-            directories, types, symbolTable, reporter) match {
-            case f: DatatypeProviderPlugin.FullDatatypeContribution =>
+            directories, types, symbolTable, localStore, reporter) match {
+            case (f: DatatypeProviderPlugin.FullDatatypeContribution, s) =>
               fulls = fulls :+ (p.name, f)
-            case pc: DatatypeProviderPlugin.PartialDatatypeContribution =>
+              localStore = s
+            case (pc: DatatypeProviderPlugin.PartialDatatypeContribution, s) =>
               partials = partials :+ (p.name, pc)
+              localStore = s
           }
         }
 
@@ -138,13 +142,14 @@ import org.sireum.ops.ISZOps
 
     generateInternal()
 
-    return ArsitResult(
-      resources = resources,
-      auxResources = ISZ(),
-      maxPort = portId,
-      maxComponent = componentId,
-      maxConnection = connections.size
-    )
+    return (
+      ArsitResult(
+        resources = resources,
+        auxResources = ISZ(),
+        maxPort = portId,
+        maxComponent = componentId,
+        maxConnection = connections.size),
+      localStore)
   }
 
   def generateInternal(): Unit = {
