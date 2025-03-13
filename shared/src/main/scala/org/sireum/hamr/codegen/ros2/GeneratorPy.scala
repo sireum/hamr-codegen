@@ -264,7 +264,7 @@ object GeneratorPy {
 
     val filePath: ISZ[String] = IS("src", top_level_package_nameT, fileName)
 
-    return (filePath, setupFileBody, true, IS())
+    return (filePath, setupFileBody, F, IS(Marker(startMarker, endMarker)))
   }
 
   def genPyInitFile(packageName: String): (ISZ[String], ST, B, ISZ[Marker]) = {
@@ -276,7 +276,7 @@ object GeneratorPy {
 
     val filePath: ISZ[String] = IS("src", packageName, packageName, fileName)
 
-    return (filePath, fileBody, true, IS())
+    return (filePath, fileBody, T, IS())
   }
 
   def genPySubInitFile(modelName: String, subModelName: String): (ISZ[String], ST, B, ISZ[Marker]) = {
@@ -289,7 +289,7 @@ object GeneratorPy {
 
     val filePath: ISZ[String] = IS("src", top_level_package_nameT, top_level_package_nameT, subModelName, fileName)
 
-    return (filePath, setupFileBody, true, IS())
+    return (filePath, setupFileBody, T, IS())
   }
 
   def genPyResourceFile(modelName: String): (ISZ[String], ST, B, ISZ[Marker]) = {
@@ -301,7 +301,7 @@ object GeneratorPy {
 
     val filePath: ISZ[String] = IS("src", top_level_package_nameT, "resource", top_level_package_nameT)
 
-    return (filePath, setupFileBody, true, IS())
+    return (filePath, setupFileBody, T, IS())
   }
 
   def genPyCopyrightFile(modelName: String): (ISZ[String], ST, B, ISZ[Marker]) = {
@@ -338,7 +338,7 @@ object GeneratorPy {
 
     val filePath: ISZ[String] = IS("src", top_level_package_nameT, "test", fileName)
 
-    return (filePath, setupFileBody, true, IS())
+    return (filePath, setupFileBody, T, IS())
   }
 
   def genPyFlakeFile(modelName: String): (ISZ[String], ST, B, ISZ[Marker]) = {
@@ -375,7 +375,7 @@ object GeneratorPy {
 
     val filePath: ISZ[String] = IS("src", top_level_package_nameT, "test", fileName)
 
-    return (filePath, setupFileBody, true, IS())
+    return (filePath, setupFileBody, T, IS())
   }
 
   def genPyPrepFile(modelName: String): (ISZ[String], ST, B, ISZ[Marker]) = {
@@ -410,7 +410,7 @@ object GeneratorPy {
 
     val filePath: ISZ[String] = IS("src", top_level_package_nameT, "test", fileName)
 
-    return (filePath, setupFileBody, true, IS())
+    return (filePath, setupFileBody, T, IS())
   }
 
   //================================================
@@ -441,7 +441,7 @@ object GeneratorPy {
 
     val filePath: ISZ[String] = IS("src", s"${top_level_package_nameT}_bringup", fileName)
 
-    return (filePath, setupFileBody, true, IS())
+    return (filePath, setupFileBody, T, IS())
   }
 
   def genLaunchPackageFile(modelName: String): (ISZ[String], ST, B, ISZ[Marker]) = {
@@ -481,7 +481,7 @@ object GeneratorPy {
 
     val filePath: ISZ[String] = IS("src", s"${top_level_package_nameT}_bringup", fileName)
 
-    return (filePath, setupFileBody, true, IS())
+    return (filePath, setupFileBody, F, IS(Marker(startMarker, endMarker)))
   }
 
 
@@ -556,7 +556,7 @@ object GeneratorPy {
 
     val filePath: ISZ[String] = IS("src", s"${top_level_package_nameT}_bringup", "launch", fileName)
 
-    return (filePath, launchFileBody, true, IS())
+    return (filePath, launchFileBody, T, IS())
   }
 
   //================================================
@@ -1542,7 +1542,8 @@ object GeneratorPy {
     val nodeName = genNodeName(component)
     val fileName = genPyNodeSourceName(nodeName)
 
-    //TODO: Markers
+    val startMarker: String = "# Additions within these tags will be preserved when re-running Codegen"
+    val endMarker: String = "# Additions within these tags will be preserved when re-running Codegen"
 
     var subscriptionHandlers: ISZ[ST] = IS()
     if (isSporadic(component)) {
@@ -1597,11 +1598,18 @@ object GeneratorPy {
           |#  C o m p u t e    E n t r y    P o i n t
           |#=================================================
           |${(subscriptionHandlers, "\n")}
+          |
+          |#=================================================
+          |#  Include any additional declarations here
+          |#=================================================
+          |${startMarker}
+          |
+          |${endMarker}
         """
 
     val filePath: ISZ[String] = IS("src", packageName, packageName, "user_code", fileName)
 
-    return (filePath, fileBody, F, IS())
+    return (filePath, fileBody, F, IS(Marker(startMarker, endMarker)))
   }
 
   def genPyNodeRunnerName(compNameS: String): String = {
