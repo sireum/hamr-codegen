@@ -9,7 +9,7 @@ import org.sireum.hamr.codegen.arsit.templates.{EntryPointTemplate, IDatatypeTem
 import org.sireum.hamr.codegen.arsit.util.ArsitOptions
 import org.sireum.hamr.codegen.arsit.{EntryPoints, Port, ProjectDirectories, plugin}
 import org.sireum.hamr.codegen.common.CommonUtil.{Store, toolName}
-import org.sireum.hamr.codegen.common.containers.{FileResource, Marker}
+import org.sireum.hamr.codegen.common.containers.{FileResource, Marker, Resource}
 import org.sireum.hamr.codegen.common.plugin.Plugin
 import org.sireum.hamr.codegen.common.symbols.{AadlPort, AadlThreadOrDevice, AnnexClauseInfo, SymbolTable}
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes}
@@ -90,7 +90,7 @@ object ArsitPlugin {
                                   aadlTypes: AadlTypes,
                                   symbolTable: SymbolTable,
                                   store: Store,
-                                  reporter: Reporter): (ISZ[FileResource], Store)
+                                  reporter: Reporter): (ISZ[Resource], Store)
 }
 
 object PlatformProviderPlugin {
@@ -101,16 +101,16 @@ object PlatformProviderPlugin {
 
     def blocks: ISZ[ST]
 
-    def resources: ISZ[FileResource]
+    def resources: ISZ[Resource]
   }
 
   @datatype class PlatformSetupContributions(val imports: ISZ[ST],
                                              val blocks: ISZ[ST],
-                                             val resources: ISZ[FileResource]) extends PlatformContributions
+                                             val resources: ISZ[Resource]) extends PlatformContributions
 
   @datatype class PlatformTearDownContributions(val imports: ISZ[ST],
                                                 val blocks: ISZ[ST],
-                                                val resources: ISZ[FileResource]) extends PlatformContributions
+                                                val resources: ISZ[Resource]) extends PlatformContributions
 }
 
 @sig trait PlatformProviderPlugin extends ArsitPlugin {
@@ -141,7 +141,7 @@ object PlatformProviderPlugin {
                              symbolTable: SymbolTable,
                              aadlTypes: AadlTypes,
 
-                             reporter: Reporter): ISZ[FileResource]
+                             reporter: Reporter): ISZ[Resource]
 }
 
 object BehaviorEntryPointProviderPlugin {
@@ -170,7 +170,7 @@ object BehaviorEntryPointProviderPlugin {
 
     def postObjectBlocks: ISZ[ST]
 
-    def resources: ISZ[FileResource]
+    def resources: ISZ[Resource]
   }
 
   @datatype class ObjectContributions(val tags: ISZ[String],
@@ -179,7 +179,7 @@ object BehaviorEntryPointProviderPlugin {
                                       val preMethodBlocks: ISZ[ST],
                                       val postMethodBlocks: ISZ[ST],
                                       val postObjectBlocks: ISZ[ST],
-                                      val resources: ISZ[FileResource]) extends BehaviorEntryPointObjectContributions
+                                      val resources: ISZ[Resource]) extends BehaviorEntryPointObjectContributions
 
   @sig trait BehaviorEntryPointMethodContributions extends BehaviorEntryPointObjectContributions {
     def markers: ISZ[Marker]
@@ -199,7 +199,7 @@ object BehaviorEntryPointProviderPlugin {
                                           val postObjectBlocks: ISZ[ST],
 
                                           val markers: ISZ[Marker],
-                                          val resources: ISZ[FileResource]) extends BehaviorEntryPointMethodContributions
+                                          val resources: ISZ[Resource]) extends BehaviorEntryPointMethodContributions
 
   // allows plugin to provide parts of the behavior code for a method that will be
   // combined with those from other plugins in the same pipeline.
@@ -220,7 +220,7 @@ object BehaviorEntryPointProviderPlugin {
                                              val postObjectBlocks: ISZ[ST],
 
                                              val markers: ISZ[Marker],
-                                             val resources: ISZ[FileResource]) extends BehaviorEntryPointMethodContributions
+                                             val resources: ISZ[Resource]) extends BehaviorEntryPointMethodContributions
 
   @sig trait ContractBlock
 
@@ -306,7 +306,7 @@ object BehaviorEntryPointProviderPlugin {
 object BridgeCodeProviderPlugin {
   @datatype class BridgeCodeContributions(val entryPointTemplate: EntryPointTemplate,
                                           val e: EntryPointProviderPlugin.EntryPointContributions => ST,
-                                          val resources: ISZ[FileResource])
+                                          val resources: ISZ[Resource])
 }
 
 @sig trait BridgeCodeProviderPlugin extends ArsitPlugin {
@@ -325,7 +325,7 @@ object EntryPointProviderPlugin {
   @datatype class EntryPointContributions(val imports: ISZ[String],
                                           val bridgeCompanionBlocks: ISZ[String],
                                           val entryPoint: ST,
-                                          val resources: ISZ[FileResource])
+                                          val resources: ISZ[Resource])
 }
 
 @sig trait EntryPointProviderPlugin extends ArsitPlugin {
@@ -357,7 +357,7 @@ object DatatypeProviderPlugin {
   @datatype trait DatatypeContribution
 
   @datatype class FullDatatypeContribution(val datatype: FileResource,
-                                           val resources: ISZ[FileResource]) extends DatatypeContribution
+                                           val resources: ISZ[Resource]) extends DatatypeContribution
 
   @datatype class PartialDatatypeContribution(val slangSwitches: ISZ[ST],
                                               val imports: ISZ[ST],
@@ -366,7 +366,7 @@ object DatatypeProviderPlugin {
                                               val payloadSingletonBlocks: ISZ[ST],
                                               val preBlocks: ISZ[ST],
                                               val postBlocks: ISZ[ST],
-                                              val resources: ISZ[FileResource]) extends DatatypeContribution
+                                              val resources: ISZ[Resource]) extends DatatypeContribution
 
   @strictpure def emptyPartialDatatypeContributions: PartialDatatypeContribution =
     PartialDatatypeContribution(ISZ(),ISZ(),ISZ(),ISZ(),ISZ(),ISZ(),ISZ(),ISZ())
@@ -458,6 +458,5 @@ object ArsitConfigurationPlugin {
                                 symbolTable: SymbolTable,
                                 aadlTypes: AadlTypes,
                                 store: Store,
-                                reporter: Reporter): ISZ[FileResource]
+                                reporter: Reporter): ISZ[Resource]
 }
-

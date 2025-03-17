@@ -2,7 +2,7 @@
 package org.sireum.hamr.codegen.microkit
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.containers.FileResource
+import org.sireum.hamr.codegen.common.containers.Resource
 import org.sireum.hamr.codegen.common.CommonUtil.Store
 import org.sireum.hamr.codegen.common.plugin.Plugin
 import org.sireum.hamr.codegen.common.symbols.{AadlPort, AadlThread, SymbolTable}
@@ -12,6 +12,7 @@ import org.sireum.hamr.codegen.common.util.{CodeGenResults, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen.{pacerSchedulingDomain, toolName}
 import org.sireum.hamr.codegen.microkit.connections._
 import org.sireum.hamr.codegen.microkit.lint.Linter
+import org.sireum.hamr.codegen.microkit.plugins.PluginUtil
 import org.sireum.hamr.codegen.microkit.types.{DefaultTypeStore, MicrokitTypeUtil, TypeStore}
 import org.sireum.hamr.codegen.microkit.util._
 import org.sireum.hamr.codegen.microkit.vm.{VmMakefileTemplate, VmUser, VmUtil}
@@ -38,7 +39,7 @@ object MicrokitCodegen {
 }
 
 @record class MicrokitCodegen {
-  var resources: ISZ[FileResource] = ISZ()
+  var resources: ISZ[Resource] = ISZ()
   var makefileContainers: ISZ[MakefileContainer] = ISZ()
 
   var xmlSchedulingDomains: ISZ[SchedulingDomain] = ISZ()
@@ -698,13 +699,13 @@ object MicrokitCodegen {
 
 
     if (!Linter.lint(model, options, types, symbolTable, reporter)) {
-      return (CodeGenResults(ISZ(), ISZ()), store)
+      return (CodeGenResults.empty, store)
     }
 
     val boundProcessors = symbolTable.getAllActualBoundProcessors()
     if (boundProcessors.size != 1) {
       reporter.error(None(), toolName, "Currently only handling models with exactly one actual bound processor")
-      return (CodeGenResults(ISZ(), ISZ()), store)
+      return (CodeGenResults.empty, store)
     }
 
     var framePeriod: Z = 0
@@ -720,6 +721,17 @@ object MicrokitCodegen {
     var typeHeaderFilenames: ISZ[String] = ISZ(MicrokitTypeUtil.cAadlTypesFilename)
     var typeImplFilenames: ISZ[String] = ISZ()
     var typeObjectNames: ISZ[String] = ISZ()
+
+    val microkitPlugins = PluginUtil.getMicrokitPlugins(plugins)
+    var continue = T
+    var localStore = store
+    for (plugin <- microkitPlugins if continue) {
+      if (plugin.canHandle(model, options, types, symbolTable, localStore, reporter)) {
+        val results = plugin.handle(model, options, types, symbolTable, localStore, reporter)
+        localStore = results._1
+        resources = resources ++ results._2
+      }
+    }
 
     val connectionStore = processConnections(typeStore)
     for (entry <- connectionStore) {
@@ -769,7 +781,7 @@ object MicrokitCodegen {
 
     if (usedBudget > framePeriod) {
       reporter.error(None(), toolName, s"Frame period ${framePeriod} is too small for the used budget ${usedBudget}")
-      return (CodeGenResults(ISZ(), ISZ()), store)
+      return (CodeGenResults.empty, store)
     }
 
     var xmlScheds: ISZ[SchedulingDomain] = ISZ()
@@ -829,6 +841,6 @@ object MicrokitCodegen {
     resources = resources :+ ResourceUtil.createResource(s"${utilIncludePath}/util.h", Util.utilh, T)
     resources = resources :+ ResourceUtil.createResource(s"${utilSrcPath}/util.c", Util.utilc, T)
 
-    return (CodeGenResults(resources = resources, auxResources = ISZ()), store)
+    return (CodeGenResults(resources = resources), store)
   }
 }

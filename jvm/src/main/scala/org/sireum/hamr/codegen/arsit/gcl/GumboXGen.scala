@@ -11,7 +11,7 @@ import org.sireum.hamr.codegen.arsit.plugin.DatatypeProviderPlugin
 import org.sireum.hamr.codegen.arsit.templates.{StubTemplate, TestTemplate}
 import org.sireum.hamr.codegen.common.CommonUtil.IdPath
 import org.sireum.hamr.codegen.common.StringUtil
-import org.sireum.hamr.codegen.common.containers.FileResource
+import org.sireum.hamr.codegen.common.containers.{FileResource, Resource}
 import org.sireum.hamr.codegen.common.resolvers.GclResolver
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
@@ -1065,7 +1065,7 @@ object GumboXGen {
   }
 
   def finalise(component: AadlThreadOrDevice, componentNames: NameProvider, projectDirectories: ProjectDirectories, gumboStore: GumboXPluginStore): ObjectContributions = {
-    var resources: ISZ[FileResource] = ISZ()
+    var resources: ISZ[Resource] = ISZ()
     var blocks: ISZ[ST] = ISZ()
     var imports: Set[String] = Set.empty
     gumboStore.integrationClauses.get(component.path) match {
@@ -1139,7 +1139,7 @@ object GumboXGen {
 
     var testingBlocks: ISZ[ST] = ISZ()
 
-    var resources: ISZ[FileResource] = ISZ()
+    var resources: ISZ[Resource] = ISZ()
 
     //////////////////////////////////////////
     // Refactored GumboX Unit Testing

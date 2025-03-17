@@ -11,7 +11,7 @@ import org.sireum.hamr.codegen.arsit.templates.{EntryPointTemplate, IDatatypeTem
 import org.sireum.hamr.codegen.arsit.util.{ArsitOptions, ReporterUtil}
 import org.sireum.hamr.codegen.arsit.{EntryPoints, Port, ProjectDirectories}
 import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, Store, StoreValue}
-import org.sireum.hamr.codegen.common.containers.FileResource
+import org.sireum.hamr.codegen.common.containers.Resource
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes}
 import org.sireum.hamr.codegen.common.util.NameUtil.NameProvider
@@ -144,7 +144,7 @@ object GumboXPluginStore {
 
   override def handleArsitInitializePlugin(projectDirectories: ProjectDirectories,
                                            arsitOptions: ArsitOptions, aadlTypes: AadlTypes, symbolTable: SymbolTable,
-                                           store: Store, reporter: Reporter): (ISZ[FileResource], Store) = {
+                                           store: Store, reporter: Reporter): (ISZ[Resource], Store) = {
     var gumboStore = GumboXPluginStore.getGumboStore(store)
     for (aadlType <- aadlTypes.typeMap.entries if symbolTable.annexClauseInfos.contains(ISZ(aadlType._1));
          annex <- symbolTable.annexClauseInfos.get(ISZ(aadlType._1)).get) {
@@ -345,7 +345,7 @@ object GumboXPluginStore {
       case _ => None()
     }
 
-    var resources = ISZ[FileResource]()
+    var resources = ISZ[Resource]()
 
     val gumbox = gumboXGen.finalise(component, componentNames, projectDirectories, GumboXPluginStore.getGumboStore(store))
 
@@ -370,8 +370,8 @@ object GumboXPluginStore {
     return gumboStore.handledComponents.nonEmpty || gumboStore.systemTestSuiteRenamings.nonEmpty
   }
 
-  override def handleArsitFinalizePlugin(projectDirectories: ProjectDirectories, arsitOptions: ArsitOptions, symbolTable: SymbolTable, aadlTypes: AadlTypes, store: Store, reporter: Reporter): ISZ[FileResource] = {
-    var resources: ISZ[FileResource] = ISZ()
+  override def handleArsitFinalizePlugin(projectDirectories: ProjectDirectories, arsitOptions: ArsitOptions, symbolTable: SymbolTable, aadlTypes: AadlTypes, store: Store, reporter: Reporter): ISZ[Resource] = {
+    var resources: ISZ[Resource] = ISZ()
     val gumboStore = GumboXPluginStore.getGumboStore(store)
     if (gumboStore.handledComponents.nonEmpty) {
       val container: ST = GumboXGenUtil.getContainerSig(arsitOptions.packageName)

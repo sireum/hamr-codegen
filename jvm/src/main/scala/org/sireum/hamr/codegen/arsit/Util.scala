@@ -272,9 +272,7 @@ object HAMR {
 }
 
 @sig trait Result {
-  def resources: ISZ[FileResource]
-
-  def auxResources: ISZ[Resource]
+  def resources: ISZ[Resource]
 
   def maxPort: Z
 
@@ -283,8 +281,7 @@ object HAMR {
   def maxConnection: Z
 }
 
-@datatype class ArsitResult(val resources: ISZ[FileResource],
-                            val auxResources: ISZ[Resource],
+@datatype class ArsitResult(val resources: ISZ[Resource],
                             val maxPort: Z,
                             val maxComponent: Z,
                             val maxConnection: Z) extends Result

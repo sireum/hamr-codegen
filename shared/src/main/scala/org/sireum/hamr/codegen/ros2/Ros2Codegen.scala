@@ -5,7 +5,7 @@ package org.sireum.hamr.codegen.ros2
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.CommonUtil.Store
-import org.sireum.hamr.codegen.common.containers.{FileResource, IResource, Marker}
+import org.sireum.hamr.codegen.common.containers.{IResource, Marker, Resource}
 import org.sireum.hamr.codegen.common.plugin.Plugin
 import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlSystem, AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, ArrayType, BaseType, EnumType, RecordType}
@@ -15,14 +15,14 @@ import org.sireum.hamr.ir.{Aadl, Component, ConnectionInstance}
 import org.sireum.message.Reporter
 import org.sireum.ops.ISZOps
 
-@datatype class Ros2Results(val fileResources: ISZ[FileResource])
+@datatype class Ros2Results(val resources: ISZ[Resource])
 
 
 @record class Ros2Codegen {
 
   val toolName: String = "Ros2Codegen"
 
-  var resources: ISZ[FileResource] = ISZ()
+  var resources: ISZ[Resource] = ISZ()
   var threadComponents: ISZ[AadlThread] = ISZ()
   var systemComponents: ISZ[AadlSystem] = ISZ()
   var connectionMap: Map[ISZ[String], ISZ[ISZ[String]]] = Map.empty
@@ -70,7 +70,7 @@ import org.sireum.ops.ISZOps
       resources = resources :+ IResource(absPath, file._2, file._4, file._3, F, F, F)
     }
 
-    return (Ros2Results(fileResources = resources), store)
+    return (Ros2Results(resources), store)
   }
 
   // Also adds threads to threadComponents

@@ -3,7 +3,7 @@
 package org.sireum.hamr.codegen.common.util.test
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.containers.{EResource, IResource, Marker, FileResource}
+import org.sireum.hamr.codegen.common.containers.{EResource, FileResource, IResource, Marker, Resource}
 
 object TestUtil {
 
@@ -15,7 +15,7 @@ object TestUtil {
     return TestJSON.toTestResult(expected.read).left
   }
 
-  def convertToTestResult(resources: ISZ[FileResource], resultsDir: Os.Path): TestResult = {
+  def convertToTestResult(resources: ISZ[Resource], resultsDir: Os.Path): TestResult = {
     def normalize(t: TestResult): TestResult = {
       val nmap: ISZ[(String, TestResource)] = t.map.entries.map(m => {
 
@@ -43,18 +43,23 @@ object TestUtil {
       return TestResult(Map(nmap))
     }
 
-    return normalize(TestResult(Map.empty[String, TestResource] ++ (resources.map((m: FileResource) => {
-      val key = resultsDir.relativize(Os.path(m.dstPath)).value
-      val results: (String, TestResource) = m match {
-        case i: IResource =>
-          val testMarkers = i.markers.map((m: Marker) => TestMarker(beginMarker = m.beginMarker, endMarker = m.endMarker))
-          (key, ITestResource(content = i.content.render, overwrite = i.overwrite, makeExecutable = i.makeExecutable, makeCRLF = i.makeCRLF, markers = testMarkers, isDatatype = i.isDatatype))
-        case e: EResource =>
-          val src = resultsDir.relativize(Os.path(e.srcPath)).value
-          val dst = resultsDir.relativize(Os.path(e.dstPath)).value
-          (key, ETestResource(src, e.symlink))
+    var map = Map.empty[String, TestResource]
+    for (r <- resources) {
+      r match {
+        case r: FileResource =>
+          val key = resultsDir.relativize(Os.path(r.dstPath)).value
+          r match {
+            case i: IResource =>
+              val testMarkers = i.markers.map((m: Marker) => TestMarker(beginMarker = m.beginMarker, endMarker = m.endMarker))
+              map = map + (key, ITestResource(content = i.content.render, overwrite = i.overwrite, makeExecutable = i.makeExecutable, makeCRLF = i.makeCRLF, markers = testMarkers, isDatatype = i.isDatatype))
+            case e: EResource =>
+              val src = resultsDir.relativize(Os.path(e.srcPath)).value
+              val dst = resultsDir.relativize(Os.path(e.dstPath)).value
+              map = map + (key, ETestResource(src, e.symlink))
+          }
+        case _ =>
       }
-      results
-    }))))
+    }
+    return normalize(TestResult(map))
   }
 }

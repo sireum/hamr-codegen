@@ -8,7 +8,7 @@ import org.sireum.hamr.codegen.arsit.plugin.BehaviorEntryPointProviderPlugin.{Be
 import org.sireum.hamr.codegen.arsit.util.ArsitOptions
 import org.sireum.hamr.codegen.arsit.{EntryPoints, ProjectDirectories, Util}
 import org.sireum.hamr.codegen.common.CommonUtil.Store
-import org.sireum.hamr.codegen.common.containers.{FileResource, Marker}
+import org.sireum.hamr.codegen.common.containers.{Marker, Resource}
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.NameUtil.NameProvider
@@ -73,7 +73,7 @@ import org.sireum.message.Reporter
     var modifies: ISZ[ST] = ISZ()
     var ensures: ISZ[ST] = ISZ()
     var flows: ISZ[ST] = ISZ()
-    var resources: ISZ[FileResource] = ISZ()
+    var resources: ISZ[Resource] = ISZ()
 
     if (!localGumboStore.handledAnnexLibraries) {
       for (gclLib <- getAnnexLibraries(symbolTable)) {

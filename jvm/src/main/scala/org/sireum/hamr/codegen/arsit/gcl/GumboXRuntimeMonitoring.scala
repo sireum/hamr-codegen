@@ -8,7 +8,7 @@ import org.sireum.hamr.codegen.arsit.templates.{ApiTemplate, EntryPointTemplate}
 import org.sireum.hamr.codegen.arsit.{EntryPoints, ProjectDirectories}
 import org.sireum.hamr.codegen.common.CommonUtil.Store
 import org.sireum.hamr.codegen.common.StringUtil
-import org.sireum.hamr.codegen.common.containers.{FileResource, Marker}
+import org.sireum.hamr.codegen.common.containers.{FileResource, Marker, Resource}
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.types.AadlTypes
@@ -58,7 +58,7 @@ object GumboXRuntimeMonitoring {
     val epCompanionName: String = s"${componentNames.componentSingletonType}_EntryPoint_Companion"
     val bridgeDirectory: String = s"${projectDirectories.utilDir}/${componentNames.packagePath}"
 
-    var resources: ISZ[FileResource] = ISZ()
+    var resources: ISZ[Resource] = ISZ()
 
     val componentMI = GumboXRuntimeMonitoring.getComponentModelInfo(component, componentNames, annexInfo, aadlTypes)
     rm_Container = rm_Container(componentModelInfos = rm_Container.componentModelInfos :+ componentMI)
@@ -519,8 +519,8 @@ object GumboXRuntimeMonitoring {
 
   def genSystemTestSuite(basePackage: String,
                          hasGcl: B,
-                         projectDirectories: ProjectDirectories): ISZ[FileResource] = {
-    var resources = ISZ[FileResource]()
+                         projectDirectories: ProjectDirectories): ISZ[Resource] = {
+    var resources = ISZ[Resource]()
 
     val utilpath = s"${projectDirectories.testUtilDir}/${basePackage}"
 
@@ -822,7 +822,7 @@ object GumboXRuntimeMonitoring {
                                    projectDirectories: ProjectDirectories): ISZ[PlatformProviderPlugin.PlatformContributions] = {
     val runtimePath = s"${projectDirectories.utilDir}/${basePackageName}/runtimemonitor"
 
-    var resources: ISZ[FileResource] = ISZ()
+    var resources: ISZ[Resource] = ISZ()
 
 
     resources = resources ++ GumboXRuntimeMonitoring.genSystemTestSuite(basePackageName, hasGcl, projectDirectories)

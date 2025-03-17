@@ -37,7 +37,7 @@ object Arsit {
   def runInternal(model: ir.Aadl, arsitOptions: ArsitOptions, aadlTypes: AadlTypes, symbolTable: SymbolTable, plugins: ISZ[Plugin], store: Store): (ArsitResult, Store) = {
     if (model.components.isEmpty) {
       ReporterUtil.reporter.error(None(), Util.toolName, "Model is empty")
-      return (ArsitResult(ISZ(), ISZ(), 0, 0, 0), store)
+      return (ArsitResult(ISZ(), 0, 0, 0), store)
     }
 
     assert(model.components.size == 1, "Expecting a single root component")
@@ -45,7 +45,7 @@ object Arsit {
     val projectDirectories = ProjectDirectories(arsitOptions)
 
     var localStore = store
-    var fileResources: ISZ[FileResource] = ISZ()
+    var fileResources: ISZ[Resource] = ISZ()
 
     for (p <- plugins if p.isInstanceOf[ArsitInitializePlugin] && p.asInstanceOf[ArsitInitializePlugin].canHandleArsitInitializePlugin(arsitOptions, aadlTypes, symbolTable)) {
       val t = p.asInstanceOf[ArsitInitializePlugin].handleArsitInitializePlugin(projectDirectories, arsitOptions, aadlTypes, symbolTable, localStore, ReporterUtil.reporter)
@@ -62,7 +62,6 @@ object Arsit {
     val nixPhase = nix.NixGenDispatch.generate(projectDirectories, symbolTable.rootSystem, arsitOptions, symbolTable, aadlTypes, stubPhase._1)
 
     fileResources = fileResources ++ nixPhase.resources
-    var addAuxResources: ISZ[Resource] = nixPhase.auxResources
 
     var plaformContributions: ISZ[(String, PlatformProviderPlugin.PlatformContributions)] = ISZ()
     for (p <- plugins if p.isInstanceOf[PlatformProviderPlugin] && p.asInstanceOf[PlatformProviderPlugin].canHandlePlatformProviderPlugin(arsitOptions, symbolTable, aadlTypes)) {
@@ -112,28 +111,27 @@ object Arsit {
                 |""",
           overwrite = F, isDatatype = T)
 
-      val datatypeResources: ISZ[FileResource] = fileResources.filter(f => f.isInstanceOf[IResource] && f.asInstanceOf[IResource].isDatatype)
+      val datatypeResources: ISZ[IResource] = fileResources.filter(f => f.isInstanceOf[IResource] && f.asInstanceOf[IResource].isDatatype).asInstanceOf[ISZ[IResource]]
 
       val (sergenCmd, sergenConfig) = ToolsTemplate.genSerGen(arsitOptions.packageName, outUtilDir, projectDirectories.slangBinDir, datatypeResources)
       fileResources = fileResources :+ ResourceUtil.createExeCrlfResource(Util.pathAppend(projectDirectories.slangBinDir, ISZ("sergen.cmd")), sergenCmd, T)
-      addAuxResources = addAuxResources :+ sergenConfig
+      fileResources = fileResources :+ sergenConfig
 
       val (slangCheckCmd, slangCheckConfig) = ToolsTemplate.slangCheck(datatypeResources, arsitOptions.packageName, outUtilDir, projectDirectories.slangBinDir)
       fileResources = fileResources :+ ResourceUtil.createExeCrlfResource(Util.pathAppend(projectDirectories.slangBinDir, ISZ("slangcheck.cmd")), slangCheckCmd, T)
-      addAuxResources = addAuxResources :+ slangCheckConfig
+      fileResources = fileResources :+ slangCheckConfig
     }
 
 
     return (ArsitResult(
       fileResources,
-      addAuxResources,
       maxPortId,
       maxComponentId,
       maxConnectionId), localStore)
   }
 
-  def copyArtFiles(maxPort: Z, maxComponent: Z, maxConnections: Z, outputDir: String): ISZ[FileResource] = {
-    var resources: ISZ[FileResource] = ISZ()
+  def copyArtFiles(maxPort: Z, maxComponent: Z, maxConnections: Z, outputDir: String): ISZ[Resource] = {
+    var resources: ISZ[Resource] = ISZ()
     for (entry <- ArsitLibrary.getFiles if ops.StringOps(entry._1).contains("art")) {
       val _c: String =
         if (ops.StringOps(entry._1).contains("Art.scala")) {
@@ -164,12 +162,16 @@ object Arsit {
       resources = resources :+ ResourceUtil.createStringResource(Util.pathAppend(outputDir, ISZ(entry._1)), _c, T)
     }
 
-    for (i <- 0 until resources.size if resources(i).name == "DataContent.scala") {
-      var resource = (resources(i).asInstanceOf[IResource])
-      resource = resource(isDatatype = T)
-      val o = ops.ISZOps(resources)
-      val ret = (o.slice(0, i) :+ resource) ++ o.slice(i + 1, resources.size)
-      return ret
+    for (i <- 0 until resources.size) {
+      resources(i) match {
+        case r : IResource if r.name == "DataContent.scala" =>
+          var resource = (resources(i).asInstanceOf[IResource])
+          resource = resource(isDatatype = T)
+          val o = ops.ISZOps(resources)
+          val ret = (o.slice(0, i) :+ resource) ++ o.slice(i + 1, resources.size)
+          return ret
+        case _ =>
+      }
     }
 
     halt("Infeasible")
@@ -178,15 +180,19 @@ object Arsit {
   def createBuildArtifacts(projectName: String,
                            options: ArsitOptions,
                            projDirs: ProjectDirectories,
-                           resources: ISZ[FileResource],
-                           reporter: Reporter): ISZ[FileResource] = {
+                           resources: ISZ[Resource],
+                           reporter: Reporter): ISZ[Resource] = {
 
-    var ret: ISZ[FileResource] = ISZ()
+    var ret: ISZ[Resource] = ISZ()
     val root = options.slangOutputDir
 
     val demoScalaPath: String = {
-      val candidate: ISZ[FileResource] = resources.filter(p => ops.StringOps(p.dstPath).endsWith("Demo.scala"))
-      if (candidate.nonEmpty) root.relativize(Os.path(candidate(0).dstPath)).value
+      val candidate: ISZ[Resource] = resources.filter(p =>
+        p match {
+          case p: FileResource => ops.StringOps(p.dstPath).endsWith("Demo.scala")
+          case _ => F
+        })
+      if (candidate.nonEmpty) root.relativize(Os.path(candidate(0).asInstanceOf[FileResource].dstPath)).value
       else "??"
     }
 
@@ -233,25 +239,41 @@ object Arsit {
       val devDir = projDirs.cExt_c_Dir
 
       val transpile: String = {
-        val x = resources.filter(p => ops.StringOps(p.dstPath).endsWith("bin/transpile.cmd"))
+        val x = resources.filter(p =>
+          p match {
+            case p: IResource => ops.StringOps(p.dstPath).endsWith("bin/transpile.cmd")
+            case _ => F
+          }).asInstanceOf[ISZ[IResource]]
         if (x.nonEmpty) x(0).dstPath
         else "??"
       }
 
       val compile: String = {
-        val x = resources.filter(p => ops.StringOps(p.dstPath).contains("bin/compile.cmd"))
+        val x = resources.filter(p =>
+          p match {
+            case p: IResource => ops.StringOps(p.dstPath).contains("bin/compile.cmd")
+            case _ => F
+          }).asInstanceOf[ISZ[IResource]]
         if (x.nonEmpty) x(0).dstPath
         else "??"
       }
 
       val run: String = {
-        val x = resources.filter(p => ops.StringOps(p.dstPath).contains("bin/run.sh"))
+        val x = resources.filter(p =>
+          p match {
+            case p: IResource => ops.StringOps(p.dstPath).contains("bin/run.sh")
+            case _ => F
+          }).asInstanceOf[ISZ[IResource]]
         if (x.nonEmpty) x(0).dstPath
         else "??"
       }
 
       val stop: String = {
-        val x = resources.filter(p => ops.StringOps(p.dstPath).endsWith("bin/stop.sh"))
+        val x = resources.filter(p =>
+          p match {
+            case p: IResource => ops.StringOps(p.dstPath).endsWith("bin/stop.sh")
+            case _ => F
+          }).asInstanceOf[ISZ[IResource]]
         if (x.nonEmpty) x(0).dstPath
         else "??"
       }
@@ -262,7 +284,11 @@ object Arsit {
 
     if (options.platform == ArsitPlatform.SeL4) {
       val transpile: String = {
-        val x = resources.filter(p => ops.StringOps(p.dstPath).endsWith("bin/transpile-sel4.cmd"))
+        val x = resources.filter(p =>
+          p match {
+            case p: IResource => ops.StringOps(p.dstPath).endsWith("bin/transpile-sel4.cmd")
+            case _ => F
+          }).asInstanceOf[ISZ[IResource]]
         if (x.nonEmpty) x(0).dstPath
         else "??"
       }

@@ -36,7 +36,7 @@ import org.sireum.ops.ISZOps
 
   var seenConnections: HashMap[ir.Name, ISZ[ir.Name]] = HashMap.empty
 
-  var resources: ISZ[FileResource] = ISZ()
+  var resources: ISZ[Resource] = ISZ()
 
   def generate(plugins: ISZ[Plugin], store: Store): (Result, Store) = {
     var localStore = store
@@ -145,7 +145,6 @@ import org.sireum.ops.ISZOps
     return (
       ArsitResult(
         resources = resources,
-        auxResources = ISZ(),
         maxPort = portId,
         maxComponent = componentId,
         maxConnection = connections.size),

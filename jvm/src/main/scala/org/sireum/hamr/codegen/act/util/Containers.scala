@@ -5,7 +5,7 @@ package org.sireum.hamr.codegen.act.util
 import org.sireum._
 import org.sireum.hamr.codegen.act.ast
 import org.sireum.hamr.codegen.act.connections.ConnectorContainer
-import org.sireum.hamr.codegen.common.containers.FileResource
+import org.sireum.hamr.codegen.common.containers.{FileResource, Resource}
 import org.sireum.hamr.ir
 
 @datatype class ActContainer(rootServer: String,
@@ -145,7 +145,7 @@ import org.sireum.hamr.ir
 }
 
 
-@datatype class ActResult(val resources: ISZ[FileResource])
+@datatype class ActResult(val resources: ISZ[Resource])
 
 @enum object ReportKind {
   'Info

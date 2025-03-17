@@ -2,10 +2,10 @@
 package org.sireum.hamr.codegen.common.util
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.containers.{FileResource, Resource}
+import org.sireum.hamr.codegen.common.containers.Resource
+
 object CodeGenResults {
-  @strictpure def empty: CodeGenResults = CodeGenResults(ISZ(), ISZ())
+  @strictpure def empty: CodeGenResults = CodeGenResults(ISZ())
 }
 
-@datatype class CodeGenResults(resources: ISZ[FileResource],
-                               auxResources: ISZ[Resource])
+@datatype class CodeGenResults(resources: ISZ[Resource])

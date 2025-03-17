@@ -6,7 +6,7 @@ import org.sireum.hamr.codegen.act.proof.ProofUtil
 import org.sireum.hamr.codegen.act.templates.StringTemplate
 import org.sireum.hamr.codegen.act.util.Util.reporter
 import org.sireum.hamr.codegen.act.util._
-import org.sireum.hamr.codegen.common.containers.FileResource
+import org.sireum.hamr.codegen.common.containers.{FileResource, Resource}
 import org.sireum.hamr.codegen.common.symbols.{AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.{NameUtil, ResourceUtil}
@@ -25,7 +25,7 @@ object Act {
 
   def runInternal(model: ir.Aadl, options: ActOptions, aadlTypes: AadlTypes, symbolTable: SymbolTable): ActResult = {
 
-    var resources: ISZ[FileResource] = ISZ()
+    var resources: ISZ[Resource] = ISZ()
 
     if (model.components.isEmpty) {
       reporter.error(None(), Util.toolName, "Model is empty")
@@ -73,7 +73,7 @@ object Act {
           slangLibInstanceNames = slangLibInstanceNames,
           symbolTable = symbolTable,
           options = options
-        )
+        ).asInstanceOf[ISZ[Resource]]
 
       case _ =>
     }
@@ -81,13 +81,21 @@ object Act {
     if (!reporter.hasError) {
 
       val runCamkesScript: String = {
-        val c = resources.filter(p => ops.StringOps(p.dstPath).endsWith(PathUtil.RUN_CAMKES_SCRIPT_PATH))
-        if (c.nonEmpty) c(0).dstPath
+        val c = resources.filter(p =>
+          p match {
+            case p: FileResource => ops.StringOps(p.dstPath).endsWith(PathUtil.RUN_CAMKES_SCRIPT_PATH)
+            case _ => F
+          })
+        if (c.nonEmpty) c(0).asInstanceOf[FileResource].dstPath
         else "??"
       }
 
-      val cakeMLAssemblyLocations = resources.filter(p => ops.StringOps(p.dstPath).endsWith(".S"))
-        .map((r: FileResource) => r.dstPath)
+      val cakeMLAssemblyLocations = resources.filter(p =>
+         p match {
+           case p: FileResource => ops.StringOps(p.dstPath).endsWith(".S")
+           case _ => F
+         })
+        .map((r: Resource) => r.asInstanceOf[FileResource].dstPath)
 
       reporter.info(None(), Util.ACT_INSTRUCTIONS_MESSAGE_KIND,
         StringTemplate.postGenInstructionsMessage(

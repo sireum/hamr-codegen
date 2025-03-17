@@ -2,8 +2,7 @@
 package org.sireum.hamr.codegen.arsit.templates
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.containers
-import org.sireum.hamr.codegen.common.containers.{FileResource, SireumToolsSergenOption, SireumToolsSergenSerializerMode, SireumToolsSlangcheckGeneratorOption}
+import org.sireum.hamr.codegen.common.containers.{IResource, SireumToolsSergenOption, SireumToolsSergenSerializerMode, SireumToolsSlangcheckGeneratorOption}
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.util.PathUtil
 
@@ -31,7 +30,7 @@ object ToolsTemplate {
       |
       |val sireum = Os.path(Os.env("SIREUM_HOME").get) / "bin" / (if (Os.isWin) "sireum.bat" else "sireum")"""
 
-  def toISString(rootDir: Os.Path, resources: ISZ[FileResource]): ST = {
+  def toISString(rootDir: Os.Path, resources: ISZ[IResource]): ST = {
     val relResources: ISZ[String] = for(r <- resources) yield s"\"${PathUtil.convertWinPathSepToNix(rootDir.relativize(Os.path(r.dstPath)).value)}\""
     val r: ST =
       st"""val files: ISZ[String] = ISZ(${(relResources, ",\n")})
@@ -40,7 +39,7 @@ object ToolsTemplate {
     return r
   }
 
-  def slangCheck(resources: ISZ[containers.FileResource], basePackage: String, outputDir: String, slangBinDir: String): (ST, SireumToolsSlangcheckGeneratorOption) = {
+  def slangCheck(datatypeResources: ISZ[IResource], basePackage: String, outputDir: String, slangBinDir: String): (ST, SireumToolsSlangcheckGeneratorOption) = {
     val ret: ST =
       st"""$header
           |
@@ -48,7 +47,7 @@ object ToolsTemplate {
           |
           |// create SlangCheck artifacts for the Slang types used in the project
           |
-          |${toISString(Os.path(slangBinDir), resources)}
+          |${toISString(Os.path(slangBinDir), datatypeResources)}
           |
           |(Os.slashDir.up / "src" / "main" / "util" / "${basePackage}").mkdirAll()
           |
@@ -60,7 +59,7 @@ object ToolsTemplate {
 
     val o = SireumToolsSlangcheckGeneratorOption(
       help = "",
-      args = for(r <- resources) yield r.dstPath,
+      args = for(r <- datatypeResources) yield r.dstPath,
       license = None(),
       packageName = ISZ(basePackage),
       outputDir = Some(outputDir),
@@ -70,7 +69,7 @@ object ToolsTemplate {
 
   }
 
-  def genSerGen(basePackage: String, outputDir: String, slangBinDir: String, resources: ISZ[FileResource]): (ST, SireumToolsSergenOption) = {
+  def genSerGen(basePackage: String, outputDir: String, slangBinDir: String, datatypeResources: ISZ[IResource]): (ST, SireumToolsSergenOption) = {
     val ret: ST =
       st"""$header
           |
@@ -78,7 +77,7 @@ object ToolsTemplate {
           |
           |// create serializers/deserializers for the Slang types used in the project
           |
-          |${toISString(Os.path(slangBinDir), resources)}
+          |${toISString(Os.path(slangBinDir), datatypeResources)}
           |
           |(Os.slashDir.up / "src" / "main" / "util" / "${basePackage}").mkdirAll()
           |
@@ -87,7 +86,7 @@ object ToolsTemplate {
 
     val o = SireumToolsSergenOption(
       help = "",
-      args = for(r <- resources) yield r.dstPath,
+      args = for(r <- datatypeResources) yield r.dstPath,
       modes = ISZ(SireumToolsSergenSerializerMode.Json, SireumToolsSergenSerializerMode.Msgpack),
       packageName = ISZ(basePackage),
       name = None(),
