@@ -55,7 +55,7 @@ object BlessBehaviorProviderPlugin {
             EResource(
               srcPath = p.path,
               dstPath = filename,
-              symlink = T)
+              symLink = T)
         }
       ))
 

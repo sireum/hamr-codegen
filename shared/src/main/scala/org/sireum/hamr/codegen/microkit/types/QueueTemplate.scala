@@ -4,8 +4,13 @@ package org.sireum.hamr.codegen.microkit.types
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.StringUtil
+import org.sireum.hamr.codegen.common.symbols.AadlPort
 import org.sireum.hamr.codegen.common.types.{AadlType, ArrayType}
+import org.sireum.hamr.codegen.microkit.plugins.apis.CRustApiUtil
+import org.sireum.hamr.codegen.microkit.plugins.types.{CRustTypeNameProvider, CTypeNameProvider, CTypePlugin}
 import org.sireum.hamr.codegen.microkit.util.Util.brand
+import org.sireum.hamr.codegen.microkit.{rust => RustAst}
+import org.sireum.hamr.ir.Direction
 
 object QueueTemplate {
 
@@ -91,6 +96,91 @@ object QueueTemplate {
           |}""")
   }
 
+  @pure def rustTestingArtifacts(p: AadlPort,
+                                 portTypeNameProvider: CRustTypeNameProvider,
+                                 aadlType: ISZ[String]): (RustAst.Item, RustAst.Item) = {
+    if (p.direction == Direction.In) {
+      val varName = s"IN_${p.identifier}"
+      val variable = RustAst.ItemStatic(
+        ident = RustAst.IdentString(varName),
+        visibility = RustAst.Visibility.Public,
+        ty = RustAst.TyPath(ISZ(ISZ("Mutex"), ISZ("Option"), portTypeNameProvider.qualifiedRustNameS), Some(aadlType)),
+        mutability = RustAst.Mutability.Not,
+        expr = RustAst.ExprST(st"Mutex::new(None);"))
+      val test = RustAst.FnImpl(
+        attributes = ISZ(RustAst.AttributeST(F, st"cfg(test)")),
+        sig = RustAst.FnSig(
+          ident = RustAst.IdentString(s"get_${p.identifier}"),
+          fnDecl = RustAst.FnDecl(
+            inputs = ISZ(RustAst.ParamImpl(
+              ident = RustAst.IdentString("data"),
+              kind = RustAst.TyPtr(mutty =
+                RustAst.MutTy(
+                  ty = RustAst.TyPath(ISZ(portTypeNameProvider.qualifiedRustNameS), Some(aadlType)),
+                  mutbl = RustAst.Mutability.Mut)))),
+            outputs = RustAst.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
+          fnHeader = RustAst.FnHeader(F),generics = None()),
+        comments = ISZ(), visibility = RustAst.Visibility.Public, contract = None(), meta = ISZ(),
+        body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
+          st"""unsafe {
+              |  *data = $varName.lock().unwrap().expect("Not expecting None");
+              |  return true;
+              |}""")))))
+      return (variable, test)
+    } else {
+      val varName = s"OUT_${p.identifier}"
+      val variable = RustAst.ItemStatic(
+        ident = RustAst.IdentString(varName),
+        visibility = RustAst.Visibility.Public,
+        ty = RustAst.TyPath(ISZ(ISZ("Mutex"), ISZ("Option"), portTypeNameProvider.qualifiedRustNameS), Some(aadlType)),
+        mutability = RustAst.Mutability.Not,
+        expr = RustAst.ExprST(st"Mutex::new(None);"))
+      val test = RustAst.FnImpl(
+        attributes = ISZ(RustAst.AttributeST(F, st"cfg(test)")),
+        sig = RustAst.FnSig(
+          ident = RustAst.IdentString(s"put_${p.identifier}"),
+          fnDecl = RustAst.FnDecl(
+            inputs = ISZ(RustAst.ParamImpl(
+              ident = RustAst.IdentString("data"),
+              kind = RustAst.TyPtr(mutty =
+                RustAst.MutTy(
+                  ty = RustAst.TyPath(ISZ(portTypeNameProvider.qualifiedRustNameS), Some(aadlType)),
+                  mutbl = RustAst.Mutability.Mut)))),
+            outputs = RustAst.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
+          fnHeader = RustAst.FnHeader(F), generics = None()),
+        comments = ISZ(), visibility = RustAst.Visibility.Public, contract = None(), meta = ISZ(),
+        body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
+          st"""unsafe {
+              |  *$varName.lock().unwrap() = Some(*data);
+              |  return true;
+              |}""")))))
+      return (variable, test)
+    }
+
+  }
+
+  def rustExternApi_senderMethodSig(methodName: String,
+                                    portQualifiedTypeName: ISZ[String],
+                                    aadlType: ISZ[String],
+                                    isEventPort: B,
+                                    unsafe: B): RustAst.FnSig = {
+    val args: ISZ[RustAst.Param] =
+      if(isEventPort) ISZ()
+      else ISZ(
+        RustAst.ParamImpl(
+          ident = RustAst.IdentString("data"),
+          kind = RustAst.TyPtr(
+            RustAst.MutTy(
+              ty = RustAst.TyPath(ISZ(portQualifiedTypeName), Some(aadlType)),
+              mutbl = RustAst.Mutability.Mut))))
+    return RustAst.FnSig(
+      fnHeader = RustAst.FnHeader(F),
+      ident = RustAst.IdentString(methodName),
+      generics = None(),
+      fnDecl = RustAst.FnDecl(
+        inputs = args, outputs = RustAst.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)))
+  }
+
   def getClientPut_rust_MethodSig(portName: String,
                                   queueElementTypeName: String,
                                   isEventPort: B,
@@ -100,6 +190,35 @@ object QueueTemplate {
     return st"""pub fn $methodName($param) -> bool"""
   }
 
+  @pure def rustExternApiUnsafeWrapper_UnsafeMethod(portName: String,
+                                                    portQualifiedTypeName: ISZ[String],
+                                                    aadlType: ISZ[String],
+                                                    isEventPort: B,
+                                                    unsafe: B): RustAst.Fn = {
+    val externMethodName = s"put_${portName}"
+    val unsafeMethodName = s"unsafe_$externMethodName"
+    val rustType = st"${(portQualifiedTypeName, "::")}"
+    val args: ISZ[RustAst.Param] =
+      if(isEventPort) ISZ()
+      else ISZ(
+        RustAst.ParamImpl(
+          ident = RustAst.IdentString("data"),
+          kind = RustAst.TyRef(
+            lifetime = None(),
+            mutty = RustAst.MutTy(
+              ty = RustAst.TyPath(ISZ(portQualifiedTypeName), Some(aadlType)),
+              mutbl = RustAst.Mutability.Not))))
+    return RustAst.FnImpl(
+      sig = RustAst.FnSig(
+        ident = RustAst.IdentString(unsafeMethodName),
+        fnDecl = RustAst.FnDecl(inputs = args, outputs = RustAst.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
+        fnHeader = RustAst.FnHeader(F), generics = None()),
+      comments = ISZ(), attributes = ISZ(),visibility = RustAst.Visibility.Public, contract = None(), meta = ISZ(),
+      body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
+        st"""unsafe {
+            |  return $externMethodName(data as *const $rustType as *mut $rustType);
+            |}""")))))
+  }
   def getClientPut_rust_UnsafeMethod(portName: String,
                                      queueElementTypeName: String,
                                      isEventPort: B): ST = {
@@ -198,10 +317,34 @@ object QueueTemplate {
                |}"""
   }
 
+  def rustExternApi_getPortMethodIsEmptySig(portName: String): RustAst.FnSig = {
+    val methodName = getClientIsEmptyMethodName(portName).render
+    return RustAst.FnSig(
+      fnHeader = RustAst.FnHeader(F),
+      ident = RustAst.IdentString(methodName),
+      generics = None(),
+      fnDecl = RustAst.FnDecl(inputs = ISZ(), outputs = RustAst.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)))
+  }
+
   def getClientIsEmpty_rust_MethodSig(portName: String,
                                       unsafe: B): ST = {
     val methodName = getClientIsEmptyMethodName(portName)
     return st"pub fn ${if (unsafe) "unsafe_" else ""}${methodName}() -> bool"
+  }
+
+  def rustExternApiUnsafeWrapper_isEmptyMethod(portName: String): RustAst.Fn = {
+    val externCMethodName = getClientIsEmptyMethodName(portName).render
+    val unsafeMethodName = s"unsafe_$externCMethodName"
+    return RustAst.FnImpl(
+      sig = RustAst.FnSig(
+        ident = RustAst.IdentString(unsafeMethodName),
+        fnDecl = RustAst.FnDecl(inputs = ISZ(), outputs = RustAst.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
+        fnHeader = RustAst.FnHeader(F), generics = None()),
+      comments = ISZ(), attributes = ISZ(),visibility = RustAst.Visibility.Private, contract = None(), meta = ISZ(),
+      body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
+        st"""unsafe {
+            |  return $externCMethodName();
+            |}""")))))
   }
 
   def getClientIsEmpty_rust_UnsafeMethod(portName: String): ST = {
@@ -252,6 +395,25 @@ object QueueTemplate {
           |}""")
   }
 
+  def rustExternApi_getPortMethodSig(methodName: String,
+                                     qualifiedRustPortTypeName: ISZ[String],
+                                     aadlTypeName: ISZ[String],
+                                     isEventPort: B): RustAst.FnSig = {
+    val args: ISZ[RustAst.Param] =
+      if (isEventPort) ISZ()
+      else ISZ(
+        RustAst.ParamImpl(
+          ident = RustAst.IdentString("data"),
+          kind = RustAst.TyPtr(
+            RustAst.MutTy(
+              ty = RustAst.TyPath(ISZ(qualifiedRustPortTypeName), Some(aadlTypeName)),
+              mutbl = RustAst.Mutability.Mut))))
+    return RustAst.FnSig(
+      fnHeader = RustAst.FnHeader(F),
+      ident = RustAst.IdentString(methodName),
+      generics = None(),
+      fnDecl = RustAst.FnDecl(inputs = args, outputs = RustAst.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)))
+  }
   def getClientGetter_rust_MethodPollSig(portName: String,
                                          queueElementTypeName: String,
                                          isEventPort: B,
@@ -261,6 +423,46 @@ object QueueTemplate {
       if (isEventPort) None()
       else Some(st", data: *mut $queueElementTypeName")
     return st"pub fn $methodName(num_dropped: *mut ${MicrokitTypeUtil.eventCounterTypename}$optEventData)"
+  }
+
+  def rustExternApiUnsafeWrapper_poll(portName: String,
+                                      rustPortTypeName: ISZ[String],
+                                      aadlTypeName: ISZ[String],
+                                      examplePortTypeData: String,
+                                      isEventPort: B): RustAst.Fn = {
+
+    val externCMethodName = getClientGetterPollMethodName(portName)
+    val unsafeMethodName = st"unsafe_$externCMethodName"
+
+    val returnType: RustAst.Ty =
+      if (isEventPort) RustAst.TypeRust(ISZ(MicrokitTypeUtil.eventCounterTypename))
+      else RustAst.TyTuple(ISZ(
+        RustAst.TyPath(ISZ(ISZ(MicrokitTypeUtil.eventCounterTypename)), None()),
+        RustAst.TyPath(ISZ(rustPortTypeName), Some(aadlTypeName))
+      ))
+
+    val qualTypeName = st"${(rustPortTypeName, "::")}"
+    val body: ST =
+      if (isEventPort)
+        st"""let mut numDropped: *mut ${MicrokitTypeUtil.eventCounterTypename} = &mut 0;
+            |$externCMethodName(numDropped);
+            |return *numDropped;"""
+      else
+        st"""let numDropped: *mut ${MicrokitTypeUtil.eventCounterTypename} = &mut 0;
+            |let data: *mut $qualTypeName = &mut $examplePortTypeData;
+            |$externCMethodName(numDropped, data);
+            |return (*numDropped, *data);"""
+
+    return RustAst.FnImpl(
+      sig = RustAst.FnSig(
+        ident = RustAst.IdentString(unsafeMethodName.render),
+        fnDecl = RustAst.FnDecl(inputs = ISZ(), outputs = RustAst.FnRetTyImpl(returnType)),
+        fnHeader = RustAst.FnHeader(F), generics = None()),
+      comments = ISZ(), attributes = ISZ(), visibility = RustAst.Visibility.Public, contract = None(), meta = ISZ(),
+      body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
+        st"""unsafe {
+            |  $body
+            |}""")))))
   }
 
   def getClientGetter_rust_UnsafeMethodPoll(portName: String,
@@ -283,7 +485,8 @@ object QueueTemplate {
   def getClientDataGetter_C_Method(portName: String,
                                    queueElementTypeName: String,
                                    queueSize: Z,
-                                   aadlType: AadlType): ST = {
+                                   aadlType: AadlType,
+                                   cTypeNameProvider: CTypeNameProvider): ST = {
     val apiMethodName = getQueueDequeueMethodName(queueElementTypeName, queueSize)
     val methodSig = getClientGetter_C_MethodSig(portName, queueElementTypeName, F)
     val recvQueueMemVarName = getClientRecvQueueName(portName)
@@ -293,8 +496,8 @@ object QueueTemplate {
 
     val (copyInfra, copyUser): (ST, ST) = aadlType match {
       case a: ArrayType => (
-        st"memcpy(&$lastName, &fresh_data, ${MicrokitTypeUtil.getArrayStringByteSizeDefineName(a)})",
-        st"memcpy(data, &$lastName, ${MicrokitTypeUtil.getArrayStringByteSizeDefineName(a)})")
+        st"memcpy(&$lastName, &fresh_data, ${CTypePlugin.getArrayStringByteSizeDefineName(cTypeNameProvider)})",
+        st"memcpy(data, &$lastName, ${CTypePlugin.getArrayStringByteSizeDefineName(cTypeNameProvider)})")
       case _ => (
         st"$lastName = fresh_data",
         st"*data = $lastName")
@@ -358,7 +561,6 @@ object QueueTemplate {
           |}""")
   }
 
-
   def getClientGetter_rust_MethodSig(portName: String,
                                      queueElementTypeName: String,
                                      isEventPort: B,
@@ -368,6 +570,39 @@ object QueueTemplate {
       if (isEventPort) None()
       else Some(st"data: *mut $queueElementTypeName")
     return st"pub fn ${if (unsafe) "unsafe_" else ""}$methodName($optEventDataPort) -> bool"
+  }
+
+  def rustExternApiUnsafeWrapper_getMethod(portName: String,
+                                           rustPortTypeName: ISZ[String],
+                                           aadlTypeName: ISZ[String],
+                                           examplePortTypeData: String,
+                                           isEventPort: B): RustAst.Fn = {
+    val externCMethodName = getClientGetterMethodName(portName)
+    val unsafeMethodName = st"unsafe_$externCMethodName"
+    val qualPortTypeName = st"${(rustPortTypeName, "::")}"
+    val body: RustAst.MethodBody =
+      if (isEventPort)
+        RustAst.MethodBody(ISZ(RustAst.BodyItemST(
+          st"""unsafe {
+              |  return $externCMethodName();
+              |}""")))
+      else
+        RustAst.MethodBody(ISZ(RustAst.BodyItemST(
+          st"""unsafe {
+              |  let data: *mut $qualPortTypeName = &mut $examplePortTypeData;
+              |  $externCMethodName(data);
+              |  return *data;
+              |}""")))
+    val returnType: RustAst.Ty =
+      if (isEventPort) MicrokitTypeUtil.rustBoolType
+      else RustAst.TyPath(ISZ(rustPortTypeName), Some(aadlTypeName))
+    return RustAst.FnImpl(
+      sig = RustAst.FnSig(
+        ident = RustAst.IdentString(unsafeMethodName.render),
+        fnDecl = RustAst.FnDecl(inputs = ISZ(), outputs = RustAst.FnRetTyImpl(returnType)),
+        fnHeader = RustAst.FnHeader(F),generics = None()),
+      comments = ISZ(), attributes = ISZ(), visibility = RustAst.Visibility.Public, contract = None(), meta = ISZ(),
+      body = Some(body))
   }
 
   def getClientGetter_rust_UnsafeMethod(portName: String,
@@ -571,7 +806,8 @@ object QueueTemplate {
 
   def implementation(aadlType: AadlType,
                      queueElementTypeName: String,
-                     queueSize: Z): ST = {
+                     queueSize: Z,
+                     cTypeNameProvider: CTypeNameProvider): ST = {
 
     val queueName = getTypeQueueName(queueElementTypeName, queueSize)
     val queueTypeName = getTypeQueueTypeName(queueElementTypeName, queueSize)
@@ -590,14 +826,14 @@ object QueueTemplate {
 
     val enqueue: ST = {
       aadlType match {
-        case a: ArrayType => st"memcpy(&queue->elt[index], data, ${MicrokitTypeUtil.getArrayStringByteSizeDefineName(a)})"
+        case a: ArrayType => st"memcpy(&queue->elt[index], data, ${CTypePlugin.getArrayStringByteSizeDefineName(cTypeNameProvider)})"
         case _ => st"queue->elt[index] = *data"
       }
     }
 
     val dequeue: ST = {
       aadlType match {
-        case a: ArrayType => st"memcpy(data, &queue->elt[index], ${MicrokitTypeUtil.getArrayStringByteSizeDefineName(a)})"
+        case a: ArrayType => st"memcpy(data, &queue->elt[index], ${CTypePlugin.getArrayStringByteSizeDefineName(cTypeNameProvider)})"
         case _ => st"*data = queue->elt[index]"
       }
     }

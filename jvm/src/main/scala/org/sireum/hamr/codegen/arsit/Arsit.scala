@@ -6,11 +6,11 @@ import org.sireum.hamr.codegen.arsit.plugin.{ArsitConfigurationPlugin, ArsitFina
 import org.sireum.hamr.codegen.arsit.templates._
 import org.sireum.hamr.codegen.arsit.util.{ArsitLibrary, ArsitOptions, ArsitPlatform, ReporterUtil}
 import org.sireum.hamr.codegen.common.CommonUtil.Store
-import org.sireum.hamr.codegen.common.containers.{FileResource, IResource, Resource}
+import org.sireum.hamr.codegen.common.containers.{FileResource, IResource, InternalResource, Resource}
 import org.sireum.hamr.codegen.common.plugin.Plugin
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
-import org.sireum.hamr.codegen.common.types.{AadlTypes, ArrayType}
+import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.{ExperimentalOptions, ResourceUtil}
 import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
 import org.sireum.hamr.ir
@@ -111,7 +111,7 @@ object Arsit {
                 |""",
           overwrite = F, isDatatype = T)
 
-      val datatypeResources: ISZ[IResource] = fileResources.filter(f => f.isInstanceOf[IResource] && f.asInstanceOf[IResource].isDatatype).asInstanceOf[ISZ[IResource]]
+      val datatypeResources: ISZ[InternalResource] = fileResources.filter(f => f.isInstanceOf[InternalResource] && f.asInstanceOf[InternalResource].isDatatype).asInstanceOf[ISZ[InternalResource]]
 
       val (sergenCmd, sergenConfig) = ToolsTemplate.genSerGen(arsitOptions.packageName, outUtilDir, projectDirectories.slangBinDir, datatypeResources)
       fileResources = fileResources :+ ResourceUtil.createExeCrlfResource(Util.pathAppend(projectDirectories.slangBinDir, ISZ("sergen.cmd")), sergenCmd, T)
@@ -165,8 +165,7 @@ object Arsit {
     for (i <- 0 until resources.size) {
       resources(i) match {
         case r : IResource if r.name == "DataContent.scala" =>
-          var resource = (resources(i).asInstanceOf[IResource])
-          resource = resource(isDatatype = T)
+          val resource = r(isDatatype = T)
           val o = ops.ISZOps(resources)
           val ret = (o.slice(0, i) :+ resource) ++ o.slice(i + 1, resources.size)
           return ret
@@ -241,9 +240,9 @@ object Arsit {
       val transpile: String = {
         val x = resources.filter(p =>
           p match {
-            case p: IResource => ops.StringOps(p.dstPath).endsWith("bin/transpile.cmd")
+            case p: InternalResource => ops.StringOps(p.dstPath).endsWith("bin/transpile.cmd")
             case _ => F
-          }).asInstanceOf[ISZ[IResource]]
+          }).asInstanceOf[ISZ[InternalResource]]
         if (x.nonEmpty) x(0).dstPath
         else "??"
       }
@@ -251,9 +250,9 @@ object Arsit {
       val compile: String = {
         val x = resources.filter(p =>
           p match {
-            case p: IResource => ops.StringOps(p.dstPath).contains("bin/compile.cmd")
+            case p: InternalResource => ops.StringOps(p.dstPath).contains("bin/compile.cmd")
             case _ => F
-          }).asInstanceOf[ISZ[IResource]]
+          }).asInstanceOf[ISZ[InternalResource]]
         if (x.nonEmpty) x(0).dstPath
         else "??"
       }
@@ -261,9 +260,9 @@ object Arsit {
       val run: String = {
         val x = resources.filter(p =>
           p match {
-            case p: IResource => ops.StringOps(p.dstPath).contains("bin/run.sh")
+            case p: InternalResource => ops.StringOps(p.dstPath).contains("bin/run.sh")
             case _ => F
-          }).asInstanceOf[ISZ[IResource]]
+          }).asInstanceOf[ISZ[InternalResource]]
         if (x.nonEmpty) x(0).dstPath
         else "??"
       }
@@ -271,9 +270,9 @@ object Arsit {
       val stop: String = {
         val x = resources.filter(p =>
           p match {
-            case p: IResource => ops.StringOps(p.dstPath).endsWith("bin/stop.sh")
+            case p: InternalResource => ops.StringOps(p.dstPath).endsWith("bin/stop.sh")
             case _ => F
-          }).asInstanceOf[ISZ[IResource]]
+          }).asInstanceOf[ISZ[InternalResource]]
         if (x.nonEmpty) x(0).dstPath
         else "??"
       }
@@ -286,9 +285,9 @@ object Arsit {
       val transpile: String = {
         val x = resources.filter(p =>
           p match {
-            case p: IResource => ops.StringOps(p.dstPath).endsWith("bin/transpile-sel4.cmd")
+            case p: InternalResource => ops.StringOps(p.dstPath).endsWith("bin/transpile-sel4.cmd")
             case _ => F
-          }).asInstanceOf[ISZ[IResource]]
+          }).asInstanceOf[ISZ[InternalResource]]
         if (x.nonEmpty) x(0).dstPath
         else "??"
       }

@@ -98,7 +98,7 @@ object CakeML {
           ret = ret :+ ResourceUtil.createExternalResource(
             srcPath = cand.string,
             dstPath = s"${path}/${cand.name}",
-            symlink = F)
+            symLink = F)
         }
       }
     } else {

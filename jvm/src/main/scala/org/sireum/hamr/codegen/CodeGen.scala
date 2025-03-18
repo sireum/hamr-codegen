@@ -451,7 +451,7 @@ object CodeGen {
   // With invertMarkers enabled, edits made to the existing file within the markers will be carried over into the
   // freshly generated file.  With it disabled, edits made outside of the markers will be carried over.
   def writeOutResources(resources: ISZ[Resource], invertMarkers: B, reporter: Reporter): Unit = {
-    def render(i: IResource): String = {
+    def render(i: InternalResource): String = {
       val ret: String = {
         val lineSep: String = if (Os.isWin) "\r\n" else "\n" // ST render uses System.lineSep
         val replace: String = if (i.makeCRLF) "\r\n" else "\n"
@@ -511,7 +511,7 @@ object CodeGen {
                 reporter.info(None(), toolName, s"File exists, will not overwrite: ${p}")
               }
             case e: EResource =>
-              if (e.symlink) {
+              if (e.symLink) {
                 halt("sym linking not yet supported")
               } else {
                 Os.path(e.srcPath).copyOverTo(p)
@@ -533,11 +533,11 @@ object CodeGen {
 
           // sanity checks
           (r, entry) match {
-            case ((ei: EResource, ci: EResource)) =>
+            case ((ei: ExternalResource, ci: ExternalResource)) =>
               if (ei.srcPath != ci.srcPath) {
                 reporter.warn(None(), toolName, s"srcPath for ${r.dstPath} not the same for duplicate entries")
               }
-              if (ei.symlink != ci.symlink) {
+              if (ei.symLink != ci.symLink) {
                 reporter.warn(None(), toolName, s"symLink flag for ${r.dstPath} not the same for duplicate entries")
               }
             case ((ri: IResource, ci: IResource)) =>

@@ -11,9 +11,21 @@ object CommonUtil {
 
   @sig trait StoreValue
 
+  @datatype class BoolValue(val value: B) extends StoreValue
+
+  @datatype class ISZValue[T](val elements: ISZ[T]) extends StoreValue
+
   type Store = Map[String, StoreValue]
 
   type IdPath = ISZ[String]
+
+  type DataIdPath = ISZ[String]
+
+  type ThreadIdPath = ISZ[String]
+
+  type PortIdPath = ISZ[String]
+
+  type TypeIdPath = ISZ[String]
 
   val toolName: String = "HAMR Codegen"
 

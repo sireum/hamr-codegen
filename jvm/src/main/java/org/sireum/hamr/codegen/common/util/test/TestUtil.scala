@@ -3,7 +3,7 @@
 package org.sireum.hamr.codegen.common.util.test
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.containers.{EResource, FileResource, IResource, Marker, Resource}
+import org.sireum.hamr.codegen.common.containers.{ExternalResource, FileResource, InternalResource, Marker, Resource}
 
 object TestUtil {
 
@@ -49,13 +49,13 @@ object TestUtil {
         case r: FileResource =>
           val key = resultsDir.relativize(Os.path(r.dstPath)).value
           r match {
-            case i: IResource =>
+            case i: InternalResource =>
               val testMarkers = i.markers.map((m: Marker) => TestMarker(beginMarker = m.beginMarker, endMarker = m.endMarker))
               map = map + (key, ITestResource(content = i.content.render, overwrite = i.overwrite, makeExecutable = i.makeExecutable, makeCRLF = i.makeCRLF, markers = testMarkers, isDatatype = i.isDatatype))
-            case e: EResource =>
+            case e: ExternalResource =>
               val src = resultsDir.relativize(Os.path(e.srcPath)).value
               val dst = resultsDir.relativize(Os.path(e.dstPath)).value
-              map = map + (key, ETestResource(src, e.symlink))
+              map = map + (key, ETestResource(src, e.symLink))
           }
         case _ =>
       }

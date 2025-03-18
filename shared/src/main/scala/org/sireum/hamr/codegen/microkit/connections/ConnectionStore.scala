@@ -8,7 +8,6 @@ import org.sireum.hamr.codegen.microkit.util.MemoryRegion
 import org.sireum.hamr.codegen.microkit.util.Util.TAB
 
 @sig trait ConnectionStore {
-  //def connectionPath: ISZ[String]
 
   def systemContributions: SystemContributions
 
@@ -143,28 +142,6 @@ object cConnectionContributions {
   }
 }
 
-@sig trait rustLangConnectionContributions {
-  def rustExternApis: ISZ[ST]
-
-  def rustUnsafeExternApisWrappers: ISZ[ST]
-}
-
-object rustConnectionsContributions {
-  @pure def empty: rustConnectionsContributions = {
-    return rustConnectionsContributions(ISZ(), ISZ())
-  }
-}
-
-@datatype class rustConnectionsContributions(val rustExternApis: ISZ[ST],
-                                             val rustUnsafeExternApisWrappers: ISZ[ST]) extends rustLangConnectionContributions {
-  @pure def combine(other: rustLangConnectionContributions): rustConnectionsContributions = {
-    return rustConnectionsContributions(
-      rustExternApis = this.rustExternApis ++ other.rustExternApis,
-      rustUnsafeExternApisWrappers = this.rustUnsafeExternApisWrappers ++ other.rustUnsafeExternApisWrappers
-    )
-  }
-}
-
 @datatype class UberConnectionContributions(val portName: ISZ[String],
                                             val portPriority: Option[Z],
 
@@ -173,6 +150,4 @@ object rustConnectionsContributions {
 
                                             val sharedMemoryMapping: ISZ[MemoryRegion],
 
-                                            val cContributions: cLangConnectionContributions,
-
-                                            val rustContributions: rustLangConnectionContributions) extends ConnectionContributions
+                                            val cContributions: cLangConnectionContributions) extends ConnectionContributions

@@ -3,17 +3,17 @@ package org.sireum.hamr.codegen.microkit
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.containers.Resource
-import org.sireum.hamr.codegen.common.CommonUtil.Store
+import org.sireum.hamr.codegen.common.CommonUtil.{BoolValue, Store}
 import org.sireum.hamr.codegen.common.plugin.Plugin
 import org.sireum.hamr.codegen.common.symbols.{AadlPort, AadlThread, SymbolTable}
-import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, TypeUtil => CommonTypeUtil}
+import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.HamrCli.CodegenOption
 import org.sireum.hamr.codegen.common.util.{CodeGenResults, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen.{pacerSchedulingDomain, toolName}
 import org.sireum.hamr.codegen.microkit.connections._
-import org.sireum.hamr.codegen.microkit.lint.Linter
-import org.sireum.hamr.codegen.microkit.plugins.PluginUtil
-import org.sireum.hamr.codegen.microkit.types.{DefaultTypeStore, MicrokitTypeUtil, TypeStore}
+import org.sireum.hamr.codegen.microkit.plugins.types.CTypePlugin
+import org.sireum.hamr.codegen.microkit.plugins.{MicrokitInitPlugin, MicrokitLintPlugin, MicrokitPlugin, PluginUtil}
+import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
 import org.sireum.hamr.codegen.microkit.util._
 import org.sireum.hamr.codegen.microkit.vm.{VmMakefileTemplate, VmUser, VmUtil}
 import org.sireum.hamr.ir.{Aadl, Direction}
@@ -40,6 +40,7 @@ object MicrokitCodegen {
 
 @record class MicrokitCodegen {
   var resources: ISZ[Resource] = ISZ()
+
   var makefileContainers: ISZ[MakefileContainer] = ISZ()
 
   var xmlSchedulingDomains: ISZ[SchedulingDomain] = ISZ()
@@ -61,15 +62,10 @@ object MicrokitCodegen {
     return nextPacerChannelId + 1
   }
 
-  def run(model: Aadl, options: CodegenOption, types: AadlTypes, symbolTable: SymbolTable, plugins: ISZ[Plugin], store: Store, reporter: Reporter): (CodeGenResults, Store) = {
-
-    val modelIsRusty: B = symbolTable.getThreads().filter(p => Util.isRust(p)).nonEmpty
+  def run(model: Aadl, options: CodegenOption, types: AadlTypes, symbolTable: SymbolTable, plugins: ISZ[Plugin], paramStore: Store, reporter: Reporter): (CodeGenResults, Store) = {
+    var localStore = paramStore
 
     val baseTypesIncludePath = s"${options.sel4OutputDir.get}/${MicrokitTypeUtil.cTypesDir}/${MicrokitCodegen.dirInclude}"
-
-    @pure def getName(ids: ISZ[String]): ST = {
-      return st"${(ops.ISZOps(ids).drop(1), "_")}"
-    }
 
     def addPacerComponent(): Unit = {
       xmlProtectionDomains = xmlProtectionDomains :+
@@ -113,99 +109,10 @@ object MicrokitCodegen {
       resources = resources :+ ResourceUtil.createResource(path, content, T)
     }
 
-    def processTypes(): TypeStore = {
-      var ret: Map[AadlType, (String, String)] = Map.empty
-
-      val eventType = MicrokitTypeUtil.processDatatype(MicrokitTypeUtil.eventPortType, reporter)
-      ret = ret + MicrokitTypeUtil.eventPortType ~> (eventType.c.name, eventType.rust.rustName)
-
-      if (types.rawConnections) {
-        reporter.error(None(), MicrokitCodegen.toolName, "Raw connections are not currently supported")
-        return DefaultTypeStore(ret, None())
-      }
-
-      val touchedTypes: ISZ[MicrokitTypeUtil.UberTypeProvider] =
-        for (t <- MicrokitTypeUtil.getAllTouchedTypes(types, symbolTable, reporter))
-          yield MicrokitTypeUtil.processDatatype(t, reporter)
-
-      var defs: ISZ[ST] = ISZ()
-      var optStringType: Option[AadlType] = None()
-      for (t <- ops.ISZOps(touchedTypes).sortWith((a, b) => CommonTypeUtil.isEnumTypeH(a.c.aadlType))) {
-        ret = ret + t.c.aadlType ~> (t.c.name, t.rust.rustName)
-        if (t.c.aadlType.name == "Base_Types::String") {
-          optStringType = Some(t.c.aadlType)
-        }
-        if (!CommonTypeUtil.isBaseTypeH(t.c.aadlType)) {
-          defs = defs :+ t.c.cTypeDeclaration.get
-        }
-      }
-
-      val cContent =
-        st"""#pragma once
-            |
-            |#include <stdbool.h>
-            |#include <stdint.h>
-            |
-            |${Util.doNotEdit}
-            |
-            |${(defs, "\n\n")}
-            |"""
-
-      val outputdir = s"${options.sel4OutputDir.get}/${MicrokitTypeUtil.cTypesDir}/${MicrokitCodegen.dirInclude}"
-      val path = s"$outputdir/${MicrokitTypeUtil.cAadlTypesFilename}"
-      resources = resources :+ ResourceUtil.createResourceH(path, cContent, T, T)
-
-      val cEventCounterPath = s"$baseTypesIncludePath/${MicrokitTypeUtil.cEventCounterFilename}"
-      resources = resources :+ ResourceUtil.createResourceH(
-        path = cEventCounterPath, content = MicrokitTypeUtil.cEventCounterContent, overwrite = T, isDatatype = T)
-
-      if (modelIsRusty) {
-        val rustAadlTypesContent =
-          st"""#![allow(non_camel_case_types)]
-              |#![allow(non_snake_case)]
-              |#![allow(non_upper_case_globals)]
-              |
-              |${Util.doNotEdit}
-              |
-              |${(for (t <- touchedTypes.filter(t => t.rust.rustTypeDeclaration.nonEmpty)) yield t.rust.rustTypeDeclaration, "\n\n")}
-              |"""
-        val rustTypesDir = s"${options.sel4OutputDir.get}/${MicrokitTypeUtil.rustTypesDir}"
-        val outRustTypesPath = s"$rustTypesDir/src/${MicrokitTypeUtil.rustAadlTypesFilename}"
-        resources = resources :+ ResourceUtil.createResourceH(outRustTypesPath, rustAadlTypesContent, T, T)
-
-        val rustEventCounterPath = s"$rustTypesDir/src/${MicrokitTypeUtil.rustEventCounterFilename}"
-        resources = resources :+ ResourceUtil.createResourceH(rustEventCounterPath, MicrokitTypeUtil.rustEventCounterContent, T, T)
-
-        val rustMicrokitTypesPath = s"$rustTypesDir/src/${MicrokitTypeUtil.rustMicrokitTypesFilename}"
-        resources = resources :+ ResourceUtil.createResourceH(rustMicrokitTypesPath, MicrokitTypeUtil.rustMicrokitTypesContent, T, T)
-
-        val rustAllTypesContents =
-          st"""#![no_std]
-              |#![allow(non_camel_case_types)]
-              |
-              |${Util.doNotEdit}
-              |
-              |mod ${MicrokitTypeUtil.aadlTypesFilenamePrefix};
-              |pub use ${MicrokitTypeUtil.aadlTypesFilenamePrefix}::*;
-              |
-              |mod ${MicrokitTypeUtil.eventCounterFilenamePrefix};
-              |pub use ${MicrokitTypeUtil.eventCounterFilenamePrefix}::*;
-              |
-              |mod ${MicrokitTypeUtil.rustMicrokitTypesPrefix};
-              |pub use ${MicrokitTypeUtil.rustMicrokitTypesPrefix}::*;
-              |"""
-        val rustAllTypesPath = s"$rustTypesDir/src/${MicrokitTypeUtil.rustTypesFilename}"
-        resources = resources :+ ResourceUtil.createResourceH(rustAllTypesPath, rustAllTypesContents, T, T)
-
-        val rustTypesCargoPath = s"$rustTypesDir/Cargo.toml"
-        resources = resources :+ ResourceUtil.createResource(rustTypesCargoPath, MicrokitTypeUtil.rustCargoContent, F)
-      }
-
-      return DefaultTypeStore(ret, optStringType)
-    }
-
-    def processConnections(typeStore: TypeStore): ISZ[ConnectionStore] = {
+    def processConnections(): ISZ[ConnectionStore] = {
       var ret: ISZ[ConnectionStore] = ISZ()
+
+      val cTypeProvider = CTypePlugin.getCTypeProvider(localStore).get
 
       for (srcThread <- symbolTable.getThreads()) {
 
@@ -222,19 +129,19 @@ object MicrokitCodegen {
 
                 codeContributions = codeContributions + dstThread.path ~>
                   ConnectionUtil.processInPort(dstThread, dstPort.asInstanceOf[AadlPort],
-                    Some(srcPort), Some(outConnection), typeStore, symbolTable)
+                    Some(srcPort),cTypeProvider, symbolTable)
 
               case x =>
                 halt(s"Only handling thread to thread connections currently: $x")
             }
           } // end processing out connections for the source port
 
-          val senderContributions = ConnectionUtil.processOutPort(srcPort, codeContributions, typeStore)
+          val senderContributions = ConnectionUtil.processOutPort(srcPort, codeContributions, cTypeProvider)
           codeContributions = codeContributions + srcThread.path ~> senderContributions
 
           val typeApiContributions: ISZ[TypeApiContributions] =
             (Set.empty[TypeApiContributions] ++ (for (rc <- codeContributions.values) yield
-              MicrokitTypeUtil.getTypeApiContributions(rc.aadlType, typeStore, rc.queueSize))).elements
+              MicrokitTypeUtil.getTypeApiContributions(rc.aadlType, cTypeProvider, rc.queueSize))).elements
 
           ret = ret :+
             DefaultConnectionStore(
@@ -253,14 +160,15 @@ object MicrokitCodegen {
             if (unconnectedPort.direction == Direction.In) {
               ConnectionUtil.processInPort(
                 dstThread = srcThread, dstPort = unconnectedPort,
-                srcPort = None(), outConnection = None(),
-                typeStore = typeStore, symbolTable = symbolTable)
+                srcPort = None(),
+                cTypeProvider = cTypeProvider,
+                symbolTable = symbolTable)
             } else {
-              ConnectionUtil.processOutPort(unconnectedPort, Map.empty, typeStore)
+              ConnectionUtil.processOutPort(unconnectedPort, Map.empty, cTypeProvider)
             }
 
           val typeApiContributions =
-            MicrokitTypeUtil.getTypeApiContributions(srcThreadContributions.aadlType, typeStore, srcThreadContributions.queueSize)
+            MicrokitTypeUtil.getTypeApiContributions(srcThreadContributions.aadlType, cTypeProvider, srcThreadContributions.queueSize)
 
           ret = ret :+
             DefaultConnectionStore(
@@ -282,9 +190,9 @@ object MicrokitCodegen {
       var retMemoryRegions: ISZ[MemoryRegion] = ISZ()
 
       val isVM = t.toVirtualMachine(symbolTable)
-      val isRustic = Util.isRust(t)
+      val isRustic = Util.isRusty(t)
 
-      val threadId = getName(t.path).render
+      val threadId = Util.getThreadIdPath(t)
       val threadMonId = st"${threadId}_MON"
 
       var nextMemAddressInKiBytes = 262144
@@ -292,14 +200,12 @@ object MicrokitCodegen {
       var sharedMemoryRegions: ISZ[MemoryRegion] = ISZ()
 
       var cCodeContributions = cConnectionContributions.empty
-      var rustCodeContributions = rustConnectionsContributions.empty
 
       val initializeMethodName = st"${threadId}_initialize"
 
       for (entry <- connectionStore if entry.codeContributions.contains(t.path)) {
         val codeContributions = entry.codeContributions.get(t.path).get
         cCodeContributions = cCodeContributions.combine(codeContributions.cContributions)
-        rustCodeContributions = rustCodeContributions.combine(codeContributions.rustContributions)
         sharedMemoryRegions = sharedMemoryRegions ++ codeContributions.sharedMemoryMapping
       }
 
@@ -645,95 +551,86 @@ object MicrokitCodegen {
       val cApiPath = s"${options.sel4OutputDir.get}/${mk.relativePathIncludeDir}/${mk.cHeaderFilename}"
       resources = resources :+ ResourceUtil.createResource(cApiPath, cApiContent, T)
 
-      if (isRustic && !isVM) {
-        val rustComponentPath = s"${options.sel4OutputDir.get}/crates/$threadId"
-        val rustComponentSrcPath = s"$rustComponentPath/src/"
-
-        var rustUserMethods: ISZ[ST] = ISZ()
-        if (t.isPeriodic()) {
-          rustUserMethods = rustUserMethods :+
-            st"""#[no_mangle]
-                |pub extern "C" fn ${threadId}_timeTriggered() {
-                |  info!("timeTriggered invoked");
-                |}"""
-        }
-        val rustUserContent = RustUtil.rustUserContent(threadId, rustUserMethods)
-        val rustUserContentPath = s"$rustComponentSrcPath/${threadId}_user.rs"
-        resources = resources :+ ResourceUtil.createResource(rustUserContentPath, rustUserContent, F)
-
-        val rustApiContent =
-          st"""#![allow(dead_code)]
-              |#![allow(non_snake_case)]
-              |
-              |${Util.doNotEdit}
-              |
-              |use types::*;
-              |
-              |extern "C" {
-              |  ${(for (r <- rustCodeContributions.rustExternApis) yield st"$r;", "\n")}
-              |}
-              |
-              |${(rustCodeContributions.rustUnsafeExternApisWrappers, "\n\n")}
-              |"""
-        val rustApiPath = s"$rustComponentSrcPath/api.rs"
-        resources = resources :+ ResourceUtil.createResource(rustApiPath, rustApiContent, T)
-
-        val rustLoggingContent = RustUtil.rustLoggingContent
-        val rustLoggingPath = s"$rustComponentSrcPath/logging.rs"
-        resources = resources :+ ResourceUtil.createResource(rustLoggingPath, rustLoggingContent, T)
-
-        val rustToolchainPath = s"$rustComponentPath/rust-toolchain.toml"
-        resources = resources :+ ResourceUtil.createResource(rustToolchainPath, RustUtil.rustToolchainContent, F)
-
-        val rustComponentMakefile = RustUtil.makefileComponent()
-        val rustComponentMakefilePath = s"$rustComponentPath/Makefile"
-        resources = resources :+ ResourceUtil.createResource(rustComponentMakefilePath, rustComponentMakefile, F)
-
-        val rustCargoContent = RustUtil.cargoComponentToml(threadId)
-        val rustCargoPath = s"$rustComponentPath/Cargo.toml"
-        resources = resources :+ ResourceUtil.createResource(rustCargoPath, rustCargoContent, F)
-      }
-
       return (child, retMemoryRegions, computeExecutionTime)
     } // end processThread
-
-
-    if (!Linter.lint(model, options, types, symbolTable, reporter)) {
-      return (CodeGenResults.empty, store)
-    }
 
     val boundProcessors = symbolTable.getAllActualBoundProcessors()
     if (boundProcessors.size != 1) {
       reporter.error(None(), toolName, "Currently only handling models with exactly one actual bound processor")
-      return (CodeGenResults.empty, store)
+      return (CodeGenResults.empty, localStore)
     }
 
     var framePeriod: Z = 0
     boundProcessors(0).getFramePeriod() match {
       case Some(z) => framePeriod = z
-      case _ => halt("Infeasible") // linter should have ensured bound processor has frame period
+      case _ => halt("Infeasible: linter should have ensured bound processor has frame period")
+    }
+
+    if (!reporter.hasError) { // linting phase (one pass)
+      var validModel = T
+      for (p <- plugins) {
+        p match {
+          case p: MicrokitLintPlugin =>
+            val results = p.validModel(model, options, types, symbolTable, localStore, reporter)
+            validModel = validModel && results._2
+            localStore = results._1
+          case _ =>
+        }
+      }
+
+      if (!validModel) {
+        return (CodeGenResults.empty, localStore)
+      }
+    }
+
+    if (reporter.hasError) {
+      return (CodeGenResults.empty, localStore)
+    } else {
+      // plugin initialization phase (one pass)
+      // TODO: move to an init plugin
+      val modelIsRusty: B = ops.ISZOps(symbolTable.getThreads()).exists(p => Util.isRusty(p))
+      if (modelIsRusty) {
+        localStore = localStore + MicrokitPlugin.KEY_MODEL_IS_RUSTY ~> BoolValue(T)
+      }
+
+      for (p <- plugins) {
+        p match {
+          case p: MicrokitInitPlugin =>
+            localStore = p.init(model, options, types, symbolTable, localStore, reporter)
+          case _ =>
+        }
+      }
+    }
+
+    if (reporter.hasError) {
+      return (CodeGenResults.empty, localStore)
+    } else {
+      // main phase plugins (multi pass)
+      val microkitPlugins = PluginUtil.getMicrokitPlugins(plugins)
+      var continue = T
+      // keep iterating until plugins stop offering to handle things
+      while (continue) {
+        var somethingHandled = F
+        for (plugin <- microkitPlugins if continue) {
+          if (plugin.canHandle(model, options, types, symbolTable, localStore, reporter)) {
+            val results = plugin.handle(model, options, types, symbolTable, localStore, reporter)
+            localStore = results._1
+            resources = resources ++ results._2
+            somethingHandled = T
+          }
+        }
+        continue = somethingHandled
+      }
     }
 
     var buildEntries: ISZ[ST] = ISZ()
-
-    val typeStore = processTypes()
 
     var typeHeaderFilenames: ISZ[String] = ISZ(MicrokitTypeUtil.cAadlTypesFilename)
     var typeImplFilenames: ISZ[String] = ISZ()
     var typeObjectNames: ISZ[String] = ISZ()
 
-    val microkitPlugins = PluginUtil.getMicrokitPlugins(plugins)
-    var continue = T
-    var localStore = store
-    for (plugin <- microkitPlugins if continue) {
-      if (plugin.canHandle(model, options, types, symbolTable, localStore, reporter)) {
-        val results = plugin.handle(model, options, types, symbolTable, localStore, reporter)
-        localStore = results._1
-        resources = resources ++ results._2
-      }
-    }
+    val connectionStore = processConnections()
 
-    val connectionStore = processConnections(typeStore)
     for (entry <- connectionStore) {
       val srcPath = s"${options.sel4OutputDir.get}/${MicrokitTypeUtil.cTypesDir}/${MicrokitCodegen.dirSrc}"
 
@@ -752,7 +649,6 @@ object MicrokitCodegen {
           path = implPath, content = tc.implementation, overwrite = T, isDatatype = T)
       }
     }
-
 
     val allTypesContent =
       st"""#pragma once
@@ -781,7 +677,7 @@ object MicrokitCodegen {
 
     if (usedBudget > framePeriod) {
       reporter.error(None(), toolName, s"Frame period ${framePeriod} is too small for the used budget ${usedBudget}")
-      return (CodeGenResults.empty, store)
+      return (CodeGenResults.empty, localStore)
     }
 
     var xmlScheds: ISZ[SchedulingDomain] = ISZ()
@@ -841,6 +737,28 @@ object MicrokitCodegen {
     resources = resources :+ ResourceUtil.createResource(s"${utilIncludePath}/util.h", Util.utilh, T)
     resources = resources :+ ResourceUtil.createResource(s"${utilSrcPath}/util.c", Util.utilc, T)
 
-    return (CodeGenResults(resources = resources), store)
+
+    if (reporter.hasError) {
+      return (CodeGenResults.empty, localStore)
+    } else {
+      // finalizing plugins
+      val microkitFinalizePlugins = PluginUtil.getMicrokitFinalizePlugins(plugins)
+      var continue = T
+      // keep iterating until plugins stop offering to handle things
+      while (continue) {
+        var somethingHandled = F
+        for (plugin <- microkitFinalizePlugins if continue) {
+          if (plugin.canFinalize(model, options, types, symbolTable, localStore, reporter)) {
+            val results = plugin.finalize(model, options, types, symbolTable, localStore, reporter)
+            localStore = results._1
+            resources = resources ++ results._2
+            somethingHandled = T
+          }
+        }
+        continue = somethingHandled
+      }
+    }
+
+    return (CodeGenResults(resources = resources), localStore)
   }
 }

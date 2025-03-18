@@ -11,7 +11,7 @@ import org.sireum.hamr.codegen.arsit.plugin.DatatypeProviderPlugin
 import org.sireum.hamr.codegen.arsit.templates.{StubTemplate, TestTemplate}
 import org.sireum.hamr.codegen.common.CommonUtil.IdPath
 import org.sireum.hamr.codegen.common.StringUtil
-import org.sireum.hamr.codegen.common.containers.{FileResource, Resource}
+import org.sireum.hamr.codegen.common.containers.Resource
 import org.sireum.hamr.codegen.common.resolvers.GclResolver
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
@@ -53,7 +53,7 @@ object GumboXGen {
       aadlType.nameProvider.qualifiedReferencedTypeNameI :+ s"D_Inv_Guard_${aadlType.nameProvider.typeName}")
   }
 
-  @pure def createIntegrationMethodName(isGuarantee: B, aadlPort: AadlPort, componentNames: NameProvider): (ISZ[String], ISZ[String]) = {
+  @pure def createIntegrationMethodName(aadlPort: AadlPort, componentNames: NameProvider): (ISZ[String], ISZ[String]) = {
     val kind: String = if (aadlPort.direction == Direction.In) "I_Assm" else "I_Guar"
     val name = s"${kind}_${aadlPort.identifier}"
     val guardName = s"${kind}_Guard_${aadlPort.identifier}"
@@ -254,9 +254,9 @@ object GumboXGen {
     var localGumboStore = resetImports(gumboStore)
 
     gclSubclauseInfo match {
-      case Some((annex, gclSymbolTable)) =>
-        val ports = component.features.filter(p => p.isInstanceOf[AadlPort]).map((m: AadlFeature) => m.asInstanceOf[AadlPort])
-        for (port <- ports if gclSymbolTable.integrationMap.contains(port)) {
+      case Some((_, gclSymbolTable)) =>
+        //val ports = component.features.filter(p => p.isInstanceOf[AadlPort]).map((m: AadlFeature) => m.asInstanceOf[AadlPort])
+        for (port <- component.getPorts() if gclSymbolTable.integrationMap.contains(port)) {
 
           val (aadlType, portType) = GumboXGen.getPortInfo(port)
 
@@ -265,7 +265,7 @@ object GumboXGen {
 
           clause match {
             case i: GclAssume =>
-              val (i_assm_name, i_assm_guard_name) = GumboXGen.createIntegrationMethodName(F, port, componentNames)
+              val (i_assm_name, i_assm_guard_name) = GumboXGen.createIntegrationMethodName(port, componentNames)
               val simple = ops.ISZOps(i_assm_name).last
               val I_Assm =
                 st"""/** I-Assm: Integration constraint on ${component.identifier}'s incoming $portType port ${port.identifier}
@@ -293,7 +293,7 @@ object GumboXGen {
                       ContractHolder(i_assm_name, ISZ(), localGumboStore.imports, I_Assm),
                       ContractHolder(i_assm_guard_name, ISZ(), localGumboStore.imports, I_Assm_Guard)))))
             case i: GclGuarantee =>
-              val (i_guar_name, i_guar_guard_name) = GumboXGen.createIntegrationMethodName(T, port, componentNames)
+              val (i_guar_name, i_guar_guard_name) = GumboXGen.createIntegrationMethodName(port, componentNames)
               val simple = ops.ISZOps(i_guar_name).last
 
               val I_Guar =
@@ -333,17 +333,10 @@ object GumboXGen {
     var IEP_Guard_Blocks: ISZ[ST] = ISZ()
     var IEP_Guar_Params: Set[GGParam] = Set.empty[GGParam] ++
       GumboXGenUtil.outPortsToParams(component, componentNames) ++
-      GumboXGenUtil.stateVarsToParams(componentNames, gclSubclauseInfo, F, aadlTypes).asInstanceOf[ISZ[GGParam]]
-
-    val stateVars: ISZ[GclStateVar] = {
-      gclSubclauseInfo match {
-        case Some((a, b)) => a.state
-        case _ => ISZ()
-      }
-    }
+      GumboXGenUtil.stateVarsToParams(componentNames, gclSubclauseInfo, F, aadlTypes)
 
     gclSubclauseInfo match {
-      case Some((GclSubclause(_, _, _, Some(initializes), _, _), gclSymbolTable)) if initializes.guarantees.nonEmpty =>
+      case Some((GclSubclause(stateVars, _, _, Some(initializes), _, _), gclSymbolTable)) if initializes.guarantees.nonEmpty =>
 
         var requiresMethods: ISZ[(ISZ[String], ST)] = ISZ()
         var combinedSpecCalls: ISZ[ST] = ISZ()
@@ -397,7 +390,7 @@ object GumboXGen {
           (combinedInitializeMethodName, content)
         }
 
-        // call the invariant
+        // call the initialize guarantee
         IEP_Guard = IEP_Guard :+ st"${ops.ISZOps(iep_guar_methodName).last}(${(for (p <- sorted_IEP_Guar_Params) yield p.name, ", ")})"
         IEP_Guard_Blocks = IEP_Guard_Blocks :+ iep_guar_content
       case _ =>
@@ -487,8 +480,10 @@ object GumboXGen {
             |    ${(for (p <- sorted_IEP_Post_Params) yield st"${p.name} = post.${p.name}", ",\n")})"""
       val ret = st"${(IEP_Guard_Blocks :+ iep_post :+ iep_post_container, "\n\n")}"
 
-      localGumboStore = localGumboStore(initializeEntryPointHolder = localGumboStore.initializeEntryPointHolder + component.path ~>
-        InitializeEntryPointHolder(ContractHolder(iepPostMethodName, sorted_IEP_Post_Params, localGumboStore.imports, ret)))
+      localGumboStore = localGumboStore(
+        initializeEntryPointHolder = localGumboStore.initializeEntryPointHolder +
+          component.path ~> InitializeEntryPointHolder(
+            ContractHolder(iepPostMethodName, sorted_IEP_Post_Params, localGumboStore.imports, ret)))
     }
     return localGumboStore
   }
@@ -515,15 +510,8 @@ object GumboXGen {
       GumboXGenUtil.outPortsToParams(component, componentNames) ++
       GumboXGenUtil.stateVarsToParams(componentNames, gclSubclauseInfo, F, aadlTypes)
 
-    val stateVars: ISZ[GclStateVar] = {
-      gclSubclauseInfo match {
-        case Some((a, b)) => a.state
-        case _ => ISZ()
-      }
-    }
-
     gclSubclauseInfo match {
-      case Some((GclSubclause(_, _, _, _, _, Some(gclCompute)), gclSymbolTable)) => {
+      case Some((GclSubclause(stateVars, _, _, _, _, Some(gclCompute)), gclSymbolTable)) => {
         { // process top level assume/guarantees
 
           var CEP_T_Assm_Params: Set[GGParam] = Set.empty
@@ -536,7 +524,6 @@ object GumboXGen {
           for (spec <- gclCompute.specs) {
             val rspec = gclSymbolTable.rexprs.get(toKey(spec.exp)).get
             localGumboStore = localGumboStore(imports = localGumboStore.imports ++ GumboGenUtil.resolveLitInterpolateImports(rspec))
-
             val descriptor = GumboXGen.processDescriptor(spec.descriptor, "*   ")
 
             spec match {
@@ -554,7 +541,7 @@ object GumboXGen {
                   st"""/** Compute Entrypoint Contract
                       |  *
                       |  * assumes ${g.id}
-                      |  ${descriptor}
+                      |  $descriptor
                       |  ${(paramsToComment(sortedParams), "\n")}
                       |  */
                       |@strictpure def $methodName(
@@ -752,7 +739,7 @@ object GumboXGen {
         }
       }
       case _ =>
-    }
+    } // done processing compute clauses
 
     var CEP_Pre: Option[ContractHolder] = None()
 
@@ -861,7 +848,9 @@ object GumboXGen {
         case Some(clauses) =>
           for (pair <- clauses if GumboXGenUtil.isOutPort(symbolTable.featureMap.get(pair._1).get)) {
             val isOptional = !GumboXGenUtil.isDataPort(symbolTable.featureMap.get(pair._1).get)
-            val methodToUse: ISZ[String] = if (isOptional) pair._2.guard.methodName else pair._2.method.methodName
+            val methodToUse: ISZ[String] =
+              if (isOptional) pair._2.guard.methodName
+              else pair._2.method.methodName
 
             val port = symbolTable.featureMap.get(pair._1).get.asInstanceOf[AadlPort]
             val (aadlType, _) = GumboXGen.getPortInfo(symbolTable.featureMap.get(pair._1).get)
