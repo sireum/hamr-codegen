@@ -2,7 +2,6 @@
 package org.sireum.hamr.codegen.microkit.plugins.gumbo
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.CommonUtil.TypeIdPath
 import org.sireum.hamr.codegen.common.symbols.{GclSymbolTable, SymTableKey}
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen
 import org.sireum.lang.{ast => SAST}
@@ -12,9 +11,14 @@ import org.sireum.message.{Position, Reporter}
 object SlangExpUtil {
 
   object BinaryOpCust {
-    val CondImpl: String = "uif_short_circuit_implication"
-    val Impl: String = "uif_logical_implication"
+
+    val CondImplLeft: String = "<=="
+
+    val BiImplication: String = "<==>"
+
+    val Xor: String = "^"
   }
+
   @strictpure def toKey(e: SAST.Exp): SymTableKey = SymTableKey(e, e.fullPosOpt)
 
   @pure def getRexp(exp: SAST.Exp, gclSymbolTable: GclSymbolTable): SAST.Exp = {
@@ -60,8 +64,15 @@ object SlangExpUtil {
             case "s32" => return st"${(unquoteLits(exp.lits), "_INFEASIBLE")}i32"
             case "s64" => return st"${(unquoteLits(exp.lits), "_INFEASIBLE")}i64"
 
-            case x => halt(s"Need to handle $x")
+            // TODO: verus also has u128 and s128 which slang doesn't
+
+            // TODO: how to handle Slang's finer grained s1"0", s2"0", etc.
+
+            case x => reporter.error(d.posOpt, MicrokitCodegen.toolName,
+              s"There is not a direct translation of the Slang interpolate $x for Rust/Verus")
+            return st"TODO"
           }
+
         case exp: Exp.Tuple => halt(s"$exp : ${exp.posOpt}")
         case exp: Exp.Select =>
           val sepS: String = exp.typedOpt match {
@@ -87,20 +98,19 @@ object SlangExpUtil {
           }
         case exp: Exp.Old => halt(s"$exp : ${exp.posOpt}")
         case exp: Exp.Binary =>
-          val leftOpOpt: Option[String] = exp.left match {
-            case left: Exp.Binary => Some(left.op)
-            case _ => None()
+          val (leftOpOpt, leftPosOpt): (Option[String], Option[Position]) = exp.left match {
+            case left: Exp.Binary => (Some(left.op), left.posOpt)
+            case _ => (None(), None())
           }
-          val rightOpOpt: Option[String] = exp.right match {
-            case right: Exp.Binary => Some(right.op)
-            case _ => None()
+          val (rightOpOpt, rightPosOpt): (Option[String], Option[Position]) = exp.right match {
+            case right: Exp.Binary => (Some(right.op), right.posOpt)
+            case _ => (None(), None())
           }
-          val isRightAssoc = exp.op == Exp.BinaryOp.CondImply || exp.op == Exp.BinaryOp.Imply
 
-          return BinaryPrettyST(inVerus,
-            convertBinaryOp(exp.op, inVerus, exp.posOpt, reporter), isRightAssoc,
-            nestedRewriteExp(exp.left, sep), leftOpOpt, exp.left.isInstanceOf[Exp.If],
-            nestedRewriteExp(exp.right, sep), rightOpOpt, exp.right.isInstanceOf[Exp.If])
+          return BinaryPrettyST(
+            slangParentOp = exp.op, parentPos = exp.posOpt,
+            left = nestedRewriteExp(exp.left, sep), leftSlangOp = leftOpOpt, isLeftIf = exp.left.isInstanceOf[Exp.If], leftPosOpt,
+            right = nestedRewriteExp(exp.right, sep), rightSlangOp = rightOpOpt, isRightIf = exp.right.isInstanceOf[Exp.If], rightPosOpt)
 
         case exp: Exp.Invoke =>
           reporter.error(exp.posOpt, MicrokitCodegen.toolName,
@@ -177,188 +187,258 @@ object SlangExpUtil {
         case exp: SAST.ProofAst.StepId => halt(s"$exp : ${exp.posOpt}")
         case exp: Exp.TypeCond => halt(s"$exp : ${exp.posOpt}")
       }
+    } // end nestedRewriteExp
+
+
+    ////////////////////////////////////////////////////////////////////////////////
+    // helper methods
+    ////////////////////////////////////////////////////////////////////////////////
+
+    @pure def unquoteLit(lit: Exp.LitString): String = {
+      return ops.StringOps(lit.value).replaceAllLiterally("\"", "")
     }
 
+    @pure def unquoteLits(lits: ISZ[Exp.LitString]): ISZ[String] = {
+      return for(l <- lits) yield unquoteLit(l)
+    }
+
+    @pure def convertUnaryOp(op: Exp.UnaryOp.Type): String = {
+      op match {
+        case Exp.UnaryOp.Not => return "!"
+        case Exp.UnaryOp.Minus => return "-"
+
+        case Exp.UnaryOp.Plus => halt(s"what is the rust equiv of $op")
+        case Exp.UnaryOp.Complement => halt(s"what is the rust equiv of $op")
+      }
+    }
+
+    @pure def shouldParenthesize(slangParentOp: String, parentPosOpt: Option[Position],
+                                 slangChildOp: String, childPosOpt: Option[Position], isRightChild: B): B = {
+      val slangParentPrecedence = Exp.BinaryOp.precendenceLevel(slangParentOp)
+      val verusRustParentOp = convertBinaryOp(inVerus, slangParentOp, parentPosOpt)
+      val verusRustParentPrecedence = rustPrecendenceLevel(verusRustParentOp)
+
+      val slangChildPrecedence = Exp.BinaryOp.precendenceLevel(slangChildOp)
+      val rustChildOp = convertBinaryOp(F, slangChildOp, childPosOpt)
+      val verusRustChildOp = convertBinaryOp(inVerus, slangChildOp, childPosOpt)
+      val verusRustChildPrecedence = rustPrecendenceLevel(verusRustChildOp)
+
+      // rust requires comparison expressions to be explicitly parenthesized
+      rustChildOp match {
+        case Exp.BinaryOp.Eq => return T
+        case Exp.BinaryOp.Ne => return T
+        case Exp.BinaryOp.Le => return T
+        case Exp.BinaryOp.Lt => return T
+        case Exp.BinaryOp.Ge => return T
+        case Exp.BinaryOp.Gt => return T
+        case BinaryOpCust.BiImplication => return T
+        case "!==" => return T
+        case _ =>
+      }
+
+      // Verus doesn't support & and | so those are converted to && and ||. The non-short
+      // circuit version have higher precedence than their short circuit counter-parts in
+      // rust so we need to parenthesize the child
+      (rustChildOp, verusRustChildOp) match {
+        case (string"&", string"&&") => return T
+        case (string"|", string"||") => return T
+        case _ =>
+      }
+
+      if (slangChildPrecedence < slangParentPrecedence) {
+        if (verusRustChildPrecedence > verusRustParentPrecedence) {
+          // in rust the child's op has higher precedence so we need parens
+          return T
+        } else if (verusRustChildPrecedence == verusRustParentPrecedence) {
+          val isParentRightAssoc = verusRustParentOp match {
+            case Exp.BinaryOp.Imply => T
+            case Exp.BinaryOp.CondImply => T
+            case _ => F
+          }
+          return isRightChild != isParentRightAssoc
+        }
+      }
+
+      return F
+    }
+
+    @pure def convertBinaryOp(convertingToVerus: B, op: String, posOpt: Option[Position]) : String = {
+      op match {
+        case Exp.BinaryOp.Add => return op // +
+        case Exp.BinaryOp.Sub => return op // -
+        case Exp.BinaryOp.Mul => return op // *
+        case Exp.BinaryOp.Div => return op // /
+        case Exp.BinaryOp.Rem => return op // %
+        case Exp.BinaryOp.Eq => return op // ==
+        case Exp.BinaryOp.Ne => return op // !=
+        case Exp.BinaryOp.Shl => return op // <<
+        case Exp.BinaryOp.Shr => return op // >>
+        case Exp.BinaryOp.Lt => return op // <
+        case Exp.BinaryOp.Le => return op // >=
+        case Exp.BinaryOp.Gt => return op // >
+        case Exp.BinaryOp.Ge => return op // >=
+
+        case Exp.BinaryOp.Xor => BinaryOpCust.Xor // |^ in Slang, ^ in Rust
+
+        case Exp.BinaryOp.CondAnd => return op // &&
+        case Exp.BinaryOp.CondOr => return op // ||
+
+        case Exp.BinaryOp.And => // &
+          if (convertingToVerus) {
+            reporter.warn(posOpt, MicrokitCodegen.toolName,
+              "TODO: Verus does not appear to a have support for '&', using '&&' instead")
+            return Exp.BinaryOp.CondAnd
+          } else {
+            return op
+          }
+
+        case Exp.BinaryOp.Or => // |
+          if (convertingToVerus) {
+            reporter.warn(posOpt, MicrokitCodegen.toolName,
+              "TODO: Verus does not appear to a have support for '|', using '||' instead")
+            return Exp.BinaryOp.CondOr
+          } else {
+            return op
+          }
+
+        case Exp.BinaryOp.Imply => // __>:
+          if (convertingToVerus) {
+            reporter.warn(posOpt, MicrokitCodegen.toolName,
+              "Verus does not have a logical implication operator, using '==>' instead")
+            return Exp.BinaryOp.CondImply
+          } else {
+            return op
+          }
+
+        case Exp.BinaryOp.CondImply => return op // ___>:
+
+        case "->:" => halt(s"Not expecting '->:', it should have been converted to ${Exp.BinaryOp.Imply} at the AIR level")
+        case "-->:" => halt(s"Not expecting '-->:', it should have been converted to ${Exp.BinaryOp.CondImply} at the AIR level")
+
+        // will the following ever appear in a gumbo expression?
+        case Exp.BinaryOp.Equiv => halt(s"what is the rust equiv of $op")
+        case Exp.BinaryOp.EquivUni => halt(s"what is the rust equiv of $op")
+        case Exp.BinaryOp.Inequiv => halt(s"what is the rust equiv of $op")
+        case Exp.BinaryOp.InequivUni => halt(s"what is the rust equiv of $op")
+        case Exp.BinaryOp.FpEq => halt(s"what is the rust equiv of $op")
+        case Exp.BinaryOp.FpNe => halt(s"what is the rust equiv of $op")
+        case Exp.BinaryOp.Ushr => halt(s"what is the rust equiv of $op")
+        case Exp.BinaryOp.Append => halt(s"what is the rust equiv of $op")
+        case Exp.BinaryOp.Prepend => halt(s"what is the rust equiv of $op")
+        case Exp.BinaryOp.AppendAll => halt(s"what is the rust equiv of $op")
+        case Exp.BinaryOp.RemoveAll => halt(s"what is the rust equiv of $op")
+        case Exp.BinaryOp.MapsTo => halt(s"what is the rust equiv of $op")
+        case Exp.BinaryOp.Arrow => halt(s"what is the rust equiv of $op")
+
+        case _ => halt(s"Wasn't expecting $op")
+      }
+    }
+
+    // https://doc.rust-lang.org/reference/expressions.html#r-expr.precedence
+    // https://verus-lang.github.io/verus/guide/spec-operator-precedence.html
+    def rustPrecendenceLevel(op: String): Z = {
+      op match {
+        //                                               Verus Op | Associativity
+        case Exp.BinaryOp.Mul => return 3 //             *          left
+        case Exp.BinaryOp.Div => return 3 //             /          left
+        case Exp.BinaryOp.Rem => return 3 //             %          left
+
+        case Exp.BinaryOp.Add => return 4 //             +          left
+        case Exp.BinaryOp.Sub => return 4 //             -          left
+
+        case Exp.BinaryOp.Shl => return 5 //             <<         left
+        case Exp.BinaryOp.Shr => return 5 //             >>         left
+
+        case Exp.BinaryOp.And => return 6 //             &          left
+
+        case BinaryOpCust.Xor => return 7 //             ^          left
+
+        case Exp.BinaryOp.Or => return 8 //              |          left
+
+        case Exp.BinaryOp.Eq => return 9 //              ==         requires parens
+        case Exp.BinaryOp.Ne => return 9 //              !=         requires parens
+        case Exp.BinaryOp.Lt => return 9 //              <          requires parens
+        case Exp.BinaryOp.Le => return 9 //              <=         requires parens
+        case Exp.BinaryOp.Gt => return 9 //              >          requires parens
+        case Exp.BinaryOp.Ge => return 9 //              >=         requires parens
+
+        case Exp.BinaryOp.CondAnd => return 10 //        &&         left
+
+        case Exp.BinaryOp.CondOr => return 11 //         ||         left
+
+        case Exp.BinaryOp.CondImply => return 12 //      ==>        right
+        case Exp.BinaryOp.Imply => return 12 //          NA         right
+
+        case BinaryOpCust.CondImplLeft => return 13 //   <==        left
+
+        case BinaryOpCust.BiImplication => return 14 //  <==>       requires parens
+
+        case string"-->:" => halt(s"Not expecting '-->:', it should have been converted to ${Exp.BinaryOp.CondImply} at the AIR level")
+        case string"->:" => halt(s"Not expecting '->:', it should have been converted to ${Exp.BinaryOp.Imply} at the AIR level")
+        case Exp.BinaryOp.Xor => halt(s"'$op' should have been converted to rust's ${BinaryOpCust.Xor} by now")
+        case _ => halt(s"Infeasible binary operator for GUMBO: $op")
+      }
+    }
+
+    @pure def BinaryPrettyST(slangParentOp: String, parentPos: Option[Position],
+                             left: ST, leftSlangOp: Option[String], isLeftIf: B, leftPos: Option[Position],
+                             right: ST, rightSlangOp: Option[String], isRightIf: B, rightPos: Option[Position]): ST = {
+      val slangParentPrecedence = Exp.BinaryOp.precendenceLevel(slangParentOp)
+
+      var singleLine = T
+      val leftST: ST = leftSlangOp match {
+        case Some(leftOp) =>
+
+          if (slangParentPrecedence > 6 || slangParentOp == Exp.BinaryOp.CondImply) {
+            singleLine = F
+          }
+
+          if (shouldParenthesize(slangParentOp, parentPos, leftOp, leftPos, F)) st"($left)"
+          else left
+        case _ if isLeftIf =>
+          singleLine = F
+          st"($left)"
+        case _ =>
+          left
+      }
+      val rightST: ST = rightSlangOp match {
+        case Some(rightOp) =>
+          if (slangParentPrecedence > 6 || slangParentOp == Exp.BinaryOp.CondImply) {
+            singleLine = F
+          }
+
+          if (shouldParenthesize(slangParentOp, parentPos, rightOp, rightPos, T)) st"($right)"
+          else right
+        case _ if isRightIf =>
+          singleLine = F
+          st"($right)"
+        case _ =>
+          right
+      }
+
+      // now convert logical operators if in verus (e.g. & becomes &&)
+      val verusRustParentOp = convertBinaryOp(inVerus, slangParentOp, parentPos)
+
+      if (!inVerus && (verusRustParentOp == Exp.BinaryOp.CondImply || verusRustParentOp == Exp.BinaryOp.Imply)) {
+        val functionName: String =
+          if (verusRustParentOp == Exp.BinaryOp.CondImply) "implies"
+          else "impliesL"
+        return (
+          st"""$functionName(
+              |  $leftST,
+              |  $rightST)""")
+      } else {
+
+        val op =
+          if (inVerus && verusRustParentOp == Exp.BinaryOp.CondImply) "==>"
+          else verusRustParentOp
+
+        return (
+          if (singleLine) st"$leftST $op $rightST"
+          else st"""$leftST $op
+                   |  $rightST""")
+      }
+    }
     return nestedRewriteExp(rexp, None())
-  }
-
-  @pure def unquoteLit(lit: Exp.LitString): String = {
-    return ops.StringOps(lit.value).replaceAllLiterally("\"", "")
-  }
-
-  @pure def unquoteLits(lits: ISZ[Exp.LitString]): ISZ[String] = {
-    return for(l <- lits) yield unquoteLit(l)
-  }
-
-  @pure def convertUnaryOp(op: Exp.UnaryOp.Type): String = {
-    op match {
-      case Exp.UnaryOp.Not => return "!"
-      case Exp.UnaryOp.Minus => return "-"
-
-      case Exp.UnaryOp.Plus => halt(s"what is the rust equiv of $op")
-      case Exp.UnaryOp.Complement => halt(s"what is the rust equiv of $op")
-    }
-  }
-
-  @pure def convertBinaryOp(op: String, inVerus: B, posOpt: Option[Position], reporter: Reporter) : String = {
-    op match {
-      case Exp.BinaryOp.Add => return op
-      case Exp.BinaryOp.Sub => return op
-      case Exp.BinaryOp.Mul => return op
-      case Exp.BinaryOp.Div => return op
-      case Exp.BinaryOp.Rem => return op
-      case Exp.BinaryOp.Eq => return op
-      case Exp.BinaryOp.Ne => return op
-      case Exp.BinaryOp.Shl => return op
-      case Exp.BinaryOp.Shr => return op
-      case Exp.BinaryOp.Lt => return op
-      case Exp.BinaryOp.Le => return op
-      case Exp.BinaryOp.Gt => return op
-      case Exp.BinaryOp.Ge => return op
-      case Exp.BinaryOp.Xor => return "^"
-
-      case Exp.BinaryOp.And =>
-        return (
-          if (inVerus) "&&"
-          else Exp.BinaryOp.And)
-
-      case Exp.BinaryOp.CondAnd => return op
-
-      case Exp.BinaryOp.Or =>
-        return (
-          if (inVerus) "||"
-          else Exp.BinaryOp.Or)
-
-      case Exp.BinaryOp.CondOr => return op
-
-      case Exp.BinaryOp.Imply =>
-        return (
-          if (inVerus) "==>"
-          else SlangExpUtil.BinaryOpCust.Impl)
-
-      case "->:" =>
-        return (
-          if (inVerus) "==>"
-          else SlangExpUtil.BinaryOpCust.Impl)
-
-      case Exp.BinaryOp.CondImply =>
-        return (
-          if (inVerus)  "==>"
-          else BinaryOpCust.CondImpl)
-
-      case "-->:" =>
-        return (
-          if (inVerus) "==>"
-          else BinaryOpCust.CondImpl)
-
-      // will the following ever appear in a gumbo expression?
-      case Exp.BinaryOp.Equiv => halt(s"what is the rust equiv of $op")
-      case Exp.BinaryOp.EquivUni => halt(s"what is the rust equiv of $op")
-      case Exp.BinaryOp.Inequiv => halt(s"what is the rust equiv of $op")
-      case Exp.BinaryOp.InequivUni => halt(s"what is the rust equiv of $op")
-      case Exp.BinaryOp.FpEq => halt(s"what is the rust equiv of $op")
-      case Exp.BinaryOp.FpNe => halt(s"what is the rust equiv of $op")
-      case Exp.BinaryOp.Ushr => halt(s"what is the rust equiv of $op")
-      case Exp.BinaryOp.Append => halt(s"what is the rust equiv of $op")
-      case Exp.BinaryOp.Prepend => halt(s"what is the rust equiv of $op")
-      case Exp.BinaryOp.AppendAll => halt(s"what is the rust equiv of $op")
-      case Exp.BinaryOp.RemoveAll => halt(s"what is the rust equiv of $op")
-      case Exp.BinaryOp.MapsTo => halt(s"what is the rust equiv of $op")
-      case Exp.BinaryOp.Arrow => halt(s"what is the rust equiv of $op")
-
-      case _ => halt(s"Wasn't expecting $op")
-    }
-  }
-
-  @pure def isPrimitive(path: TypeIdPath): B = {
-    path match {
-      case ISZ("org", "sireum", _) => return T
-      case _ => return F
-    }
-  }
-
-  @pure def shouldParenthesize(level: Z, cop: String, isRight: B, isRightAssoc: B): B = {
-    val c = precendenceLevel(cop)
-    if (c > level) {
-      return T
-    }
-    if (c == level) {
-      return isRight != isRightAssoc
-    }
-    return F
-  }
-
-  def precendenceLevel(op: String): Z = {
-    val c = conversions.String.toCis(op)(0)
-    c match {
-      case '*' => return 2
-      case '/' => return 2
-      case '%' => return 2
-      case '+' => return 3
-      case '-' => return 3
-      case ':' => return 4
-      case '=' => return 5
-      case '!' => return 5
-      case '<' => return 6
-      case '>' => return 6
-      case '&' => return 7
-      case '^' => return 8
-      case '|' => return 9
-      case '$' => return 10
-      case '_' => return 10
-      case _ =>
-        ops.COps(c).category match {
-          case ops.COps.Category.Ll => return 10
-          case ops.COps.Category.Lu => return 10
-          case ops.COps.Category.Lt => return 10
-          case ops.COps.Category.Lo => return 10
-          case ops.COps.Category.Nl => return 10
-          case _ => return 1
-        }
-    }
-  }
-
-  @pure def BinaryPrettyST(inVerus: B,
-                           op: String, isOpRightAssoc: B,
-                           left: ST, leftOpOpt: Option[String], isLeftIf: B,
-                           right: ST, rightOpOpt: Option[String], isRightIf: B): ST = {
-    val l = precendenceLevel(op)
-    var singleLine = T
-    val leftST: ST = leftOpOpt match {
-      case Some(leftOp) =>
-        if (l > 6 || op == "___>:" || op == "-->:" || op == BinaryOpCust.CondImpl) {
-          singleLine = F
-        }
-        if (shouldParenthesize(l, leftOp, F, isOpRightAssoc)) st"($left)" else left
-      case _ if isLeftIf =>
-        singleLine = F
-        st"($left)"
-      case _ =>
-        left
-    }
-    val rightST: ST = rightOpOpt match {
-      case Some(rightOp) =>
-        if (l > 6 || op == "___>:" || op == "-->:" || op == BinaryOpCust.CondImpl) {
-          singleLine = F
-        }
-        if (shouldParenthesize(l, rightOp, T, isOpRightAssoc)) st"($right)" else right
-      case _ if isRightIf =>
-        singleLine = F
-        st"($right)"
-      case _ =>
-        right
-    }
-    if (!inVerus && (op == BinaryOpCust.Impl || op == BinaryOpCust.CondImpl)) {
-      val functionName: String = if (op == BinaryOpCust.Impl) "impliesL" else "implies"
-      return (
-        st"""$functionName(
-            |  $leftST,
-            |  $rightST)""")
-    } else {
-      return (
-        if (singleLine) st"$leftST $op $rightST"
-        else st"""$leftST $op
-                 |  $rightST""")
-    }
   }
 }

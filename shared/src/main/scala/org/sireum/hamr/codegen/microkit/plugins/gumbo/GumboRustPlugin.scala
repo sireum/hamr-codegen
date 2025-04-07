@@ -4,7 +4,7 @@ package org.sireum.hamr.codegen.microkit.plugins.gumbo
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{BoolValue, DataIdPath, ISZValue, Store, StoreValue, ThreadIdPath}
 import org.sireum.hamr.codegen.common.containers.{Marker, Resource}
-import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlEventPort, AadlThread, GclAnnexClauseInfo, GclSymbolTable, SymTableKey, SymbolTable}
+import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlEventPort, AadlThread, GclAnnexClauseInfo, SymbolTable}
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes}
 import org.sireum.hamr.codegen.common.util.HamrCli
 import org.sireum.hamr.codegen.microkit.plugins.apis.CRustApiPlugin

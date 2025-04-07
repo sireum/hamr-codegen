@@ -483,7 +483,10 @@ object ComputeContributions {
                   outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
                 fnHeader = RAST.FnHeader(F), generics = None()),
               attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(),
-              body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(st"${(topLevelAssumeCallsCombined, " &\n")}")))),
+              body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
+                st"""${(for (i <- 0 until topLevelAssumeCallsCombined.size) yield st"let r$i: bool = ${topLevelAssumeCallsCombined(i)};", "\n")}
+                    |
+                    |return ${(for (i <- 0 until topLevelAssumeCallsCombined.size) yield s"r$i", " && ")};""")))),
               meta = ISZ())
           }
 
@@ -503,9 +506,12 @@ object ComputeContributions {
                   inputs = for (p <- sorted_CEP_T_Guar_Params) yield p.toRustParam,
                   outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
                 fnHeader = RAST.FnHeader(F), generics = None()),
-              attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(),
-              body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(st"${(topLevelGuaranteesCombined, " &\n")}")))),
-              meta = ISZ())
+              attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(), meta = ISZ(),
+              body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
+                st"""${(for (i <- 0 until topLevelGuaranteesCombined.size) yield st"let r$i: bool = ${topLevelGuaranteesCombined(i)};", "\n")}
+                    |
+                    |return ${(for (i <- 0 until topLevelGuaranteesCombined.size) yield s"r$i", " && ")};"""))))
+            )
           }
         }
 
@@ -805,11 +811,11 @@ object ComputeContributions {
         }
         entries = entries ++ (for (i <- entry._2.IEP_Guarantee) yield i.prettyST)
 
+        entries = entries ++ (for(a <- entry._2.computeContributions.CEP_T_Assum__methods) yield a.prettyST)
         if (entry._2.computeContributions.CEP_Pre.nonEmpty) {
           entries = entries :+ entry._2.computeContributions.CEP_Pre.get.prettyST
         }
 
-        entries = entries ++ (for(a <- entry._2.computeContributions.CEP_T_Assum__methods) yield a.prettyST)
         entries = entries ++ (for(g <- entry._2.computeContributions.CEP_T_Guar__methods) yield g.prettyST)
         entries = entries ++ (for(c <- entry._2.computeContributions.CEP_T_Case__methods) yield c.prettyST)
 

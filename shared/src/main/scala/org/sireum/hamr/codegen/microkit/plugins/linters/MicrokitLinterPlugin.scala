@@ -134,7 +134,7 @@ object MicrokitLinterPlugin {
           (srcPort.isInstanceOf[AadlDataPort] && dstPort.isInstanceOf[AadlDataPort]) ||
             (srcPort.isInstanceOf[AadlEventPort] && dstPort.isInstanceOf[AadlEventPort]) ||
             (srcPort.isInstanceOf[AadlEventDataPort] && dstPort.isInstanceOf[AadlEventDataPort]))) {
-          reporter.error(connection.name.pos, MicrokitCodegen.toolName, s"Connected ports have the same type")
+          reporter.error(connection.name.pos, MicrokitCodegen.toolName, s"Connected ports must have the same port type")
         }
         if (MicrokitTypeUtil.getPortType(srcPort) != MicrokitTypeUtil.getPortType(dstPort)) {
           reporter.error(connection.name.pos, MicrokitCodegen.toolName, s"Connected ports must have the same payload type")

@@ -37,13 +37,7 @@ object GclUtil {
     override def isRightAssoc(op: Exp): B = {
       op match {
         case AST.Exp.LitString(value) =>
-          val ret: B = value match {
-            case "-->:" => T
-            case "->:" => T
-            case "+:" => T
-            case _ => F
-          }
-          return ret
+          return ops.StringOps(value).endsWith(":")
         case _ =>
           ureporter.error(op.posOpt, messageKind, s"isRightAssoc: Was expecting a LitString holding a binary operator but received: ${op.string}")
           return F
