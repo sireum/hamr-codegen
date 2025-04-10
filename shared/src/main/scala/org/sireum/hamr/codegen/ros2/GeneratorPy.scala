@@ -141,7 +141,7 @@ object GeneratorPy {
     val py_package_nameT = genPyPackageName(modelName)
     val node_executable_file_nameT = genExecutableFileName(componentName)
     val entryPointDecl: ST
-    = st"\"${node_executable_file_nameT} = ${py_package_nameT}.user_code.${node_source_file_nameT}:${py_src_node_entry_point_name}\""
+    = st"\"${node_executable_file_nameT} = ${py_package_nameT}.base_code.${node_source_file_nameT}:${py_src_node_entry_point_name}\""
     return entryPointDecl
   }
 
@@ -268,7 +268,7 @@ object GeneratorPy {
   }
 
   def genPyInitFile(packageName: String): (ISZ[String], ST, B, ISZ[Marker]) = {
-    val fileName = genPyNodeSourceName("__init__")
+    val fileName = "__init__.py"
 
     val fileBody =
       st"""
@@ -904,7 +904,7 @@ object GeneratorPy {
       handler = st"self.event_handle_${handlerName}"
     }
     else {
-      handler = st"self.handle_${handlerName}"
+      handler = st"handle_${handlerName}"
     }
 
     if (outPortNames.size == 1) {
@@ -1054,11 +1054,19 @@ object GeneratorPy {
     return callbackGroup
   }
 
+  def genPyTimeTriggeredBaseMethod(): ST = {
+    val timeTriggered: ST =
+      st"""def timeTriggered(self):
+          |    pass
+        """
+    return timeTriggered
+  }
+
   def genPyTimeTriggeredStrict(component: AadlThread): ST = {
     val period = component.period.get
 
     val timer: ST =
-      st"""self.periodTimer_ = self.create_wall_timer(${period}, self.timeTriggeredCaller, callback_group=self.${callback_group_name})"""
+      st"""self.periodTimer_ = self.create_timer(${period}, self.timeTriggeredCaller, callback_group=self.${callback_group_name})"""
     return timer
   }
 
@@ -1066,7 +1074,7 @@ object GeneratorPy {
     val period = component.period.get
 
     val timer: ST =
-      st"""self.periodTimer_ = self.create_wall_timer(${period}, self.timeTriggered, callback_group=self.${callback_group_name})"""
+      st"""self.periodTimer_ = self.create_timer(${period}, self.timeTriggered, callback_group=self.${callback_group_name})"""
     return timer
   }
 
@@ -1256,6 +1264,8 @@ object GeneratorPy {
           hasInPorts = T
         }
         else {
+          outMsgVars = outMsgVars :+ genPyInfrastructureOutQueue(p)
+          outMsgVars = outMsgVars :+ genPyApplicationOutQueue(p)
           outPortNames = outPortNames :+ p.identifier
           if (invertTopicBinding) {
             publishers = publishers :+ genPyTopicPublisher(p, portDatatype, getPortNames(IS(p.path.toISZ)))
@@ -1310,8 +1320,6 @@ object GeneratorPy {
           hasInPorts = T
         }
         else {
-          outMsgVars = outMsgVars :+ genPyInfrastructureOutQueue(p)
-          outMsgVars = outMsgVars :+ genPyApplicationOutQueue(p)
           if (invertTopicBinding) {
             publishers = publishers :+ genPyTopicPublisher(p, portDatatype, getPortNames(IS(p.path.toISZ)))
             publisherMethods = publisherMethods :+
@@ -1345,6 +1353,12 @@ object GeneratorPy {
         st"""${stdIncludes}
             |from typing import Union
             |import threading"""
+    }
+
+    if (!strictAADLMode && subscribers.size > 0) {
+      stdIncludes =
+        st"""${stdIncludes}
+            |from ${packageName}.user_code.consumer_consumer_src import *"""
     }
 
     var fileBody =
@@ -1394,6 +1408,10 @@ object GeneratorPy {
              |        ${genPyTimeTriggeredTimer(component)}
            """
       }
+
+      fileBody =
+        st"""${fileBody}
+          |    ${genPyTimeTriggeredBaseMethod()}"""
     }
 
     if(strictAADLMode) {
@@ -1409,24 +1427,24 @@ object GeneratorPy {
              |        ${genPyInEventPortTupleVector(inPortNames)}"""
       }
 
+      if (inMsgVars.size > 0) {
+        fileBody =
+          st"""${fileBody}
+              |        ${(inMsgVars, "\n")}
+          """
+      }
+
+      if (outMsgVars.size > 0) {
+        fileBody =
+          st"""${fileBody}
+              |        ${(outMsgVars, "\n")}
+          """
+      }
+
       fileBody =
         st"""${fileBody}
            |        # Used by sendOutputs
            |        ${genPyOutPortTupleVector(outPortNames)}"""
-    }
-
-    if (inMsgVars.size > 0) {
-      fileBody =
-        st"""${fileBody}
-            |        ${(inMsgVars, "\n")}
-          """
-    }
-
-    if (outMsgVars.size > 0) {
-      fileBody =
-        st"""${fileBody}
-            |        ${(outMsgVars, "\n")}
-          """
     }
 
     if (subscriberMethods.size > 0 || publisherMethods.size > 0 || (strictAADLMode && subscribers.size > 0)) {
@@ -1568,8 +1586,7 @@ object GeneratorPy {
     var includeFiles: ST =
       st"""#!/usr/bin/env python3
           |import rclpy
-          |from rclpy.node import Node
-          |from ${packageName}.base_code.${nodeName}_runner import ${nodeName}"""
+          |from rclpy.node import Node"""
 
     if (hasConverterFiles) {
       includeFiles =
@@ -1587,9 +1604,7 @@ object GeneratorPy {
           |#=================================================
           |#  I n i t i a l i z e    E n t r y    P o i n t
           |#=================================================
-          |def initialize(n):
-          |    node = ${nodeName}()
-          |    node.data = n
+          |def initialize(node):
           |    node.get_logger().info("Initialize Entry Point invoked")
           |
           |    # Initialize the node
@@ -1627,8 +1642,8 @@ object GeneratorPy {
           |import rclpy
           |from rclpy.node import Node
           |from rclpy.executors import MultiThreadedExecutor
-          |from ${packageName}.user_code.${nodeName}_src import *
-          |from ${packageName}.user_code.${nodeName}_base_src import ${nodeName}_base
+          |from ${packageName}.user_code.${nodeName}_src import initialize
+          |from ${packageName}.base_code.${nodeName}_base_src import ${nodeName}_base
           |#========================================================
           |# Re-running Codegen will overwrite changes to this file
           |#========================================================
@@ -1637,7 +1652,7 @@ object GeneratorPy {
           |    def __init__(self):
           |        super().__init__()
           |        # invoke initialize entry point
-          |        initialize()
+          |        initialize(self)
           |
           |        self.get_logger().info("${nodeName} infrastructure set up")
           |
