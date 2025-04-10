@@ -113,7 +113,7 @@ object GumboGen {
       val ret: ST =
         st"""// case ${caseId}
             |${descriptor}
-            |($requires) -->: ($ensures)"""
+            |($requires) ___>: ($ensures)"""
       return ret
     }
   }
@@ -127,7 +127,8 @@ object GumboGen {
   @datatype class GclEntryPointSporadicCompute(val markers: ISZ[Marker],
                                                val handlers: HashSMap[AadlPort, GclComputeEventHolder]) extends GclEntryPointContainer
 
-  @datatype class GclApiContributions(val objectContributions: ISZ[ST],
+  @datatype class GclApiContributions(val apiImportContributions: ISZ[String],
+                                      val objectContributions: ISZ[ST],
                                       val datatypeContributions: ISZ[ST],
                                       val requiresContributions: ISZ[ST],
                                       val ensuresContributions: ISZ[ST])
@@ -987,11 +988,14 @@ object GumboGen {
       var requiresContributions: ISZ[ST] = ISZ()
       var ensuresContributions: ISZ[ST] = ISZ()
 
+      var apiImports: ISZ[String] = ISZ()
+
       integration match {
         case Some(spec) =>
           val portInvariantMethodName = GumboGen.convertToMethodName(spec.id)
 
-          imports = imports ++ GumboGenUtil.resolveLitInterpolateImports(spec.exp)
+          apiImports = apiImports ++ GumboGenUtil.resolveLitInterpolateImports(spec.exp)
+          imports = imports ++ apiImports
 
           var assumeOrGuar: String = "assume"
           spec match {
@@ -1031,6 +1035,7 @@ object GumboGen {
       }
 
       ret = ret + (port ~> GclApiContributions(
+        apiImportContributions = apiImports,
         objectContributions = objectContributions,
         datatypeContributions = datatypeContributions,
         requiresContributions = requiresContributions,

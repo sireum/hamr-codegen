@@ -284,7 +284,7 @@ object GumboRustPlugin {
         GumboRustUtil.processGumboSpec(r, T, types, subclauseInfo.gclSymbolTable, reporter)
 
     var aadlReq: ISZ[ST] = ISZ()
-    for (p <- thread.getPorts() if p.direction == Direction.Out) {
+    for (p <- thread.getPorts() if !p.isInstanceOf[AadlDataPort] && p.direction == Direction.Out) {
       aadlReq = aadlReq :+ (st"old(api).${p.identifier}.is_none()")
     }
     if (aadlReq.nonEmpty) {

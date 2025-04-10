@@ -15,8 +15,6 @@ object SlangExpUtil {
     val CondImplLeft: String = "<=="
 
     val BiImplication: String = "<==>"
-
-    val Xor: String = "^"
   }
 
   @strictpure def toKey(e: SAST.Exp): SymTableKey = SymTableKey(e, e.fullPosOpt)
@@ -35,6 +33,15 @@ object SlangExpUtil {
                         inRequires: B,
                         inVerus: B,
                         reporter: Reporter): ST = {
+    return rewriteExpHL(rexp, substitutions, inRequires, inVerus, F, F, reporter)
+  }
+
+  @pure def rewriteExpHL(rexp: Exp, substitutions: Map[String, String],
+                         inRequires: B,
+                         inVerus: B,
+                         alwaysOneLine: B,
+                         isTesting: B,
+                         reporter: Reporter): ST = {
 
     @pure def receiverOptST(receiverOpt: Option[Exp], sep: String): Option[ST] = {
       if (receiverOpt.isEmpty) {
@@ -109,8 +116,8 @@ object SlangExpUtil {
 
           return BinaryPrettyST(
             slangParentOp = exp.op, parentPos = exp.posOpt,
-            left = nestedRewriteExp(exp.left, sep), leftSlangOp = leftOpOpt, isLeftIf = exp.left.isInstanceOf[Exp.If], leftPosOpt,
-            right = nestedRewriteExp(exp.right, sep), rightSlangOp = rightOpOpt, isRightIf = exp.right.isInstanceOf[Exp.If], rightPosOpt)
+            left = nestedRewriteExp(exp.left, sep), leftSlangOp = leftOpOpt, isLeftIf = exp.left.isInstanceOf[Exp.If], leftPos = leftPosOpt,
+            right = nestedRewriteExp(exp.right, sep), rightSlangOp = rightOpOpt, isRightIf = exp.right.isInstanceOf[Exp.If], rightPos = rightPosOpt)
 
         case exp: Exp.Invoke =>
           reporter.error(exp.posOpt, MicrokitCodegen.toolName,
@@ -245,18 +252,34 @@ object SlangExpUtil {
         case _ =>
       }
 
-      if (slangChildPrecedence < slangParentPrecedence) {
+      if (slangChildPrecedence >= slangParentPrecedence) {
+        // in Slang, either
+        //   a) the child's op either binds looser than the parent op
+        //      so would need parens in Slang, or
+        //   b) the child and parent ops have the same precedence
+        //      in which case we only potentially need parens in Slang
+        //      due to right associativity
+
         if (verusRustChildPrecedence > verusRustParentPrecedence) {
-          // in rust the child's op has higher precedence so we need parens
+          // in Rust the child's Rust op also binds looser than the
+          // parent's Rust op so need parens in Rust
           return T
         } else if (verusRustChildPrecedence == verusRustParentPrecedence) {
-          val isParentRightAssoc = verusRustParentOp match {
+          // same precedence in Rust so may need parens due to
+          // right associativity
+          val isParentRightAssoc: B = verusRustParentOp match {
             case Exp.BinaryOp.Imply => T
             case Exp.BinaryOp.CondImply => T
             case _ => F
           }
           return isRightChild != isParentRightAssoc
+        } else {
+          // in Rust the child's Rust op binds tighter than the
+          // parent Rust op so don't need parens
         }
+      } else {
+        // in Slang the child's op binds tighter than the parent so
+        // wouldn't need parens in Slang
       }
 
       return F
@@ -277,9 +300,7 @@ object SlangExpUtil {
         case Exp.BinaryOp.Le => return op // >=
         case Exp.BinaryOp.Gt => return op // >
         case Exp.BinaryOp.Ge => return op // >=
-
-        case Exp.BinaryOp.Xor => BinaryOpCust.Xor // |^ in Slang, ^ in Rust
-
+        case Exp.BinaryOp.Xor => return op // |^ in Slang, ^ in Rust/Verus
         case Exp.BinaryOp.CondAnd => return op // &&
         case Exp.BinaryOp.CondOr => return op // ||
 
@@ -351,7 +372,7 @@ object SlangExpUtil {
 
         case Exp.BinaryOp.And => return 6 //             &          left
 
-        case BinaryOpCust.Xor => return 7 //             ^          left
+        case Exp.BinaryOp.Xor => return 7 //             ^          left
 
         case Exp.BinaryOp.Or => return 8 //              |          left
 
@@ -375,7 +396,7 @@ object SlangExpUtil {
 
         case string"-->:" => halt(s"Not expecting '-->:', it should have been converted to ${Exp.BinaryOp.CondImply} at the AIR level")
         case string"->:" => halt(s"Not expecting '->:', it should have been converted to ${Exp.BinaryOp.Imply} at the AIR level")
-        case Exp.BinaryOp.Xor => halt(s"'$op' should have been converted to rust's ${BinaryOpCust.Xor} by now")
+
         case _ => halt(s"Infeasible binary operator for GUMBO: $op")
       }
     }
@@ -417,25 +438,24 @@ object SlangExpUtil {
       }
 
       // now convert logical operators if in verus (e.g. & becomes &&)
-      val verusRustParentOp = convertBinaryOp(inVerus, slangParentOp, parentPos)
+      val verusRustParentOp: String = convertBinaryOp(inVerus, slangParentOp, parentPos) match {
+        case Exp.BinaryOp.Xor => "^"
+        case Exp.BinaryOp.CondImply => "==>"
+        case op => op
+      }
 
-      if (!inVerus && (verusRustParentOp == Exp.BinaryOp.CondImply || verusRustParentOp == Exp.BinaryOp.Imply)) {
+      if ((!inVerus || isTesting) && (verusRustParentOp == "==>" || verusRustParentOp == Exp.BinaryOp.Imply)) {
         val functionName: String =
-          if (verusRustParentOp == Exp.BinaryOp.CondImply) "implies"
+          if (verusRustParentOp == "==>") "implies"
           else "impliesL"
         return (
           st"""$functionName(
               |  $leftST,
               |  $rightST)""")
       } else {
-
-        val op =
-          if (inVerus && verusRustParentOp == Exp.BinaryOp.CondImply) "==>"
-          else verusRustParentOp
-
         return (
-          if (singleLine) st"$leftST $op $rightST"
-          else st"""$leftST $op
+          if (alwaysOneLine || singleLine) st"$leftST $verusRustParentOp $rightST"
+          else st"""$leftST $verusRustParentOp
                    |  $rightST""")
       }
     }

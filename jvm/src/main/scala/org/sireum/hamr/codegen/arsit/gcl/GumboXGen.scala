@@ -263,8 +263,11 @@ object GumboXGen {
           val clause = gclSymbolTable.integrationMap.get(port).get
           val rexp = getRExp(clause.exp, basePackageName, aadlTypes, gclSymbolTable)
 
+          val imports = GumboGenUtil.resolveLitInterpolateImports(clause.exp)
+
           clause match {
             case i: GclAssume =>
+
               val (i_assm_name, i_assm_guard_name) = GumboXGen.createIntegrationMethodName(port, componentNames)
               val simple = ops.ISZOps(i_assm_name).last
               val I_Assm =
@@ -278,7 +281,7 @@ object GumboXGen {
 
               val typ: (String, ST) =
                 if (!GumboXGenUtil.isDataPort(symbolTable.featureMap.get(port.path).get))
-                  (s"Option[${aadlType.nameProvider.qualifiedReferencedTypeName}]", st"${port.identifier}.nonEmpty -->: $simple(${port.identifier}.get)")
+                  (s"Option[${aadlType.nameProvider.qualifiedReferencedTypeName}]", st"${port.identifier}.nonEmpty ___>: $simple(${port.identifier}.get)")
                 else (aadlType.nameProvider.qualifiedReferencedTypeName, st"$simple(${port.identifier})")
 
               val I_Assm_Guard =
@@ -290,8 +293,8 @@ object GumboXGen {
                 integrationClauses = localGumboStore.integrationClauses + component.path ~> (
                   localGumboStore.integrationClauses.getOrElse(component.path, ISZ()) :+
                     (port.path, IntegrationAssumeHolder(
-                      ContractHolder(i_assm_name, ISZ(), localGumboStore.imports, I_Assm),
-                      ContractHolder(i_assm_guard_name, ISZ(), localGumboStore.imports, I_Assm_Guard)))))
+                      ContractHolder(i_assm_name, ISZ(), localGumboStore.imports ++ imports, I_Assm),
+                      ContractHolder(i_assm_guard_name, ISZ(), localGumboStore.imports ++ imports, I_Assm_Guard)))))
             case i: GclGuarantee =>
               val (i_guar_name, i_guar_guard_name) = GumboXGen.createIntegrationMethodName(port, componentNames)
               val simple = ops.ISZOps(i_guar_name).last
@@ -308,13 +311,13 @@ object GumboXGen {
               val I_Guar_Guard =
                 st"""// I_Guar-Guard: Integration constraint on ${component.identifier}'s outgoing $portType port ${port.identifier}
                     |@strictpure def ${ops.ISZOps(i_guar_guard_name).last}(${port.identifier}: Option[${aadlType.nameProvider.qualifiedReferencedTypeName}]): B =
-                    |  ${port.identifier}.nonEmpty -->: $simple(${port.identifier}.get)"""
+                    |  ${port.identifier}.nonEmpty ___>: $simple(${port.identifier}.get)"""
 
               localGumboStore = localGumboStore(integrationClauses = localGumboStore.integrationClauses + component.path ~> (
                 localGumboStore.integrationClauses.getOrElse(component.path, ISZ()) :+
                   (port.path, IntegrationGuaranteeHolder(
-                    ContractHolder(i_guar_name, ISZ(), localGumboStore.imports, I_Guar),
-                    ContractHolder(i_guar_guard_name, ISZ(), localGumboStore.imports, I_Guar_Guard)))))
+                    ContractHolder(i_guar_name, ISZ(), localGumboStore.imports ++ imports, I_Guar),
+                    ContractHolder(i_guar_guard_name, ISZ(), localGumboStore.imports ++ imports, I_Guar_Guard)))))
             case _ => halt("Infeasible")
           }
         }
@@ -647,7 +650,7 @@ object GumboXGen {
                   |  */
                   |@strictpure def $methodName(
                   |    ${(for (p <- sortedParams) yield p.getParamDef, ",\n")}): B =
-                  |  (${ggAssm.exp}) -->:
+                  |  (${ggAssm.exp}) ___>:
                   |    (${ggGuar.exp})"""
 
             caseMethods = caseMethods :+ method
@@ -731,7 +734,7 @@ object GumboXGen {
                   |  */
                   |@strictpure def ${simpleName} (
                   |    ${(for (p <- sorted_CEP_H_Guar_Params) yield p.getParamDef, ",\n")}): B =
-                  |  ${aadlPortParam.name}.nonEmpty -->: (
+                  |  ${aadlPortParam.name}.nonEmpty ___>: (
                   |    ${(handlers_Guarantees_Calls_Combined, " &\n")})"""
             CEP_T_Handlers = CEP_T_Handlers :+
               ContractHolder(CEP_T_Guar_MethodName, sorted_CEP_H_Guar_Params, localGumboStore.imports, content)
@@ -1024,7 +1027,7 @@ object GumboXGen {
       st"""/** D-Inv-Guard Data Invariant for ${aadlType.nameProvider.qualifiedReferencedTypeName}
           |  */
           |@strictpure def ${ops.ISZOps(d_inv_guard_method_name).last}(value: Option[${aadlType.nameProvider.qualifiedReferencedTypeName}]): B =
-          |  value.nonEmpty -->: $simple(value.get)"""
+          |  value.nonEmpty ___>: $simple(value.get)"""
 
     localGumboStore = localGumboStore(dataInvariants = localGumboStore.dataInvariants + aadlType.name ~>
       DataInvariantHolder(

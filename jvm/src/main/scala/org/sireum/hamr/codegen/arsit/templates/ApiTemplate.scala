@@ -7,6 +7,7 @@ import org.sireum.hamr.codegen.arsit.Port
 import org.sireum.hamr.codegen.arsit.gcl.GumboGen.GclApiContributions
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlEventPort, AadlFeature, AadlFeatureData, AadlFeatureEvent, AadlPort}
+import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.types.{AadlType, TypeUtil}
 import org.sireum.hamr.codegen.common.util.NameUtil.NameProvider
 import org.sireum.hamr.ir._
@@ -42,11 +43,14 @@ object ApiTemplate {
       return ret
     }
 
+    var apiImports: Set[String] = Set.empty
     var traitSPFs: ISZ[ST] = ISZ()
     val getters = inPorts.map((p: Port) => {
       val gclApiContributions = getContract(p.aadlFeature)
       gclApiContributions match {
-        case Some(c) if c.objectContributions.nonEmpty => traitSPFs = traitSPFs :+ st"${(c.objectContributions, "\n\n")}"
+        case Some(c) if c.objectContributions.nonEmpty =>
+          apiImports = apiImports ++ c.apiImportContributions
+          traitSPFs = traitSPFs :+ st"${(c.objectContributions, "\n\n")}"
         case _ =>
       }
       getterApi(p, gclApiContributions)
@@ -56,7 +60,9 @@ object ApiTemplate {
     val setters = outPorts.map((p: Port) => {
       val gclApiContributions = getContract(p.aadlFeature)
       gclApiContributions match {
-        case Some(c) if c.objectContributions.nonEmpty => opSPFs = opSPFs :+ st"${(c.objectContributions, "\n\n")}"
+        case Some(c) if c.objectContributions.nonEmpty =>
+          apiImports = apiImports ++ c.apiImportContributions
+          opSPFs = opSPFs :+ st"${(c.objectContributions, "\n\n")}"
         case _ =>
       }
       setterApi(p, gclApiContributions)
@@ -82,6 +88,9 @@ object ApiTemplate {
           |import org.sireum._
           |import art._
           |import ${basePackageName}._
+          |${(for (i <- apiImports.elements) yield s"import $i", "\n")}
+          |
+          |${CommentTemplate.doNotEditComment_scala}
           |
           |${collect(names.api, traitSPFs ++ opSPFs)}
           |@sig trait ${names.api} {
@@ -188,14 +197,14 @@ object ApiTemplate {
           |@spec var ${p.name}: ${specType} = $$"""
     )
     gclApiContributions match {
-      case Some(GclApiContributions(_, datatypeContributions, _, _)) if datatypeContributions.nonEmpty =>
+      case Some(GclApiContributions(_, _, datatypeContributions, _, _)) if datatypeContributions.nonEmpty =>
         dtcontributions = dtcontributions ++ datatypeContributions
       case _ =>
     }
     val optDatatypeContributions: Option[ST] = Some(st"${(dtcontributions, "\n")}")
 
     val optRequires: Option[ST] = gclApiContributions match {
-      case Some(GclApiContributions(_, _, requires, _)) if requires.nonEmpty =>
+      case Some(GclApiContributions(_, _, _, requires, _)) if requires.nonEmpty =>
         Some(
           st"""Requires(
               |  ${(requires, ",\n")}
@@ -204,7 +213,7 @@ object ApiTemplate {
     }
 
     val optEnsures: Option[ST] = gclApiContributions match {
-      case Some(GclApiContributions(_, _, _, ensures)) if ensures.nonEmpty =>
+      case Some(GclApiContributions(_, _, _, _, ensures)) if ensures.nonEmpty =>
         Some(st"${(ensures, ",\n")},")
       case _ => None()
     }
