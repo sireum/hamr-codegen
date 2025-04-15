@@ -12,7 +12,7 @@ import org.sireum.hamr.codegen.microkit.plugins.{MicrokitInitPlugin, MicrokitPlu
 import org.sireum.hamr.codegen.microkit.plugins.component.CRustComponentPlugin
 import org.sireum.hamr.codegen.microkit.plugins.linters.MicrokitLinterPlugin
 import org.sireum.hamr.codegen.microkit.plugins.types.CRustTypePlugin
-import org.sireum.hamr.codegen.microkit.util.Util
+import org.sireum.hamr.codegen.microkit.util.{MakefileTarget, MakefileUtil, Util}
 import org.sireum.hamr.ir.{Aadl, Direction, GclAssume, GclGuarantee, GclSubclause}
 import org.sireum.message.{Level, Message, Reporter}
 import org.sireum.hamr.codegen.microkit.{MicrokitCodegen, rust => RAST}
@@ -101,12 +101,13 @@ object GumboRustPlugin {
       }
     }
 
-    for (threadId <- GumboRustPlugin.getThreadsWithContracts(localStore)) {
+    var makefileItems: ISZ[ST] = ISZ()
+    for (threadPath <- GumboRustPlugin.getThreadsWithContracts(localStore)) {
       var markers: ISZ[Marker] = ISZ()
-      val thread = symbolTable.componentMap.get(threadId).get.asInstanceOf[AadlThread]
-      val subclauseInfo = GumboRustUtil.getGumboSubclause(threadId, symbolTable)
+      val thread = symbolTable.componentMap.get(threadPath).get.asInstanceOf[AadlThread]
+      val subclauseInfo = GumboRustUtil.getGumboSubclause(threadPath, symbolTable)
       val componentContributions = CRustComponentPlugin.getCRustComponentContributions(localStore)
-      val threadContributions = componentContributions.componentContributions.get(threadId).get
+      val threadContributions = componentContributions.componentContributions.get(threadPath).get
       var structDef = threadContributions.appStructDef
       val structImpl = threadContributions.appStructImpl.asInstanceOf[RAST.ImplBase]
 
@@ -127,7 +128,7 @@ object GumboRustPlugin {
         val (requires, ensures) = handleIntegrationConstraints(thread, subclauseInfo, types, reporter)
 
         val crustApiContributions = CRustApiPlugin.getCRustApiContributions(localStore).get
-        val componentApiContributions = crustApiContributions.apiContributions.get(threadId).get
+        val componentApiContributions = crustApiContributions.apiContributions.get(threadPath).get
 
         var updatedPutApis: ISZ[RAST.Item] = ISZ()
         for (u <- componentApiContributions.appApiDefaultPutters) {
@@ -161,7 +162,7 @@ object GumboRustPlugin {
           }
         }
 
-        val con = crustApiContributions.addApiContributions(threadId,
+        val con = crustApiContributions.addApiContributions(threadPath,
           componentApiContributions(
             appApiDefaultPutters = updatedPutApis,
             appApiDefaultGetters = updatedGetApis))
@@ -205,17 +206,20 @@ object GumboRustPlugin {
 
       localStore = CRustComponentPlugin.putComponentContributions(localStore,
         componentContributions.replaceComponentContributions(
-          componentContributions.componentContributions + threadId ~>
+          componentContributions.componentContributions + threadPath ~>
             threadContributions(
               markers = markers,
               requiresVerus = T,
               appStructDef = structDef,
               appStructImpl = structImpl(items = updatedImplItems))))
-    }
+
+      makefileItems = makefileItems :+ st"make -C $${CRATES_DIR}/${Util.getThreadIdPath(thread)} verus"
+    } // end processing thread's contracts
 
     return (
-      GumboRustPlugin.putGumboRustContributions(DefaultGumboRustContributions(datatypeInvariants), localStore),
-      ISZ())
+      MakefileUtil.addMainMakefileTarget(MakefileTarget(name = "verus", dependencies = ISZ(), body = makefileItems),
+        GumboRustPlugin.putGumboRustContributions(DefaultGumboRustContributions(datatypeInvariants), localStore)),
+        ISZ())
   }
 
   @pure def handleIntegrationConstraints(thread: AadlThread, subclauseInfo: GclAnnexClauseInfo, types: AadlTypes, reporter: Reporter): (Map[String, RAST.Expr], Map[String, RAST.Expr]) = {

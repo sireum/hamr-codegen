@@ -10,7 +10,7 @@ import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.plugins.apis.CRustApiPlugin
 import org.sireum.hamr.codegen.microkit.plugins.types.CRustTypePlugin
 import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, MicrokitPlugin}
-import org.sireum.hamr.codegen.microkit.util.Util
+import org.sireum.hamr.codegen.microkit.util.{MakefileTarget, MakefileUtil, Util}
 import org.sireum.hamr.ir.Aadl
 import org.sireum.message.Reporter
 import org.sireum.hamr.codegen.microkit.{rust => RustAst}
@@ -77,6 +77,7 @@ object ComponentContributions {}
 
     var ret: Map[IdPath, ComponentContributions] = Map.empty
 
+    var makefileEntries: ISZ[ST] = ISZ()
     for (thread <- symbolTable.getThreads() if Util.isRusty(thread)) {
       val threadId = Util.getThreadIdPath(thread)
 
@@ -192,10 +193,13 @@ object ComponentContributions {}
             appStructDef = struct,
             appStructImpl = impl)
       }
-    }
+
+      makefileEntries = makefileEntries :+ st"make -C $${CRATES_DIR}/$threadId test"
+    } // end handling crusty components
 
     return (
-      CRustComponentPlugin.putComponentContributions(localStore, DefaultCRustComponentContributions(ret)),
+      MakefileUtil.addMainMakefileTarget(MakefileTarget(name = "test", dependencies = ISZ(), body = makefileEntries),
+        CRustComponentPlugin.putComponentContributions(localStore, DefaultCRustComponentContributions(ret))),
       resources)
   }
 

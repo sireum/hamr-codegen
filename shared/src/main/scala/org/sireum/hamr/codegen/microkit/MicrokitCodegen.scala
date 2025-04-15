@@ -705,7 +705,7 @@ object MicrokitCodegen {
     val dotPath = s"${options.sel4OutputDir.get}/microkit.dot"
     resources = resources :+ ResourceUtil.createResource(path = dotPath, content = sysDot, overwrite = T)
 
-    val makefileContents = MakefileTemplate.mainMakefile
+    val makefileContents = MakefileTemplate.mainMakefile(MakefileUtil.getMainMakefileTarget(localStore).elements)
     val makefilePath = s"${options.sel4OutputDir.get}/Makefile"
     resources = resources :+ ResourceUtil.createResource(makefilePath, makefileContents, T)
 
