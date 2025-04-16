@@ -4,7 +4,7 @@ package org.sireum.hamr.codegen.ros2
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.containers.Marker
-import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlPort, AadlThread, Dispatch_Protocol}
+import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlPort, AadlSystem, AadlThread, Dispatch_Protocol}
 import org.sireum.hamr.codegen.common.types.{AadlType, EnumType}
 import org.sireum.hamr.ir.Direction
 import org.sireum.message.Reporter
@@ -154,7 +154,6 @@ object GeneratorPy {
     // build entry point declarations
     var entry_point_decls: ISZ[ST] = IS()
     for (comp <- threadComponents) {
-      val launch_node_decl_nameT = genPyFormatLaunchNodeDeclName(genNodeName(comp))
       entry_point_decls =
         entry_point_decls :+ genPySetupEntryPointDecl(modelName, genNodeName(comp))
     }
@@ -527,36 +526,38 @@ object GeneratorPy {
   }
 
   // For example, see https://github.com/santoslab/ros-examples/blob/main/tempControl_ws/src/tc_bringup/launch/tc.launch.py
-  def genPyFormatLaunchFile(modelName: String, threadComponents: ISZ[AadlThread]): (ISZ[String], ST, B, ISZ[Marker]) = {
-    val fileName = genPyLaunchFileName(modelName)
+  def genPyFormatLaunchFile(modelName: String, threadComponents: ISZ[AadlThread],
+                            systemComponents: ISZ[AadlSystem]): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
 
     val top_level_package_nameT: String = genPyPackageName(modelName)
 
-    var node_decls: ISZ[ST] = IS()
-    var ld_entries: ISZ[ST] = IS()
+    var launchFiles: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
 
-    for (comp <- threadComponents) {
-      val launch_node_decl_nameT = genPyFormatLaunchNodeDeclName(genNodeName(comp))
-      node_decls = node_decls :+ genPyFormatLaunchNodeDecl(launch_node_decl_nameT, top_level_package_nameT, comp)
-      ld_entries = ld_entries :+ genPyFormatLaunchAddAction(launch_node_decl_nameT)
+    for (system <- systemComponents) {
+      val fileName = genPyFormatLaunchNodeDeclName(system.identifier)
+
+      val node_decls: ISZ[ST] = IS()
+      val ld_entries: ISZ[ST] = IS()
+
+      val launchFileBody =
+        st"""from launch import LaunchDescription
+            |from launch_ros.actions import Node
+            |
+            |def generate_launch_description():
+            |    ld = LaunchDescription()
+            |
+            |    ${(node_decls, "\n")}
+            |    ${(ld_entries, "\n")}
+            |
+            |    return ld
+          """
+
+      val filePath: ISZ[String] = IS("src", s"${top_level_package_nameT}_bringup", "launch", fileName)
+
+      launchFiles = launchFiles :+ (filePath, launchFileBody, T, IS())
     }
 
-    val launchFileBody =
-      st"""from launch import LaunchDescription
-          |from launch_ros.actions import Node
-          |
-          |def generate_launch_description():
-          |    ld = LaunchDescription()
-          |
-          |    ${(node_decls, "\n")}
-          |    ${(ld_entries, "\n")}
-          |
-          |    return ld
-        """
-
-    val filePath: ISZ[String] = IS("src", s"${top_level_package_nameT}_bringup", "launch", fileName)
-
-    return (filePath, launchFileBody, T, IS())
+    return launchFiles
   }
 
   //================================================
