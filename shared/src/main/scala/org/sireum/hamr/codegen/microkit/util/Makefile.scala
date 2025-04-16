@@ -8,7 +8,7 @@ import org.sireum.hamr.codegen.microkit.util.Util.TAB
 @sig trait MakefileItem
 
 object MakefileUtil {
-  val KEY_MainMakefileTarget = "KEY_MainMakefileTarget"
+  val KEY_MainMakefileTarget: String = "KEY_MainMakefileTarget"
 
   @strictpure def getMainMakefileTarget(store: Store): ISZValue[MakefileTarget] =
     store.getOrElse(KEY_MainMakefileTarget, ISZValue[MakefileTarget](ISZ())).asInstanceOf[ISZValue[MakefileTarget]]
