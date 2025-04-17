@@ -15,11 +15,12 @@ import org.sireum.message.Reporter
 object GumboRustUtil {
 
   @pure def getGumboSubclauseOpt(threadId: IdPath, symbolTable: SymbolTable): Option[GclAnnexClauseInfo] = {
-    val cands = symbolTable.annexClauseInfos.get(threadId).get.filter(p => p.isInstanceOf[GclAnnexClauseInfo])
-    assert (cands.size < 2, "gcl's symbol resolver should have only allowed one gcl clause per component")
-    return (
-      if (cands.isEmpty) None()
-      else Some(cands(0).asInstanceOf[GclAnnexClauseInfo]))
+    symbolTable.annexClauseInfos.get(threadId) match {
+      case Some(clauses) =>
+        assert (clauses.size < 2, "gcl's symbol resolver should have only allowed one gcl clause per component")
+        return Some(clauses(0).asInstanceOf[GclAnnexClauseInfo])
+      case _ => return None()
+    }
   }
 
   @pure def getGumboSubclause(threadId: IdPath, symbolTable: SymbolTable): GclAnnexClauseInfo = {
