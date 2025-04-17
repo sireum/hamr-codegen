@@ -56,11 +56,11 @@ import org.sireum.ops.ISZOps
           }
         }
 
-        val aadlComponent = symbolTable.componentMap.get(ISZ(aadlType.name)).get
-        val resolvedAnnexSubclauses: ISZ[AnnexClauseInfo] = symbolTable.annexClauseInfos.get(aadlComponent.path) match {
-          case Some(annexInfos) => annexInfos
-          case _ => ISZ()
-        }
+        val resolvedAnnexSubclauses: ISZ[AnnexClauseInfo] =
+          symbolTable.annexClauseInfos.get(ISZ(aadlType.name)) match {
+            case Some(annexInfos) => annexInfos
+            case _ => ISZ()
+          }
 
         var fulls: ISZ[(String, DatatypeProviderPlugin.FullDatatypeContribution)] = ISZ()
         var partials: ISZ[(String, DatatypeProviderPlugin.PartialDatatypeContribution)] = ISZ()

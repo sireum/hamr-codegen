@@ -187,7 +187,14 @@ import org.sireum.message.Position
   def getAllBoundProcessors(): ISZ[Processor] = {
     var processors: Set[Processor] = Set.empty
     for (c <- componentMap.values) {
-      processors = processors ++ getBoundProcessors(c)
+      // AADL let you bind components to systems, devices, and abstract in addition to
+      // processor and virtual processors.  Not sure what the semantics are for the former
+      // bindings so the linter only allows processors and virtual processors for now
+      c match {
+        case i:AadlProcessor => processors = processors ++ getBoundProcessors(c)
+        case i:AadlVirtualProcessor => processors = processors ++ getBoundProcessors(c)
+        case _ =>
+      }
     }
     return processors.elements
   }

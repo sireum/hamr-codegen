@@ -149,7 +149,9 @@ object GumboXPluginStore {
     for (aadlType <- aadlTypes.typeMap.entries if symbolTable.annexClauseInfos.contains(ISZ(aadlType._1));
          annex <- symbolTable.annexClauseInfos.get(ISZ(aadlType._1)).get) {
       if (annex.isInstanceOf[GclAnnexClauseInfo]) {
-        gumboStore = gumboStore(datatypesWithInvariants = gumboStore.datatypesWithInvariants + aadlType._2.nameProvider.classifier)
+        gumboStore =
+          gumboStore(datatypesWithInvariants =
+            gumboStore.datatypesWithInvariants + aadlType._2.nameProvider.classifier)
       }
     }
 

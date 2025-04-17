@@ -51,12 +51,14 @@ object SymbolResolver {
       val annexLibInfos: ISZ[AnnexLibInfo] = processAnnexLibraries(model.annexLib, st, aadlTypes, annexVisitors, reporter)
 
       var annexClauseInfos: HashSMap[IdPath, ISZ[AnnexClauseInfo]] = HashSMap.empty
-      for (component <- st.componentMap.values) {
+      for (component <- st.componentMap.entries) {
         var ais: ISZ[AnnexClauseInfo] = ISZ()
-        for (annex <- component.component.annexes) {
-          ais = ais ++ processAnnexSubclauses(component, st, aadlTypes, annex, annexLibInfos, annexVisitors, reporter)
+        for (annex <- component._2.component.annexes) {
+          ais = ais ++ processAnnexSubclauses(component._2, st, aadlTypes, annex, annexLibInfos, annexVisitors, reporter)
         }
-        annexClauseInfos = annexClauseInfos + (component.path ~> ais)
+        if (ais.nonEmpty) {
+          annexClauseInfos = annexClauseInfos + (component._1 ~> ais)
+        }
       }
       return Some(st(annexClauseInfos = annexClauseInfos, annexLibInfos = annexLibInfos))
     }
@@ -197,7 +199,7 @@ object SymbolResolver {
           }
           val path: IdPath = if (parent.isEmpty) ISZ(name)
           else parent :+ name
-          (name, path, CommonUtil.splitClassifier(c.classifier.get))
+          (name, path,ISZ(c.classifier.get.name))
         case _ =>
           val classifierPath: IdPath =
             c.classifier match {
@@ -620,7 +622,10 @@ object SymbolResolver {
           abs
       }
 
-      componentMap = componentMap + (path ~> aadlComponent)
+      aadlComponent match {
+        case i:AadlData => componentMap = componentMap + classifierPath ~> aadlComponent
+        case _ => componentMap = componentMap + (path ~> aadlComponent)
+      }
 
       val instances: ISZ[AadlComponent] = if (classifierMap.contains(classifierPath)) classifierMap.get(classifierPath).get else ISZ()
       classifierMap = classifierMap + (classifierPath ~> (instances :+ aadlComponent))

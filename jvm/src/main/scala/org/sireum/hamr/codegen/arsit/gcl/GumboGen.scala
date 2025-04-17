@@ -245,8 +245,7 @@ object GumboGen {
   }
 
   @pure def getGclAnnexInfos(componentPath: IdPath, symbolTable: SymbolTable): ISZ[GclAnnexClauseInfo] = {
-    val aadlComponent = symbolTable.componentMap.get(componentPath).get
-    val annexInfos: ISZ[GclAnnexClauseInfo] = symbolTable.annexClauseInfos.get(aadlComponent.path) match {
+    val annexInfos: ISZ[GclAnnexClauseInfo] = symbolTable.annexClauseInfos.get(componentPath) match {
       case Some(annexInfos) =>
         annexInfos.filter(f => f.isInstanceOf[GclAnnexClauseInfo]).map(m => m.asInstanceOf[GclAnnexClauseInfo])
       case _ => ISZ()
