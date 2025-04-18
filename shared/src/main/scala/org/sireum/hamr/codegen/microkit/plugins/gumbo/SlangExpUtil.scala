@@ -305,31 +305,19 @@ object SlangExpUtil {
         case Exp.BinaryOp.CondOr => return op // ||
 
         case Exp.BinaryOp.And => // &
-          if (convertingToVerus) {
-            reporter.warn(posOpt, MicrokitCodegen.toolName,
-              "TODO: Verus does not appear to a have support for '&', using '&&' instead")
-            return Exp.BinaryOp.CondAnd
-          } else {
-            return op
-          }
+          return (
+            if (convertingToVerus) Exp.BinaryOp.CondAnd
+            else op)
 
         case Exp.BinaryOp.Or => // |
-          if (convertingToVerus) {
-            reporter.warn(posOpt, MicrokitCodegen.toolName,
-              "TODO: Verus does not appear to a have support for '|', using '||' instead")
-            return Exp.BinaryOp.CondOr
-          } else {
-            return op
-          }
+          return (
+            if (convertingToVerus) Exp.BinaryOp.CondOr
+            else op)
 
         case Exp.BinaryOp.Imply => // __>:
-          if (convertingToVerus) {
-            reporter.warn(posOpt, MicrokitCodegen.toolName,
-              "Verus does not have a logical implication operator, using '==>' instead")
-            return Exp.BinaryOp.CondImply
-          } else {
-            return op
-          }
+          return (
+            if (convertingToVerus) Exp.BinaryOp.CondImply
+            else op)
 
         case Exp.BinaryOp.CondImply => return op // ___>:
 
