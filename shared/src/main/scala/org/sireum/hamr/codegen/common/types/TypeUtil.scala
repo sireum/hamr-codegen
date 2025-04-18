@@ -148,8 +148,16 @@ object TypeUtil {
     return ops.StringOps(c.classifier.get.name).startsWith("Base_Types::")
   }
 
-  @pure def isBaseTypeH(a: AadlType): B = {
+  @pure def isBaseTypeA(a: AadlType): B = {
     return a.isInstanceOf[BaseType]
+  }
+
+  @pure def isBaseTypeS(s: String): B = {
+    return ops.StringOps(s).startsWith("Base_Types::")
+  }
+
+  @pure def isNormalBaseTypeS(s: String): B = {
+    return isBaseTypeS(s) && s != "Base_Types::String"
   }
 
   def isMissingType(c: ir.Component): B = {

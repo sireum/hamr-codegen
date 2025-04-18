@@ -60,6 +60,15 @@ object Marker {
 @datatype class Marker(val beginMarker: String,
                        val endMarker: String)
 
+@sig trait InternalResource extends FileResource {
+  def content: ST
+  def markers: ISZ[Marker]
+  def overwrite: B
+  def makeExecutable: B
+  def makeCRLF: B
+  def isDatatype: B
+}
+
 // Internal Resource
 @datatype class IResource(val dstPath: String,
                           val content: ST,
@@ -70,12 +79,17 @@ object Marker {
 
                           // isDataype indicates whether resource should be added to sergen/slangcheck
                           val isDatatype: B
-                         ) extends FileResource
+                         ) extends InternalResource
+
+@sig trait ExternalResource extends FileResource {
+  def srcPath: String
+  def symLink: B
+}
 
 // External Resource
 @datatype class EResource(val srcPath: String,
                           val dstPath: String,
-                          val symlink: B) extends FileResource
+                          val symLink: B) extends ExternalResource
 
 @sig trait ConfigResource extends Resource
 

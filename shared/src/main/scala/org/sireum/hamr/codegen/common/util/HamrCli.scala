@@ -207,9 +207,9 @@ import HamrCli._
           |                          The programming language for the launch file (expects
           |                           one of { Python, Xml }; default: Python)
           |    --invert-topic-binding
-          |                          By default, topic names are based on in ports, and fan
-          |                           out ports would have multiple publishers.  This option
-          |                           inverts that behavior."
+          |                          By default, topic names are based on in ports, and
+          |                           fan out ports would have multiple publishers.  This
+          |                           option inverts that behavior.
           |
           |Experimental Options:
           |-x, --experimental-options    
@@ -415,12 +415,12 @@ import HamrCli._
              case _ => return None()
            }
          } else if (arg == "--invert-topic-binding") {
-          val o: Option[B] = { j = j - 1; Some(!invertTopicBinding) }
-          o match {
-            case Some(v) => invertTopicBinding = v
-            case _ => return None()
-          }
-        } else if (arg == "-x" || arg == "--experimental-options") {
+           val o: Option[B] = { j = j - 1; Some(!invertTopicBinding) }
+           o match {
+             case Some(v) => invertTopicBinding = v
+             case _ => return None()
+           }
+         } else if (arg == "-x" || arg == "--experimental-options") {
            val o: Option[ISZ[String]] = parseStrings(args, j + 1, ';')
            o match {
              case Some(v) => experimentalOptions = v

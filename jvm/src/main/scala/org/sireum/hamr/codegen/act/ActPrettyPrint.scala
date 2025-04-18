@@ -245,7 +245,7 @@ import org.sireum.ops.StringOps
           EResource(
             srcPath = e.srcPath,
             dstPath = dstPath,
-            symlink = e.symlink
+            symLink = e.symLink
           )
       }
     })

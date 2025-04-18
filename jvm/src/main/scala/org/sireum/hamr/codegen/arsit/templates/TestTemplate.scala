@@ -4,7 +4,7 @@ package org.sireum.hamr.codegen.arsit.templates
 import org.sireum._
 import org.sireum.hamr.codegen.arsit.{Port, ProjectDirectories, Util}
 import org.sireum.hamr.codegen.common.CommonUtil
-import org.sireum.hamr.codegen.common.containers.FileResource
+import org.sireum.hamr.codegen.common.containers.{FileResource, Resource}
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.util.NameUtil.NameProvider
 import org.sireum.hamr.codegen.common.util.ResourceUtil
@@ -49,9 +49,9 @@ object TestTemplate {
   @pure def bridgeTestApis(basePackage: String,
                            names: NameProvider,
                            projectDirectories: ProjectDirectories,
-                           ports: ISZ[Port]): ISZ[FileResource] = {
+                           ports: ISZ[Port]): ISZ[Resource] = {
 
-    var resources: ISZ[FileResource] = ISZ()
+    var resources: ISZ[Resource] = ISZ()
     var concretePutParams: ISZ[ST] = ISZ()
     var concretePutBlocks: ISZ[ST] = ISZ()
     var concretePutScalaDoc: ISZ[ST] = ISZ()

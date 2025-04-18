@@ -3,10 +3,15 @@
 package org.sireum.hamr.codegen.common.types
 
 import org.sireum._
+import org.sireum.hamr.codegen.common.CommonUtil.TypeIdPath
 import org.sireum.hamr.ir
 
 @datatype class AadlTypes(val rawConnections: B,
-                          val typeMap: Map[String, AadlType])
+                          val typeMap: Map[String, AadlType]) {
+  @pure def getTypeByPath(path: TypeIdPath): AadlType = {
+    return typeMap.get(st"${(path, "::")}".render).get
+  }
+}
 
 @sig trait AadlType {
 

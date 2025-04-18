@@ -66,10 +66,10 @@ object ResourceUtil {
     return createExeResource(path, st"${content}", overwrite)
   }
 
-  def createExternalResource(srcPath: String, dstPath: String, symlink: B): FileResource = {
+  def createExternalResource(srcPath: String, dstPath: String, symLink: B): FileResource = {
     return EResource(
       srcPath = srcPath,
       dstPath = dstPath,
-      symlink = symlink)
+      symLink = symLink)
   }
 }

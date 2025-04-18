@@ -9,7 +9,7 @@ import org.sireum.hamr.codegen.arsit.templates.SeL4NixTemplate
 import org.sireum.hamr.codegen.arsit.util.ReporterUtil.reporter
 import org.sireum.hamr.codegen.arsit.util.{ArsitOptions, ArsitPlatform}
 import org.sireum.hamr.codegen.common._
-import org.sireum.hamr.codegen.common.containers.FileResource
+import org.sireum.hamr.codegen.common.containers.Resource
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.templates.{CommentTemplate, StackFrameTemplate}
 import org.sireum.hamr.codegen.common.templates.StackFrameTemplate.{SF, SF_LAST}
@@ -137,12 +137,12 @@ object NixGen {
     return (extHEntries, extCEntries)
   }
 
-  def genExtensionFiles(threadOrDevice: AadlThreadOrDevice, names: NameProvider, ports: ISZ[Port]): (ISZ[Os.Path], ISZ[FileResource]) = {
+  def genExtensionFiles(threadOrDevice: AadlThreadOrDevice, names: NameProvider, ports: ISZ[Port]): (ISZ[Os.Path], ISZ[Resource]) = {
 
     val rootExtDir = Os.path(dirs.cExt_c_Dir)
 
     var extensionFiles: ISZ[Os.Path] = ISZ()
-    var resources: ISZ[FileResource] = ISZ()
+    var resources: ISZ[Resource] = ISZ()
 
     if (arsitOptions.excludeImpl || symbolTable.hasCakeMLComponents()) {
 
@@ -805,7 +805,6 @@ object NixGenDispatch {
       case _ =>
         ArsitResult(
           resources = previousPhase.resources,
-          auxResources = previousPhase.auxResources,
           maxPort = previousPhase.maxPort,
           maxComponent = previousPhase.maxComponent,
           maxConnection = previousPhase.maxConnection

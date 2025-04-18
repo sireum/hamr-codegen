@@ -3,7 +3,7 @@ package org.sireum.hamr.codegen.arsit.bts
 
 import org.sireum._
 import org.sireum.hamr.codegen.arsit.plugin.BehaviorProviderPlugin
-import org.sireum.hamr.codegen.common.containers.{EResource, IResource, FileResource}
+import org.sireum.hamr.codegen.common.containers.{EResource, IResource, Resource}
 import org.sireum.hamr.codegen.common.symbols.{AadlThreadOrDevice, AnnexClauseInfo, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.ir._
@@ -17,7 +17,7 @@ object BlessBehaviorProviderPlugin {
   }
 }
 
-@record class BlessBehaviorProviderPlugin extends BehaviorProviderPlugin {
+@datatype class BlessBehaviorProviderPlugin extends BehaviorProviderPlugin {
 
   @pure def name: String = {
     return "BLESS Behavior Provider Provider"
@@ -34,11 +34,11 @@ object BlessBehaviorProviderPlugin {
                                       componentDirectory: ISZ[String],
                                       symbolTable: SymbolTable,
                                       aadlTypes: AadlTypes,
-                                      reporter: Reporter): ISZ[FileResource] = {
+                                      reporter: Reporter): ISZ[Resource] = {
 
     val behaviorProviders = BlessBehaviorProviderPlugin.getBTSSubclauseBehaviorProvider(component)
 
-    val ret: ISZ[FileResource] = behaviorProviders.flatMap((m: BTSSubclauseBehaviorProvider) =>
+    val ret: ISZ[Resource] = behaviorProviders.flatMap((m: BTSSubclauseBehaviorProvider) =>
       m.values.map((r: BTSResource) =>
         r match {
           case t: BTSText =>
@@ -55,7 +55,7 @@ object BlessBehaviorProviderPlugin {
             EResource(
               srcPath = p.path,
               dstPath = filename,
-              symlink = T)
+              symLink = T)
         }
       ))
 

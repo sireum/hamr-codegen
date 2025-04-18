@@ -3,12 +3,11 @@ package org.sireum.hamr.codegen.microkit.util
 
 import org.sireum._
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen
-import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
 import org.sireum.hamr.codegen.microkit.util.Util.TAB
 
 object MakefileTemplate {
 
-  def mainMakefile: ST = {
+  def mainMakefile(targets: ISZ[MakefileTarget]): ST = {
     val content =
       st"""${Util.doNotEditMakefile}
           |
@@ -54,6 +53,8 @@ object MakefileTemplate {
           |$${TOP_BUILD_DIR}/Makefile: $$(SYSTEM_MAKEFILE)
           |	mkdir -p $${TOP_BUILD_DIR}
           |	cp $$(SYSTEM_MAKEFILE) $${TOP_BUILD_DIR}/Makefile
+          |
+          |${(for(t <- targets) yield t.prettyST, "\n\n")}
           |
           |FORCE:
           |"""

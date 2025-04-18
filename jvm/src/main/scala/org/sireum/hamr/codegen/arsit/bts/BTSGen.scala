@@ -45,7 +45,7 @@ import org.sireum.ops._
 
   var vizEntries: ISZ[ST] = ISZ()
 
-  var resources: ISZ[FileResource] = ISZ()
+  var resources: ISZ[Resource] = ISZ()
 
   def process(a: BTSBLESSAnnexClause): BTSResults = {
     if (a.assertions.nonEmpty) {
@@ -155,7 +155,6 @@ import org.sireum.ops._
 
     return BTSResults(
       resources = resources,
-      auxResources = ISZ(),
       maxPort = -1,
       maxComponent = -1,
       maxConnection = -1,
@@ -854,8 +853,7 @@ import org.sireum.ops._
                           initExp: ST
                          )
 
-@datatype class BTSResults(val resources: ISZ[FileResource],
-                           val auxResources: ISZ[Resource],
+@datatype class BTSResults(val resources: ISZ[Resource],
                            val maxPort: Z,
                            val maxComponent: Z,
                            val maxConnection: Z,

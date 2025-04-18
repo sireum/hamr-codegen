@@ -26,7 +26,7 @@ import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
 
   val basePackage: String = arsitOptions.packageName
 
-  var resources: ISZ[FileResource] = ISZ()
+  var resources: ISZ[Resource] = ISZ()
 
   var transpilerOptions: ISZ[SireumSlangTranspilersCOption] = ISZ()
 
@@ -40,8 +40,7 @@ import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
     gen()
 
     return ArsitResult(
-      resources = previousPhase.resources() ++ resources,
-      auxResources = previousPhase.auxResources ++ transpilerOptions.asInstanceOf[ISZ[Resource]],
+      resources = previousPhase.resources() ++ resources ++ transpilerOptions.asInstanceOf[ISZ[Resource]],
       maxPort = previousPhase.maxPort,
       maxComponent = previousPhase.maxComponent,
       maxConnection = previousPhase.maxConnection)

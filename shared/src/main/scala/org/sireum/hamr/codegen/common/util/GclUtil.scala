@@ -9,6 +9,7 @@ import org.sireum.lang.{ast => AST}
 import org.sireum.message.{FlatPos, Position, Reporter}
 import org.sireum.parser.ParseTree
 import org.sireum.parser.ParseTree.BinaryPrecedenceOps
+import org.sireum.U32._
 
 object GclUtil {
 
@@ -36,13 +37,7 @@ object GclUtil {
     override def isRightAssoc(op: Exp): B = {
       op match {
         case AST.Exp.LitString(value) =>
-          val ret: B = value match {
-            case "-->:" => T
-            case "->:" => T
-            case "+:" => T
-            case _ => F
-          }
-          return ret
+          return ops.StringOps(value).endsWith(":")
         case _ =>
           ureporter.error(op.posOpt, messageKind, s"isRightAssoc: Was expecting a LitString holding a binary operator but received: ${op.string}")
           return F
@@ -115,7 +110,25 @@ object GclUtil {
           "???"
       }
       val posOpt = mergePos(left.fullPosOpt, right.fullPosOpt)
-      return AST.Exp.Binary(left, o, right, AST.ResolvedAttr(posOpt = posOpt, resOpt = None(), typedOpt = None()), None())
+      var opPosOpt: Option[Position] =
+        if (op.posOpt.nonEmpty) op.posOpt
+        else if (left.posOpt.nonEmpty) left.posOpt
+        else right.posOpt
+      (left.posOpt, right.posOpt) match {
+        case (Some(leftPos: FlatPos), Some(rightPos: FlatPos)) if op.posOpt.isEmpty =>
+          val length32 = (rightPos.offset32 - u32"1") - (leftPos.offset32 + leftPos.length32 + u32"1");
+          opPosOpt = Some(FlatPos(
+            uriOpt = leftPos.uriOpt,
+            beginLine32 = leftPos.endLine32,
+            beginColumn32 = leftPos.endColumn32 + leftPos.length32 + u32"1",
+            endLine32 = rightPos.beginLine32,
+            endColumn32 = rightPos.beginColumn32 - u32"1",
+            offset32 = leftPos.offset32 + leftPos.length32 + u32"1",
+            length32 = length32
+          ));
+        case _ =>
+      }
+      return AST.Exp.Binary(left, o, right, AST.ResolvedAttr(posOpt = posOpt, resOpt = None(), typedOpt = None()), opPosOpt)
     }
 
     override def transform(builder: BinaryBuilder, tree: Exp): Exp = {

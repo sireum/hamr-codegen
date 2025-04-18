@@ -6,6 +6,7 @@ import org.sireum.Os.Path
 import org.sireum.hamr.codegen.act.util.Util.ACT_INSTRUCTIONS_MESSAGE_KIND
 import org.sireum.hamr.codegen.arsit.Util.ARSIT_INSTRUCTIONS_MESSAGE_KIND
 import org.sireum.hamr.codegen.common.containers._
+import org.sireum.hamr.codegen.common.CommonUtil.Store
 import org.sireum.hamr.codegen.common.plugin.Plugin
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
 import org.sireum.hamr.codegen.common.types.AadlTypes
@@ -26,16 +27,27 @@ object CodeGen {
   def codeGen(model: Aadl,
               shouldWriteOutResources: B,
               options: CodegenOption,
-              plugins: MSZ[Plugin],
+              plugins: ISZ[Plugin],
+              store: Store,
               reporter: Reporter,
               transpilerCallback: (SireumSlangTranspilersCOption, Reporter) => Z,
               proyekIveCallback: SireumProyekIveOption => Z,
               sergenCallback: (SireumToolsSergenOption, Reporter) => Z,
-              slangCheckCallback: (SireumToolsSlangcheckGeneratorOption, Reporter) => Z): CodeGenResults = {
+              slangCheckCallback: (SireumToolsSlangcheckGeneratorOption, Reporter) => Z): (CodeGenResults, Store) = {
 
+    @pure def finalizePlugins(aadlTypes: Option[AadlTypes], symbolTable: Option[SymbolTable],
+                              codegenResults: CodeGenResults, currentStore: Store): (CodeGenResults, Store) = {
+      var localStore = currentStore
+      for(p <- plugins) {
+        localStore = p.finalizePlugin(model, aadlTypes, symbolTable, codegenResults, localStore, options, reporter)
+      }
+      return (codegenResults, localStore)
+    }
+
+    var localStore = store
     if (model.components.size != 1) {
       reporter.error(None(), toolName, s"Expecting exactly one root component but found ${model.components.size}")
-      return CodeGenResults.empty
+      return (CodeGenResults.empty, localStore)
     }
 
     var modOptions = options
@@ -97,48 +109,49 @@ object CodeGen {
     if (modOptions.runtimeMonitoring && isTranspilerProject) {
       reporter.error(None(), toolName, "Runtime monitoring support for transpiled projects has not been added yet. Disable runtime-monitoring before transpiling")
       reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
-      return CodeGenResults.empty
+      return finalizePlugins(None(), None(), CodeGenResults.empty, localStore)
     }
 
-    var arsitResources: ISZ[FileResource] = ISZ()
-    var arsitAuxResources: ISZ[Resource] = ISZ()
+    var arsitResources: ISZ[Resource] = ISZ()
 
     var wroteOutArsitResources: B = F
 
     val result: Option[ModelElements] = ModelUtil.resolve(model, model.components(0).identifier.pos, packageName, modOptions, reporter)
     reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
     if (result.isEmpty) {
-      return CodeGenResults.empty
+      return finalizePlugins(None(), None(), CodeGenResults.empty, localStore)
     }
 
     val (rmodel, aadlTypes, symbolTable): (Aadl, AadlTypes, SymbolTable) = (result.get.model, result.get.types, result.get.symbolTable)
 
     if (modOptions.runtimeMonitoring && symbolTable.getThreads().isEmpty) {
       reporter.error(None(), toolName, "Model must contain threads in order to enable runtime monitoring")
-      return CodeGenResults.empty
+      return finalizePlugins(Some(aadlTypes), Some(symbolTable), CodeGenResults.empty, localStore)
     }
 
     if (~reporter.hasError && runRos2) {
-      val results = Ros2Codegen().run(rmodel, modOptions, aadlTypes, symbolTable, plugins, reporter)
+      val results = Ros2Codegen().run(rmodel, modOptions, aadlTypes, symbolTable, plugins, localStore, reporter)
+      localStore = results._2
       if (!reporter.hasError) {
-        writeOutResources(results.fileResources, T, reporter)
+        writeOutResources(results._1.resources, T, reporter)
       }
       if (!modOptions.parseableMessages) {
         reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
       }
-      return CodeGenResults(resources = results.fileResources, auxResources = ISZ())
+      return finalizePlugins(Some(aadlTypes), Some(symbolTable), CodeGenResults(resources = results._1.resources), localStore)
     }
 
     if (!reporter.hasError && runMicrokit) {
       reporter.info(None(), toolName, "Generating Microkit artifacts...")
-      val results = MicrokitCodegen().run(rmodel, modOptions, aadlTypes, symbolTable, plugins, reporter)
+      val results = MicrokitCodegen().run(rmodel, modOptions, aadlTypes, symbolTable, plugins, store, reporter)
+      localStore = results._2
       if (!reporter.hasError) {
-        writeOutResources(results.resources, F, reporter)
+        writeOutResources(results._1.resources, F, reporter)
       }
       if (!modOptions.parseableMessages) {
         reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
       }
-      return results
+      return finalizePlugins(Some(aadlTypes), Some(symbolTable), results._1, localStore)
     }
 
     if (!reporter.hasError && runArsit) {
@@ -175,16 +188,16 @@ object CodeGen {
       reporter.info(None(), toolName, "Generating Slang artifacts...")
       reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
 
-      val results = arsit.Arsit.run(rmodel, opt, aadlTypes, symbolTable, plugins, reporter)
+      val results = arsit.Arsit.run(rmodel, opt, aadlTypes, symbolTable, plugins, store, reporter)
+      localStore = results._2
 
-      arsitResources = arsitResources ++ results.resources
-      arsitAuxResources = arsitAuxResources ++ results.auxResources
+      arsitResources = arsitResources ++ results._1.resources
 
       reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ(ARSIT_INSTRUCTIONS_MESSAGE_KIND))
 
       arsitResources = removeDuplicates(arsitResources, reporter)
 
-      val sergenConfigs = Resource.projectSergenConfigs(arsitAuxResources)
+      val sergenConfigs = Resource.projectSergenConfigs(arsitResources)
       if (!reporter.hasError && isSlangProject && sergenConfigs.nonEmpty &&
         !ExperimentalOptions.disableSergen(modOptions.experimentalOptions) &&
         !modOptions.noEmbedArt // only run sergen and slangcheck when art is embedded
@@ -206,7 +219,7 @@ object CodeGen {
         }
       }
 
-      val slangCheckConfigs = Resource.projectSlangCheckConfigs(arsitAuxResources)
+      val slangCheckConfigs = Resource.projectSlangCheckConfigs(arsitResources)
       if (!reporter.hasError && isSlangProject && slangCheckConfigs.nonEmpty &&
         !ExperimentalOptions.disableSlangCheck(modOptions.experimentalOptions) &&
         !modOptions.noEmbedArt // only run sergen and slangcheck when art is embedded
@@ -280,7 +293,7 @@ object CodeGen {
           reporter.info(None(), toolName, "Transpiling project ...")
           reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
 
-          for (transpilerConfig <- Resource.projectTranspilerConfigs(results.auxResources) if !reporter.hasError) {
+          for (transpilerConfig <- Resource.projectTranspilerConfigs(results._1.resources) if !reporter.hasError) {
             // CTranspiler prints all the messages in the passed in reporter so
             // create a new one for each config
             val transpilerReporter = Reporter.create
@@ -292,8 +305,7 @@ object CodeGen {
       }
     }
 
-    var actResources: ISZ[FileResource] = ISZ()
-    var actAuxResources: ISZ[Resource] = ISZ()
+    var actResources: ISZ[Resource] = ISZ()
 
     if (!reporter.hasError && runACT) {
 
@@ -341,9 +353,9 @@ object CodeGen {
       printMessages(reporter.errors, T, 0, ISZ())
     }
 
-    return CodeGenResults(
-      resources = arsitResources ++ actResources,
-      auxResources = arsitAuxResources ++ actAuxResources)
+    return finalizePlugins(
+      Some(aadlTypes), Some(symbolTable),
+      CodeGenResults(resources = arsitResources ++ actResources), localStore)
   }
 
   def printMessages(reporterMessages: ISZ[Message], verbose: B, messageIndex: Z, kindsToFilterOut: ISZ[String]): Z = {
@@ -438,8 +450,8 @@ object CodeGen {
 
   // With invertMarkers enabled, edits made to the existing file within the markers will be carried over into the
   // freshly generated file.  With it disabled, edits made outside of the markers will be carried over.
-  def writeOutResources(resources: IS[Z, FileResource], invertMarkers: B, reporter: Reporter): Unit = {
-    def render(i: IResource): String = {
+  def writeOutResources(resources: ISZ[Resource], invertMarkers: B, reporter: Reporter): Unit = {
+    def render(i: InternalResource): String = {
       val ret: String = {
         val lineSep: String = if (Os.isWin) "\r\n" else "\n" // ST render uses System.lineSep
         val replace: String = if (i.makeCRLF) "\r\n" else "\n"
@@ -449,97 +461,106 @@ object CodeGen {
     }
 
     for (r <- resources) {
-      val _p = Os.path(r.dstPath).canon
-      val p = _p.canon
-      assert(!p.exists || p.isFile)
-      p.up.mkdirAll()
       r match {
-        case i: IResource =>
-          if (i.overwrite || !p.exists) {
-            val content = render(i)
-            p.writeOver(content)
-            reporter.info(None(), toolName, s"Wrote: ${p}")
-            if (i.makeExecutable) {
-              p.chmodAll("700")
-              reporter.info(None(), toolName, s"Made ${p} executable")
-            }
-          } else if (p.exists && i.markers.nonEmpty) {
-            val newContent = render(i)
-            val oldSections = StringUtil.collectSections(p.read, toolName, i.markers, reporter)
-            val newSections = StringUtil.collectSections(newContent, toolName, i.markers, reporter)
-
-            val missingMarkers = i.markers.filter((m: Marker) => !ops.ISZOps(oldSections.keys).contains(m))
-            if (missingMarkers.nonEmpty) {
-              val fixme = p.up / s"${p.name}_fixme"
-              fixme.writeOver(newContent)
-              val msg =
-                st"""Existing file did not contain the following markers. Copy the markers/content found in ${fixme.toUri}
-                    |to the corresponding locations in ${p.toUri}
-                    |
-                    |  ${(missingMarkers, "\n")}"""
-              reporter.error(None(), toolName, msg.render)
-            } else {
-              if (invertMarkers) {
-                val replacements: ISZ[(Z, Z, String)] = newSections.entries.map((newEntry: (Marker, (Z, Z, String))) =>
-                  ((newEntry._2._1, newEntry._2._2, oldSections.get(newEntry._1).get._3)))
-                val content: String = StringUtil.replaceSections(newContent, replacements, reporter)
+        case r: FileResource =>
+          val _p = Os.path(r.dstPath).canon
+          val p = _p.canon
+          assert(!p.exists || p.isFile)
+          p.up.mkdirAll()
+          r match {
+            case i: IResource =>
+              if (i.overwrite || !p.exists) {
+                val content = render(i)
                 p.writeOver(content)
+                reporter.info(None(), toolName, s"Wrote: ${p}")
+                if (i.makeExecutable) {
+                  p.chmodAll("700")
+                  reporter.info(None(), toolName, s"Made ${p} executable")
+                }
+              } else if (p.exists && i.markers.nonEmpty) {
+                val newContent = render(i)
+                val oldSections = StringUtil.collectSections(p.read, toolName, i.markers, reporter)
+                val newSections = StringUtil.collectSections(newContent, toolName, i.markers, reporter)
+
+                val missingMarkers = i.markers.filter((m: Marker) => !ops.ISZOps(oldSections.keys).contains(m))
+                if (missingMarkers.nonEmpty) {
+                  val fixme = p.up / s"${p.name}_fixme"
+                  fixme.writeOver(newContent)
+                  val msg =
+                    st"""Existing file did not contain the following markers. Copy the markers/content found in ${fixme.toUri}
+                        |to the corresponding locations in ${p.toUri}
+                        |
+                        |  ${(missingMarkers, "\n")}"""
+                  reporter.error(None(), toolName, msg.render)
+                } else {
+                  if (invertMarkers) {
+                    val replacements: ISZ[(Z, Z, String)] = newSections.entries.map((newEntry: (Marker, (Z, Z, String))) =>
+                      ((newEntry._2._1, newEntry._2._2, oldSections.get(newEntry._1).get._3)))
+                    val content: String = StringUtil.replaceSections(newContent, replacements, reporter)
+                    p.writeOver(content)
+                  } else {
+                    val replacements: ISZ[(Z, Z, String)] = oldSections.entries.map((oldEntry: (Marker, (Z, Z, String))) =>
+                      ((oldEntry._2._1, oldEntry._2._2, newSections.get(oldEntry._1).get._3)))
+                    val content: String = StringUtil.replaceSections(p.read, replacements, reporter)
+                    p.writeOver(content)
+                  }
+                  reporter.info(None(), toolName, s"Wrote and preserved existing content: ${p}")
+                }
+
               } else {
-                val replacements: ISZ[(Z, Z, String)] = oldSections.entries.map((oldEntry: (Marker, (Z, Z, String))) =>
-                  ((oldEntry._2._1, oldEntry._2._2, newSections.get(oldEntry._1).get._3)))
-                val content: String = StringUtil.replaceSections(p.read, replacements, reporter)
-                p.writeOver(content)
+                reporter.info(None(), toolName, s"File exists, will not overwrite: ${p}")
               }
-              reporter.info(None(), toolName, s"Wrote and preserved existing content: ${p}")
-            }
-
-          } else {
-            reporter.info(None(), toolName, s"File exists, will not overwrite: ${p}")
+            case e: EResource =>
+              if (e.symLink) {
+                halt("sym linking not yet supported")
+              } else {
+                Os.path(e.srcPath).copyOverTo(p)
+                reporter.info(None(), toolName, s"Copied: ${e.srcPath} to ${p}")
+              }
           }
-        case e: EResource =>
-          if (e.symlink) {
-            halt("sym linking not yet supported")
-          } else {
-            Os.path(e.srcPath).copyOverTo(p)
-            reporter.info(None(), toolName, s"Copied: ${e.srcPath} to ${p}")
-          }
+        case _ =>
       }
     }
   }
 
-  def removeDuplicates(resources: ISZ[FileResource], reporter: Reporter): ISZ[FileResource] = {
-    var m: HashSMap[String, FileResource] = HashSMap.empty[String, FileResource]
+  def removeDuplicates(resources: ISZ[Resource], reporter: Reporter): ISZ[Resource] = {
+    var m: HashSMap[String, Resource] = HashSMap.empty[String, Resource]
+    var others: ISZ[Resource] = ISZ()
     for (r <- resources) {
-      if (m.contains(r.dstPath)) {
-        val entry = m.get(r.dstPath).get
+      r match {
+        case r: FileResource =>if (m.contains(r.dstPath)) {
+          val entry = m.get(r.dstPath).get
 
-        // sanity checks
-        (r, entry) match {
-          case ((ei: EResource, ci: EResource)) =>
-            if (ei.srcPath != ci.srcPath) {
-              reporter.warn(None(), toolName, s"srcPath for ${r.dstPath} not the same for duplicate entries")
-            }
-            if (ei.symlink != ci.symlink) {
-              reporter.warn(None(), toolName, s"symLink flag for ${r.dstPath} not the same for duplicate entries")
-            }
-          case ((ri: IResource, ci: IResource)) =>
-            if (ri.content.render != ci.content.render) {
-              reporter.warn(None(), toolName, s"content of ${r.dstPath} not the same for duplicate entries")
-            }
-            if (ri.overwrite != ci.overwrite) {
-              reporter.warn(None(), toolName, s"overwrite flag for ${r.dstPath} not the same for duplicate entries")
-            }
-            if (ri.makeExecutable != ci.makeExecutable) {
-              reporter.warn(None(), toolName, s"makeExecutable flag for ${r.dstPath} not the same for duplicate entries")
-            }
+          // sanity checks
+          (r, entry) match {
+            case ((ei: ExternalResource, ci: ExternalResource)) =>
+              if (ei.srcPath != ci.srcPath) {
+                reporter.warn(None(), toolName, s"srcPath for ${r.dstPath} not the same for duplicate entries")
+              }
+              if (ei.symLink != ci.symLink) {
+                reporter.warn(None(), toolName, s"symLink flag for ${r.dstPath} not the same for duplicate entries")
+              }
+            case ((ri: IResource, ci: IResource)) =>
+              if (ri.content.render != ci.content.render) {
+                reporter.warn(None(), toolName, s"content of ${r.dstPath} not the same for duplicate entries")
+              }
+              if (ri.overwrite != ci.overwrite) {
+                reporter.warn(None(), toolName, s"overwrite flag for ${r.dstPath} not the same for duplicate entries")
+              }
+              if (ri.makeExecutable != ci.makeExecutable) {
+                reporter.warn(None(), toolName, s"makeExecutable flag for ${r.dstPath} not the same for duplicate entries")
+              }
 
-          case _ => halt(s"Infeasible: resource types not the same")
+            case _ => halt(s"Infeasible: resource types not the same")
+          }
+        } else {
+          m = m + (r.dstPath ~> r)
         }
-      } else {
-        m = m + (r.dstPath ~> r)
+        case _ =>
+          others = others :+ r
       }
     }
-    return m.values
+    return m.values ++ others
   }
 
   def getSystemRoot(model: Aadl, workspaceRootDir: Option[String]): Os.Path = {

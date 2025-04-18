@@ -113,7 +113,7 @@ object GumboGen {
       val ret: ST =
         st"""// case ${caseId}
             |${descriptor}
-            |($requires) -->: ($ensures)"""
+            |($requires) ___>: ($ensures)"""
       return ret
     }
   }
@@ -127,7 +127,8 @@ object GumboGen {
   @datatype class GclEntryPointSporadicCompute(val markers: ISZ[Marker],
                                                val handlers: HashSMap[AadlPort, GclComputeEventHolder]) extends GclEntryPointContainer
 
-  @datatype class GclApiContributions(val objectContributions: ISZ[ST],
+  @datatype class GclApiContributions(val apiImportContributions: ISZ[String],
+                                      val objectContributions: ISZ[ST],
                                       val datatypeContributions: ISZ[ST],
                                       val requiresContributions: ISZ[ST],
                                       val ensuresContributions: ISZ[ST])
@@ -140,7 +141,7 @@ object GumboGen {
   val InitializesRequiresMarker: Marker = Marker("// BEGIN INITIALIZES REQUIRES", "// END INITIALIZES REQUIRES")
   val InitializesFlowsMarker: Marker = Marker("// BEGIN INITIALIZES FLOWS", "// END INITIALIZES FLOWS")
 
-  var imports: ISZ[String] = ISZ()
+  var imports: ISZ[String] = ISZ() // singleton global var
 
   def resetImports(): Unit = {
     imports = ISZ()
@@ -244,8 +245,7 @@ object GumboGen {
   }
 
   @pure def getGclAnnexInfos(componentPath: IdPath, symbolTable: SymbolTable): ISZ[GclAnnexClauseInfo] = {
-    val aadlComponent = symbolTable.componentMap.get(componentPath).get
-    val annexInfos: ISZ[GclAnnexClauseInfo] = symbolTable.annexClauseInfos.get(aadlComponent.path) match {
+    val annexInfos: ISZ[GclAnnexClauseInfo] = symbolTable.annexClauseInfos.get(componentPath) match {
       case Some(annexInfos) =>
         annexInfos.filter(f => f.isInstanceOf[GclAnnexClauseInfo]).map(m => m.asInstanceOf[GclAnnexClauseInfo])
       case _ => ISZ()
@@ -693,7 +693,7 @@ object GumboGen {
 
         val eventPort = optInEvent.get
 
-        var handlerRequires = generalRequires
+        val handlerRequires = generalRequires
 
         if (generalFlows.nonEmpty) {
           val marker = genComputeMarkerCreator(eventPort.identifier, "FLOW")
@@ -862,7 +862,6 @@ object GumboGen {
       val key = st"${(paramTypeName, "::")}".render
 
       val aadlType = GclResolver.getAadlType(key, aadlTypes, p.id.attr.posOpt, Reporter.create).nameProvider
-      //val aadlType = aadlTypes.typeMap.get(key).get.nameProvider
       s"${p.id.value}: ${aadlType.qualifiedReferencedTypeName}"
     })
 
@@ -988,11 +987,14 @@ object GumboGen {
       var requiresContributions: ISZ[ST] = ISZ()
       var ensuresContributions: ISZ[ST] = ISZ()
 
+      var apiImports: ISZ[String] = ISZ()
+
       integration match {
         case Some(spec) =>
           val portInvariantMethodName = GumboGen.convertToMethodName(spec.id)
 
-          imports = imports ++ GumboGenUtil.resolveLitInterpolateImports(spec.exp)
+          apiImports = apiImports ++ GumboGenUtil.resolveLitInterpolateImports(spec.exp)
+          imports = imports ++ apiImports
 
           var assumeOrGuar: String = "assume"
           spec match {
@@ -1032,6 +1034,7 @@ object GumboGen {
       }
 
       ret = ret + (port ~> GclApiContributions(
+        apiImportContributions = apiImports,
         objectContributions = objectContributions,
         datatypeContributions = datatypeContributions,
         requiresContributions = requiresContributions,

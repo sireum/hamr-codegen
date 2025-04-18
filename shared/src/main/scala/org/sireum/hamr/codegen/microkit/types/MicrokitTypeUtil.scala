@@ -3,82 +3,34 @@ package org.sireum.hamr.codegen.microkit.types
 
 import org.sireum._
 import org.sireum.CircularQueue.Policy
-import org.sireum.hamr.codegen.common.symbols.{AadlFeatureData, GclAnnexClauseInfo, GclAnnexLibInfo, SymbolTable}
+import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlEventPort, AadlFeatureData, AadlPort, GclAnnexClauseInfo, GclAnnexLibInfo, SymbolTable}
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypeNameProvider, AadlTypes, ArrayType, BaseType, BitType, EnumType, RecordType, SlangType, TypeKind, TypeUtil}
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen
 import org.sireum.hamr.codegen.microkit.connections._
+import org.sireum.hamr.codegen.microkit.plugins.types.{CRustTypePlugin, CRustTypeProvider, CTypeProvider}
 import org.sireum.hamr.codegen.microkit.util.Util
 import org.sireum.hamr.codegen.microkit.util.Util.brand
 import org.sireum.hamr.ir
 import org.sireum.hamr.ir.GclStateVar
 import org.sireum.lang.ast.Param
 import org.sireum.message.{Position, Reporter}
+import org.sireum.hamr.codegen.microkit.{rust => RAST}
 
 object MicrokitTypeUtil {
 
-  @sig trait TypeProvider {
-    def name: String
-
-    def aadlType: AadlType
-  }
-
-  @sig trait cLangTypeProvider extends TypeProvider {
-    def name: String = {
-      return cQualifiedName
-    }
-
-    def cSimpleName: String
-    def cQualifiedName: String
-
-    def cTypeDeclaration: Option[ST]
-
-    def cDefaultValue: ST
-  }
-
-  @sig trait rustLangTypeProvider extends TypeProvider {
-
-    def name: String = {
-      return rustQualifiedName
-    }
-
-    def rustName: String
-    def rustQualifiedName: String
-
-    def rustTypeDeclaration: Option[ST]
-
-    // future work: T if the rust type is not based off a C type
-    @strictpure def pureRust: B = F
-  }
-
-  @datatype class cTypeProvider (val aadlType: AadlType,
-                                 val cSimpleName: String,
-                                 val cQualifiedName: String,
-                                 val cTypeDeclaration: Option[ST],
-                                 val cDefaultValue: ST) extends cLangTypeProvider
-
-  @datatype class rustTypeProvider(val aadlType: AadlType,
-                                   val rustName: String,
-                                   val rustQualifiedName: String,
-                                   val rustTypeDeclaration: Option[ST]) extends rustLangTypeProvider
-
-  @datatype class UberTypeProvider(val c: cTypeProvider,
-                                   val rust: rustTypeProvider)
-
-  val cratesDir: String = "crates"
-
-  val rustTypesDir: String = s"$cratesDir/types"
+  val rustBoolType: RAST.Ty = RAST.TyPath(ISZ(ISZ("bool")), None())
 
   val cTypesDir: String = "types"
 
   val allTypesFilenamePrefix: String = "types"
   val cAllTypesFilename: String = brand(s"${allTypesFilenamePrefix}.h")
-  val rustAllTypesFilename: String = brand(s"${allTypesFilenamePrefix}.rs")
 
   val aadlTypesFilenamePrefix: String = brand("aadl_types")
   val cAadlTypesFilename: String = s"${aadlTypesFilenamePrefix}.h"
-  val rustAadlTypesFilename: String = s"${aadlTypesFilenamePrefix}.rs"
 
   val make_TYPE_OBJS: String = "TYPE_OBJS"
+
+  val eventPortTypeName: String = "AADL_EVENT_PORT_TYPE"
 
   val eventPortType: AadlType = {
     BaseType(
@@ -95,11 +47,9 @@ object MicrokitTypeUtil {
   }
 
   val cTypesFilename: String = brand(s"types.h")
-  val rustTypesFilename: String = brand(s"types.rs")
 
   val eventCounterFilenamePrefix: String = brand("event_counter")
   val cEventCounterFilename: String = s"$eventCounterFilenamePrefix.h"
-  val rustEventCounterFilename: String = s"$eventCounterFilenamePrefix.rs"
 
   val eventCounterTypename: String = brand("event_counter_t")
 
@@ -112,20 +62,6 @@ object MicrokitTypeUtil {
        |
        |typedef _Atomic uintmax_t ${eventCounterTypename};
        |"""
-
-  val rustEventCounterContent: ST =
-    st"""${Util.doNotEdit}
-        |
-        |pub type $eventCounterTypename = cty::uintmax_t;
-        |"""
-
-  val rustMicrokitTypesPrefix: String = brand("microkit_types")
-  val rustMicrokitTypesFilename: String = s"${rustMicrokitTypesPrefix}.rs"
-  val rustMicrokitTypesContent: ST =
-    st"""${Util.doNotEdit}
-        |
-        |pub type microkit_channel = cty::uint32_t;
-        |"""
 
   val rustCargoContent: ST = st"""${Util.safeToEditMakefile}
                                  |
@@ -140,260 +76,153 @@ object MicrokitTypeUtil {
                                  |[lib]
                                  |path = "src/sb_types.rs""""
 
-  def getTypeApiContributions(aadlType: AadlType, typeStore: TypeStore, queueSize: Z): TypeApiContributions = {
-    val queueElementTypeName = typeStore.getCTypeName(aadlType)
+  @pure def getCRustTypeDefaultValue(a: AadlType, cRustTypeProvider: CRustTypeProvider): String = {
+    cRustTypeProvider.getRepresentativeType(a) match {
+      case b: BaseType => return MicrokitTypeUtil.getRustPrimitiveDefaultValue(a.name)
+      case _ if a.name == "Base_Types::String" => return "[0; Base_Types::String::Base_Types_String_DIM_0]"
+      case at: ArrayType =>
+        assert (at.dimensions.size == 1, "Need to handle multi-dim arrays")
+        val np = cRustTypeProvider.getTypeNameProvider(at)
+        val dim0 = CRustTypePlugin.getArrayDimName(np, 0)
+        val baseTypeDefault = getCRustTypeDefaultValue(at.baseType, cRustTypeProvider)
+        val dimConst = st"${(ops.ISZOps(np.qualifiedRustNameS).dropRight(1), "::")}"
+        return s"[$baseTypeDefault; $dimConst::$dim0]"
+      case x => return s"${cRustTypeProvider.getTypeNameProvider(x).qualifiedRustName}::default()"
+    }
+  }
+
+  @pure def getCRustTypeDefaultVerusValue(a: AadlType, cRustTypeProvider: CRustTypeProvider): ST = {
+    cRustTypeProvider.getRepresentativeType(a) match {
+      case b: BaseType => return st"${MicrokitTypeUtil.getRustPrimitiveDefaultValue(a.name)}"
+      case _ if a.name == "Base_Types::String" => return st"[0; Base_Types::String::Base_Types_String_DIM_0]"
+      case at: ArrayType =>
+        assert (at.dimensions.size == 1, "Need to handle multi-dim arrays")
+        val np = cRustTypeProvider.getTypeNameProvider(at)
+        val dim0 = CRustTypePlugin.getArrayDimName(np, 0)
+        val baseTypeDefault = getCRustTypeDefaultValue(at.baseType, cRustTypeProvider)
+        val dimConst = st"${(ops.ISZOps(np.qualifiedRustNameS).dropRight(1), "::")}"
+        return st"[$baseTypeDefault; $dimConst::$dim0]"
+      case e: EnumType =>
+      val np = cRustTypeProvider.getTypeNameProvider(e)
+        return st"${np.qualifiedRustName}::${e.values(0)}"
+      case r: RecordType =>
+        val fields: ISZ[ST] = for (f <- r.fields.entries) yield st"${f._1}: ${getCRustTypeDefaultVerusValue(f._2, cRustTypeProvider)}"
+        val np = cRustTypeProvider.getTypeNameProvider(r)
+        return st"${np.qualifiedRustName} { ${(fields, ", ")} }"
+    }
+  }
+
+  def getPortType(p: AadlPort): AadlType = {
+    val ret: AadlType = p match {
+      case _: AadlEventPort => MicrokitTypeUtil.eventPortType
+      case p: AadlEventDataPort => p.aadlType
+      case p: AadlDataPort => p.aadlType
+      case _ => halt("Infeasible")
+    }
+    return ret
+  }
+
+  def getTypeApiContributions(aadlType: AadlType, CTypeProvider: CTypeProvider, queueSize: Z): TypeApiContributions = {
+    val cTypeNameProvider = CTypeProvider.getTypeNameProvider(aadlType)
+    val queueElementTypeName = cTypeNameProvider.mangledName
     return DefaultTypeApiContributions(
       aadlType = aadlType,
       simpleFilename = QueueTemplate.getTypeQueueName(queueElementTypeName, queueSize),
       header = QueueTemplate.header(queueElementTypeName, queueSize),
-      implementation = QueueTemplate.implementation(aadlType, queueElementTypeName, queueSize))
+      implementation = QueueTemplate.implementation(aadlType, queueElementTypeName, queueSize, cTypeNameProvider))
   }
 
-  def processDatatype(aadlType: AadlType, reporter: Reporter): UberTypeProvider = {
-
-    def processField(fieldType: AadlType): (String, ST, String) = {
-      fieldType match {
-        case rt: RecordType =>
-          val cTypeName = fieldType.nameProvider.qualifiedCTypeName
-          val rustTypeName = fieldType.nameProvider.rustTypeName
-          return (cTypeName, st"$cTypeName", rustTypeName)
-        case b: BaseType =>
-          val cName = translateBaseTypeToC(fieldType.name, reporter).get
-          val rustName = translateBaseTypeToRust(fieldType.name, reporter).get
-          return (cName, st"${cName}", rustName)
-        case _ =>
-          val cName = fieldType.nameProvider.qualifiedCTypeName
-          val rustTypeName = fieldType.nameProvider.rustTypeName
-          return (cName, st"$cName", rustTypeName)
-      }
-    }
-
-    def processArray(cName: String, cBaseType: String, cContainer: String,
-                     byteSizeName: String, byteSize: Z, dimName: String, dim: Z,
-                     rustTypeName: String, rustQualifiedTypeName: String, rustBaseType: String): (cTypeProvider, rustTypeProvider) = {
-      val ctype = cTypeProvider(
-        aadlType = aadlType,
-        cSimpleName = cName,
-        cQualifiedName = cName,
-        cTypeDeclaration = Some(st"""#define $byteSizeName $byteSize
-                                    |#define $dimName $dim
-                                    |
-                                    |typedef $cBaseType $cName [$dimName];
-                                    |
-                                    |typedef
-                                    |  struct $cContainer{
-                                    |    $cName f;
-                                    |  } $cContainer;"""),
-        cDefaultValue = st"not yet")
-
-      val rustType = rustTypeProvider(
-        aadlType = aadlType,
-        rustName = rustTypeName,
-        rustQualifiedName = rustQualifiedTypeName,
-        rustTypeDeclaration = Some(
-          st"""pub const $byteSizeName: usize = $byteSize;
-              |pub const $dimName: usize = $dim;
-              |
-              |pub type $rustTypeName = [$rustBaseType; $dimName];"""))
-
-      return (ctype, rustType)
-    }
-
-    aadlType match {
-      case rt: RecordType =>
-        val cTypeName = rt.nameProvider.qualifiedCTypeName
-        val cFields: ISZ[ST] = for (s <- rt.fields.entries) yield st"${processField(s._2)._1} ${s._1};"
-          val ctype = cTypeProvider(
-            aadlType = aadlType,
-            cSimpleName = cTypeName,
-            cQualifiedName = cTypeName,
-            cTypeDeclaration = Some(st"""typedef struct $cTypeName {
-                                        |  ${(cFields, "\n")}
-                                        |} $cTypeName;"""),
-            cDefaultValue = st"not yet")
-
-        val rustTypeName = rt.nameProvider.rustTypeName
-        val rustQualifiedTypeName = rt.nameProvider.qualifiedRustTypeName
-        val rustFields: ISZ[ST] = for (s <- rt.fields.entries) yield st"pub ${s._1}: ${processField(s._2)._3}"
-        val rustType = rustTypeProvider(
-          aadlType = aadlType,
-          rustName = rustTypeName,
-          rustQualifiedName = rustQualifiedTypeName,
-          rustTypeDeclaration = Some(
-            st"""#[repr(C)]
-                |#[derive(Debug, Clone, Copy)]
-                |pub struct $rustTypeName {
-                |  ${(rustFields, ",\n")}
-                |}"""))
-
-        return UberTypeProvider(ctype, rustType)
-
-      case b: BaseType =>
-        assert (b.name != "Base_Types::String", "This should be an AadlType by now")
-
-        val cTypeName = translateBaseTypeToC(aadlType.name, reporter).get
-        val ctype = cTypeProvider(
-          aadlType = aadlType,
-          cSimpleName = cTypeName,
-          cQualifiedName = cTypeName,
-          cTypeDeclaration = None(),
-          cDefaultValue = st"not yet")
-
-        val rustTypeName = translateBaseTypeToRust(aadlType.name, reporter).get
-        val rustType = rustTypeProvider(
-          aadlType = aadlType,
-          rustName = rustTypeName,
-          rustQualifiedName = rustTypeName,
-          rustTypeDeclaration = None())
-
-        return UberTypeProvider(ctype, rustType)
-
-      case e: EnumType =>
-        val cTypeName = e.nameProvider.qualifiedCTypeName
-        val ctype = cTypeProvider(
-          aadlType = aadlType,
-          cSimpleName = cTypeName,
-          cQualifiedName = cTypeName,
-          cTypeDeclaration = Some(st"""typedef
-                                      |  enum {${(e.values, ", ")}} $cTypeName;"""),
-          cDefaultValue = st"not yet")
-
-        val rustTypeName = e.nameProvider.rustTypeName
-        val rustQualifiedTypeName = e.nameProvider.qualifiedRustTypeName
-        val rustEnumValues: ISZ[ST] = for(i <- 0 until e.values.size) yield st"${e.values(i)} = $i"
-        val rustType = rustTypeProvider(
-          aadlType = aadlType,
-          rustName = rustTypeName,
-          rustQualifiedName = rustQualifiedTypeName,
-          rustTypeDeclaration = Some(
-            st"""#[repr(C)]
-                |#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-                |pub enum $rustTypeName {
-                |  ${(rustEnumValues, ",\n")}
-                |}"""))
-
-        return UberTypeProvider(ctype, rustType)
-
-      case a: ArrayType =>
-        val cName = aadlType.nameProvider.qualifiedCTypeName
-        val container = s"${cName}_container"
-
-        val cBaseType: String = getC_TypeName(a, reporter)
-
-        assert (a.dimensions.size == 1 && a.dimensions(0) >= 0, "Linter should have disallowed other variants")
-        val dim: Z = a.dimensions(0)
-
-        val byteSize: Z = a.bitSize.get / 8 // linter guarantees bit size will be > 0
-
-        val byteSizeName = getArrayStringByteSizeDefineName(a)
-        val dimName = getArrayStringDimDefineName(a)
-
-        val rustTypeName = aadlType.nameProvider.rustTypeName
-        val rustQualifiedTypeName = aadlType.nameProvider.qualifiedRustTypeName
-        val rustBaseType: String = getRust_TypeName(a, reporter)
-
-        val (ctype, rustType) = processArray(
-          cName = cName, cBaseType = cBaseType, cContainer = container,
-          byteSizeName = byteSizeName, byteSize = byteSize, dimName = dimName, dim = dim,
-          rustTypeName = rustTypeName, rustQualifiedTypeName = rustQualifiedTypeName, rustBaseType = rustBaseType
-        )
-
-        return UberTypeProvider(ctype, rustType)
-
-      case x => halt(s"Unexpected Type: $x")
-    }
-  }
-
-  @pure def getArrayStringByteSizeDefineName(a: AadlType): String = {
-    assert (a.isInstanceOf[ArrayType] || a.isInstanceOf[BaseType])
-    return s"${a.nameProvider.qualifiedCTypeName}_SIZE"
-  }
-
-  @pure def getArrayStringDimDefineName(a: AadlType): String = {
-    assert (a.isInstanceOf[ArrayType] || a.isInstanceOf[BaseType])
-    return s"${a.nameProvider.qualifiedCTypeName}_DIM"
-  }
-
-  @pure def isPrimitive(a: AadlType): B = {
-    a match {
-      case a: EnumType => return T
-      case b: BaseType => return T
-      case _ => return F
-    }
-  }
-
-  def getRust_TypeName(a: AadlType, reporter: Reporter): String = {
-    val t: AadlType = a match {
-      case a: ArrayType => a.baseType
-      case _ => a
-    }
-    return (
-      if (isPrimitive(t)) translateBaseTypeToRust(t.name, reporter).get
-      else t.nameProvider.qualifiedRustTypeName
-    )
-  }
-
-  def getC_TypeName(a: AadlType, reporter: Reporter): String = {
-    val t: AadlType = a match {
-      case a: ArrayType => a.baseType
-      case _ => a
-    }
-    return (
-      if (isPrimitive(t)) translateBaseTypeToC(t.name, reporter).get
-      else t.nameProvider.qualifiedCTypeName)
-  }
-
-  def translateBaseTypeToC(c: String, reporter: Reporter): Option[String] = {
+  def translateBaseTypeToC(c: String): String = {
     c match {
-      case "Base_Types::Boolean" => return Some("bool")
+      case "Base_Types::Boolean" => return "bool"
 
-      case "Base_Types::Integer_8" => return Some(s"int8_t")
-      case "Base_Types::Integer_16" => return Some(s"int16_t")
-      case "Base_Types::Integer_32" => return Some(s"int32_t")
-      case "Base_Types::Integer_64" => return Some(s"int64_t")
+      case "Base_Types::Integer_8" => return s"int8_t"
+      case "Base_Types::Integer_16" => return s"int16_t"
+      case "Base_Types::Integer_32" => return s"int32_t"
+      case "Base_Types::Integer_64" => return s"int64_t"
 
-      case "Base_Types::Unsigned_8" => return Some(s"uint8_t")
-      case "Base_Types::Unsigned_16" => return Some(s"uint16_t")
-      case "Base_Types::Unsigned_32" => return Some(s"uint32_t")
-      case "Base_Types::Unsigned_64" => return Some(s"uint64_t")
+      case "Base_Types::Unsigned_8" => return s"uint8_t"
+      case "Base_Types::Unsigned_16" => return s"uint16_t"
+      case "Base_Types::Unsigned_32" => return s"uint32_t"
+      case "Base_Types::Unsigned_64" => return s"uint64_t"
 
-      case "Base_Types::Float_32" => return Some("float")
-      case "Base_Types::Float_64" => return Some("double")
+      case "Base_Types::Float_32" => return "float"
+      case "Base_Types::Float_64" => return "double"
 
-      case "Base_Types::Character" => return Some("char")
-      case "Base_Types::String" => return Some("String")
+      case "Base_Types::Character" => return "char"
+
+      // Base_Types::String is now substituted for one that is defined in an AadlArray
+      //case "Base_Types::String" => return "String"
 
       case x =>
         halt(s"Unexpected base types: $x")
     }
   }
 
-  def translateBaseTypeToRust(c: String, reporter: Reporter): Option[String] = {
+  def translateBaseTypeToRust(c: String): String = {
     c match {
-      case "Base_Types::Boolean" => return Some("bool")
+      case "Base_Types::Boolean" => return "bool"
 
-      case "Base_Types::Integer_8" => return Some(s"cty::int8_t")
-      case "Base_Types::Integer_16" => return Some(s"cty::int16_t")
-      case "Base_Types::Integer_32" => return Some(s"cty::int32_t")
-      case "Base_Types::Integer_64" => return Some(s"cty::int64_t")
+      case "Base_Types::Integer_8" => return s"i8"
+      case "Base_Types::Integer_16" => return s"i16"
+      case "Base_Types::Integer_32" => return s"i32"
+      case "Base_Types::Integer_64" => return s"i64"
 
-      case "Base_Types::Unsigned_8" => return Some(s"cty::uint8_t")
-      case "Base_Types::Unsigned_16" => return Some(s"cty::uint16_t")
-      case "Base_Types::Unsigned_32" => return Some(s"cty::uint32_t")
-      case "Base_Types::Unsigned_64" => return Some(s"cty::uint64_t")
+      case "Base_Types::Unsigned_8" => return s"u8"
+      case "Base_Types::Unsigned_16" => return s"u16"
+      case "Base_Types::Unsigned_32" => return s"u32"
+      case "Base_Types::Unsigned_64" => return "u64"
 
-      case "Base_Types::Float_32" => return Some("cty::c_float")
-      case "Base_Types::Float_64" => return Some("cty::c_double")
+      case "Base_Types::Float_32" => return "f32"
+      case "Base_Types::Float_64" => return "f64"
 
-      case "Base_Types::Character" => return Some("cty::c_char")
-      case "Base_Types::String" => return Some("String")
+      // AADL does not specify Unicode support for Character, so do not use Rust's char,
+      // which is a 4-byte Unicode scalar. Instead, treat it as a raw byte (u8)
+      case "Base_Types::Character" => return "u8"
+
+      // Base_Types::String is now substituted for one that is defined in an AadlArray
+      //case "Base_Types::String" => return "Base_Types::String"
 
       case x =>
         halt(s"Unexpected base type: $x")
     }
   }
 
-  @pure def getAllTouchedTypes(aadlTypes: AadlTypes, symbolTable: SymbolTable, reporter: Reporter): ISZ[AadlType] = {
+  def getRustPrimitiveDefaultValue(c: String): String = {
+    c match {
+      case "Base_Types::Boolean" => return "false"
+
+      case "Base_Types::Integer_8" => return s"0"
+      case "Base_Types::Integer_16" => return s"0"
+      case "Base_Types::Integer_32" => return s"0"
+      case "Base_Types::Integer_64" => return s"0"
+
+      case "Base_Types::Unsigned_8" => return s"0"
+      case "Base_Types::Unsigned_16" => return s"0"
+      case "Base_Types::Unsigned_32" => return s"0"
+      case "Base_Types::Unsigned_64" => return "0"
+
+      case "Base_Types::Float_32" => return "0.0"
+      case "Base_Types::Float_64" => return "0.0"
+
+      // AADL does not specify Unicode support for Character, so do not use Rust's char,
+      // which is a 4-byte Unicode scalar. Instead, treat it as a raw byte (u8)
+      case "Base_Types::Character" => return "0"
+
+      // Base_Types::String is now substituted for one that is defined in an AadlArray
+      //case "Base_Types::String" => return "Base_Types::String"
+
+      case x =>
+        halt(s"Unexpected base type: $x")
+    }
+  }
+
+  /** @return a tuple. First is an ordered sequence of types based on their dependencies (e.g. field types
+    *         appear before records that use them). Second is a substitution map (e.g. Base_Types::String
+    *         will be mapped to an array based version where the dimension is the largest String dimension
+    *         seen in the model, default is 100)
+    */
+  @pure def getAllTouchedTypes(aadlTypes: AadlTypes, symbolTable: SymbolTable, reporter: Reporter): (ISZ[String], Map[String, AadlType]) = {
     var ret: Set[AadlType] = Set.empty
 
     var maxStringDim: Z = 0
@@ -490,7 +319,7 @@ object MicrokitTypeUtil {
       }
     }
 
-    var optStringType: Option[AadlType] = None()
+    var subs: Map[String, AadlType] = Map.empty
     maxString match {
       case Some(b)=>
         // +1 for the null character
@@ -500,24 +329,25 @@ object MicrokitTypeUtil {
           name = ir.Name(ISZ("Data_Model::Dimension"), None()),
           propertyValues = ISZ(ir.UnitProp((size).string, None())),
           appliesTo = ISZ()) +: container.properties.filter(p => p.name.name != ISZ("Data_Model::Dimension")))
-        optStringType = Some(ArrayType(
-          classifier = ISZ("Base_Types::String"),
+        val arrayString = ArrayType(
+          classifier = ISZ("Base_Types", "String"),
           nameProvider = b.nameProvider,
           container = Some(container),
           bitSize = Some(size * 8),
           dimensions = ISZ(size),
           baseType = BaseType(
-            classifier = ISZ("Base_Types::Character"),
+            classifier = ISZ("Base_Types", "Character"),
             nameProvider = b.nameProvider,
             container = None(),
             bitSize = Some(8),
-            slangType = SlangType.C)))
-        ret = ret + optStringType.get
+            slangType = SlangType.C))
+        ret = ret + arrayString
+        subs = subs + "Base_Types::String" ~> arrayString
       case _ =>
     }
 
     if (ret.isEmpty) {
-      return ISZ()
+      return (ISZ(), subs)
     } else {
 
       def getRep(t: AadlType): AadlType = {
@@ -548,10 +378,10 @@ object MicrokitTypeUtil {
       for (root <- poset.rootNodes) {
         queue.enqueue(root)
       }
-      var ordered: ISZ[AadlType] = ISZ()
+      var ordered: ISZ[String] = ISZ()
       while (queue.nonEmpty) {
         val node = queue.dequeue()
-        ordered = ordered :+ node
+        ordered = ordered :+ node.name
         for (child <- poset.childrenOf(node).elements) {
           val update = inDegrees.get(child).get - 1
           inDegrees = inDegrees + child ~> (update)
@@ -560,7 +390,7 @@ object MicrokitTypeUtil {
           }
         }
       }
-      return ordered
+      return (ordered, subs)
     }
   }
 }
