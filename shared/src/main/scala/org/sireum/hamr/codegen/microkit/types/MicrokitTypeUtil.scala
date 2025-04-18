@@ -79,14 +79,14 @@ object MicrokitTypeUtil {
   @pure def getCRustTypeDefaultValue(a: AadlType, cRustTypeProvider: CRustTypeProvider): String = {
     cRustTypeProvider.getRepresentativeType(a) match {
       case b: BaseType => return MicrokitTypeUtil.getRustPrimitiveDefaultValue(a.name)
-      case _ if a.name == "Base_Types::String" => return "[0; Base_Types::String::Base_Types_String_DIM_0]"
+      case _ if a.name == "Base_Types::String" => return "[0; Base_Types::Base_Types_String_DIM_0]"
       case at: ArrayType =>
         assert (at.dimensions.size == 1, "Need to handle multi-dim arrays")
         val np = cRustTypeProvider.getTypeNameProvider(at)
         val dim0 = CRustTypePlugin.getArrayDimName(np, 0)
         val baseTypeDefault = getCRustTypeDefaultValue(at.baseType, cRustTypeProvider)
         val dimConst = st"${(ops.ISZOps(np.qualifiedRustNameS).dropRight(1), "::")}"
-        return s"[$baseTypeDefault; $dimConst::$dim0]"
+        return st"[$baseTypeDefault; $dimConst::$dim0]".render
       case x => return s"${cRustTypeProvider.getTypeNameProvider(x).qualifiedRustName}::default()"
     }
   }

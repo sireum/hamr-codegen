@@ -157,7 +157,11 @@ object TypeUtil {
   }
 
   @pure def isNormalBaseTypeS(s: String): B = {
-    return isBaseTypeS(s) && s != "Base_Types::String"
+    return isBaseTypeS(s) && !isBaseTypesStringS(s)
+  }
+
+  @pure def isBaseTypesStringS(s: String): B = {
+    return s == "Base_Types::String"
   }
 
   def isMissingType(c: ir.Component): B = {

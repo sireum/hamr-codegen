@@ -545,7 +545,7 @@ object SymbolResolver {
 
           val data = AadlData(
             component = c,
-            parent = parent,
+            parent = ISZ(),
             path = path,
             typ = typ.get,
             identifier = identifier,

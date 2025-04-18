@@ -113,7 +113,7 @@ object CRustTypePlugin {
       MicrokitTypeUtil.eventPortTypeName ~> getTypeNameProvider(MicrokitTypeUtil.eventPortType, touchedTypes.substitutionTypeMap, reporter)
 
     val rustItems = HashSMap.empty[String, ISZ[RustAst.Item]] ++ (
-      for (aadlTypeName <- touchedTypes.orderedDependencies if !TypeUtil.isBaseTypeS(aadlTypeName)) yield
+      for (aadlTypeName <- touchedTypes.orderedDependencies if !TypeUtil.isBaseTypeS(aadlTypeName) || TypeUtil.isBaseTypesStringS(aadlTypeName)) yield
         aadlTypeName ~> getRustItems(types.typeMap.get(aadlTypeName).get, typeNameProvider, touchedTypes.substitutionTypeMap))
 
     val ret = DefaultCRustTypeProvider(rustItems, typeNameProvider, touchedTypes.substitutionTypeMap)
@@ -234,7 +234,7 @@ object CRustTypePlugin {
     @pure def getCRustTypeDefaultValue(a: AadlType): String = {
       substitutions.getOrElse(a.name, a) match {
         case b: BaseType => return MicrokitTypeUtil.getRustPrimitiveDefaultValue(a.name)
-        case _ if a.name == "Base_Types::String" => return "[0; Base_Types::String::Base_Types_String_DIM_0]"
+        case _ if a.name == "Base_Types::String" => return "[0; Base_Types::Base_Types_String_DIM_0]"
         case at: ArrayType =>
           assert (at.dimensions.size == 1, "Need to handle multi-dim arrays")
           val np = typeNameProvider.get(at.name).get
@@ -252,20 +252,35 @@ object CRustTypePlugin {
     ret = ret :+ RustAst.Use(ISZ(), RustAst.IdentString("vstd::prelude::*"))
     ret = ret :+ RustAst.Use(ISZ(), RustAst.IdentString("crate::data::*"))
 
+    var uses: Set[RustAst.IdentString] = Set.empty
+
     // TODO is it safe to always assume type defs will be in verus (ie. even if there are no contracts)
     var inVerusItems: ISZ[RustAst.Item] = ISZ()
 
+    val substituteType = substitutions.getOrElse(aadlType.name, aadlType)
+    val aadlTypePackageName = ops.ISZOps(getTypePackageNamesName(substituteType)).dropRight(1)
+
+    @pure def addType(t: AadlType): RustAst.TypeAadl = {
+      val subT = substitutions.getOrElse(t.name, t)
+      val qualfiedName = getTypePackageNamesName(subT)
+      val tPackageName = ops.ISZOps(qualfiedName).dropRight(1)
+      if (!subT.isInstanceOf[BaseType] && aadlTypePackageName != tPackageName) {
+        uses = uses + RustAst.IdentString(st"crate::data::${(tPackageName, "::")}::*".render)
+      }
+      return RustAst.TypeAadl(
+        qualifiedNameS = qualfiedName,
+        aadlTypeName = subT.classifier)
+    }
+
     var implBody: Option[ST] = None()
-    substitutions.getOrElse(aadlType.name, aadlType) match {
+    substituteType match {
       case rt: RecordType =>
         val fields: ISZ[RustAst.StructField] = for (f <- rt.fields.entries) yield
           RustAst.StructField(
             visibility = Visibility.Public,
             isGhost = F,
             ident = RustAst.IdentString(f._1),
-            fieldType = RustAst.TypeAadl(
-              qualifiedNameS = getTypePackageNamesName(f._2),
-              aadlTypeName = f._2.classifier))
+            fieldType = addType(f._2))
         inVerusItems = inVerusItems :+
           RustAst.StructDef(
             attributes = ISZ(
@@ -316,16 +331,17 @@ object CRustTypePlugin {
             visibility = Visibility.Public,
             ident = RustAst.IdentString(getTypeSimpleName(at)),
             dims = dims,
-            elemType =
-              RustAst.TypeAadl(
-                qualifiedNameS = getTypePackageNamesName(at.baseType),
-                aadlTypeName = at.baseType.classifier))
+            elemType = addType(at.baseType))
 
         //assert(at.dimensions.size == 1, "Need to handle multi-dim arrays")
         //val lastDim = CRustTypePlugin.getArrayDimName(np, at.dimensions.lastIndex)
         //implBody = Some(st"[${getCRustTypeDefaultValue(at.baseType)}; $lastDim]")
 
       case _ => halt(s"Infeasible ${aadlType.name}")
+    }
+
+    for (u <- uses.elements) {
+      ret = ret :+ RustAst.Use(ISZ(), u)
     }
     if (implBody.nonEmpty) {
       inVerusItems = inVerusItems :+
