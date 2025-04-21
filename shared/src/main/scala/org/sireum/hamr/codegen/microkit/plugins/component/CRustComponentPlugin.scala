@@ -104,10 +104,9 @@ object ComponentContributions {}
 
         val newFn = RustAst.FnImpl(
           sig = RustAst.FnSig(
-            fnHeader = RustAst.FnHeader(T),
             ident = RustAst.IdentString("new"),
             fnDecl = RustAst.FnDecl(inputs = ISZ(), outputs = RustAst.FnRetTyImpl(RustAst.TyPath(ISZ(ISZ("Self")), None()))),
-            generics = None()),
+            fnHeader = RustAst.FnHeader(F), generics = None()),
           comments = ISZ(), attributes = ISZ(), visibility = RustAst.Visibility.Public, contract = None(), meta = ISZ(),
           body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemSelf(ISZ())))))
 
@@ -226,7 +225,11 @@ object ComponentContributions {}
               st"""#[no_mangle]
                   |pub extern "C" fn ${threadId}_timeTriggered() {
                   |  unsafe {
-                  |    app.timeTriggered(&mut compute_api);
+                  |    if let Some(_app) = app.as_mut() {
+                  |      _app.timeTriggered(&mut compute_api);
+                  |    } else {
+                  |      panic!("Unexpected: app is None");
+                  |    }
                   |  }
                   |}""")
           else ISZ(st"NOT YET")
@@ -261,7 +264,7 @@ object ComponentContributions {}
               |#[allow(unused_imports)]
               |use log::{error, warn, info, debug, trace};
               |
-              |static mut app: ${threadId} = ${threadId}::new();
+              |static mut app: Option<$threadId> = None;
               |static mut init_api: ${CRustApiPlugin.applicationApiType(thread)}<${CRustApiPlugin.initializationApiType(thread)}> = api::init_api();
               |static mut compute_api: ${CRustApiPlugin.applicationApiType(thread)}<${CRustApiPlugin.computeApiType(thread)}> = api::compute_api();
               |
@@ -272,7 +275,9 @@ object ComponentContributions {}
               |  logging::LOGGER.set().unwrap();
               |
               |  unsafe {
-              |    app.initialize(&mut init_api);
+              |    let mut _app = $threadId::new();
+              |    _app.initialize(&mut init_api);
+              |    app = Some(_app);
               |  }
               |}
               |
@@ -281,7 +286,11 @@ object ComponentContributions {}
               |#[no_mangle]
               |pub extern "C" fn ${threadId}_notify(channel: microkit_channel) {
               |  unsafe {
-              |    app.notify(channel);
+              |    if let Some(_app) = app.as_mut() {
+              |      _app.notify(channel);
+              |    } else {
+              |      panic!("Unexpected: app is None");
+              |    }
               |  }
               |}
               |
@@ -306,7 +315,7 @@ object ComponentContributions {}
         val content =
           st"""#![cfg(feature = "sel4")]
               |
-              |${Util.doNotEdit}
+              |${Util.safeToEdit}
               |
               |use sel4::debug_print;
               |use sel4_logging::{LevelFilter, Logger, LoggerBuilder};
@@ -326,7 +335,7 @@ object ComponentContributions {}
               |  .build();
               |"""
         val path = s"$componentSrcDir/logging.rs"
-        resources = resources :+ ResourceUtil.createResource(path, content, T)
+        resources = resources :+ ResourceUtil.createResource(path, content, F)
       }
 
 

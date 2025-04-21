@@ -112,7 +112,7 @@ object GumboRustUtil {
       fieldType = RAST.TyPath(
         items = ISZ(np.qualifiedRustNameS),
         aadlType = Some(aadlType.classifier))),
-      st"${sv.name}: ${MicrokitTypeUtil.getCRustTypeDefaultVerusValue(aadlType, tp)}"
+      st"${sv.name}: ${MicrokitTypeUtil.getCRustTypeDefaultValue(aadlType, tp)}"
     )
   }
 }
