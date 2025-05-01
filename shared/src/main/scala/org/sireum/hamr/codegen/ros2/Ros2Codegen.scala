@@ -50,7 +50,7 @@ import org.sireum.ops.ISZOps
 
     options.ros2LaunchLanguage.name match {
       case "Xml" => files = files ++ Generator.genXmlLaunchPkg(modelName, threadComponents, systemComponents)
-      case "Python" => files = files ++ GeneratorPy.genPyLaunchPkg(modelName, threadComponents)
+      case "Python" => files = files ++ GeneratorPy.genPyLaunchPkg(modelName, threadComponents, systemComponents)
       case _ => reporter.error(None(), toolName, s"Unknown code type: ${options.ros2NodesLanguage.name}")
     }
 

@@ -4,7 +4,7 @@ package org.sireum.hamr.codegen.ros2
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.containers.Marker
-import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlPort, AadlSystem, AadlThread, Dispatch_Protocol}
+import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlDataPort, AadlEventDataPort, AadlPort, AadlProcess, AadlSystem, AadlThread, Dispatch_Protocol}
 import org.sireum.hamr.codegen.common.types.{AadlType, EnumType}
 import org.sireum.hamr.ir.Direction
 import org.sireum.message.Reporter
@@ -505,24 +505,73 @@ object GeneratorPy {
   //        package="tc_cpp_pkg",
   //        executable="tc_exe"
   //        )
-  def genPyFormatLaunchNodeDecl(launch_node_decl_nameT: String,
-                                top_level_package_nameT: String,
-                                component: AadlThread): ST = {
-    val node_executable_file_nameT = genExecutableFileName(genNodeName(component))
+  def genPyFormatLaunchNodeDecl(top_level_package_nameT: String,
+                                thread: AadlThread): ST = {
+    val node_executable_file_nameT = genExecutableFileName(genNodeName(thread))
+    val launch_node_decl_nameT = genPyFormatLaunchNodeDeclName(genNodeName(thread))
     val s =
       st"""${launch_node_decl_nameT} = Node(
           |    package = "${top_level_package_nameT}",
           |    executable = "${node_executable_file_nameT}"
-          |   )
+          |)
         """
     return s
   }
 
+  // Generate system launch code (including a system launch file)
+  //   Example:
+  //     <include file="$(find-pkg-share gazebo_ros)/launch/gazebo.launch.py"/>
+  def genPyFormatLaunchSystemDecl(top_level_package_nameT: String,
+                                   system: AadlSystem): ST = {
+    val launch_node_decl_nameT = genPyFormatLaunchNodeDeclName(system.identifier)
+    val launchFileName: String = genPyLaunchFileName(system.identifier)
+    val s =
+      st"""${launch_node_decl_nameT} = IncludeLaunchDescription(
+        |    PythonLaunchDescriptionSource(
+        |        os.path.join(get_package_share_directory('${top_level_package_nameT}_bringup'),
+        |                     'launch/${launchFileName}')
+        |    )
+        |)
+      """
+    return s
+  }
+
+  def genPyFormatLaunchDecls(component: AadlComponent, packageName: String): ISZ[ST] = {
+    var launch_decls: ISZ[ST] = IS()
+
+    for (comp <- component.subComponents) {
+      comp match {
+        case thread: AadlThread =>
+          launch_decls = launch_decls :+ genPyFormatLaunchNodeDecl(packageName, thread)
+        case system: AadlSystem =>
+          launch_decls = launch_decls :+ genPyFormatLaunchSystemDecl(packageName, system)
+        case process: AadlProcess =>
+          launch_decls = launch_decls ++ genPyFormatLaunchDecls(process, packageName)
+        case _ =>
+      }
+    }
+
+    return launch_decls
+  }
+
   // Example:
   //    ld.add_action(tc_node)
-  def genPyFormatLaunchAddAction(launch_node_decl_nameT: String): ST = {
-    val s = st"""ld.add_action(${launch_node_decl_nameT})"""
-    return s
+  def genPyFormatLaunchAddAction(component: AadlComponent): ISZ[ST] = {
+    var ld_entries: ISZ[ST] = IS()
+
+    for(comp <- component.subComponents) {
+      comp match {
+        case thread: AadlThread =>
+          ld_entries = ld_entries :+ st"""ld.add_action(${genPyFormatLaunchNodeDeclName(genNodeName(thread))})"""
+        case system: AadlSystem =>
+          ld_entries = ld_entries :+ st"""ld.add_action(${genPyFormatLaunchNodeDeclName(system.identifier)})"""
+        case process: AadlProcess =>
+          ld_entries = ld_entries ++ genPyFormatLaunchAddAction(process)
+        case _ =>
+      }
+    }
+
+    return ld_entries
   }
 
   // For example, see https://github.com/santoslab/ros-examples/blob/main/tempControl_ws/src/tc_bringup/launch/tc.launch.py
@@ -534,14 +583,19 @@ object GeneratorPy {
     var launchFiles: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
 
     for (system <- systemComponents) {
-      val fileName = genPyFormatLaunchNodeDeclName(system.identifier)
+      val fileName = genPyLaunchFileName(system.identifier)
 
-      val node_decls: ISZ[ST] = IS()
-      val ld_entries: ISZ[ST] = IS()
+      val node_decls: ISZ[ST] = genPyFormatLaunchDecls(system, top_level_package_nameT)
+      val ld_entries: ISZ[ST] = genPyFormatLaunchAddAction(system)
 
       val launchFileBody =
         st"""from launch import LaunchDescription
             |from launch_ros.actions import Node
+            |
+            |import os
+            |from ament_index_python.packages import get_package_share_directory
+            |from launch.actions import IncludeLaunchDescription
+            |from launch.launch_description_sources import PythonLaunchDescriptionSource
             |
             |def generate_launch_description():
             |    ld = LaunchDescription()
@@ -772,6 +826,25 @@ object GeneratorPy {
     return subscriptionMessageHeader
   }
 
+  def genPySubscriptionHandlerVirtualStrict(inPort: AadlPort, portType: String): ST = {
+    val handlerName = inPort.identifier
+
+    var handlerCode: ST = st""
+    if (isEventPort(portType)) {
+      handlerCode =
+        st"""def handle_${handlerName}(self):
+           |    raise NotImplementedError("Subclasses must implement this method")
+           |"""
+    } else {
+      handlerCode =
+        st"""def handle_${handlerName}(self, msg):
+            |    raise NotImplementedError("Subclasses must implement this method")
+            |"""
+    }
+
+    return handlerCode
+  }
+
   def genPySubscriptionHandlerBaseSporadic(inPort: AadlPort, portType: String): ST = {
     val handlerName = inPort.identifier
 
@@ -905,7 +978,7 @@ object GeneratorPy {
       handler = st"self.event_handle_${handlerName}"
     }
     else {
-      handler = st"handle_${handlerName}"
+      handler = st"self.handle_${handlerName}"
     }
 
     if (outPortNames.size == 1) {
@@ -984,6 +1057,25 @@ object GeneratorPy {
     val subscriptionMessageVar: ST =
       st"self.${portName}_msg_holder"
     return subscriptionMessageVar
+  }
+
+  def genPySubscriptionHandlerVirtual(inPort: AadlPort, portType: String): ST = {
+    val handlerName = inPort.identifier
+
+    var handlerCode: ST = st""
+    if (isEventPort(portType)) {
+      handlerCode =
+        st"""def handle_${handlerName}(self):
+            |    raise NotImplementedError("Subclasses must implement this method")
+            |"""
+    } else {
+      handlerCode =
+        st"""def handle_${handlerName}(self, msg):
+            |    raise NotImplementedError("Subclasses must implement this method")
+            |"""
+    }
+
+    return handlerCode
   }
 
   def genPyInfrastructureOutQueue(inPort: AadlPort): ST = {
@@ -1217,7 +1309,7 @@ object GeneratorPy {
     var inPortNames: ISZ[String] = IS()
     var strictPutMsgMethods: ISZ[ST] = IS()
     var strictSubscriptionMessageAcceptorMethods: ISZ[ST] = IS()
-    var strictSubscriptionHandlerBaseMethods: ISZ[ST] = IS()
+    var subscriptionHandlerMethods: ISZ[ST] = IS()
     var msgTypes: ISZ[String] = IS()
 
     var inMsgVars: ISZ[ST] = IS()
@@ -1259,7 +1351,9 @@ object GeneratorPy {
             subscriptionMessageGetters = subscriptionMessageGetters :+ genPyGetApplicationInValue(p, portDatatype)
           }
           else {
-            strictSubscriptionHandlerBaseMethods = strictSubscriptionHandlerBaseMethods :+
+            subscriptionHandlerMethods = subscriptionHandlerMethods :+
+              genPySubscriptionHandlerVirtualStrict(p, portDatatype)
+            subscriptionHandlerMethods = subscriptionHandlerMethods :+
               genPySubscriptionHandlerBaseSporadic(p, portDatatype)
           }
           hasInPorts = T
@@ -1317,6 +1411,9 @@ object GeneratorPy {
               genPySubscriptionHandlerPeriodic(p, portDatatype)
             subscriptionMessageGetters = subscriptionMessageGetters :+ genPyGetSubscriptionMessage(p, nodeName)
             inMsgVars = inMsgVars :+ genPySubscriptionMessageVar(p)
+          } else {
+            subscriptionHandlerMethods = subscriptionHandlerMethods :+
+              genPySubscriptionHandlerVirtual(p, portDatatype)
           }
           hasInPorts = T
         }
@@ -1359,7 +1456,7 @@ object GeneratorPy {
     if (!strictAADLMode && subscribers.size > 0) {
       stdIncludes =
         st"""${stdIncludes}
-            |from ${packageName}.user_code.consumer_consumer_src import *"""
+            |from ${packageName}.user_code.${genNodeName(component)}_src import *"""
     }
 
     var fileBody =
@@ -1451,9 +1548,9 @@ object GeneratorPy {
     if (subscriberMethods.size > 0 || publisherMethods.size > 0 || (strictAADLMode && subscribers.size > 0)) {
       fileBody =
         st"""${fileBody}
-            |#=================================================
-            |#  C o m m u n i c a t i o n
-            |#=================================================
+            |    #=================================================
+            |    #  C o m m u n i c a t i o n
+            |    #=================================================
           """
 
       if (strictSubscriptionMessageAcceptorMethods.size > 0) {
@@ -1474,18 +1571,22 @@ object GeneratorPy {
               |    ${(subscriptionMessageGetters, "\n")}"""
       }
 
-      if (strictSubscriptionHandlerBaseMethods.size > 0) {
-        fileBody =
-          st"""${fileBody}
-              |    ${(strictSubscriptionHandlerBaseMethods, "\n")}"""
-      }
-
       if (publisherMethods.size > 0) {
         fileBody =
           st"""${fileBody}
               |    ${(publisherMethods, "\n")}
               |    ${(strictPutMsgMethods, "\n")}"""
       }
+    }
+
+    if (subscriptionHandlerMethods.size > 0) {
+      fileBody =
+        st"""${fileBody}
+           |    #=================================================
+           |    #  C o m p u t e    E n t r y    P o i n t
+           |    #=================================================
+           |    ${(subscriptionHandlerMethods, "\n")}
+           |"""
     }
 
     if (strictAADLMode) {
@@ -1508,6 +1609,12 @@ object GeneratorPy {
     val filePath: ISZ[String] = IS("src", packageName, packageName, "base_code", fileName)
 
     return (filePath, fileBody, T, IS())
+  }
+
+  def genPySubscriptionHandlerAdder(inPort: AadlPort): ST = {
+    val handlerName = inPort.identifier
+    val subscriptionAdder: ST = st"node.handle_${handlerName} = handle_${handlerName}"
+    return subscriptionAdder
   }
 
   def genPySubscriptionHandlerSporadicStrict(inPort: AadlPort, portType: String): ST = {
@@ -1565,6 +1672,7 @@ object GeneratorPy {
     val endMarker: String = "# Additions within these tags will be preserved when re-running Codegen"
 
     var subscriptionHandlers: ISZ[ST] = IS()
+    var subscriptionAdders: ISZ[ST] = IS()
     if (isSporadic(component)) {
       for (p <- component.getPorts()) {
         val portDatatype: String = genPortDatatype(p, packageName, datatypeMap, reporter)
@@ -1572,16 +1680,21 @@ object GeneratorPy {
           if (strictAADLMode) {
             subscriptionHandlers = subscriptionHandlers :+
               genPySubscriptionHandlerSporadicStrict(p, portDatatype)
+            subscriptionAdders = subscriptionAdders :+
+              genPySubscriptionHandlerAdder(p)
           }
           else {
             subscriptionHandlers = subscriptionHandlers :+
               genPySubscriptionHandlerSporadic(p, portDatatype)
+            subscriptionAdders = subscriptionAdders :+
+              genPySubscriptionHandlerAdder(p)
           }
         }
       }
     }
     else {
       subscriptionHandlers = subscriptionHandlers :+ genPyTimeTriggeredMethod()
+      subscriptionAdders = subscriptionAdders :+ st"node.timeTriggered = timeTriggered"
     }
 
     var includeFiles: ST =
@@ -1609,6 +1722,7 @@ object GeneratorPy {
           |    node.get_logger().info("Initialize Entry Point invoked")
           |
           |    # Initialize the node
+          |    ${(subscriptionAdders, "\n")}
           |
           |#=================================================
           |#  C o m p u t e    E n t r y    P o i n t
@@ -1735,9 +1849,16 @@ object GeneratorPy {
 
   def genPyEnumConverterFile(packageName: String, enumTypes: ISZ[(String, AadlType)],
                               strictAADLMode: B): (ISZ[String], ST, B, ISZ[Marker]) = {
+    var includes: ISZ[ST] = IS()
+
+    for (enum <- enumTypes) {
+      val enumName: String = ops.StringOps(enum._2.classifier.apply(enum._2.classifier.size - 1)).replaceAllLiterally("_", "")
+      includes = includes :+ st"from ${packageName}_interfaces.msg import ${enumName}"
+    }
+
     val fileBody =
       st"""#!/usr/bin/env python3
-          |from datatypes_system_py_pkg_interfaces.msg import MyEnum
+          |${(includes, "\n")}
           |
           |#========================================================
           |# Re-running Codegen will overwrite changes to this file
@@ -1807,11 +1928,11 @@ object GeneratorPy {
     return files
   }
 
-  def genPyLaunchPkg(modelName: String, threadComponents: ISZ[AadlThread]): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
+  def genPyLaunchPkg(modelName: String, threadComponents: ISZ[AadlThread], systemComponents: ISZ[AadlSystem]): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
     var files: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
     files = files :+ genLaunchCMakeListsFile(modelName)
     files = files :+ genLaunchPackageFile(modelName)
-    files = files :+ genPyFormatLaunchFile(modelName, threadComponents)
+    files = files ++ genPyFormatLaunchFile(modelName, threadComponents, systemComponents)
 
     return files
   }
