@@ -927,7 +927,6 @@ object GeneratorPy {
       }
     }
 
-    // Int32 is a placeholder message value
     val publisherCode: ST =
       st"""def sendOut_${handlerName}(self, msg):
          |    if type(msg) is ${portType}:
@@ -1181,7 +1180,7 @@ object GeneratorPy {
     val vector: ST =
       st"""self.inDataPortTupleVector = [
         |    ${(tuples, ",\n")}
-        | ]
+        |]
       """
     return vector
   }
@@ -1196,7 +1195,7 @@ object GeneratorPy {
      val vector: ST =
        st"""self.inEventPortTupleVector = [
          |    ${(tuples, ",\n")}
-         |  ]
+         |]
        """
      return vector
   }
@@ -1211,7 +1210,7 @@ object GeneratorPy {
     val vector: ST =
       st"""self.outPortTupleVector = [
         |    ${(tuples, ",\n")}
-        | ]
+        |]
       """
     return vector
   }
@@ -1364,7 +1363,8 @@ object GeneratorPy {
           outPortNames = outPortNames :+ p.identifier
           if (invertTopicBinding) {
             publishers = publishers :+ genPyTopicPublisher(p, portDatatype, getPortNames(IS(p.path.toISZ)))
-            genPyTopicPublishMethodStrict(p, portDatatype, 1)
+            publisherMethods = publisherMethods :+
+              genPyTopicPublishMethodStrict(p, portDatatype, 1)
           }
           else {
             if (connectionMap.get(p.path).nonEmpty) {
@@ -1513,18 +1513,6 @@ object GeneratorPy {
     }
 
     if(strictAADLMode) {
-      fileBody =
-        st"""${fileBody}
-           |        # Used by receiveInputs
-           |        ${genPyInDataPortTupleVector(inPortNames)}"""
-
-      if (!isSporadic(component)) {
-        fileBody =
-          st"""${fileBody}
-             |        # Used by receiveInputs
-             |        ${genPyInEventPortTupleVector(inPortNames)}"""
-      }
-
       if (inMsgVars.size > 0) {
         fileBody =
           st"""${fileBody}
@@ -1537,6 +1525,18 @@ object GeneratorPy {
           st"""${fileBody}
               |        ${(outMsgVars, "\n")}
           """
+      }
+
+      fileBody =
+        st"""${fileBody}
+            |        # Used by receiveInputs
+            |        ${genPyInDataPortTupleVector(inPortNames)}"""
+
+      if (!isSporadic(component)) {
+        fileBody =
+          st"""${fileBody}
+              |        # Used by receiveInputs
+              |        ${genPyInEventPortTupleVector(inPortNames)}"""
       }
 
       fileBody =
@@ -1569,6 +1569,12 @@ object GeneratorPy {
         fileBody =
           st"""${fileBody}
               |    ${(subscriptionMessageGetters, "\n")}"""
+      }
+
+      if (eventPortHandlers.size > 0) {
+        fileBody =
+          st"""${fileBody}
+              |    ${(eventPortHandlers, "\n")}"""
       }
 
       if (publisherMethods.size > 0) {
