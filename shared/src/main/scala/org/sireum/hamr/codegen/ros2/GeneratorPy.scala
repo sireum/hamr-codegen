@@ -15,8 +15,6 @@ object GeneratorPy {
   val toolName: String = "Ros2Codegen"
 
   val node_executable_filename_suffix: String = "_exe"
-  val launch_node_decl_suffix: String = "_node"
-  val py_launch_file_name_suffix: String = ".launch.py"
   val py_package_name_suffix: String = "_py_pkg"
   val py_src_node_name_suffix: String = "_src.py"
   val py_src_node_entry_point_name: String = "main"
@@ -24,12 +22,6 @@ object GeneratorPy {
 
   val callback_group_type: String = "ReentrantCallbackGroup"
   val callback_group_name: String = "cb_group_"
-
-  def genPyLaunchFileName(compNameS: String): String = {
-    // create launch file name
-    val nodeNameT: String = s"${compNameS}${py_launch_file_name_suffix}"
-    return nodeNameT
-  }
 
   def genPyPackageName(packageNameS: String): String = {
     // create target package name
@@ -114,15 +106,6 @@ object GeneratorPy {
       case _ => s"Empty"
     }
     return s
-  }
-
-  def seqToString(seq: ISZ[String], separator: String): String = {
-    var str = ""
-    for (s <- seq) {
-      str = s"$str$s$separator"
-    }
-    //str = ops.StringOps(str).substring(0, str.size - 1)
-    return str
   }
 
   //================================================
@@ -410,208 +393,6 @@ object GeneratorPy {
     val filePath: ISZ[String] = IS("src", top_level_package_nameT, "test", fileName)
 
     return (filePath, setupFileBody, T, IS())
-  }
-
-  //================================================
-  //  L a u n c h  File Setup Files
-  //================================================
-
-  def genLaunchCMakeListsFile(modelName: String): (ISZ[String], ST, B, ISZ[Marker]) = {
-    val top_level_package_nameT: String = genPyPackageName(modelName)
-    val fileName: String = "CMakeLists.txt"
-
-    val setupFileBody =
-      st"""cmake_minimum_required(VERSION 3.8)
-          |project(${top_level_package_nameT}_bringup)
-          |
-          |if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-          |    add_compile_options(-Wall -Wextra -Wpedantic)
-          |endif()
-          |
-          |find_package(ament_cmake REQUIRED)
-          |
-          |install(DIRECTORY
-          |    launch
-          |    DESTINATION share/$${PROJECT_NAME}
-          |)
-          |
-          |ament_package()
-        """
-
-    val filePath: ISZ[String] = IS("src", s"${top_level_package_nameT}_bringup", fileName)
-
-    return (filePath, setupFileBody, T, IS())
-  }
-
-  def genLaunchPackageFile(modelName: String): (ISZ[String], ST, B, ISZ[Marker]) = {
-    val top_level_package_nameT: String = genPyPackageName(modelName)
-    val fileName: String = "package.xml"
-
-    val startMarker: String = "<!-- Additions within these tags will be preserved when re-running Codegen -->"
-    val endMarker: String = "<!-- Additions within these tags will be preserved when re-running Codegen -->"
-
-    val setupFileBody =
-      st"""<?xml version="1.0"?>
-          |<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
-          |<package format="3">
-          |    <name>${top_level_package_nameT}_bringup</name>
-          |    <version>0.0.0</version>
-          |    <description>TODO: Package description</description>
-          |    <maintainer email="sireum@todo.todo">sireum</maintainer>
-          |    <license>TODO: License declaration</license>
-          |
-          |    <buildtool_depend>ament_cmake</buildtool_depend>
-          |
-          |    <exec_depend>${top_level_package_nameT}</exec_depend>
-          |    <exec_depend>${top_level_package_nameT}_interfaces</exec_depend>
-          |
-          |    ${startMarker}
-          |
-          |    ${endMarker}
-          |
-          |    <test_depend>ament_lint_auto</test_depend>
-          |    <test_depend>ament_lint_common</test_depend>
-          |
-          |    <export>
-          |        <build_type>ament_cmake</build_type>
-          |    </export>
-          |</package>
-        """
-
-    val filePath: ISZ[String] = IS("src", s"${top_level_package_nameT}_bringup", fileName)
-
-    return (filePath, setupFileBody, F, IS(Marker(startMarker, endMarker)))
-  }
-
-
-  //================================================
-  //  L a u n c h  File (Python Format)
-  //================================================
-
-  // Example:
-  //     tc_node = Node(           ## Example is "tc_node" python variable name
-  //        package="tc_cpp_pkg",
-  //        executable="tc_exe"
-  //        )
-  def genPyFormatLaunchNodeDeclName(componentNameS: String): String = {
-    // create target launch node decl name
-    val launch_node_decl_nameT: String = s"${componentNameS}${launch_node_decl_suffix}"
-    return launch_node_decl_nameT
-  }
-
-  // genLaunchNodeDecl() - generate node declaration
-  //   Example:
-  //     tc_node = Node(
-  //        package="tc_cpp_pkg",
-  //        executable="tc_exe"
-  //        )
-  def genPyFormatLaunchNodeDecl(top_level_package_nameT: String,
-                                thread: AadlThread): ST = {
-    val node_executable_file_nameT = genExecutableFileName(genNodeName(thread))
-    val launch_node_decl_nameT = genPyFormatLaunchNodeDeclName(genNodeName(thread))
-    val s =
-      st"""${launch_node_decl_nameT} = Node(
-          |    package = "${top_level_package_nameT}",
-          |    executable = "${node_executable_file_nameT}"
-          |)
-        """
-    return s
-  }
-
-  // Generate system launch code (including a system launch file)
-  //   Example:
-  //     <include file="$(find-pkg-share gazebo_ros)/launch/gazebo.launch.py"/>
-  def genPyFormatLaunchSystemDecl(top_level_package_nameT: String,
-                                   system: AadlSystem): ST = {
-    val launch_node_decl_nameT = genPyFormatLaunchNodeDeclName(system.identifier)
-    val launchFileName: String = genPyLaunchFileName(system.identifier)
-    val s =
-      st"""${launch_node_decl_nameT} = IncludeLaunchDescription(
-        |    PythonLaunchDescriptionSource(
-        |        os.path.join(get_package_share_directory('${top_level_package_nameT}_bringup'),
-        |                     'launch/${launchFileName}')
-        |    )
-        |)
-      """
-    return s
-  }
-
-  def genPyFormatLaunchDecls(component: AadlComponent, packageName: String): ISZ[ST] = {
-    var launch_decls: ISZ[ST] = IS()
-
-    for (comp <- component.subComponents) {
-      comp match {
-        case thread: AadlThread =>
-          launch_decls = launch_decls :+ genPyFormatLaunchNodeDecl(packageName, thread)
-        case system: AadlSystem =>
-          launch_decls = launch_decls :+ genPyFormatLaunchSystemDecl(packageName, system)
-        case process: AadlProcess =>
-          launch_decls = launch_decls ++ genPyFormatLaunchDecls(process, packageName)
-        case _ =>
-      }
-    }
-
-    return launch_decls
-  }
-
-  // Example:
-  //    ld.add_action(tc_node)
-  def genPyFormatLaunchAddAction(component: AadlComponent): ISZ[ST] = {
-    var ld_entries: ISZ[ST] = IS()
-
-    for(comp <- component.subComponents) {
-      comp match {
-        case thread: AadlThread =>
-          ld_entries = ld_entries :+ st"""ld.add_action(${genPyFormatLaunchNodeDeclName(genNodeName(thread))})"""
-        case system: AadlSystem =>
-          ld_entries = ld_entries :+ st"""ld.add_action(${genPyFormatLaunchNodeDeclName(system.identifier)})"""
-        case process: AadlProcess =>
-          ld_entries = ld_entries ++ genPyFormatLaunchAddAction(process)
-        case _ =>
-      }
-    }
-
-    return ld_entries
-  }
-
-  // For example, see https://github.com/santoslab/ros-examples/blob/main/tempControl_ws/src/tc_bringup/launch/tc.launch.py
-  def genPyFormatLaunchFile(modelName: String, threadComponents: ISZ[AadlThread],
-                            systemComponents: ISZ[AadlSystem]): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
-
-    val top_level_package_nameT: String = genPyPackageName(modelName)
-
-    var launchFiles: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
-
-    for (system <- systemComponents) {
-      val fileName = genPyLaunchFileName(system.identifier)
-
-      val node_decls: ISZ[ST] = genPyFormatLaunchDecls(system, top_level_package_nameT)
-      val ld_entries: ISZ[ST] = genPyFormatLaunchAddAction(system)
-
-      val launchFileBody =
-        st"""from launch import LaunchDescription
-            |from launch_ros.actions import Node
-            |
-            |import os
-            |from ament_index_python.packages import get_package_share_directory
-            |from launch.actions import IncludeLaunchDescription
-            |from launch.launch_description_sources import PythonLaunchDescriptionSource
-            |
-            |def generate_launch_description():
-            |    ld = LaunchDescription()
-            |
-            |    ${(node_decls, "\n")}
-            |    ${(ld_entries, "\n")}
-            |
-            |    return ld
-          """
-
-      val filePath: ISZ[String] = IS("src", s"${top_level_package_nameT}_bringup", "launch", fileName)
-
-      launchFiles = launchFiles :+ (filePath, launchFileBody, T, IS())
-    }
-
-    return launchFiles
   }
 
   //================================================
@@ -1930,15 +1711,6 @@ object GeneratorPy {
     files = files :+ genPyCopyrightFile(modelName)
     files = files :+ genPyFlakeFile(modelName)
     files = files :+ genPyPrepFile(modelName)
-
-    return files
-  }
-
-  def genPyLaunchPkg(modelName: String, threadComponents: ISZ[AadlThread], systemComponents: ISZ[AadlSystem]): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
-    var files: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
-    files = files :+ genLaunchCMakeListsFile(modelName)
-    files = files :+ genLaunchPackageFile(modelName)
-    files = files ++ genPyFormatLaunchFile(modelName, threadComponents, systemComponents)
 
     return files
   }
