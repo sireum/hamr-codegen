@@ -49,21 +49,17 @@ object Ros2Codegen {
       case "Cpp" => files =
         Generator.genCppNodePkg(modelName, threadComponents, connectionMap, datatypeMap, options.strictAadlMode,
                                 options.invertTopicBinding, reporter)
-      case "Python" => files = GeneratorPy.genPyNodePkg(modelName, threadComponents, connectionMap, datatypeMap, options.strictAadlMode,
+        files = files ++ Generator.genInterfacesPkg(modelName, datatypeMap)
+      case "Python" =>
+        files = GeneratorPy.genPyNodePkg(modelName, threadComponents, connectionMap, datatypeMap, options.strictAadlMode,
                                                       options.invertTopicBinding, reporter)
+        files = files ++ GeneratorPy.genInterfacesPkg(modelName, datatypeMap)
       case _ => reporter.error(None(), toolName, s"Unknown code type: ${options.ros2NodesLanguage.name}")
     }
 
     options.ros2LaunchLanguage.name match {
-      case "Xml" => files = files ++ Generator.genXmlLaunchPkg(modelName, threadComponents, systemComponents)
-      case "Python" => files = files ++ GeneratorPy.genPyLaunchPkg(modelName, threadComponents, systemComponents)
-      case _ => reporter.error(None(), toolName, s"Unknown code type: ${options.ros2NodesLanguage.name}")
-    }
-
-    //files = files ++ Generator.genInterfacesPkg(modelName, datatypeMap)
-    options.ros2NodesLanguage.name match {
-      case "Cpp" => files = files ++ Generator.genInterfacesPkg(modelName, datatypeMap)
-      case "Python" => files = files ++ GeneratorPy.genInterfacesPkg(modelName, datatypeMap)
+      case "Xml" => files = files ++ GeneratorLaunch.genXmlLaunchPkg(modelName, threadComponents, systemComponents, options.ros2NodesLanguage.name)
+      case "Python" => files = files ++ GeneratorLaunch.genPyLaunchPkg(modelName, threadComponents, systemComponents, options.ros2NodesLanguage.name)
       case _ => reporter.error(None(), toolName, s"Unknown code type: ${options.ros2NodesLanguage.name}")
     }
 
