@@ -45,18 +45,17 @@ object MicrokitPlugin {
 // lint plugins are called as the first step in microkit codegen.  Subsequent phases will not be
 // initiated if any lint plugin return F or if the reporter contains errors after linting
 @sig trait MicrokitLintPlugin extends Plugin {
-  def validModel(model: Aadl, options: CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, B)
+  @pure def validModel(model: Aadl, options: CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, B)
 }
 
 // init plugins are called after linting in order to do any initialization, pre-processing, etc that is
 // needed by a plugin
 @sig trait MicrokitInitPlugin extends Plugin {
-  def init(model: Aadl, options: CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): Store
+  @pure def init(model: Aadl, options: CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): Store
 }
 
 @sig trait MicrokitPlugin extends Plugin {
 
-  // TODO: maybe pass in the touched types
   @pure def canHandle(model: Aadl, options: CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): B
 
   @pure def handle(model: Aadl, options: CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource])

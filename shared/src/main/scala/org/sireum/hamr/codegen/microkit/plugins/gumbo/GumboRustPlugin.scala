@@ -40,6 +40,9 @@ object GumboRustPlugin {
 @sig trait GumboRustPlugin extends MicrokitInitPlugin with MicrokitPlugin {
 
   @pure override def init(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): Store = {
+    if (isDisabled(store)) {
+      return store
+    }
     var localStore = store
     if (options.platform != HamrCli.CodegenHamrPlatform.Microkit ||
       !ops.ISZOps(symbolTable.getThreads()).exists(p => Util.isRusty(p))) {
@@ -78,6 +81,7 @@ object GumboRustPlugin {
 
   @strictpure override def canHandle(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): B =
     options.platform == HamrCli.CodegenHamrPlatform.Microkit &&
+      !isDisabled(store) &&
       !store.contains(GumboRustPlugin.KEY_GumboRustPlugin) &&
       // may need the app contributions if we need to insert method-level contracts so
       // wait until that phase is done.  The component plugin depends on the typing and
@@ -284,7 +288,7 @@ object GumboRustPlugin {
 
     // general assumes clauses
     var requires: ISZ[RAST.Expr] =
-      for (r <- subclauseInfo.annex.compute.get.specs.filter(p => p.isInstanceOf[GclAssume])) yield
+      for (r <- subclauseInfo.annex.compute.get.assumes) yield
         GumboRustUtil.processGumboSpec(r, T, types, subclauseInfo.gclSymbolTable, reporter)
 
     var aadlReq: ISZ[ST] = ISZ()
@@ -299,7 +303,7 @@ object GumboRustPlugin {
 
     val ensures: ISZ[RAST.Expr] = {
       // general ensures clauses
-      (for (r <- subclauseInfo.annex.compute.get.specs.filter(p => p.isInstanceOf[GclGuarantee])) yield
+      (for (r <- subclauseInfo.annex.compute.get.guarantees) yield
         GumboRustUtil.processGumboSpec(r, F, types, subclauseInfo.gclSymbolTable, reporter)) ++
         // gumbo compute cases clauses
         (for (c <- subclauseInfo.annex.compute.get.cases) yield

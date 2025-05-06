@@ -88,6 +88,7 @@ object CRustTypePlugin {
 
   @strictpure override def canHandle(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): B =
     options.platform == CodegenHamrPlatform.Microkit &&
+      !isDisabled(store) &&
       // TODO this should probably be modelIsCRusty indicating there are components that will be C + Rust rather
       //      than just pure Rust
       MicrokitPlugin.modelIsRusty(store) &&
@@ -96,6 +97,7 @@ object CRustTypePlugin {
 
   @strictpure override def canFinalize(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): B =
     options.platform == CodegenHamrPlatform.Microkit &&
+      !isDisabled(store) &&
       // TODO this should probably be modelIsCRusty indicating there are components that will be C + Rust rather
       //      than just pure Rust
       MicrokitPlugin.modelIsRusty(store) &&

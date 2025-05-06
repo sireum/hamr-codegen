@@ -67,6 +67,7 @@ object ComputeContributions {
 
   @strictpure override def canHandle(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): B =
     options.platform == CodegenHamrPlatform.Microkit &&
+      !isDisabled(store) &&
       !haveHandled(store) &&
       CRustTypePlugin.hasCRustTypeProvider(store) &&
       // gumbo rust plugin provides datatype invariant rust methods
@@ -76,6 +77,7 @@ object ComputeContributions {
 
   @strictpure override def canFinalize(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): B =
     options.platform == HamrCli.CodegenHamrPlatform.Microkit &&
+      !isDisabled(store) &&
       !alreadyFinalized(store) &&
       GumboXRustPlugin.getGumboXContributions(store).nonEmpty &&
       // will need to add the gumboX module to the bridge's mod.rs file
@@ -395,73 +397,71 @@ object ComputeContributions {
 
           var topLevelGuaranteesCombined: ISZ[ST] = ISZ()
 
-          for (spec <- compute.specs) {
-            spec match {
-              case g: GclAssume =>
-                val gg = GumboXRustUtil.rewriteToExpX(SlangExpUtil.getRexp(g.exp, gclSymbolTable), thread, types, stateVars, crustTypeProvider)
-                val rexp = SlangExpUtil.rewriteExp(
-                  rexp = gg.exp, inRequires = T,
-                  inVerus = F, reporter = reporter)
+          for (g <- compute.assumes) {
+            val gg = GumboXRustUtil.rewriteToExpX(SlangExpUtil.getRexp(g.exp, gclSymbolTable), thread, types, stateVars, crustTypeProvider)
+            val rexp = SlangExpUtil.rewriteExp(
+              rexp = gg.exp, inRequires = T,
+              inVerus = F, reporter = reporter)
 
-                val methodName = s"compute_spec_${g.id}_assume"
+            val methodName = s"compute_spec_${g.id}_assume"
 
-                CEP_T_Assum_Params = CEP_T_Assum_Params ++ gg.params.elements
+            CEP_T_Assum_Params = CEP_T_Assum_Params ++ gg.params.elements
 
-                val sortedParams = GumboXRustUtil.sortParams(gg.params.elements)
+            val sortedParams = GumboXRustUtil.sortParams(gg.params.elements)
 
-                topLevelAssumeCallsCombined = topLevelAssumeCallsCombined :+ st"$methodName(${(for (p <- sortedParams) yield p.name, ", ")})"
+            topLevelAssumeCallsCombined = topLevelAssumeCallsCombined :+ st"$methodName(${(for (p <- sortedParams) yield p.name, ", ")})"
 
-                CEP_T_Assm__methods = CEP_T_Assm__methods :+ RAST.FnImpl(
-                  comments = ISZ(RAST.CommentST(
-                    st"""/** Compute Entrypoint Contract
-                        |  *
-                        |  * assumes ${g.id}
-                        |  ${GumboRustUtil.processDescriptor(spec.descriptor, "*   ")}
-                        |  ${(paramsToComment(sortedParams), "\n")}
-                        |  */""")),
-                  sig = RAST.FnSig(
-                    ident = RAST.IdentString(methodName),
-                    fnDecl = RAST.FnDecl(
-                      inputs = for (p <- sortedParams) yield p.toRustParam,
-                      outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
-                    fnHeader = RAST.FnHeader(F), generics = None()),
-                  attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(),
-                  body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(rexp)))),
-                  meta = ISZ())
+            CEP_T_Assm__methods = CEP_T_Assm__methods :+ RAST.FnImpl(
+              comments = ISZ(RAST.CommentST(
+                st"""/** Compute Entrypoint Contract
+                    |  *
+                    |  * assumes ${g.id}
+                    |  ${GumboRustUtil.processDescriptor(g.descriptor, "*   ")}
+                    |  ${(paramsToComment(sortedParams), "\n")}
+                    |  */""")),
+              sig = RAST.FnSig(
+                ident = RAST.IdentString(methodName),
+                fnDecl = RAST.FnDecl(
+                  inputs = for (p <- sortedParams) yield p.toRustParam,
+                  outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
+                fnHeader = RAST.FnHeader(F), generics = None()),
+              attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(),
+              body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(rexp)))),
+              meta = ISZ())
+          }
 
-              case g: GclGuarantee =>
-                val gg = GumboXRustUtil.rewriteToExpX(SlangExpUtil.getRexp(g.exp, gclSymbolTable), thread, types, stateVars, crustTypeProvider)
-                val rexp = SlangExpUtil.rewriteExp(
-                  rexp = gg.exp, inRequires = F,
-                  inVerus = F, reporter = reporter)
+          for (g <- compute.guarantees) {
+            val gg = GumboXRustUtil.rewriteToExpX(SlangExpUtil.getRexp(g.exp, gclSymbolTable), thread, types, stateVars, crustTypeProvider)
+            val rexp = SlangExpUtil.rewriteExp(
+              rexp = gg.exp, inRequires = F,
+              inVerus = F, reporter = reporter)
 
-                val methodName = s"compute_spec_${g.id}_guarantee"
+            val methodName = s"compute_spec_${g.id}_guarantee"
 
-                CEP_T_Guar_Params = CEP_T_Guar_Params ++ gg.params.elements
+            CEP_T_Guar_Params = CEP_T_Guar_Params ++ gg.params.elements
 
-                val sortedParams = GumboXRustUtil.sortParams(gg.params.elements)
+            val sortedParams = GumboXRustUtil.sortParams(gg.params.elements)
 
-                topLevelGuaranteesCombined = topLevelGuaranteesCombined :+ st"$methodName(${(for (p <- sortedParams) yield p.name, ", ")})"
+            topLevelGuaranteesCombined = topLevelGuaranteesCombined :+ st"$methodName(${(for (p <- sortedParams) yield p.name, ", ")})"
 
-                CEP_T_Guar__methods = CEP_T_Guar__methods :+ RAST.FnImpl(
-                  comments = ISZ(RAST.CommentST(
-                    st"""/** Compute Entrypoint Contract
-                        |  *
-                        |  * guarantee ${g.id}
-                        |  ${GumboRustUtil.processDescriptor(spec.descriptor, "*   ")}
-                        |  ${(paramsToComment(sortedParams), "\n")}
-                        |  */"""
-                  )),
-                  sig = RAST.FnSig(
-                    ident = RAST.IdentString(methodName),
-                    fnDecl = RAST.FnDecl(
-                      inputs = for (p <- sortedParams) yield p.toRustParam,
-                      outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
-                    fnHeader = RAST.FnHeader(F), generics = None()),
-                  attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(),
-                  body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(rexp)))),
-                  meta = ISZ())
-            }
+            CEP_T_Guar__methods = CEP_T_Guar__methods :+ RAST.FnImpl(
+              comments = ISZ(RAST.CommentST(
+                st"""/** Compute Entrypoint Contract
+                    |  *
+                    |  * guarantee ${g.id}
+                    |  ${GumboRustUtil.processDescriptor(g.descriptor, "*   ")}
+                    |  ${(paramsToComment(sortedParams), "\n")}
+                    |  */"""
+              )),
+              sig = RAST.FnSig(
+                ident = RAST.IdentString(methodName),
+                fnDecl = RAST.FnDecl(
+                  inputs = for (p <- sortedParams) yield p.toRustParam,
+                  outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
+                fnHeader = RAST.FnHeader(F), generics = None()),
+              attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(),
+              body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(rexp)))),
+              meta = ISZ())
           }
 
           if (CEP_T_Assm__methods.nonEmpty) {
@@ -519,30 +519,43 @@ object ComputeContributions {
           var CEP_T_Case_Params: Set[GGParam] = Set.empty
           var caseCallsCombined: ISZ[ST] = ISZ()
 
-          for (generalCase <- compute.cases) {
-            val ggAssm = GumboXRustUtil.rewriteToExpX(SlangExpUtil.getRexp(generalCase.assumes, gclSymbolTable), thread, types, stateVars, crustTypeProvider)
-            val rAssm = SlangExpUtil.rewriteExp(
-              rexp = ggAssm.exp, inRequires = T,
-              inVerus = F, reporter = reporter)
+          for (ccase <- compute.cases) {
+            var combinedAssumGuarParams: Set[GGParam] = Set.empty
+            val rAssm: Option[ST] =
+              ccase.assumes match {
+                case Some(assumes) =>
+                  val ggAssm = GumboXRustUtil.rewriteToExpX (SlangExpUtil.getRexp (assumes, gclSymbolTable), thread, types, stateVars, crustTypeProvider)
+                  combinedAssumGuarParams = combinedAssumGuarParams ++ ggAssm.params.elements
+                  Some(SlangExpUtil.rewriteExp (
+                    rexp = ggAssm.exp, inRequires = T,
+                    inVerus = F, reporter = reporter))
+                case _ => None()
+              }
 
-            val ggGuar = GumboXRustUtil.rewriteToExpX(SlangExpUtil.getRexp(generalCase.guarantees, gclSymbolTable), thread, types, stateVars, crustTypeProvider)
+            val ggGuar = GumboXRustUtil.rewriteToExpX(SlangExpUtil.getRexp(ccase.guarantees, gclSymbolTable), thread, types, stateVars, crustTypeProvider)
             val rGuar = SlangExpUtil.rewriteExp(
               rexp = ggGuar.exp, inRequires = F,
               inVerus = F, reporter = reporter)
 
-            val methodName = s"compute_case_${generalCase.id}"
+            val methodName = s"compute_case_${ccase.id}"
 
-            val combinedAssmGuarParams = ggAssm.params ++ ggGuar.params.elements
+            val combinedAssmGuarParams = combinedAssumGuarParams ++ ggGuar.params.elements
             CEP_T_Case_Params = CEP_T_Case_Params ++ combinedAssmGuarParams.elements
 
             val sortedParams = GumboXRustUtil.sortParams(combinedAssmGuarParams.elements)
 
             caseCallsCombined = caseCallsCombined :+ st"$methodName(${(for (p <- sortedParams) yield p.name, ", ")})"
 
+            val pred: ST =
+              if (rAssm.nonEmpty)
+                st"""implies(
+                    |  $rAssm,
+                    |  $rGuar)"""
+              else rGuar
             CEP_T_Case__methods = CEP_T_Case__methods :+ RAST.FnImpl(
               comments = ISZ(RAST.CommentST(
-                st"""/** guarantee ${generalCase.id}
-                    |  ${GumboRustUtil.processDescriptor(generalCase.descriptor, "*   ")}
+                st"""/** guarantee ${ccase.id}
+                    |  ${GumboRustUtil.processDescriptor(ccase.descriptor, "*   ")}
                     |  ${(paramsToComment(sortedParams), "\n")}
                     |  */"""
               )),
@@ -553,12 +566,8 @@ object ComputeContributions {
                   outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
                 fnHeader = RAST.FnHeader(F), generics = None()),
               attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(),
-              body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
-                st"""implies(
-                    |  $rAssm,
-                    |  $rGuar)""")))),
+              body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(pred)))),
               meta = ISZ())
-
           } // end for
 
           val sorted_CEP_T_Case_Params = sortParams(CEP_T_Case_Params.elements)

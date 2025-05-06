@@ -97,23 +97,29 @@ object GumboGen {
 
   @datatype class GclCaseHolder(val caseId: String,
                                 val descriptor: Option[ST],
-                                val requires: ST,
+                                val requires: Option[ST],
                                 val ensures: ST) extends GclHolder {
     def toST: ST = {
+      val reqOpt: Option[ST] =
+        if (requires.nonEmpty) Some(st"Requires($requires),")
+        else None()
       val ret =
         st"""Case("${caseId}"
             |  ${descriptor}
-            |  Requires(${requires}),
+            |  $reqOpt
             |  Ensures(${ensures})
             |)"""
       return ret;
     }
 
     def toSTMin: ST = {
+      val pred: ST =
+        if (requires.nonEmpty) st"($requires) ___>: ($ensures)"
+        else ensures
       val ret: ST =
         st"""// case ${caseId}
             |${descriptor}
-            |($requires) ___>: ($ensures)"""
+            |$pred"""
       return ret
     }
   }
@@ -633,31 +639,36 @@ object GumboGen {
 
     generalHolder = generalHolder ++ addBuiltInOutgoingEventPortRequires(context)
 
-
-    for (spec <- compute.specs) {
-      val rspec = gclSymbolTable.rexprs.get(toKey(spec.exp)).get
+    for (assumee <- compute.assumes) {
+      val rspec = gclSymbolTable.rexprs.get(toKey(assumee.exp)).get
       imports = imports ++ GumboGenUtil.resolveLitInterpolateImports(rspec)
 
-      val id = spec.id
-      val descriptor = GumboGen.processDescriptor(spec.descriptor, "//   ")
+      val descriptor = GumboGen.processDescriptor(assumee.descriptor, "//   ")
+      val rassume = GumboGen.StateVarInRewriter().wrapStateVarsInInput(rspec)
+      generalHolder = generalHolder :+ GclRequiresHolder(assumee.id, descriptor, st"$rassume")
+    }
 
-      val genHolder: GclGeneralHolder = spec match {
-        case g: GclAssume =>
-          val rassume = GumboGen.StateVarInRewriter().wrapStateVarsInInput(rspec)
-          GclRequiresHolder(id, descriptor, st"$rassume")
-        case g: GclGuarantee => GclEnsuresHolder(id, descriptor, st"$rspec")
-      }
+    for (guarantee <- compute.guarantees) {
+      val rspec = gclSymbolTable.rexprs.get(toKey(guarantee.exp)).get
+      imports = imports ++ GumboGenUtil.resolveLitInterpolateImports(rspec)
 
-      generalHolder = generalHolder :+ genHolder
+      val descriptor = GumboGen.processDescriptor(guarantee.descriptor, "//   ")
+      generalHolder = generalHolder :+ GclEnsuresHolder(guarantee.id, descriptor, st"$rspec")
     }
 
     if (compute.cases.nonEmpty) {
       // fill in general case
       for (generalCase <- compute.cases) {
 
-        val rexp = gclSymbolTable.rexprs.get(toKey(generalCase.assumes)).get
-        val rrassume = GumboGen.StateVarInRewriter().wrapStateVarsInInput(rexp)
-        imports = imports ++ GumboGenUtil.resolveLitInterpolateImports(rrassume)
+        val rrassume: Option[ST] =
+          generalCase.assumes match {
+            case Some(assumes) =>
+              val rexp = gclSymbolTable.rexprs.get(toKey(assumes)).get
+              val rrassume = GumboGen.StateVarInRewriter().wrapStateVarsInInput(rexp)
+              imports = imports ++ GumboGenUtil.resolveLitInterpolateImports(rrassume)
+              Some(rrassume.prettyST)
+            case _ => None()
+          }
 
         val rguarantee = gclSymbolTable.rexprs.get(toKey(generalCase.guarantees)).get
         imports = imports ++ GumboGenUtil.resolveLitInterpolateImports(rguarantee)
@@ -665,8 +676,8 @@ object GumboGen {
         generalHolder = generalHolder :+ GclCaseHolder(
           caseId = generalCase.id,
           descriptor = GumboGen.processDescriptor(generalCase.descriptor, "//   "),
-          requires = st"${rrassume}",
-          ensures = st"${rguarantee}")
+          requires = rrassume,
+          ensures = rguarantee.prettyST)
       }
     }
 
@@ -693,7 +704,7 @@ object GumboGen {
 
         val eventPort = optInEvent.get
 
-        val handlerRequires = generalRequires
+        val handlerRequires: ISZ[GclRequiresHolder] = generalRequires
 
         if (generalFlows.nonEmpty) {
           val marker = genComputeMarkerCreator(eventPort.identifier, "FLOW")
@@ -716,13 +727,22 @@ object GumboGen {
                     |${modMarker.endMarker}"""
             }
 
-            if (handlerRequires.nonEmpty) {
+            if (handlerRequires.nonEmpty || handler.assumes.nonEmpty) {
               val marker = genComputeMarkerCreator(eventPort.identifier, "REQUIRES")
-              val elems = handlerRequires.map((m: GclRequiresHolder) => m.toSTMin)
+              val handlerRequiresST: ISZ[ST] =
+                handlerRequires.map((m: GclRequiresHolder) => m.toSTMin) ++
+                  handler.assumes.map((g: GclAssume) => {
+                    val rexp = gclSymbolTable.rexprs.get(toKey(g.exp)).get
+                    val rassume = GumboGen.StateVarInRewriter().wrapStateVarsInInput(rexp)
+                    imports = imports ++ GumboGenUtil.resolveLitInterpolateImports(rassume)
+                    st"""// assumes ${g.id}
+                        |${GumboGen.processDescriptor(g.descriptor, "//   ")}
+                        |${rassume}"""
+                  })
 
               rrequires = rrequires :+
                 st"""${marker.beginMarker}
-                    |${(elems, ",\n")}
+                    |${(handlerRequiresST, ",\n")}
                     |${marker.endMarker}"""
             }
 
@@ -730,7 +750,7 @@ object GumboGen {
               val generalElems = generalEnsures.map((m: GclEnsuresHolder) => m.toSTMin)
               val _cases = generalCases.map((m: GclCaseHolder) => m.toSTMin)
 
-              val handlerEnsures = generalElems ++ _cases ++
+              val handlerEnsuresST: ISZ[ST] = generalElems ++ _cases ++
                 handler.guarantees.map((g: GclGuarantee) => {
                   val rexp = gclSymbolTable.rexprs.get(toKey(g.exp)).get
                   imports = imports ++ GumboGenUtil.resolveLitInterpolateImports(rexp)
@@ -743,7 +763,7 @@ object GumboGen {
 
               rensures = rensures :+
                 st"""${marker.beginMarker}
-                    |${(handlerEnsures, ",\n")}
+                    |${(handlerEnsuresST, ",\n")}
                     |${marker.endMarker}"""
             }
           }

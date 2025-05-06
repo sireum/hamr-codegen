@@ -23,6 +23,18 @@ object GclUtil {
     ((s, s"org.sireum.${ops.StringOps(s).firstToUpper}._"))
   })
 
+
+  object SlangAstBridge {
+    // Slang enums nested within objects are not accessible via Eclipse JDT so this
+    // allows Gumbo2Air to get the enum value by name.  Currently only needed to
+    // resolve the 'apply' invoke call for nested arrays, e.g. array(1)(2)
+    @strictpure def getResolvedInfo_BuiltIn_Kind(enumValue: String): AST.ResolvedInfo.BuiltIn.Kind.Type =
+      AST.ResolvedInfo.BuiltIn.Kind.byName(enumValue).get
+  }
+  // need this dummy class in order to be to get access to the singleton from Eclipse JDT
+  @datatype class SlangAstBridge
+
+
   @datatype class BinaryBuilder
 
   @datatype class BinaryExpPrecedenceOps extends BinaryPrecedenceOps[BinaryBuilder, Exp, Exp] {

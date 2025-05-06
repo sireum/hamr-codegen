@@ -84,21 +84,28 @@ object GumboRustUtil {
   }
 
   @pure def processGumboCase(c: GclCaseStatement, types: AadlTypes, gclSymbolTable: GclSymbolTable, reporter: Reporter): RAST.Expr = {
-    val requires = SlangExpUtil.rewriteExp(
-      rexp = SlangExpUtil.getRexp(c.assumes, gclSymbolTable),
-      inRequires = T,
-      inVerus = T,
-      reporter = reporter)
+    val requires: Option[ST] =
+      if (c.assumes.nonEmpty)
+        Some(SlangExpUtil.rewriteExp(
+        rexp = SlangExpUtil.getRexp(c.assumes.get, gclSymbolTable),
+        inRequires = T,
+        inVerus = T,
+        reporter = reporter))
+      else None()
     val ensures = SlangExpUtil.rewriteExp(
       rexp = SlangExpUtil.getRexp(c.guarantees, gclSymbolTable),
       inRequires = F,
       inVerus = T,
       reporter = reporter)
+    val e: ST =
+      if (requires.nonEmpty)
+        st"""($requires) ==>
+            |  ($ensures)"""
+      else ensures
     return RAST.ExprST(
       st"""// case ${c.id}
           |${GumboRustUtil.processDescriptor(c.descriptor, "//   ")}
-          |($requires) ==>
-          |  ($ensures)""")
+          |$e""")
   }
 
 

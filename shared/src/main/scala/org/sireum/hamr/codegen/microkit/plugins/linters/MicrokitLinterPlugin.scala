@@ -26,6 +26,9 @@ object MicrokitLinterPlugin {
 @sig trait MicrokitLinterPlugin extends MicrokitLintPlugin {
   @pure override def validModel(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes,
                                 symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, B) = {
+    if (isDisabled(store)) {
+      return (store, T)
+    }
     var localStore = store
 
     val allProcesses = symbolTable.getProcesses()

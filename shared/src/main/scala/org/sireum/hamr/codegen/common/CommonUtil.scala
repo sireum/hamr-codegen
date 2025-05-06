@@ -11,6 +11,8 @@ object CommonUtil {
 
   @sig trait StoreValue
 
+  @datatype class UnitValue() extends StoreValue
+
   @datatype class BoolValue(val value: B) extends StoreValue
 
   @datatype class ISZValue[T](val elements: ISZ[T]) extends StoreValue

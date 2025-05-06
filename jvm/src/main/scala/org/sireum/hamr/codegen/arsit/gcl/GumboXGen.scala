@@ -524,58 +524,60 @@ object GumboXGen {
           var CEP_T_Guar_Params: Set[GGParam] = Set.empty
           var topLevelGuarantees: ISZ[ST] = ISZ()
           var topLevelGuaranteesCombined: ISZ[ST] = ISZ()
-          for (spec <- gclCompute.specs) {
-            val rspec = gclSymbolTable.rexprs.get(toKey(spec.exp)).get
+
+          for (assumee <- gclCompute.assumes) {
+            val rspec = gclSymbolTable.rexprs.get(toKey(assumee.exp)).get
             localGumboStore = localGumboStore(imports = localGumboStore.imports ++ GumboGenUtil.resolveLitInterpolateImports(rspec))
-            val descriptor = GumboXGen.processDescriptor(spec.descriptor, "*   ")
+            val descriptor = GumboXGen.processDescriptor(assumee.descriptor, "*   ")
+            val gg = GumboXGenUtil.rewriteToExpX(rspec, component, componentNames, aadlTypes, stateVars)
+            val methodName = st"compute_spec_${assumee.id}_assume"
 
-            spec match {
-              case g: GclAssume =>
-                val gg = GumboXGenUtil.rewriteToExpX(rspec, component, componentNames, aadlTypes, stateVars)
-                val methodName = st"compute_spec_${g.id}_assume"
+            CEP_T_Assm_Params = CEP_T_Assm_Params ++ gg.params.elements
 
-                CEP_T_Assm_Params = CEP_T_Assm_Params ++ gg.params.elements
+            val sortedParams = GumboXGenUtil.sortParam(gg.params.elements)
 
-                val sortedParams = GumboXGenUtil.sortParam(gg.params.elements)
+            topLevelAssumeCallsCombined = topLevelAssumeCallsCombined :+ st"$methodName(${(for (p <- sortedParams) yield p.name, ", ")})"
 
-                topLevelAssumeCallsCombined = topLevelAssumeCallsCombined :+ st"$methodName(${(for (p <- sortedParams) yield p.name, ", ")})"
+            val method =
+              st"""/** Compute Entrypoint Contract
+                  |  *
+                  |  * assume ${assumee.id}
+                  |  $descriptor
+                  |  ${(paramsToComment(sortedParams), "\n")}
+                  |  */
+                  |@strictpure def $methodName(
+                  |    ${(for (p <- sortedParams) yield p.getParamDef, ",\n")}): B =
+                  |  ${gg.exp}"""
 
-                val method =
-                  st"""/** Compute Entrypoint Contract
-                      |  *
-                      |  * assumes ${g.id}
-                      |  $descriptor
-                      |  ${(paramsToComment(sortedParams), "\n")}
-                      |  */
-                      |@strictpure def $methodName(
-                      |    ${(for (p <- sortedParams) yield p.getParamDef, ",\n")}): B =
-                      |  ${gg.exp}"""
+            topLevelAssumes = topLevelAssumes :+ method
+          }
 
-                topLevelAssumes = topLevelAssumes :+ method
+          for (guarantee <- gclCompute.guarantees) {
+            val rspec = gclSymbolTable.rexprs.get(toKey(guarantee.exp)).get
+            localGumboStore = localGumboStore(imports = localGumboStore.imports ++ GumboGenUtil.resolveLitInterpolateImports(rspec))
+            val descriptor = GumboXGen.processDescriptor(guarantee.descriptor, "*   ")
 
-              case g: GclGuarantee =>
-                val gg = GumboXGenUtil.rewriteToExpX(rspec, component, componentNames, aadlTypes, stateVars)
-                val methodName = st"compute_spec_${g.id}_guarantee"
+            val gg = GumboXGenUtil.rewriteToExpX(rspec, component, componentNames, aadlTypes, stateVars)
+            val methodName = st"compute_spec_${guarantee.id}_guarantee"
 
-                CEP_T_Guar_Params = CEP_T_Guar_Params ++ gg.params.elements
+            CEP_T_Guar_Params = CEP_T_Guar_Params ++ gg.params.elements
 
-                val sortedParams = GumboXGenUtil.sortParam(gg.params.elements)
+            val sortedParams = GumboXGenUtil.sortParam(gg.params.elements)
 
-                topLevelGuaranteesCombined = topLevelGuaranteesCombined :+ st"$methodName(${(for (p <- sortedParams) yield p.name, ", ")})"
+            topLevelGuaranteesCombined = topLevelGuaranteesCombined :+ st"$methodName(${(for (p <- sortedParams) yield p.name, ", ")})"
 
-                val method =
-                  st"""/** Compute Entrypoint Contract
-                      |  *
-                      |  * guarantee ${g.id}
-                      |  ${descriptor}
-                      |  ${(paramsToComment(sortedParams), "\n")}
-                      |  */
-                      |@strictpure def $methodName(
-                      |    ${(for (p <- sortedParams) yield p.getParamDef, ",\n")}): B =
-                      |  ${gg.exp}"""
+            val method =
+              st"""/** Compute Entrypoint Contract
+                  |  *
+                  |  * guarantee ${guarantee.id}
+                  |  ${descriptor}
+                  |  ${(paramsToComment(sortedParams), "\n")}
+                  |  */
+                  |@strictpure def $methodName(
+                  |    ${(for (p <- sortedParams) yield p.getParamDef, ",\n")}): B =
+                  |  ${gg.exp}"""
 
-                topLevelGuarantees = topLevelGuarantees :+ method
-            }
+            topLevelGuarantees = topLevelGuarantees :+ method
           }
 
           if (topLevelAssumes.nonEmpty) {
@@ -623,11 +625,19 @@ object GumboXGen {
           var caseCallsCombined: ISZ[ST] = ISZ()
 
           for (generalCase <- gclCompute.cases) {
-            val rexp = gclSymbolTable.rexprs.get(toKey(generalCase.assumes)).get
-            val rrassume = GumboGen.StateVarInRewriter().wrapStateVarsInInput(rexp)
-            localGumboStore = localGumboStore(imports = localGumboStore.imports ++ GumboGenUtil.resolveLitInterpolateImports(rrassume))
+            var combinedAssmGuarParam: Set[GGParam] = Set.empty
+            val ggAssm: Option[GGExpParamHolder] =
+              generalCase.assumes match {
+                case Some(assumee) =>
+                  val rexp = gclSymbolTable.rexprs.get(toKey(assumee)).get
+                  val rrassume = GumboGen.StateVarInRewriter().wrapStateVarsInInput(rexp)
+                  localGumboStore = localGumboStore(imports = localGumboStore.imports ++ GumboGenUtil.resolveLitInterpolateImports(rrassume))
 
-            val ggAssm = GumboXGenUtil.rewriteToExpX(rrassume, component, componentNames, aadlTypes, stateVars)
+                  val gg = GumboXGenUtil.rewriteToExpX(rrassume, component, componentNames, aadlTypes, stateVars)
+                  combinedAssmGuarParam = combinedAssmGuarParam ++ gg.params.elements
+                  Some(gg)
+                case _ => None()
+              }
 
             val rguarantee = gclSymbolTable.rexprs.get(toKey(generalCase.guarantees)).get
             localGumboStore = localGumboStore(imports = localGumboStore.imports ++ GumboGenUtil.resolveLitInterpolateImports(rguarantee))
@@ -635,12 +645,18 @@ object GumboXGen {
             val ggGuar = GumboXGenUtil.rewriteToExpX(rguarantee, component, componentNames, aadlTypes, stateVars)
             val methodName = st"compute_case_${generalCase.id}"
 
-            val combinedAssmGuarParam = ggAssm.params ++ ggGuar.params.elements
+            combinedAssmGuarParam = combinedAssmGuarParam ++ ggGuar.params.elements
             CEP_T_Case_Params = CEP_T_Case_Params ++ combinedAssmGuarParam.elements
 
             val sortedParams = GumboXGenUtil.sortParam(combinedAssmGuarParam.elements)
 
             caseCallsCombined = caseCallsCombined :+ st"$methodName(${(for (p <- sortedParams) yield p.name, ", ")})"
+
+            val pred: ST =
+              if (ggAssm.nonEmpty)
+                st"""(${ggAssm.get.exp.prettyST}) ___>:
+                    |  (${ggGuar.exp.prettyST})"""
+              else ggGuar.exp.prettyST
 
             val descriptor = GumboXGen.processDescriptor(generalCase.descriptor, "*   ")
             val method =
@@ -650,8 +666,7 @@ object GumboXGen {
                   |  */
                   |@strictpure def $methodName(
                   |    ${(for (p <- sortedParams) yield p.getParamDef, ",\n")}): B =
-                  |  (${ggAssm.exp}) ___>:
-                  |    (${ggGuar.exp})"""
+                  |  $pred"""
 
             caseMethods = caseMethods :+ method
           }

@@ -91,7 +91,7 @@ object GumboXPluginStore {
         case ISZ(GclAnnexClauseInfo(annex, _)) =>
           val hasInitContracts: B = annex.initializes.nonEmpty && annex.initializes.get.guarantees.nonEmpty
           val hasComputeContracts: B = annex.compute match {
-            case Some(c) => c.cases.nonEmpty || c.specs.nonEmpty || c.handlers.nonEmpty
+            case Some(c) => c.cases.nonEmpty || c.assumes.nonEmpty || c.guarantees.nonEmpty || c.handlers.nonEmpty
             case _ => F
           }
           annex.integration.nonEmpty || hasInitContracts || hasComputeContracts

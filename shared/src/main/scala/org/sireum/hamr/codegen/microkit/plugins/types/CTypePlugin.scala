@@ -67,6 +67,7 @@ object CTypePlugin {
 
   @strictpure override def canHandle(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): B =
     options.platform == CodegenHamrPlatform.Microkit &&
+      !isDisabled(store) &&
       MicrokitLinterPlugin.getTouchedTypesOpt(store).nonEmpty &&
       !haveProcessedTypes(store)
 

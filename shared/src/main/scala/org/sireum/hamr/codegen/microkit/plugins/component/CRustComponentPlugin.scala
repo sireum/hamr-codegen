@@ -63,11 +63,13 @@ object ComponentContributions {}
 
   @strictpure override def canHandle(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): B =
     options.platform == HamrCli.CodegenHamrPlatform.Microkit &&
+      !isDisabled(store) &&
       CRustTypePlugin.hasCRustTypeProvider(store) &&
       //CRustApiPlugin.getCRustApiContributions(store).nonEmpty &&
       !haveHandled(store)
 
   @strictpure override def canFinalize(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): B =
+    !isDisabled(store) &&
     haveHandled(store) &&
       !haveFinalized(store)
 

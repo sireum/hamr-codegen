@@ -991,44 +991,50 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       }
 
       s.compute match {
-        case Some(GclCompute(modifies, specs, cases, handlers, flows)) => {
+        case Some(GclCompute(modifies, assumes, guarantees, cases, handlers, flows)) => {
 
           processModifiesClause(modifies)
 
           var seenSpecIds: Set[String] = Set.empty
-
-          for (spec <- specs) {
-            if (seenSpecIds.contains(spec.id)) {
-              reporter.error(spec.posOpt, GclResolver.toolName, s"Duplicate spec name: ${spec.id}")
+          for (assumee <- assumes) {
+            if (seenSpecIds.contains(assumee.id)) {
+              reporter.error(assumee.posOpt, GclResolver.toolName, s"Duplicate spec name: ${assumee.id}")
             }
-            seenSpecIds = seenSpecIds + spec.id
+            seenSpecIds = seenSpecIds + assumee.id
 
             {
-              val rexp = typeCheckBoolExp(spec.exp)
-              val isContextGeneralAssumeClause = spec.isInstanceOf[GclAssume]
-              val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, isContextGeneralAssumeClause, s.state, gclMethods, symbolTable, reporter)
+              val rexp = typeCheckBoolExp(assumee.exp)
+              val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, T, s.state, gclMethods, symbolTable, reporter)
               apiReferences = apiReferences ++ apiRefs
 
-              spec match {
-                case g: GclAssume =>
-                  for (sym <- symbols) {
-                    sym match {
-                      case AadlSymbolHolder(i: AadlPort) if i.direction == Direction.Out =>
-                        reporter.error(spec.exp.fullPosOpt, toolName, "Assume clauses cannot refer to outgoing ports")
-                      case _ =>
-                    }
-                  }
-                case _ =>
+              for (sym <- symbols) {
+                sym match {
+                  case AadlSymbolHolder(i: AadlPort) if i.direction == Direction.Out =>
+                    reporter.error(assumee.exp.fullPosOpt, toolName, "Assume clauses cannot refer to outgoing ports")
+                  case _ =>
+                }
               }
 
-              if (rexp2.isEmpty) {
-                rexprs = rexprs + (toKey(spec.exp) ~> rexp)
-              } else {
-                rexprs = rexprs + (toKey(spec.exp) ~> rexp2.get)
-              }
+              rexprs = rexprs + (
+                if (rexp2.isEmpty) toKey(assumee.exp) ~> rexp
+                else toKey(assumee.exp) ~> rexp2.get)
             }
           }
 
+          for (guarantee <- guarantees) {
+            if (seenSpecIds.contains(guarantee.id)) {
+              reporter.error(guarantee.posOpt, GclResolver.toolName, s"Duplicate spec name: ${guarantee.id}")
+            }
+            seenSpecIds = seenSpecIds + guarantee.id
+
+            val rexp = typeCheckBoolExp(guarantee.exp)
+            val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, F, s.state, gclMethods, symbolTable, reporter)
+            apiReferences = apiReferences ++ apiRefs
+
+            rexprs = rexprs + (
+              if (rexp2.isEmpty) toKey(guarantee.exp) ~> rexp
+              else toKey(guarantee.exp) ~> rexp2.get)
+          }
 
           for (caase <- cases) {
             if (seenSpecIds.contains(caase.id)) {
@@ -1036,23 +1042,25 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             }
             seenSpecIds = seenSpecIds + caase.id
 
-            {
-              val rexp = typeCheckBoolExp(caase.assumes)
+            caase.assumes match {
+              case Some(assumes) =>
+              val rexp = typeCheckBoolExp(assumes)
               val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, F, s.state, gclMethods, symbolTable, reporter)
               apiReferences = apiReferences ++ apiRefs
 
               for (sym <- symbols) {
                 sym match {
                   case AadlSymbolHolder(i: AadlPort) if i.direction == Direction.Out =>
-                    reporter.error(caase.assumes.fullPosOpt, toolName, "Assume clauses cannot refer to outgoing ports")
+                    reporter.error(assumes.fullPosOpt, toolName, "Assume clauses cannot refer to outgoing ports")
                   case _ =>
                 }
               }
               if (rexp2.isEmpty) {
-                rexprs = rexprs + (toKey(caase.assumes) ~> rexp)
+                rexprs = rexprs + (toKey(assumes) ~> rexp)
               } else {
-                rexprs = rexprs + (toKey(caase.assumes) ~> rexp2.get)
+                rexprs = rexprs + (toKey(assumes) ~> rexp2.get)
               }
+              case _ =>
             }
 
             {
@@ -1098,22 +1106,77 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             processModifiesClause(handler.modifies)
 
             var handlerSpecIds: Set[String] = Set.empty
-            for (guarantees <- handler.guarantees) {
-              if (seenSpecIds.contains(guarantees.id) || handlerSpecIds.contains(guarantees.id)) {
-                reporter.error(guarantees.posOpt, GclResolver.toolName, s"Duplicate spec name: ${guarantees.id}")
+            for (assm <- handler.assumes) {
+              if (seenSpecIds.contains(assm.id)) {
+                reporter.error(assm.posOpt, GclResolver.toolName, s"Duplicate spec name: ${assm.id}")
               }
-              handlerSpecIds = handlerSpecIds + guarantees.id
+              handlerSpecIds = handlerSpecIds + assm.id
 
-              val rexp = typeCheckBoolExp(guarantees.exp)
-              val (rexp2, _, apiRefs) = GclResolver.collectSymbolsH(rexp, RewriteMode.ApiGet, component, F,
-                computeHandlerPortMap.get(handler.port), // rewrite handled port references to the passed in param
-                s.state, gclMethods, symbolTable, reporter)
+              val rexp = typeCheckBoolExp(assm.exp)
+              val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, T, s.state, gclMethods, symbolTable, reporter)
               apiReferences = apiReferences ++ apiRefs
 
-              if (rexp2.isEmpty) {
-                rexprs = rexprs + toKey(guarantees.exp) ~> rexp
-              } else {
-                rexprs = rexprs + toKey(guarantees.exp) ~> rexp2.get
+              for (sym <- symbols) {
+                sym match {
+                  case AadlSymbolHolder(i: AadlPort) if i.direction == Direction.Out =>
+                    reporter.error(assm.exp.fullPosOpt, toolName, "Assume clauses cannot refer to outgoing ports")
+                  case _ =>
+                }
+              }
+
+              rexprs = rexprs + (
+                if (rexp2.isEmpty) toKey(assm.exp) ~> rexp
+                else toKey(assm.exp) ~> rexp2.get)
+            }
+
+            for (guar <- handler.guarantees) {
+              if (seenSpecIds.contains(guar.id)) {
+                reporter.error(guar.posOpt, GclResolver.toolName, s"Duplicate spec name: ${guar.id}")
+              }
+              handlerSpecIds = handlerSpecIds + guar.id
+
+              val rexp = typeCheckBoolExp(guar.exp)
+              val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, F, s.state, gclMethods, symbolTable, reporter)
+              apiReferences = apiReferences ++ apiRefs
+
+              rexprs = rexprs + (
+                if (rexp2.isEmpty) toKey(guar.exp) ~> rexp
+                else toKey(guar.exp) ~> rexp2.get)
+            }
+
+            for (caase <- handler.cases) {
+              if (seenSpecIds.contains(caase.id)) {
+                reporter.error(caase.posOpt, GclResolver.toolName, s"Duplicate spec name: ${caase.id}")
+              }
+              seenSpecIds = seenSpecIds + caase.id
+
+              caase.assumes match {
+                case Some(assumes) =>
+                  val rexp = typeCheckBoolExp(assumes)
+                  val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, F, s.state, gclMethods, symbolTable, reporter)
+                  apiReferences = apiReferences ++ apiRefs
+
+                  for (sym <- symbols) {
+                    sym match {
+                      case AadlSymbolHolder(i: AadlPort) if i.direction == Direction.Out =>
+                        reporter.error(assumes.fullPosOpt, toolName, "Assume clauses cannot refer to outgoing ports")
+                      case _ =>
+                    }
+                  }
+                  rexprs = rexprs + (
+                    if (rexp2.isEmpty) toKey(assumes) ~> rexp
+                    else toKey(assumes) ~> rexp2.get)
+                case _ =>
+              }
+
+              {
+                val rexp = typeCheckBoolExp(caase.guarantees)
+                val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, F, s.state, gclMethods, symbolTable, reporter)
+                apiReferences = apiReferences ++ apiRefs
+
+                rexprs = rexprs + (
+                  if (rexp2.isEmpty) toKey(caase.guarantees) ~> rexp
+                  else toKey(caase.guarantees) ~> rexp2.get)
               }
             }
 
@@ -1390,9 +1453,16 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           return enumx
 
         case r: RecordType =>
-          val component = r.container.get
+          val aadlData = symbolTable.componentMap.get(ISZ(r.name)).get.asInstanceOf[AadlData]
 
-          val aadlData = symbolTable.componentMap.get(ISZ(component.classifier.get.name)).get.asInstanceOf[AadlData]
+          return buildAdtTypeInfo(aadlData)
+
+        case a: ArrayType =>
+          if (a.dimensions.size > 1) {
+            reporter.error(None(), GclResolver.toolName, s"Only single dimension arrays are supported.  ${a.name} has ${a.dimensions.size}")
+          }
+
+          val aadlData = symbolTable.componentMap.get(ISZ(a.name)).get.asInstanceOf[AadlData]
 
           return buildAdtTypeInfo(aadlData)
 
@@ -1509,7 +1579,6 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
           return typeInfoAdt
 
-        case a: ArrayType => return TODO_TYPE
         case b: BitType => return TODO_TYPE
         case x => return TODO_TYPE
       }
@@ -2015,28 +2084,28 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
       if (gclAnnexes.size > 1) {
         reporter.error(a.component.identifier.pos, toolName, "Only a single GCL subclause is allowed per component type/implementation")
-      }
-
-      // treat stateVars as if they were features for Tipe
-      val stateVars: ISZ[AadlPort] = gclAnnexes.flatMap((g: GclSubclause) => g.state.map((sv: GclStateVar) => {
-        val aadlType = getAadlType(sv.classifier, aadlTypes, sv.posOpt, reporter)
-        AadlDataPort(
-          feature = FeatureEnd(
-            identifier = Name(adtQualifiedName :+ sv.name, sv.posOpt),
-            direction = Direction.Out,
-            category = FeatureCategory.DataPort,
-            classifier = Some(Classifier(sv.classifier)),
-            properties = ISZ(),
-            uriFrag = ""),
-          featureGroupIds = ISZ(),
-          direction = Direction.In,
-          aadlType = aadlType)
-      }))
-
-      val features: ISZ[AadlPort] = {
-        if (stateVars.nonEmpty) {
+      } else if (gclAnnexes.nonEmpty) {
+        if (gclAnnexes(0).state.nonEmpty) {
           reporter.error(a.component.identifier.pos, toolName, s"Not expecting a data component to have state vars")
         }
+        if (gclAnnexes(0).methods.nonEmpty) {
+          reporter.error(a.component.identifier.pos, toolName, s"Not expecting a data component to have GUMBO methods")
+        }
+        if (gclAnnexes(0).initializes.nonEmpty) {
+          reporter.error(a.component.identifier.pos, toolName, s"Not expecting a data component to have initialize clauses")
+        }
+        if (gclAnnexes(0).integration.nonEmpty) {
+          reporter.error(a.component.identifier.pos, toolName, s"Not expecting a data component to have integration clauses")
+        }
+        if (gclAnnexes(0).compute.nonEmpty) {
+          reporter.error(a.component.identifier.pos, toolName, s"Not expecting a data component to have compute clauses")
+        }
+        if (gclAnnexes(0).invariants.isEmpty) {
+          reporter.error(a.component.identifier.pos, toolName, s"Expected a datatype invariant")
+        }
+      }
+
+      val features: ISZ[AadlPort] = {
         // treat aadl data subcomponents as if they were features for Tipe
         a.subComponents.map((sc: AadlComponent) => {
           val aadlType = aadlTypes.typeMap.get(sc.component.classifier.get.name).get
@@ -2054,7 +2123,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       }
 
       var adtParams: ISZ[AST.AdtParam] = ISZ()
-      for (param <- features ++ stateVars) {
+      for (param <- features) {
         val paramId: String = param.identifier
         val paramType: AadlType = param match {
           case afd: AadlFeatureData => afd.aadlType
@@ -2250,7 +2319,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           constructorRes = constructorRes), None(), reporter)
 
       return typeInfoAdt
-    }
+
+    } // end buildAdtTypeInfo
 
     { // build type info aadl types
       for (aadlType <- aadlTypes.typeMap.values) {
