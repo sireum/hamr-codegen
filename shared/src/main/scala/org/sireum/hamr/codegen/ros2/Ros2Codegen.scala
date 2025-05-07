@@ -43,11 +43,9 @@ import org.sireum.ops.ISZOps
       case "Cpp" => files =
         Generator.genCppNodePkg(modelName, threadComponents, connectionMap, datatypeMap, options.strictAadlMode,
                                 options.invertTopicBinding, reporter)
-        files = files ++ Generator.genInterfacesPkg(modelName, datatypeMap)
       case "Python" =>
         files = GeneratorPy.genPyNodePkg(modelName, threadComponents, connectionMap, datatypeMap, options.strictAadlMode,
                                                       options.invertTopicBinding, reporter)
-        files = files ++ GeneratorPy.genInterfacesPkg(modelName, datatypeMap)
       case _ => reporter.error(None(), toolName, s"Unknown code type: ${options.ros2NodesLanguage.name}")
     }
 
@@ -56,6 +54,8 @@ import org.sireum.ops.ISZOps
       case "Python" => files = files ++ GeneratorLaunch.genPyLaunchPkg(modelName, threadComponents, systemComponents, options.ros2NodesLanguage.name)
       case _ => reporter.error(None(), toolName, s"Unknown code type: ${options.ros2NodesLanguage.name}")
     }
+
+    files = files ++ GeneratorInterfaces.genInterfacesPkg(modelName, datatypeMap, options.ros2NodesLanguage.name)
 
     for (file <- files) {
       var filePath: String = ""
