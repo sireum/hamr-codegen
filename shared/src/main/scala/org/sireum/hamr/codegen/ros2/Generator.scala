@@ -1147,6 +1147,55 @@ object Generator {
     return handler
   }
 
+  def genCppSubscriptionHandlerSporadicWithExamples(inPort: AadlPort, nodeName: String, portType: String,
+                                                    inDataPorts: ISZ[AadlPort], packageName: String,
+                                                    datatypeMap: Map[AadlType, (String, ISZ[String])],
+                                                    reporter: Reporter): ST = {
+    val handlerName = inPort.identifier
+
+    var exampleUsage: ST = st""
+    if (inDataPorts.size > 0) {
+      exampleUsage = st"// example receiving messages on data ports"
+      for (inDataPort <- inDataPorts) {
+        val dataPortType: String = genPortDatatype(inDataPort, packageName, datatypeMap, reporter)
+        exampleUsage =
+          st"""${exampleUsage}
+              |${dataPortType}::SharedPtr ${inDataPort.identifier} = get_${inDataPort.identifier}();
+              |PRINT_INFO("Received ${inDataPort.identifier}: %s", MESSAGE_TO_STRING(${inDataPort.identifier}));"""
+      }
+    }
+
+
+    var subscriptionHandlerHeader: ST = st""
+    if (isEventPort(portType)) {
+      subscriptionHandlerHeader = st"""void ${nodeName}::handle_${handlerName}()
+                                      |{
+                                      |    // Handle ${handlerName} event
+                                      |    PRINT_INFO("Received ${handlerName}");
+                                    """
+    }
+    else {
+      subscriptionHandlerHeader = st"""void ${nodeName}::handle_${handlerName}(const ${portType}::SharedPtr msg)
+                                      |{
+                                      |    // Handle ${handlerName} msg
+                                      |    PRINT_INFO("Received ${handlerName}: %s", MESSAGE_TO_STRING(msg));
+                                    """
+    }
+
+    if (!exampleUsage.render.value.equals("")) {
+      subscriptionHandlerHeader =
+        st"""${subscriptionHandlerHeader}
+            |    ${exampleUsage}"""
+    }
+
+    subscriptionHandlerHeader =
+      st"""${subscriptionHandlerHeader}
+          |}
+        """
+
+    return subscriptionHandlerHeader
+  }
+
   // Example:
   //  void handle_currentTemp(const example_interfaces::msg::Int32::SharedPtr currentTempMsg) {}
   def genCppSubscriptionHandlerSporadic(inPort: AadlPort, nodeName: String, portType: String): ST = {
@@ -1157,6 +1206,7 @@ object Generator {
       subscriptionHandlerHeader = st"""void ${nodeName}::handle_${handlerName}()
                                       |{
                                       |    // Handle ${handlerName} event
+                                      |    PRINT_INFO("Received ${handlerName}");
                                       |}
                                     """
     }
@@ -1164,9 +1214,58 @@ object Generator {
       subscriptionHandlerHeader = st"""void ${nodeName}::handle_${handlerName}(const ${portType}::SharedPtr msg)
                                       |{
                                       |    // Handle ${handlerName} msg
+                                      |    PRINT_INFO("Received ${handlerName}: %s", MESSAGE_TO_STRING(msg));
                                       |}
                                     """
     }
+
+    return subscriptionHandlerHeader
+  }
+
+  def genCppSubscriptionHandlerSporadicStrictWithExamples(inPort: AadlPort, nodeName: String, portType: String,
+                                                          inDataPorts: ISZ[AadlPort], packageName: String,
+                                                          datatypeMap: Map[AadlType, (String, ISZ[String])],
+                                                          reporter: Reporter): ST = {
+    val handlerName = inPort.identifier
+
+    var exampleUsage: ST = st""
+    if (inDataPorts.size > 0) {
+      exampleUsage = st"// example receiving messages on data ports"
+      for (inDataPort <- inDataPorts) {
+        val dataPortType: String = genPortDatatype(inDataPort, packageName, datatypeMap, reporter)
+        exampleUsage =
+          st"""${exampleUsage}
+              |${dataPortType} ${inDataPort.identifier} = get_${inDataPort.identifier}();
+              |PRINT_INFO("Received ${inDataPort.identifier}: %s", MESSAGE_TO_STRING(${inDataPort.identifier}));"""
+      }
+    }
+
+    var subscriptionHandlerHeader: ST = st""
+    if (isEventPort(portType)) {
+      subscriptionHandlerHeader = st"""void ${nodeName}::handle_${handlerName}()
+                                      |{
+                                      |    // Handle ${handlerName} event
+                                      |    PRINT_INFO("Received ${handlerName}");
+                                    """
+    }
+    else {
+      subscriptionHandlerHeader = st"""void ${nodeName}::handle_${handlerName}(const ${portType} msg)
+                                      |{
+                                      |    // Handle ${handlerName} msg
+                                      |    PRINT_INFO("Received ${handlerName}: %s", MESSAGE_TO_STRING(msg));
+                                    """
+    }
+
+    if (!exampleUsage.render.value.equals("")) {
+      subscriptionHandlerHeader =
+        st"""${subscriptionHandlerHeader}
+            |    ${exampleUsage}"""
+    }
+
+    subscriptionHandlerHeader =
+      st"""${subscriptionHandlerHeader}
+          |}
+        """
 
     return subscriptionHandlerHeader
   }
@@ -1179,6 +1278,7 @@ object Generator {
       subscriptionHandlerHeader = st"""void ${nodeName}::handle_${handlerName}()
                                       |{
                                       |    // Handle ${handlerName} event
+                                      |    PRINT_INFO("Received ${handlerName}");
                                       |}
                                     """
     }
@@ -1186,6 +1286,7 @@ object Generator {
       subscriptionHandlerHeader = st"""void ${nodeName}::handle_${handlerName}(const ${portType} msg)
                                       |{
                                       |    // Handle ${handlerName} msg
+                                      |    PRINT_INFO("Received ${handlerName}: %s", MESSAGE_TO_STRING(msg));
                                       |}
                                     """
     }
@@ -1201,6 +1302,26 @@ object Generator {
       st"""void handle_${handlerName}_base(MsgType msg);"""
 
     return handlerCode
+  }
+
+  def genCppExamplePublisher(outPort: AadlPort, packageName: String,
+                                   datatypeMap: Map[AadlType, (String, ISZ[String])],
+                                   reporter: Reporter): ST = {
+    val handlerName = outPort.identifier
+    val dataPortType: String = genPortDatatype(outPort, packageName, datatypeMap, reporter)
+
+    var publisherCode: ST = st""
+
+    if (isEventPort(dataPortType)) {
+      publisherCode =
+        st"put_${handlerName}();"
+    } else {
+      publisherCode =
+        st"""${dataPortType} ${handlerName} = ${dataPortType}();
+            |put_${handlerName}(${handlerName});"""
+    }
+
+    return publisherCode
   }
 
   // Used to convert the type of the msg from MsgType to the intended type before calling the user-defined handler
@@ -1405,7 +1526,6 @@ object Generator {
     return method
   }
 
-  // TODO: If/when migrating to a helper function file, find a way to make the publisher method static (probably by passing in the publisher var)
   // For all non-empty out application port queues, pop the queue and add the message to the corresponding infrastructure queue
   // Then, for all non-empty infrastructure queues, pop the queue and publish the message
   def genCppSendOutputs(nodeName: String): ST = {
@@ -1469,11 +1589,14 @@ object Generator {
     return timeTriggeredHeader
   }
 
-  def genCppTimeTriggeredMethod(nodeName: String): ST = {
+  def genCppTimeTriggeredMethod(nodeName: String, examplePublishers: ISZ[ST]): ST = {
     val timeTriggered: ST =
       st"""void ${nodeName}::timeTriggered()
           |{
           |    // Handle communication
+          |
+          |    // Example publishing messages
+          |    ${(examplePublishers, "\n")}
           |}
         """
     return timeTriggered
@@ -1607,6 +1730,7 @@ object Generator {
     var subscriptionMessageGetterHeaders: ISZ[ST] = IS()
     var strictPublisherHeaders: ISZ[ST] = IS()
     var msgTypes: ISZ[String] = IS()
+    var msgToString: ST = st""
 
     for (p <- component.getPorts()) {
       val portDatatype: String = genPortDatatype(p, packageName, datatypeMap, reporter)
@@ -1758,6 +1882,10 @@ object Generator {
         st"""${fileBody}
             |    using MsgType = std::variant<${(msgTypes, ", ")}>;
           """
+
+      msgToString = st"#define MESSAGE_TO_STRING(message) ${packageName}_interfaces::msg::to_yaml(message).c_str()"
+    } else {
+      msgToString = st"#define MESSAGE_TO_STRING(message) ${packageName}_interfaces::msg::to_yaml(*message).c_str()"
     }
 
     fileBody =
@@ -1768,6 +1896,7 @@ object Generator {
           |    //  C o m m u n i c a t i o n
           |    //=================================================
           |
+          |    ${msgToString}
           |    #define PRINT_INFO(...) RCLCPP_INFO(this->get_logger(), __VA_ARGS__)
           |    #define PRINT_WARN(...) RCLCPP_WARN(this->get_logger(), __VA_ARGS__)
           |    #define PRINT_ERROR(...) RCLCPP_ERROR(this->get_logger(), __VA_ARGS__)
@@ -1907,7 +2036,6 @@ object Generator {
     return (filePath, fileBody, T, IS())
   }
 
-  // TODO: invertTopicBinding
   def genCppBaseNodeCppFile(packageName: String, component: AadlThread, connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
                             datatypeMap: Map[AadlType, (String, ISZ[String])], strictAADLMode: B,
                             invertTopicBinding: B, reporter: Reporter): (ISZ[String], ST, B, ISZ[Marker]) = {
@@ -1939,7 +2067,6 @@ object Generator {
 
               subscribers = subscribers :+
                 genCppTopicSubscriptionStrict(p, nodeName, portDatatype, outputPortNames)
-              // TODO: Add helper method?  If so, remember to add header
             }
             else {
               // In ports with no connections should still subscribe to a topic
@@ -2227,6 +2354,10 @@ object Generator {
     var fileBody =
       st"""#include "${packageName}/base_headers/${nodeName}_base${cpp_src_node_header_name_suffix}"
           |
+          |//========================================================
+          |// Re-running Codegen will overwrite changes to this file
+          |//========================================================
+          |
           |class ${nodeName} : public ${nodeName}_base
           |{
           |public:
@@ -2269,25 +2400,56 @@ object Generator {
                             hasConverterFiles: B, strictAADLMode: B, reporter: Reporter): (ISZ[String], ST, B, ISZ[Marker]) = {
     val nodeName = genNodeName(component)
     val fileName = genCppNodeSourceName(nodeName)
+    var examplePublishers: ISZ[ST] = IS()
+
+    for (p <- component.getPorts()) {
+      if (p.direction == Direction.Out) {
+        examplePublishers = examplePublishers :+ genCppExamplePublisher(p, packageName, datatypeMap, reporter)
+      }
+    }
 
     var subscriptionHandlers: ISZ[ST] = IS()
     if (isSporadic(component)) {
+      var inDataPorts: ISZ[AadlPort] = IS()
+
+      for (p <- component.getPorts()) {
+        if (p.direction == Direction.In && p.isInstanceOf[AadlDataPort]) {
+          inDataPorts = inDataPorts :+ p
+        }
+      }
+
+      var firstSubscriptionHandler: B = true
+
       for (p <- component.getPorts()) {
         val portDatatype: String = genPortDatatype(p, packageName, datatypeMap, reporter)
         if (p.direction == Direction.In && !p.isInstanceOf[AadlDataPort]) {
           if (strictAADLMode) {
-            subscriptionHandlers = subscriptionHandlers :+
-              genCppSubscriptionHandlerSporadicStrict(p, nodeName, portDatatype)
+            if (firstSubscriptionHandler) {
+              subscriptionHandlers = subscriptionHandlers :+
+                genCppSubscriptionHandlerSporadicStrictWithExamples(p, nodeName, portDatatype, inDataPorts,
+                  packageName, datatypeMap, reporter)
+              firstSubscriptionHandler = false
+            } else {
+              subscriptionHandlers = subscriptionHandlers :+
+                genCppSubscriptionHandlerSporadicStrict(p, nodeName, portDatatype)
+            }
           }
           else {
-            subscriptionHandlers = subscriptionHandlers :+
-              genCppSubscriptionHandlerSporadic(p, nodeName, portDatatype)
+            if (firstSubscriptionHandler) {
+              subscriptionHandlers = subscriptionHandlers :+
+                genCppSubscriptionHandlerSporadicWithExamples(p, nodeName, portDatatype, inDataPorts,
+                  packageName, datatypeMap, reporter)
+              firstSubscriptionHandler = false
+            } else {
+              subscriptionHandlers = subscriptionHandlers :+
+                genCppSubscriptionHandlerSporadic(p, nodeName, portDatatype)
+            }
           }
         }
       }
     }
     else {
-      subscriptionHandlers = subscriptionHandlers :+ genCppTimeTriggeredMethod(nodeName)
+      subscriptionHandlers = subscriptionHandlers :+ genCppTimeTriggeredMethod(nodeName, examplePublishers)
     }
 
     var includeFiles: ST = st"#include \"${packageName}/user_headers/${nodeName}${cpp_src_node_header_name_suffix}\""
@@ -2515,7 +2677,6 @@ object Generator {
   //  P a c k a g e   G e n e r a t o r s
   //================================================
 
-  // TODO: Python pkgs
   def genPyNodePkg(modelName: String, threadComponents: ISZ[AadlThread], connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
                  strictAADLMode: B): ISZ[(ISZ[String], ST)] = {
     var files: ISZ[(ISZ[String], ST)] = IS()
@@ -2525,7 +2686,7 @@ object Generator {
 
     return files
   }
- // TODO: Python pkgs
+
   def genPyLaunchPkg(modelName: String, threadComponents: ISZ[AadlThread]): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
     var files: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
 
