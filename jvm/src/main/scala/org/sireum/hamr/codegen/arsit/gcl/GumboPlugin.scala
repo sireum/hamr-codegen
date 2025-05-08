@@ -73,6 +73,7 @@ import org.sireum.message.Reporter
     var modifies: ISZ[ST] = ISZ()
     var ensures: ISZ[ST] = ISZ()
     var flows: ISZ[ST] = ISZ()
+    var tables: ISZ[ST] = ISZ() //SIERRA
     var resources: ISZ[FileResource] = ISZ()
 
     if (!localGumboStore.handledAnnexLibraries) {
@@ -112,8 +113,10 @@ import org.sireum.message.Reporter
             modifies = modifies ++ r.modifies
             ensures = ensures ++ r.ensures
             flows = flows ++ r.flows
+            tables = tables ++ r.tables
             markers = markers ++ r.markers
             imports = imports ++ r.imports
+            tables = tables
 
           case EntryPoints.compute if annex.compute.nonEmpty =>
             GumboGen(gclSymbolTable, symbolTable, aadlTypes, componentNames.basePackage).processCompute(

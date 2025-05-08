@@ -17,6 +17,8 @@ import org.sireum.lang.tipe.{TypeChecker, TypeHierarchy}
 import org.sireum.lang.{ast => AST}
 import org.sireum.message.{Position, Reporter, ReporterImpl}
 
+import java.util
+
 object GclResolver {
 
   @sig trait SymbolHolder
@@ -991,7 +993,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       }
 
       s.compute match {
-        case Some(GclCompute(modifies, specs, cases, handlers, flows)) => {
+        case Some(GclCompute(modifies, specs, cases, handlers, flows, tables)) => {
 
           processModifiesClause(modifies)
 
@@ -1138,6 +1140,84 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               checkFlow(toExp, F, flow.posOpt)
             }
           }
+
+          //SIERRA BEGIN
+          //
+          var seenTableIds: Set[String] = Set.empty// To keep track of tables declared at this scope (the parent initialize clause).
+          for (table <- s.compute.get.tables) {// for each table.
+            //note, for now, only norm table; this is where I'd check when there are other possiblities.
+            // If we see there is already a table with this id, report an error at the normal table.
+
+            // CHECK 1 :: UNIQUE ID
+            if(seenTableIds.contains(table.table.id)) {
+              reporter.error(table.table.posOpt, GclResolver.toolName, s"Duplicate spec name: ${table.table.id}")
+            }
+            seenTableIds += table.table.id // append this id to the ids we have seen.
+
+            //CHECK 2 :: ALL BOOLEAN PREDICATES (And conversion)
+            var hpreds: ISZ[Exp] = for(p <- table.table.horizontalPredicates) yield typeCheckBoolExp(p) // Type checked.
+            var vpreds: ISZ[Exp] = for(p <- table.table.verticalPredicates) yield typeCheckBoolExp(p)
+            var rres: ISZ[ISZ[Exp]] =
+              for(row: ResultRow <- table.table.resultRows) yield (
+                for(r:Exp <- row.results) yield typeCheckBoolExp(r)
+                )
+
+            // SYMBOL-MAPPING
+            //    HORIZONTAL
+            var i: Z = 0
+            for(p <- hpreds) {
+              if(p.prettyST.render=="current_tempWstatus.value < lower_desired_temp.value"){
+                assert(true)
+              }
+              val (conp, _, apiRefs) = GclResolver.collectSymbols(p, RewriteMode.ApiGet, component, F, s.state, gclMethods, symbolTable, reporter)
+              if(conp.isEmpty){
+                rexprs = rexprs + toKey(table.table.horizontalPredicates(i)) ~> p
+              }
+              else {
+                rexprs = rexprs + toKey(table.table.horizontalPredicates(i)) ~> conp.get
+              }
+              apiReferences = apiReferences ++ apiRefs
+              i=i+1
+            }
+            //    VERTICAL
+            i = 0
+            for(p <- vpreds) {
+              if(p.prettyST.render=="current_tempWstatus.value < lower_desired_temp.value"){
+                assert(true)
+              }
+              val (conp, _, apiRefs) = GclResolver.collectSymbols(p, RewriteMode.ApiGet, component, F, s.state, gclMethods, symbolTable, reporter)
+              if(conp.isEmpty){
+                rexprs = rexprs + toKey(table.table.verticalPredicates(i)) ~> p
+              }
+              else {
+                rexprs = rexprs + toKey(table.table.verticalPredicates(i)) ~> conp.get
+              }
+              apiReferences = apiReferences ++ apiRefs
+              i=i+1
+            }
+            //    RESULTS
+            var ri: Z = 0
+            i = 0
+            for(row <- rres){
+              i = 0
+              for(r <- row){
+                if(r.prettyST.render=="current_tempWstatus.value < lower_desired_temp.value"){
+                  assert(true)
+                }
+                val (conr,_,apiRefs) = GclResolver.collectSymbols(r,RewriteMode.ApiGet,component,F,s.state,gclMethods,symbolTable, reporter)
+                if(conr.isEmpty){
+                  rexprs = rexprs + toKey(table.table.resultRows(ri).results(i)) ~> r
+                }
+                else{
+                  rexprs = rexprs + toKey(table.table.resultRows(ri).results(i)) ~> conr.get
+                }
+                apiReferences = apiReferences ++ apiRefs
+                i=i+1
+              }
+              ri = ri + 1
+            }
+          }
+          //SIERRA END
         }
         case Some(x) => reporter.error(componentPos, toolName, s"Expecting GclCompute but received ${x}")
         case _ =>
@@ -1926,7 +2006,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           (uif__MaySend, ISZ(), ISZ[AST.Param](portParam), boolType),
           (uif__NoSend, ISZ(genericType), ISZ[AST.Param](genericPortParam), boolType),
           (uif__MustSend, ISZ(genericType), ISZ[AST.Param](genericPortParam), boolType),
-          (uif__MustSendWithExpectedValue, ISZ(genericType), ISZ[AST.Param](genericPortParam, genericValueParam), boolType),
+          (uif__MustSendWithExpectedValue, ISZ(genericType), ISZ[AST.Param](genericPortParam, genericValueParam), boolType)
         )
 
         for (sig <- sigs) {
