@@ -1171,20 +1171,19 @@ object Generator {
       subscriptionHandlerHeader = st"""void ${nodeName}::handle_${handlerName}()
                                       |{
                                       |    // Handle ${handlerName} event
-                                      |    PRINT_INFO("Received ${handlerName}");
-                                    """
+                                      |    PRINT_INFO("Received ${handlerName}");"""
     }
     else {
       subscriptionHandlerHeader = st"""void ${nodeName}::handle_${handlerName}(const ${portType}::SharedPtr msg)
                                       |{
                                       |    // Handle ${handlerName} msg
-                                      |    PRINT_INFO("Received ${handlerName}: %s", MESSAGE_TO_STRING(msg));
-                                    """
+                                      |    PRINT_INFO("Received ${handlerName}: %s", MESSAGE_TO_STRING(msg));"""
     }
 
-    if (!exampleUsage.equals(st"")) {
+    if (inDataPorts.size > 0) {
       subscriptionHandlerHeader =
         st"""${subscriptionHandlerHeader}
+            |
             |    ${exampleUsage}"""
     }
 
@@ -1245,20 +1244,19 @@ object Generator {
       subscriptionHandlerHeader = st"""void ${nodeName}::handle_${handlerName}()
                                       |{
                                       |    // Handle ${handlerName} event
-                                      |    PRINT_INFO("Received ${handlerName}");
-                                    """
+                                      |    PRINT_INFO("Received ${handlerName}");"""
     }
     else {
       subscriptionHandlerHeader = st"""void ${nodeName}::handle_${handlerName}(const ${portType} msg)
                                       |{
                                       |    // Handle ${handlerName} msg
-                                      |    PRINT_INFO("Received ${handlerName}: %s", MESSAGE_TO_STRING(msg));
-                                    """
+                                      |    PRINT_INFO("Received ${handlerName}: %s", MESSAGE_TO_STRING(msg));"""
     }
 
-    if (!exampleUsage.render.value.equals("")) {
+    if (inDataPorts.size > 0) {
       subscriptionHandlerHeader =
         st"""${subscriptionHandlerHeader}
+            |
             |    ${exampleUsage}"""
     }
 
@@ -1605,8 +1603,7 @@ object Generator {
     val initializer: ST =
       st"""void ${nodeName}::init_${portName}(${portType} val) {
           |    ${portName}_msg_holder = std::make_shared<${portType}>(val);
-          |}
-        """
+          |}"""
     return initializer
   }
 
@@ -1616,8 +1613,7 @@ object Generator {
     val initializer: ST =
       st"""void ${nodeName}::init_${portName}(${portType} val) {
           |    enqueue(infrastructureIn_${portName}, val);
-          |}
-        """
+          |}"""
     return initializer
   }
 
@@ -1657,7 +1653,7 @@ object Generator {
           |    // Handle communication
         """
 
-    if (!exampleUsage.render.value.equals("")) {
+    if (inDataPorts.size > 0) {
       timeTriggered =
         st"""${timeTriggered}
             |    ${exampleUsage}
@@ -2333,7 +2329,7 @@ object Generator {
     if (dataPortInitializers.size > 0) {
       fileBody =
         st"""${fileBody}
-            |${(dataPortInitializers, "\n")}
+            |${(dataPortInitializers, "\n\n")}
           """
     }
 
