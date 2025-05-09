@@ -1182,7 +1182,7 @@ object Generator {
                                     """
     }
 
-    if (!exampleUsage.render.value.equals("")) {
+    if (exampleUsage.parts.length > 0) {
       subscriptionHandlerHeader =
         st"""${subscriptionHandlerHeader}
             |    ${exampleUsage}"""
