@@ -1583,22 +1583,99 @@ object Generator {
     return subscriptionMessage
   }
 
+  def genCppDataPortInitializerHeader(inDataPort: AadlPort, portType: String): ST = {
+    val portName = inDataPort.identifier
+
+    val initializerHeader: ST =
+      st"void init_${portName}(${portType} val);"
+    return initializerHeader
+  }
+
+  def genCppDataPortInitializerHeaderStrict(inDataPort: AadlPort, portType: String): ST = {
+    val portName = inDataPort.identifier
+
+    val initializerHeader: ST =
+      st"void init_${portName}(${portType} val);"
+    return initializerHeader
+  }
+
+  def genCppDataPortInitializer(inDataPort: AadlPort, nodeName: String, portType: String): ST = {
+    val portName = inDataPort.identifier
+
+    val initializer: ST =
+      st"""void ${nodeName}::init_${portName}(${portType} val) {
+          |    ${portName}_msg_holder = std::make_shared<${portType}>(val);
+          |}
+        """
+    return initializer
+  }
+
+  def genCppDataPortInitializerStrict(inDataPort: AadlPort, nodeName: String, portType: String): ST = {
+    val portName = inDataPort.identifier
+
+    val initializer: ST =
+      st"""void ${nodeName}::init_${portName}(${portType} val) {
+          |    enqueue(infrastructureIn_${portName}, val);
+          |}
+        """
+    return initializer
+  }
+
   def genCppTimeTriggeredMethodHeader(): ST = {
     val timeTriggeredHeader: ST =
       st"void timeTriggered();"
     return timeTriggeredHeader
   }
 
-  def genCppTimeTriggeredMethod(nodeName: String, examplePublishers: ISZ[ST]): ST = {
-    val timeTriggered: ST =
+  def genCppTimeTriggeredMethod(nodeName: String, inDataPorts: ISZ[AadlPort], examplePublishers: ISZ[ST],
+                                packageName: String, datatypeMap: Map[AadlType, (String, ISZ[String])],
+                                strictAADLMode: B, reporter: Reporter): ST = {
+    var exampleUsage: ST = st""
+    if (inDataPorts.size > 0) {
+      exampleUsage = st"// example receiving messages on data ports"
+      for (inDataPort <- inDataPorts) {
+        val dataPortType: String = genPortDatatype(inDataPort, packageName, datatypeMap, reporter)
+
+        if (strictAADLMode) {
+          exampleUsage =
+            st"""${exampleUsage}
+                |${dataPortType} ${inDataPort.identifier} = get_${inDataPort.identifier}();
+                |PRINT_INFO("Received ${inDataPort.identifier}: %s", MESSAGE_TO_STRING(${inDataPort.identifier}));"""
+        }
+        else {
+          exampleUsage =
+            st"""${exampleUsage}
+                |${dataPortType}::SharedPtr ${inDataPort.identifier} = get_${inDataPort.identifier}();
+                |PRINT_INFO("Received ${inDataPort.identifier}: %s", MESSAGE_TO_STRING(${inDataPort.identifier}));"""
+        }
+      }
+    }
+
+    var timeTriggered: ST =
       st"""void ${nodeName}::timeTriggered()
           |{
           |    // Handle communication
-          |
-          |    // Example publishing messages
-          |    ${(examplePublishers, "\n")}
+        """
+
+    if (!exampleUsage.render.value.equals("")) {
+      timeTriggered =
+        st"""${timeTriggered}
+            |    ${exampleUsage}
+          """
+    }
+
+    if (examplePublishers.nonEmpty) {
+      timeTriggered =
+        st"""${timeTriggered}
+            |    // Example publishing messages
+            |    ${(examplePublishers, "\n")}"""
+    }
+
+    timeTriggered =
+      st"""${timeTriggered}
           |}
         """
+
     return timeTriggered
   }
 
@@ -1730,6 +1807,7 @@ object Generator {
     var subscriptionMessageGetterHeaders: ISZ[ST] = IS()
     var strictPublisherHeaders: ISZ[ST] = IS()
     var msgTypes: ISZ[String] = IS()
+    var dataPortInitializerHeaders: ISZ[ST] = IS()
     var msgToString: ST = st""
 
     for (p <- component.getPorts()) {
@@ -1739,6 +1817,11 @@ object Generator {
       }
       if (strictAADLMode) {
         if (p.direction == Direction.In) {
+          if (p.isInstanceOf[AadlDataPort]) {
+            dataPortInitializerHeaders = dataPortInitializerHeaders :+
+              genCppDataPortInitializerHeaderStrict(p, portDatatype)
+          }
+
           if (invertTopicBinding) {
             if (connectionMap.get(p.path).nonEmpty) {
               val outputPorts = connectionMap.get(p.path).get
@@ -1787,21 +1870,15 @@ object Generator {
               publisherHeaders = publisherHeaders :+ genCppTopicPublisherVarHeader(p, portDatatype, 1)
             }
           }
-          else {
-            if (connectionMap.get(p.path).nonEmpty) {
-              val inputPorts = connectionMap.get(p.path).get
-              publisherHeaders = publisherHeaders :+ genCppTopicPublisherVarHeader(p, portDatatype, inputPorts.size)
-            }
-            else {
-              // Out ports with no connections should still publish to a topic (for other non-generated components
-              // to subscribe to, for example)
-              publisherHeaders = publisherHeaders :+ genCppTopicPublisherVarHeader(p, portDatatype, 1)
-            }
-          }
         }
       }
       else {
         if (p.direction == Direction.In) {
+          if (p.isInstanceOf[AadlDataPort]) {
+            dataPortInitializerHeaders = dataPortInitializerHeaders :+
+              genCppDataPortInitializerHeader(p, portDatatype)
+          }
+
           if (invertTopicBinding) {
             if (connectionMap.get(p.path).nonEmpty) {
               val outputPorts = connectionMap.get(p.path).get
@@ -1908,6 +1985,14 @@ object Generator {
       fileBody =
         st"""${fileBody}
             |    ${(subscriptionMessageGetterHeaders, "\n")}
+          """
+    }
+
+    if (dataPortInitializerHeaders.size > 0) {
+      fileBody =
+        st"""${fileBody}
+            |    // Methods to be used to set initial values for data ports
+            |    ${(dataPortInitializerHeaders, "\n")}
           """
     }
 
@@ -2048,6 +2133,7 @@ object Generator {
     var publisherMethods: ISZ[ST] = IS()
     var subscriptionMessageGetters: ISZ[ST] = IS()
     var eventPortHandlers: ISZ[ST] = IS()
+    var dataPortInitializers: ISZ[ST] = IS()
 
     var outPortNames: ISZ[String] = IS()
     var inPortNames: ISZ[String] = IS()
@@ -2060,6 +2146,10 @@ object Generator {
       val portDatatype: String = genPortDatatype(p, packageName, datatypeMap, reporter)
       if (strictAADLMode) {
         if (p.direction == Direction.In) {
+          if (p.isInstanceOf[AadlDataPort]) {
+            dataPortInitializers = dataPortInitializers :+ genCppDataPortInitializerStrict(p, nodeName, portDatatype)
+          }
+
           if (invertTopicBinding) {
             if (connectionMap.get(p.path).nonEmpty) {
               val outputPorts = connectionMap.get(p.path).get
@@ -2120,6 +2210,10 @@ object Generator {
       }
       else {
         if (p.direction == Direction.In) {
+          if (p.isInstanceOf[AadlDataPort]) {
+            dataPortInitializers = dataPortInitializers :+ genCppDataPortInitializer(p, nodeName, portDatatype)
+          }
+
           if (invertTopicBinding) {
             if (connectionMap.get(p.path).nonEmpty) {
               val outputPorts = connectionMap.get(p.path).get
@@ -2149,27 +2243,6 @@ object Generator {
         }
         else {
           if (invertTopicBinding) {
-            publishers = publishers :+ genCppTopicPublisher(p, portDatatype, getPortNames(IS(p.path.toISZ)))
-            publisherMethods = publisherMethods :+
-              genCppTopicPublishMethod(p, nodeName, portDatatype, 1)
-          }
-          else {
-            if (connectionMap.get(p.path).nonEmpty) {
-              val inputPorts = connectionMap.get(p.path).get
-              val inputPortNames = getPortNames(inputPorts)
-              publishers = publishers :+ genCppTopicPublisher(p, portDatatype, inputPortNames)
-              publisherMethods = publisherMethods :+
-                genCppTopicPublishMethod(p, nodeName, portDatatype, inputPortNames.size)
-            }
-            else {
-              // Out ports with no connections should still publish to a topic
-              publishers = publishers :+ genCppTopicPublisher(p, portDatatype, getPortNames(IS(p.path.toISZ)))
-              publisherMethods = publisherMethods :+
-                genCppTopicPublishMethod(p, nodeName, portDatatype, 1)
-            }
-          }
-          else {
-            // Out ports with no connections should still publish to a topic
             publishers = publishers :+ genCppTopicPublisher(p, portDatatype, getPortNames(IS(p.path.toISZ)))
             publisherMethods = publisherMethods :+
               genCppTopicPublishMethod(p, nodeName, portDatatype, 1)
@@ -2256,6 +2329,13 @@ object Generator {
       st"""${fileBody}
           |}
         """
+
+    if (dataPortInitializers.size > 0) {
+      fileBody =
+        st"""${fileBody}
+            |${(dataPortInitializers, "\n")}
+          """
+    }
 
     if (subscriberMethods.size > 0 || publisherMethods.size > 0 || (strictAADLMode && subscribers.size > 0)) {
       fileBody =
@@ -2401,23 +2481,19 @@ object Generator {
     val nodeName = genNodeName(component)
     val fileName = genCppNodeSourceName(nodeName)
     var examplePublishers: ISZ[ST] = IS()
+    var inDataPorts: ISZ[AadlPort] = IS()
 
     for (p <- component.getPorts()) {
       if (p.direction == Direction.Out) {
         examplePublishers = examplePublishers :+ genCppExamplePublisher(p, packageName, datatypeMap, reporter)
       }
+      else if (p.direction == Direction.In && p.isInstanceOf[AadlDataPort]) {
+        inDataPorts = inDataPorts :+ p
+      }
     }
 
     var subscriptionHandlers: ISZ[ST] = IS()
     if (isSporadic(component)) {
-      var inDataPorts: ISZ[AadlPort] = IS()
-
-      for (p <- component.getPorts()) {
-        if (p.direction == Direction.In && p.isInstanceOf[AadlDataPort]) {
-          inDataPorts = inDataPorts :+ p
-        }
-      }
-
       var firstSubscriptionHandler: B = true
 
       for (p <- component.getPorts()) {
@@ -2449,7 +2525,8 @@ object Generator {
       }
     }
     else {
-      subscriptionHandlers = subscriptionHandlers :+ genCppTimeTriggeredMethod(nodeName, examplePublishers)
+      subscriptionHandlers = subscriptionHandlers :+
+        genCppTimeTriggeredMethod(nodeName, inDataPorts, examplePublishers, packageName, datatypeMap, strictAADLMode, reporter)
     }
 
     var includeFiles: ST = st"#include \"${packageName}/user_headers/${nodeName}${cpp_src_node_header_name_suffix}\""
@@ -2460,7 +2537,9 @@ object Generator {
             |#include "${packageName}/base_headers/enum_converter.hpp""""
     }
 
-    val fileBody =
+    val inDataPortInitializers: ISZ[ST] = genCppUserDataPortInitializers(inDataPorts, packageName, datatypeMap, reporter)
+
+    var fileBody =
       st"""${includeFiles}
           |
           |//===========================================================
@@ -2474,7 +2553,17 @@ object Generator {
           |{
           |    PRINT_INFO("Initialize Entry Point invoked");
           |
-          |    // Initialize the node
+          |    // Initialize the node"""
+
+    if (inDataPortInitializers.size != 0) {
+      fileBody =
+        st"""${fileBody}
+          |    // Initialize the node's incoming data port values here
+          |    ${(inDataPortInitializers, "\n")}"""
+    }
+
+    fileBody =
+      st"""${fileBody}
           |}
           |
           |//=================================================
@@ -2486,6 +2575,23 @@ object Generator {
     val filePath: ISZ[String] = IS("src", packageName, "src", "user_code", fileName)
 
     return (filePath, fileBody, F, IS())
+  }
+
+  def genCppUserDataPortInitializers(inDataPorts: ISZ[AadlPort], packageName: String,
+                                           datatypeMap: Map[AadlType, (String, ISZ[String])], reporter: Reporter): ISZ[ST] = {
+    var initializers: ISZ[ST] = IS()
+
+    for (p <- inDataPorts) {
+      val portDatatype = genPortDatatype(p, packageName, datatypeMap, reporter)
+      val portName = p.identifier
+
+      initializers = initializers :+
+        st"""${portDatatype} ${portName} = ${portDatatype}();
+            |init_${portName}(${portName});
+          """
+    }
+
+    return initializers
   }
 
   def genCppNodeRunnerFile(packageName: String, component: AadlThread): (ISZ[String], ST, B, ISZ[Marker]) = {
