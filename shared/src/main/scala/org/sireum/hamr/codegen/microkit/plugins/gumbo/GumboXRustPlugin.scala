@@ -37,7 +37,8 @@ object GumboXComponentContributions {
   @strictpure def empty: GumboXComponentContributions = GumboXComponentContributions(
     Map.empty,
     ISZ(),
-    ComputeContributions.empty)
+    ComputeContributions.empty,
+    ISZ())
 }
 
 object ComputeContributions {
@@ -56,7 +57,10 @@ object ComputeContributions {
                                              val IEP_Guarantee: ISZ[RAST.Fn],
 
                                              // compute contributions
-                                            val computeContributions: ComputeContributions)
+                                             val computeContributions: ComputeContributions,
+
+                                            //
+                                             val gumboMethods: ISZ[RAST.Fn])
 
 
 @sig trait GumboXRustPlugin extends MicrokitPlugin with MicrokitFinalizePlugin {
@@ -101,16 +105,19 @@ object ComputeContributions {
       if (datatypesWithContracts.nonEmpty || ops.ISZOps(componentsWithContracts).contains(thread.path)) {
         val subclauseInfoOpt = GumboRustUtil.getGumboSubclauseOpt(thread.path, symbolTable)
 
-        val integrationConstraints = processIntegrationConstraints(thread, subclauseInfoOpt, crustTypeProvider, types, reporter)
+        val integrationConstraints = processIntegrationConstraints(thread, subclauseInfoOpt, crustTypeProvider, types, localStore, reporter)
 
-        val IEP_Guarantee = processInitialize(thread, datatypeInvariants, integrationConstraints, subclauseInfoOpt, crustTypeProvider, types, reporter)
+        val IEP_Guarantee = processInitialize(thread, datatypeInvariants, integrationConstraints, subclauseInfoOpt, crustTypeProvider, types, localStore, reporter)
 
-        val computeContributions = processCompute(thread, datatypeInvariants, integrationConstraints, subclauseInfoOpt, crustTypeProvider, types, reporter)
+        val computeContributions = processCompute(thread, datatypeInvariants, integrationConstraints, subclauseInfoOpt, crustTypeProvider, types, localStore, reporter)
+
+        val gumboMethods = processGumboMethods(thread, subclauseInfoOpt, crustTypeProvider, types, localStore, reporter)
 
         items = items + thread.path ~> GumboXComponentContributions(
           integrationConstraints = integrationConstraints,
           IEP_Guarantee = IEP_Guarantee,
-          computeContributions = computeContributions)
+          computeContributions = computeContributions,
+          gumboMethods = gumboMethods)
 
         { // update bridge/mod.rs to include the GUMBOX module. Need to do this now rather during
           // finalizing since the Api plugin's finalizer will probably be called first
@@ -130,9 +137,37 @@ object ComputeContributions {
     return (GumboXRustPlugin.putGumboXContributions(DefaultGumboXContributions(items), localStore), resources)
   }
 
+  @pure def processGumboMethods(thread: AadlThread,
+                                subclauseInfoOpt: Option[GclAnnexClauseInfo],
+                                crustTypeProvider: CRustTypeProvider,
+                                types: AadlTypes,
+                                store: Store,
+                                reporter: Reporter): ISZ[RAST.Fn] = {
+    subclauseInfoOpt match {
+      case Some(c) =>
+        var ret: ISZ[RAST.Fn] = ISZ()
+        for(m <- c.annex.methods) {
+          ret = ret :+ GumboRustUtil.processGumboMethod(
+            m = m,
+            context = thread,
+            inVerus = F,
+            aadlTypes = types,
+            tp = crustTypeProvider,
+            gclSymbolTable = c.gclSymbolTable,
+            store = store,
+            reporter = reporter)
+        }
+        return ret
+      case _ => return ISZ()
+    }
+  }
+
   @pure def processIntegrationConstraints(thread: AadlThread,
                                           subclauseInfoOpt: Option[GclAnnexClauseInfo],
-                                          crustTypeProvider: CRustTypeProvider, types: AadlTypes, reporter: Reporter): Map[PortIdPath, ISZ[RAST.Fn]] = {
+                                          crustTypeProvider: CRustTypeProvider,
+                                          types: AadlTypes,
+                                          store: Store,
+                                          reporter: Reporter): Map[PortIdPath, ISZ[RAST.Fn]] = {
     var ret: Map[PortIdPath, ISZ[RAST.Fn]] = Map.empty
 
     subclauseInfoOpt match {
@@ -142,14 +177,19 @@ object ComputeContributions {
           val typeNameProvider = crustTypeProvider.getTypeNameProvider(aadlType)
 
           val clause = gclSymbolTable.integrationMap.get(port).get
-          val rexp = SlangExpUtil.rewriteExp(
+          val rewrittenExp = SlangExpUtil.rewriteExp(
             rexp = SlangExpUtil.getRexp(clause.exp, gclSymbolTable),
+            context = thread,
 
             // integration GclGuarantees become verus requires clauses and
             // integration GclAssumes become verus ensures clauses
             inRequires = clause.isInstanceOf[GclAssume],
 
-            inVerus = F, reporter = reporter)
+            inVerus = F,
+            tp = crustTypeProvider,
+            aadlTypes = types,
+            store = store,
+            reporter = reporter)
 
           val (i_name, i_assum_guard_name) = GumboXRustUtil.createIntegrationMethodName(port)
           clause match {
@@ -168,9 +208,9 @@ object ComputeContributions {
                       ident = RAST.IdentString(port.identifier),
                       kind = RAST.TyPath(ISZ(typeNameProvider.qualifiedRustNameS), Some(aadlType.classifier)))),
                     outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
-                  fnHeader = RAST.FnHeader(F),generics = None()),
+                  verusHeader = None(), fnHeader = RAST.FnHeader(F),generics = None()),
                 attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(),
-                body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(rexp)))),
+                body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(rewrittenExp)))),
                 meta = ISZ(RAST.MetaOrigin(port.path)))
 
               if (port.isInstanceOf[AadlDataPort]) {
@@ -193,9 +233,9 @@ object ComputeContributions {
                       ident = RAST.IdentString(port.identifier),
                       kind = RAST.TyPath(ISZ(typeNameProvider.qualifiedRustNameS), Some(aadlType.classifier)))),
                     outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
-                  fnHeader = RAST.FnHeader(F), generics = None()),
+                  verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
                 attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(),
-                body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(rexp)))),
+                body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(rewrittenExp)))),
                 meta = ISZ(RAST.MetaOrigin(port.path)))
 
               if (port.isInstanceOf[AadlDataPort]) {
@@ -214,7 +254,11 @@ object ComputeContributions {
   @pure def processInitialize(thread: AadlThread,
                               datatypeInvariants: Map[PortIdPath, ISZ[RAST.Fn]],
                               integrationConstraints: Map[PortIdPath, ISZ[RAST.Fn]],
-                              subclauseInfoOpt: Option[GclAnnexClauseInfo], crustTypeProvider: CRustTypeProvider, types: AadlTypes, reporter: Reporter): ISZ[RAST.Fn] = {
+                              subclauseInfoOpt: Option[GclAnnexClauseInfo],
+                              crustTypeProvider: CRustTypeProvider,
+                              types: AadlTypes,
+                              store: Store,
+                              reporter: Reporter): ISZ[RAST.Fn] = {
 
     var IEP_Guarantee: ISZ[RAST.Fn] = ISZ()
     var IEP_Guarantee_Params: Set[GGParam] = Set.empty[GGParam] ++
@@ -229,9 +273,15 @@ object ComputeContributions {
         for (guarantee <- initializes.guarantees) {
 
           val gg = GumboXRustUtil.rewriteToExpX(SlangExpUtil.getRexp(guarantee.exp, gclSymbolTable), thread, types, stateVars, crustTypeProvider)
-          val rexp = SlangExpUtil.rewriteExp(
-            rexp = gg.exp, inRequires = F,
-            inVerus = F, reporter = reporter)
+          val rewrittenExp = SlangExpUtil.rewriteExp(
+            rexp = gg.exp,
+            context = thread,
+            inRequires = F,
+            inVerus = F,
+            tp = crustTypeProvider,
+            aadlTypes = types,
+            store = store,
+            reporter = reporter)
 
           IEP_Guarantee_Params = IEP_Guarantee_Params ++ gg.params.elements
           val sortedParams = GumboXRustUtil.sortParams(gg.params.elements)
@@ -253,9 +303,9 @@ object ComputeContributions {
               fnDecl = RAST.FnDecl(
                 inputs = for (p <- sortedParams) yield p.toRustParam,
                 outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
-              fnHeader = RAST.FnHeader(F), generics = None()),
+              verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
             attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(),
-            body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(rexp)))),
+            body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(rewrittenExp)))),
             meta = ISZ())
         }
 
@@ -275,7 +325,7 @@ object ComputeContributions {
             fnDecl = RAST.FnDecl(
               inputs = for (p <- sorted_IEP_Guar_Params) yield p.toRustParam,
               outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
-            fnHeader = RAST.FnHeader(F), generics = None()),
+            verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
           attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(),
           body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(st"${(combinedSpecCalls, " &&\n")}")))),
           meta = ISZ())
@@ -355,7 +405,7 @@ object ComputeContributions {
           fnDecl = RAST.FnDecl(
             inputs = for (p <- sorted_IEP_Post_Params) yield p.toRustParam,
             outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
-          fnHeader = RAST.FnHeader(F), generics = None()),
+          verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
         attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(),
         body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(st"""${(bodySegments, "&& \n\n")}""")))),
         meta = ISZ())
@@ -367,7 +417,11 @@ object ComputeContributions {
   @pure def processCompute(thread: AadlThread,
                            datatypeInvariants: Map[DataIdPath, ISZ[RAST.Fn]],
                            integrationConstraints: Map[PortIdPath, ISZ[RAST.Fn]],
-                           subclauseInfoOpt: Option[GclAnnexClauseInfo], crustTypeProvider: CRustTypeProvider, types: AadlTypes, reporter: Reporter): ComputeContributions = {
+                           subclauseInfoOpt: Option[GclAnnexClauseInfo],
+                           crustTypeProvider: CRustTypeProvider,
+                           types: AadlTypes,
+                           store: Store,
+                           reporter: Reporter): ComputeContributions = {
 
     var CEP_T_Assm__methods: ISZ[RAST.Fn] = ISZ()
     var CEP_T_Guar__methods: ISZ[RAST.Fn] = ISZ()
@@ -400,8 +454,14 @@ object ComputeContributions {
           for (g <- compute.assumes) {
             val gg = GumboXRustUtil.rewriteToExpX(SlangExpUtil.getRexp(g.exp, gclSymbolTable), thread, types, stateVars, crustTypeProvider)
             val rexp = SlangExpUtil.rewriteExp(
-              rexp = gg.exp, inRequires = T,
-              inVerus = F, reporter = reporter)
+              rexp = gg.exp,
+              context = thread,
+              inRequires = T,
+              inVerus = F,
+              tp = crustTypeProvider,
+              aadlTypes = types,
+              store = store,
+              reporter = reporter)
 
             val methodName = s"compute_spec_${g.id}_assume"
 
@@ -424,7 +484,7 @@ object ComputeContributions {
                 fnDecl = RAST.FnDecl(
                   inputs = for (p <- sortedParams) yield p.toRustParam,
                   outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
-                fnHeader = RAST.FnHeader(F), generics = None()),
+                verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
               attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(),
               body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(rexp)))),
               meta = ISZ())
@@ -433,8 +493,14 @@ object ComputeContributions {
           for (g <- compute.guarantees) {
             val gg = GumboXRustUtil.rewriteToExpX(SlangExpUtil.getRexp(g.exp, gclSymbolTable), thread, types, stateVars, crustTypeProvider)
             val rexp = SlangExpUtil.rewriteExp(
-              rexp = gg.exp, inRequires = F,
-              inVerus = F, reporter = reporter)
+              rexp = gg.exp,
+              context = thread,
+              inRequires = F,
+              inVerus = F,
+              tp = crustTypeProvider,
+              aadlTypes = types,
+              store = store,
+              reporter = reporter)
 
             val methodName = s"compute_spec_${g.id}_guarantee"
 
@@ -458,7 +524,7 @@ object ComputeContributions {
                 fnDecl = RAST.FnDecl(
                   inputs = for (p <- sortedParams) yield p.toRustParam,
                   outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
-                fnHeader = RAST.FnHeader(F), generics = None()),
+                verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
               attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(),
               body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(rexp)))),
               meta = ISZ())
@@ -481,7 +547,7 @@ object ComputeContributions {
                 fnDecl = RAST.FnDecl(
                   inputs = for(p <- sorted_CEP_T_Assm_Params) yield p.toRustParam,
                   outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
-                fnHeader = RAST.FnHeader(F), generics = None()),
+                verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
               attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(),
               body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
                 st"""${(for (i <- 0 until topLevelAssumeCallsCombined.size) yield st"let r$i: bool = ${topLevelAssumeCallsCombined(i)};", "\n")}
@@ -505,7 +571,7 @@ object ComputeContributions {
                 fnDecl = RAST.FnDecl(
                   inputs = for (p <- sorted_CEP_T_Guar_Params) yield p.toRustParam,
                   outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
-                fnHeader = RAST.FnHeader(F), generics = None()),
+                verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
               attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(), meta = ISZ(),
               body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
                 st"""${(for (i <- 0 until topLevelGuaranteesCombined.size) yield st"let r$i: bool = ${topLevelGuaranteesCombined(i)};", "\n")}
@@ -527,15 +593,27 @@ object ComputeContributions {
                   val ggAssm = GumboXRustUtil.rewriteToExpX (SlangExpUtil.getRexp (assumes, gclSymbolTable), thread, types, stateVars, crustTypeProvider)
                   combinedAssumGuarParams = combinedAssumGuarParams ++ ggAssm.params.elements
                   Some(SlangExpUtil.rewriteExp (
-                    rexp = ggAssm.exp, inRequires = T,
-                    inVerus = F, reporter = reporter))
+                    rexp = ggAssm.exp,
+                    context = thread,
+                    inRequires = T,
+                    inVerus = F,
+                    tp = crustTypeProvider,
+                    aadlTypes = types,
+                    store = store,
+                    reporter = reporter))
                 case _ => None()
               }
 
             val ggGuar = GumboXRustUtil.rewriteToExpX(SlangExpUtil.getRexp(ccase.guarantees, gclSymbolTable), thread, types, stateVars, crustTypeProvider)
             val rGuar = SlangExpUtil.rewriteExp(
-              rexp = ggGuar.exp, inRequires = F,
-              inVerus = F, reporter = reporter)
+              rexp = ggGuar.exp,
+              context = thread,
+              inRequires = F,
+              inVerus = F,
+              tp = crustTypeProvider,
+              aadlTypes = types,
+              store = store,
+              reporter = reporter)
 
             val methodName = s"compute_case_${ccase.id}"
 
@@ -564,7 +642,7 @@ object ComputeContributions {
                 fnDecl = RAST.FnDecl(
                   inputs = for(p <- sortedParams) yield p.toRustParam,
                   outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
-                fnHeader = RAST.FnHeader(F), generics = None()),
+                verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
               attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(),
               body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(pred)))),
               meta = ISZ())
@@ -584,7 +662,7 @@ object ComputeContributions {
               fnDecl = RAST.FnDecl(
                 inputs = for(p <- sorted_CEP_T_Case_Params) yield p.toRustParam,
                 outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
-              fnHeader = RAST.FnHeader(F), generics = None()),
+              verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
             attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(),
             body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
               st"""${(for (i <- 0 until caseCallsCombined.size) yield st"let r$i: bool = ${caseCallsCombined(i)};", "\n")}
@@ -677,7 +755,7 @@ object ComputeContributions {
             fnDecl = RAST.FnDecl(
               inputs = for(p <- sorted_Cep_Pre_Params) yield p.toRustParam,
               outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
-            fnHeader = RAST.FnHeader(F), generics = None()),
+            verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
           attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(), meta = ISZ(),
           body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
             st"""${(bodySegments, " & \n\n")}
@@ -784,7 +862,7 @@ object ComputeContributions {
             fnDecl = RAST.FnDecl(
               inputs = for (p <- sorted_Cep_Post_Params) yield p.toRustParam,
               outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
-            fnHeader = RAST.FnHeader(F), generics = None()),
+            verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
           attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(), meta = ISZ(),
           body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
             st"""${(segments, "\n\n")}
@@ -814,10 +892,12 @@ object ComputeContributions {
         val apiDirectory = CRustApiPlugin.apiDirectory(thread, options)
 
         var entries: ISZ[ST] = ISZ()
-        if (entry._2.integrationConstraints.nonEmpty) {
-          entries = entries ++ (for (values <- entry._2.integrationConstraints.values;
-                                     v <- values) yield v.prettyST)
-        }
+
+        entries = entries ++ (for (m <- entry._2.gumboMethods) yield m.prettyST)
+
+        entries = entries ++ (for (values <- entry._2.integrationConstraints.values;
+                                   v <- values) yield v.prettyST)
+
         entries = entries ++ (for (i <- entry._2.IEP_Guarantee) yield i.prettyST)
 
         entries = entries ++ (for(a <- entry._2.computeContributions.CEP_T_Assum__methods) yield a.prettyST)

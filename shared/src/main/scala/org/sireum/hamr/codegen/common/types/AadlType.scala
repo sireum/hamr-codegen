@@ -8,9 +8,15 @@ import org.sireum.hamr.ir
 
 @datatype class AadlTypes(val rawConnections: B,
                           val typeMap: Map[String, AadlType]) {
+
   @pure def getTypeByPath(path: TypeIdPath): AadlType = {
-    return typeMap.get(st"${(path, "::")}".render).get
+    return getTypeByPathOpt(path).get
   }
+
+  @pure def getTypeByPathOpt(path: TypeIdPath): Option[AadlType] = {
+    return typeMap.get(st"${(path, "::")}".render)
+  }
+
 }
 
 @sig trait AadlType {

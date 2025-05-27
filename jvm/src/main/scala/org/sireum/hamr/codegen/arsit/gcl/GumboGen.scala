@@ -236,14 +236,23 @@ object GumboGen {
     override def post_langastExpInvoke(o: AST.Exp.Invoke): MOption[AST.Exp] = {
       val ret: MOption[AST.Exp] = o.attr.resOpt.get match {
         case arm: AST.ResolvedInfo.Method if arm.mode == AST.MethodMode.Constructor =>
-          val componentName = s"${convertSelects(o.receiverOpt)}::${o.ident.id.value}"
-          val path: IdPath = aadlTypes.typeMap.get(componentName) match {
-            case Some(t) => t.nameProvider.qualifiedReferencedTypeNameI
-            case _ => halt(s"Couldn't find an AADL data component corresponding to '${componentName}''")
+          val receiverOpt: String =
+            if (o.receiverOpt.nonEmpty) s"${convertSelects(o.receiverOpt)}::"
+            else ""
+          val componentName = s"$receiverOpt${o.ident.id.value}"
+
+          if (componentName == "IS") {
+            MNone()
+          } else {
+            val path: IdPath = aadlTypes.typeMap.get(componentName) match {
+              case Some(t) => t.nameProvider.qualifiedReferencedTypeNameI
+              case _ => halt(s"Couldn't find an AADL data component corresponding to '${componentName}''")
+            }
+
+            val receiver = convertToSelect(ops.ISZOps(path).dropRight(1))
+            val ident = AST.Exp.Ident(id = AST.Id(value = path(path.size - 1), attr = o.ident.id.attr), attr = o.ident.attr)
+            MSome(o(receiverOpt = receiver, ident = ident))
           }
-          val receiver = convertToSelect(ops.ISZOps(path).dropRight(1))
-          val ident = AST.Exp.Ident(id = AST.Id(value = path(path.size - 1), attr = o.ident.id.attr), attr = o.ident.attr)
-          MSome(o(receiverOpt = receiver, ident = ident))
         case _ => MNone()
       }
       return ret

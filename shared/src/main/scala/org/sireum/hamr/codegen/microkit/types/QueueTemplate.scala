@@ -119,7 +119,7 @@ object QueueTemplate {
                   ty = RustAst.TyPath(ISZ(portTypeNameProvider.qualifiedRustNameS), Some(aadlType)),
                   mutbl = RustAst.Mutability.Mut)))),
             outputs = RustAst.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
-          fnHeader = RustAst.FnHeader(F),generics = None()),
+          verusHeader = None(), fnHeader = RustAst.FnHeader(F),generics = None()),
         comments = ISZ(), visibility = RustAst.Visibility.Public, contract = None(), meta = ISZ(),
         body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
           st"""unsafe {
@@ -147,7 +147,7 @@ object QueueTemplate {
                   ty = RustAst.TyPath(ISZ(portTypeNameProvider.qualifiedRustNameS), Some(aadlType)),
                   mutbl = RustAst.Mutability.Mut)))),
             outputs = RustAst.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
-          fnHeader = RustAst.FnHeader(F), generics = None()),
+          verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
         comments = ISZ(), visibility = RustAst.Visibility.Public, contract = None(), meta = ISZ(),
         body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
           st"""unsafe {
@@ -176,7 +176,7 @@ object QueueTemplate {
     return RustAst.FnSig(
       fnHeader = RustAst.FnHeader(F),
       ident = RustAst.IdentString(methodName),
-      generics = None(),
+      verusHeader = None(), generics = None(),
       fnDecl = RustAst.FnDecl(
         inputs = args, outputs = RustAst.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)))
   }
@@ -212,7 +212,7 @@ object QueueTemplate {
       sig = RustAst.FnSig(
         ident = RustAst.IdentString(unsafeMethodName),
         fnDecl = RustAst.FnDecl(inputs = args, outputs = RustAst.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
-        fnHeader = RustAst.FnHeader(F), generics = None()),
+        verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
       comments = ISZ(), attributes = ISZ(),visibility = RustAst.Visibility.Public, contract = None(), meta = ISZ(),
       body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
         st"""unsafe {
@@ -322,7 +322,7 @@ object QueueTemplate {
     return RustAst.FnSig(
       fnHeader = RustAst.FnHeader(F),
       ident = RustAst.IdentString(methodName),
-      generics = None(),
+      verusHeader = None(), generics = None(),
       fnDecl = RustAst.FnDecl(inputs = ISZ(), outputs = RustAst.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)))
   }
 
@@ -339,7 +339,7 @@ object QueueTemplate {
       sig = RustAst.FnSig(
         ident = RustAst.IdentString(unsafeMethodName),
         fnDecl = RustAst.FnDecl(inputs = ISZ(), outputs = RustAst.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
-        fnHeader = RustAst.FnHeader(F), generics = None()),
+        verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
       comments = ISZ(), attributes = ISZ(),visibility = RustAst.Visibility.Private, contract = None(), meta = ISZ(),
       body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
         st"""unsafe {
@@ -411,7 +411,7 @@ object QueueTemplate {
     return RustAst.FnSig(
       fnHeader = RustAst.FnHeader(F),
       ident = RustAst.IdentString(methodName),
-      generics = None(),
+      verusHeader = None(), generics = None(),
       fnDecl = RustAst.FnDecl(inputs = args, outputs = RustAst.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)))
   }
   def getClientGetter_rust_MethodPollSig(portName: String,
@@ -457,7 +457,7 @@ object QueueTemplate {
       sig = RustAst.FnSig(
         ident = RustAst.IdentString(unsafeMethodName.render),
         fnDecl = RustAst.FnDecl(inputs = ISZ(), outputs = RustAst.FnRetTyImpl(returnType)),
-        fnHeader = RustAst.FnHeader(F), generics = None()),
+        verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
       comments = ISZ(), attributes = ISZ(), visibility = RustAst.Visibility.Public, contract = None(), meta = ISZ(),
       body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
         st"""unsafe {
@@ -600,7 +600,7 @@ object QueueTemplate {
       sig = RustAst.FnSig(
         ident = RustAst.IdentString(unsafeMethodName.render),
         fnDecl = RustAst.FnDecl(inputs = ISZ(), outputs = RustAst.FnRetTyImpl(returnType)),
-        fnHeader = RustAst.FnHeader(F),generics = None()),
+        verusHeader = None(), fnHeader = RustAst.FnHeader(F),generics = None()),
       comments = ISZ(), attributes = ISZ(), visibility = RustAst.Visibility.Public, contract = None(), meta = ISZ(),
       body = Some(body))
   }

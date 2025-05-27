@@ -25,6 +25,12 @@ object GclUtil {
 
 
   object SlangAstBridge {
+
+    // Fun.Param is not visible in eclipse jdt
+    @pure def AST_Exp_Fun_Param(idOpt: Option[AST.Id], tipeOpt: Option[AST.Type], typedOpt: Option[AST.Typed]): AST.Exp.Fun.Param = {
+      return AST.Exp.Fun.Param(idOpt = idOpt, tipeOpt = tipeOpt, typedOpt = typedOpt)
+    }
+    
     // Slang enums nested within objects are not accessible via Eclipse JDT so this
     // allows Gumbo2Air to get the enum value by name.  Currently only needed to
     // resolve the 'apply' invoke call for nested arrays, e.g. array(1)(2)

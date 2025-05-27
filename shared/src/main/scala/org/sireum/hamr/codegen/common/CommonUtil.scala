@@ -17,6 +17,8 @@ object CommonUtil {
 
   @datatype class ISZValue[T](val elements: ISZ[T]) extends StoreValue
 
+  @datatype class MapValue[K, V](val map: Map[K, V]) extends StoreValue
+
   type Store = Map[String, StoreValue]
 
   type IdPath = ISZ[String]

@@ -2,8 +2,9 @@
 package org.sireum.hamr.codegen.microkit.plugins.gumbo
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.CommonUtil.{BoolValue, DataIdPath, ISZValue, Store, StoreValue, ThreadIdPath}
+import org.sireum.hamr.codegen.common.CommonUtil.{BoolValue, DataIdPath, ISZValue, Store, StoreValue, ThreadIdPath, TypeIdPath}
 import org.sireum.hamr.codegen.common.containers.{Marker, Resource}
+import org.sireum.hamr.codegen.common.resolvers.GclResolver
 import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlEventPort, AadlThread, GclAnnexClauseInfo, SymbolTable}
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes}
 import org.sireum.hamr.codegen.common.util.HamrCli
@@ -11,7 +12,7 @@ import org.sireum.hamr.codegen.microkit.plugins.apis.CRustApiPlugin
 import org.sireum.hamr.codegen.microkit.plugins.{MicrokitInitPlugin, MicrokitPlugin}
 import org.sireum.hamr.codegen.microkit.plugins.component.CRustComponentPlugin
 import org.sireum.hamr.codegen.microkit.plugins.linters.MicrokitLinterPlugin
-import org.sireum.hamr.codegen.microkit.plugins.types.CRustTypePlugin
+import org.sireum.hamr.codegen.microkit.plugins.types.{CRustTypePlugin, CRustTypeProvider}
 import org.sireum.hamr.codegen.microkit.util.{MakefileTarget, MakefileUtil, Util}
 import org.sireum.hamr.ir.{Aadl, Direction, GclAssume, GclGuarantee, GclSubclause}
 import org.sireum.message.{Level, Message, Reporter}
@@ -92,7 +93,12 @@ object GumboRustPlugin {
       (GumboRustPlugin.getThreadsWithContracts(store).nonEmpty ||
         GumboRustPlugin.getDatatypesWithContracts(store).nonEmpty)
 
-  @pure override def handle(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
+  @pure override def handle(model: Aadl,
+                            options: HamrCli.CodegenOption,
+                            types: AadlTypes,
+                            symbolTable: SymbolTable,
+                            store: Store,
+                            reporter: Reporter): (Store, ISZ[Resource]) = {
     var localStore = store
 
     var datatypeInvariants: Map[DataIdPath, ISZ[RAST.Fn]] = Map.empty
@@ -113,10 +119,11 @@ object GumboRustPlugin {
       val componentContributions = CRustComponentPlugin.getCRustComponentContributions(localStore)
       val threadContributions = componentContributions.componentContributions.get(threadPath).get
       var structDef = threadContributions.appStructDef
-      val structImpl = threadContributions.appStructImpl.asInstanceOf[RAST.ImplBase]
+      var structImpl = threadContributions.appStructImpl.asInstanceOf[RAST.ImplBase]
 
       var optStateVarInits: ISZ[ST] = ISZ()
       if (subclauseInfo.annex.state.nonEmpty) {
+        // add a Rust field to the struct definition for each state variable
         var stateVars: ISZ[RAST.StructField] = ISZ()
         for(sv <- subclauseInfo.annex.state) {
           val i = GumboRustUtil.processStateVariable(sv, types, CRustTypePlugin.getCRustTypeProvider(localStore).get)
@@ -125,11 +132,40 @@ object GumboRustPlugin {
         }
         val m = Marker.createMarker("STATE VARS")
         markers = markers :+ m
-        structDef = structDef(items = structDef.items :+ RAST.StructFieldsMarker(m, stateVars))
+        structDef = structDef(items = structDef.items :+ RAST.MarkerWrap(m, stateVars.asInstanceOf[ISZ[RAST.Item]], "\n"))
+      }
+
+      if (subclauseInfo.annex.methods.nonEmpty) {
+        // add Verus methods to the struct implementation for each method
+
+        var funs: ISZ[RAST.Fn] = ISZ()
+        for (m <- subclauseInfo.annex.methods) {
+          funs = funs :+ GumboRustUtil.processGumboMethod(
+            m = m,
+            context = thread,
+
+            inVerus = T,
+
+            aadlTypes = types,
+            tp = CRustTypePlugin.getCRustTypeProvider(localStore).get,
+            gclSymbolTable = subclauseInfo.gclSymbolTable,
+            store = localStore,
+            reporter = reporter)
+        }
+        val m = Marker.createMarker("GUMBO METHODS")
+        markers = markers :+ m
+        structImpl = structImpl(items = structImpl.items :+ RAST.MarkerWrap(m, funs.asInstanceOf[ISZ[RAST.Item]], "\n\n"))
       }
 
       if (subclauseInfo.annex.integration.nonEmpty) {
-        val (requires, ensures) = handleIntegrationConstraints(thread, subclauseInfo, types, reporter)
+        val (requires, ensures) = handleIntegrationConstraints(
+          thread = thread,
+          subclauseInfo = subclauseInfo,
+
+          types = types,
+          tp = CRustTypePlugin.getCRustTypeProvider(localStore).get,
+          store = localStore,
+          reporter = reporter)
 
         val crustApiContributions = CRustApiPlugin.getCRustApiContributions(localStore).get
         val componentApiContributions = crustApiContributions.apiContributions.get(threadPath).get
@@ -194,11 +230,27 @@ object GumboRustPlugin {
               updatedImplItems = updatedImplItems :+ f(body = b)
             }
             else if (f.ident.string == "initialize" && subclauseInfo.annex.initializes.nonEmpty) {
-              val init = handleInitialize(f, thread, subclauseInfo, types, symbolTable, reporter)
+              val init = handleInitialize(
+                fn = f,
+                thread = thread,
+                subclauseInfo = subclauseInfo,
+                types = types,
+                tp = CRustTypePlugin.getCRustTypeProvider(localStore).get,
+                symbolTable = symbolTable,
+                store = localStore,
+                reporter = reporter)
               markers = markers :+ init._1
               updatedImplItems = updatedImplItems :+ init._2
             } else if (f.ident.string == "timeTriggered" && subclauseInfo.annex.compute.nonEmpty) {
-              val tt = handleCompute(f, thread, subclauseInfo, types, symbolTable, reporter)
+              val tt = handleCompute(
+                fn = f,
+                thread = thread,
+                subclauseInfo = subclauseInfo,
+                types = types,
+                tp = CRustTypePlugin.getCRustTypeProvider(localStore).get,
+                symbolTable = symbolTable,
+                store = localStore,
+                reporter = reporter)
               markers = markers ++ tt._1
               updatedImplItems = updatedImplItems :+ tt._2
             } else {
@@ -226,7 +278,13 @@ object GumboRustPlugin {
         ISZ())
   }
 
-  @pure def handleIntegrationConstraints(thread: AadlThread, subclauseInfo: GclAnnexClauseInfo, types: AadlTypes, reporter: Reporter): (Map[String, RAST.Expr], Map[String, RAST.Expr]) = {
+  @pure def handleIntegrationConstraints(thread: AadlThread,
+                                         subclauseInfo: GclAnnexClauseInfo,
+
+                                         types: AadlTypes,
+                                         tp: CRustTypeProvider,
+                                         store: Store,
+                                         reporter: Reporter): (Map[String, RAST.Expr], Map[String, RAST.Expr]) = {
     var requires: Map[String, RAST.Expr] = Map.empty
     var ensures: Map[String, RAST.Expr] = Map.empty
 
@@ -249,7 +307,15 @@ object GumboRustPlugin {
                 halt("Need to handle event ports")
               } else {
                 val subs = Map.empty[String, String] + p.identifier ~> s"${CRustApiPlugin.apiResultName}"
-                ensures = ensures + p.identifier ~> GumboRustUtil.processGumboSpecH(a, subs, F, types, subclauseInfo.gclSymbolTable, reporter)
+                ensures = ensures + p.identifier ~> GumboRustUtil.processGumboSpecH(
+                  spec = a,
+                  context = thread, substitutions = subs,
+                  isAssumeRequires = F,
+                  types = types,
+                  tp = tp,
+                  gclSymbolTable = subclauseInfo.gclSymbolTable,
+                  store = store,
+                  reporter = reporter)
                 reporter.warn(p.feature.identifier.pos, MicrokitCodegen.toolName, s"TODO: Need to add type invariant for ${thread.identifier}'s ${p.identifier} ghost variable")
               }
 
@@ -258,7 +324,17 @@ object GumboRustPlugin {
             // requirements on the param value passed to the api -- the param's name will always be 'value'
 
               val subs = Map.empty[String, String] + p.identifier ~> s"${CRustApiPlugin.apiParameterName}"
-              requires = requires + p.identifier ~> GumboRustUtil.processGumboSpecH(g, subs, F, types, subclauseInfo.gclSymbolTable, reporter)
+              requires = requires + p.identifier ~> GumboRustUtil.processGumboSpecH(
+                spec = g,
+                context = thread,
+                substitutions = subs,
+
+                isAssumeRequires = F,
+                types = types,
+                tp = tp,
+                gclSymbolTable = subclauseInfo.gclSymbolTable,
+                store = store,
+                reporter = reporter)
               reporter.warn(p.feature.identifier.pos, MicrokitCodegen.toolName, s"TODO: Need to add type invariant for ${thread.identifier}'s ${p.identifier} ghost variable")
           }
         case _ =>
@@ -267,12 +343,29 @@ object GumboRustPlugin {
     return (requires, ensures)
   }
 
-  @pure def handleInitialize(fn: RAST.FnImpl, thread: AadlThread, subclauseInfo: GclAnnexClauseInfo,
-                             types: AadlTypes, symbolTable: SymbolTable, reporter: Reporter): (Marker, RAST.FnImpl) = {
+  @pure def handleInitialize(fn: RAST.FnImpl,
+                             thread: AadlThread,
+                             subclauseInfo: GclAnnexClauseInfo,
+
+                             types: AadlTypes,
+                             tp: CRustTypeProvider,
+                             symbolTable: SymbolTable,
+                             store: Store,
+                             reporter: Reporter): (Marker, RAST.FnImpl) = {
     assert (fn.contract.isEmpty, "who filled this in already?")
 
     val ensures: ISZ[RAST.Expr] = for (g <- subclauseInfo.annex.initializes.get.guarantees) yield
-      GumboRustUtil.processGumboSpec(g, F, types, subclauseInfo.gclSymbolTable, reporter)
+      GumboRustUtil.processGumboSpec(
+        spec = g,
+        context = thread,
+        isAssumeRequires = F,
+
+        types = types,
+        tp = tp,
+        gclSymbolTable = subclauseInfo.gclSymbolTable,
+        store = store,
+        reporter = reporter)
+
 
     val ensuresMarker = Marker.createMarker("INITIALIZATION ENSURES")
     return (ensuresMarker, fn(contract = Some(RAST.FnContract(
@@ -282,14 +375,29 @@ object GumboRustPlugin {
       ensures = ensures))))
   }
 
-  @pure def handleCompute(fn: RAST.FnImpl, thread: AadlThread, subclauseInfo: GclAnnexClauseInfo,
-                          types: AadlTypes, symbolTable: SymbolTable, reporter: Reporter): (ISZ[Marker], RAST.FnImpl) = {
+  @pure def handleCompute(fn: RAST.FnImpl,
+                          thread: AadlThread,
+                          subclauseInfo: GclAnnexClauseInfo,
+
+                          types: AadlTypes,
+                          tp: CRustTypeProvider,
+                          symbolTable: SymbolTable,
+                          store: Store,
+                          reporter: Reporter): (ISZ[Marker], RAST.FnImpl) = {
     assert (fn.contract.isEmpty, "who filled this in already?")
 
     // general assumes clauses
     var requires: ISZ[RAST.Expr] =
       for (r <- subclauseInfo.annex.compute.get.assumes) yield
-        GumboRustUtil.processGumboSpec(r, T, types, subclauseInfo.gclSymbolTable, reporter)
+        GumboRustUtil.processGumboSpec(
+          spec = r,
+          context = thread,
+          isAssumeRequires = T,
+          types = types,
+          tp = tp,
+          gclSymbolTable = subclauseInfo.gclSymbolTable,
+          store = store,
+          reporter = reporter)
 
     var aadlReq: ISZ[ST] = ISZ()
     for (p <- thread.getPorts() if !p.isInstanceOf[AadlDataPort] && p.direction == Direction.Out) {
@@ -304,10 +412,25 @@ object GumboRustPlugin {
     val ensures: ISZ[RAST.Expr] = {
       // general ensures clauses
       (for (r <- subclauseInfo.annex.compute.get.guarantees) yield
-        GumboRustUtil.processGumboSpec(r, F, types, subclauseInfo.gclSymbolTable, reporter)) ++
+        GumboRustUtil.processGumboSpec(
+          spec = r,
+          context = thread,
+          isAssumeRequires = F,
+          types = types,
+          tp = tp,
+          gclSymbolTable = subclauseInfo.gclSymbolTable,
+          store = store,
+          reporter = reporter)) ++
         // gumbo compute cases clauses
         (for (c <- subclauseInfo.annex.compute.get.cases) yield
-          GumboRustUtil.processGumboCase(c, types, subclauseInfo.gclSymbolTable, reporter))
+          GumboRustUtil.processGumboCase(
+            c = c,
+            context = thread,
+            store = store,
+            aadlTypes = types ,
+            tp = tp,
+            gclSymbolTable = subclauseInfo.gclSymbolTable,
+            reporter = reporter))
     }
 
     var optEnsuresMarker: Option[Marker] = None()

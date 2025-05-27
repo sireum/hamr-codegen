@@ -2,8 +2,14 @@
 package org.sireum.hamr.codegen.microkit.plugins.gumbo
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.symbols.{GclSymbolTable, SymTableKey}
+import org.sireum.hamr.codegen.common.CommonUtil.{Store, TypeIdPath}
+import org.sireum.hamr.codegen.common.StringUtil
+import org.sireum.hamr.codegen.common.resolvers.GclResolver
+import org.sireum.hamr.codegen.common.symbols.{AadlComponent, GclSymbolTable, SymTableKey}
+import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen
+import org.sireum.hamr.codegen.microkit.plugins.types.CRustTypeProvider
+import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
 import org.sireum.lang.{ast => SAST}
 import org.sireum.lang.ast.Exp
 import org.sireum.message.{Position, Reporter}
@@ -24,35 +30,55 @@ object SlangExpUtil {
   }
 
   @pure def rewriteExp(rexp: Exp,
-                       inRequires: B, inVerus: B,
+                       context: AadlComponent,
+
+                       inRequires: B,
+                       inVerus: B,
+
+                       tp: CRustTypeProvider,
+                       aadlTypes: AadlTypes,
+                       store: Store,
                        reporter: Reporter): ST = {
-    return rewriteExpH(rexp, Map.empty, inRequires, inVerus, reporter)
+    return rewriteExpH(rexp, context, Map.empty, inRequires, inVerus, tp, aadlTypes, store, reporter)
   }
 
-  @pure def rewriteExpH(rexp: Exp, substitutions: Map[String, String],
+  @pure def rewriteExpH(rexp: Exp,
+                        context: AadlComponent,
+
+                        substitutions: Map[String, String],
+
                         inRequires: B,
                         inVerus: B,
+
+                        tp: CRustTypeProvider,
+                        aadlTypes: AadlTypes,
+                        store: Store,
                         reporter: Reporter): ST = {
-    return rewriteExpHL(rexp, substitutions, inRequires, inVerus, F, F, reporter)
+    return rewriteExpHL(rexp, context, substitutions, inRequires, inVerus, F, F, tp, aadlTypes, store, reporter)
   }
 
-  @pure def rewriteExpHL(rexp: Exp, substitutions: Map[String, String],
+  @pure def rewriteExpHL(rexp: Exp,
+                         context: AadlComponent,
+
+                         substitutions: Map[String, String],
+
                          inRequires: B,
                          inVerus: B,
-                         alwaysOneLine: B,
-                         isTesting: B,
+
+                         alwaysOneLine: B, // don't add newlines, useful when testing
+                         isTesting: B, // true when invoking from testing context
+
+                         tp: CRustTypeProvider,
+                         aadlTypes: AadlTypes,
+                         store: Store,
                          reporter: Reporter): ST = {
 
-    @pure def receiverOptST(receiverOpt: Option[Exp], sep: String): Option[ST] = {
-      if (receiverOpt.isEmpty) {
-        return None()
-      }
-      receiverOpt.get match {
-        case exp: Exp.This => halt("Not expecting 'this' in a gumbo contract")
-        case exp =>
-          return (
-            if (Exp.shouldParenthesize(exp)) Some(st"x(${nestedRewriteExp(exp, Some(sep))})$sep")
-            else Some(st"${nestedRewriteExp(exp, Some(sep))}$sep"))
+    var optCastType: Option[TypeIdPath] = None()
+    @pure def pushCast(t: TypeIdPath): Unit = {
+      if (optCastType.isEmpty) {
+        optCastType = Some(t)
+      } else {
+        assert(optCastType.get == t)
       }
     }
 
@@ -89,21 +115,44 @@ object SlangExpUtil {
                 case _ => "."
               }
             case Some(s: SAST.Typed.Enum) => "::"
-            case Some(x) => halt(s"Only expecting Typed.Name, Typed.Enum: $x")
+            case Some(m: SAST.Typed.Method) =>
+              if (m.owner == ISZ("org", "sireum", "IS")) {
+                if (m.name == "size") {
+                  "."
+                } else {
+                  halt(s"TODO: ${m.name}")
+                }
+              } else {
+                halt(s"TODO: ${m.owner}")
+              }
+            case Some(o: SAST.Typed.Object) =>
+              o.owner match {
+                case ISZ("org", "sireum", "conversions") =>
+                  "NA"
+                case x =>
+                  halt(s"Need to handle ${exp.prettyST.render}")
+              }
+
+            case Some(x) =>
+              halt(s"Only expecting Typed.Name, Typed.Enum but found: $x")
             case _ if sep.nonEmpty => sep.get
-            case _ => halt(s"Infeasible: this should have been typed by now $exp")
-          }
-          exp.id.value match {
-            case "get" =>
-              return st"${receiverOptST(exp.receiverOpt, sepS)}unwrap()"
-            case "isEmpty" =>
-              return st"${receiverOptST(exp.receiverOpt, sepS)}is_none()"
-            case "nonEmpty" =>
-              return st"${receiverOptST(exp.receiverOpt, sepS)}is_some()"
             case _ =>
-              return st"${receiverOptST(exp.receiverOpt, sepS)}${exp.id.value}"
+              halt(s"Infeasible: this should have been typed by now $exp")
           }
-        case exp: Exp.Old => halt(s"$exp : ${exp.posOpt}")
+
+            exp.id.value match {
+              case "get" =>
+                return st"${receiverOptST(exp.receiverOpt, sepS)}unwrap()"
+              case "isEmpty" =>
+                return st"${receiverOptST(exp.receiverOpt, sepS)}is_none()"
+              case "nonEmpty" =>
+                return st"${receiverOptST(exp.receiverOpt, sepS)}is_some()"
+              case "size" =>
+                return st"${receiverOptST(exp.receiverOpt, sepS)}len()"
+              case _ =>
+                return st"${receiverOptST(exp.receiverOpt, sepS)}${exp.id.value}"
+            }
+
         case exp: Exp.Binary =>
           val (leftOpOpt, leftPosOpt): (Option[String], Option[Position]) = exp.left match {
             case left: Exp.Binary => (Some(left.op), left.posOpt)
@@ -120,10 +169,71 @@ object SlangExpUtil {
             right = nestedRewriteExp(exp.right, sep), rightSlangOp = rightOpOpt, isRightIf = exp.right.isInstanceOf[Exp.If], rightPos = rightPosOpt)
 
         case exp: Exp.Invoke =>
-          reporter.error(exp.posOpt, MicrokitCodegen.toolName,
-            "Gumbo definition invocations are not currently supported for Rust/Verus")
-          return st"??"
-        case exp: Exp.InvokeNamed => halt(s"$exp : ${exp.posOpt}")
+          GclResolver.getIndexingTypeFingerprints(store).get(exp.ident.id.value) match {
+            case Some(indexingType) =>
+              // bounded array index. The Z literals are wrapped in calls to the indexing type's fingerprint method
+              // for Slang.  For Rust, use the raw Z literal to index into the array
+              assert (exp.args.size == 1 && exp.args(0).typedOpt.get == SAST.Typed.Name(ISZ("org", "sireum", "Z"), ISZ()))
+              return nestedRewriteExp(exp.args(0), None())
+            case _ =>
+              val args: ISZ[ST] = for(arg <- exp.args) yield nestedRewriteExp(arg, None())
+
+              if (isUnitConversionOperation(exp)) {
+                assert(args.size == 1)
+
+                // unit type conversion (e.g. conversions.U8.toU16(v))
+
+                //val fromType = getUnitConversionFromType(exp)
+                val toType: SAST.Typed.Name = getUnitConversionToType(exp).get
+                val aadlType = MicrokitTypeUtil.getAadlTypeFromSlangTypeH(toType, aadlTypes)
+                val np = tp.getTypeNameProvider(aadlType)
+
+                pushCast(np.qualifiedRustNameS)
+
+                return st"((${args(0)}) as ${(np.qualifiedRustNameS, "::")})"
+
+              } else {
+
+                val receiverOpt: Option[ST] =
+                  exp.receiverOpt match {
+                    case Some(ro) if isThreadSingleton(ro) =>
+                      // drop the fully qualified reference to the Slang singleton object
+                      None()
+                    case Some(ro) => Some(nestedRewriteExp(ro, None()))
+                    case  _ => None()
+                  }
+
+                val fname: ST =
+                  if (exp.ident.id.value == "apply") {
+                  assert(receiverOpt.nonEmpty, "What is being applied?")
+                  receiverOpt.get
+                } else {
+                  st"${if( receiverOpt.nonEmpty) st"${receiverOpt.get}." else st""}${exp.ident.id.value}"
+                }
+
+                exp.attr.resOpt match {
+                  case Some(m: SAST.ResolvedInfo.Method) if m.owner == ISZ("org", "sireum") && m.id == "IS" =>
+                    if (exp.ident.id.value == "IS") {
+                      // array construction
+                      m.tpeOpt.get.ret.asInstanceOf[SAST.Typed.Name].args(0).asInstanceOf[SAST.Typed.Name].ids match {
+                        case ISZ("org", "sireum", "Z") =>
+                          // unbounded array construction
+                          halt("Need to handle unbounded array constructions")
+                        case ids =>
+                          // bounded array construction
+
+                          return st"[${(args, ", ")}]"
+                      }
+                    } else {
+                      // array indexing expression
+                      return st"$fname[${(args, ", ")}]"
+                    }
+                  case _ =>
+                    // normal method invocation
+                    return st"${if (inVerus) "Self::" else ""}$fname(${(args, ",")})"
+                }
+              }
+          }
 
         case exp: Exp.Ident =>
           exp.resOpt match {
@@ -155,15 +265,15 @@ object SlangExpUtil {
             case _ =>
               halt(s"Only expecting Ident to be wrapped in In(): ${exp.exp}")
           }
-        case exp: Exp.Result => halt(s"$exp : ${exp.posOpt}")
-        case exp: Exp.If => halt(s"$exp : ${exp.posOpt}")
-        case exp: Exp.LitC => halt(s"$exp : ${exp.posOpt}")
-        case exp: Exp.LitZ => halt(s"$exp : ${exp.posOpt}")
-        case exp: Exp.LitF32 => halt(s"$exp : ${exp.posOpt}")
-        case exp: Exp.LitF64 => halt(s"$exp : ${exp.posOpt}")
-        case exp: Exp.LitR => halt(s"$exp : ${exp.posOpt}")
+        case exp: Exp.If =>
+          return st"""if (${nestedRewriteExp(exp.cond, None())}) {
+                     |  ${nestedRewriteExp(exp.thenExp, None())}
+                     |} else {
+                     |  ${nestedRewriteExp(exp.elseExp, None())}
+                     |}"""
+        case exp: Exp.LitZ => return exp.prettyST
         case exp: Exp.LitB => return if (exp.value) st"true" else st"false"
-        case exp: Exp.LitString => halt(s"$exp : ${exp.posOpt}")
+
         case exp: Exp.Unary =>
           val paren: B = exp.exp match {
             case _: Exp.Ident => F
@@ -173,6 +283,52 @@ object SlangExpUtil {
           val op = convertUnaryOp(exp.op)
           val rrexp = nestedRewriteExp(exp.exp, sep)
           return if (paren) st"$op($rrexp)" else st"$op$rrexp"
+
+        case exp: Exp.QuantRange =>
+          assert (exp.fun.params.size == 1 && exp.fun.params(0).idOpt.nonEmpty, "only expecting a single named quantified variable")
+          assert (exp.fun.exp.isInstanceOf[SAST.Stmt.Expr], s"Unexpected quantified expression: ${exp.fun.exp.prettyST.render}")
+
+          val param = exp.fun.params(0).idOpt.get.value
+
+          val lo = nestedRewriteExp(exp.lo, None())
+          val hi = st"${nestedRewriteExp(exp.hi, None())}${if (exp.hiExact) "" else " - 1"}"
+
+          val body = nestedRewriteExp(exp.fun.exp.asInstanceOf[SAST.Stmt.Expr].exp, None())
+
+          if (inVerus) {
+            val quantType: String = if (exp.isForall) "forall" else "exists"
+
+            val range = st"$lo <= $param && $param <= $hi"
+
+            return st"$quantType|$param:int| $range ==> $body"
+          } else {
+            val b: ST =
+              if (exp.isForall)
+                st"""if not($body) {
+                    |  return false;
+                    |}
+                    |"""
+              else
+                st"""if $body {
+                    |  return true;
+                    |}"""
+
+            return st"""for $param in $lo .. $hi {
+                       |  $b
+                       |}
+                       |return ${if (exp.isForall) "true" else "false"};"""
+          }
+
+
+        case exp: Exp.InvokeNamed => halt(s"$exp : ${exp.posOpt}")
+        case exp: Exp.Old => halt(s"$exp : ${exp.posOpt}")
+        case exp: Exp.Result => halt(s"$exp : ${exp.posOpt}")
+        case exp: Exp.LitC => halt(s"$exp : ${exp.posOpt}")
+        case exp: Exp.LitF32 => halt(s"$exp : ${exp.posOpt}")
+        case exp: Exp.LitF64 => halt(s"$exp : ${exp.posOpt}")
+        case exp: Exp.LitR => halt(s"$exp : ${exp.posOpt}")
+        case exp: Exp.LitString => halt(s"$exp : ${exp.posOpt}")
+
 
         // currently not expecting the following expressions in gumbo
         case exp: Exp.At => halt(s"$exp : ${exp.posOpt}")
@@ -196,10 +352,29 @@ object SlangExpUtil {
       }
     } // end nestedRewriteExp
 
+    @pure def receiverOptST(receiverOpt: Option[Exp], sep: String): Option[ST] = {
+      if (receiverOpt.isEmpty) {
+        return None()
+      }
+      receiverOpt.get match {
+        case exp: Exp.This => halt("Not expecting 'this' in a gumbo contract")
+        case exp =>
+          return (
+            if (Exp.shouldParenthesize(exp)) Some(st"x(${nestedRewriteExp(exp, Some(sep))})$sep")
+            else Some(st"${nestedRewriteExp(exp, Some(sep))}$sep"))
+      }
+    }
 
-    ////////////////////////////////////////////////////////////////////////////////
-    // helper methods
-    ////////////////////////////////////////////////////////////////////////////////
+    @pure def isThreadSingleton(e: Exp): B = {
+      e match {
+        case Exp.Select(None(), id, _) =>
+          val classifier = StringUtil.sanitizeName(context.classifier(context.classifier.lastIndex))
+          val path = st"${(ops.ISZOps(context.path).drop(1), "_")}".render
+
+          return s"${classifier}_$path" == id.value
+        case _ => return F
+      }
+    }
 
     @pure def unquoteLit(lit: Exp.LitString): String = {
       return ops.StringOps(lit.value).replaceAllLiterally("\"", "")
@@ -447,6 +622,37 @@ object SlangExpUtil {
                    |  $rightST""")
       }
     }
-    return nestedRewriteExp(rexp, None())
+
+    val ret = nestedRewriteExp(rexp, None())
+
+    if (inVerus && optCastType.nonEmpty) {
+      return st"($ret) as ${(optCastType.get, "::")}"
+    } else {
+      return ret
+    }
+  }
+
+  @pure def isUnitConversionOperation(e: Exp.Invoke): B = {
+    return getUnitConversionFromType(e).nonEmpty
+  }
+
+  @pure def getUnitConversionToType(e: Exp.Invoke): Option[SAST.Typed.Name] = {
+    assert(isUnitConversionOperation(e))
+    e.typedOpt match {
+      case Some(t: SAST.Typed.Name) => return Some(t)
+      case x => halt(s"Unexpected: $x")
+    }
+  }
+
+  @pure def getUnitConversionFromType(e: Exp.Invoke): Option[SAST.Typed.Name] = {
+    e.receiverOpt match {
+      case Some(Exp.Select(Some(Exp.Select(None(), SAST.Id("conversions"), _)), fromType, _)) =>
+        assert(e.args.size == 1)
+        e.args(0).typedOpt match {
+          case Some(t: SAST.Typed.Name) => return Some(t)
+          case x => halt(s"Unexpected: $x")
+        }
+      case  _ => return None()
+    }
   }
 }

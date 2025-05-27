@@ -62,8 +62,8 @@ object MicrokitCodegen {
     return nextPacerChannelId + 1
   }
 
-  def run(model: Aadl, options: CodegenOption, types: AadlTypes, symbolTable: SymbolTable, plugins: ISZ[Plugin], paramStore: Store, reporter: Reporter): (CodeGenResults, Store) = {
-    var localStore = paramStore
+  def run(model: Aadl, options: CodegenOption, types: AadlTypes, symbolTable: SymbolTable, plugins: ISZ[Plugin], store: Store, reporter: Reporter): (CodeGenResults, Store) = {
+    var localStore = store
 
     val baseTypesIncludePath = s"${options.sel4OutputDir.get}/${MicrokitTypeUtil.cTypesDir}/${MicrokitCodegen.dirInclude}"
 

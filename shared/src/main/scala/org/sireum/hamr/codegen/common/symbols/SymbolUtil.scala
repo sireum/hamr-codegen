@@ -4,6 +4,7 @@ package org.sireum.hamr.codegen.common.symbols
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
+import org.sireum.hamr.codegen.common.CommonUtil.Store
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.ir
 import org.sireum.hamr.ir.{Annex, AnnexLib, MTransformer => MAirTransformer}
@@ -71,14 +72,16 @@ object SymbolUtil {
   def offerLibraries(annexLibs: ISZ[AnnexLib],
                      symbolTable: SymbolTable,
                      aadlTypes: AadlTypes,
-                     reporter: Reporter): ISZ[AnnexLibInfo]
+                     store: Store,
+                     reporter: Reporter): (ISZ[AnnexLibInfo], Store)
 
   def offer(context: AadlComponent,
             annex: Annex,
             annexLibs: ISZ[AnnexLibInfo],
             symbolTable: SymbolTable,
             aadlTypes: AadlTypes,
-            reporter: Reporter): Option[AnnexClauseInfo]
+            store: Store,
+            reporter: Reporter): (Option[AnnexClauseInfo], Store)
 }
 
 @datatype class AadlMaps(airComponentMap: HashSMap[String, ir.Component],

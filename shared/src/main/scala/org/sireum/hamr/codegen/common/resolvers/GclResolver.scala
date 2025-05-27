@@ -3,21 +3,29 @@ package org.sireum.hamr.codegen.common.resolvers
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
-import org.sireum.hamr.codegen.common.CommonUtil.IdPath
+import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, MapValue, Store, TypeIdPath, isInFeature}
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.types.TypeUtil.EmptyType
 import org.sireum.hamr.codegen.common.types._
 import org.sireum.hamr.codegen.common.util.{GclUtil, NameUtil}
 import org.sireum.hamr.ir._
 import org.sireum.lang.ast.MethodContract.Simple
-import org.sireum.lang.ast.{Exp, ResolvedAttr, ResolvedInfo, TypeParam}
-import org.sireum.lang.symbol.Resolver.{NameMap, QName, TypeMap}
+import org.sireum.lang.ast.{Exp, Purity, ResolvedAttr, ResolvedInfo, TypeParam}
+import org.sireum.lang.symbol.Resolver.{NameMap, QName, TypeMap, typeName, typeParamMap}
 import org.sireum.lang.symbol.{Info, Resolver, Scope, TypeInfo}
 import org.sireum.lang.tipe.{TypeChecker, TypeHierarchy}
 import org.sireum.lang.{ast => AST}
 import org.sireum.message.{Position, Reporter, ReporterImpl}
 
 object GclResolver {
+
+  val KEY_IndexingTypeFingerprints: String = "KEY_IndexingTypeFingerprints"
+  @strictpure def getIndexingTypeFingerprints(store: Store): Map[String, TypeIdPath] =
+    store.getOrElse(KEY_IndexingTypeFingerprints, MapValue[String, TypeIdPath](Map.empty))
+      .asInstanceOf[MapValue[String, TypeIdPath]].map
+
+  @strictpure def putIndexingTypeFingerprints(m: Map[String, TypeIdPath], store: Store): Store =
+    store + KEY_IndexingTypeFingerprints ~> MapValue(m)
 
   @sig trait SymbolHolder
 
@@ -35,6 +43,8 @@ object GclResolver {
   val uif__MustSendWithExpectedValue: String = "uif__MustSendWithExpectedValue"
   val uif__NoSend: String = "uif__NoSend"
 
+  val uifs: ops.ISZOps[String] = ops.ISZOps(ISZ(uif__HasEvent, uif__MaySend, uif__MustSend, uif__MustSendWithExpectedValue, uif__NoSend))
+
   val apiName: String = "api"
 
   @enum object RewriteMode {
@@ -46,6 +56,7 @@ object GclResolver {
   @pure def libraryReporter: TypeChecker = {
     return org.sireum.lang.FrontEnd.checkedLibraryReporter._1
   }
+
 
   @record class SymbolFinder(val mode: RewriteMode.Type,
                              val context: AadlComponent,
@@ -178,171 +189,191 @@ object GclResolver {
       val emptyAttr = AST.Attr(posOpt = o.fullPosOpt)
       val emptyRAttr = AST.ResolvedAttr(posOpt = o.fullPosOpt, resOpt = None(), typedOpt = None())
 
-      if (o.ident.id.value == uif__MustSend || o.ident.id.value == uif__MustSendWithExpectedValue) {
+      if (o.receiverOpt.isEmpty) {
+        if (!uifs.contains(o.ident.id.value)) {
+          // e.g. assuming RxIn is an incoming event data port with an array payload
+          //      RxIn(0)
+          post_langastExpIdent(o.ident) match {
+            case MSome(s@Exp.Select(receiverOpt, id@AST.Id("get"), _)) =>
+              // port(..) --> api.port.get(..)
+              return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(
+                o(receiverOpt = receiverOpt, ident = Exp.Ident(id, emptyRAttr))))
 
-        if (o.args.isEmpty) {
-          reporter.error(o.fullPosOpt, toolName, "Invalid MustSend expression. First argument must be outgoing event port")
-          return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
-        }
+            case MSome(e) =>
+              halt(s"Unexpected: ${e}")
 
-        val onlyIdent: Exp.Ident = o.args(0) match {
-          case Exp.Select(Some(t: Exp.This), id, _) =>
-            // strip 'this' off that's added by tipe
-            Exp.Ident(id, o.attr)
-          case i: Exp.Ident => i
-          case _ =>
-            reporter.error(o.fullPosOpt, toolName, "Invalid MustSend expression. First argument must (currently) be the simple name of an outgoing event port")
-            return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
-        }
-
-        processIdent(onlyIdent) match {
-          case Some(ash@AadlSymbolHolder(aadlFeatureEvent: AadlFeatureEvent)) if aadlFeatureEvent.direction == Direction.Out =>
-
-            if (!aadlFeatureEvent.isInstanceOf[AadlEventPort] && !aadlFeatureEvent.isInstanceOf[AadlEventDataPort]) {
-              reporter.error(o.fullPosOpt, toolName, "Invalid MustSend expression. First argument must an an outgoing event port")
+            case _ => return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
+          }
+        } else {
+          if (o.ident.id.value == uif__MustSend || o.ident.id.value == uif__MustSendWithExpectedValue) {
+            if (o.args.isEmpty) {
+              reporter.error(o.fullPosOpt, toolName, "Invalid MustSend expression. First argument must be outgoing event port")
               return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
             }
 
-            val p = aadlFeatureEvent.asInstanceOf[AadlPort]
-
-            symbols = symbols + ash
-            apiReferences = apiReferences + p
-
-            if (o.args.size == 1) { // MustSend(portIdent)
-              // api.portid
-              val apiIdent: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = emptyAttr), attr = emptyRAttr)
-              val apiSelect = Exp.Select(receiverOpt = Some(apiIdent), id = onlyIdent.id, targs = ISZ(), attr = getPortAttr(p))
-
-              // api.portid.nonEmpty
-              val nonEmpty = Exp.Select(receiverOpt = Some(apiSelect), id = AST.Id("nonEmpty", emptyAttr), targs = o.targs, attr = o.attr)
-
-              return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(nonEmpty))
-
-            } else if (o.args.size == 2) { // MustSend(portIdent, expectedValue)
-
-              if (aadlFeatureEvent.isInstanceOf[AadlEventPort]) {
-                reporter.error(o.fullPosOpt, toolName, "Invalid MustSend expression. Expected value not supported for event ports")
+            val onlyIdent: Exp.Ident = o.args(0) match {
+              case Exp.Select(Some(t: Exp.This), id, _) =>
+                // strip 'this' off that's added by tipe
+                Exp.Ident(id, o.attr)
+              case i: Exp.Ident => i
+              case _ =>
+                reporter.error(o.fullPosOpt, toolName, "Invalid MustSend expression. First argument must (currently) be the simple name of an outgoing event port")
                 return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
-              }
+            }
 
-              val expectedValue: Exp = o.args(1) match {
-                case s@Exp.Select(Some(t: Exp.This), id, _) => Exp.Ident(id, s.attr) // strip off 'this'
-                case x => x
-              }
+            processIdent(onlyIdent) match {
+              case Some(ash@AadlSymbolHolder(aadlFeatureEvent: AadlFeatureEvent)) if aadlFeatureEvent.direction == Direction.Out =>
 
-              expectedValue match {
-                case valueIdent: Exp.Ident =>
-                  processIdent(valueIdent) match {
-                    case Some(g: GclSymbolHolder) => symbols = symbols + g
+                if (!aadlFeatureEvent.isInstanceOf[AadlEventPort] && !aadlFeatureEvent.isInstanceOf[AadlEventDataPort]) {
+                  reporter.error(o.fullPosOpt, toolName, "Invalid MustSend expression. First argument must an an outgoing event port")
+                  return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
+                }
+
+                val p = aadlFeatureEvent.asInstanceOf[AadlPort]
+
+                symbols = symbols + ash
+                apiReferences = apiReferences + p
+
+                if (o.args.size == 1) { // MustSend(portIdent)
+                  // api.portid
+                  val apiIdent: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = emptyAttr), attr = emptyRAttr)
+                  val apiSelect = Exp.Select(receiverOpt = Some(apiIdent), id = onlyIdent.id, targs = ISZ(), attr = getPortAttr(p))
+
+                  // api.portid.nonEmpty
+                  val nonEmpty = Exp.Select(receiverOpt = Some(apiSelect), id = AST.Id("nonEmpty", emptyAttr), targs = o.targs, attr = o.attr)
+
+                  return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(nonEmpty))
+
+                } else if (o.args.size == 2) { // MustSend(portIdent, expectedValue)
+
+                  if (aadlFeatureEvent.isInstanceOf[AadlEventPort]) {
+                    reporter.error(o.fullPosOpt, toolName, "Invalid MustSend expression. Expected value not supported for event ports")
+                    return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
+                  }
+
+                  val expectedValue: Exp = o.args(1) match {
+                    case s@Exp.Select(Some(t: Exp.This), id, _) => Exp.Ident(id, s.attr) // strip off 'this'
+                    case x => x
+                  }
+
+                  expectedValue match {
+                    case valueIdent: Exp.Ident =>
+                      processIdent(valueIdent) match {
+                        case Some(g: GclSymbolHolder) => symbols = symbols + g
+                        case _ => // expected value can be any legal Ident
+                      }
                     case _ => // expected value can be any legal Ident
                   }
-                case _ => // expected value can be any legal Ident
-              }
 
-              // api.portid
-              val apiIdent: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = emptyAttr), attr = emptyRAttr)
-              val apiSelect = Exp.Select(receiverOpt = Some(apiIdent), id = onlyIdent.id, targs = ISZ(), attr = getPortAttr(p))
+                  // api.portid
+                  val apiIdent: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = emptyAttr), attr = emptyRAttr)
+                  val apiSelect = Exp.Select(receiverOpt = Some(apiIdent), id = onlyIdent.id, targs = ISZ(), attr = getPortAttr(p))
 
-              // api.portid.get
-              val getSelect = Exp.Select(receiverOpt = Some(apiSelect), id = AST.Id("get", emptyAttr), targs = o.targs, attr = o.attr)
+                  // api.portid.get
+                  val getSelect = Exp.Select(receiverOpt = Some(apiSelect), id = AST.Id("get", emptyAttr), targs = o.targs, attr = o.attr)
 
-              // api.portid.get == expectedValue
-              val be = Exp.Binary(getSelect, "==", expectedValue, o.attr, o.attr.posOpt)
+                  // api.portid.get == expectedValue
+                  val be = Exp.Binary(getSelect, "==", expectedValue, o.attr, o.attr.posOpt)
 
-              // api.portid.nonempty
-              val nonEmptySel: Exp = Exp.Select(receiverOpt = Some(apiSelect), id = AST.Id("nonEmpty", emptyAttr), targs = o.targs, attr = o.attr)
+                  // api.portid.nonempty
+                  val nonEmptySel: Exp = Exp.Select(receiverOpt = Some(apiSelect), id = AST.Id("nonEmpty", emptyAttr), targs = o.targs, attr = o.attr)
 
-              // (api.portid.nonEmpty && (api.portid.get == expectedValue)
-              val rexp = Exp.Binary(nonEmptySel, "&&", be, o.attr, o.attr.posOpt)
+                  // (api.portid.nonEmpty && (api.portid.get == expectedValue)
+                  val rexp = Exp.Binary(nonEmptySel, "&&", be, o.attr, o.attr.posOpt)
 
-              return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(rexp))
+                  return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(rexp))
 
-            } else {
-              reporter.error(o.fullPosOpt, toolName, "Invalid MustSend expression. Too many arguments")
-              return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
+                } else {
+                  reporter.error(o.fullPosOpt, toolName, "Invalid MustSend expression. Too many arguments")
+                  return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
+                }
+
+              case _ =>
+                reporter.error(o.fullPosOpt, toolName, "Invalid MustSend expression. First argument must be an outgoing event port")
+                return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
             }
 
-          case _ =>
-            reporter.error(o.fullPosOpt, toolName, "Invalid MustSend expression. First argument must be an outgoing event port")
-            return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
-        }
+          } else if (o.ident.id.value == uif__NoSend) {
+            if (o.args.size == 1) {
 
-      } else if (o.ident.id.value == uif__NoSend) {
-        if (o.args.size == 1) {
+              val onlyIdent: Exp.Ident = o.args(0) match {
+                case Exp.Select(Some(t: Exp.This), id, _) =>
+                  // strip 'this' off that's added by tipe
+                  Exp.Ident(id, o.attr)
+                case i: Exp.Ident => i
+                case _ =>
+                  reporter.error(o.fullPosOpt, toolName, "Invalid NoSend expression. Argument must (currently) be the simple name of an outgoing event port")
+                  return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
+              }
 
-          val onlyIdent: Exp.Ident = o.args(0) match {
-            case Exp.Select(Some(t: Exp.This), id, _) =>
-              // strip 'this' off that's added by tipe
-              Exp.Ident(id, o.attr)
-            case i: Exp.Ident => i
-            case _ =>
-              reporter.error(o.fullPosOpt, toolName, "Invalid NoSend expression. Argument must (currently) be the simple name of an outgoing event port")
+              processIdent(onlyIdent) match {
+                case Some(ash@AadlSymbolHolder(aadlFeatureEvent: AadlFeatureEvent)) if aadlFeatureEvent.direction == Direction.Out && aadlFeatureEvent.isInstanceOf[AadlPort] =>
+                  val p = aadlFeatureEvent.asInstanceOf[AadlPort]
+
+                  symbols = symbols + ash
+                  apiReferences = apiReferences + p
+
+                  // api.portid
+                  val apiIdent: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = emptyAttr), attr = emptyRAttr)
+                  val apiSelect = Exp.Select(receiverOpt = Some(apiIdent), id = onlyIdent.id, targs = ISZ(), attr = getPortAttr(p))
+
+                  // api.portid.isEmpty
+                  val isEmpty = Exp.Select(receiverOpt = Some(apiSelect), id = AST.Id("isEmpty", emptyAttr), targs = o.targs, attr = o.attr)
+
+                  return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(isEmpty))
+                case _ =>
+                  reporter.error(o.fullPosOpt, toolName, "Invalid NoSend expression. Can only be applied to outgoing event ports")
+                  return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
+              }
+            }
+            else {
+              reporter.error(o.fullPosOpt, toolName, "Invalid NoSend expression. Requires an outgoing event port")
               return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
-          }
+            }
+          } else if (o.ident.id.value == uif__HasEvent) {
+            if (o.args.size == 1) {
 
-          processIdent(onlyIdent) match {
-            case Some(ash@AadlSymbolHolder(aadlFeatureEvent: AadlFeatureEvent)) if aadlFeatureEvent.direction == Direction.Out && aadlFeatureEvent.isInstanceOf[AadlPort] =>
-              val p = aadlFeatureEvent.asInstanceOf[AadlPort]
+              val onlyIdent: Exp.Ident = o.args(0) match {
+                case Exp.Select(Some(t: Exp.This), id, _) =>
+                  // strip 'this' off that's added by tipe
+                  Exp.Ident(id, o.attr)
+                case i: Exp.Ident => i
+                case _ =>
+                  reporter.error(o.fullPosOpt, toolName, "Invalid HasEvent expression. Argument must (currently) be the simple name of an incoming event port")
+                  return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
+              }
 
-              symbols = symbols + ash
-              apiReferences = apiReferences + p
+              processIdent(onlyIdent) match {
+                case Some(ash@AadlSymbolHolder(aadlFeatureEvent: AadlFeatureEvent)) if aadlFeatureEvent.isInstanceOf[AadlPort] =>
+                  val p = aadlFeatureEvent.asInstanceOf[AadlPort]
 
-              // api.portid
-              val apiIdent: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = emptyAttr), attr = emptyRAttr)
-              val apiSelect = Exp.Select(receiverOpt = Some(apiIdent), id = onlyIdent.id, targs = ISZ(), attr = getPortAttr(p))
+                  symbols = symbols + ash
+                  apiReferences = apiReferences + p
 
-              // api.portid.isEmpty
-              val isEmpty = Exp.Select(receiverOpt = Some(apiSelect), id = AST.Id("isEmpty", emptyAttr), targs = o.targs, attr = o.attr)
+                  // api.portid
+                  val apiIdent: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = emptyAttr), attr = emptyRAttr)
+                  val apiSelect = Exp.Select(receiverOpt = Some(apiIdent), id = onlyIdent.id, targs = ISZ(), attr = getPortAttr(p))
 
-              return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(isEmpty))
-            case _ =>
-              reporter.error(o.fullPosOpt, toolName, "Invalid NoSend expression. Can only be applied to outgoing event ports")
+                  // api.portid.nonEmpty
+                  val isEmpty = Exp.Select(receiverOpt = Some(apiSelect), id = AST.Id("nonEmpty", emptyAttr), targs = o.targs, attr = o.attr)
+
+                  return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(isEmpty))
+                case _ =>
+                  reporter.error(o.fullPosOpt, toolName, "Invalid HasEvent expression. Can only be applied to incoming event ports")
+                  return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
+              }
+            }
+            else {
+              reporter.error(o.fullPosOpt, toolName, "Invalid HasEvent expression. Requires an incoming event port")
               return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
+            }
+          } else {
+            halt(s"Infeasible uif: ${o.ident.id.value}")
           }
         }
-        else {
-          reporter.error(o.fullPosOpt, toolName, "Invalid NoSend expression. Requires an outgoing event port")
-          return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
-        }
-      } else if (o.ident.id.value == uif__HasEvent) {
-        if (o.args.size == 1) {
-
-          val onlyIdent: Exp.Ident = o.args(0) match {
-            case Exp.Select(Some(t: Exp.This), id, _) =>
-              // strip 'this' off that's added by tipe
-              Exp.Ident(id, o.attr)
-            case i: Exp.Ident => i
-            case _ =>
-              reporter.error(o.fullPosOpt, toolName, "Invalid HasEvent expression. Argument must (currently) be the simple name of an incoming event port")
-              return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
-          }
-
-          processIdent(onlyIdent) match {
-            case Some(ash@AadlSymbolHolder(aadlFeatureEvent: AadlFeatureEvent)) if aadlFeatureEvent.isInstanceOf[AadlPort] =>
-              val p = aadlFeatureEvent.asInstanceOf[AadlPort]
-
-              symbols = symbols + ash
-              apiReferences = apiReferences + p
-
-              // api.portid
-              val apiIdent: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = emptyAttr), attr = emptyRAttr)
-              val apiSelect = Exp.Select(receiverOpt = Some(apiIdent), id = onlyIdent.id, targs = ISZ(), attr = getPortAttr(p))
-
-              // api.portid.nonEmpty
-              val isEmpty = Exp.Select(receiverOpt = Some(apiSelect), id = AST.Id("nonEmpty", emptyAttr), targs = o.targs, attr = o.attr)
-
-              return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(isEmpty))
-            case _ =>
-              reporter.error(o.fullPosOpt, toolName, "Invalid HasEvent expression. Can only be applied to incoming event ports")
-              return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
-          }
-        }
-        else {
-          reporter.error(o.fullPosOpt, toolName, "Invalid HasEvent expression. Requires an incoming event port")
-          return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
-        }
-      }
+      } // end receiverOpt isEmpty
       else {
+        // receiverOpt is nonEmpty
         return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
       }
     }
@@ -413,11 +444,14 @@ object GclResolver {
             o.receiverOpt match {
               case s@Some(AST.Exp.Select(_, rid, _)) =>
                 if (rid.value != GUMBO__Library) {
-                  reporter.error(o.fullPosOpt, toolName, s"Expecting the method ${rid.value} to be in a synthetic package called ${GUMBO__Library}")
+                  // can now be an array indexing exp
+
+                  //reporter.error(o.fullPosOpt, toolName, s"Expecting the method ${rid.value} to be in a synthetic package called ${GUMBO__Library}")
                 }
                 s
               case _ =>
-                // receiver is empty so must be a call to a subclause specdef
+                // receiver is empty so must be a call to a subclause gumbo function so
+                // use the fully qualified name of the generated Slang function
 
                 val owner: ISZ[String] = {
                   o.attr.resOpt match {
@@ -466,6 +500,7 @@ object GclResolver {
       return MNone()
     }
 
+    // TODO: why isn't this a pre order call?
     override def post_langastExpIdent(o: Exp.Ident): MOption[Exp] = {
       processIdent(o) match {
         case Some(s) =>
@@ -543,6 +578,14 @@ object GclResolver {
         return EmptyType
     }
   }
+
+  def getActualSlangTypedName(typeName: ISZ[String], typeHierarchy: TypeHierarchy): AST.Typed.Name = {
+    typeHierarchy.typeMap.get(typeName) match {
+      case Some(ta: TypeInfo.TypeAlias) =>
+        return ta.ast.tipe.typedOpt.get.asInstanceOf[AST.Typed.Name]
+      case _ => return AST.Typed.Name(ids = typeName, args = ISZ())
+    }
+  }
 }
 
 import org.sireum.hamr.codegen.common.resolvers.GclResolver._
@@ -561,6 +604,10 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
   var globalNameMap: NameMap = HashSMap.empty
   var resolvedMethods: HashSMap[ISZ[String], Info.Method] = HashSMap.empty
   var builtTypeInfo: B = F
+  var modelContainsBoundArrays: B = F
+
+  var arrayIndexInterpolateImports: ISZ[AST.Stmt.Import] = ISZ()
+  var indexingTypeFingerprints: Map[String, TypeIdPath] = Map.empty
 
   def reset: B = {
     rexprs = HashMap.empty
@@ -573,6 +620,9 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
     globalNameMap = HashSMap.empty[QName, Info] ++ GclResolver.libraryReporter.nameMap.entries
     resolvedMethods = HashSMap.empty
     builtTypeInfo = F
+    modelContainsBoundArrays = F
+    arrayIndexInterpolateImports = ISZ()
+    indexingTypeFingerprints = Map.empty
 
     return T
   }
@@ -598,20 +648,9 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       )
     }
 
-    return sireumImporters.map((m: AST.Stmt.Import.Importer) =>
-      AST.Stmt.Import(importers = ISZ(m), attr = emptyAttr))
-  }
-
-  def fetchSubcomponent(name: Name, context: AadlComponent): Option[AadlComponent] = {
-    val n = CommonUtil.getName(name)
-    for (sc <- context.subComponents if sc.identifier == n) {
-      return Some(sc)
-    }
-    return None()
-  }
-
-  def isSubcomponent(name: Name, context: AadlComponent): B = {
-    return !fetchSubcomponent(name, context).isEmpty
+    return (
+      arrayIndexInterpolateImports ++
+        (for (m <- sireumImporters) yield AST.Stmt.Import(importers = ISZ(m), attr = emptyAttr)))
   }
 
   def fetchPort(name: Name, context: AadlComponent): Option[AadlPort] = {
@@ -626,78 +665,176 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
     return !fetchPort(name, context).isEmpty
   }
 
-  def typeMethod(fqn: ISZ[String], m: AST.Stmt.Method, reporter: Reporter): AST.Stmt.Method = {
-    resolvedMethods.get(fqn) match {
-      case Some(resolvedMethod) =>
-        return m(sig = resolvedMethod.ast.sig, attr = resolvedMethod.ast.attr)
-      case _ =>
-        reporter.error(m.posOpt, toolName, st"Could not resolve method '${(fqn, "::")}'".render)
-        return m
-    }
-  }
-
-  def visitMethodContract(m: AST.Stmt.Method,
-                          typeHierarchy: TypeHierarchy,
-                          scope: Scope,
-                          reporter: Reporter): AST.Stmt.Method = {
-    val tc = TypeChecker(typeHierarchy, ISZ(m.sig.id.value), F, TypeChecker.ModeContext.Spec, F)
-
-    val newStmt = TypeChecker.checkMethodContractSequent(F, typeHierarchy, ISZ(m.sig.id.value), scope, F, m, reporter)
-
-    return newStmt
-  }
-
   @pure def toKey(e: AST.Exp): SymTableKey = {
     //assert(e.fullPosOpt.nonEmpty, e.string)
     return SymTableKey(e, e.fullPosOpt)
   }
 
+  def visitSlangExp(exp: AST.Exp,
+                    context: ISZ[String],
+                    mode: TypeChecker.ModeContext.Type,
+                    scope: Scope.Local, typeHierarchy: TypeHierarchy, reporter: Reporter): Option[(AST.Exp, Option[AST.Typed])] = {
+
+    val typeChecker: TypeChecker = TypeChecker(typeHierarchy, context, F, mode, F)
+
+    val typeChecked = typeChecker.checkExp(None(), scope, exp, reporter)
+
+    if (typeChecked._2.isEmpty) {
+      reporter.error(exp.posOpt, toolName, s"Could not resolve expression's type: ${exp.prettyST.render}")
+    }
+
+    return Some(typeChecked)
+  }
+
+  def typeCheckBoolExp(exp: Exp,
+                       context: ISZ[String],
+                       mode: TypeChecker.ModeContext.Type,
+                       component: Option[AadlComponent],
+                       params: ISZ[AST.Param],
+                       stateVars: ISZ[GclStateVar],
+                       specFuns: Map[ISZ[String], GclMethod],
+                       symbolTable: SymbolTable, aadlTypes: AadlTypes,
+                       scope: Scope.Local,
+                       typeHierarchy: TypeHierarchy,
+                       reporter: Reporter): Exp = {
+    return typeCheckExp(
+      exp,
+      AST.Typed.Name(ids = ISZ("org", "sireum", "B"), args = ISZ()),
+      context,
+      mode, component, params, stateVars, specFuns, symbolTable, aadlTypes, scope, typeHierarchy, reporter)
+  }
+
+  def typeCheckExp(exp: Exp,
+                   expectedType: AST.Typed.Name,
+                   context: ISZ[String],
+                   mode: TypeChecker.ModeContext.Type,
+                   component: Option[AadlComponent],
+                   params: ISZ[AST.Param],
+                   stateVars: ISZ[GclStateVar],
+                   specFuns: Map[ISZ[String], GclMethod],
+                   symbolTable: SymbolTable,
+                   aadlTypes: AadlTypes,
+                   scope: Scope.Local,
+                   typeHierarchy: TypeHierarchy,
+                   reporter: Reporter): Exp = {
+    val _exp: AST.Exp = {
+      if (modelContainsBoundArrays) {
+        val r = ArrayIndexRewriter(component, params, stateVars, specFuns, scope, typeHierarchy, symbolTable, aadlTypes).transform_langastExp(exp)
+        if (r.nonEmpty) r.get
+        else exp
+      }
+      else {
+        exp
+      }
+    }
+
+    val rexp: AST.Exp = visitSlangExp(_exp, context, mode, scope, typeHierarchy, reporter) match {
+      case Some((rexp, roptType)) =>
+        roptType match {
+          case Some(t: AST.Typed.Name) if t == expectedType =>
+            rexp
+          case Some(x) =>
+            reporter.error(_exp.fullPosOpt, GclResolver.toolName, st"Expecting ${(expectedType, ".")} but found $x".render)
+            _exp
+          case _ =>
+            assert(reporter.hasError, "Expression is untyped so Tipe should have reported errors already") // sanity check
+            _exp
+        }
+      case _ =>
+        reporter.error(_exp.fullPosOpt, GclResolver.toolName, "Unexpected: type checking returned none")
+        _exp
+    }
+    return rexp
+  }
+
   def visitGclMethod(context: ISZ[String],
+                     component: Option[AadlComponent],
                      gclMethod: GclMethod,
+                     specMethods: Map[ISZ[String], GclMethod],
                      typeHierarchy: TypeHierarchy,
                      scope: Scope,
+                     symbolTable: SymbolTable,
+                     aadlTypes: AadlTypes,
                      reporter: Reporter): AST.Stmt.Method = {
+
     val fqn = context :+ gclMethod.method.sig.id.value
-    val tc = TypeChecker(typeHierarchy, fqn, F, TypeChecker.ModeContext.Spec, F)
-    val typedMethod: AST.Stmt.Method = typeMethod(fqn, gclMethod.method, reporter)
-    var rMethod: AST.Stmt.Method = tc.checkMethod(scope, typedMethod, reporter)
 
-    if (gclMethod.method.mcontract.nonEmpty) {
-      val scontract = gclMethod.method.mcontract.asInstanceOf[Simple]
-
-      rMethod = visitMethodContract(rMethod, typeHierarchy, scope, reporter)
-
-      val rscontract = rMethod.mcontract.asInstanceOf[Simple]
-
-      for (i <- 0 until scontract.reads.size) {
-        rexprs = rexprs + (toKey(scontract.reads(i).asInstanceOf[AST.Exp.Ident]) ~> rscontract.reads(i).asInstanceOf[AST.Exp.Ident])
+    var rMethod: AST.Stmt.Method =
+      resolvedMethods.get(fqn) match {
+        case Some(resolvedMethod) =>
+          gclMethod.method(sig = resolvedMethod.ast.sig, attr = resolvedMethod.ast.attr)
+        case _ =>
+          reporter.error(gclMethod.posOpt, toolName, st"Could not resolve method '${(fqn, "::")}'".render)
+          return gclMethod.method
       }
 
-      for (i <- 0 until scontract.requires.size) {
-        rexprs = rexprs + (toKey(scontract.requires(i)) ~> rscontract.requires(i))
+    val (ok, methodScope) = TypeChecker.methodScope(typeHierarchy, context, scope, rMethod.sig, reporter)
+    if (ok) {
+
+      // need to rewrite any array accesses for bound arrays (e.g. array(0) -> array(I(0))
+
+      @pure def tce(e: Exp, mode: TypeChecker.ModeContext.Type): Exp = {
+        val ret = typeCheckBoolExp(
+          exp = e,
+          context = context,
+          mode = mode,
+          component = component,
+          params = rMethod.sig.params,
+          stateVars = ISZ(), specFuns = specMethods,
+          scope = methodScope, typeHierarchy = typeHierarchy,
+          symbolTable = symbolTable, aadlTypes = aadlTypes, reporter = reporter)
+        rexprs = rexprs + toKey(e) ~> ret
+        return ret
       }
 
-      for (i <- 0 until scontract.modifies.size) {
-        rexprs = rexprs + (toKey(scontract.modifies(i).asInstanceOf[AST.Exp.Ident]) ~> rscontract.modifies(i).asInstanceOf[AST.Exp.Ident])
+      rMethod =
+        if (rMethod.hasContract) TypeChecker.checkMethodContractSequent(
+          // don't use methodScope here
+          F, typeHierarchy, ISZ(rMethod.sig.id.value), scope, F, rMethod, reporter)
+        else rMethod
+
+      var mc = gclMethod.method.mcontract.asInstanceOf[Simple]
+
+      val readsClause = mc.readsClause(refs = for (r <- mc.reads) yield tce(r.asExp, TypeChecker.ModeContext.Spec).asInstanceOf[Exp.Ident])
+      val requiresClause = mc.requiresClause(claims = for (r <- mc.requires) yield tce(r, TypeChecker.ModeContext.Spec))
+      val modifiesClause = mc.modifiesClause(refs = for (m <- mc.modifies) yield tce(m.asExp, TypeChecker.ModeContext.Spec).asInstanceOf[AST.Exp.Ident])
+      val ensuresClause = mc.ensuresClause(claims = for (e <- mc.ensures) yield tce(e, TypeChecker.ModeContext.SpecPost))
+
+      mc = mc(
+        readsClause = readsClause,
+        requiresClause = requiresClause,
+        modifiesClause = modifiesClause,
+        ensuresClause = ensuresClause)
+
+      val body: Option[AST.Body] = (gclMethod.method.bodyOpt) match {
+        case Some(body@AST.Body(ISZ(ret @ AST.Stmt.Return(Some(exp))))) =>
+          val retType: ISZ[String] = for (id <- gclMethod.method.sig.returnType.asInstanceOf[AST.Type.Named].name.ids) yield id.value
+          val retAadlType = aadlTypes.getTypeByPath(retType)
+          val retSlangTypeName = GclResolverUtil.getSlangName(retAadlType, reporter)
+
+          val rexp = typeCheckExp(exp = exp,
+            expectedType = GclResolver.getActualSlangTypedName(retSlangTypeName, typeHierarchy),
+            context = context,
+            mode = TypeChecker.ModeContext.Code,
+            component = component,
+            params = rMethod.sig.params,
+            stateVars = ISZ(), specFuns = specMethods,
+            scope = methodScope, typeHierarchy = typeHierarchy,
+            symbolTable = symbolTable, aadlTypes = aadlTypes, reporter = reporter)
+          rexprs = rexprs + toKey(exp) ~> rexp
+          Some(body(stmts=ISZ(ret(expOpt=Some(rexp)))))
+        case _ =>
+          reporter.error(gclMethod.method.posOpt, GclResolver.toolName, "Unexpected: method does not have a body")
+          None()
       }
 
-      for (i <- 0 until scontract.ensures.size) {
-        rexprs = rexprs + (toKey(scontract.ensures(i)) ~> rscontract.ensures(i))
-      }
+      // now do a full tipe check one the method using the rewritten expressions (will recheck the expressions)
+      val tc = TypeChecker(typeHierarchy, fqn, F, TypeChecker.ModeContext.Spec, F)
+      return tc.checkMethod(scope, rMethod(bodyOpt = body, mcontract = mc), reporter)
+    } else {
+      assert(reporter.hasError)
+      return rMethod
     }
-
-    (gclMethod.method.bodyOpt, rMethod.bodyOpt) match {
-      case (Some(AST.Body(ISZ(AST.Stmt.Return(Some(exp))))),
-      Some(AST.Body(ISZ(AST.Stmt.Return(Some(rexp)))))) =>
-
-        rexprs = rexprs + (toKey(exp) ~> rexp)
-
-      case _ =>
-        reporter.error(gclMethod.method.posOpt, GclResolver.toolName, "Unexpected: method does not have a body")
-    }
-
-    return rMethod
-
   }
 
   def processGclLib(context: ISZ[String],
@@ -709,7 +846,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                     reporter: Reporter): Option[GclSymbolTable] = {
 
     for (gclMethod <- gclLib.methods) {
-      val rMethod = visitGclMethod(context, gclMethod, typeHierarchy, scope, reporter)
+      val rMethod = visitGclMethod(context, None(), gclMethod, Map.empty, typeHierarchy, scope, symbolTable, aadlTypes, reporter)
       val methodQualifiedName = context :+ gclMethod.method.sig.id.value
       replaceName(methodQualifiedName, Info.Method(
         owner = context,
@@ -722,8 +859,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
     val gclSymTable = GclSymbolTable(
       rexprs = rexprs,
       slangTypeHierarchy = typeHierarchy(
-          nameMap = globalNameMap,
-          typeMap = globalTypeMap),
+        nameMap = globalNameMap,
+        typeMap = globalTypeMap),
       apiReferences = ISZ(),
       integrationMap = Map.empty,
       computeHandlerPortMap = Map.empty)
@@ -740,14 +877,9 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                       scope: Scope.Local,
                       reporter: Reporter): Option[GclSymbolTable] = {
 
-    val baseTypeBoolean = aadlTypes.typeMap.get("Base_Types::Boolean").get
-    val baseTypeInteger = aadlTypes.typeMap.get("Base_Types::Integer").get
-    val baseTypeString = aadlTypes.typeMap.get("Base_Types::String").get
-    val baseTypeFloat = aadlTypes.typeMap.get("Base_Types::Float").get
-    val baseTypeFloat32 = aadlTypes.typeMap.get("Base_Types::Float_32").get
-    val baseTypeFloat64 = aadlTypes.typeMap.get("Base_Types::Float_64").get
-
     val componentPos = component.component.identifier.pos
+
+    val context = component.classifier
 
     var libMethods: Map[ISZ[String], GclMethod] = Map.empty
     for (lib <- libInfos) {
@@ -757,39 +889,17 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
     def visitGclSubclause(s: GclSubclause): Unit = {
       var seenInvariantIds: Set[String] = Set.empty
 
-      val context = component.classifier
       if (reporter.hasError) {
         return
       }
 
-      val threadMethods: Map[ISZ[String], GclMethod] = Map.empty[ISZ[String], GclMethod] ++ (for(m <- s.methods) yield (context :+ m.method.sig.id.value) ~> m)
+      val threadMethods: Map[ISZ[String], GclMethod] = Map.empty[ISZ[String], GclMethod] ++ (for (m <- s.methods) yield (context :+ m.method.sig.id.value) ~> m)
 
       // hmm, lost imports with AIR translation so assume all glc lib annexes have been imported
       val gclMethods = threadMethods ++ libMethods.entries
 
-      def typeCheckBoolExp(exp: Exp): Exp = {
-        val rexp: AST.Exp = visitSlangExp(exp) match {
-          case Some((rexp, roptType)) =>
-            roptType match {
-              case Some(AST.Typed.Name(ISZ("org", "sireum", "B"), _)) =>
-                //rexprs = rexprs + (exp ~> rexp)
-                rexp
-              case Some(x) =>
-                reporter.error(exp.fullPosOpt, GclResolver.toolName, s"Expecting B but found ${x}")
-                exp
-              case _ =>
-                assert(reporter.hasError, "Expression is untyped so Tipe should have reported errors already") // sanity check
-                exp
-            }
-          case _ =>
-            reporter.error(exp.fullPosOpt, GclResolver.toolName, "Unexpected: type checking returned none")
-            exp
-        }
-        return rexp
-      }
-
       for (gclMethod <- s.methods) {
-        visitGclMethod(context, gclMethod, typeHierarchy, scope, reporter)
+        visitGclMethod(context, Some(component), gclMethod, gclMethods, typeHierarchy, scope, symbolTable, aadlTypes, reporter)
       }
 
       for (i <- s.invariants) {
@@ -811,7 +921,15 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           }
           seenSpecNames = seenSpecNames + glcIntegSpec.id
 
-          val expTipe: AST.Exp = typeCheckBoolExp(glcIntegSpec.exp)
+          val expTipe: AST.Exp = typeCheckBoolExp(
+            exp = glcIntegSpec.exp, context = context,
+            mode = TypeChecker.ModeContext.Spec,
+            component = Some(component),
+            params = ISZ(),
+            stateVars = s.state, specFuns = gclMethods,
+            symbolTable = symbolTable, aadlTypes = aadlTypes,
+            scope = scope, typeHierarchy = typeHierarchy,
+            reporter = reporter)
 
           if (!reporter.hasError) {
             val (expTrans, symbols, apiRefs) =
@@ -878,7 +996,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       def checkFlow(exp: AST.Exp, isFrom: B, posOpt: Option[Position]): Unit = {
         exp match {
           case e: Exp.Ident =>
-            visitSlangExp(e) match {
+            visitSlangExp(exp = e, context = context, mode = TypeChecker.ModeContext.Spec, scope = scope, typeHierarchy = typeHierarchy, reporter = reporter) match {
               case Some((rexp, roptType)) =>
                 val (rexp2, symbols, _) = GclResolver.collectSymbols(rexp, RewriteMode.Api, component, F, s.state, gclMethods, symbolTable, reporter)
                 if (!reporter.hasError) {
@@ -922,7 +1040,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         for (modifies <- lmodifies) {
           modifies match {
             case e: Exp.Ident =>
-              visitSlangExp(e) match {
+              visitSlangExp(exp = e, context = context, mode = TypeChecker.ModeContext.Spec, scope = scope, typeHierarchy = typeHierarchy, reporter = reporter) match {
                 case Some((rexp, roptType)) =>
                   val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.Normal, component, F, s.state, gclMethods, symbolTable, reporter)
                   apiReferences = apiReferences ++ apiRefs
@@ -966,7 +1084,11 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           }
           seenGuaranteeIds = seenGuaranteeIds + guarantees.id
 
-          val rexp = typeCheckBoolExp(guarantees.exp)
+          val rexp = typeCheckBoolExp(exp = guarantees.exp, context = context, mode = TypeChecker.ModeContext.SpecPost, component = Some(component),
+            params = ISZ(),
+            stateVars = s.state, specFuns = gclMethods,
+            symbolTable = symbolTable, aadlTypes = aadlTypes,
+            scope = scope, typeHierarchy = typeHierarchy, reporter = reporter)
           val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, F, s.state, gclMethods, symbolTable, reporter)
           apiReferences = apiReferences ++ apiRefs
 
@@ -1003,7 +1125,11 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             seenSpecIds = seenSpecIds + assumee.id
 
             {
-              val rexp = typeCheckBoolExp(assumee.exp)
+              val rexp = typeCheckBoolExp(exp = assumee.exp, context = context, mode = TypeChecker.ModeContext.Spec, component = Some(component),
+                params = ISZ(),
+                stateVars = s.state, specFuns = gclMethods,
+                symbolTable = symbolTable, aadlTypes = aadlTypes,
+                scope = scope, typeHierarchy = typeHierarchy, reporter = reporter)
               val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, T, s.state, gclMethods, symbolTable, reporter)
               apiReferences = apiReferences ++ apiRefs
 
@@ -1027,7 +1153,11 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             }
             seenSpecIds = seenSpecIds + guarantee.id
 
-            val rexp = typeCheckBoolExp(guarantee.exp)
+            val rexp = typeCheckBoolExp(exp = guarantee.exp, context = context, mode = TypeChecker.ModeContext.SpecPost, component = Some(component),
+              params = ISZ(),
+              stateVars = s.state, specFuns = gclMethods,
+              symbolTable = symbolTable, aadlTypes = aadlTypes,
+              scope = scope, typeHierarchy = typeHierarchy, reporter = reporter)
             val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, F, s.state, gclMethods, symbolTable, reporter)
             apiReferences = apiReferences ++ apiRefs
 
@@ -1044,27 +1174,35 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
             caase.assumes match {
               case Some(assumes) =>
-              val rexp = typeCheckBoolExp(assumes)
-              val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, F, s.state, gclMethods, symbolTable, reporter)
-              apiReferences = apiReferences ++ apiRefs
+                val rexp = typeCheckBoolExp(exp = assumes, context = context, mode = TypeChecker.ModeContext.Spec, component = Some(component),
+                  params = ISZ(),
+                  stateVars = s.state, specFuns = gclMethods,
+                  symbolTable = symbolTable, aadlTypes = aadlTypes,
+                  scope = scope, typeHierarchy = typeHierarchy, reporter = reporter)
+                val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, F, s.state, gclMethods, symbolTable, reporter)
+                apiReferences = apiReferences ++ apiRefs
 
-              for (sym <- symbols) {
-                sym match {
-                  case AadlSymbolHolder(i: AadlPort) if i.direction == Direction.Out =>
-                    reporter.error(assumes.fullPosOpt, toolName, "Assume clauses cannot refer to outgoing ports")
-                  case _ =>
+                for (sym <- symbols) {
+                  sym match {
+                    case AadlSymbolHolder(i: AadlPort) if i.direction == Direction.Out =>
+                      reporter.error(assumes.fullPosOpt, toolName, "Assume clauses cannot refer to outgoing ports")
+                    case _ =>
+                  }
                 }
-              }
-              if (rexp2.isEmpty) {
-                rexprs = rexprs + (toKey(assumes) ~> rexp)
-              } else {
-                rexprs = rexprs + (toKey(assumes) ~> rexp2.get)
-              }
+                if (rexp2.isEmpty) {
+                  rexprs = rexprs + (toKey(assumes) ~> rexp)
+                } else {
+                  rexprs = rexprs + (toKey(assumes) ~> rexp2.get)
+                }
               case _ =>
             }
 
             {
-              val rexp = typeCheckBoolExp(caase.guarantees)
+              val rexp = typeCheckBoolExp(exp = caase.guarantees, context = context, mode = TypeChecker.ModeContext.Spec, component = Some(component),
+                params = ISZ(),
+                stateVars = s.state, specFuns = gclMethods,
+                symbolTable = symbolTable, aadlTypes = aadlTypes,
+                scope = scope, typeHierarchy = typeHierarchy, reporter = reporter)
               val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, F, s.state, gclMethods, symbolTable, reporter)
               apiReferences = apiReferences ++ apiRefs
 
@@ -1078,7 +1216,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
           for (handler <- handlers) {
 
-            visitSlangExp(handler.port) match {
+            visitSlangExp(exp = handler.port, context = context, mode = TypeChecker.ModeContext.Spec, scope = scope, typeHierarchy = typeHierarchy, reporter = reporter) match {
               case Some((rexp, roptType)) =>
                 val (hexp, symbols, _) = GclResolver.collectSymbols(rexp, RewriteMode.Normal, component, F, s.state, gclMethods, symbolTable, reporter)
                 if (!reporter.hasError) {
@@ -1112,7 +1250,11 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               }
               handlerSpecIds = handlerSpecIds + assm.id
 
-              val rexp = typeCheckBoolExp(assm.exp)
+              val rexp = typeCheckBoolExp(exp = assm.exp, context = context, mode = TypeChecker.ModeContext.Spec, component = Some(component),
+                params = ISZ(),
+                stateVars = s.state, specFuns = gclMethods,
+                symbolTable = symbolTable, aadlTypes = aadlTypes,
+                scope = scope, typeHierarchy = typeHierarchy, reporter = reporter)
               val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, T, s.state, gclMethods, symbolTable, reporter)
               apiReferences = apiReferences ++ apiRefs
 
@@ -1135,7 +1277,12 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               }
               handlerSpecIds = handlerSpecIds + guar.id
 
-              val rexp = typeCheckBoolExp(guar.exp)
+              val rexp = typeCheckBoolExp(exp = guar.exp, context = context, mode = TypeChecker.ModeContext.SpecPost, component = Some(component),
+                params = ISZ(),
+                stateVars = s.state, specFuns = gclMethods,
+                symbolTable = symbolTable, aadlTypes = aadlTypes,
+                scope = scope, typeHierarchy = typeHierarchy, reporter = reporter)
+
               val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, F, s.state, gclMethods, symbolTable, reporter)
               apiReferences = apiReferences ++ apiRefs
 
@@ -1152,7 +1299,11 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
               caase.assumes match {
                 case Some(assumes) =>
-                  val rexp = typeCheckBoolExp(assumes)
+                  val rexp = typeCheckBoolExp(exp = assumes, context = context, mode = TypeChecker.ModeContext.Spec, component = Some(component),
+                    params = ISZ(),
+                    stateVars = s.state, specFuns = gclMethods,
+                    symbolTable = symbolTable, aadlTypes = aadlTypes,
+                    scope = scope, typeHierarchy = typeHierarchy, reporter = reporter)
                   val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, F, s.state, gclMethods, symbolTable, reporter)
                   apiReferences = apiReferences ++ apiRefs
 
@@ -1170,7 +1321,11 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               }
 
               {
-                val rexp = typeCheckBoolExp(caase.guarantees)
+                val rexp = typeCheckBoolExp(exp = caase.guarantees, context = context, mode = TypeChecker.ModeContext.Spec, component = Some(component),
+                  params = ISZ(),
+                  stateVars = s.state, specFuns = gclMethods,
+                  symbolTable = symbolTable, aadlTypes = aadlTypes,
+                  scope = scope, typeHierarchy = typeHierarchy, reporter = reporter)
                 val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, F, s.state, gclMethods, symbolTable, reporter)
                 apiReferences = apiReferences ++ apiRefs
 
@@ -1208,7 +1363,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
     }
 
     def visitInvariant(i: GclInvariant): Unit = {
-      visitSlangExp(i.exp) match {
+      visitSlangExp(exp = i.exp, context = context, scope = scope, mode = TypeChecker.ModeContext.Spec, typeHierarchy = typeHierarchy, reporter = reporter) match {
         case Some((rexp, roptType)) =>
           roptType match {
             case Some(AST.Typed.Name(ISZ("org", "sireum", "B"), _)) =>
@@ -1224,21 +1379,6 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           }
         case _ => reporter.error(i.exp.fullPosOpt, GclResolver.toolName, "Unexpected: type checking returned none")
       }
-    }
-
-    def visitSlangExp(exp: AST.Exp): Option[(AST.Exp, Option[AST.Typed])] = {
-      val scontext: QName = component.classifier
-
-      val mode = TypeChecker.ModeContext.Spec
-      val typeChecker: TypeChecker = TypeChecker(typeHierarchy, scontext, F, mode, F)
-
-      val typeChecked = typeChecker.checkExp(None(), scope, exp, reporter)
-
-      if (typeChecked._2.isEmpty) {
-        reporter.error(exp.posOpt, toolName, s"Could not resolve expression's type")
-      }
-
-      return Some(typeChecked)
     }
 
     visitGclSubclause(annex)
@@ -1276,85 +1416,49 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
     }
     builtTypeInfo = T
 
-    def fromTypetoTyped(value: AST.Type): AST.Typed = {
-      val ret: AST.Typed = value match {
+    def resolveType(value: AST.Type, posOpt: Option[Position]): AST.Type.Named = {
+      val pos: Option[Position] = if (value.posOpt.nonEmpty) value.posOpt else posOpt
+      value match {
         case atn: AST.Type.Named =>
-          AST.Typed.Name(ids = atn.name.ids.map((m: AST.Id) => m.value), args = ISZ())
+          val aadlName: String = atn.name.ids.map((i: AST.Id) => i.value) match {
+            case i@ISZ("org", "sireum", b) => TypeResolver.getAadlBaseFromSlangType(i)
+            case fqn =>
+              st"${(if (fqn(fqn.lastIndex) == "Type") ops.ISZOps(fqn).dropRight(1) else fqn, "::")}".render
+          }
+
+          return resolveTypeH(getAadlType(aadlName, aadlTypes, pos, reporter), posOpt)
+
         case x =>
-          reporter.error(value.posOpt, GclResolver.toolName, s"Expected a Type.Named but received $x")
-          AST.Typed.Name(ids = ISZ(), args = ISZ())
+          reporter.error(value.posOpt, GclResolver.toolName, s"Wasn't expecting $x")
+          return AST.Type.Named(name = AST.Name(ids = ISZ(), attr = AST.Attr(None())), typeArgs = ISZ(), attr = AST.TypedAttr(None(), None()))
       }
-      return ret
     }
 
-    def resolveType(value: AST.Type, posOpt: Option[Position]): AST.Type = {
-      val ret: AST.Type = {
-        value match {
-          case atn: AST.Type.Named =>
-            val fqn = atn.name.ids.map((i: AST.Id) => i.value)
-            val s = st"${(fqn, "::")}".render
+    def resolveTypeH(aadlType: AadlType, posOpt: Option[Position]): AST.Type.Named = {
+      val typeInfo = buildTypeInfo(aadlType)
+      val pos: Option[Position] = if (typeInfo.posOpt.nonEmpty) typeInfo.posOpt else posOpt
 
-            val aadlType: AadlType = getAadlType(s, aadlTypes, if(posOpt.nonEmpty) posOpt else value.posOpt, reporter)
-            val typeInfo = buildTypeInfo(aadlType)
+      val (typeName, typedName): (ISZ[String], AST.Typed) = typeInfo match {
+        case ta: TypeInfo.TypeAlias =>
+          // use the actual type for the typed opt
+          (ta.name, ta.ast.tipe.asInstanceOf[AST.Type.Named].attr.typedOpt.get.asInstanceOf[AST.Typed.Name])
 
-            val name: AST.Name = typeInfo match {
-              case ta: TypeInfo.TypeAlias =>
-                val tn = ta.ast.tipe.asInstanceOf[AST.Type.Named].attr.typedOpt.get.asInstanceOf[AST.Typed.Name]
-                AST.Name(ids = tn.ids.map((s: String) => AST.Id(value = s, attr = AST.Attr(None()))),
-                  attr = AST.Attr(None()))
+        case tadt: TypeInfo.Adt =>
+          (tadt.tpe.ids, AST.Typed.Name(tadt.tpe.ids, ISZ()))
 
-              case tadt: TypeInfo.Adt =>
-                AST.Name(ids = tadt.tpe.ids.map((s: String) => AST.Id(value = s, attr = AST.Attr(None()))), attr = AST.Attr(None()))
+        case te: TypeInfo.Enum =>
+          (te.name, AST.Typed.Name(te.name, ISZ()))
 
-              case te: TypeInfo.Enum =>
-                AST.Name(ids = te.name.map((s: String) => AST.Id(value = s, attr = AST.Attr(None()))), attr = AST.Attr(None()))
-
-              case x =>
-                reporter.error(typeInfo.posOpt, GclResolver.toolName, s"Wasn't expecting a $x")
-                AST.Name(ids = ISZ(), attr = AST.Attr(None()))
-            }
-
-            val typedName = AST.Typed.Name(ids = name.ids.map((i: AST.Id) => i.value), args = ISZ())
-
-            AST.Type.Named(
-              name = name,
-              typeArgs = ISZ(),
-              attr = AST.TypedAttr(posOpt = None(), typedOpt = Some(typedName))
-            )
-          case x =>
-            reporter.error(value.posOpt, GclResolver.toolName, s"Wasn't expecting $x")
-            AST.Type.Named(name = AST.Name(ids = ISZ(), attr = AST.Attr(None())), typeArgs = ISZ(), attr = AST.TypedAttr(None(), None()))
-        }
-      }
-      return ret
-    }
-
-    def typeToTyped(t: AST.Type): AST.Typed = {
-      val ret: AST.Typed = t match {
-        case atn: AST.Type.Named => AST.Typed.Name(ids = atn.name.ids.map((i: AST.Id) => i.value), args = ISZ())
         case x =>
-          reporter.error(t.posOpt, GclResolver.toolName, s"Wasn't expecting $x")
-          AST.Typed.Name(ids = ISZ(), args = ISZ())
+          reporter.error(pos, GclResolver.toolName, s"Wasn't expecting a $x")
+          (ISZ(), AST.Typed.Name(ISZ(), ISZ()))
       }
-      return ret
-    }
 
-    def paramToTypedName(p: AST.Param): AST.Typed = {
-      val ids = p.tipe.asInstanceOf[AST.Type.Named].name.ids.map((i: AST.Id) => i.value)
-      return AST.Typed.Name(ids = ids, args = ISZ())
-    }
-
-    def getTypedFromAadlType(aadlType: AadlType): Option[AST.Typed] = {
-      val paramResolvedType: TypeInfo = buildTypeInfo(aadlType)
-      val typedOpt: Option[AST.Typed] = paramResolvedType match {
-        case ta: TypeInfo.TypeAlias => ta.ast.tipe.typedOpt
-        case tadt: TypeInfo.Adt => Some(tadt.tpe)
-        case te: TypeInfo.Enum => Some(AST.Typed.Name(ids = te.name, args = ISZ()))
-        case x =>
-          reporter.error(aadlType.container.get.identifier.pos, GclResolver.toolName, s"Wasn't expecting $x")
-          None()
-      }
-      return typedOpt
+      return AST.Type.Named(
+        name = AST.Name(for (t <- typeName) yield AST.Id(t, AST.Attr(None())), AST.Attr(None())),
+        typeArgs = ISZ(),
+        attr = AST.TypedAttr(posOpt = None(), typedOpt = Some(typedName))
+      )
     }
 
     def buildTypeInfo(aadlType: AadlType): TypeInfo = {
@@ -1462,12 +1566,270 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             reporter.error(None(), GclResolver.toolName, s"Only single dimension arrays are supported.  ${a.name} has ${a.dimensions.size}")
           }
 
-          val aadlData = symbolTable.componentMap.get(ISZ(a.name)).get.asInstanceOf[AadlData]
+          if (globalTypeMap.contains(qualifiedName)) {
+            return globalTypeMap.get(qualifiedName).get
+          }
 
-          return buildAdtTypeInfo(aadlData)
+          val packageName = ops.ISZOps(qualifiedName).dropRight(1)
+          val simpleName = qualifiedName(qualifiedName.lastIndex)
+
+          buildPackageInfo(packageName)
+
+          val emptyAttr = AST.Attr(None())
+
+          val baseTypeFQN: ISZ[String] = GclResolverUtil.getSlangName(a.baseType, reporter)
+
+          val adtScope = scope(packageName, globalImports(symbolTable), packageName)
+
+          modelContainsBoundArrays = modelContainsBoundArrays || a.dimensions.nonEmpty
+
+          val (seqName, indexingType): (String, AST.Typed.Name) =
+            if (a.dimensions.isEmpty)
+              ("ISZ", AST.Typed.Name(ids = ISZ("org", "sireum", "Z"), args = ISZ()))
+            else
+              ("IS", AST.Typed.Name(ids = qualifiedName :+ "I", args = ISZ()))
+
+          // type ta = IS[IndexingType, baseType]
+          val ta = TypeInfo.TypeAlias(
+            name = qualifiedName,
+            scope = adtScope,
+            ast = AST.Stmt.TypeAlias(
+              // original name
+              id = AST.Id(simpleName, emptyAttr),
+              typeParams = ISZ(),
+              // IS[IndexingType, baseType]
+              tipe = AST.Type.Named(
+                // IS
+                name = AST.Name(ids = ISZ(AST.Id(seqName, emptyAttr)), attr = emptyAttr),
+                // [IndexingType, baseType]
+                typeArgs = ISZ(
+                  // IndexingType
+                  AST.Type.Named(
+                    name = AST.Name(ids = for (id <- indexingType.ids) yield AST.Id(id, emptyAttr), attr = emptyAttr),
+                    typeArgs = ISZ(),
+                    attr = AST.TypedAttr(
+                      posOpt = None(),
+                      typedOpt = Some(AST.Typed.Name(ids = indexingType.ids, args = ISZ())))),
+                  // baseType
+                  AST.Type.Named(
+                    name = AST.Name(ids = for (b <- baseTypeFQN) yield AST.Id(b, emptyAttr), attr = emptyAttr),
+                    typeArgs = ISZ(),
+                    attr = AST.TypedAttr(
+                      posOpt = None(),
+                      typedOpt = Some(AST.Typed.Name(ids = baseTypeFQN, args = ISZ()))))),
+                attr = AST.TypedAttr(
+                  posOpt = None(),
+                  typedOpt = Some(AST.Typed.Name(
+                    ids = ISZ("org", "sireum", "IS"),
+                    args = ISZ(
+                      indexingType,
+                      AST.Typed.Name(ids = baseTypeFQN, args = ISZ())
+                    ))))),
+              attr = emptyAttr))
+
+          globalTypeMap = globalTypeMap + (qualifiedTypeName ~> ta)
+
+
+          if (a.dimensions.nonEmpty) {
+            // introduce companion object that contains
+            //  - the indexing type definition, "@range(min=x, max=y, index=T) class I"
+            //  - the type alias, "type <aadlTypeName> = IS[I, <baseType>]"
+            //  - a method whose name is the indexing type's fingerprint.  It takes a Z and returns an I
+            val indexTypeFingerprint = s"I${AST.Util.stableTypeSig(indexingType, 3).render}"
+            indexingTypeFingerprints = indexingTypeFingerprints + indexTypeFingerprint ~> indexingType.ids
+
+            val fingerMethodAST =
+              AST.Stmt.Method(
+                typeChecked = F,
+                purity = Purity.StrictPure,
+                modifiers = ISZ("@strictpure"),
+                sig = AST.MethodSig(
+                  purity = Purity.StrictPure,
+                  annotations = ISZ(),
+                  id = AST.Id(indexTypeFingerprint, emptyAttr),
+                  typeParams = ISZ(),
+                  hasParams = T,
+                  params = ISZ(AST.Param(
+                    isHidden = F,
+                    id = AST.Id("i", emptyAttr),
+                    tipe = AST.Type.Named(
+                      name = AST.Name(ISZ(AST.Id("Z", emptyAttr)), emptyAttr),
+                      typeArgs = ISZ(),
+                      attr = AST.TypedAttr(typedOpt = Some(AST.Typed.Name(ISZ("org", "sireum", "Z"), ISZ())), posOpt = None())))),
+                  returnType = AST.Type.Named(
+                    name = AST.Name(ISZ(AST.Id("I", emptyAttr)), emptyAttr),
+                    typeArgs = ISZ(),
+                    attr = AST.TypedAttr(typedOpt = Some(AST.Typed.Name(ids = qualifiedName :+ "I", args = ISZ())), posOpt = None()))),
+                mcontract = AST.MethodContract.Simple.empty,
+                bodyOpt = Some(AST.Body(
+                  stmts = ISZ(
+                    // val _r_: I = I.fromZ(i)
+                    AST.Stmt.Var(isSpec = F, isVal = T, id = AST.Id("_r_", emptyAttr),
+                      tipeOpt = Some(AST.Type.Named(
+                        name = AST.Name(ISZ(AST.Id("I", emptyAttr)), emptyAttr), typeArgs = ISZ(),
+                        attr = AST.TypedAttr(typedOpt = Some(AST.Typed.Name(qualifiedName :+ "I", ISZ())), posOpt = None()))),
+
+                      // ... = I.fromZ(i)
+                      initOpt = Some(AST.Stmt.Expr(
+                        exp = AST.Exp.Invoke(
+                          receiverOpt = Some(AST.Exp.Ident(AST.Id("I", emptyAttr), AST.ResolvedAttr(
+                            posOpt = None(),
+                            resOpt = Some(AST.ResolvedInfo.Object(qualifiedName :+ "I")),
+                            typedOpt = Some(AST.Typed.Object(owner = qualifiedName, id = "I"))))),
+                          ident = AST.Exp.Ident(
+                            id = AST.Id("fromZ", emptyAttr),
+                            attr = AST.ResolvedAttr(posOpt = None(),
+                              resOpt = Some(AST.ResolvedInfo.Method(isInObject = T, mode = AST.MethodMode.Method, typeParams = ISZ(),
+                                owner = qualifiedName :+ "I", id = "fromZ", paramNames = ISZ("n"),
+                                tpeOpt = Some(AST.Typed.Fun(
+                                  purity = AST.Purity.Pure, isByName = F,
+                                  args = ISZ(AST.Typed.Name(ISZ("org", "sireum", "Z"), ISZ())),
+                                  ret = AST.Typed.Name(qualifiedName :+ "I", ISZ()))),
+                                reads = ISZ(), writes = ISZ())),
+                              typedOpt = Some(AST.Typed.Method(
+                                isInObject = T, mode = AST.MethodMode.Ext, typeParams = ISZ(),
+                                owner = qualifiedName :+ "I", name = "fromZ", paramNames = ISZ("n"),
+                                tpe = AST.Typed.Fun(purity = AST.Purity.Pure, isByName = F,
+                                  args = ISZ(AST.Typed.Name(ISZ("org", "sireum", "Z"), ISZ())),
+                                  ret = AST.Typed.Name(qualifiedName :+ "I", ISZ())))))),
+                          targs = ISZ(),
+                          args = ISZ(
+                            AST.Exp.Ident(AST.Id("i", emptyAttr), AST.ResolvedAttr(
+                              posOpt = None(),
+                              resOpt = Some(AST.ResolvedInfo.LocalVar(context = qualifiedName :+ indexTypeFingerprint, scope = AST.ResolvedInfo.LocalVar.Scope.Current,
+                                isSpec = F, isVal = T, id = "i")),
+                              typedOpt = Some(AST.Typed.Name(ISZ("org", "sireum", "Z"), ISZ()))
+                            ))),
+                          attr = AST.ResolvedAttr(
+                            posOpt = None(),
+                            resOpt = Some(AST.ResolvedInfo.Method(
+                              isInObject = T, mode = AST.MethodMode.Ext, typeParams = ISZ(),
+                              owner = qualifiedName :+ "I", id = "fromZ", paramNames = ISZ("n"),
+                              tpeOpt = Some(AST.Typed.Fun(
+                                purity = AST.Purity.Pure, isByName = F, args = ISZ(AST.Typed.Name(ISZ("org", "sireum", "Z"), ISZ())),
+                                ret = AST.Typed.Name(qualifiedName :+ "I", ISZ()))),
+                              reads = ISZ(), writes = ISZ())),
+                            typedOpt = Some(AST.Typed.Name(qualifiedName :+ "I", ISZ())))),
+                        attr = AST.TypedAttr(posOpt = None(), typedOpt = Some(AST.Typed.Name(qualifiedName :+ "I", ISZ())))
+                      )),
+                      attr = AST.ResolvedAttr(posOpt = None(),
+                        resOpt = Some(AST.ResolvedInfo.LocalVar(context = qualifiedName :+ indexTypeFingerprint, scope = AST.ResolvedInfo.LocalVar.Scope.Current,
+                          isSpec = F, isVal = T, id = "_r_")),
+                        typedOpt = Some(AST.Typed.Name(qualifiedName :+ "I", ISZ())))),
+
+                    // return _r_
+                    AST.Stmt.Return(
+                      expOpt = Some(AST.Exp.Ident(AST.Id("_r_", emptyAttr),
+                        AST.ResolvedAttr(posOpt = None(),
+                          resOpt = Some(ResolvedInfo.LocalVar(
+                            context = qualifiedName :+ indexTypeFingerprint, scope = AST.ResolvedInfo.LocalVar.Scope.Current,
+                            isSpec = F, isVal = T, id = "_r")),
+                          typedOpt = Some(AST.Typed.Name(qualifiedName :+ "I", ISZ()))))),
+                      attr = AST.TypedAttr(posOpt = None(), typedOpt = Some(
+                        AST.Typed.Name(qualifiedName :+ "I", ISZ()))))
+                  ),
+                  undecls = ISZ(
+                    AST.ResolvedInfo.LocalVar(
+                      id = "i", context = qualifiedName :+ indexTypeFingerprint, scope = AST.ResolvedInfo.LocalVar.Scope.Current, isSpec = F, isVal = T),
+                    AST.ResolvedInfo.LocalVar(
+                      id = "_r", context = qualifiedName :+ indexTypeFingerprint, scope = AST.ResolvedInfo.LocalVar.Scope.Current, isSpec = F, isVal = T)))),
+                attr = AST.ResolvedAttr(posOpt = None(),
+                  resOpt = Some(AST.ResolvedInfo.Method(
+                    isInObject = T, mode = AST.MethodMode.Method, typeParams = ISZ(),
+                    owner = qualifiedName,
+                    id = indexTypeFingerprint,
+                    paramNames = ISZ("i"),
+                    tpeOpt = Some(AST.Typed.Fun(
+                      purity = Purity.StrictPure, isByName = F,
+                      args = ISZ(AST.Typed.Name(ISZ("org", "sireum", "Z"), ISZ())),
+                      ret = AST.Typed.Name(qualifiedName :+ "I", ISZ()))),
+                    reads = ISZ(),
+                    writes = ISZ())),
+                  typedOpt = Some(AST.Typed.Method(isInObject = T, mode = AST.MethodMode.Method, typeParams = ISZ(),
+                    owner = qualifiedName,
+                    name = indexTypeFingerprint,
+                    paramNames = ISZ("i"),
+                    tpe = AST.Typed.Fun(purity = Purity.StrictPure, isByName = F,
+                      args = ISZ(AST.Typed.Name(ISZ("org", "sireum", "Z"), ISZ())),
+                      ret = AST.Typed.Name(qualifiedName :+ "I", ISZ()))))
+                ))
+
+            val fingerMethodObj = Info.Method(
+              owner = qualifiedName,
+              isInObject = T,
+              scope = adtScope,
+              hasBody = T,
+              ast = fingerMethodAST)
+
+            declareName(indexTypeFingerprint, qualifiedName :+ indexTypeFingerprint, fingerMethodObj, None(), reporter)
+
+            val indexingTypeTypeInfo = TypeInfo.SubZ(
+              owner = packageName :+ simpleName,
+              ast = // @range(min=x max=x, index=T) class I
+                AST.Stmt.SubZ(
+                  id = AST.Id("I", emptyAttr),
+                  min = 0, max = a.dimensions(0) - 1, isIndex = T,
+                  isSigned = F, isBitVector = F, isWrapped = F, hasMin = T, hasMax = T, bitWidth = 0, index = 0, attr = emptyAttr))
+
+            globalTypeMap = globalTypeMap + ((packageName :+ simpleName :+ "I") ~> indexingTypeTypeInfo)
+
+            val obj = Info.Object(
+              owner = packageName,
+              isSynthetic = F,
+              scope = adtScope,
+              outlined = F,
+              contractOutlined = F,
+              typeChecked = F,
+              ast = AST.Stmt.Object(
+                isApp = F,
+                extNameOpt = None(),
+                id = AST.Id(simpleName, emptyAttr),
+                stmts = ISZ(
+
+                  // @range(min=x max=x, index=T) class I
+                  indexingTypeTypeInfo.ast,
+
+                  // type <aadlTypeName> = IS[I, <baseType>]
+                  ta.ast,
+
+                  // @strictpure def <indexTypeFingerprint>(i: Z): I = {
+                  //   val _r_: I = I.fromZ(i)
+                  //   return _r_
+                  // }
+                  fingerMethodAST
+                ),
+                attr = emptyAttr
+              ),
+              typedOpt = Some(AST.Typed.Object(owner = packageName, id = simpleName)),
+              resOpt = Some(AST.ResolvedInfo.Object(name = qualifiedName)),
+              constructorRes = AST.ResolvedInfo.Method(
+                isInObject = F,
+                mode = AST.MethodMode.ObjectConstructor,
+                typeParams = ISZ(),
+                owner = packageName,
+                id = simpleName,
+                paramNames = ISZ(),
+                tpeOpt = None(), // this is null in the debugger
+                reads = ISZ(),
+                writes = ISZ()))
+
+            declareName(simpleName, qualifiedName, obj, None(), reporter)
+
+            // import the subz fingerprint method
+            val fname: ISZ[AST.Id] = for (n <- qualifiedName :+ indexTypeFingerprint) yield AST.Id(n, emptyAttr)
+            arrayIndexInterpolateImports = arrayIndexInterpolateImports :+
+              AST.Stmt.Import(importers = ISZ(AST.Stmt.Import.Importer(
+                name = AST.Name(fname, emptyAttr), selectorOpt = None())), attr = emptyAttr)
+          }
+
+          val gclAnnexes = a.container.get.annexes.filter((a: Annex) => a.clause.isInstanceOf[GclSubclause]).map((a: Annex) => a.clause.asInstanceOf[GclSubclause])
+          if (gclAnnexes.nonEmpty) {
+            halt("TODO: invariant added to an ISZ()")
+          }
+
+          return ta
 
         case b: BaseType =>
-
           val simpleName = b.simpleName
           val packageName = ops.ISZOps(qualifiedTypeName).dropRight(1)
           buildPackageInfo(packageName)
@@ -1476,33 +1838,12 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
           val scope: Scope.Global = Scope.Global(packageName, imports, packageName)
 
+          val slangName = GclResolverUtil.getSlangName(b, reporter)
+
           val ast: AST.Stmt.TypeAlias = {
             val _id = AST.Id(simpleName, AST.Attr(None()))
             val typeParams: ISZ[TypeParam] = ISZ()
-            val simpleSireumName: String = simpleName match {
-              case "Integer_8" => "S8"
-              case "Integer_16" => "S16"
-              case "Integer_32" => "S32"
-              case "Integer_64" => "S64"
-              case "Integer" => "Z"
-
-              case "Unsigned_8" => "U8"
-              case "Unsigned_16" => "U16"
-              case "Unsigned_32" => "U32"
-              case "Unsigned_64" => "U64"
-
-              case "Float_32" => "F32"
-              case "Float_64" => "F64"
-              case "Float" => "R"
-
-              case "Boolean" => "B"
-              case "Character" => "C"
-              case "String" => "String"
-
-              case x =>
-                reporter.error(b.container.get.identifier.pos, GclResolver.toolName, s"Wasn't expecting $simpleName")
-                "String"
-            }
+            val simpleSireumName: String = slangName(slangName.lastIndex)
             val tipe: AST.Type = AST.Type.Named(
               name = AST.Name(
                 ids = ISZ(AST.Id(simpleSireumName, AST.Attr(None()))),
@@ -1512,7 +1853,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               attr = AST.TypedAttr(
                 posOpt = None(),
                 typedOpt = Some(AST.Typed.Name(
-                  ids = ISZ[String]("org", "sireum") :+ simpleSireumName,
+                  ids = slangName,
                   args = ISZ()
                 ))
               )
@@ -1553,7 +1894,6 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               parents = ISZ(),
               stmts = ISZ(),
               attr = AST.Attr(None()))
-
           val typeInfoAdt = TypeInfo.Adt(
             owner = ISZ("art"),
             outlined = F,
@@ -1612,7 +1952,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
       val adtScope = scope(packageName, globalImports(symbolTable), packageName)
 
-      for(gclMethod <- g.methods) {
+      for (gclMethod <- g.methods) {
         val fqMethodName = (adtQualifiedName :+ gclMethod.method.sig.id.value)
 
         if (!globalNameMap.contains(fqMethodName)) {
@@ -1664,14 +2004,12 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
       val qualifiedMethodName = adtQualifiedName :+ methodName
 
-      val resolvedParams: ISZ[AST.Param] = m.sig.params.map((p: AST.Param) => {
-        val resolvedTipe = resolveType(p.tipe, p.id.attr.posOpt)
-        p(tipe = resolvedTipe)
-      })
+      val resolvedParams: ISZ[AST.Param] = for (p <- m.sig.params) yield
+        p(tipe = resolveType(p.tipe, p.id.attr.posOpt))
 
-      val resolvedReturnType: AST.Type = resolveType(m.sig.returnType, m.sig.id.attr.posOpt)
+      val resolvedReturnType = resolveType(m.sig.returnType, m.sig.id.attr.posOpt)
 
-      val resolvedReturnTyped: AST.Typed = fromTypetoTyped(resolvedReturnType)
+      val resolvedReturnTyped: AST.Typed = resolvedReturnType.attr.typedOpt.get
 
       val resolvedTypeParams = m.sig.typeParams
       assert(resolvedTypeParams.isEmpty, "Not handling type params yet")
@@ -1688,7 +2026,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       val resolvedTypedFun = AST.Typed.Fun(
         purity = m.sig.purity,
         isByName = F,
-        args = resolvedParams.map((p: AST.Param) => paramToTypedName(p)),
+        args = resolvedParams.map((p: AST.Param) => p.tipe.asInstanceOf[AST.Type.Named].attr.typedOpt.get),
         ret = resolvedReturnTyped)
 
       val resolvedInfoMethod = AST.ResolvedInfo.Method(
@@ -1727,11 +2065,14 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
       val scopeNameMap: HashMap[String, Info] = {
         val entries: ISZ[(String, Info)] = resolvedParams.map((p: AST.Param) => {
+          val paramTypeName = resolveType(p.tipe, None())
+          val typedOpt: Option[AST.Typed] = paramTypeName.attr.typedOpt
+
           val lv = Info.LocalVar(
             name = qualifiedMethodName :+ p.id.value,
             isVal = T,
             ast = AST.Id(value = p.id.value, attr = AST.Attr(posOpt = None())),
-            typedOpt = Some(paramToTypedName(p)),
+            typedOpt = typedOpt, //
             initOpt = None(),
             resOpt = Some(AST.ResolvedInfo.LocalVar(
               context = qualifiedMethodName,
@@ -1818,7 +2159,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
       for (field <- features ++ stateVars) {
         val fieldId: String = field.identifier
-        val fieldType: AadlType = field match {
+        val fieldAadlType: AadlType = field match {
           case afd: AadlFeatureData => afd.aadlType
           case _ => TypeUtil.EmptyType
         }
@@ -1828,14 +2169,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         val fieldResInfoOpt = Some[AST.ResolvedInfo](
           AST.ResolvedInfo.Var(isInObject = T, isSpec = F, isVal = F, owner = threadsName, id = fieldId))
 
-        val typedOpt: Option[AST.Typed] = getTypedFromAadlType(fieldType)
-
-        val varTypeId = AST.Id(value = fieldType.name, attr = AST.Attr(None()))
-        val varTypeName = AST.Type.Named(
-          name = AST.Name(ids = ISZ(varTypeId), attr = AST.Attr(None())),
-          typeArgs = ISZ(),
-          attr = AST.TypedAttr(posOpt = None(), typedOpt = None())
-        )
+        val fieldType = resolveTypeH(fieldAadlType, None())
 
         val infoVar = Info.Var(
           owner = threadsName,
@@ -1848,9 +2182,10 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             isSpec = F,
             isVal = F,
             id = AST.Id(value = fieldId, attr = AST.Attr(None())),
-            tipeOpt = Some(varTypeName),
+            tipeOpt = Some(fieldType),
             initOpt = None(),
-            attr = ResolvedAttr(posOpt = field.feature.identifier.pos, resOpt = fieldResInfoOpt, typedOpt = typedOpt)
+            attr = ResolvedAttr(posOpt = field.feature.identifier.pos, resOpt = fieldResInfoOpt,
+              typedOpt = Some(fieldType.attr.typedOpt.get))
           )
         )
 
@@ -1861,7 +2196,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
         val TYPE_VAR__STATE_VAR = "TYPE_VAR__STATE_VAR"
 
-        def createInfoMethod(methodName: String, typeParams: ISZ[AST.TypeParam], params: ISZ[AST.Param], returnType: AST.Type.Named, isInObject: B): Info.Method = {
+        def createUIFInfoMethod(methodName: String, typeParams: ISZ[AST.TypeParam], params: ISZ[AST.Param], returnType: AST.Type.Named, isInObject: B): Info.Method = {
 
           val methodAst: AST.Stmt.Method = {
             val methodSig = AST.MethodSig(
@@ -1999,7 +2334,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         )
 
         for (sig <- sigs) {
-          _methods = _methods + sig._1 ~> createInfoMethod(
+          _methods = _methods + sig._1 ~> createUIFInfoMethod(
             methodName = sig._1,
             typeParams = sig._2,
             params = sig._3,
@@ -2144,7 +2479,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         val paramResInfoOpt = Some[AST.ResolvedInfo](
           AST.ResolvedInfo.Var(isInObject = F, isSpec = F, isVal = F, owner = adtQualifiedName, id = paramId))
 
-        val typedOpt: Option[AST.Typed] = getTypedFromAadlType(paramType)
+        val typedOpt: Option[AST.Typed] = resolveTypeH(paramType, None()).attr.typedOpt
 
         val varTypeId = AST.Id(value = paramType.name, attr = AST.Attr(None()))
         val varTypeName = AST.Type.Named(
@@ -2203,7 +2538,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           isByName = F,
           args = a.subComponents.map((sc: AadlComponent) => {
             val aadlType = aadlTypes.typeMap.get(sc.component.classifier.get.name).get
-            getTypedFromAadlType(aadlType).get
+            resolveTypeH(aadlType, None()).attr.typedOpt.get
           }),
           ret = AST.Typed.Name(ids = adtQualifiedName, args = ISZ())
         )
@@ -2343,9 +2678,9 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
     }
   }
 
-  def offer(component: AadlComponent, annex: Annex, annexLibs: ISZ[AnnexLibInfo], symbolTable: SymbolTable, aadlTypes: AadlTypes, reporter: Reporter): Option[AnnexClauseInfo] = {
+  def offer(component: AadlComponent, annex: Annex, annexLibs: ISZ[AnnexLibInfo], symbolTable: SymbolTable, aadlTypes: AadlTypes, store: Store, reporter: Reporter): (Option[AnnexClauseInfo], Store) = {
     if (processedAnnexes.contains(annex)) {
-      return processedAnnexes.get(annex).get
+      return (processedAnnexes.get(annex).get, store)
     } else {
       val result: Option[AnnexClauseInfo] = annex.clause match {
         case gclSubclause: GclSubclause =>
@@ -2354,7 +2689,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
           val qualifiedName: IdPath = component.classifier
           if (reporter.hasError) {
-            return None()
+            return (None(), store)
           }
 
           val scope: Scope.Local = component match {
@@ -2369,11 +2704,11 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                       scope
                     case x =>
                       reporter.error(None(), toolName, s"Expecting ${qualifiedName} to resolve to an ADT but found ${x}")
-                      return None()
+                      return (None(), store)
                   }
                 case _ =>
                   reporter.error(None(), toolName, s"Could not resolve type info for GCl Subclause: ${qualifiedName}")
-                  return None()
+                  return (None(), store)
               }
             case ac: AadlThread =>
               globalNameMap.get(qualifiedName) match {
@@ -2388,11 +2723,11 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
                 case _ =>
                   reporter.error(None(), toolName, s"Could not resolve name for GCL Subclause: ${qualifiedName}")
-                  return None()
+                  return (None(), store)
               }
             case c =>
               reporter.error(c.component.identifier.pos, toolName, s"GUMBO subclause contracts can only be attached to threads and data components")
-              return None()
+              return (None(), store)
           }
 
           val typeHierarchy: TypeHierarchy = TypeHierarchy(
@@ -2406,11 +2741,11 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           Some(GclAnnexClauseInfo(gclSubclause, gclSymbolTable))
         case _ => None()
       }
-      return result
+      return (result, GclResolver.putIndexingTypeFingerprints(indexingTypeFingerprints, store))
     }
   }
 
-  def offerLibraries(annexLibs: ISZ[AnnexLib], symbolTable: SymbolTable, aadlTypes: AadlTypes, reporter: Reporter): ISZ[AnnexLibInfo] = {
+  def offerLibraries(annexLibs: ISZ[AnnexLib], symbolTable: SymbolTable, aadlTypes: AadlTypes, store:Store, reporter: Reporter): (ISZ[AnnexLibInfo], Store) = {
     var ret: ISZ[AnnexLibInfo] = ISZ()
     val gclLibs: ISZ[GclLib] = annexLibs.filter((al: AnnexLib) => al.isInstanceOf[GclLib]).map((al: AnnexLib) => al.asInstanceOf[GclLib])
 
@@ -2453,7 +2788,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         }
       }
     }
-    return ret
+
+    return (ret, GclResolver.putIndexingTypeFingerprints(indexingTypeFingerprints, store))
   }
 
 }

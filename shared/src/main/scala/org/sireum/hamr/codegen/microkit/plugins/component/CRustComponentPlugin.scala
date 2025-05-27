@@ -108,7 +108,7 @@ object ComponentContributions {}
           sig = RustAst.FnSig(
             ident = RustAst.IdentString("new"),
             fnDecl = RustAst.FnDecl(inputs = ISZ(), outputs = RustAst.FnRetTyImpl(RustAst.TyPath(ISZ(ISZ("Self")), None()))),
-            fnHeader = RustAst.FnHeader(F), generics = None()),
+            verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
           comments = ISZ(), attributes = ISZ(), visibility = RustAst.Visibility.Public, contract = None(), meta = ISZ(),
           body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemSelf(ISZ())))))
 
@@ -128,7 +128,7 @@ object ComponentContributions {}
                     ty = RustAst.TyPath(ISZ(ISZ(appApiType), ISZ("API")), None()), mutbl = RustAst.Mutability.Mut)))
               ),
               outputs = RustAst.FnRetTyDefault()),
-            fnHeader = RustAst.FnHeader(F)),
+            verusHeader = None(), fnHeader = RustAst.FnHeader(F)),
           comments = ISZ(), attributes = ISZ(), visibility = RustAst.Visibility.Public, contract = None(), meta = ISZ(),
           body = Some(RustAst.MethodBody(ISZ(
             RustAst.BodyItemST(st"""#[cfg(feature = "sel4")]
@@ -152,7 +152,7 @@ object ComponentContributions {}
                         ty = RustAst.TyPath(ISZ(ISZ(appApiType), ISZ("API")), None()), mutbl = RustAst.Mutability.Mut)))
                   ),
                   outputs = RustAst.FnRetTyDefault()),
-                fnHeader = RustAst.FnHeader(F)),
+                verusHeader = None(), fnHeader = RustAst.FnHeader(F)),
               comments = ISZ(), attributes = ISZ(), visibility = RustAst.Visibility.Public, contract = None(), meta = ISZ(),
               body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
                 st"""#[cfg(feature = "sel4")]
@@ -169,7 +169,7 @@ object ComponentContributions {}
                   ident = RustAst.IdentString("channel"),
                   kind = RustAst.TyPath(ISZ(ISZ("microkit_channel")), None()))),
               outputs = RustAst.FnRetTyDefault()),
-            fnHeader = RustAst.FnHeader(F), generics = None()),
+            verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
           comments = ISZ(), contract = None(), visibility = RustAst.Visibility.Public, attributes = ISZ(), meta = ISZ(),
           body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
             st"""// this method is called when the monitor does not handle the passed in channel

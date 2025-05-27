@@ -8,6 +8,7 @@ import org.sireum.hamr.codegen.arsit.Util.ARSIT_INSTRUCTIONS_MESSAGE_KIND
 import org.sireum.hamr.codegen.common.containers._
 import org.sireum.hamr.codegen.common.CommonUtil.Store
 import org.sireum.hamr.codegen.common.plugin.Plugin
+import org.sireum.hamr.codegen.common.resolvers.GclResolver
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.HamrCli.{CodegenHamrPlatform, CodegenOption}
@@ -116,13 +117,14 @@ object CodeGen {
 
     var wroteOutArsitResources: B = F
 
-    val result: Option[ModelElements] = ModelUtil.resolve(model, model.components(0).identifier.pos, packageName, modOptions, reporter)
+    val result: (Option[ModelElements], Store) = ModelUtil.resolve(model, model.components(0).identifier.pos, packageName, modOptions, localStore, reporter)
+    localStore = result._2
     reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
-    if (result.isEmpty) {
+    if (result._1.isEmpty) {
       return finalizePlugins(None(), None(), CodeGenResults.empty, localStore)
     }
 
-    val (rmodel, aadlTypes, symbolTable): (Aadl, AadlTypes, SymbolTable) = (result.get.model, result.get.types, result.get.symbolTable)
+    val (rmodel, aadlTypes, symbolTable): (Aadl, AadlTypes, SymbolTable) = (result._1.get.model, result._1.get.types, result._1.get.symbolTable)
 
     if (modOptions.runtimeMonitoring && symbolTable.getThreads().isEmpty) {
       reporter.error(None(), toolName, "Model must contain threads in order to enable runtime monitoring")
@@ -143,7 +145,7 @@ object CodeGen {
 
     if (!reporter.hasError && runMicrokit) {
       reporter.info(None(), toolName, "Generating Microkit artifacts...")
-      val results = MicrokitCodegen().run(rmodel, modOptions, aadlTypes, symbolTable, plugins, store, reporter)
+      val results = MicrokitCodegen().run(rmodel, modOptions, aadlTypes, symbolTable, plugins, localStore, reporter)
       localStore = results._2
       if (!reporter.hasError) {
         writeOutResources(results._1.resources, F, reporter)
@@ -188,7 +190,7 @@ object CodeGen {
       reporter.info(None(), toolName, "Generating Slang artifacts...")
       reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
 
-      val results = arsit.Arsit.run(rmodel, opt, aadlTypes, symbolTable, plugins, store, reporter)
+      val results = arsit.Arsit.run(rmodel, opt, aadlTypes, symbolTable, plugins, localStore, reporter)
       localStore = results._2
 
       arsitResources = arsitResources ++ results._1.resources
@@ -359,31 +361,31 @@ object CodeGen {
   }
 
   def printMessages(reporterMessages: ISZ[Message], verbose: B, messageIndex: Z, kindsToFilterOut: ISZ[String]): Z = {
+    var messages = ops.ISZOps(reporterMessages).slice(messageIndex, reporterMessages.size)
+    for (key <- kindsToFilterOut) {
+      messages = messages.filter(p => p.kind != key)
+    }
 
-    if (verbose) {
-      var messages = ops.ISZOps(reporterMessages).slice(messageIndex, reporterMessages.size)
-      for (key <- kindsToFilterOut) {
-        messages = messages.filter(p => p.kind != key)
-      }
-
-      var infoWarnings: ISZ[Message] = ISZ()
-      var errors: ISZ[Message] = ISZ()
-      for (m <- messages) {
-        if (m.isError) {
-          errors = errors :+ m
-        } else {
-          infoWarnings = infoWarnings :+ m
-        }
-      }
-
-      ReporterImpl(infoWarnings).printMessages()
-
-      if (errors.nonEmpty) {
-        cprintln(T, "")
-        cprintln(T, "Errors:")
-        ReporterImpl(errors).printMessages()
+    var infoWarnings: ISZ[Message] = ISZ()
+    var errors: ISZ[Message] = ISZ()
+    for (m <- messages) {
+      if (m.isError) {
+        errors = errors :+ m
+      } else {
+        infoWarnings = infoWarnings :+ m
       }
     }
+
+    if (verbose) {
+      ReporterImpl(infoWarnings).printMessages()
+    }
+
+    if (errors.nonEmpty) {
+      cprintln(T, "")
+        cprintln(T, "Errors:")
+      ReporterImpl(errors).printMessages()
+    }
+
     return reporterMessages.size
   }
 

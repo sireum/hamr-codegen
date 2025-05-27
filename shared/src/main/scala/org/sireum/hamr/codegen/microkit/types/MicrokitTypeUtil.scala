@@ -11,7 +11,8 @@ import org.sireum.hamr.codegen.microkit.plugins.types.{CRustTypePlugin, CRustTyp
 import org.sireum.hamr.codegen.microkit.util.Util
 import org.sireum.hamr.codegen.microkit.util.Util.brand
 import org.sireum.hamr.ir
-import org.sireum.hamr.ir.GclStateVar
+import org.sireum.hamr.ir.{GclMethod, GclStateVar}
+import org.sireum.lang.{ast => SAST}
 import org.sireum.lang.ast.Param
 import org.sireum.message.{Position, Reporter}
 import org.sireum.hamr.codegen.microkit.{rust => RAST}
@@ -136,6 +137,8 @@ object MicrokitTypeUtil {
     c match {
       case "Base_Types::Boolean" => return "bool"
 
+      case "Base_Types::Integer" => return "intmax_t"
+
       case "Base_Types::Integer_8" => return s"int8_t"
       case "Base_Types::Integer_16" => return s"int16_t"
       case "Base_Types::Integer_32" => return s"int32_t"
@@ -162,6 +165,8 @@ object MicrokitTypeUtil {
   def translateBaseTypeToRust(c: String): String = {
     c match {
       case "Base_Types::Boolean" => return "bool"
+
+      case "Base_Types::Integer" => return "usize"
 
       case "Base_Types::Integer_8" => return s"i8"
       case "Base_Types::Integer_16" => return s"i16"
@@ -192,6 +197,8 @@ object MicrokitTypeUtil {
     c match {
       case "Base_Types::Boolean" => return "false"
 
+      case "Base_Types::Integer" => return s"0"
+
       case "Base_Types::Integer_8" => return s"0"
       case "Base_Types::Integer_16" => return s"0"
       case "Base_Types::Integer_32" => return s"0"
@@ -217,6 +224,45 @@ object MicrokitTypeUtil {
     }
   }
 
+  @pure def getAadlTypeFromSlangTypeH(slangType: SAST.Typed.Name, aadlTypes: AadlTypes): AadlType = {
+    return getAadlTypeFromSlangType(slangType.ids, aadlTypes)
+  }
+
+  @pure def getAadlTypeFromSlangType(slangType: ISZ[String], aadlTypes: AadlTypes): AadlType = {
+    slangType match {
+      case ISZ("org", "sireum", baseType) =>
+        baseType match {
+
+          case "B" => return aadlTypes.typeMap.get("Base_Types::Boolean").get
+
+          case "Z" => return aadlTypes.typeMap.get("Base_Types::Integer").get
+
+          case "S8" => return aadlTypes.typeMap.get("Base_Types::Signed_8").get
+          case "S16" => return aadlTypes.typeMap.get("Base_Types::Signed_16").get
+          case "S32" => return aadlTypes.typeMap.get("Base_Types::Signed_32").get
+          case "S64" => return aadlTypes.typeMap.get("Base_Types::Signed_64").get
+
+          case "U8" => return aadlTypes.typeMap.get("Base_Types::Unsigned_8").get
+          case "U16" => return aadlTypes.typeMap.get("Base_Types::Unsigned_16").get
+          case "U32" => return aadlTypes.typeMap.get("Base_Types::Unsigned_32").get
+          case "U64" => return aadlTypes.typeMap.get("Base_Types::Unsigned_64").get
+
+          case "F32" => return aadlTypes.typeMap.get("Base_Types::Float_32").get
+          case "F64" => return aadlTypes.typeMap.get("Base_Types::Float_64").get
+
+          case x =>
+            halt(s"Unexpected base type: $x")
+
+        }
+      case _ =>
+        if (slangType(slangType.lastIndex) == "Type") {
+          return aadlTypes.getTypeByPath(ops.ISZOps(slangType).dropRight(1))
+        } else {
+          return aadlTypes.getTypeByPath(slangType)
+        }
+    }
+  }
+
   /** @return a tuple. First is an ordered sequence of types based on their dependencies (e.g. field types
     *         appear before records that use them). Second is a substitution map (e.g. Base_Types::String
     *         will be mapped to an array based version where the dimension is the largest String dimension
@@ -229,8 +275,6 @@ object MicrokitTypeUtil {
     var maxString: Option[BaseType] = None()
     def add(posOpt: Option[Position], aadlType: AadlType): Unit = {
       aadlType.name match {
-        case "Base_Types::Integer" =>
-          reporter.error(posOpt, MicrokitCodegen.toolName, "Unbounded Integer is not supported for Microkit")
         case "Base_Types::Float" =>
           reporter.error(posOpt, MicrokitCodegen.toolName, "Unbounded Float is not supported for Microkit")
         case "Base_Types::String" =>
@@ -288,12 +332,25 @@ object MicrokitTypeUtil {
     def processState(s: GclStateVar): Unit = {
       add(s.posOpt, aadlTypes.typeMap.get(s.classifier).get)
     }
+    def processType(typed: org.sireum.lang.ast.Typed.Name, posOpt: Option[Position]): Unit = {
+      val name = st"${(typed.ids, "::")}".render
+      add(posOpt, aadlTypes.typeMap.get(name).get)
+    }
+
     def processParam(p: Param): Unit = {
       p.tipe.typedOpt match {
-        case Some(typed: org.sireum.lang.ast.Typed.Name) =>
-          val name = st"${(typed.ids, "::")}".render
-          add(p.id.attr.posOpt, aadlTypes.typeMap.get(name).get)
+        case Some(typed: org.sireum.lang.ast.Typed.Name) => processType(typed, p.id.attr.posOpt)
         case _ =>
+      }
+    }
+
+    def processMethod(m: GclMethod): Unit = {
+      m.method.sig.returnType.typedOpt match {
+        case Some(t: org.sireum.lang.ast.Typed.Name) => processType(t, m.posOpt)
+        case _ =>
+      }
+      for (p <- m.method.sig.params) {
+        processParam(p)
       }
     }
 
@@ -303,17 +360,16 @@ object MicrokitTypeUtil {
           for (s <- g.annex.state) {
             processState(s)
           }
-          for (m <- g.annex.methods; p <- m.method.sig.params) {
-            processParam(p)
+          for (m <- g.annex.methods) {
+            processMethod(m)
           }
       }
     }
     for (gclLib <- symbolTable.annexLibInfos) {
       gclLib match {
         case lib: GclAnnexLibInfo =>
-          for (m <- lib.annex.methods;
-               p <- m.method.sig.params) {
-            processParam(p)
+          for (m <- lib.annex.methods) {
+            processMethod(m)
           }
         case _ =>
       }

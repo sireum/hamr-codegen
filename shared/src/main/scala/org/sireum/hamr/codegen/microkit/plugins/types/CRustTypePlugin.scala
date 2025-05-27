@@ -352,6 +352,7 @@ object CRustTypePlugin {
           forIdent = RustAst.IdentString(getTypeSimpleName(aadlType)),
           items = ISZ(RustAst.FnImpl(
             sig = RustAst.FnSig(
+              verusHeader = None(),
               fnHeader = RustAst.FnHeader(F),
               ident = RustAst.IdentString("default"),
               generics = None(),

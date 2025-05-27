@@ -2,7 +2,7 @@
 package org.sireum.hamr.codegen.microkit.rust
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.CommonUtil.IdPath
+import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, isThread}
 import org.sireum.hamr.codegen.common.containers.Marker
 import org.sireum.hamr.codegen.microkit.rust.Printers._
 
@@ -179,12 +179,13 @@ object Printers {
   }
 }
 
-@datatype class StructFieldsMarker(val marker: Marker,
-                                   val fields: ISZ[StructField]) extends Item {
+@datatype class MarkerWrap(val marker: Marker,
+                           val items: ISZ[Item],
+                           val sep: String) extends Item {
   @pure override def prettyST: ST = {
     return (
     st"""${marker.beginMarker}
-        |${(for(f <- fields) yield f.prettyST, "\n")}
+        |${(for(i <- items) yield i.prettyST, sep)}
         |${marker.endMarker}""")
   }
 }
@@ -310,6 +311,13 @@ object Printers {
 
 @datatype class FnHeader(val constness: B)
 
+@datatype class FnVerusHeader(val isOpen: B,
+                              val isSpec: B) {
+  @pure def prettyST: ST = {
+    return st"${if (isOpen) "open " else ""}${if(isSpec) "spec " else "proof " }"
+  }
+}
+
 @sig trait Param extends Item {
   @pure def ident: Ident
 }
@@ -351,15 +359,19 @@ object Printers {
   }
 }
 
-@datatype class FnSig(val fnHeader: FnHeader,
+@datatype class FnSig(val verusHeader: Option[FnVerusHeader],
+                      val fnHeader: FnHeader,
                       val ident: Ident,
                       val fnDecl: FnDecl,
 
                       val generics: Option[Generics]) extends Item {
   @pure override def prettyST: ST = {
+    val optVerusHeader: Option[ST] =
+      if (verusHeader.nonEmpty) Some(verusHeader.get.prettyST)
+      else None()
     val header: String = if (fnHeader.constness) "const " else ""
     val optGenerics: Option[ST] = if (generics.isEmpty) None() else Some(generics.get.prettyST)
-    return st"""${header}fn ${ident.prettyST}$optGenerics${fnDecl.prettyST}"""
+    return st"""$optVerusHeader${header}fn ${ident.prettyST}$optGenerics${fnDecl.prettyST}"""
   }
 }
 

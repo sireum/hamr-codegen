@@ -4,7 +4,7 @@ package org.sireum.hamr.codegen.common.symbols
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
-import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, toolName}
+import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, Store, toolName}
 import org.sireum.hamr.codegen.common.properties.HamrProperties.HAMR__BIT_CODEC_MAX_SIZE
 import org.sireum.hamr.codegen.common.properties.{CasePropertiesProperties, CaseSchedulingProperties, OsateProperties, PropertyUtil}
 import org.sireum.hamr.codegen.common.resolvers.{BTSResolver, GclResolver}
@@ -24,9 +24,10 @@ object SymbolResolver {
               aadlTypes: AadlTypes,
               aadlMaps: AadlMaps,
               options: CodegenOption,
-              reporter: Reporter): Option[SymbolTable] = {
+              store: Store,
+              reporter: Reporter): (Option[SymbolTable], Store) = {
 
-    return SymbolResolver().resolve(model, aadlTypes, aadlMaps, options, defaultAnnexVisitors, reporter)
+    return SymbolResolver().resolve(model, aadlTypes, aadlMaps, options, defaultAnnexVisitors, store, reporter)
   }
 }
 
@@ -38,29 +39,35 @@ object SymbolResolver {
               aadlMaps: AadlMaps,
               options: CodegenOption,
               annexVisitors: MSZ[AnnexVisitor],
-              reporter: Reporter): Option[SymbolTable] = {
+              store: Store,
+              reporter: Reporter): (Option[SymbolTable], Store) = {
+
+    var localStore = store
 
     annexVisitors.foreach((f: AnnexVisitor) => f.reset)
 
     val stOpt = buildSymbolTable(model, aadlTypes, aadlMaps, options, reporter)
     if (reporter.hasError) {
-      return stOpt
+      return (stOpt, localStore)
     } else {
       val st = stOpt.get
 
-      val annexLibInfos: ISZ[AnnexLibInfo] = processAnnexLibraries(model.annexLib, st, aadlTypes, annexVisitors, reporter)
+      val annexLibInfos: (ISZ[AnnexLibInfo], Store) = processAnnexLibraries(model.annexLib, st, aadlTypes, annexVisitors, localStore, reporter)
+      localStore = annexLibInfos._2
 
       var annexClauseInfos: HashSMap[IdPath, ISZ[AnnexClauseInfo]] = HashSMap.empty
       for (component <- st.componentMap.entries) {
         var ais: ISZ[AnnexClauseInfo] = ISZ()
         for (annex <- component._2.component.annexes) {
-          ais = ais ++ processAnnexSubclauses(component._2, st, aadlTypes, annex, annexLibInfos, annexVisitors, reporter)
+          val p = processAnnexSubclauses(component._2, st, aadlTypes, annex, annexLibInfos._1, annexVisitors, localStore, reporter)
+          ais = ais ++ p._1
+          localStore = p._2
         }
         if (ais.nonEmpty) {
           annexClauseInfos = annexClauseInfos + (component._1 ~> ais)
         }
       }
-      return Some(st(annexClauseInfos = annexClauseInfos, annexLibInfos = annexLibInfos))
+      return (Some(st(annexClauseInfos = annexClauseInfos, annexLibInfos = annexLibInfos._1)), localStore)
     }
   }
 
@@ -819,12 +826,16 @@ object SymbolResolver {
                             symbolTable: SymbolTable,
                             aadlTypes: AadlTypes,
                             annexVisitors: MSZ[AnnexVisitor],
-                            reporter: Reporter): ISZ[AnnexLibInfo] = {
+                            store: Store,
+                            reporter: Reporter): (ISZ[AnnexLibInfo], Store) = {
     var ret: ISZ[AnnexLibInfo] = ISZ()
+    var localStore = store
     for (v <- annexVisitors) {
-      ret = ret ++ v.offerLibraries(libs, symbolTable, aadlTypes, reporter)
+      val p = v.offerLibraries(libs, symbolTable, aadlTypes, localStore, reporter)
+      ret = ret ++ p._1
+      localStore = p._2
     }
-    return ret
+    return (ret, localStore)
   }
 
   def processAnnexSubclauses(context: AadlComponent,
@@ -833,15 +844,20 @@ object SymbolResolver {
                              annex: Annex,
                              annexLibs: ISZ[AnnexLibInfo],
                              annexVisitors: MSZ[AnnexVisitor],
-                             reporter: Reporter): ISZ[AnnexClauseInfo] = {
+                             store: Store,
+                             reporter: Reporter): (ISZ[AnnexClauseInfo], Store) = {
     var ret: ISZ[AnnexClauseInfo] = ISZ()
+    var localStore = store
     for (v <- annexVisitors) {
       // TODO: what if 2+ visitors can handle the same annex?
-      v.offer(context, annex, annexLibs, symbolTable, aadlTypes, reporter) match {
-        case Some(ai) => ret = ret :+ ai
-        case None() =>
+      v.offer(context, annex, annexLibs, symbolTable, aadlTypes, localStore, reporter) match {
+        case (Some(ai), s) =>
+          ret = ret :+ ai
+          localStore = s
+        case (None(), s) =>
+          localStore = s
       }
     }
-    return ret
+    return (ret, localStore)
   }
 }

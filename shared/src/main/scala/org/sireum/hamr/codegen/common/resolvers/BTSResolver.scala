@@ -4,7 +4,7 @@ package org.sireum.hamr.codegen.common.resolvers
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
-import org.sireum.hamr.codegen.common.CommonUtil.IdPath
+import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, Store}
 import org.sireum.hamr.codegen.common.symbols.{BTSVariable => BTSVariableSym}
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.types.AadlTypes
@@ -64,20 +64,20 @@ import org.sireum.message.Reporter
     return T
   }
 
-  def offer(context: AadlComponent, annex: Annex, annexLibs: ISZ[AnnexLibInfo], symbolTable: SymbolTable, aadlTypes: AadlTypes, reporter: Reporter): Option[AnnexClauseInfo] = {
+  def offer(context: AadlComponent, annex: Annex, annexLibs: ISZ[AnnexLibInfo], symbolTable: SymbolTable, aadlTypes: AadlTypes, store: Store, reporter: Reporter): (Option[AnnexClauseInfo], Store) = {
     if (!seenAnnexes.contains(annex)) {
       seenAnnexes = seenAnnexes + annex
       annex.clause match {
         case b: BTSBLESSAnnexClause =>
           val btsSymTable = processBTSAnnex(b, symbolTable, aadlTypes, reporter).get
-          return Some(BTSAnnexInfo(b, btsSymTable))
+          return (Some(BTSAnnexInfo(b, btsSymTable)), store)
         case _ =>
       }
     }
-    return None()
+    return (None(), store)
   }
 
-  def offerLibraries(annexLibs: ISZ[AnnexLib], symbolTable: SymbolTable, aadlTypes: AadlTypes, reporter: Reporter): ISZ[AnnexLibInfo] = {
-    return ISZ()
+  def offerLibraries(annexLibs: ISZ[AnnexLib], symbolTable: SymbolTable, aadlTypes: AadlTypes, store: Store, reporter: Reporter): (ISZ[AnnexLibInfo], Store) = {
+    return (ISZ(), store)
   }
 }

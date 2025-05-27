@@ -98,6 +98,7 @@ object CRustApiUtil {
               ty = RustAst.TyPath(ISZ(crustTypeNameProvider.qualifiedRustNameS), Some(aadlType.classifier)),
               mutbl = RustAst.Mutability.Mut))))
     return RustAst.FnSig(
+      verusHeader = None(),
       fnHeader = RustAst.FnHeader(F),
       ident = RustAst.IdentString(methodName),
       generics = None(),
@@ -130,7 +131,7 @@ object CRustApiUtil {
           inputs = inputs,
           outputs = RustAst.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)
         ),
-        fnHeader = RustAst.FnHeader(F), generics = None()),
+        verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
       comments = ISZ(), attributes = ISZ(), contract = None(), meta = ISZ(),
       body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(body)))))
   }
@@ -176,7 +177,7 @@ object CRustApiUtil {
         fnDecl = RustAst.FnDecl(
           inputs = ISZ(),
           outputs = RustAst.FnRetTyImpl(returnType)),
-        fnHeader = RustAst.FnHeader(F), generics = None()),
+        verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
       comments = ISZ(), attributes = ISZ(), contract = None(), meta = ISZ(),
       body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(body)))))
   }
@@ -225,7 +226,7 @@ object CRustApiUtil {
             RustAst.ParamFixMe(st"&mut self"),
             RustAst.ParamImpl(ident = RustAst.IdentString(CRustApiPlugin.apiParameterName), kind = RustAst.TyPath(ISZ(portTypeNP.qualifiedRustNameS), Some(aadlType.classifier)))),
           outputs = RustAst.FnRetTyDefault()),
-        fnHeader = RustAst.FnHeader(F), generics = None()),
+        verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
       contract = Some(RustAst.FnContract(
         optEnsuresMarker = None(),
         ensures = ensures,
@@ -260,7 +261,7 @@ object CRustApiUtil {
           inputs = ISZ(
             RustAst.ParamFixMe(st"&mut self")),
           outputs = retType),
-        fnHeader = RustAst.FnHeader(F), generics = None()),
+        verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
       contract = Some(RustAst.FnContract(
         optEnsuresMarker = None(),
         ensures = ensures,
@@ -291,7 +292,7 @@ object CRustApiUtil {
       sig = RustAst.FnSig(
         ident = RustAst.IdentString(methodName),
         fnDecl = RustAst.FnDecl(args, RustAst.FnRetTyDefault()),
-        fnHeader = RustAst.FnHeader(F), generics = None()),
+        verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
       comments = ISZ(), visibility = RustAst.Visibility.Private, contract = None(), meta = ISZ(),
       body = Some(RustAst.MethodBody(ISZ(body))))
   }
@@ -343,7 +344,7 @@ object CRustApiUtil {
         fnDecl = RustAst.FnDecl(
           inputs = args,
           outputs = retType),
-        fnHeader = RustAst.FnHeader(F), generics = None()),
+        verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
       // TODO: probably move all verus to gumbo plug
       contract = Some(RustAst.FnContract(
         optRequiresMarker = None(),
@@ -378,7 +379,7 @@ object CRustApiUtil {
                   ty = RustAst.TyPath(ISZ(portTypeNameProvider.qualifiedRustNameS), Some(aadlType)),
                   mutbl = RustAst.Mutability.Mut)))),
             outputs = RustAst.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
-          fnHeader = RustAst.FnHeader(F), generics = None()),
+          verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
         comments = ISZ(), visibility = RustAst.Visibility.Public, contract = None(), meta = ISZ(),
         body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
           st"""unsafe {
@@ -406,7 +407,7 @@ object CRustApiUtil {
                   ty = RustAst.TyPath(ISZ(portTypeNameProvider.qualifiedRustNameS), Some(aadlType)),
                   mutbl = RustAst.Mutability.Mut)))),
             outputs = RustAst.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
-          fnHeader = RustAst.FnHeader(F), generics = None()),
+          verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
         comments = ISZ(), visibility = RustAst.Visibility.Public, contract = None(), meta = ISZ(),
         body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
           st"""unsafe {

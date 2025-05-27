@@ -3,6 +3,7 @@
 package org.sireum.hamr.codegen.common.util
 
 import org.sireum._
+import org.sireum.hamr.codegen.common.CommonUtil.Store
 import org.sireum.hamr.codegen.common.properties.PropertyUtil
 import org.sireum.hamr.codegen.common.symbols.{Linter, SymbolResolver, SymbolTable, SymbolUtil}
 import org.sireum.hamr.codegen.common.transformers.Transformers
@@ -21,7 +22,8 @@ object ModelUtil {
               modelPosOpt: Option[Position],
               packageName: String,
               options: CodegenOption,
-              reporter: Reporter): Option[ModelElements] = {
+              store: Store,
+              reporter: Reporter): (Option[ModelElements], Store) = {
 
     var transModel = origModel
 
@@ -30,7 +32,7 @@ object ModelUtil {
     val tResult = AirTransformer(Transformers.MissingTypeRewriter()).transformAadl(Transformers.CTX(F, ISZ()), transModel)
     reporter.reports(tResult.ctx.messages)
     if (reporter.hasError) {
-      return None()
+      return (None(), store)
     }
     transModel = if (tResult.resultOpt.nonEmpty) tResult.resultOpt.get else transModel
 
@@ -39,7 +41,7 @@ object ModelUtil {
     val btxResults = btsmt.transformAadl(transModel)
     reporter.reports(btsmt.reporter.messages)
     if (reporter.hasError) {
-      return None()
+      return (None(), store)
     }
 
     transModel = if (btxResults.nonEmpty) btxResults.get else transModel
@@ -52,12 +54,13 @@ object ModelUtil {
       aadlTypes = aadlTypes,
       aadlMaps = aadlMaps,
       options = options,
+      store = store,
       reporter = reporter) match {
-      case Some(symbolTable) =>
+      case (Some(symbolTable), s) =>
         Linter.lint(options, symbolTable, reporter)
 
-        return Some(ModelElements(transModel, modelPosOpt, aadlTypes, symbolTable))
-      case _ => return None()
+        return (Some(ModelElements(transModel, modelPosOpt, aadlTypes, symbolTable)), s)
+      case (_, s) => return (None(), s)
     }
   }
 }
