@@ -97,7 +97,8 @@ for(releaseDir <- releases) {
   (releaseDir / "compositeContent.xml").writeOver(b.render)
 
   val versions = ops.StringOps(releaseDir.name).split(c => c == '.')
-  val pluginReadme = releaseUpdateSiteReadme(releaseDir.name, versions(versions.size - 1))
+  val isLatest = releaseDir == releases(releases.lastIndex)
+  val pluginReadme = releaseUpdateSiteReadme(releaseDir.name, versions(versions.size - 1), isLatest)
 
   (releaseDir / "readme.md").writeOver(pluginReadme.render)
 }
@@ -298,7 +299,20 @@ object Templates {
     return ret
   }
 
-  def releaseUpdateSiteReadme(version: String, sireumVersion: String) : ST = {
+  def releaseUpdateSiteReadme(version: String, sireumVersion: String, isLatest: B) : ST = {
+    val optSireumJar: Option[ST] =
+    if (isLatest) {
+      val f = Os.temp()
+      f.downloadFrom("https://api.github.com/repos/sireum/kekinian/releases/latest")
+      val cands = f.readLines.filter(p => ops.StringOps(p).contains("browser_download_url") && ops.StringOps(p).contains("sireum.jar"))
+      assert (cands.size == 1)
+      val o = ops.StringOps(cands(0))
+      val latestSireumJar = o.substring(o.stringIndexOf("url") + 7, o.size - 1)
+      Some(st"wget -O bin/sireum.jar $latestSireumJar")
+    } else {
+      None()
+    }
+
     val _features = ISZ[String]("cli", "hamr").map((m: String) => {
       s"org.sireum.aadl.osate.${m}.feature.feature.group=https://raw.githubusercontent.com/sireum/osate-update-site/master/${version}"
     })
@@ -335,6 +349,7 @@ object Templates {
           |  cd Sireum
           |  git checkout ${sireumVersion}
           |  git submodule update --init --recursive
+          |  $optSireumJar
           |  bin${bt}build.cmd
           |  bin${bt}sireum hamr phantom -u --features "${features}"
           |  ```
@@ -346,6 +361,7 @@ object Templates {
           |  cd Sireum
           |  git checkout ${sireumVersion}
           |  git submodule update --init --recursive
+          |  $optSireumJar
           |  bin/build.cmd
           |  bin/sireum hamr phantom -u --features "${features}"
           |  ```
@@ -357,6 +373,7 @@ object Templates {
           |  cd Sireum
           |  git checkout ${sireumVersion}
           |  git submodule update --init --recursive
+          |  $optSireumJar
           |  bin/build.cmd
           |  bin/sireum hamr phantom -u --features "${features}"
           |  ```
