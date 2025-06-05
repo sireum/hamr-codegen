@@ -165,20 +165,20 @@ import org.sireum.hamr.codegen.common.util.ResourceUtil
     val path = "kernel/domain_schedule.c"
 
     val contents: ST = aadlProcessor.getScheduleSourceText() match {
-      case Some(path) =>
-        if (Os.path(path).exists) {
-          val p = Os.path(path)
+      case Some(path2) =>
+        if (Os.path(path2).exists) {
+          val p = Os.path(path2)
           st"${p.read}"
         } else {
           actOptions.workspaceRootDir match {
             case Some(root) =>
-              val candidate = Os.path(root) / path
+              val candidate = Os.path(root) / path2
               if (candidate.exists) {
                 st"${candidate.read}"
               } else {
                 halt(s"Could not locate Schedule_Source_Text ${candidate}")
               }
-            case _ => halt(s"Unexpected: Couldn't locate Schedule_Source_Text ${path}")
+            case _ => halt(s"Unexpected: Couldn't locate Schedule_Source_Text ${path2}")
           }
         }
       case _ =>

@@ -50,7 +50,7 @@ object Act {
     val auxHFiles: ISZ[String] = auxFiles.filter(f => Os.path(f._1).ext == "h").map(m => m._1)
     val auxHeaderDirectories = (Set.empty[String] ++ auxHFiles.map((m: String) => Os.path(m).up.value)).elements
 
-    val container = Gen(model, symbolTable, aadlTypes, options).process(auxHFiles)
+    val containerOpt = Gen(model, symbolTable, aadlTypes, options).process(auxHFiles)
 
     val slangLibInstanceNames: ISZ[String] = options.platform match {
       case ActPlatform.SeL4 =>
@@ -58,7 +58,7 @@ object Act {
       case _ => ISZ()
     }
 
-    container match {
+    containerOpt match {
       case Some(container) =>
         val rootDir: String = options.workspaceRootDir match {
           case Some(f) => Os.path(f).abs.value

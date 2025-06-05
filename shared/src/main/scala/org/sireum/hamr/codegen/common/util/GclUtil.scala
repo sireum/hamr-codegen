@@ -122,7 +122,7 @@ object GclUtil {
 
     override def binary(builder: BinaryBuilder, left: Exp, op: Exp, right: Exp): Exp = {
       val o: String = op match {
-        case AST.Exp.LitString(op) => op
+        case AST.Exp.LitString(op2) => op2
         case _ =>
           ureporter.error(op.posOpt, messageKind, s"binary: Was expecting a LitString holding a binary operator but received $op")
           "???"

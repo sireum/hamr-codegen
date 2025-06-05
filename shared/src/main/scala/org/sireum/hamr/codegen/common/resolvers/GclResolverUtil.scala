@@ -105,9 +105,9 @@ object GclResolverUtil {
           assert(i.args.isEmpty, "Need to rewrite invoke args for apply")
           val identv = i.ident.id.value
           scope.resolveName(typeHierarchy.nameMap, ISZ(identv)) match {
-            case Some(i: Info.Method) =>
+            case Some(info: Info.Method) =>
               // e.g. gumboMethodInvocation()(0)
-              val retType: ISZ[String] = for (i <- i.ast.sig.returnType.asInstanceOf[AST.Type.Named].name.ids) yield i.value
+              val retType: ISZ[String] = for (i <- info.ast.sig.returnType.asInstanceOf[AST.Type.Named].name.ids) yield i.value
               aadlTypes.getTypeByPathOpt(retType) match {
                 case Some(a: ArrayType) =>
                   arrayType = Some(a)
@@ -280,8 +280,8 @@ object GclResolverUtil {
               case t: AST.Type.Named =>
                 val name = st"${(for (i <- t.name.ids) yield i.value, "::")}".render
                 aadlTypes.typeMap.get(name) match {
-                  case Some(t) =>
-                    pushType(t)
+                  case Some(tpe) =>
+                    pushType(tpe)
                     return irMTransformer.PreResult(F, MNone())
                   case _ =>
                     halt(name)

@@ -527,7 +527,7 @@ object GclResolver {
 
               return MSome(sel)
 
-            case GclSymbolHolder(s: GclStateVar) if isContextGeneralAssumeClause =>
+            case GclSymbolHolder(_: GclStateVar) if isContextGeneralAssumeClause =>
               // In(s)
               return MSome(Exp.Input(o, AST.Attr(o.fullPosOpt)))
             case _ =>
@@ -1173,8 +1173,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             seenSpecIds = seenSpecIds + caase.id
 
             caase.assumes match {
-              case Some(assumes) =>
-                val rexp = typeCheckBoolExp(exp = assumes, context = context, mode = TypeChecker.ModeContext.Spec, component = Some(component),
+              case Some(assumes2) =>
+                val rexp = typeCheckBoolExp(exp = assumes2, context = context, mode = TypeChecker.ModeContext.Spec, component = Some(component),
                   params = ISZ(),
                   stateVars = s.state, specFuns = gclMethods,
                   symbolTable = symbolTable, aadlTypes = aadlTypes,
@@ -1185,14 +1185,14 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 for (sym <- symbols) {
                   sym match {
                     case AadlSymbolHolder(i: AadlPort) if i.direction == Direction.Out =>
-                      reporter.error(assumes.fullPosOpt, toolName, "Assume clauses cannot refer to outgoing ports")
+                      reporter.error(assumes2.fullPosOpt, toolName, "Assume clauses cannot refer to outgoing ports")
                     case _ =>
                   }
                 }
                 if (rexp2.isEmpty) {
-                  rexprs = rexprs + (toKey(assumes) ~> rexp)
+                  rexprs = rexprs + (toKey(assumes2) ~> rexp)
                 } else {
-                  rexprs = rexprs + (toKey(assumes) ~> rexp2.get)
+                  rexprs = rexprs + (toKey(assumes2) ~> rexp2.get)
                 }
               case _ =>
             }
@@ -1298,8 +1298,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               seenSpecIds = seenSpecIds + caase.id
 
               caase.assumes match {
-                case Some(assumes) =>
-                  val rexp = typeCheckBoolExp(exp = assumes, context = context, mode = TypeChecker.ModeContext.Spec, component = Some(component),
+                case Some(assumes2) =>
+                  val rexp = typeCheckBoolExp(exp = assumes2, context = context, mode = TypeChecker.ModeContext.Spec, component = Some(component),
                     params = ISZ(),
                     stateVars = s.state, specFuns = gclMethods,
                     symbolTable = symbolTable, aadlTypes = aadlTypes,
@@ -1310,13 +1310,13 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                   for (sym <- symbols) {
                     sym match {
                       case AadlSymbolHolder(i: AadlPort) if i.direction == Direction.Out =>
-                        reporter.error(assumes.fullPosOpt, toolName, "Assume clauses cannot refer to outgoing ports")
+                        reporter.error(assumes2.fullPosOpt, toolName, "Assume clauses cannot refer to outgoing ports")
                       case _ =>
                     }
                   }
                   rexprs = rexprs + (
-                    if (rexp2.isEmpty) toKey(assumes) ~> rexp
-                    else toKey(assumes) ~> rexp2.get)
+                    if (rexp2.isEmpty) toKey(assumes2) ~> rexp
+                    else toKey(assumes2) ~> rexp2.get)
                 case _ =>
               }
 

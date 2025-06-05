@@ -816,7 +816,7 @@ import org.sireum.ops._
 
   def isEnum(c: Classifier): B = {
     aadlTypes.typeMap.get(c.name) match {
-      case Some(c: EnumType) => return T
+      case Some(et: EnumType) => return T
       case _ => return F
     }
   }

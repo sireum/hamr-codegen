@@ -302,7 +302,7 @@ import org.sireum.hamr.ir.Direction
     )
 
     genBitArraySequenceSizes() match {
-      case Some((z, typeName)) => customSequenceSizes = customSequenceSizes :+ ((s"IS[Z,B]=$z", s"Needed for the max bit size specified in the model -- see $typeName"))
+      case Some((zs, typeName)) => customSequenceSizes = customSequenceSizes :+ ((s"IS[Z,B]=$zs", s"Needed for the max bit size specified in the model -- see $typeName"))
       case _ =>
     }
 

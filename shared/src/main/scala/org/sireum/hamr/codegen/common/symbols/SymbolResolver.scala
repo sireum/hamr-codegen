@@ -227,7 +227,7 @@ object SymbolResolver {
 
       def getFeatureEndType(f: ir.FeatureEnd): Option[AadlType] = {
         val ret: Option[AadlType] = f.classifier match {
-          case Some(c) => Some(aadlTypes.typeMap.get(c.name).get)
+          case Some(c2) => Some(aadlTypes.typeMap.get(c2.name).get)
           case _ => None()
         }
         return ret
@@ -546,7 +546,7 @@ object SymbolResolver {
           val subComponents: ISZ[AadlComponent] = for (sc <- c.subComponents) yield buildAadlComponent(sc, path)
 
           val typ: Option[AadlType] = c.classifier match {
-            case Some(c) => aadlTypes.typeMap.get(c.name)
+            case Some(c2) => aadlTypes.typeMap.get(c2.name)
             case _ => None()
           }
 

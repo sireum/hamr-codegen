@@ -35,7 +35,7 @@ object TypeUtil {
     if (isEnum(v.properties)) {
       for (p <- PropertyUtil.getPropertyValues(v.properties, OsateProperties.DATA_MODEL__ENUMERATORS)) {
         p match {
-          case ir.ValueProp(v) => ret = ret :+ v
+          case ir.ValueProp(v2) => ret = ret :+ v2
           case _ => halt(s"Unhandled ${p}")
         }
       }
