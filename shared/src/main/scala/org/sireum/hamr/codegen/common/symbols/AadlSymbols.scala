@@ -436,7 +436,10 @@ import org.sireum.hamr.ir._
   def aadlType: AadlType
 }
 
-@sig trait AadlPort extends AadlDirectedFeature
+@sig trait AadlPort extends AadlDirectedFeature {
+  @pure def isEvent: B
+  @pure def isData: B
+}
 
 @sig trait AadlFeatureEvent extends AadlDirectedFeature {
   def queueSize: Z = {
@@ -450,17 +453,26 @@ import org.sireum.hamr.ir._
 
 @datatype class AadlEventPort(val feature: ir.FeatureEnd,
                               val featureGroupIds: ISZ[String],
-                              val direction: ir.Direction.Type) extends AadlPort with AadlFeatureEvent
+                              val direction: ir.Direction.Type) extends AadlPort with AadlFeatureEvent {
+  val isEvent: B = T
+  val isData: B = F
+}
 
 @datatype class AadlEventDataPort(val feature: ir.FeatureEnd,
                                   val featureGroupIds: ISZ[String],
                                   val direction: ir.Direction.Type,
-                                  val aadlType: AadlType) extends AadlPort with AadlFeatureData with AadlFeatureEvent
+                                  val aadlType: AadlType) extends AadlPort with AadlFeatureData with AadlFeatureEvent {
+  val isEvent: B = T
+  val isData: B = T
+}
 
 @datatype class AadlDataPort(val feature: ir.FeatureEnd,
                              val featureGroupIds: ISZ[String],
                              val direction: ir.Direction.Type,
-                             val aadlType: AadlType) extends AadlPort with AadlFeatureData
+                             val aadlType: AadlType) extends AadlPort with AadlFeatureData {
+  val isEvent: B = F
+  val isData: B = T
+}
 
 @datatype class AadlParameter(val feature: ir.FeatureEnd,
                               val featureGroupIds: ISZ[String],

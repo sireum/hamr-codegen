@@ -361,6 +361,23 @@ object CRustApiUtil {
                                      portTypeNameProvider: CRustTypeNameProvider): (RustAst.Item, RustAst.Item) = {
     if (p.direction == Direction.In) {
       val varName = s"IN_${p.identifier}"
+      val body: ST =
+        if (p.isEvent) {
+          st"""unsafe {
+              |  match *$varName.lock().unwrap() {
+              |    Some(v) => {
+              |      *value = v;
+              |      return true;
+              |    },
+              |    None => return false,
+              |  }
+              |}"""
+        } else {
+          st"""unsafe {
+              |  *value = $varName.lock().unwrap().expect("Not expecting None");
+              |  return true;
+              |}"""
+        }
       val variable = RustAst.ItemStatic(
         ident = RustAst.IdentString(varName),
         visibility = RustAst.Visibility.Public,
@@ -381,11 +398,7 @@ object CRustApiUtil {
             outputs = RustAst.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
           verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
         comments = ISZ(), visibility = RustAst.Visibility.Public, contract = None(), meta = ISZ(),
-        body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
-          st"""unsafe {
-              |  *value = $varName.lock().unwrap().expect("Not expecting None");
-              |  return true;
-              |}""")))))
+        body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(body)))))
       return (variable, test)
     } else {
       val varName = s"OUT_${p.identifier}"

@@ -609,8 +609,8 @@ object SlangExpUtil {
 
       if ((!inVerus || isTesting) && (verusRustParentOp == "==>" || verusRustParentOp == Exp.BinaryOp.Imply)) {
         val functionName: String =
-          if (verusRustParentOp == "==>") "implies"
-          else "impliesL"
+          if (verusRustParentOp == "==>") "implies!"
+          else "impliesL!"
         return (
           st"""$functionName(
               |  $leftST,
