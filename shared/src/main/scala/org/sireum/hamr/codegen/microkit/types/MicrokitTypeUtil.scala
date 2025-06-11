@@ -281,13 +281,9 @@ object MicrokitTypeUtil {
           TypeUtil.getArrayDimensions(aadlType.container.get) match {
             case ISZ() =>
             case ISZ(dim) =>
-              if (dim <= 0) {
-                reporter.error(None(), MicrokitCodegen.toolName, s"String dimension must be > 0")
-              } else {
-                if (dim > maxStringDim) {
-                  maxStringDim = dim
-                  maxString = Some(aadlType.asInstanceOf[BaseType])
-                }
+              if (dim > maxStringDim) {
+                maxStringDim = dim
+                maxString = Some(aadlType.asInstanceOf[BaseType])
               }
             case _ =>
               reporter.error(None(), MicrokitCodegen.toolName, s"Only a single dimension is allowed for Strings")

@@ -281,6 +281,10 @@ object HAMR {
   def maxConnection: Z
 }
 
+object ArsitResult {
+  @strictpure def emptyResults = ArsitResult(ISZ(), -1, -1, -1)
+}
+
 @datatype class ArsitResult(val resources: ISZ[Resource],
                             val maxPort: Z,
                             val maxComponent: Z,

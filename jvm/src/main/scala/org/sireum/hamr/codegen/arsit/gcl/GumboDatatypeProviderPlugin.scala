@@ -40,7 +40,7 @@ import org.sireum.message.Reporter
 
     datatypeTemplate match {
       case dt: DatatypeTemplate =>
-        val invariants = GumboGen.processInvariants(aadlType, symbolTable, aadlTypes, aadlType.nameProvider.basePackageName)
+        val invariants = GumboGen.processInvariants(aadlType, symbolTable, aadlTypes, aadlType.nameProvider.basePackageName, store)
 
         val imports: ISZ[ST] = for (str <- (Set.empty[String] ++ GumboGen.imports).elements) yield st"$str"
 

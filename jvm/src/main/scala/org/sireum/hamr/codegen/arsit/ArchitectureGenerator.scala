@@ -13,6 +13,7 @@ import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.CommonUtil.Store
 import org.sireum.hamr.codegen.common.containers._
 import org.sireum.hamr.codegen.common.plugin.Plugin
+import org.sireum.hamr.codegen.common.resolvers.GclResolver
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.types._
 import org.sireum.hamr.codegen.common.util.NameUtil.NameProvider
@@ -50,9 +51,9 @@ import org.sireum.ops.ISZOps
 
           aadlType match {
             case e: EnumType => EnumTemplate(e, e.values, T)
-            case e: RecordType => DatatypeTemplate(e, T)
-            case e: ArrayType => DatatypeTemplate(e, T)
-            case e: TODOType => DatatypeTemplate(e, F)
+            case e: RecordType => DatatypeTemplate(e, GclResolver.getIndexingTypeFingerprints(localStore), T)
+            case e: ArrayType => DatatypeTemplate(e, GclResolver.getIndexingTypeFingerprints(localStore), T)
+            case e: TODOType => DatatypeTemplate(e, GclResolver.getIndexingTypeFingerprints(localStore), F)
           }
         }
 

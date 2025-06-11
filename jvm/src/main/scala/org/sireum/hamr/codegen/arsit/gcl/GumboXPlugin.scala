@@ -7,7 +7,7 @@ import org.sireum.hamr.codegen.arsit.gcl.GumboXGen.{ComputeEntryPointHolder, Dat
 import org.sireum.hamr.codegen.arsit.gcl.GumboXRuntimeMonitoring.RM_Container
 import org.sireum.hamr.codegen.arsit.plugin.BehaviorEntryPointProviderPlugin.ObjectContributions
 import org.sireum.hamr.codegen.arsit.plugin._
-import org.sireum.hamr.codegen.arsit.templates.{EntryPointTemplate, IDatatypeTemplate}
+import org.sireum.hamr.codegen.arsit.templates.{BridgeEntryPointTemplate, IDatatypeTemplate}
 import org.sireum.hamr.codegen.arsit.util.{ArsitOptions, ReporterUtil}
 import org.sireum.hamr.codegen.arsit.{EntryPoints, Port, ProjectDirectories}
 import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, Store, StoreValue}
@@ -113,7 +113,9 @@ object GumboXPluginStore {
              aadlTypes: AadlTypes,
              projectDirectories: ProjectDirectories,
 
-             store: GumboXPluginStore,
+             gstore: GumboXPluginStore,
+
+             store: Store,
 
              reporter: Reporter): GumboXPluginStore = {
 
@@ -123,12 +125,12 @@ object GumboXPluginStore {
         case _ => None()
       }
 
-    var gumboStore = store
+    var gumboStore = gstore
 
     gumboStore = gumboXGen.processAnnex(component, componentNames,
       gclSubclauseInfo,
       componentNames.basePackage, symbolTable, aadlTypes, projectDirectories,
-      gumboStore, reporter)
+      gumboStore, store, reporter)
 
     gumboStore = gumboStore(handledComponents = gumboStore.handledComponents + component.path)
 
@@ -188,7 +190,7 @@ object GumboXPluginStore {
                                       reporter: Reporter): (DatatypeProviderPlugin.DatatypeContribution, Store) = {
     for (a <- resolvedAnnexSubclauses if a.isInstanceOf[GclAnnexClauseInfo]) {
       // there should only be one Gumbo Annex Clause per component so just return once we found it
-      val ret = gumboXGen.processDatatype(aadlType, a.asInstanceOf[GclAnnexClauseInfo], basePackageName, symbolTable, aadlTypes, projectDirectories, GumboXPluginStore.getGumboStore(store), ReporterUtil.reporter)
+      val ret = gumboXGen.processDatatype(aadlType, a.asInstanceOf[GclAnnexClauseInfo], basePackageName, symbolTable, aadlTypes, projectDirectories, GumboXPluginStore.getGumboStore(store), store, ReporterUtil.reporter)
       return (ret._1, store + GumboXPluginStore.key ~> ret._2)
     }
     halt(s"Infeasible: why did ${name} offer to handle ${aadlType.name} if it doesn't have a GclSubclause attached to it?")
@@ -242,7 +244,7 @@ object GumboXPluginStore {
 
                                         resolvedAnnexSubclauses: ISZ[AnnexClauseInfo],
 
-                                        entryPointTemplate: EntryPointTemplate,
+                                        entryPointTemplate: BridgeEntryPointTemplate,
 
                                         arsitOptions: ArsitOptions,
                                         symbolTable: SymbolTable,
@@ -264,7 +266,7 @@ object GumboXPluginStore {
 
     val containers = getContainer(component, componentNames, annexInfo, aadlTypes, gumboStore)
 
-    gumboStore = handle(component, componentNames, resolvedAnnexSubclauses, symbolTable, aadlTypes, projectDirectories, gumboStore, reporter)
+    gumboStore = handle(component, componentNames, resolvedAnnexSubclauses, symbolTable, aadlTypes, projectDirectories, gumboStore, store, reporter)
 
     if (arsitOptions.runtimeMonitoring) {
       gumboStore = gumboStore(systemTestSuiteRenamings = gumboStore.systemTestSuiteRenamings :+
@@ -316,7 +318,7 @@ object GumboXPluginStore {
                                                 store: Store,
                                                 reporter: Reporter): (BehaviorEntryPointProviderPlugin.BehaviorEntryPointContributions, Store) = {
 
-    val gumboStore = handle(component, componentNames, resolvedAnnexSubclauses, symbolTable, aadlTypes, projectDirectories, GumboXPluginStore.getGumboStore(store), reporter)
+    val gumboStore = handle(component, componentNames, resolvedAnnexSubclauses, symbolTable, aadlTypes, projectDirectories, GumboXPluginStore.getGumboStore(store), store, reporter)
 
     return (BehaviorEntryPointProviderPlugin.emptyPartialContributions, store + GumboXPluginStore.key ~> gumboStore)
   }

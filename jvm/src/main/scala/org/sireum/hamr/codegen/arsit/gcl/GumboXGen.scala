@@ -9,7 +9,7 @@ import org.sireum.hamr.codegen.arsit.gcl.GumboXGenUtil._
 import org.sireum.hamr.codegen.arsit.plugin.BehaviorEntryPointProviderPlugin.{ObjectContributions, emptyObjectContributions}
 import org.sireum.hamr.codegen.arsit.plugin.DatatypeProviderPlugin
 import org.sireum.hamr.codegen.arsit.templates.{StubTemplate, TestTemplate}
-import org.sireum.hamr.codegen.common.CommonUtil.IdPath
+import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, Store}
 import org.sireum.hamr.codegen.common.StringUtil
 import org.sireum.hamr.codegen.common.containers.Resource
 import org.sireum.hamr.codegen.common.resolvers.GclResolver
@@ -238,19 +238,19 @@ object GumboXGen {
                    gclSubclauseInfo: Option[(GclSubclause, GclSymbolTable)],
                    basePackageName: String, symbolTable: SymbolTable, aadlTypes: AadlTypes,
                    projectDirectories: ProjectDirectories,
-                   gumboStore: GumboXPluginStore, reporter: Reporter): GumboXPluginStore = {
+                   gumboStore: GumboXPluginStore, store: Store, reporter: Reporter): GumboXPluginStore = {
 
-    var store = processIntegerationConstraints(component, componentNames, gclSubclauseInfo, basePackageName, symbolTable, aadlTypes, projectDirectories, gumboStore, reporter)
+    var gstore = processIntegerationConstraints(component, componentNames, gclSubclauseInfo, basePackageName, symbolTable, aadlTypes, projectDirectories, gumboStore, store, reporter)
 
-    store = processInitializeEntrypoint(component, componentNames, gclSubclauseInfo, basePackageName, symbolTable, aadlTypes, projectDirectories, store, reporter)
+    gstore = processInitializeEntrypoint(component, componentNames, gclSubclauseInfo, basePackageName, symbolTable, aadlTypes, projectDirectories, gstore, store, reporter)
 
-    return processComputeEntrypoints(component, componentNames, gclSubclauseInfo, basePackageName, symbolTable, aadlTypes, projectDirectories, store, reporter)
+    return processComputeEntrypoints(component, componentNames, gclSubclauseInfo, basePackageName, symbolTable, aadlTypes, projectDirectories, gstore, store, reporter)
   }
 
   def processIntegerationConstraints(component: AadlThreadOrDevice, componentNames: NameProvider,
                                      gclSubclauseInfo: Option[(GclSubclause, GclSymbolTable)],
                                      basePackageName: String, symbolTable: SymbolTable, aadlTypes: AadlTypes, directories: ProjectDirectories,
-                                     gumboStore: GumboXPluginStore, reporter: Reporter): GumboXPluginStore = {
+                                     gumboStore: GumboXPluginStore, store: Store, reporter: Reporter): GumboXPluginStore = {
     var localGumboStore = resetImports(gumboStore)
 
     gclSubclauseInfo match {
@@ -263,7 +263,7 @@ object GumboXGen {
           val clause = gclSymbolTable.integrationMap.get(port).get
           val rexp = getRExp(clause.exp, basePackageName, aadlTypes, gclSymbolTable)
 
-          val imports = GumboGenUtil.resolveLitInterpolateImports(clause.exp)
+          val imports = GumboGenUtil.resolveLitInterpolateImports(clause.exp, basePackageName, GclResolver.getIndexingTypeFingerprints(store))
 
           clause match {
             case i: GclAssume =>
@@ -329,7 +329,7 @@ object GumboXGen {
   def processInitializeEntrypoint(component: AadlThreadOrDevice, componentNames: NameProvider,
                                   gclSubclauseInfo: Option[(GclSubclause, GclSymbolTable)],
                                   basePackageName: String, symbolTable: SymbolTable, aadlTypes: AadlTypes, directories: ProjectDirectories,
-                                  gumboStore: GumboXPluginStore, reporter: Reporter): GumboXPluginStore = {
+                                  gumboStore: GumboXPluginStore, store: Store, reporter: Reporter): GumboXPluginStore = {
     var localGumboStore = resetImports(gumboStore)
 
     var IEP_Guard: ISZ[ST] = ISZ()
@@ -347,7 +347,7 @@ object GumboXGen {
         // process each guarantee clause
         for (spec <- initializes.guarantees) {
           val rspec = getRExp(spec.exp, basePackageName, aadlTypes, gclSymbolTable)
-          localGumboStore = localGumboStore(imports = localGumboStore.imports ++ GumboGenUtil.resolveLitInterpolateImports(rspec))
+          localGumboStore = localGumboStore(imports = localGumboStore.imports ++ GumboGenUtil.resolveLitInterpolateImports(rspec, basePackageName, GclResolver.getIndexingTypeFingerprints(store)))
 
           val descriptor = GumboXGen.processDescriptor(spec.descriptor, "*   ")
 
@@ -494,7 +494,7 @@ object GumboXGen {
   def processComputeEntrypoints(component: AadlThreadOrDevice, componentNames: NameProvider,
                                 gclSubclauseInfo: Option[(GclSubclause, GclSymbolTable)],
                                 basePackageName: String, symbolTable: SymbolTable, aadlTypes: AadlTypes, directories: ProjectDirectories,
-                                gumboStore: GumboXPluginStore, reporter: Reporter): GumboXPluginStore = {
+                                gumboStore: GumboXPluginStore, store: Store, reporter: Reporter): GumboXPluginStore = {
     var localGumboStore = resetImports(gumboStore)
 
     var CEP_T_Case: Option[ContractHolder] = None()
@@ -527,7 +527,7 @@ object GumboXGen {
 
           for (assumee <- gclCompute.assumes) {
             val rspec = gclSymbolTable.rexprs.get(toKey(assumee.exp)).get
-            localGumboStore = localGumboStore(imports = localGumboStore.imports ++ GumboGenUtil.resolveLitInterpolateImports(rspec))
+            localGumboStore = localGumboStore(imports = localGumboStore.imports ++ GumboGenUtil.resolveLitInterpolateImports(rspec, basePackageName, GclResolver.getIndexingTypeFingerprints(store)))
             val descriptor = GumboXGen.processDescriptor(assumee.descriptor, "*   ")
             val gg = GumboXGenUtil.rewriteToExpX(rspec, component, componentNames, aadlTypes, stateVars)
             val methodName = st"compute_spec_${assumee.id}_assume"
@@ -554,7 +554,7 @@ object GumboXGen {
 
           for (guarantee <- gclCompute.guarantees) {
             val rspec = gclSymbolTable.rexprs.get(toKey(guarantee.exp)).get
-            localGumboStore = localGumboStore(imports = localGumboStore.imports ++ GumboGenUtil.resolveLitInterpolateImports(rspec))
+            localGumboStore = localGumboStore(imports = localGumboStore.imports ++ GumboGenUtil.resolveLitInterpolateImports(rspec, basePackageName, GclResolver.getIndexingTypeFingerprints(store)))
             val descriptor = GumboXGen.processDescriptor(guarantee.descriptor, "*   ")
 
             val gg = GumboXGenUtil.rewriteToExpX(rspec, component, componentNames, aadlTypes, stateVars)
@@ -631,7 +631,7 @@ object GumboXGen {
                 case Some(assumee) =>
                   val rexp = gclSymbolTable.rexprs.get(toKey(assumee)).get
                   val rrassume = GumboGen.StateVarInRewriter().wrapStateVarsInInput(rexp)
-                  localGumboStore = localGumboStore(imports = localGumboStore.imports ++ GumboGenUtil.resolveLitInterpolateImports(rrassume))
+                  localGumboStore = localGumboStore(imports = localGumboStore.imports ++ GumboGenUtil.resolveLitInterpolateImports(rrassume, basePackageName, GclResolver.getIndexingTypeFingerprints(store)))
 
                   val gg = GumboXGenUtil.rewriteToExpX(rrassume, component, componentNames, aadlTypes, stateVars)
                   combinedAssmGuarParam = combinedAssmGuarParam ++ gg.params.elements
@@ -640,7 +640,7 @@ object GumboXGen {
               }
 
             val rguarantee = gclSymbolTable.rexprs.get(toKey(generalCase.guarantees)).get
-            localGumboStore = localGumboStore(imports = localGumboStore.imports ++ GumboGenUtil.resolveLitInterpolateImports(rguarantee))
+            localGumboStore = localGumboStore(imports = localGumboStore.imports ++ GumboGenUtil.resolveLitInterpolateImports(rguarantee, basePackageName, GclResolver.getIndexingTypeFingerprints(store)))
 
             val ggGuar = GumboXGenUtil.rewriteToExpX(rguarantee, component, componentNames, aadlTypes, stateVars)
             val methodName = st"compute_case_${generalCase.id}"
@@ -709,7 +709,7 @@ object GumboXGen {
 
             for (guarantee <- handler.guarantees) {
               val rhguar = gclSymbolTable.rexprs.get(toKey(guarantee.exp)).get
-              localGumboStore = localGumboStore(imports = localGumboStore.imports ++ GumboGenUtil.resolveLitInterpolateImports(rhguar))
+              localGumboStore = localGumboStore(imports = localGumboStore.imports ++ GumboGenUtil.resolveLitInterpolateImports(rhguar, basePackageName, GclResolver.getIndexingTypeFingerprints(store)))
 
               val gg = GumboXGenUtil.rewriteToExpX(rhguar, component, componentNames, aadlTypes, stateVars)
               val methodName = st"compute_handle_${handlerId}_${guarantee.id}_guarantee"
@@ -1008,6 +1008,7 @@ object GumboXGen {
                       aadlTypes: AadlTypes,
                       directories: ProjectDirectories,
                       gumboStore: GumboXPluginStore,
+                      store: Store,
                       reporter: Reporter): (DatatypeProviderPlugin.PartialDatatypeContribution, GumboXPluginStore) = {
     var localGumboStore = resetImports(gumboStore)
 
@@ -1017,7 +1018,7 @@ object GumboXGen {
     for (i <- gclAnnexSubclauseInfo.annex.invariants) {
       val methodName = convertInvariantToMethodName(i.id, aadlType)
 
-      localGumboStore = localGumboStore(imports = localGumboStore.imports ++ GumboGenUtil.resolveLitInterpolateImports(i.exp))
+      localGumboStore = localGumboStore(imports = localGumboStore.imports ++ GumboGenUtil.resolveLitInterpolateImports(i.exp, basePackageName, GclResolver.getIndexingTypeFingerprints(store)))
 
       val descriptor = GumboXGen.processDescriptor(i.descriptor, "*   ")
       methodNames = methodNames :+ methodName

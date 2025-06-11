@@ -3,10 +3,12 @@
 package org.sireum.hamr.codegen.common.types
 
 import org.sireum._
+import org.sireum.hamr.codegen.common.CommonUtil.TypeIdPath
 import org.sireum.hamr.codegen.common._
 import org.sireum.hamr.codegen.common.properties.{OsateProperties, PropertyUtil}
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.ir
+import org.sireum.lang.{ast => AST}
 
 object TypeUtil {
 
@@ -29,6 +31,18 @@ object TypeUtil {
   val BIT_SIG: String = "IS[Z, B]"
 
   val BIT_FINGERPRINT: String = TypeUtil.getTypeFingerprint("IS", BIT_SIG)
+
+  @pure def getIndexingTypeFingerprintMethodName(ids: TypeIdPath): String = {
+    val typed = AST.Typed.Name(ids = ids, args = ISZ())
+    val fingerprint = AST.Util.stableTypeSig(typed, 3).render
+    val first = ops.StringOps(fingerprint).first
+    if ('0' <= first && first <= '9') {
+      // make sure it's a valid Scala identifier
+      return s"I$fingerprint"
+    } else {
+      return fingerprint
+    }
+  }
 
   @pure def getEnumValues(v: ir.Component): ISZ[String] = {
     var ret: ISZ[String] = ISZ()
@@ -67,7 +81,7 @@ object TypeUtil {
   @pure def getArrayDimensions(c: ir.Component): ISZ[Z] = {
     val dims = PropertyUtil.getPropertyValues(c.properties, OsateProperties.DATA_MODEL__DIMENSION)
     return (
-      if (dims.isEmpty) ISZ[Z]()
+      if (dims.isEmpty) ISZ[Z](0)
       else
         dims.map((x: ir.PropertyValue) => x.asInstanceOf[ir.UnitProp])
           .map((m: ir.UnitProp) => {

@@ -4,21 +4,21 @@ package org.sireum.hamr.codegen.arsit.templates
 import org.sireum._
 import org.sireum.hamr.codegen.arsit.EntryPoints
 
-@datatype class EntryPointTemplate(parameters: ISZ[ST],
-                                   localVars: ISZ[ST],
+@datatype class BridgeEntryPointTemplate(parameters: ISZ[ST],
+                                         localVars: ISZ[ST],
 
-                                   defaultActivateBody: ST,
+                                         defaultActivateBody: ST,
 
-                                   defaultInitialiseBody: ST,
-                                   defaultTestInitialiseBody: ST,
+                                         defaultInitialiseBody: ST,
+                                         defaultTestInitialiseBody: ST,
 
-                                   defaultComputeBody: ST,
-                                   defaultTestComputeBody: ST,
+                                         defaultComputeBody: ST,
+                                         defaultTestComputeBody: ST,
 
-                                   // Note that the following entry points are not emitted
-                                   defaultDeactivateBody: ST,
-                                   defaultFinaliseBody: ST,
-                                   defaultRecoverBody: ST) {
+                                         // Note that the following entry points are not emitted
+                                         defaultDeactivateBody: ST,
+                                         defaultFinaliseBody: ST,
+                                         defaultRecoverBody: ST) {
 
   @pure def generateCustom(blocks: ISZ[String],
                            activateBody: Option[String],

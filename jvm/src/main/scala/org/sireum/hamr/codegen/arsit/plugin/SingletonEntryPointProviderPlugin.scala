@@ -2,7 +2,7 @@
 package org.sireum.hamr.codegen.arsit.plugin
 
 import org.sireum._
-import org.sireum.hamr.codegen.arsit.templates.{ApiTemplate, EntryPointTemplate}
+import org.sireum.hamr.codegen.arsit.templates.{ApiTemplate, BridgeEntryPointTemplate}
 import org.sireum.hamr.codegen.arsit.util.ArsitOptions
 import org.sireum.hamr.codegen.arsit.{EntryPoints, Port, ProjectDirectories}
 import org.sireum.hamr.codegen.common.CommonUtil
@@ -24,7 +24,7 @@ import org.sireum.message.Reporter
 
                                      resolvedAnnexSubclauses: ISZ[AnnexClauseInfo],
 
-                                     entryPointTemplate: EntryPointTemplate,
+                                     entryPointTemplate: BridgeEntryPointTemplate,
 
                                      arsitOptions: ArsitOptions, symbolTable: SymbolTable, aadlTypes: AadlTypes, projectDirectories: ProjectDirectories,
 
@@ -44,7 +44,7 @@ object SingletonEntryPointProviderPlugin {
 
   @pure def getEntryPointTemplate(nameProvider: NameProvider,
                                   component: AadlThreadOrDevice,
-                                  ports: ISZ[Port]): EntryPointTemplate = {
+                                  ports: ISZ[Port]): BridgeEntryPointTemplate = {
     val componentName = "component"
 
     val parameters: ISZ[ST] = (
@@ -64,7 +64,7 @@ object SingletonEntryPointProviderPlugin {
           |val eventOutPortIds: ISZ[Art.PortId] = IS(${(ports.filter((v: Port) => CommonUtil.isEventPort(v.feature) && CommonUtil.isOutFeature(v.feature)).map((p: Port) => addId(p.name)), ",\n")})"""
     )
 
-    val entryPointTemplate = EntryPointTemplate(
+    val entryPointTemplate = BridgeEntryPointTemplate(
       parameters = parameters,
       localVars = localVars,
       defaultActivateBody = st"${activateBody(componentName, nameProvider)}",

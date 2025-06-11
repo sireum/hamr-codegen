@@ -5,7 +5,7 @@ import org.sireum._
 import org.sireum.hamr.codegen.arsit.bts.BlessBehaviorProviderPlugin
 import org.sireum.hamr.codegen.arsit.gcl.{GumboDatatypeProviderPlugin, GumboPlugin, GumboXPlugin}
 import org.sireum.hamr.codegen.arsit.plugin.BehaviorEntryPointProviderPlugin.{BehaviorEntryPointContributions, ObjectContributions}
-import org.sireum.hamr.codegen.arsit.templates.{EntryPointTemplate, IDatatypeTemplate}
+import org.sireum.hamr.codegen.arsit.templates.{BridgeEntryPointTemplate, IDatatypeTemplate}
 import org.sireum.hamr.codegen.arsit.util.ArsitOptions
 import org.sireum.hamr.codegen.arsit.{EntryPoints, Port, ProjectDirectories, plugin}
 import org.sireum.hamr.codegen.common.CommonUtil.{Store, toolName}
@@ -304,7 +304,7 @@ object BehaviorEntryPointProviderPlugin {
 }
 
 object BridgeCodeProviderPlugin {
-  @datatype class BridgeCodeContributions(val entryPointTemplate: EntryPointTemplate,
+  @datatype class BridgeCodeContributions(val entryPointTemplate: BridgeEntryPointTemplate,
                                           val e: EntryPointProviderPlugin.EntryPointContributions => ST,
                                           val resources: ISZ[Resource])
 }
@@ -342,7 +342,7 @@ object EntryPointProviderPlugin {
 
                                resolvedAnnexSubclauses: ISZ[AnnexClauseInfo],
 
-                               entryPointTemplate: EntryPointTemplate,
+                               entryPointTemplate: BridgeEntryPointTemplate,
 
                                arsitOptions: ArsitOptions,
                                symbolTable: SymbolTable,

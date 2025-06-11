@@ -145,9 +145,10 @@ object TypeResolver {
         }
 
         val dimensions: ISZ[Z] = TypeUtil.getArrayDimensions(c)
-        for(d <- dimensions if d < 1) {
-          // a range type will be introduced with min = 0 so it's max (ie. dim - 1) must be at least 0
-          reporter.error(pos, CommonUtil.toolName, s"Dimensions for ${cname} must be greater than 0 rather than ${d}")
+        for(d <- dimensions if d < 0) {
+          // if Data_Model::Dimension is not provided then an ISZ is introduced.  Dimensions equal to zero
+          // become ISZ, otherwise an IS with a range type will be introduced with min = 0 and max = dim - 1
+          reporter.error(pos, CommonUtil.toolName, s"Dimensions for ${cname} must be greater or equal to 0 rather than ${d}")
         }
 
         val nameProvider = AadlTypeNameProvider(basePackage, classifier, ISZ(), TypeKind.Array)

@@ -3,6 +3,7 @@
 package org.sireum.hamr.codegen.arsit.templates
 
 import org.sireum._
+import org.sireum.hamr.codegen.common.CommonUtil.TypeIdPath
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.types._
 
@@ -113,12 +114,14 @@ import org.sireum.hamr.codegen.common.types._
 }
 
 @datatype class DatatypeTemplate(val typ: AadlType,
+                                 val indexingTypeFingerprints: Map[String, TypeIdPath],
                                  val willBeOverwritten: B) extends IDatatypeTemplate {
 
   @pure def params: ISZ[ST] = {
     typ match {
       case at: ArrayType =>
-        if (at.dimensions.size == 1) {
+        assert (at.dimensions.size == 1)
+        if (at.dimensions(0) != 0) {
           return ISZ(st"val value: IS[${at.nameProvider.referencedTypeName}.I, ${at.baseType.nameProvider.referencedSergenTypeName}]")
         } else {
           return ISZ(st"val value: ISZ[${at.baseType.nameProvider.referencedSergenTypeName}]")
@@ -134,11 +137,22 @@ import org.sireum.hamr.codegen.common.types._
 
     val args: ISZ[ST] = typ match {
       case at: ArrayType =>
+        assert (at.dimensions.size == 1)
         val baseType = at.baseType.nameProvider.qualifiedReferencedTypeName
-        if (at.dimensions.size == 1) {
+        if (at.dimensions(0) != 0) {
 
           val min = 0 // perhaps TODO, allow for negative indexing
           val max = at.dimensions(0) - 1
+
+          // For bounded arrays, GclResolver will rewrite array indexes in a fingerprint method that
+          // takes a Z and returns I.  This could be a useful method so always emit it even if there
+          // are no uses in gumbo contracts
+          val indexTypeIds = at.classifier :+ "I"
+          val gumboFingerprint = indexingTypeFingerprints.entries.filter(p => p._2 == indexTypeIds)
+          val fingerprint: String = TypeUtil.getIndexingTypeFingerprintMethodName(indexTypeIds)
+
+          assert (!gumboFingerprint.nonEmpty || gumboFingerprint(0)._1 == fingerprint,
+            s"GclResolver chose ${gumboFingerprint(0)._1} rather than $fingerprint")
 
           ret = ret :+ st"""// Import I's interpolator to create instances of I.  For e.g.,
                             |//   import ${at.nameProvider.qualifiedReferencedTypeName}.I._
@@ -146,14 +160,23 @@ import org.sireum.hamr.codegen.common.types._
                             |//     val value: ${at.nameProvider.qualifiedReferencedTypeName}.I = i"0"
                             |//     ...
                             |//
-                            |// Rename I and use its fromZ method when using multiple <array-def>.I indexing types in the same context.  For e.g.
+                            |// Use the ${fingerprint} method when using multiple <array-def>.I indexing types in the same
+                            |// context.  Alternatively, rename I and use its fromZ method when using multiple
                             |//   import ${at.nameProvider.qualifiedReferencedTypeName}.{I => I0}
                             |//   import <other-array-def>.{I => I1}
                             |//   object Example {
                             |//     val value: ${at.nameProvider.qualifiedReferencedTypeName}.I = I0.fromZ(0)
                             |//     ...
                             |
-                            |@range(min = 0, max = $max, index = T) class I"""
+                            |@range(min = 0, max = $max, index = T) class I
+                            |
+                            |@pure def ${fingerprint}(z: Z): I = {
+                            |  Contract(
+                            |    Requires(I.Min.toZ <= z && z <= I.Max.toZ),
+                            |    Ensures(Res[I].toZ == z)
+                            |  )
+                            |  return I.fromZ(z)
+                            |}"""
 
           ISZ(st"value = IS.create[I, $baseType](${at.dimensions(0)}, ${at.baseType.nameProvider.example()})")
         } else {

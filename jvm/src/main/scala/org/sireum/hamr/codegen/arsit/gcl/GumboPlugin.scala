@@ -67,6 +67,7 @@ import org.sireum.message.Reporter
 
     var imports: ISZ[String] = ISZ()
     var preMethodBlocks: ISZ[ST] = ISZ()
+    var postMethodBlocks: ISZ[ST] = ISZ()
     var markers: ISZ[Marker] = ISZ()
     var reads: ISZ[ST] = ISZ()
     var requires: ISZ[ST] = ISZ()
@@ -77,7 +78,7 @@ import org.sireum.message.Reporter
 
     if (!localGumboStore.handledAnnexLibraries) {
       for (gclLib <- getAnnexLibraries(symbolTable)) {
-        val (content, filename) = GumboGen.processGclLibrary(gclLib, symbolTable, aadlTypes, componentNames.basePackage)
+        val (content, filename) = GumboGen.processGclLibrary(gclLib, symbolTable, aadlTypes, componentNames.basePackage, store)
         // TODO: treat libraries as datatype files since datatype invariants may use the libraries functions
         //       (i.e. the file containing the library will need to be given to slangcheck)
         resources = resources :+ ResourceUtil.createResourceH(
@@ -99,15 +100,16 @@ import org.sireum.message.Reporter
         }
 
         if (annex.methods.nonEmpty && !localGumboStore.handledSubClauseFunctions.contains(component)) {
-          val (content, marker) = GumboGen.processSubclauseFunctions(annex.methods, gclSymbolTable, symbolTable, aadlTypes, componentNames.basePackage)
+          val (content, marker, methodImports) = GumboGen.processSubclauseFunctions(annex.methods, gclSymbolTable, symbolTable, aadlTypes, componentNames.basePackage, store)
           preMethodBlocks = preMethodBlocks :+ content
           markers = markers :+ marker
+          imports = imports ++ methodImports
           localGumboStore = localGumboStore(handledSubClauseFunctions = localGumboStore.handledSubClauseFunctions + component)
         }
 
         entryPoint match {
           case EntryPoints.initialise if annex.initializes.nonEmpty =>
-            val r = GumboGen.processInitializes(component, symbolTable, aadlTypes, componentNames.basePackage).get
+            val r = GumboGen.processInitializes(component, symbolTable, aadlTypes, componentNames.basePackage, store).get
             requires = requires ++ r.requires
             modifies = modifies ++ r.modifies
             ensures = ensures ++ r.ensures
@@ -117,7 +119,7 @@ import org.sireum.message.Reporter
 
           case EntryPoints.compute if annex.compute.nonEmpty =>
             GumboGen(gclSymbolTable, symbolTable, aadlTypes, componentNames.basePackage).processCompute(
-              annex.compute.get, optInEventPort, component) match {
+              annex.compute.get, optInEventPort, component, store) match {
               case (n: NonCaseContractBlock, mmarkers) =>
                 markers = markers ++ mmarkers
                 reads = reads ++ n.contractReads
@@ -146,15 +148,15 @@ import org.sireum.message.Reporter
       BehaviorEntryPointProviderPlugin.PartialMethodContributions(
         imports = imports,
         preMethodBlocks = preMethodBlocks,
+        postMethodBlocks = postMethodBlocks,
         markers = markers,
         contractBlock = optSubclauseContractBlock,
         resources = resources,
 
-
         tags = ISZ(),
         preObjectBlocks = ISZ(),
         optBody = None(),
-        postMethodBlocks = ISZ(),
+
         postObjectBlocks = ISZ()),
       store + GumboXPluginStore.key ~> localGumboStore)
   }

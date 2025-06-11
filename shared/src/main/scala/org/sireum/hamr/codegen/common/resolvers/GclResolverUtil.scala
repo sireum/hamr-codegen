@@ -3,7 +3,7 @@ package org.sireum.hamr.codegen.common.resolvers
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlDataPort, AadlEventDataPort, SymbolTable}
-import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, ArrayType, BaseType, EnumType, TypeResolver}
+import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, ArrayType, BaseType, EnumType, TypeResolver, TypeUtil}
 import org.sireum.hamr.ir.{GclMethod, GclStateVar, MTransformer, MTransformer => irMTransformer}
 import org.sireum.message.Reporter
 import org.sireum.lang.{ast => AST}
@@ -144,8 +144,7 @@ object GclResolverUtil {
     arrayType match {
       case Some(a) if a.dimensions.nonEmpty =>
         val qualifiedName = a.classifier
-        val indexingType = AST.Typed.Name(ids = qualifiedName :+ "I", args = ISZ())
-        val indexingTypeFingerprint = s"I${AST.Util.stableTypeSig(indexingType, 3).render}"
+        val indexingTypeFingerprint = TypeUtil.getIndexingTypeFingerprintMethodName(qualifiedName :+ "I")
 
         val typeAlias = typeHierarchy.typeMap.get(a.classifier).get.asInstanceOf[TypeInfo.TypeAlias].ast.tipe.asInstanceOf[AST.Type.Named]
 

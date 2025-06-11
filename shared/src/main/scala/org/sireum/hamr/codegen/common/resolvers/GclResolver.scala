@@ -1635,7 +1635,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             //  - the indexing type definition, "@range(min=x, max=y, index=T) class I"
             //  - the type alias, "type <aadlTypeName> = IS[I, <baseType>]"
             //  - a method whose name is the indexing type's fingerprint.  It takes a Z and returns an I
-            val indexTypeFingerprint = s"I${AST.Util.stableTypeSig(indexingType, 3).render}"
+            val indexTypeFingerprint = TypeUtil.getIndexingTypeFingerprintMethodName(indexingType.ids)
             indexingTypeFingerprints = indexingTypeFingerprints + indexTypeFingerprint ~> indexingType.ids
 
             val fingerMethodAST =

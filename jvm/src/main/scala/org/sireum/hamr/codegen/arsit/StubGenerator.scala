@@ -151,7 +151,7 @@ import org.sireum.hamr.ir._
     resources = resources ++ bridgeContributions.resources ++ entryPointContributions._1.resources
 
 
-    val integrationContracts = GumboGen.processIntegrationContract(m, symbolTable, aadlTypes, basePackage)
+    val integrationContracts = GumboGen.processIntegrationContract(m, symbolTable, aadlTypes, basePackage, store)
 
     val api = ApiTemplate.api(
       names.packageName,

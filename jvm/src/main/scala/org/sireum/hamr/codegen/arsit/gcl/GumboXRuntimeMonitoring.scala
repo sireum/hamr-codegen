@@ -4,7 +4,7 @@ package org.sireum.hamr.codegen.arsit.gcl
 import org.sireum._
 import org.sireum.hamr.codegen.arsit.gcl.GumboXGenUtil.{GGParam, GGPortParam, GGStateVarParam, SymbolKind}
 import org.sireum.hamr.codegen.arsit.plugin.{EntryPointProviderPlugin, PlatformProviderPlugin}
-import org.sireum.hamr.codegen.arsit.templates.{ApiTemplate, EntryPointTemplate}
+import org.sireum.hamr.codegen.arsit.templates.{ApiTemplate, BridgeEntryPointTemplate}
 import org.sireum.hamr.codegen.arsit.{EntryPoints, ProjectDirectories}
 import org.sireum.hamr.codegen.common.CommonUtil.Store
 import org.sireum.hamr.codegen.common.StringUtil
@@ -39,7 +39,7 @@ object GumboXRuntimeMonitoring {
   def handleEntryPointProvider(component: AadlThreadOrDevice,
                                componentNames: NameProvider,
 
-                               entryPointTemplate: EntryPointTemplate,
+                               entryPointTemplate: BridgeEntryPointTemplate,
 
                                gumboXGen: GumboXGen,
                                containers: GumboXGenUtil.Container,

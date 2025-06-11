@@ -4,7 +4,7 @@ package org.sireum.hamr.codegen.arsit
 import org.sireum._
 import org.sireum.hamr.codegen.arsit.plugin.{ArsitConfigurationPlugin, ArsitFinalizePlugin, ArsitInitializePlugin, PlatformProviderPlugin}
 import org.sireum.hamr.codegen.arsit.templates._
-import org.sireum.hamr.codegen.arsit.util.{ArsitLibrary, ArsitOptions, ArsitPlatform, ReporterUtil}
+import org.sireum.hamr.codegen.arsit.util.{ArsitLibrary, ArsitLinter, ArsitOptions, ArsitPlatform, ReporterUtil}
 import org.sireum.hamr.codegen.common.CommonUtil.Store
 import org.sireum.hamr.codegen.common.containers.{FileResource, IResource, InternalResource, Resource}
 import org.sireum.hamr.codegen.common.plugin.Plugin
@@ -28,6 +28,11 @@ object Arsit {
   //=================================================================
 
   def run(model: ir.Aadl, o: ArsitOptions, aadlTypes: AadlTypes, symbolTable: SymbolTable, plugins: ISZ[Plugin], store: Store, reporter: Reporter): (ArsitResult, Store) = {
+
+    if (!ArsitLinter.lint(model, o, aadlTypes, symbolTable, plugins, store, reporter)) {
+      return (ArsitResult.emptyResults, store)
+    }
+
     ReporterUtil.resetReporter()
     val ret = runInternal(model, o, aadlTypes, symbolTable, plugins, store)
     ReporterUtil.addReports(reporter)
@@ -37,7 +42,7 @@ object Arsit {
   def runInternal(model: ir.Aadl, arsitOptions: ArsitOptions, aadlTypes: AadlTypes, symbolTable: SymbolTable, plugins: ISZ[Plugin], store: Store): (ArsitResult, Store) = {
     if (model.components.isEmpty) {
       ReporterUtil.reporter.error(None(), Util.toolName, "Model is empty")
-      return (ArsitResult(ISZ(), 0, 0, 0), store)
+      return (ArsitResult.emptyResults, store)
     }
 
     assert(model.components.size == 1, "Expecting a single root component")
