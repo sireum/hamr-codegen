@@ -282,7 +282,7 @@ object HAMR {
 }
 
 object ArsitResult {
-  @strictpure def emptyResults = ArsitResult(ISZ(), -1, -1, -1)
+  @strictpure def emptyResults: ArsitResult = ArsitResult(ISZ(), -1, -1, -1)
 }
 
 @datatype class ArsitResult(val resources: ISZ[Resource],
