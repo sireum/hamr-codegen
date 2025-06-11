@@ -14,13 +14,15 @@ import org.sireum.hamr.ir
 import org.sireum.hamr.ir.{Aadl, Component, ConnectionInstance}
 import org.sireum.message.Reporter
 import org.sireum.ops.ISZOps
+import org.sireum.hamr.codegen.ros2.Ros2Codegen.toolName
 
 @datatype class Ros2Results(val resources: ISZ[Resource])
 
+object Ros2Codegen {
+  val toolName: String = "Ros2Codegen"
+}
 
 @record class Ros2Codegen {
-
-  val toolName: String = "Ros2Codegen"
 
   var resources: ISZ[Resource] = ISZ()
   var threadComponents: ISZ[AadlThread] = ISZ()
@@ -30,6 +32,10 @@ import org.sireum.ops.ISZOps
 
   def run(model: Aadl, options: CodegenOption, aadlTypes: AadlTypes, symbolTable: SymbolTable, plugins: ISZ[Plugin], store: Store, reporter: Reporter): (Ros2Results, Store) = {
     assert(model.components.size == 1)
+
+    if (!RosLinter.lint(model, options, aadlTypes, symbolTable, plugins, store, reporter)) {
+      return (Ros2Results(ISZ()), store)
+    }
 
     val modelName = getModelName(symbolTable)
 
@@ -235,10 +241,14 @@ import org.sireum.ops.ISZOps
     }
     val baseType: String = datatypeMap.get(arr.baseType).get._1
 
-    if (arr.dimensions.size == 0) {
-      msg = s"${baseType}[] arr"
-    } else if (arr.dimensions.size == 1) {
-      msg = s"${baseType}[${arr.dimensions.apply(0)}] arr"
+    assert (arr.dimensions.nonEmpty)
+
+    if (arr.dimensions.size == 1) {
+      if (arr.dimensions(0) == 0) {
+        msg = s"${baseType}[] arr"
+      } else {
+        msg = s"${baseType}[${arr.dimensions(0)}] arr"
+      }
     } else {
       var length: Z = 1
       var index: Z = 0
