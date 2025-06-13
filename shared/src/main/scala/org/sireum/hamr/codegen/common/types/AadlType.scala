@@ -14,9 +14,13 @@ import org.sireum.hamr.ir
   }
 
   @pure def getTypeByPathOpt(path: TypeIdPath): Option[AadlType] = {
-    return typeMap.get(st"${(path, "::")}".render)
+    path match {
+      case ISZ("art", "Empty") => return Some(TypeUtil.EmptyType)
+      case _ =>
+        val f = TypeUtil.getAadlTypeFromSlangType(path)
+        return typeMap.get(f)
+    }
   }
-
 }
 
 @sig trait AadlType {
@@ -46,6 +50,12 @@ import org.sireum.hamr.ir
 
                          val values: ISZ[String]) extends AadlType
 
+@enum object ArraySizeKind {
+  "Fixed"
+  "Bounded"
+  "Unbounded"
+}
+
 @datatype class ArrayType(val classifier: ISZ[String],
                           val nameProvider: TypeNameProvider,
 
@@ -53,6 +63,8 @@ import org.sireum.hamr.ir
                           val bitSize: Option[Z],
 
                           val dimensions: ISZ[Z],
+                          val kind: ArraySizeKind.Type,
+
                           val baseType: AadlType) extends AadlType
 
 @datatype class RecordType(val classifier: ISZ[String],

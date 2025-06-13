@@ -4,7 +4,7 @@ package org.sireum.hamr.codegen.microkit.plugins.gumbo
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{TypeIdPath, splitClassifier}
 import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlEventPort, AadlFeature, AadlFeatureData, AadlFeatureEvent, AadlPort, AadlThread, GclAnnexClauseInfo}
-import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, TypeResolver}
+import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, TypeResolver, TypeUtil}
 import org.sireum.hamr.codegen.microkit.plugins.types.{CRustTypeNameProvider, CRustTypeProvider}
 import org.sireum.hamr.codegen.microkit.rust.Param
 import org.sireum.hamr.ir.{Direction, GclStateVar, GclSubclause}
@@ -23,21 +23,10 @@ object GumboXRustUtil {
         i.ids
       case _ => typ.ids
     }
-    val _ids: ISZ[String] =
-      if (ids(ids.size - 1) == "Type") ops.ISZOps(typ.ids).dropRight(1)
-      else ids
 
-    if (_ids.size == 2 && _ids(0) == "art" && _ids(1) == "Empty") {
-      //return (TypeUtil.EmptyType, isOptional)
-      halt("Need to handle event ports")
-    } else if (_ids.size == 3 && _ids(0) == "org" && _ids(1) == "sireum") {
-      val aadlType = TypeResolver.getAadlBaseFromSlangType(_ids)
-      return (aadlTypes.typeMap.get(aadlType).get, isOptional)
-    } else {
-      val key = st"${(_ids, "::")}".render
-      return (aadlTypes.typeMap.get(key).get, isOptional)
-    }
+    return (aadlTypes.getTypeByPath(ids), isOptional)
   }
+
   @datatype class GGExpParamHolder(val params: Set[GGParam],
                                    val exp: Exp)
 

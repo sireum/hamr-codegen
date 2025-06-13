@@ -37,6 +37,8 @@ object HamrProperties {
   val HAMR__PLATFORM: String = "HAMR::Platform"
   val HAMR__HW: String = "HAMR::HW"
 
+  val HAMR__ARRAY_SIZE_KIND: String = "HAMR::Array_Size_Kind"
+
   val HAMR__DEFAULT_BIT_WIDTH: String = "HAMR::Default_Bit_Width"
   val HAMR__DEFAULT_MAX_SEQUENCE_SIZE: String = "HAMR::Default_Sequence_Size"
   val HAMR__MAX_STRING_SIZE: String = "HAMR::Max_String_Size"

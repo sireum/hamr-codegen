@@ -298,15 +298,8 @@ object GclResolverUtil {
         p.tipe match {
           case n: AST.Type.Named =>
             val typeName: ISZ[String] = for (id <- n.name.ids) yield id.value
-            typeName match {
-              case ISZ("org", "sireum", x) =>
-                val aadlTypeName = TypeResolver.getAadlBaseFromSlangType(typeName)
-                pushType(aadlTypes.typeMap.get(aadlTypeName).get)
-                return irMTransformer.PreResult(F, MNone())
-              case _ =>
-                pushType(aadlTypes.getTypeByPath(typeName))
-                return irMTransformer.PreResult(F, MNone())
-            }
+            pushType(aadlTypes.getTypeByPath(typeName))
+            return irMTransformer.PreResult(F, MNone())
           case _ =>
         }
       case ISZ() =>
@@ -324,6 +317,10 @@ object GclResolverUtil {
     }
 
     scope.resolveName(typeHierarchy.nameMap, ISZ(o.id.value)) match {
+      case Some(e: Info.Method) =>
+        val n: ISZ[String] = for (id <- e.ast.sig.returnType.asInstanceOf[AST.Type.Named].name.ids) yield id.value
+        pushType(aadlTypes.getTypeByPath(n))
+        return irMTransformer.PreResult(F, MNone())
       case Some(e) =>
         return irMTransformer.PreResult(F, MNone())
       case _ =>

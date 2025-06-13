@@ -367,7 +367,7 @@ object SeL4NixTemplate {
     // this CANNOT use type aliases
     val qualifiedNameForFingerprinting: String =
       typ.kind match {
-        case TypeKind.Base => TypeResolver.getSlangType(typ.typeName).string
+        case TypeKind.Base => TypeUtil.getSlangType(typ.typeName).string
         case TypeKind.Bit => TypeUtil.BIT_SIG
         case TypeKind.Empty => typ.qualifiedReferencedTypeName
         case _ => s"${typ.basePackageName}.${typ.qualifiedReferencedTypeName}"
@@ -419,7 +419,7 @@ object SeL4NixTemplate {
     // this CANNOT use type aliases
     val qualifiedNameForFingerprinting: String =
       typ.kind match {
-        case TypeKind.Base => TypeResolver.getSlangType(typ.typeName).string
+        case TypeKind.Base => TypeUtil.getSlangType(typ.typeName).string
         case TypeKind.Bit => TypeUtil.BIT_SIG
         case TypeKind.Empty => typ.qualifiedReferencedTypeName
         case _ => s"${typ.basePackageName}.${typ.qualifiedReferencedTypeName}"

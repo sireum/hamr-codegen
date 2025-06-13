@@ -1002,7 +1002,7 @@ object GumboXGen {
   }
 
   def processDatatype(aadlType: AadlType,
-                      gclAnnexSubclauseInfo: GclAnnexClauseInfo,
+                      optGclAnnexSubclauseInfo: Option[GclAnnexClauseInfo],
                       basePackageName: String,
                       symbolTable: SymbolTable,
                       aadlTypes: AadlTypes,
@@ -1015,19 +1015,37 @@ object GumboXGen {
     var datatypeSingletonBlocks = ISZ[ST]()
 
     var methodNames: ISZ[String] = ISZ()
-    for (i <- gclAnnexSubclauseInfo.annex.invariants) {
-      val methodName = convertInvariantToMethodName(i.id, aadlType)
 
-      localGumboStore = localGumboStore(imports = localGumboStore.imports ++ GumboGenUtil.resolveLitInterpolateImports(i.exp, basePackageName, GclResolver.getIndexingTypeFingerprints(store)))
+    aadlType match {
+      case a: ArrayType if a.kind == ArraySizeKind.Fixed =>
+        val methodName = "__fixedArraySizeInvariant"
+        methodNames = methodNames :+ methodName
+        datatypeSingletonBlocks = datatypeSingletonBlocks :+
+          st"""/** invariant $methodName
+              |  */
+              |@strictpure def $methodName(value: ${aadlType.nameProvider.qualifiedReferencedTypeName}): B =
+              |  value.value.size == ${a.dimensions(0)}
+              |"""
+      case _ =>
+    }
 
-      val descriptor = GumboXGen.processDescriptor(i.descriptor, "*   ")
-      methodNames = methodNames :+ methodName
-      datatypeSingletonBlocks = datatypeSingletonBlocks :+
-        st"""/** invariant ${i.id}
-            |  ${descriptor}
-            |  */
-            |@strictpure def ${methodName}(value: ${aadlType.nameProvider.qualifiedReferencedTypeName}): B =
-            |  ${rewriteInvariant(getRExp(i.exp, basePackageName, aadlTypes, gclAnnexSubclauseInfo.gclSymbolTable))}"""
+    optGclAnnexSubclauseInfo match {
+      case Some(gclAnnexSubclauseInfo) =>
+        for (i <- gclAnnexSubclauseInfo.annex.invariants) {
+          val methodName = convertInvariantToMethodName(i.id, aadlType)
+
+          localGumboStore = localGumboStore(imports = localGumboStore.imports ++ GumboGenUtil.resolveLitInterpolateImports(i.exp, basePackageName, GclResolver.getIndexingTypeFingerprints(store)))
+
+          val descriptor = GumboXGen.processDescriptor(i.descriptor, "*   ")
+          methodNames = methodNames :+ methodName
+          datatypeSingletonBlocks = datatypeSingletonBlocks :+
+            st"""/** invariant ${i.id}
+                |  ${descriptor}
+                |  */
+                |@strictpure def ${methodName}(value: ${aadlType.nameProvider.qualifiedReferencedTypeName}): B =
+                |  ${rewriteInvariant(getRExp(i.exp, basePackageName, aadlTypes, gclAnnexSubclauseInfo.gclSymbolTable))}"""
+        }
+      case _ =>
     }
 
     val (d_inv_method_name, d_inv_guard_method_name) = createInvariantMethodName(aadlType)

@@ -7,7 +7,7 @@ import org.sireum.hamr.codegen.arsit.plugin.DatatypeProviderPlugin
 import org.sireum.hamr.codegen.arsit.templates.{DatatypeTemplate, EnumTemplate, IDatatypeTemplate}
 import org.sireum.hamr.codegen.common.CommonUtil.Store
 import org.sireum.hamr.codegen.common.symbols.{AnnexClauseInfo, GclAnnexClauseInfo, SymbolTable}
-import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes}
+import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, ArraySizeKind, ArrayType}
 import org.sireum.message.Reporter
 
 @datatype class GumboDatatypeProviderPlugin extends DatatypeProviderPlugin {
@@ -18,7 +18,8 @@ import org.sireum.message.Reporter
                                             aadlTypes: AadlTypes,
                                             symbolTable: SymbolTable,
                                             store: Store): B =
-    resolvedAnnexSubclauses.filter((f: AnnexClauseInfo) => f.isInstanceOf[GclAnnexClauseInfo]).nonEmpty
+    resolvedAnnexSubclauses.filter((f: AnnexClauseInfo) => f.isInstanceOf[GclAnnexClauseInfo]).nonEmpty ||
+      (aadlType.isInstanceOf[ArrayType] && aadlType.asInstanceOf[ArrayType].kind == ArraySizeKind.Fixed)
 
   @pure def handleDatatypeProvider(basePackageName: String,
                                    aadlType: AadlType,
@@ -33,7 +34,7 @@ import org.sireum.message.Reporter
                                    reporter: Reporter): (DatatypeProviderPlugin.DatatypeContribution, Store) = {
 
     val subclauses = resolvedAnnexSubclauses.filter((f: AnnexClauseInfo) => f.isInstanceOf[GclAnnexClauseInfo])
-    if (subclauses.size != 1) {
+    if (subclauses.size > 1) {
       // should be infeasible as sym resolution should have rejected this already
       halt(s"A data component can have at most one GUMBO subclause but ${aadlType.name} has ${subclauses.size}")
     }

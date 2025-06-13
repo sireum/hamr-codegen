@@ -199,8 +199,7 @@ object GumboGen {
     @pure override def post_langastExpResult(o: AST.Exp.Result): MOption[AST.Exp] = {
       o.attr.typedOpt match {
         case Some(atn: AST.Typed.Name) =>
-          val fqAadlTypeName = st"${(atn.ids, "::")}".render
-          val aadlType = aadlTypes.typeMap.get(fqAadlTypeName).get
+          val aadlType = aadlTypes.getTypeByPath(atn.ids)
 
           val splitSlangTypeName = aadlType.nameProvider.qualifiedReferencedTypeNameI
 
@@ -465,6 +464,13 @@ object GumboGen {
       val gg = GumboGen(gclSymTable, symbolTable, aadlTypes, basePackageName)
       ret = ret ++ gg.processInvariants(sc.invariants, store)
       addImports(gg)
+    }
+
+    e match {
+      case a: ArrayType if a.kind == ArraySizeKind.Fixed =>
+        assert (a.dimensions.size == 1, "Only expecting single dimension arrays for Slang")
+        ret = ret :+ st"""@spec def __fixedArraySizeInvariant = Invariant(value.size == ${a.dimensions(0)})"""
+      case _ =>
     }
 
     return ret

@@ -5,7 +5,7 @@ package org.sireum.hamr.codegen.common.types
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.TypeIdPath
 import org.sireum.hamr.codegen.common._
-import org.sireum.hamr.codegen.common.properties.{OsateProperties, PropertyUtil}
+import org.sireum.hamr.codegen.common.properties.{HamrProperties, OsateProperties, PropertyUtil}
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.ir
 import org.sireum.lang.{ast => AST}
@@ -31,6 +31,76 @@ object TypeUtil {
   val BIT_SIG: String = "IS[Z, B]"
 
   val BIT_FINGERPRINT: String = TypeUtil.getTypeFingerprint("IS", BIT_SIG)
+
+  @pure def getSlangType(s: String): SlangType.Type = {
+    val t: SlangType.Type = s match {
+      case "Boolean" => SlangType.B
+
+      case "Integer" => SlangType.Z
+
+      case "Integer_8" => SlangType.S8
+      case "Integer_16" => SlangType.S16
+      case "Integer_32" => SlangType.S32
+      case "Integer_64" => SlangType.S64
+
+      case "Unsigned_8" => SlangType.U8
+      case "Unsigned_16" => SlangType.U16
+      case "Unsigned_32" => SlangType.U32
+      case "Unsigned_64" => SlangType.U64
+
+      case "Float" => SlangType.R // TODO
+      case "Float_32" => SlangType.F32
+      case "Float_64" => SlangType.F64
+
+      case "Character" => SlangType.C
+      case "String" => SlangType.String
+    }
+    return t
+  }
+
+  @pure def getAadlTypeFromSlangType(s: ISZ[String]): String = {
+    return st"${(getAadlTypePathFromSlangType(s), "::")}".render
+  }
+
+  @pure def getAadlTypePathFromSlangType(s: ISZ[String]): ISZ[String] = {
+    s match {
+      case ISZ("org", "sireum", _) => return getAadlBaseFromSlangType(s)
+      case _ =>
+        return (if (s(s.lastIndex) == "Type") ops.ISZOps(s).dropRight(1)
+        else s)
+    }
+  }
+
+  @pure def getAadlBaseFromSlangType(s: ISZ[String]): ISZ[String] = {
+    if (s.size != 3 || s(0) != "org" || s(1) != "sireum") {
+      halt(s"Infeasible: $s is not a base type")
+    }
+    val t: String = s(2) match {
+      case  "B" => "Boolean"
+
+      case "Z" => "Integer"
+
+      case "S8" => "Integer_8"
+      case "S16" => "Integer_16"
+      case "S32" => "Integer_32"
+      case "S64" => "Integer_64"
+
+      case "U8" => "Unsigned_8"
+      case "U16" => "Unsigned_16"
+      case "U32" => "Unsigned_32"
+      case "U64" => "Unsigned_64"
+
+      case "R" => "Float"
+      case "F32" => "Float_32"
+      case "F64" => "Float_64"
+
+      case "C" => "Character"
+      case "String" => "String"
+
+      case x => halt(s"Infeasible: $x is not a base type")
+    }
+    return ISZ("Base_Types", t)
+  }
 
   @pure def getIndexingTypeFingerprintMethodName(ids: TypeIdPath): String = {
     val typed = AST.Typed.Name(ids = ids, args = ISZ())
@@ -90,6 +160,18 @@ object TypeUtil {
               case _ => z"-1"
             }
           }))
+  }
+
+  @pure def getArraySizeKind(c: ir.Component): Option[ArraySizeKind.Type] = {
+    PropertyUtil.getDiscreetPropertyValue(c.properties, HamrProperties.HAMR__ARRAY_SIZE_KIND) match {
+      case Some(ir.ValueProp(e)) =>
+        e match {
+          case "Fixed" => return Some(ArraySizeKind.Fixed)
+          case "Bounded" => return Some(ArraySizeKind.Bounded)
+          case "Unbounded" => return Some(ArraySizeKind.Unbounded)
+        }
+      case _ => return None()
+    }
   }
 
   @pure def getBaseTypes(c: ir.Component): ISZ[String] = {

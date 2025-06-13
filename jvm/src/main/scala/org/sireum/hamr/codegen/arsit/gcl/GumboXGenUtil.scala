@@ -975,18 +975,7 @@ object GumboXGenUtil {
         i.ids
       case _ => typ.ids
     }
-    val _ids: ISZ[String] =
-      if (ids(ids.size - 1) == "Type") ops.ISZOps(typ.ids).dropRight(1)
-      else ids
 
-    if (_ids.size == 2 && _ids(0) == "art" && _ids(1) == "Empty") {
-      return (TypeUtil.EmptyType, isOptional)
-    } else if (_ids.size == 3 && _ids(0) == "org" && _ids(1) == "sireum") {
-      val aadlType = TypeResolver.getAadlBaseFromSlangType(_ids)
-      return (aadlTypes.typeMap.get(aadlType).get, isOptional)
-    } else {
-      val key = st"${(_ids, "::")}".render
-      return (aadlTypes.typeMap.get(key).get, isOptional)
-    }
+    return (aadlTypes.getTypeByPath(ids), isOptional)
   }
 }

@@ -11,63 +11,6 @@ import org.sireum.message.{Position, Reporter}
 
 object TypeResolver {
 
-  def getSlangType(s: String): SlangType.Type = {
-    val t: SlangType.Type = s match {
-      case "Boolean" => SlangType.B
-
-      case "Integer" => SlangType.Z
-
-      case "Integer_8" => SlangType.S8
-      case "Integer_16" => SlangType.S16
-      case "Integer_32" => SlangType.S32
-      case "Integer_64" => SlangType.S64
-
-      case "Unsigned_8" => SlangType.U8
-      case "Unsigned_16" => SlangType.U16
-      case "Unsigned_32" => SlangType.U32
-      case "Unsigned_64" => SlangType.U64
-
-      case "Float" => SlangType.R // TODO
-      case "Float_32" => SlangType.F32
-      case "Float_64" => SlangType.F64
-
-      case "Character" => SlangType.C
-      case "String" => SlangType.String
-    }
-    return t
-  }
-
-  def getAadlBaseFromSlangType(s: ISZ[String]): String = {
-    if (s.size != 3 || s(0) != "org" || s(1) != "sireum") {
-      halt(s"Infeasible: $s is not a base type")
-    }
-    val t: String = s(2) match {
-      case  "B" => "Base_Types::Boolean"
-
-      case "Z" => "Base_Types::Integer"
-
-      case "S8" => "Base_Types::Integer_8"
-      case "S16" => "Base_Types::Integer_16"
-      case "S32" => "Base_Types::Integer_32"
-      case "S64" => "Base_Types::Integer_64"
-
-      case "U8" => "Base_Types::Unsigned_8"
-      case "U16" => "Base_Types::Unsigned_16"
-      case "U32" => "Base_Types::Unsigned_32"
-      case "U64" => "Base_Types::Unsigned_64"
-
-      case "R" => "Base_Types::Float"
-      case "F32" => "Base_Types::Float_32"
-      case "F64" => "Base_Types::Float_64"
-
-      case "C" => "Base_Types::Character"
-      case "String" => "Base_Types::String"
-
-      case x => halt(s"Infeasible: $x is not a base type")
-    }
-    return t
-  }
-
   def processDataTypes(model: Aadl,
                        rawConnections: B,
                        maxStringSize: Z,
@@ -111,7 +54,7 @@ object TypeResolver {
 
         val aadlType = org.sireum.ops.StringOps(c.classifier.get.name).replaceAllLiterally("Base_Types::", "")
 
-        val t: SlangType.Type = TypeResolver.getSlangType(aadlType)
+        val t: SlangType.Type = TypeUtil.getSlangType(aadlType)
 
         val dataSize: Option[Z] =
           bitCodecSize match {
@@ -151,8 +94,30 @@ object TypeResolver {
           reporter.error(pos, CommonUtil.toolName, s"Dimensions for ${cname} must be greater or equal to 0 rather than ${d}")
         }
 
+        val kind: ArraySizeKind.Type = TypeUtil.getArraySizeKind(c) match {
+          case Some(e) if e == ArraySizeKind.Unbounded =>
+            if (dimensions.nonEmpty && dimensions.filter(d => d != 0).nonEmpty) {
+              reporter.error(pos, CommonUtil.toolName, s"All dimensions for unbounded array ${cname} must be 0")
+            }
+            e
+          case Some(e) => // bounded or fixed
+            if (dimensions.isEmpty || dimensions.filter(d => d == 0).nonEmpty) {
+              reporter.error(pos, CommonUtil.toolName, s"Dimensions must be provided for $e array ${cname} and all must be greater than 0")
+            }
+            e
+          case _ =>
+            if (dimensions.isEmpty || dimensions.filter(d => d == 0).nonEmpty) {
+              ArraySizeKind.Unbounded
+            } else if (ops.ISZOps(dimensions).forall(d => d > 0)) {
+              ArraySizeKind.Bounded
+            } else {
+              reporter.error(pos, CommonUtil.toolName, s"Invalid array definition '${c.classifier.get.name}'. Mixed bounded and unbounded arrays are not currently supported")
+              ArraySizeKind.Bounded
+            }
+        }
+
         val nameProvider = AadlTypeNameProvider(basePackage, classifier, ISZ(), TypeKind.Array)
-        return ArrayType(cname, nameProvider, container, bitCodecSize, dimensions, baseType)
+        return ArrayType(cname, nameProvider, container, bitCodecSize, dimensions, kind, baseType)
       }
       else if (TypeUtil.isRecordType(c)) {
         var fields: Map[String, AadlType] = Map.empty

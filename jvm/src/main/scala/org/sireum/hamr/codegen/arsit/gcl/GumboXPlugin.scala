@@ -13,7 +13,7 @@ import org.sireum.hamr.codegen.arsit.{EntryPoints, Port, ProjectDirectories}
 import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, Store, StoreValue}
 import org.sireum.hamr.codegen.common.containers.Resource
 import org.sireum.hamr.codegen.common.symbols._
-import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes}
+import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, ArraySizeKind, ArrayType}
 import org.sireum.hamr.codegen.common.util.NameUtil.NameProvider
 import org.sireum.hamr.codegen.common.util.ResourceUtil
 import org.sireum.hamr.ir.GclSubclause
@@ -148,12 +148,22 @@ object GumboXPluginStore {
                                            arsitOptions: ArsitOptions, aadlTypes: AadlTypes, symbolTable: SymbolTable,
                                            store: Store, reporter: Reporter): (ISZ[Resource], Store) = {
     var gumboStore = GumboXPluginStore.getGumboStore(store)
-    for (aadlType <- aadlTypes.typeMap.entries if symbolTable.annexClauseInfos.contains(ISZ(aadlType._1));
-         annex <- symbolTable.annexClauseInfos.get(ISZ(aadlType._1)).get) {
-      if (annex.isInstanceOf[GclAnnexClauseInfo]) {
-        gumboStore =
-          gumboStore(datatypesWithInvariants =
-            gumboStore.datatypesWithInvariants + aadlType._2.nameProvider.classifier)
+    for (aadlType <- aadlTypes.typeMap.entries) {
+      aadlType._2 match {
+        case a: ArrayType if a.kind == ArraySizeKind.Fixed =>
+          gumboStore =
+            gumboStore(datatypesWithInvariants =
+              gumboStore.datatypesWithInvariants + aadlType._2.nameProvider.classifier)
+        case _ =>
+      }
+      if (symbolTable.annexClauseInfos.contains(ISZ(aadlType._1))) {
+        for(annex <- symbolTable.annexClauseInfos.get(ISZ(aadlType._1)).get) {
+          if (annex.isInstanceOf[GclAnnexClauseInfo]) {
+            gumboStore =
+              gumboStore(datatypesWithInvariants =
+                gumboStore.datatypesWithInvariants + aadlType._2.nameProvider.classifier)
+          }
+        }
       }
     }
 
@@ -188,12 +198,18 @@ object GumboXPluginStore {
                                       symbolTable: SymbolTable,
                                       store: Store,
                                       reporter: Reporter): (DatatypeProviderPlugin.DatatypeContribution, Store) = {
-    for (a <- resolvedAnnexSubclauses if a.isInstanceOf[GclAnnexClauseInfo]) {
-      // there should only be one Gumbo Annex Clause per component so just return once we found it
-      val ret = gumboXGen.processDatatype(aadlType, a.asInstanceOf[GclAnnexClauseInfo], basePackageName, symbolTable, aadlTypes, projectDirectories, GumboXPluginStore.getGumboStore(store), store, ReporterUtil.reporter)
-      return (ret._1, store + GumboXPluginStore.key ~> ret._2)
+    val c: Option[GclAnnexClauseInfo] = {
+      val cands = resolvedAnnexSubclauses.filter(f => f.isInstanceOf[GclAnnexClauseInfo])
+      assert (cands.size <= 1)
+      if (cands.nonEmpty) Some(cands(0).asInstanceOf[GclAnnexClauseInfo])
+      else None()
     }
-    halt(s"Infeasible: why did ${name} offer to handle ${aadlType.name} if it doesn't have a GclSubclause attached to it?")
+
+    assert(!c.isEmpty || aadlType.isInstanceOf[ArrayType] && aadlType.asInstanceOf[ArrayType].kind == ArraySizeKind.Fixed)
+
+    val ret = gumboXGen.processDatatype(aadlType, c, basePackageName, symbolTable, aadlTypes, projectDirectories, GumboXPluginStore.getGumboStore(store), store, ReporterUtil.reporter)
+
+    return (ret._1, store + GumboXPluginStore.key ~> ret._2)
   }
 
 

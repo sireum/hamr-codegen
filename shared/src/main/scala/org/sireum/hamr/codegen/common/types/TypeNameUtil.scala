@@ -138,7 +138,7 @@ object TypeNameUtil {
   def referencedSergenTypeName: String = {
     val ret: String = kind match {
       case TypeKind.Bit => "ISZ[B]"
-      case TypeKind.Base => TypeResolver.getSlangType(typeName).name
+      case TypeKind.Base => TypeUtil.getSlangType(typeName).name
       case _ => s"$packageName.$referencedTypeName"
     }
     return ret
@@ -168,7 +168,7 @@ object TypeNameUtil {
   def qualifiedCTypeName: String = {
     val ret: String = kind match {
       case TypeKind.Empty => "art_Empty"
-      case TypeKind.Base => TypeResolver.getSlangType(typeName).string
+      case TypeKind.Base => TypeUtil.getSlangType(typeName).string
       case TypeKind.Bit => TypeUtil.BIT_FINGERPRINT
       case _ =>
         val enumSuffix: String = if (isEnum) "_Type" else ""
@@ -218,7 +218,7 @@ object TypeNameUtil {
   def rustTypeName: String = {
     val ret: String = kind match {
       case TypeKind.Empty => "art_Empty"
-      case TypeKind.Base => TypeResolver.getSlangType(typeName).string
+      case TypeKind.Base => TypeUtil.getSlangType(typeName).string
       case TypeKind.Bit => TypeUtil.BIT_FINGERPRINT
       case _ =>
         val enumSuffix: String = if (isEnum) "_Type" else ""

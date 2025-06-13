@@ -4,7 +4,7 @@ package org.sireum.hamr.codegen.microkit.types
 import org.sireum._
 import org.sireum.CircularQueue.Policy
 import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlEventPort, AadlFeatureData, AadlPort, GclAnnexClauseInfo, GclAnnexLibInfo, SymbolTable}
-import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypeNameProvider, AadlTypes, ArrayType, BaseType, BitType, EnumType, RecordType, SlangType, TypeKind, TypeUtil}
+import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypeNameProvider, AadlTypes, ArraySizeKind, ArrayType, BaseType, BitType, EnumType, RecordType, SlangType, TypeKind, TypeUtil}
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen
 import org.sireum.hamr.codegen.microkit.connections._
 import org.sireum.hamr.codegen.microkit.plugins.types.{CRustTypePlugin, CRustTypeProvider, CTypeProvider}
@@ -292,6 +292,11 @@ object MicrokitTypeUtil {
         case _ =>
           aadlType match {
             case t: ArrayType =>
+              t.kind match {
+                case ArraySizeKind.Fixed =>
+                case x =>
+                  reporter.error(None(), MicrokitCodegen.toolName, s"Only Fixed arrays are currently supported: ${t.name} (attach 'HAMR::Array_Size_Kind => Fixed' to the data component)")
+              }
               t.dimensions match {
                 case ISZ() =>
                   reporter.error(None(), MicrokitCodegen.toolName, s"Unbounded arrays are not currently supported: ${t.name}")
@@ -387,6 +392,7 @@ object MicrokitTypeUtil {
           container = Some(container),
           bitSize = Some(size * 8),
           dimensions = ISZ(size),
+          kind = ArraySizeKind.Fixed,
           baseType = BaseType(
             classifier = ISZ("Base_Types", "Character"),
             nameProvider = b.nameProvider,

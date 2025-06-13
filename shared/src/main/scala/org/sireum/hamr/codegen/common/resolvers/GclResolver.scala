@@ -787,12 +787,6 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         return ret
       }
 
-      rMethod =
-        if (rMethod.hasContract) TypeChecker.checkMethodContractSequent(
-          // don't use methodScope here
-          F, typeHierarchy, ISZ(rMethod.sig.id.value), scope, F, rMethod, reporter)
-        else rMethod
-
       var mc = gclMethod.method.mcontract.asInstanceOf[Simple]
 
       val readsClause = mc.readsClause(refs = for (r <- mc.reads) yield tce(r.asExp, TypeChecker.ModeContext.Spec).asInstanceOf[Exp.Ident])
@@ -828,7 +822,15 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           None()
       }
 
+      rMethod = rMethod(bodyOpt = body, mcontract = mc)
+
       // now do a full tipe check one the method using the rewritten expressions (will recheck the expressions)
+
+      rMethod = if (rMethod.hasContract) TypeChecker.checkMethodContractSequent(
+        // don't use methodScope here
+        F, typeHierarchy, ISZ(rMethod.sig.id.value), scope, F, rMethod, reporter)
+      else rMethod
+
       val tc = TypeChecker(typeHierarchy, fqn, F, TypeChecker.ModeContext.Spec, F)
       return tc.checkMethod(scope, rMethod(bodyOpt = body, mcontract = mc), reporter)
     } else {
@@ -1420,11 +1422,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       val pos: Option[Position] = if (value.posOpt.nonEmpty) value.posOpt else posOpt
       value match {
         case atn: AST.Type.Named =>
-          val aadlName: String = atn.name.ids.map((i: AST.Id) => i.value) match {
-            case i@ISZ("org", "sireum", b) => TypeResolver.getAadlBaseFromSlangType(i)
-            case fqn =>
-              st"${(if (fqn(fqn.lastIndex) == "Type") ops.ISZOps(fqn).dropRight(1) else fqn, "::")}".render
-          }
+          val typeIds: ISZ[String] = for (id <- atn.name.ids) yield id.value
+          val aadlName = TypeUtil.getAadlTypeFromSlangType(typeIds)
 
           return resolveTypeH(getAadlType(aadlName, aadlTypes, pos, reporter), posOpt)
 
