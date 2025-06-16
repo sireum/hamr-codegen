@@ -732,7 +732,14 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       case Some((rexp, roptType)) =>
         roptType match {
           case Some(t: AST.Typed.Name) if t == expectedType =>
-            rexp
+            (_exp, expectedType.ids) match {
+              case (i: AST.Exp.Ident, ISZ("org", "sireum", "B")) if i.id.value == "T" || i.id.value == "F" =>
+                // sysml toolchain may emit these, which type check correctly.  However, downstream tools
+                // likely expect LitB's
+                AST.Exp.LitB(i.id.value == "T", i.id.attr)
+              case _ =>
+                rexp
+            }
           case Some(x) =>
             reporter.error(_exp.fullPosOpt, GclResolver.toolName, st"Expecting ${(expectedType, ".")} but found $x".render)
             _exp
