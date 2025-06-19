@@ -157,11 +157,12 @@ import org.sireum.hamr.codegen.common.types._
           ret = ret :+ st"""// Import I's interpolator to create instances of I.  For e.g.,
                             |//   import ${at.nameProvider.qualifiedReferencedTypeName}.I._
                             |//   object Example {
-                            |//     val value: ${at.nameProvider.qualifiedReferencedTypeName}.I = i"0"
+                            |//     val array: ${at.nameProvider.qualifiedReferencedTypeName} = ${at.nameProvider.qualifiedReferencedTypeName}.example()
+                            |//     val elem: ${at.baseType.nameProvider.qualifiedReferencedTypeName} = array(i"0")
                             |//     ...
                             |//
                             |// Use the ${fingerprint} method when using multiple <array-def>.I indexing types in the same
-                            |// context.  Alternatively, rename I and use its fromZ method when using multiple
+                            |// context.  Alternatively, rename the I's and use their fromZ methods.  For e.g.
                             |//   import ${at.nameProvider.qualifiedReferencedTypeName}.{I => I0}
                             |//   import <other-array-def>.{I => I1}
                             |//   object Example {

@@ -172,7 +172,6 @@ object TypeNameUtil {
       case TypeKind.Bit => TypeUtil.BIT_FINGERPRINT
       case _ =>
         val enumSuffix: String = if (isEnum) "_Type" else ""
-        //val cPackageName = ops.StringOps(packageName).replaceAllChars('.', '_')
         val cPackageName = st"${(packageNameI, "_")}".render
         StringUtil.sanitizeName(s"${basePackageName}_${cPackageName}_${typeName}${enumSuffix}")
     }
@@ -181,7 +180,7 @@ object TypeNameUtil {
 
   def example(): String = {
     val ret: String = kind match {
-      case TypeKind.Enum => s"${qualifiedTypeName}.byOrdinal(0).get"
+      case TypeKind.Enum => s"${qualifiedTypeName}.${enumValues(0)}"
       case TypeKind.Base => s"${qualifiedTypeName}_example()"
       case TypeKind.Bit => s"${qualifiedTypeName}_example()"
       case TypeKind.Array => s"${qualifiedTypeName}.example()"
