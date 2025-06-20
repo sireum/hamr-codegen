@@ -915,7 +915,7 @@ object ComputeContributions {
         val content =
           st"""${Util.doNotEdit}
               |
-              |use crate::data::*;
+              |use data::*;
               |
               |macro_rules! implies {
               |  ($$lhs: expr, $$rhs: expr) => {

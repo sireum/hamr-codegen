@@ -10,7 +10,8 @@ import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.plugins.apis.CRustApiPlugin
 import org.sireum.hamr.codegen.microkit.plugins.types.CRustTypePlugin
 import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, MicrokitPlugin}
-import org.sireum.hamr.codegen.microkit.util.{MakefileTarget, MakefileUtil, Util}
+import org.sireum.hamr.codegen.microkit.util.Util.TAB
+import org.sireum.hamr.codegen.microkit.util.{MakefileTarget, MakefileUtil, RustUtil, Util}
 import org.sireum.hamr.ir.Aadl
 import org.sireum.message.Reporter
 import org.sireum.hamr.codegen.microkit.{rust => RustAst}
@@ -91,7 +92,7 @@ object ComponentContributions {}
           RustAst.AttributeST(T, st"allow(non_snake_case)"))
 
         val uses: ISZ[RustAst.Item] = ISZ(
-          RustAst.Use(ISZ(), RustAst.IdentString("crate::data::*")),
+          RustAst.Use(ISZ(), RustAst.IdentString("data::*")),
           RustAst.Use(ISZ(), RustAst.IdentString(s"crate::bridge::${CRustApiPlugin.apiModuleName(thread)}::*")),
           RustAst.Use(ISZ(
             RustAst.AttributeST(F, st"cfg(feature = \"sel4\")"),
@@ -239,22 +240,12 @@ object ComponentContributions {}
         val content =
           st"""#![cfg_attr(not(test), no_std)]
               |
-              |#![allow(non_camel_case_types)]
-              |#![allow(non_snake_case)]
-              |#![allow(non_upper_case_globals)]
-              |
-              |#![allow(dead_code)]
-              |#![allow(static_mut_refs)]
-              |#![allow(unused_unsafe)]
-              |#![allow(unused_imports)]
-              |#![allow(unused_variables)]
-              |#![allow(unused_parens)]
+              |${RustUtil.defaultCrateLevelAttributes}
               |
               |${Util.doNotEdit}
               |
               |mod bridge;
               |mod component;
-              |mod data;
               |mod logging;
               |mod tests;
               |
@@ -262,7 +253,6 @@ object ComponentContributions {}
               |use crate::component::${CRustComponentPlugin.appModuleName(thread)}::*;
               |use data::*;
               |
-              |#[cfg(feature = "sel4")]
               |#[allow(unused_imports)]
               |use log::{error, warn, info, debug, trace};
               |
@@ -298,15 +288,10 @@ object ComponentContributions {}
               |
               |// Need a Panic handler in a no_std environment
               |#[panic_handler]
-              |#[cfg(feature = "sel4")]
               |#[cfg(not(test))]
               |fn panic(info: &core::panic::PanicInfo) -> ! {
               |  error!("PANIC: {info:#?}");
               |  loop {}
-              |}
-              |
-              |fn main() {
-              |  // TODO: required by Verus CLI (i.e. 'verus src/lib.rs')
               |}
               |"""
         val path = s"$componentSrcDir/lib.rs"
@@ -395,9 +380,8 @@ object ComponentContributions {}
               |log = "0.4.27"
               |sel4 = { git = "https://github.com/seL4/rust-sel4", features = ["single-threaded"], optional = true }
               |sel4-logging = { git = "https://github.com/seL4/rust-sel4", optional = true}
-              |vstd = { git = "https://github.com/verus-lang/verus.git", default-features=false }
-              |builtin = { git = "https://github.com/verus-lang/verus.git" }
-              |builtin_macros = { git = "https://github.com/verus-lang/verus.git" }
+              |${RustUtil.verusCargoDependencies}
+              |data = { path = "../data" }
               |
               |[dev-dependencies]
               |lazy_static = "1.5.0"
@@ -410,6 +394,9 @@ object ComponentContributions {}
               |
               |[features]
               |sel4 = ["dep:sel4", "dep:sel4-logging" ]
+              |
+              |[package.metadata.verus]
+              |verify = true
               |"""
         val path = s"$componentCrateDir/Cargo.toml"
         resources = resources :+ ResourceUtil.createResource(path, content, F)
@@ -425,41 +412,37 @@ object ComponentContributions {}
               |                                            $$(microkit_sdk_config_dir)/debug/include))
               |
               |all:
-              |	SEL4_INCLUDE_DIRS=$$(abspath $$(sel4_include_dirs)) \
-              |		cargo build \
-              |			--features sel4 \
-              |			-Z build-std=core,alloc,compiler_builtins \
-              |			-Z build-std-features=compiler-builtins-mem \
-              |			--target aarch64-unknown-none \
-              |			--release
+              |${TAB}RUSTC_BOOTSTRAP=1 \
+              |${TAB}SEL4_INCLUDE_DIRS=$$(abspath $$(sel4_include_dirs)) \
+              |${TAB}cargo build \
+              |${TAB}${TAB}--features sel4 \
+              |${TAB}${TAB}-Z build-std=core,alloc,compiler_builtins \
+              |${TAB}${TAB}-Z build-std-features=compiler-builtins-mem \
+              |${TAB}${TAB}--target aarch64-unknown-none \
+              |${TAB}${TAB}--release
               |
               |verus:
-              |	verus src/lib.rs
-              |
-              |#verus-build:
-              |#	 verus \
-              |#	 	--crate-type=staticlib \
-              |#		--multiple-errors 5 \
-              |#		--compile \
-              |#		src/lib.rs
+              |${TAB}RUSTC_BOOTSTRAP=1 \
+              |${TAB}SEL4_INCLUDE_DIRS=$$(abspath $$(sel4_include_dirs)) \
+              |${TAB}cargo verus verify \
+              |${TAB}${TAB}-Z build-std=core,alloc,compiler_builtins \
+              |${TAB}${TAB}-Z build-std-features=compiler-builtins-mem \
+              |${TAB}${TAB}--target aarch64-unknown-none \
+              |${TAB}${TAB}--release
               |
               |test:
-              |	cargo test
+              |${TAB}cargo test
               |
               |clean:
-              |	cargo clean
+              |${TAB}cargo clean
               |"""
         val path = s"$componentCrateDir/Makefile"
         resources = resources :+ ResourceUtil.createResource(path, content, F)
       }
 
       { // rust-toolchain.toml
-        val content = st"""${Util.safeToEditMakefile}
-                          |
-                          |[toolchain]
-                          |channel = "nightly"
-                          |components = [ "rustfmt", "rust-src", "rustc-dev", "llvm-tools-preview", "rust-analyzer" ]
-                          |"""
+        val content = RustUtil.defaultRustToolChainToml
+
         val path = s"$componentCrateDir/rust-toolchain.toml"
         resources = resources :+ ResourceUtil.createResource(path, content, F)
       }

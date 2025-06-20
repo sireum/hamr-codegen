@@ -5,17 +5,16 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{BoolValue, IdPath, Store, StoreValue}
 import org.sireum.hamr.codegen.common.StringUtil
 import org.sireum.hamr.codegen.common.containers.Resource
-import org.sireum.hamr.codegen.common.symbols.{AadlThread, SymbolTable}
+import org.sireum.hamr.codegen.common.symbols.SymbolTable
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, ArrayType, BaseType, EnumType, RecordType, TypeUtil}
 import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
 import org.sireum.hamr.codegen.common.util.HamrCli.CodegenHamrPlatform
 import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, MicrokitPlugin}
-import org.sireum.hamr.codegen.microkit.plugins.component.CRustComponentPlugin
 import org.sireum.hamr.codegen.microkit.plugins.linters.MicrokitLinterPlugin
 import org.sireum.hamr.codegen.microkit.rust.Visibility
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
-import org.sireum.hamr.codegen.microkit.util.Util
-import org.sireum.hamr.ir.{Aadl, BLESSAnnex}
+import org.sireum.hamr.codegen.microkit.util.{RustUtil, Util}
+import org.sireum.hamr.ir.Aadl
 import org.sireum.message.Reporter
 import org.sireum.hamr.codegen.microkit.{rust => RustAst}
 
@@ -37,7 +36,7 @@ object CRustTypePlugin {
 
   @strictpure def getArrayDimName(arrayTypeNampeProvider: CRustTypeNameProvider, dim: Z): String = st"${(arrayTypeNampeProvider.qualifiedRustNameS, "_")}_DIM_$dim".render
 
-  @strictpure def dataDirectory(thread: AadlThread, options: HamrCli.CodegenOption): String = s"${CRustComponentPlugin.componentCrateDirectory(thread, options)}/src/data"
+  @strictpure def dataDirectory(options: HamrCli.CodegenOption): String = s"${options.sel4OutputDir.get}/crates/data"
 }
 
 @sig trait CRustTypeNameProvider {
@@ -129,14 +128,14 @@ object CRustTypePlugin {
     // TODO verus doesn't play too well with having a common types library (ie. each create depends on ../data)
     //      A workaround until cargo+verus is improved is to nest the library into each crate
 
-    for (thread <- symbolTable.getThreads() if Util.isRusty(thread)) {
-      val rootDataDir = CRustTypePlugin.dataDirectory(thread, options)
+    val rootDataDir = CRustTypePlugin.dataDirectory(options)
+    val rootDataSrcDir = s"$rootDataDir/src"
 
       var modIncludes: Map[IdPath, ISZ[ST]] = Map.empty
       for(e <- typeProvider.rustTypeDefs.entries) {
         val nameProvider = typeProvider.getTypeNameProvider(types.typeMap.get(e._1).get)
         val fname = s"${nameProvider.simpleRustName}.rs"
-        val path = st"$rootDataDir/${(nameProvider.packageRustNames, "/")}/$fname".render
+        val path = st"$rootDataSrcDir/${(nameProvider.packageRustNames, "/")}/$fname".render
 
         val content = st"${(for(i <- e._2) yield i.prettyST, "\n\n")}"
 
@@ -162,17 +161,17 @@ object CRustTypePlugin {
               |pub use xx::*;
               |
               |however this would create a module out of xx.rs so to refer to the datatype
-              |it contains you'd have to do something like "use crate::data::xx::xx"
+              |it contains you'd have to do something like "use data::xx::xx"
               |in lib.rs. A workaround is to rename the file, e.g. xx_STRUCT.rs but leave the
               |file contents unchanged.  Then in this file do
               |
               |pub mod xx_STRUCT;
               |pub use xx_STRUCT::*;
               |
-              |then xx would be imported in lib.rs via "use crate::data::${(p._1, "::")}::*"
+              |then xx would be imported in lib.rs via "use data::${(p._1, "::")}::*"
               |*/
               |"""
-        val packageModPath = st"${rootDataDir}/${(p._1, "/")}/mod.rs".render
+        val packageModPath = st"${rootDataSrcDir}/${(p._1, "/")}/mod.rs".render
         resources = resources :+ ResourceUtil.createResourceH(path = packageModPath, content = packageMod, overwrite = T, isDatatype = T)
       }
 
@@ -182,7 +181,7 @@ object CRustTypePlugin {
               |
               |pub type sb_event_counter_t = usize;
               |"""
-        val sbEventCounterPath = s"$rootDataDir/sb_event_counter.rs"
+        val sbEventCounterPath = s"$rootDataSrcDir/sb_event_counter.rs"
         resources = resources :+ ResourceUtil.createResourceH(path = sbEventCounterPath, content = sbEventCounter, overwrite = T, isDatatype = T)
       }
 
@@ -192,23 +191,52 @@ object CRustTypePlugin {
               |
               |pub type microkit_channel = u32;
               |"""
-        val sbMicrokitTypesPath = s"$rootDataDir/sb_microkit_types.rs"
+        val sbMicrokitTypesPath = s"$rootDataSrcDir/sb_microkit_types.rs"
         resources = resources :+ ResourceUtil.createResourceH(path = sbMicrokitTypesPath, content = sbMicrokitTypes, overwrite = T, isDatatype = T)
       }
 
-      { // src/data/mod.rs
+      { // src/lib.rs
         val dataMod =
-          st"""${Util.doNotEdit}
+          st"""#![cfg_attr(not(test), no_std)]
+              |
+              |${RustUtil.defaultCrateLevelAttributes}
+              |
+              |${Util.doNotEdit}
               |
               |${(for (k <- modIncludes.keys) yield st"pub mod ${(k, "::")};", "\n")}
               |
               |include!("sb_event_counter.rs");
               |include!("sb_microkit_types.rs");
               |"""
-        val dataModPath = s"${rootDataDir}/mod.rs"
+        val dataModPath = s"${rootDataSrcDir}/lib.rs"
         resources = resources :+ ResourceUtil.createResourceH(path = dataModPath, content = dataMod, overwrite = T, isDatatype = T)
       }
+
+    { // Cargo.toml
+      val content = st"""${Util.safeToEditMakefile}
+                        |
+                        |[package]
+                        |name = "data"
+                        |version = "0.1.0"
+                        |edition = "2021"
+                        |
+                        |[dependencies]
+                        |${RustUtil.verusCargoDependencies}
+                        |
+                        |[package.metadata.verus]
+                        |verify = true
+                        |"""
+      val cargoTomlPath = s"${rootDataDir}/Cargo.toml"
+      resources = resources :+ ResourceUtil.createResourceH(path = cargoTomlPath, content = content, overwrite = T, isDatatype = T)
     }
+
+    { // rust-toolchain.toml
+      val content = RustUtil.defaultRustToolChainToml
+
+      val rusttoolchain = s"${rootDataDir}/rust-toolchain.toml"
+      resources = resources :+ ResourceUtil.createResourceH(path = rusttoolchain, content = content, overwrite = T, isDatatype = T)
+    }
+
     return (store + s"FINALIZED_$name" ~> BoolValue(true), resources)
   }
 
@@ -252,7 +280,7 @@ object CRustTypePlugin {
 
     ret = ret :+ RustAst.ItemST(Util.doNotEdit)
     ret = ret :+ RustAst.Use(ISZ(), RustAst.IdentString("vstd::prelude::*"))
-    ret = ret :+ RustAst.Use(ISZ(), RustAst.IdentString("crate::data::*"))
+    ret = ret :+ RustAst.Use(ISZ(), RustAst.IdentString("super::*"))
 
     var uses: Set[RustAst.IdentString] = Set.empty
 
@@ -267,7 +295,7 @@ object CRustTypePlugin {
       val qualfiedName = getTypePackageNamesName(subT)
       val tPackageName = ops.ISZOps(qualfiedName).dropRight(1)
       if (!subT.isInstanceOf[BaseType] && aadlTypePackageName != tPackageName) {
-        uses = uses + RustAst.IdentString(st"crate::data::${(tPackageName, "::")}::*".render)
+        uses = uses + RustAst.IdentString(st"super::${(tPackageName, "::")}::*".render)
       }
       return RustAst.TypeAadl(
         qualifiedNameS = qualfiedName,

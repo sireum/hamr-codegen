@@ -197,7 +197,7 @@ object ComponentApiContributions {
               |//! This code must be unsafe.
               |//! Assumptions about correctness are introduced and need to be verified by other means.
               |
-              |use crate::data::*;
+              |use data::*;
               |
               |#[cfg(test)]
               |use std::sync::Mutex;
@@ -239,7 +239,7 @@ object ComponentApiContributions {
           st"""${Util.doNotEdit}
               |
               |use vstd::prelude::*;
-              |use crate::data::*;
+              |use data::*;
               |use super::extern_c_api as extern_api;
               |
               |verus! {
@@ -321,7 +321,7 @@ object ComponentApiContributions {
               |  use serial_test::serial;
               |
               |  use crate::bridge::extern_c_api as extern_api;
-              |  use crate::data::*;
+              |  use data::*;
               |
               |  #[test]
               |  #[serial]
