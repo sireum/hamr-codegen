@@ -298,9 +298,9 @@ object SlangExpUtil {
           if (inVerus) {
             val quantType: String = if (exp.isForall) "forall" else "exists"
 
-            val range = st"$lo <= $param && $param <= $hi"
+            val range = st"$lo <= $param <= $hi"
 
-            return st"$quantType|$param:int| $range ==> $body"
+            return st"$quantType|$param:int| $range && $body"
           } else {
             val b: ST =
               if (exp.isForall)
