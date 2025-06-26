@@ -33,19 +33,19 @@ import Templates._
                         matches: Option[Matches.Type]
                        )
 
-@datatype class Feature (productId: String,
-                         featureId: String,
-                         version: String,
+@datatype class Feature(productId: String,
+                        featureId: String,
+                        version: String,
 
-                         productName: String,
-                         productDescription: String,
-                         providerName: String,
+                        productName: String,
+                        productDescription: String,
+                        providerName: String,
 
-                         requires: ISZ[Require],
+                        requires: ISZ[Require],
 
-                         updateSiteName: String,
-                         directory: Os.Path
-                         )
+                        updateSiteName: String,
+                        directory: Os.Path
+                       )
 
 val osate_plugin_dir = Os.home / "devel" / "sireum" / "osate-plugin"
 val dest = Os.home / "devel" / "sireum" / "osate-update-site"
@@ -63,49 +63,50 @@ val knownProjects: Map[String, Os.Path] = Map(ISZ(
 
 val archivedFeatures: Set[String] = Set.empty[String] + "org.sireum.aadl.osate.securitymodel"
 
-for(releaseDir <- releases) {
-  val features = getSortedDirs(releaseDir)
+val releaseDir = releases(releases.lastIndex)
+val features = getSortedDirs(releaseDir)
 
-  var previousVersion: String = ""
-  for(featureUpdateDir <- features if !archivedFeatures.contains(featureUpdateDir.name)) {
-    println(s"Processing ${featureUpdateDir}")
+var previousVersion: String = ""
+for (featureUpdateDir <- features if !archivedFeatures.contains(featureUpdateDir.name)) {
+  println(s"Processing ${featureUpdateDir}")
 
-    val projDir = knownProjects.get(featureUpdateDir.name).get
-    val feature: Feature = parse(projDir / s"${featureUpdateDir.name}.feature")
+  val projDir = knownProjects.get(featureUpdateDir.name).get
+  val feature: Feature = parse(projDir / s"${featureUpdateDir.name}.feature")
 
-    val featuresDir = (featureUpdateDir / "features")
-    assert(featuresDir.list.size == 1, s"${featuresDir.value} -- ${featuresDir.list.size}")
+  val featuresDir = (featureUpdateDir / "features")
+  assert(featuresDir.list.size == 1, s"${featuresDir.value} -- ${featuresDir.list.size}")
 
-    val featureJarFile = featuresDir.list(0)
-    val jarName = ops.StringOps(featureJarFile.name)
-    val pluginVersion: String = jarName.substring(jarName.lastIndexOf('_') + 1, jarName.lastIndexOf('.'))
-    val noTimePluginVersion: String = jarName.substring(jarName.lastIndexOf('_') + 1, jarName.lastIndexOf('.') - 4)
-    val site_xml_contents = site_xml(feature.updateSiteName, featureJarFile.name, feature.featureId, pluginVersion)
+  val featureJarFile = featuresDir.list(0)
+  val jarName = ops.StringOps(featureJarFile.name)
+  val pluginVersion: String = jarName.substring(jarName.lastIndexOf('_') + 1, jarName.lastIndexOf('.'))
+  val noTimePluginVersion: String = jarName.substring(jarName.lastIndexOf('_') + 1, jarName.lastIndexOf('.') - 4)
+  val site_xml_contents = site_xml(feature.updateSiteName, featureJarFile.name, feature.featureId, pluginVersion)
 
-    (featureUpdateDir / "site.xml").writeOver(site_xml_contents.render)
-    println(s"Wrote: ${(featureUpdateDir / "site.xml").value}")
+  (featureUpdateDir / "site.xml").writeOver(site_xml_contents.render)
+  println(s"Wrote: ${(featureUpdateDir / "site.xml").value}")
 
-    if(previousVersion == "") {
-      // the various plugins should all have been build within the same day???
-      previousVersion = noTimePluginVersion
-    }
-    else { assert (previousVersion == noTimePluginVersion, s"${previousVersion} vs ${noTimePluginVersion} for ${featuresDir}")}
+  if (previousVersion == "") {
+    // the various plugins should all have been build within the same day???
+    previousVersion = noTimePluginVersion
   }
-
-  val (a,b): (ST, ST) = composite(features.map(m => m.name))
-  (releaseDir / "compositeArtifacts.xml").writeOver(a.render)
-  (releaseDir / "compositeContent.xml").writeOver(b.render)
-
-  val versions = ops.StringOps(releaseDir.name).split(c => c == '.')
-  val isLatest = releaseDir == releases(releases.lastIndex)
-  val pluginReadme = releaseUpdateSiteReadme(releaseDir.name, versions(versions.size - 1), isLatest)
-
-  (releaseDir / "readme.md").writeOver(pluginReadme.render)
+  else {
+    assert(previousVersion == noTimePluginVersion, s"${previousVersion} vs ${noTimePluginVersion} for ${featuresDir}")
+  }
 }
 
-val (a,b): (ST, ST) = composite(releases.map(m => m.name))
-(dest / "compositeArtifacts.xml").writeOver(a.render)
-(dest / "compositeContent.xml").writeOver(b.render)
+val (a, b): (ST, ST) = composite(features.map(m => m.name))
+(releaseDir / "compositeArtifacts.xml").writeOver(a.render)
+(releaseDir / "compositeContent.xml").writeOver(b.render)
+
+val versions = ops.StringOps(releaseDir.name).split(c => c == '.')
+
+val pluginReadme = releaseUpdateSiteReadme(releaseDir.name, versions(versions.size - 1))
+(releaseDir / "readme.md").writeOver(pluginReadme.render)
+
+
+val (c, d): (ST, ST) = composite(releases.map(m => m.name))
+(dest / "compositeArtifacts.xml").writeOver(c.render)
+(dest / "compositeContent.xml").writeOver(d.render)
 (dest / "readme.md").writeOver(rootUpdateSiteReadme(releases).render)
 
 object Templates {
@@ -121,18 +122,18 @@ object Templates {
     return str.substring(str.indexOf('"') + 1, str.lastIndexOf('"'))
   }
 
-  def parseImport(str : ops.StringOps): Require = {
+  def parseImport(str: ops.StringOps): Require = {
     val pluginPos = str.stringIndexOf("plugin=")
     val plugin = str.substring(pluginPos + 8, str.indexOfFrom('"', pluginPos + 9))
     var version: Option[String] = None()
     var matches: Option[Matches.Type] = None()
 
     val versionPos = str.stringIndexOf("version=")
-    if(versionPos > 0) {
+    if (versionPos > 0) {
       version = Some(str.substring(versionPos + 9, str.indexOfFrom('"', versionPos + 10)))
     }
     val matchPos = str.stringIndexOf("match=")
-    if(matchPos > 0) {
+    if (matchPos > 0) {
       val m = str.substring(matchPos + 7, str.indexOfFrom('"', matchPos + 8))
       m match {
         case "greaterOrEqual" => matches = Some(Matches.GreaterOrEqual)
@@ -157,11 +158,11 @@ object Templates {
     var version: String = ""
     var providerName: String = ""
     var updateSiteName: String = ""
-    var requires: ISZ[Require]= ISZ()
+    var requires: ISZ[Require] = ISZ()
     var i = 0
     while (i < lines.size) {
       var line = ops.StringOps(lines(i))
-      if(line.startsWith("<feature")) {
+      if (line.startsWith("<feature")) {
         featureId = getQuote(lines(i + 1))
         productName = getQuote(lines(i + 2))
         version = getQuote(lines(i + 3))
@@ -170,24 +171,25 @@ object Templates {
         updateSiteName = s"${productName} Update Site"
       }
 
-      if(line.contains("<description")) {
+      if (line.contains("<description")) {
         i = i + 1
         while (!ops.StringOps(lines(i)).contains("</description>")) {
-          productDescription = st"""${productDescription}
-                                   |${lines(i)}""".render
+          productDescription =
+            st"""${productDescription}
+                |${lines(i)}""".render
           i = i + 1
         }
       }
 
-      if(line.contains("<requires>")) {
-        i = i  + 1
-        while(ops.StringOps(lines(i)).contains("<import")) {
+      if (line.contains("<requires>")) {
+        i = i + 1
+        while (ops.StringOps(lines(i)).contains("<import")) {
           requires = requires :+ parseImport(ops.StringOps(lines(i)))
-          i = i  + 1
+          i = i + 1
         }
       }
 
-      if(line.contains("<plugin")) {
+      if (line.contains("<plugin")) {
         productId = getQuote(lines(i + 1))
       }
 
@@ -202,27 +204,28 @@ object Templates {
                jarFile: String,
                featureId: String,
                featureVersion: String): ST = {
-    val ret = st"""<?xml version="1.0" encoding="UTF-8"?>
-                  |<site>
-                  |   <description name="${updateSiteName}">
-                  |      ${updateSiteName}
-                  |   </description>
-                  |   <feature url="features/${jarFile}" id="${featureId}" version="${featureVersion}">
-                  |      <category name="org.sireum.aadl.osate.category"/>
-                  |   </feature>
-                  |   <category-def name="org.sireum.aadl.osate.category" label="Sireum">
-                  |      <description>
-                  |         Sireum features
-                  |      </description>
-                  |   </category-def>
-                  |</site>
-                  |"""
+    val ret =
+      st"""<?xml version="1.0" encoding="UTF-8"?>
+          |<site>
+          |   <description name="${updateSiteName}">
+          |      ${updateSiteName}
+          |   </description>
+          |   <feature url="features/${jarFile}" id="${featureId}" version="${featureVersion}">
+          |      <category name="org.sireum.aadl.osate.category"/>
+          |   </feature>
+          |   <category-def name="org.sireum.aadl.osate.category" label="Sireum">
+          |      <description>
+          |         Sireum features
+          |      </description>
+          |   </category-def>
+          |</site>
+          |"""
     return ret
   }
 
   def build_xml(destDir: Os.Path,
-        featureId: String,
-        qualifier: String): ST = {
+                featureId: String,
+                qualifier: String): ST = {
 
     val ret: ST =
       st"""<?xml version="1.0" encoding="UTF-8"?>
@@ -241,35 +244,37 @@ object Templates {
   def composite(locations: ISZ[String]): (ST, ST) = {
     val children = locations.map((m: String) => s"<child location='${m}'/>")
     val size = locations.size
-    val a = st"""<?xml version='1.0' encoding='UTF-8'?>
-                |<?compositeArtifactRepository version='1.0.0'?>
-                |<repository name='Sireum OSATE Update Site'
-                |    type='org.eclipse.equinox.internal.p2.artifact.repository.CompositeArtifactRepository' version='1.0.0'>
-                |  <properties size='1'>
-                |    <property name='p2.timestamp' value='1243822502440'/>
-                |  </properties>
-                |  <children size='${size}'>
-                |    ${(children, "\n")}
-                |  </children>
-                |</repository>
-                |"""
+    val a =
+      st"""<?xml version='1.0' encoding='UTF-8'?>
+          |<?compositeArtifactRepository version='1.0.0'?>
+          |<repository name='Sireum OSATE Update Site'
+          |    type='org.eclipse.equinox.internal.p2.artifact.repository.CompositeArtifactRepository' version='1.0.0'>
+          |  <properties size='1'>
+          |    <property name='p2.timestamp' value='1243822502440'/>
+          |  </properties>
+          |  <children size='${size}'>
+          |    ${(children, "\n")}
+          |  </children>
+          |</repository>
+          |"""
 
-    val b = st"""<?xml version='1.0' encoding='UTF-8'?>
-                |<?compositeMetadataRepository version='1.0.0'?>
-                |<repository name='Sireum OSATE Update Site'
-                |    type='org.eclipse.equinox.internal.p2.metadata.repository.CompositeMetadataRepository' version='1.0.0'>
-                |  <properties size='1'>
-                |    <property name='p2.timestamp' value='1243822502499'/>
-                |  </properties>
-                |  <children size='${size}'>
-                |    ${(children, "\n")}
-                |  </children>
-                |</repository>
-                |"""
+    val b =
+      st"""<?xml version='1.0' encoding='UTF-8'?>
+          |<?compositeMetadataRepository version='1.0.0'?>
+          |<repository name='Sireum OSATE Update Site'
+          |    type='org.eclipse.equinox.internal.p2.metadata.repository.CompositeMetadataRepository' version='1.0.0'>
+          |  <properties size='1'>
+          |    <property name='p2.timestamp' value='1243822502499'/>
+          |  </properties>
+          |  <children size='${size}'>
+          |    ${(children, "\n")}
+          |  </children>
+          |</repository>
+          |"""
     return (a, b)
   }
 
-  def rootUpdateSiteReadme(dirs: ISZ[Os.Path]) : ST = {
+  def rootUpdateSiteReadme(dirs: ISZ[Os.Path]): ST = {
     val _dirs = dirs.map((m: Os.Path) => s"- [${m.name}](${m.name})")
     val ret =
       st"""# Sireum OSATE Plugins Releases
@@ -299,18 +304,15 @@ object Templates {
     return ret
   }
 
-  def releaseUpdateSiteReadme(version: String, sireumVersion: String, isLatest: B) : ST = {
-    val optSireumJar: Option[ST] =
-    if (isLatest) {
+  def releaseUpdateSiteReadme(version: String, sireumVersion: String): ST = {
+    val bootstrappingSireumJar: ST = {
       val f = Os.temp()
       f.downloadFrom("https://api.github.com/repos/sireum/kekinian/releases/latest")
       val cands = f.readLines.filter(p => ops.StringOps(p).contains("browser_download_url") && ops.StringOps(p).contains("sireum.jar"))
-      assert (cands.size == 1)
+      assert(cands.size == 1)
       val o = ops.StringOps(cands(0))
       val latestSireumJar = o.substring(o.stringIndexOf("url") + 7, o.size - 1)
-      Some(st"wget -O bin/sireum.jar $latestSireumJar")
-    } else {
-      None()
+      st"wget -O bin/sireum.jar $latestSireumJar"
     }
 
     val _features = ISZ[String]("cli", "hamr").map((m: String) => {
@@ -349,7 +351,7 @@ object Templates {
           |  cd Sireum
           |  git checkout ${sireumVersion}
           |  git submodule update --init --recursive
-          |  $optSireumJar
+          |  $bootstrappingSireumJar
           |  bin${bt}build.cmd
           |  bin${bt}sireum hamr phantom -u --features "${features}"
           |  ```
@@ -361,7 +363,7 @@ object Templates {
           |  cd Sireum
           |  git checkout ${sireumVersion}
           |  git submodule update --init --recursive
-          |  $optSireumJar
+          |  $bootstrappingSireumJar
           |  bin/build.cmd
           |  bin/sireum hamr phantom -u --features "${features}"
           |  ```
@@ -373,7 +375,7 @@ object Templates {
           |  cd Sireum
           |  git checkout ${sireumVersion}
           |  git submodule update --init --recursive
-          |  $optSireumJar
+          |  $bootstrappingSireumJar
           |  bin/build.cmd
           |  bin/sireum hamr phantom -u --features "${features}"
           |  ```

@@ -30,7 +30,7 @@ val localUpdateSites: B = T || ops.ISZOps(Os.cliArgs).contains("local")
 val sireumHome = Os.path(Os.env("SIREUM_HOME").get)
 
 val osateLoc = Os.path("/Applications") / "osate.app" / "Contents" / "MacOS" / "osate"
-val fmideLoc = sireumHome / "bin" / "linux" / "fmide" / "fmide"
+val fmideLoc = sireumHome / "bin" / "mac" / "fmide.app" / "Contents" / "MacOS" / "osate"
 
 val remoteUpdateSite = "https://raw.githubusercontent.com/sireum/osate-update-site/master"
 val localUpdateSite = (Os.home / "devel" / "sireum" / "osate-update-site").toUri
@@ -102,11 +102,20 @@ def gc(_osateExe: Os.Path): Unit = {
   proc"${_osateExe.string} -nosplash -console -consoleLog -application org.eclipse.equinox.p2.garbagecollector.application -profile DefaultProfile".at(_osateExe.up).runCheck()
 }
 
-
-def isInstalled(featureId: String, _osateExe: Os.Path): B = {
+def getVersion(featureId: String, _osateExe: Os.Path): Option[String] = {
   val installedPlugins = Os.proc(ISZ(_osateExe.string, "-nosplash", "-console", "-consoleLog", "-application", "org.eclipse.equinox.p2.director",
     "-listInstalledRoots")).at(_osateExe.up).runCheck()
-  return ops.StringOps(installedPlugins.out).contains(featureId)
+  val l = ops.StringOps(installedPlugins.out).split(c => c == '\n')
+  l.filter(f => ops.StringOps(f).startsWith(featureId)) match {
+    case ISZ(i) =>
+      val x = ops.StringOps(i)
+      return Some(x.substring(x.indexOf('/') + 1, x.size))
+    case _ => return None()
+  }
+}
+
+def isInstalled(featureId: String, _osateExe: Os.Path): B = {
+  return getVersion(featureId, _osateExe).nonEmpty
 }
 
 def uninstallPlugin(feature: Feature, _osateExe : Os.Path): Unit = {
@@ -123,6 +132,8 @@ def installPlugin(feature: Feature, _osateExe : Os.Path): Unit = {
   Os.proc(ISZ(_osateExe.string, "-nosplash", "-console", "-consoleLog", "-application", "org.eclipse.equinox.p2.director",
     "-repository", updateSite, "-installIU", feature.id
   )).at(_osateExe.up).runCheck()
+
+  addInfo(s"Installed ${feature.name} ${getVersion(featureId = feature.id, _osateExe = _osateExe).get}")
 }
 
 def addInfo(s: String): Unit = { cprintln(F, s ) }
