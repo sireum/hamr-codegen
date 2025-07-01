@@ -1,0 +1,25 @@
+name: Check Disabled Workflows
+
+on:
+  push:
+  schedule:
+    - cron: "0 2 * * 6" # every sunday at 2am
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Run workflow checker
+        env:
+          GITHUB_TOKEN: ${{ secrets.REPO_PAT }}
+        run: python3 bin/repocheck.py
