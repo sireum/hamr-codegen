@@ -4,7 +4,6 @@ package org.sireum.hamr.codegen.microkit.plugins.gumbo
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{BoolValue, DataIdPath, ISZValue, Store, StoreValue, ThreadIdPath, TypeIdPath}
 import org.sireum.hamr.codegen.common.containers.{Marker, Resource}
-import org.sireum.hamr.codegen.common.resolvers.GclResolver
 import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlEventPort, AadlThread, GclAnnexClauseInfo, SymbolTable}
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes}
 import org.sireum.hamr.codegen.common.util.HamrCli
@@ -123,16 +122,71 @@ object GumboRustPlugin {
 
       var optStateVarInits: ISZ[ST] = ISZ()
       if (subclauseInfo.annex.state.nonEmpty) {
-        // add a Rust field to the struct definition for each state variable
-        var stateVars: ISZ[RAST.StructField] = ISZ()
-        for(sv <- subclauseInfo.annex.state) {
-          val i = GumboRustUtil.processStateVariable(sv, types, CRustTypePlugin.getCRustTypeProvider(localStore).get)
-          stateVars = stateVars :+ i._1
-          optStateVarInits = optStateVarInits :+ i._2
+        val typeProvider = CRustTypePlugin.getCRustTypeProvider(localStore).get
+
+        { // add testing apis to get/set the state variables
+          var testingApis: ISZ[RAST.Item] = ISZ()
+          for (sv <- subclauseInfo.annex.state) {
+            val aadlType = typeProvider.getRepresentativeType(types.typeMap.get(sv.classifier).get)
+            val np = typeProvider.getTypeNameProvider(aadlType)
+            testingApis = testingApis :+ RAST.FnImpl(
+              attributes = ISZ(RAST.AttributeST(F, st"cfg(test)")),
+              visibility = RAST.Visibility.Public,
+              sig = RAST.FnSig(
+                ident = RAST.IdentString(s"get_${sv.name}"),
+                fnHeader = RAST.FnHeader(F),
+                fnDecl = RAST.FnDecl(
+                  inputs = ISZ(),
+                  outputs = RAST.FnRetTyImpl(RAST.TyPath(items = ISZ(np.qualifiedRustNameS), aadlType = Some(aadlType.classifier)))
+                ),
+                verusHeader = None(), generics = None()),
+              comments = ISZ(), contract = None(), meta =  ISZ(),
+              body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
+                st"""unsafe {
+                    |  match &crate::app {
+                    |    Some(inner) => inner.${sv.name},
+                    |    None => panic!("The app is None")
+                    |  }
+                    |}""" )))))
+
+            val typ = RAST.TyPath(items = ISZ(np.qualifiedRustNameS), aadlType = Some(aadlType.classifier))
+            testingApis = testingApis :+ RAST.FnImpl(
+              attributes = ISZ(RAST.AttributeST(F, st"cfg(test)")),
+              visibility = RAST.Visibility.Public,
+              sig = RAST.FnSig(
+                ident = RAST.IdentString(s"put_${sv.name}"),
+                fnHeader = RAST.FnHeader(F),
+                fnDecl = RAST.FnDecl(
+                  inputs = ISZ(RAST.ParamImpl(ident = RAST.IdentString("value"), kind = typ)),
+                  outputs = RAST.FnRetTyDefault()),
+                verusHeader = None(), generics = None()),
+              comments = ISZ(), contract = None(), meta =  ISZ(),
+              body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
+                st"""unsafe {
+                    |  match &mut crate::app {
+                    |    Some(inner) => inner.${sv.name} = value,
+                    |    None => panic!("The app is None")
+                    |  }
+                    |}""" )))))
+          }
+          val apiContributions = CRustApiPlugin.getCRustApiContributions(localStore).get
+          var apis = apiContributions.apiContributions.get(threadPath).get
+          apis = apis(testingApis = apis.testingApis ++ testingApis)
+          localStore = CRustApiPlugin.putCRustApiContributions(
+            apiContributions.addApiContributions(threadPath, apis), localStore)
         }
-        val m = Marker.createMarker("STATE VARS")
-        markers = markers :+ m
-        structDef = structDef(items = structDef.items :+ RAST.MarkerWrap(m, stateVars.asInstanceOf[ISZ[RAST.Item]], "\n"))
+
+        { // add a Rust field to the struct definition for each state variable
+          var stateVars: ISZ[RAST.StructField] = ISZ()
+          for (sv <- subclauseInfo.annex.state) {
+            val i = GumboRustUtil.processStateVariable(sv, types, typeProvider)
+            stateVars = stateVars :+ i._1
+            optStateVarInits = optStateVarInits :+ i._2
+          }
+          val m = Marker.createMarker("STATE VARS")
+          markers = markers :+ m
+          structDef = structDef(items = structDef.items :+ RAST.MarkerWrap(m, stateVars.asInstanceOf[ISZ[RAST.Item]], "\n"))
+        }
       }
 
       if (subclauseInfo.annex.methods.nonEmpty) {

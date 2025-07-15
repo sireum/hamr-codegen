@@ -915,7 +915,7 @@ object ComputeContributions {
         val content =
           st"""${Util.doNotEdit}
               |
-              |use data::*;
+              |use ${CRustTypePlugin.usePath};
               |
               |macro_rules! implies {
               |  ($$lhs: expr, $$rhs: expr) => {

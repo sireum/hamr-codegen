@@ -21,8 +21,10 @@ object CRustApiUtil {
     return ComponentApiContributions.empty(
       externCApis = ISZ(getCExternMethodSig(dstPort, portType, portTypeNameProvider)),
       unsafeExternCApiWrappers = ISZ(getUnsafeGetWrapper(dstPort, portType, crustTypeProvider)),
-      testingMockVariables = ISZ(testingArtifacts._1),
-      testingCApis = ISZ(testingArtifacts._2),
+      externApiTestMockVariables = ISZ(testingArtifacts._1),
+      externApiTestingApis = ISZ(testingArtifacts._2),
+
+      testingApis = ISZ(testingArtifacts._3),
 
       //putApis = ISZ(),
       unverifiedGetApis = ISZ(getBridgeGetApi(dstPort, portType, crustTypeProvider)),
@@ -44,8 +46,10 @@ object CRustApiUtil {
     return ComponentApiContributions.empty(
       externCApis = ISZ(getCExternMethodSig(srcPort, portType, portTypeNameProvider)),
       unsafeExternCApiWrappers = ISZ(getUnsafePutWrapper(srcPort, portType, crustTypeProvider)),
-      testingMockVariables = ISZ(testingArtifacts._1),
-      testingCApis = ISZ(testingArtifacts._2),
+      externApiTestMockVariables = ISZ(testingArtifacts._1),
+      externApiTestingApis = ISZ(testingArtifacts._2),
+
+      testingApis = ISZ(testingArtifacts._3),
 
       unverifiedPutApis = ISZ(getBridgePutApi(srcPort, portType, crustTypeProvider)),
       //getApis = ISZ(),
@@ -358,11 +362,11 @@ object CRustApiUtil {
 
   @pure def getCrustTestingArtifacts(p: AadlPort,
                                      aadlType: ISZ[String],
-                                     portTypeNameProvider: CRustTypeNameProvider): (RustAst.Item, RustAst.Item) = {
+                                     portTypeNameProvider: CRustTypeNameProvider): (RustAst.Item, RustAst.Item, RustAst.Item) = {
     if (p.direction == Direction.In) {
       val varName = s"IN_${p.identifier}"
-      val body: ST =
-        if (p.isEvent) {
+      val (externApiBody, testingApiBody): (ST, ST) = {
+        val eBody = if (p.isEvent) {
           st"""unsafe {
               |  match *$varName.lock().unwrap() {
               |    Some(v) => {
@@ -378,13 +382,15 @@ object CRustApiUtil {
               |  return true;
               |}"""
         }
+        (eBody, st"""*extern_api::$varName.lock().unwrap() = Some(value)""")
+      }
       val variable = RustAst.ItemStatic(
         ident = RustAst.IdentString(varName),
         visibility = RustAst.Visibility.Public,
         ty = RustAst.TyPath(ISZ(ISZ("Mutex"), ISZ("Option"), portTypeNameProvider.qualifiedRustNameS), Some(aadlType)),
         mutability = RustAst.Mutability.Not,
         expr = RustAst.ExprST(st"Mutex::new(None);"))
-      val test = RustAst.FnImpl(
+      val externApiMethod = RustAst.FnImpl(
         attributes = ISZ(RustAst.AttributeST(F, st"cfg(test)")),
         sig = RustAst.FnSig(
           ident = RustAst.IdentString(s"get_${p.identifier}"),
@@ -398,8 +404,21 @@ object CRustApiUtil {
             outputs = RustAst.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
           verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
         comments = ISZ(), visibility = RustAst.Visibility.Public, contract = None(), meta = ISZ(),
-        body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(body)))))
-      return (variable, test)
+        body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(externApiBody)))))
+      val testApiMethod = RustAst.FnImpl(
+        attributes = ISZ(RustAst.AttributeST(F, st"cfg(test)")),
+        visibility = RustAst.Visibility.Public,
+        sig = RustAst.FnSig(
+          ident = RustAst.IdentString(s"put_${p.identifier}"),
+          fnDecl = RustAst.FnDecl(
+            inputs = ISZ(RustAst.ParamImpl(
+              ident = RustAst.IdentString("value"),
+              kind = RustAst.TyPath(items = ISZ(portTypeNameProvider.qualifiedRustNameS), aadlType = Some(aadlType)))),
+            outputs = RustAst.FnRetTyDefault()),
+          verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
+        contract = None(), comments = ISZ(), meta = ISZ(),
+        body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(testingApiBody)))))
+      return (variable, externApiMethod, testApiMethod)
     } else {
       val varName = s"OUT_${p.identifier}"
       val variable = RustAst.ItemStatic(
@@ -408,7 +427,7 @@ object CRustApiUtil {
         ty = RustAst.TyPath(ISZ(ISZ("Mutex"), ISZ("Option"), portTypeNameProvider.qualifiedRustNameS), Some(aadlType)),
         mutability = RustAst.Mutability.Not,
         expr = RustAst.ExprST(st"Mutex::new(None);"))
-      val test = RustAst.FnImpl(
+      val externApiMethod = RustAst.FnImpl(
         attributes = ISZ(RustAst.AttributeST(F, st"cfg(test)")),
         sig = RustAst.FnSig(
           ident = RustAst.IdentString(s"put_${p.identifier}"),
@@ -427,7 +446,26 @@ object CRustApiUtil {
               |  *$varName.lock().unwrap() = Some(*value);
               |  return true;
               |}""")))))
-      return (variable, test)
+
+      val (testingApiBody, retType): (ST, RustAst.Ty) = {
+        if (p.isEvent) {
+          (st"return extern_api::$varName.lock().unwrap().clone()", RustAst.TyPath(items = ISZ(ISZ("Option"), portTypeNameProvider.qualifiedRustNameS), aadlType = Some(aadlType)))
+        } else {
+          (st"""return extern_api::$varName.lock().unwrap().expect("Not expecting None")""", RustAst.TyPath(items = ISZ(portTypeNameProvider.qualifiedRustNameS), aadlType = Some(aadlType)))
+        }
+      }
+      val testApiMethod = RustAst.FnImpl(
+        attributes = ISZ(RustAst.AttributeST(F, st"cfg(test)")),
+        visibility = RustAst.Visibility.Public,
+        sig = RustAst.FnSig(
+          ident = RustAst.IdentString(s"get_${p.identifier}"),
+          fnDecl = RustAst.FnDecl(
+            inputs = ISZ(),
+            outputs = RustAst.FnRetTyImpl(retType)),
+          verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
+        contract = None(), comments = ISZ(), meta = ISZ(),
+        body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(testingApiBody)))))
+      return (variable, externApiMethod, testApiMethod)
     }
   }
 }

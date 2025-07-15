@@ -48,7 +48,7 @@ object CRustApiPlugin {
 
 object ComponentApiContributions {
   @strictpure def empty: ComponentApiContributions = ComponentApiContributions(
-    ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ())
+    ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ())
 }
 
 @datatype class ComponentApiContributions( // items for bridge/mod.rs
@@ -58,9 +58,10 @@ object ComponentApiContributions {
                                            // items for extern_c_api.rs
                                            val externCApis: ISZ[RustAst.Item],
                                            val unsafeExternCApiWrappers: ISZ[RustAst.Item],
-                                           val testingMockVariables: ISZ[RustAst.Item],
-                                           val testingCApis: ISZ[RustAst.Item],
+                                           val externApiTestMockVariables: ISZ[RustAst.Item],
+                                           val externApiTestingApis: ISZ[RustAst.Item],
 
+                                           val testingApis: ISZ[RustAst.Item],
 
                                            // items for bridge api
                                            val unverifiedPutApis: ISZ[RustAst.Item],
@@ -78,8 +79,10 @@ object ComponentApiContributions {
 
       externCApis = this.externCApis ++ other.externCApis,
       unsafeExternCApiWrappers = this.unsafeExternCApiWrappers ++ other.unsafeExternCApiWrappers,
-      testingMockVariables = this.testingMockVariables ++ other.testingMockVariables,
-      testingCApis = this.testingCApis ++ other.testingCApis,
+      externApiTestMockVariables = this.externApiTestMockVariables ++ other.externApiTestMockVariables,
+      externApiTestingApis = this.externApiTestingApis ++ other.externApiTestingApis,
+
+      testingApis = this.testingApis ++ other.testingApis,
 
       unverifiedPutApis = this.unverifiedPutApis ++ other.unverifiedPutApis,
       unverifiedGetApis = this.unverifiedGetApis ++ other.unverifiedGetApis,
@@ -197,7 +200,7 @@ object ComponentApiContributions {
               |//! This code must be unsafe.
               |//! Assumptions about correctness are introduced and need to be verified by other means.
               |
-              |use data::*;
+              |use ${CRustTypePlugin.usePath};
               |
               |#[cfg(test)]
               |use std::sync::Mutex;
@@ -218,10 +221,10 @@ object ComponentApiContributions {
               |  // simulate the global C variables that point to the microkit shared memory regions.  In a full
               |  // microkit system we would be able to mutate the shared memory for out ports since they're r/w,
               |  // but we couldn't do that for in ports since they are read-only
-              |  ${(for (v <- c._2.testingMockVariables) yield v.prettyST, "\n")}
+              |  ${(for (v <- c._2.externApiTestMockVariables) yield v.prettyST, "\n")}
               |}
               |
-              |${(for (a <- c._2.testingCApis) yield a.prettyST, "\n\n")}
+              |${(for (a <- c._2.externApiTestingApis) yield a.prettyST, "\n\n")}
               |"""
         val path = s"$bridgeDir/extern_c_api.rs"
         resources = resources :+ ResourceUtil.createResource(path, content, T)
@@ -239,7 +242,7 @@ object ComponentApiContributions {
           st"""${Util.doNotEdit}
               |
               |use vstd::prelude::*;
-              |use data::*;
+              |use ${CRustTypePlugin.usePath};
               |use super::extern_c_api as extern_api;
               |
               |verus! {
@@ -299,11 +302,24 @@ object ComponentApiContributions {
         resources = resources :+ ResourceUtil.createResource(path, content, T)
       }
 
+      { // bridge/test_api.rs
+        val content =
+          st"""${Util.doNotEdit}
+              |
+              |use crate::bridge::extern_c_api as extern_api;
+              |use ${CRustTypePlugin.usePath};
+              |
+              |${(for(c <- c._2.testingApis) yield c.prettyST, "\n\n")}"""
+        val path = s"$bridgeDir/test_api.rs"
+        resources = resources :+ ResourceUtil.createResource(path, content, T)
+      }
+
       { // bridge/mod.rs
         val content =
           st"""${Util.doNotEdit}
               |
               |pub mod extern_c_api;
+              |pub mod test_api;
               |pub mod ${threadId}_api;
               |${(for(c <- c._2.bridgeModuleContributions) yield st"${c.prettyST}", "\n")}"""
         val path = s"$bridgeDir/mod.rs"
@@ -321,7 +337,7 @@ object ComponentApiContributions {
               |  use serial_test::serial;
               |
               |  use crate::bridge::extern_c_api as extern_api;
-              |  use data::*;
+              |  use ${CRustTypePlugin.usePath};
               |
               |  #[test]
               |  #[serial]

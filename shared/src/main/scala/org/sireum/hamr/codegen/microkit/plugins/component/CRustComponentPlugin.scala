@@ -92,7 +92,7 @@ object ComponentContributions {}
           RustAst.AttributeST(T, st"allow(non_snake_case)"))
 
         val uses: ISZ[RustAst.Item] = ISZ(
-          RustAst.Use(ISZ(), RustAst.IdentString("data::*")),
+          RustAst.Use(ISZ(), RustAst.IdentString(CRustTypePlugin.usePath)),
           RustAst.Use(ISZ(), RustAst.IdentString(s"crate::bridge::${CRustApiPlugin.apiModuleName(thread)}::*")),
           RustAst.Use(ISZ(
             RustAst.AttributeST(F, st"cfg(feature = \"sel4\")"),

@@ -30,6 +30,7 @@ object CRustTypePlugin {
 
   @strictpure def putCRustTypeProvider(c: CRustTypeProvider, store: Store): Store = store + KEY_CRustTypeProvider ~> c
 
+  val usePath: String = "data::*"
 
   // TODO: maybe move everything below into the Store
   @strictpure def getArraySizeName(arrayTypeNampeProvider: CRustTypeNameProvider): String = st"${(arrayTypeNampeProvider.qualifiedRustNameS, "_")}_BYTE_SIZE".render
