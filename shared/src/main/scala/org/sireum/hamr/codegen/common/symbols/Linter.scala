@@ -165,13 +165,13 @@ object Linter {
             case apc: AadlPortConnection =>
               if (!TypeUtil.isEmptyType(apc.connectionDataType)) {
                 val connName = apc.name
-                val typeName = apc.connectionDataType match {
+                val typeName: String = apc.connectionDataType match {
                   case b: BitType =>
                     b.originatingType match {
                       case Some(o) => o.name
                       case _ => b.name
                     }
-                  case _ =>
+                  case _ => apc.connectionDataType.name
                 }
                 val pos: Option[Position] = apc.connectionDataType.container match {
                   case Some(c) => c.identifier.pos

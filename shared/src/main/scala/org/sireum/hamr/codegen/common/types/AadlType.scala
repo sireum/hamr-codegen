@@ -39,8 +39,8 @@ import org.sireum.hamr.ir
 
   @pure def properties: ISZ[ir.Property] = {
     container match {
-      case Some(c) => c.properties
-      case _ => ISZ()
+      case Some(c) => return c.properties
+      case _ => return ISZ()
     }
   }
 

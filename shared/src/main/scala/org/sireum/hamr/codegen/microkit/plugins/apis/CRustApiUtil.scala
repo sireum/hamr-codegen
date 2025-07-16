@@ -366,7 +366,7 @@ object CRustApiUtil {
     if (p.direction == Direction.In) {
       val varName = s"IN_${p.identifier}"
       val (externApiBody, testingApiBody): (ST, ST) = {
-        val eBody = if (p.isEvent) {
+        val eBody: ST = if (p.isEvent) {
           st"""unsafe {
               |  match *$varName.lock().unwrap() {
               |    Some(v) => {

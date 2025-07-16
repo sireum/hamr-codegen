@@ -30,7 +30,7 @@ object ConnectionUtil {
 
     val cTypeNameProvider = cTypeProvider.getTypeNameProvider(aadlType)
 
-    val pageSize =
+    val pageSize: Z =
       aadlType.bitSize match {
         case Some(bits) =>
           val p = Util.bytesToKiBytes(Util.bitsToBytes(bits))
@@ -138,7 +138,7 @@ object ConnectionUtil {
 
       val cTypeName = cTypeProvider.getTypeNameProvider(receiverContribution.aadlType).mangledName
 
-      val pageSize =
+      val pageSize: Z =
         receiverContribution.aadlType.bitSize match {
           case Some(bits) =>
             val p = Util.bytesToKiBytes(Util.bitsToBytes(bits))
@@ -175,7 +175,7 @@ object ConnectionUtil {
     if (receiverContributions.isEmpty) {
       val cTypeName = cTypeProvider.getTypeNameProvider(senderPortType).mangledName
 
-      val pageSize =
+      val pageSize: Z =
         senderPortType.bitSize match {
           case Some(bits) =>
             val p = Util.bytesToKiBytes(Util.bitsToBytes(bits))
