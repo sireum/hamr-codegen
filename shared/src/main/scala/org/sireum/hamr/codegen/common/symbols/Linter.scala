@@ -8,7 +8,7 @@ import org.sireum.message.{Position, Reporter}
 import org.sireum.hamr.codegen.common.properties.{CasePropertiesProperties, CaseSchedulingProperties, OsateProperties, PropertyUtil}
 import org.sireum.hamr.codegen.common.util.HamrCli.{CodegenHamrPlatform, CodegenOption}
 import org.sireum.hamr.ir
-import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, BaseType, TypeUtil}
+import org.sireum.hamr.codegen.common.types.{BaseType, BitType, TypeUtil}
 import org.sireum.hamr.codegen.common.util.ExperimentalOptions
 
 object Linter {
@@ -165,7 +165,14 @@ object Linter {
             case apc: AadlPortConnection =>
               if (!TypeUtil.isEmptyType(apc.connectionDataType)) {
                 val connName = apc.name
-                val typeName = apc.connectionDataType.name
+                val typeName = apc.connectionDataType match {
+                  case b: BitType =>
+                    b.originatingType match {
+                      case Some(o) => o.name
+                      case _ => b.name
+                    }
+                  case _ =>
+                }
                 val pos: Option[Position] = apc.connectionDataType.container match {
                   case Some(c) => c.identifier.pos
                   case _ => None()

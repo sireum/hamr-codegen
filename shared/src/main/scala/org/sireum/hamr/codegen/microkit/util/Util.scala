@@ -48,6 +48,10 @@ object Util {
   @strictpure def getThreadIdPath(thread: AadlThread): String =
     st"${(ops.ISZOps(thread.path).drop(1), "_")}".render
 
+  @pure def bitsToBytes(bits: Z): Z = {
+    return Extensions.bitsToBytes(bits)
+  }
+
   @pure def bytesToKiBytes(bytes: Z): Z = {
     return Extensions.bytesToKiBytes(bytes)
   }
@@ -1312,5 +1316,7 @@ object Util {
 }
 
 @ext object Extensions {
+  def bitsToBytes(bits: Z): Z = $
+
   def bytesToKiBytes(bytes: Z): Z = $
 }

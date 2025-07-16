@@ -3,6 +3,7 @@ package org.sireum.hamr.codegen.microkit.types
 
 import org.sireum._
 import org.sireum.CircularQueue.Policy
+import org.sireum.hamr.codegen.common.properties.{HamrProperties, OsateProperties, PropertyUtil}
 import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlEventPort, AadlFeatureData, AadlPort, GclAnnexClauseInfo, GclAnnexLibInfo, SymbolTable}
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypeNameProvider, AadlTypes, ArraySizeKind, ArrayType, BaseType, BitType, EnumType, RecordType, SlangType, TypeKind, TypeUtil}
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen
@@ -307,8 +308,18 @@ object MicrokitTypeUtil {
                 case _ =>
                   reporter.error(None(), MicrokitCodegen.toolName, s"Multi dimensional arrays are not currently supported: ${t.name}")
               }
-              if (t.bitSize.isEmpty || t.bitSize.get <= 0) {
-                reporter.error(None(), MicrokitCodegen.toolName, s"Bit size > 0 must be specified for ${t.name}")
+              PropertyUtil.getUnitPropZ(aadlType.properties, OsateProperties.MEMORY_PROPERTIES__DATA_SIZE) match {
+                case None() =>
+                  reporter.error(None(), MicrokitCodegen.toolName, s"${OsateProperties.MEMORY_PROPERTIES__DATA_SIZE} must be specified for ${t.name}")
+                case _ =>
+                  PropertyUtil.getUnitPropZ(aadlType.properties, HamrProperties.HAMR__BIT_CODEC_MAX_SIZE) match {
+                    case Some(_) =>
+                      reporter.error(None(), MicrokitCodegen.toolName, s"Microkit codegen does not currently support both ${OsateProperties.MEMORY_PROPERTIES__DATA_SIZE} and ${HamrProperties.HAMR__BIT_CODEC_MAX_SIZE} being specified for ${t.name}")
+                    case _ =>
+                      if (t.bitSize.isEmpty || t.bitSize.get <= 0) {
+                        reporter.error(None(), MicrokitCodegen.toolName, s"Bit size > 0 must be specified for ${t.name}")
+                      }
+                  }
               }
 
               add(posOpt, t.baseType)

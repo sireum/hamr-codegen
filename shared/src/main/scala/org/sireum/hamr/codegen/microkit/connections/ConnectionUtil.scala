@@ -30,6 +30,15 @@ object ConnectionUtil {
 
     val cTypeNameProvider = cTypeProvider.getTypeNameProvider(aadlType)
 
+    val pageSize =
+      aadlType.bitSize match {
+        case Some(bits) =>
+          val p = Util.bytesToKiBytes(Util.bitsToBytes(bits))
+          if (p < Util.defaultPageSizeInKiBytes) Util.defaultPageSizeInKiBytes
+          else p
+        case _ => Util.defaultPageSizeInKiBytes
+      }
+
     val cTypeName = cTypeNameProvider.mangledName
 
     val sharedMemTypeName = QueueTemplate.getTypeQueueTypeName(cTypeName, dstQueueSize)
@@ -87,7 +96,7 @@ object ConnectionUtil {
           queueSize = dstQueueSize,
           varAddr = sharedVarName,
           perms = ISZ(Perm.READ),
-          sizeInKiBytes = Util.defaultPageSizeInKiBytes,
+          sizeInKiBytes = pageSize,
           physicalAddressInKiBytes = None())
       ),
 
@@ -129,6 +138,15 @@ object ConnectionUtil {
 
       val cTypeName = cTypeProvider.getTypeNameProvider(receiverContribution.aadlType).mangledName
 
+      val pageSize =
+        receiverContribution.aadlType.bitSize match {
+          case Some(bits) =>
+            val p = Util.bytesToKiBytes(Util.bitsToBytes(bits))
+            if (p < Util.defaultPageSizeInKiBytes) Util.defaultPageSizeInKiBytes
+            else p
+          case _ => Util.defaultPageSizeInKiBytes
+        }
+
       val sharedMemVarName = QueueTemplate.getClientEnqueueSharedVarName(srcPort.identifier, receiverContribution.queueSize)
       srcPutContributions = srcPutContributions :+ QueueTemplate.getClientPutEntry(
         sharedMemoryVarName = sharedMemVarName,
@@ -149,13 +167,22 @@ object ConnectionUtil {
           queueSize = receiverContribution.queueSize,
           varAddr = varName,
           perms = ISZ(Perm.READ, Perm.WRITE),
-          sizeInKiBytes = Util.defaultPageSizeInKiBytes,
+          sizeInKiBytes = pageSize,
           physicalAddressInKiBytes = None()
         )
     }
 
     if (receiverContributions.isEmpty) {
       val cTypeName = cTypeProvider.getTypeNameProvider(senderPortType).mangledName
+
+      val pageSize =
+        senderPortType.bitSize match {
+          case Some(bits) =>
+            val p = Util.bytesToKiBytes(Util.bitsToBytes(bits))
+            if (p < Util.defaultPageSizeInKiBytes) Util.defaultPageSizeInKiBytes
+            else p
+          case _ => Util.defaultPageSizeInKiBytes
+        }
 
       val queueSize = 1
 
@@ -179,7 +206,7 @@ object ConnectionUtil {
           queueSize = queueSize,
           varAddr = varName,
           perms = ISZ(Perm.READ, Perm.WRITE),
-          sizeInKiBytes = Util.defaultPageSizeInKiBytes,
+          sizeInKiBytes = pageSize,
           physicalAddressInKiBytes = None()
         )
     }

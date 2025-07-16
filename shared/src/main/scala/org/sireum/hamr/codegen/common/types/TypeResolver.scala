@@ -42,30 +42,28 @@ object TypeResolver {
       assert(c.category == ir.ComponentCategory.Data, s"Unexpected data type definition ${cname}")
 
       val container = Some(c)
-      val bitCodecSize = PropertyUtil.getUnitPropZ(c.properties, HamrProperties.HAMR__BIT_CODEC_MAX_SIZE)
+      val dataSize: Option[Z] = {
+        PropertyUtil.getUnitPropZ(c.properties, HamrProperties.HAMR__BIT_CODEC_MAX_SIZE) match {
+          case s: Some[Z] => s
+          case _ =>
+            PropertyUtil.getUnitPropZ(c.properties, OsateProperties.MEMORY_PROPERTIES__DATA_SIZE) match {
+              case s: Some[Z] => s
+              case n => n
+            }
+          }
+        }
 
       val classifier = ops.StringOps(ops.StringOps(c.classifier.get.name).replaceAllLiterally("::", "|")).split((c: C) => c == '|')
 
       if (TypeUtil.isEnumType(c)) {
         val nameProvider = AadlTypeNameProvider(basePackage, classifier, TypeUtil.getEnumValues(c), TypeKind.Enum)
-        return EnumType(cname, nameProvider, container, bitCodecSize, TypeUtil.getEnumValues(c))
+        return EnumType(cname, nameProvider, container, dataSize, TypeUtil.getEnumValues(c))
       }
       else if (TypeUtil.isBaseType(c)) {
 
         val aadlType = org.sireum.ops.StringOps(c.classifier.get.name).replaceAllLiterally("Base_Types::", "")
 
         val t: SlangType.Type = TypeUtil.getSlangType(aadlType)
-
-        val dataSize: Option[Z] =
-          bitCodecSize match {
-            case Some(bitCodec) => Some(bitCodec)
-            case _ => {
-              PropertyUtil.getUnitPropZ(c.properties, OsateProperties.MEMORY_PROPERTIES__DATA_SIZE) match {
-                case Some(bits) => Some(bits)
-                case _ => None()
-              }
-            }
-          }
 
         val nameProvider = AadlTypeNameProvider(basePackage, classifier, ISZ(), TypeKind.Base)
         return BaseType(cname, nameProvider, container, dataSize, t)
@@ -117,7 +115,7 @@ object TypeResolver {
         }
 
         val nameProvider = AadlTypeNameProvider(basePackage, classifier, ISZ(), TypeKind.Array)
-        return ArrayType(cname, nameProvider, container, bitCodecSize, dimensions, kind, baseType)
+        return ArrayType(cname, nameProvider, container, dataSize, dimensions, kind, baseType)
       }
       else if (TypeUtil.isRecordType(c)) {
         var fields: Map[String, AadlType] = Map.empty
@@ -128,23 +126,11 @@ object TypeResolver {
         }
 
         val nameProvider = AadlTypeNameProvider(basePackage, classifier, ISZ(), TypeKind.Record)
-        return RecordType(cname, nameProvider, container, bitCodecSize, fields)
+        return RecordType(cname, nameProvider, container, dataSize, fields)
       }
       else {
-        val bitCodecOrDataSize: Option[Z] =
-          bitCodecSize match {
-            case Some(bitCodec) => Some(bitCodec)
-            case _ => {
-              // check to see if the component is potentially extending a bound base_type
-              PropertyUtil.getUnitPropZ(c.properties, OsateProperties.MEMORY_PROPERTIES__DATA_SIZE) match {
-                case Some(bits) => Some(bits)
-                case _ => None()
-              }
-            }
-          }
-
         val nameProvider = AadlTypeNameProvider(basePackage, classifier, ISZ(), TypeKind.Unknown)
-        return TODOType(cname, nameProvider, container, bitCodecOrDataSize)
+        return TODOType(cname, nameProvider, container, dataSize)
       }
     }
 

@@ -37,6 +37,13 @@ import org.sireum.hamr.ir
 
   def container: Option[ir.Component]
 
+  @pure def properties: ISZ[ir.Property] = {
+    container match {
+      case Some(c) => c.properties
+      case _ => ISZ()
+    }
+  }
+
   def nameProvider: TypeNameProvider
 
   def bitSize: Option[Z]
