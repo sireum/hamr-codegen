@@ -386,15 +386,42 @@ object Printers {
                              val attributes: ISZ[Attribute],
                              val bounds: GenericBounds) {
   @pure def prettyST: ST = {
-    return st"<${ident.prettyST}: ${bounds.prettyST}>"
+    return st"${ident.prettyST}: ${bounds.prettyST}"
   }
 }
 
-@datatype class Generics(val params: GenericParam) extends Item {
+@datatype class Generics(val params: ISZ[GenericParam]) extends Item {
   @pure override def prettyST: ST = {
-    return params.prettyST
+    if (params.size == 1) return st"<${params(0).prettyST}> "
+    else return (
+    st"""
+        |  <${(for(p <- params) yield p.prettyST, ", \n")}> """)
   }
 }
+
+@sig trait Macro extends Item
+
+@datatype class MacroImpl(val comments: ISZ[Comment],
+                          val attributes: ISZ[Attribute],
+                          val inputs: ISZ[Param],
+                          val ident: Ident,
+                          val body: Option[ST]
+                         ) extends Macro {
+  @pure override def prettyST: ST = {
+    return (
+    st"""${printAttributes(attributes)}
+        |macro_rules!
+        |${ident.prettyST} {
+        |  (
+        |    ${(for (p <- inputs) yield p.prettyST, ",\n")}
+        |  ) => {
+        |    $body
+        |  };
+        |}""")
+  }
+}
+
+
 
 @sig trait Fn extends Item {
   @pure def ident: Ident = {
@@ -409,10 +436,6 @@ object Printers {
 
   @pure def meta: ISZ[Meta]
 }
-
-@sig trait Meta
-
-@datatype class MetaOrigin(val origin: IdPath) extends Meta
 
 @datatype class FnImpl(val comments: ISZ[Comment],
                        val attributes: ISZ[Attribute],
@@ -520,3 +543,9 @@ object Printers {
   }
 
 }
+
+
+
+@sig trait Meta
+
+@datatype class MetaOrigin(val origin: IdPath) extends Meta

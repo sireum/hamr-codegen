@@ -154,8 +154,24 @@ object GumboXRustUtil {
       return st"$name: $langType"
     }
 
+    @pure def isStateVar: B = {
+      return kind == SymbolKind.StateVarPre || kind == SymbolKind.StateVar
+    }
+
+    @pure def isInPort: B = {
+      return isInEventPort || kind == SymbolKind.ApiVarInData
+    }
+
     @pure def isInEventPort: B = {
       return kind == SymbolKind.ApiVarInEventData || kind == SymbolKind.ApiVarInEvent
+    }
+
+    @pure def isOutPort: B = {
+      return isOutEventPort || kind == GumboXRustUtil.SymbolKind.ApiVarOutData
+    }
+
+    @pure def isOutEventPort: B = {
+      return kind == SymbolKind.ApiVarOutEvent || kind == SymbolKind.ApiVarOutEventData
     }
 
     @strictpure def toRustParam: Param =

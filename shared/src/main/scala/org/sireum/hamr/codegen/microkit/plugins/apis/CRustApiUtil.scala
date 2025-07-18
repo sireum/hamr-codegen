@@ -2,12 +2,17 @@
 package org.sireum.hamr.codegen.microkit.plugins.apis
 
 import org.sireum._
+import org.sireum.hamr.codegen.common.CommonUtil.Store
 import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlEventPort, AadlFeatureEvent, AadlPort, AadlThread, SymbolTable}
-import org.sireum.hamr.codegen.common.types.AadlType
-import org.sireum.hamr.codegen.microkit.plugins.types.{CRustTypeNameProvider, CRustTypeProvider}
+import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes}
+import org.sireum.hamr.codegen.common.util.HamrCli
+import org.sireum.hamr.codegen.microkit.plugins.linters.TouchedTypes
+import org.sireum.hamr.codegen.microkit.plugins.types.{CRustTypeNameProvider, CRustTypePlugin, CRustTypeProvider}
 import org.sireum.hamr.codegen.microkit.{rust => RustAst}
 import org.sireum.hamr.codegen.microkit.types.{MicrokitTypeUtil, QueueTemplate}
-import org.sireum.hamr.ir.Direction
+import org.sireum.hamr.ir.{Aadl, Direction}
+import org.sireum.message.Reporter
+import org.sireum.hamr.codegen.common.types._
 
 object CRustApiUtil {
 
@@ -210,6 +215,217 @@ object CRustApiUtil {
     return r
   }
 
+  @pure def propTestOptionMethod(): ISZ[RustAst.Item] = {
+    var generics: ISZ[RustAst.GenericParam] = ISZ()
+    generics = generics :+ RustAst.GenericParam(
+      ident = RustAst.IdentString("T"),
+      attributes = ISZ(),
+      bounds = RustAst.GenericBoundFixMe(st"Clone + std::fmt::Debug"))
+    generics = generics :+ RustAst.GenericParam(
+      ident = RustAst.IdentString("S"),
+      attributes = ISZ(),
+      bounds = RustAst.GenericBoundFixMe(st" Strategy<Value = T>"))
+
+    val defaultStrategy = RustAst.FnImpl(
+      visibility = RustAst.Visibility.Public,
+      sig = RustAst.FnSig(
+        ident = RustAst.IdentString("option_strategy_default"),
+        fnDecl = RustAst.FnDecl(
+          inputs = ISZ(
+            RustAst.ParamImpl(
+              ident = RustAst.IdentString("base"),
+              kind = RustAst.TyPath(ISZ(ISZ("S")), None()))),
+          outputs = RustAst.FnRetTyImpl(
+            RustAst.TyFixMe(st"impl Strategy<Value = Option<T>>"))),
+        generics = Some(RustAst.Generics(generics)),
+        fnHeader = RustAst.FnHeader(F), verusHeader = None()),
+      body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
+        st"""option_strategy_bias(1, base)""")))),
+      meta = ISZ(), comments = ISZ(), attributes = ISZ(), contract = None())
+
+    val custStrategy = RustAst.FnImpl(
+      visibility = RustAst.Visibility.Public,
+      sig = RustAst.FnSig(
+        ident = RustAst.IdentString("option_strategy_bias"),
+        fnDecl = RustAst.FnDecl(
+          inputs = ISZ(
+            RustAst.ParamImpl(
+              ident = RustAst.IdentString("bias"),
+              kind = RustAst.TyPath(ISZ(ISZ("u32")), None())),
+            RustAst.ParamImpl(
+              ident = RustAst.IdentString("base"),
+              kind = RustAst.TyPath(ISZ(ISZ("S")), None()))),
+          outputs = RustAst.FnRetTyImpl(
+            RustAst.TyFixMe(st"impl Strategy<Value = Option<T>>"))),
+        generics = Some(RustAst.Generics(generics)),
+        fnHeader = RustAst.FnHeader(F), verusHeader = None()),
+      body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
+        st"""prop_oneof![
+            |  bias => base.prop_map(Some),
+            |  1 => Just(None),
+            |]""")))),
+      meta = ISZ(), comments = ISZ(), attributes = ISZ(), contract = None())
+
+    return ISZ(defaultStrategy, custStrategy)
+  }
+
+  @pure def generatePropTestDatatypeGenerators(touchedTypes: TouchedTypes, cRustTypeProvider: CRustTypeProvider,
+                                               model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): ISZ[RustAst.Item] = {
+    var ret: ISZ[RustAst.Item] = ISZ()
+    for (t <- touchedTypes.orderedDependencies) {
+      val o = types.typeMap.get(t).get
+      val rep = cRustTypeProvider.getRepresentativeType(o)
+      val np = cRustTypeProvider.getTypeNameProvider(rep)
+
+      val defaultIdent = RustAst.IdentString(st"${(np.qualifiedRustNameS, "_")}_strategy_default".render)
+
+      def getDefaultGenerator(name: String, t: AadlType): ST = {
+        cRustTypeProvider.getRepresentativeType(t) match {
+          case b: BaseType =>
+            st"any::<${MicrokitTypeUtil.translateBaseTypeToRust(t.name)}>()"
+          case _ =>
+            val npx = cRustTypeProvider.getTypeNameProvider(t)
+            return st"${(npx.qualifiedRustNameS, "_")}_strategy_default()"
+        }
+      }
+
+      rep match {
+        case b: BaseType => // do nothing
+
+        case a: ArrayType =>
+          val custName = st"${(np.qualifiedRustNameS, "_")}_stategy_cust"
+
+          val baseRep = cRustTypeProvider.getRepresentativeType(a.baseType)
+          val baseNp = cRustTypeProvider.getTypeNameProvider(baseRep)
+
+          val defaultStrategy = RustAst.FnImpl(
+            visibility = RustAst.Visibility.Public,
+            sig = RustAst.FnSig(
+              ident = defaultIdent,
+              fnDecl = RustAst.FnDecl(
+                inputs = ISZ(),
+                outputs = RustAst.FnRetTyImpl(RustAst.TyFixMe(st"impl Strategy<Value = ${np.qualifiedRustName}>"))),
+              fnHeader = RustAst.FnHeader(F), generics = None(), verusHeader = None()),
+            body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
+              st"""$custName(${getDefaultGenerator("base_strategy", baseRep)})""")))),
+            meta = ISZ(), comments = ISZ(), attributes = ISZ(), contract = None())
+
+
+
+          val baseStrategyName = st"${(baseNp.qualifiedRustNameS, "_")}_strategy".render
+          val baseGeneric =
+            RustAst.GenericParam(
+              ident = RustAst.IdentString(baseStrategyName),
+              attributes = ISZ(),
+              bounds = RustAst.GenericBoundFixMe(st"Strategy<Value = ${baseNp.qualifiedRustName}>"))
+
+          val dim = st"${(np.packageRustNames, "::")}::${CRustTypePlugin.getArrayDimName(np, 0)}"
+
+          val paramName = "base_strategy"
+          val param = RustAst.ParamImpl(
+            ident = RustAst.IdentString(paramName),
+            kind = RustAst.TyPath(items = ISZ(ISZ(baseStrategyName)), aadlType = None()))
+
+          val custStrategy = RustAst.FnImpl(
+            visibility = RustAst.Visibility.Public,
+            sig = RustAst.FnSig(
+              ident = RustAst.IdentString(custName.render),
+              fnDecl = RustAst.FnDecl(
+                inputs = ISZ(param),
+                outputs = RustAst.FnRetTyImpl(
+                  RustAst.TyFixMe(st"impl Strategy<Value = ${np.qualifiedRustName}>"))),
+              generics = Some(RustAst.Generics(ISZ(baseGeneric))),
+              fnHeader = RustAst.FnHeader(F), verusHeader = None()),
+            body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
+              st"""proptest::collection::vec(base_strategy, $dim)
+                  |  .prop_map(|v| {
+                  |    let boxed: Box<[${baseNp.qualifiedRustName}; $dim]> = v.into_boxed_slice().try_into().unwrap();
+                  |    *boxed
+                  |})""")))),
+            meta = ISZ(), comments = ISZ(), attributes = ISZ(), contract = None())
+
+          ret = ret :+ defaultStrategy :+ custStrategy
+
+        case r: RecordType =>
+          val custName = st"${(np.qualifiedRustNameS, "_")}_stategy_cust"
+          val items = for(f <- r.fields.entries) yield getDefaultGenerator(f._1, f._2)
+
+          val defaultStrategy = RustAst.FnImpl(
+            visibility = RustAst.Visibility.Public,
+            sig = RustAst.FnSig(
+              ident = defaultIdent,
+              fnDecl = RustAst.FnDecl(
+                inputs = ISZ(),
+                outputs = RustAst.FnRetTyImpl(RustAst.TyFixMe(st"impl Strategy<Value = ${np.qualifiedRustName}>"))),
+              fnHeader = RustAst.FnHeader(F), generics = None(), verusHeader = None()),
+            body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
+              st"""$custName(
+                  |  ${(items, ",\n")}
+                  |)""")))),
+            meta = ISZ(), comments = ISZ(), attributes = ISZ(), contract = None())
+
+          var stategyNames: ISZ[String] = ISZ()
+          var fieldNames: ISZ[String] = ISZ()
+          var params: ISZ[RustAst.Param] = ISZ()
+          var generics: ISZ[RustAst.GenericParam] = ISZ()
+          for (f <- r.fields.entries) {
+            val ft = cRustTypeProvider.getTypeNameProvider(f._2)
+            val stategyName = st"${f._1}_strategy".render
+            stategyNames = stategyNames :+ stategyName
+            fieldNames = fieldNames :+ f._1
+
+            val genericName = st"${(ft.qualifiedRustNameS, "_")}_strategy".render
+
+            generics = generics :+ RustAst.GenericParam(
+              ident = RustAst.IdentString(genericName),
+              attributes = ISZ(),
+              bounds = RustAst.GenericBoundFixMe(st"Strategy<Value = ${ft.qualifiedRustName}>"))
+            params = params :+ RustAst.ParamImpl(
+              ident = RustAst.IdentString(stategyName),
+              kind = RustAst.TyPath(items = ISZ(ISZ(genericName)), aadlType = None()))
+          }
+
+          val custStrategy = RustAst.FnImpl(
+            visibility = RustAst.Visibility.Public,
+            sig = RustAst.FnSig(
+              ident = RustAst.IdentString(custName.render),
+              fnDecl = RustAst.FnDecl(
+                inputs = params,
+                outputs = RustAst.FnRetTyImpl(
+                  RustAst.TyFixMe(st"impl Strategy<Value = ${np.qualifiedRustName}>"))),
+              generics = Some(RustAst.Generics(generics)),
+              fnHeader = RustAst.FnHeader(F), verusHeader = None()),
+            body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
+              st"""(${(stategyNames, ", ")}).prop_map(|(${(fieldNames, ", ")})| {
+                  |  ${np.qualifiedRustName} { ${(fieldNames, ", ")} }
+                  |})""")))),
+            meta = ISZ(), comments = ISZ(), attributes = ISZ(), contract = None())
+
+          ret = ret :+ defaultStrategy :+ custStrategy
+
+        case e: EnumType =>
+          val items = for(v <- e.values) yield st"Just(${np.qualifiedRustName}::${v})"
+          ret = ret :+ RustAst.FnImpl(
+            visibility = RustAst.Visibility.Public,
+            sig = RustAst.FnSig(
+              ident = defaultIdent,
+              fnDecl = RustAst.FnDecl(
+                inputs = ISZ(),
+                outputs = RustAst.FnRetTyImpl(RustAst.TyFixMe(st"impl Strategy<Value = ${np.qualifiedRustName}>"))),
+              fnHeader = RustAst.FnHeader(F), generics = None(), verusHeader = None()),
+            body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
+              st"""prop_oneof![
+                  |  ${(items, ",\n")}
+                  |]""")))),
+            meta = ISZ(), comments = ISZ(), attributes = ISZ(), contract = None())
+        case x =>
+          halt("Unexpected type: $x")
+      }
+    }
+
+    return ret
+  }
+
   @pure def getApiDefaultPutter(srcThread: AadlThread, srcPort: AadlPort, aadlType: AadlType, crustTypeProvider: CRustTypeProvider): RustAst.Item = {
     val methodName = s"put_${srcPort.identifier}"
     val unverifiedMethodName = s"unverified_$methodName"
@@ -365,7 +581,7 @@ object CRustApiUtil {
                                      portTypeNameProvider: CRustTypeNameProvider): (RustAst.Item, RustAst.Item, RustAst.Item) = {
     if (p.direction == Direction.In) {
       val varName = s"IN_${p.identifier}"
-      val (externApiBody, testingApiBody): (ST, ST) = {
+      val (externApiBody, testApiBody): (ST, ST) = {
         val eBody: ST = if (p.isEvent) {
           st"""unsafe {
               |  match *$varName.lock().unwrap() {
@@ -382,14 +598,23 @@ object CRustApiUtil {
               |  return true;
               |}"""
         }
-        (eBody, st"""*extern_api::$varName.lock().unwrap() = Some(value)""")
+
+        val tBody: ST = if (p.isEvent) {
+          st"*extern_api::$varName.lock().unwrap() = value"
+        } else {
+          st"*extern_api::$varName.lock().unwrap() = Some(value)"
+        }
+
+        (eBody, tBody)
       }
-      val variable = RustAst.ItemStatic(
+
+      val externApiTestVariable = RustAst.ItemStatic(
         ident = RustAst.IdentString(varName),
         visibility = RustAst.Visibility.Public,
         ty = RustAst.TyPath(ISZ(ISZ("Mutex"), ISZ("Option"), portTypeNameProvider.qualifiedRustNameS), Some(aadlType)),
         mutability = RustAst.Mutability.Not,
         expr = RustAst.ExprST(st"Mutex::new(None);"))
+
       val externApiMethod = RustAst.FnImpl(
         attributes = ISZ(RustAst.AttributeST(F, st"cfg(test)")),
         sig = RustAst.FnSig(
@@ -405,20 +630,30 @@ object CRustApiUtil {
           verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
         comments = ISZ(), visibility = RustAst.Visibility.Public, contract = None(), meta = ISZ(),
         body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(externApiBody)))))
+
+
+      val paramType: ISZ[ISZ[String]] = if(p.isEvent) {
+        ISZ(ISZ("Option"), portTypeNameProvider.qualifiedRustNameS)
+      } else {
+        ISZ(portTypeNameProvider.qualifiedRustNameS)
+      }
+
       val testApiMethod = RustAst.FnImpl(
-        attributes = ISZ(RustAst.AttributeST(F, st"cfg(test)")),
+        attributes = ISZ(),
         visibility = RustAst.Visibility.Public,
         sig = RustAst.FnSig(
           ident = RustAst.IdentString(s"put_${p.identifier}"),
           fnDecl = RustAst.FnDecl(
             inputs = ISZ(RustAst.ParamImpl(
               ident = RustAst.IdentString("value"),
-              kind = RustAst.TyPath(items = ISZ(portTypeNameProvider.qualifiedRustNameS), aadlType = Some(aadlType)))),
+              kind = RustAst.TyPath(items = paramType, aadlType = Some(aadlType)))),
             outputs = RustAst.FnRetTyDefault()),
           verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
         contract = None(), comments = ISZ(), meta = ISZ(),
-        body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(testingApiBody)))))
-      return (variable, externApiMethod, testApiMethod)
+        body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(testApiBody)))))
+
+      return (externApiTestVariable, externApiMethod, testApiMethod)
+
     } else {
       val varName = s"OUT_${p.identifier}"
       val variable = RustAst.ItemStatic(
@@ -447,7 +682,8 @@ object CRustApiUtil {
               |  return true;
               |}""")))))
 
-      val (testingApiBody, retType): (ST, RustAst.Ty) = {
+
+      val (testApiBody, retType): (ST, RustAst.Ty) = {
         if (p.isEvent) {
           (st"return extern_api::$varName.lock().unwrap().clone()", RustAst.TyPath(items = ISZ(ISZ("Option"), portTypeNameProvider.qualifiedRustNameS), aadlType = Some(aadlType)))
         } else {
@@ -455,7 +691,7 @@ object CRustApiUtil {
         }
       }
       val testApiMethod = RustAst.FnImpl(
-        attributes = ISZ(RustAst.AttributeST(F, st"cfg(test)")),
+        attributes = ISZ(),
         visibility = RustAst.Visibility.Public,
         sig = RustAst.FnSig(
           ident = RustAst.IdentString(s"get_${p.identifier}"),
@@ -464,7 +700,8 @@ object CRustApiUtil {
             outputs = RustAst.FnRetTyImpl(retType)),
           verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
         contract = None(), comments = ISZ(), meta = ISZ(),
-        body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(testingApiBody)))))
+        body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(testApiBody)))))
+
       return (variable, externApiMethod, testApiMethod)
     }
   }

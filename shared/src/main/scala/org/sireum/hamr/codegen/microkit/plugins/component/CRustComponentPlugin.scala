@@ -24,7 +24,7 @@ object CRustComponentPlugin {
 
   @strictpure def getCRustComponentContributions(store: Store): CRustComponentContributions = store.get(KEY_CrustComponentPlugin).get.asInstanceOf[CRustComponentContributions]
 
-  @strictpure def putComponentContributions(store: Store, contributions: CRustComponentContributions): Store = store + KEY_CrustComponentPlugin ~> contributions
+  @strictpure def putComponentContributions( contributions: CRustComponentContributions, store: Store): Store = store + KEY_CrustComponentPlugin ~> contributions
 
 
   @strictpure def componentCrateDirectory(thread: AadlThread, options: HamrCli.CodegenOption): String = s"${options.sel4OutputDir.get}/crates/${Util.getThreadIdPath(thread)}"
@@ -36,13 +36,20 @@ object CRustComponentPlugin {
 
 object ComponentContributions {}
 
-@datatype class ComponentContributions(val markers: ISZ[Marker],
+@datatype class ComponentContributions( // markers for component/<thread-path>_app.rs
+                                        val markers: ISZ[Marker],
 
-                                       val requiresVerus: B,
-                                       val appModDirectives: ISZ[RustAst.Item],
-                                       val appUses: ISZ[RustAst.Item],
-                                       val appStructDef: RustAst.StructDef,
-                                       val appStructImpl: RustAst.Impl)
+                                        // items for component/<thread-path>_app.rs
+                                        val requiresVerus: B,
+                                        val appModDirectives: ISZ[RustAst.Item],
+                                        val appUses: ISZ[RustAst.Item],
+                                        val appStructDef: RustAst.StructDef,
+                                        val appStructImpl: RustAst.Impl,
+
+
+                                        // items for tests.rs
+                                        val testEntries: ISZ[RustAst.Item]
+                                      )
 
 @sig trait CRustComponentContributions extends StoreValue {
   @pure def componentContributions: Map[IdPath, ComponentContributions]
@@ -71,7 +78,7 @@ object ComponentContributions {}
 
   @strictpure override def canFinalize(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): B =
     !isDisabled(store) &&
-    haveHandled(store) &&
+      haveHandled(store) &&
       !haveFinalized(store)
 
   @pure override def handle(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
@@ -84,125 +91,161 @@ object ComponentContributions {}
     for (thread <- symbolTable.getThreads() if Util.isRusty(thread)) {
       val threadId = Util.getThreadIdPath(thread)
 
-      {
-        val appApiType = CRustApiPlugin.applicationApiType(thread)
+      val appApiType = CRustApiPlugin.applicationApiType(thread)
 
-        val modDirectives: ISZ[RustAst.Item] = ISZ(
-          RustAst.AttributeST(T, st"allow(non_camel_case_types)"),
-          RustAst.AttributeST(T, st"allow(non_snake_case)"))
+      val modDirectives: ISZ[RustAst.Item] = ISZ(
+        RustAst.AttributeST(T, st"allow(non_camel_case_types)"),
+        RustAst.AttributeST(T, st"allow(non_snake_case)"))
 
-        val uses: ISZ[RustAst.Item] = ISZ(
-          RustAst.Use(ISZ(), RustAst.IdentString(CRustTypePlugin.usePath)),
-          RustAst.Use(ISZ(), RustAst.IdentString(s"crate::bridge::${CRustApiPlugin.apiModuleName(thread)}::*")),
-          RustAst.Use(ISZ(
-            RustAst.AttributeST(F, st"cfg(feature = \"sel4\")"),
-            RustAst.AttributeST(F, st"allow(unused_imports)")),
-            RustAst.IdentString(s"log::{error, warn, info, debug, trace}")))
+      val uses: ISZ[RustAst.Item] = ISZ(
+        RustAst.Use(ISZ(), RustAst.IdentString(CRustTypePlugin.usePath)),
+        RustAst.Use(ISZ(), RustAst.IdentString(s"crate::bridge::${CRustApiPlugin.apiModuleName(thread)}::*")),
+        RustAst.Use(ISZ(
+          RustAst.AttributeST(F, st"cfg(feature = \"sel4\")"),
+          RustAst.AttributeST(F, st"allow(unused_imports)")),
+          RustAst.IdentString(s"log::{error, warn, info, debug, trace}")))
 
-        val struct = RustAst.StructDef(
-          attributes = ISZ(),
-          visibility = RustAst.Visibility.Public,
-          ident = RustAst.IdentString(threadId),
-          items = ISZ())
+      val struct = RustAst.StructDef(
+        attributes = ISZ(),
+        visibility = RustAst.Visibility.Public,
+        ident = RustAst.IdentString(threadId),
+        items = ISZ())
 
-        val newFn = RustAst.FnImpl(
-          sig = RustAst.FnSig(
-            ident = RustAst.IdentString("new"),
-            fnDecl = RustAst.FnDecl(inputs = ISZ(), outputs = RustAst.FnRetTyImpl(RustAst.TyPath(ISZ(ISZ("Self")), None()))),
-            verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
-          comments = ISZ(), attributes = ISZ(), visibility = RustAst.Visibility.Public, contract = None(), meta = ISZ(),
-          body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemSelf(ISZ())))))
+      val newFn = RustAst.FnImpl(
+        sig = RustAst.FnSig(
+          ident = RustAst.IdentString("new"),
+          fnDecl = RustAst.FnDecl(inputs = ISZ(), outputs = RustAst.FnRetTyImpl(RustAst.TyPath(ISZ(ISZ("Self")), None()))),
+          verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
+        comments = ISZ(), attributes = ISZ(), visibility = RustAst.Visibility.Public, contract = None(), meta = ISZ(),
+        body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemSelf(ISZ())))))
 
-        val initFn = RustAst.FnImpl(
-          sig = RustAst.FnSig(
-            ident = RustAst.IdentString("initialize"),
-            generics = Some(RustAst.Generics(RustAst.GenericParam(
-              ident = RustAst.IdentString("API"),
-              attributes = ISZ(),
-              bounds = RustAst.GenericBoundFixMe(st"${CRustApiPlugin.putApiType(thread)}")))),
-            fnDecl = RustAst.FnDecl(
-              inputs = ISZ(
-                RustAst.ParamFixMe(st"&mut self"),
-                RustAst.ParamImpl(
-                  ident = RustAst.IdentString("api"),
-                  kind = RustAst.TyRef(None(), RustAst.MutTy(
-                    ty = RustAst.TyPath(ISZ(ISZ(appApiType), ISZ("API")), None()), mutbl = RustAst.Mutability.Mut)))
-              ),
-              outputs = RustAst.FnRetTyDefault()),
-            verusHeader = None(), fnHeader = RustAst.FnHeader(F)),
-          comments = ISZ(), attributes = ISZ(), visibility = RustAst.Visibility.Public, contract = None(), meta = ISZ(),
-          body = Some(RustAst.MethodBody(ISZ(
-            RustAst.BodyItemST(st"""#[cfg(feature = "sel4")]
-                                   |info!("initialize entrypoint invoked");""")))))
+      val initFn = RustAst.FnImpl(
+        sig = RustAst.FnSig(
+          ident = RustAst.IdentString("initialize"),
+          generics = Some(RustAst.Generics(ISZ(RustAst.GenericParam(
+            ident = RustAst.IdentString("API"),
+            attributes = ISZ(),
+            bounds = RustAst.GenericBoundFixMe(st"${CRustApiPlugin.putApiType(thread)}"))))),
+          fnDecl = RustAst.FnDecl(
+            inputs = ISZ(
+              RustAst.ParamFixMe(st"&mut self"),
+              RustAst.ParamImpl(
+                ident = RustAst.IdentString("api"),
+                kind = RustAst.TyRef(None(), RustAst.MutTy(
+                  ty = RustAst.TyPath(ISZ(ISZ(appApiType), ISZ("API")), None()), mutbl = RustAst.Mutability.Mut)))
+            ),
+            outputs = RustAst.FnRetTyDefault()),
+          verusHeader = None(), fnHeader = RustAst.FnHeader(F)),
+        comments = ISZ(), attributes = ISZ(), visibility = RustAst.Visibility.Public, contract = None(), meta = ISZ(),
+        body = Some(RustAst.MethodBody(ISZ(
+          RustAst.BodyItemST(
+            st"""#[cfg(feature = "sel4")]
+                |info!("initialize entrypoint invoked");""")))))
 
-        val entrypointFns: ISZ[RustAst.Item] =
-          if (thread.isPeriodic())
-            ISZ(RustAst.FnImpl(
-              sig = RustAst.FnSig(
-                ident = RustAst.IdentString("timeTriggered"),
-                generics = Some(RustAst.Generics(RustAst.GenericParam(
-                  ident = RustAst.IdentString("API"),
-                  attributes = ISZ(),
-                  bounds = RustAst.GenericBoundFixMe(st"${CRustApiPlugin.fullApiType(thread)}")))),
-                fnDecl = RustAst.FnDecl(
-                  inputs = ISZ(
-                    RustAst.ParamFixMe(st"&mut self"),
-                    RustAst.ParamImpl(
-                      ident = RustAst.IdentString("api"),
-                      kind = RustAst.TyRef(None(), RustAst.MutTy(
-                        ty = RustAst.TyPath(ISZ(ISZ(appApiType), ISZ("API")), None()), mutbl = RustAst.Mutability.Mut)))
-                  ),
-                  outputs = RustAst.FnRetTyDefault()),
-                verusHeader = None(), fnHeader = RustAst.FnHeader(F)),
-              comments = ISZ(), attributes = ISZ(), visibility = RustAst.Visibility.Public, contract = None(), meta = ISZ(),
-              body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
-                st"""#[cfg(feature = "sel4")]
-                     |info!("compute entrypoint invoked");"""))))))
-          else ISZ(RustAst.CommentNonDoc(ISZ(st"NOT YET FOR SPORADIC")))
+      val entrypointFns: ISZ[RustAst.Item] =
+        if (thread.isPeriodic())
+          ISZ(RustAst.FnImpl(
+            sig = RustAst.FnSig(
+              ident = RustAst.IdentString("timeTriggered"),
+              generics = Some(RustAst.Generics(ISZ(RustAst.GenericParam(
+                ident = RustAst.IdentString("API"),
+                attributes = ISZ(),
+                bounds = RustAst.GenericBoundFixMe(st"${CRustApiPlugin.fullApiType(thread)}"))))),
+              fnDecl = RustAst.FnDecl(
+                inputs = ISZ(
+                  RustAst.ParamFixMe(st"&mut self"),
+                  RustAst.ParamImpl(
+                    ident = RustAst.IdentString("api"),
+                    kind = RustAst.TyRef(None(), RustAst.MutTy(
+                      ty = RustAst.TyPath(ISZ(ISZ(appApiType), ISZ("API")), None()), mutbl = RustAst.Mutability.Mut)))
+                ),
+                outputs = RustAst.FnRetTyDefault()),
+              verusHeader = None(), fnHeader = RustAst.FnHeader(F)),
+            comments = ISZ(), attributes = ISZ(), visibility = RustAst.Visibility.Public, contract = None(), meta = ISZ(),
+            body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
+              st"""#[cfg(feature = "sel4")]
+                  |info!("compute entrypoint invoked");"""))))))
+        else ISZ(RustAst.CommentNonDoc(ISZ(st"NOT YET FOR SPORADIC")))
 
-        val notify = RustAst.FnImpl(
-          sig = RustAst.FnSig(
-            ident = RustAst.IdentString("notify"),
-            fnDecl = RustAst.FnDecl(
-              inputs = ISZ(
-                RustAst.ParamFixMe(st"&mut self"),
-                RustAst.ParamImpl(
-                  ident = RustAst.IdentString("channel"),
-                  kind = RustAst.TyPath(ISZ(ISZ("microkit_channel")), None()))),
-              outputs = RustAst.FnRetTyDefault()),
-            verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
-          comments = ISZ(), contract = None(), visibility = RustAst.Visibility.Public, attributes = ISZ(), meta = ISZ(),
-          body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
-            st"""// this method is called when the monitor does not handle the passed in channel
-                |match channel {
-                |  _ => {
-                |    #[cfg(feature = "sel4")]
-                |    warn!("Unexpected channel {}", channel)
-                |  }
-                |}""")))))
+      val notify = RustAst.FnImpl(
+        sig = RustAst.FnSig(
+          ident = RustAst.IdentString("notify"),
+          fnDecl = RustAst.FnDecl(
+            inputs = ISZ(
+              RustAst.ParamFixMe(st"&mut self"),
+              RustAst.ParamImpl(
+                ident = RustAst.IdentString("channel"),
+                kind = RustAst.TyPath(ISZ(ISZ("microkit_channel")), None()))),
+            outputs = RustAst.FnRetTyDefault()),
+          verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
+        comments = ISZ(), contract = None(), visibility = RustAst.Visibility.Public, attributes = ISZ(), meta = ISZ(),
+        body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
+          st"""// this method is called when the monitor does not handle the passed in channel
+              |match channel {
+              |  _ => {
+              |    #[cfg(feature = "sel4")]
+              |    warn!("Unexpected channel {}", channel)
+              |  }
+              |}""")))))
 
-        val impl = RustAst.ImplBase(
-          forIdent = RustAst.IdentString(threadId),
-          items = ISZ[RustAst.Item](newFn, initFn) ++ entrypointFns :+ notify,
-          comments = ISZ(), attributes = ISZ(), implIdent = None())
+      val impl = RustAst.ImplBase(
+        forIdent = RustAst.IdentString(threadId),
+        items = ISZ[RustAst.Item](newFn, initFn) ++ entrypointFns :+ notify,
+        comments = ISZ(), attributes = ISZ(), implIdent = None())
 
-        ret = ret + thread.path ~>
-          ComponentContributions(
-            markers = ISZ(),
-            requiresVerus = F,
-            appModDirectives = modDirectives,
-            appUses = uses,
-            appStructDef = struct,
-            appStructImpl = impl)
-      }
+      val testEntries = genTestEntries(thread)
+
+      ret = ret + thread.path ~>
+        ComponentContributions(
+          markers = ISZ(),
+          requiresVerus = F,
+          appModDirectives = modDirectives,
+          appUses = uses,
+          appStructDef = struct,
+          appStructImpl = impl,
+
+          testEntries = testEntries)
 
       makefileEntries = makefileEntries :+ st"make -C $${CRATES_DIR}/$threadId test"
     } // end handling crusty components
 
     return (
       MakefileUtil.addMainMakefileTarget(MakefileTarget(name = "test", dependencies = ISZ(), body = makefileEntries),
-        CRustComponentPlugin.putComponentContributions(localStore, DefaultCRustComponentContributions(ret))),
+        CRustComponentPlugin.putComponentContributions(DefaultCRustComponentContributions(ret), localStore)),
       resources)
+  }
+
+  @pure def genTestEntries(thread: AadlThread): ISZ[RustAst.Item] = {
+    val threadId = Util.getThreadIdPath(thread)
+    assert(thread.isPeriodic(), s"Not yet handling sporadic threads: ${threadId}")
+
+    return ISZ(RustAst.ItemST(
+      st"""mod tests {
+          |  // NOTE: need to run tests sequentially to prevent race conditions
+          |  //       on the app and the testing apis which are static
+          |  use serial_test::serial;
+          |
+          |  use crate::bridge::test_api;
+          |  use ${CRustTypePlugin.usePath};
+          |
+          |  #[test]
+          |  #[serial]
+          |  fn test_initialization() {
+          |    unsafe {
+          |      crate::${threadId}_initialize();
+          |    }
+          |  }
+          |
+          |  #[test]
+          |  #[serial]
+          |  fn test_compute() {
+          |    unsafe {
+          |      crate::${threadId}_initialize();
+          |
+          |      crate::${threadId}_timeTriggered();
+          |    }
+          |  }
+          |}"""))
   }
 
 
@@ -267,6 +310,9 @@ object ComponentContributions {}
               |  logging::LOGGER.set().unwrap();
               |
               |  unsafe {
+              |    #[cfg(test)]
+              |    crate::bridge::extern_c_api::initialize_test_globals();
+              |
               |    let mut _app = $threadId::new();
               |    _app.initialize(&mut init_api);
               |    app = Some(_app);
@@ -367,6 +413,18 @@ object ComponentContributions {}
         resources = resources :+ ResourceUtil.createResource(path, content, F)
       }
 
+      { // tests.rs
+        val content =
+          st"""#![cfg(test)]
+              |
+              |${Util.safeToEdit}
+              |
+              |${(for(i <- e._2.testEntries) yield i.prettyST, "\n\n")}
+              |"""
+        val path = s"${CRustComponentPlugin.componentCrateDirectory(thread, options)}/src/tests.rs"
+        resources = resources :+ ResourceUtil.createResource(path, content, F)
+      }
+
       { // Cargo.toml
         val content =
           st"""${Util.safeToEditMakefile}
@@ -387,6 +445,7 @@ object ComponentContributions {}
               |lazy_static = "1.5.0"
               |once_cell = "1.21.3"
               |serial_test = "3.2.0"
+              |proptest = "1.7.0"
               |
               |[lib]
               |path = "src/lib.rs"

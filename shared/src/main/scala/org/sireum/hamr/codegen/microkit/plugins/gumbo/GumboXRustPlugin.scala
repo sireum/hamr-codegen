@@ -9,7 +9,8 @@ import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
 import org.sireum.hamr.codegen.common.util.HamrCli.CodegenHamrPlatform
 import org.sireum.hamr.codegen.microkit.plugins.apis.CRustApiPlugin
-import org.sireum.hamr.codegen.microkit.plugins.gumbo.GumboXRustUtil.{GGParam, GGPortParam, paramsToComment, sortParams}
+import org.sireum.hamr.codegen.microkit.plugins.component.CRustComponentPlugin
+import org.sireum.hamr.codegen.microkit.plugins.gumbo.GumboXRustUtil.{GGParam, GGPortParam, SymbolKind, paramsToComment, sortParams}
 import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, MicrokitPlugin}
 import org.sireum.hamr.codegen.microkit.plugins.types.{CRustTypePlugin, CRustTypeProvider}
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
@@ -36,30 +37,41 @@ object GumboXRustPlugin {
 object GumboXComponentContributions {
   @strictpure def empty: GumboXComponentContributions = GumboXComponentContributions(
     Map.empty,
-    ISZ(),
+    InitializeContributions.empty,
     ComputeContributions.empty,
     ISZ())
 }
 
+object InitializeContributions {
+  @strictpure def empty: InitializeContributions = InitializeContributions(ISZ(), ISZ())
+}
+
+@datatype class InitializeContributions(val IEP_Post_Params: ISZ[GGParam],
+                                        val IEP_Guarantee: ISZ[RAST.Fn])
+
 object ComputeContributions {
-  @strictpure def empty: ComputeContributions = ComputeContributions(ISZ(), ISZ(), ISZ(), None(), None())
+  @strictpure def empty: ComputeContributions = ComputeContributions(ISZ(), ISZ(), ISZ(), ISZ(), None(), ISZ(), None())
 }
 
 @datatype class ComputeContributions(val CEP_T_Assum__methods: ISZ[RAST.Fn],
                                      val CEP_T_Guar__methods: ISZ[RAST.Fn],
                                      val CEP_T_Case__methods: ISZ[RAST.Fn],
+
+                                     val CEP_Pre_Params: ISZ[GGParam],
                                      val CEP_Pre: Option[RAST.Fn],
+
+                                     val CEP_Post_Params: ISZ[GGParam],
                                      val CEP_Post: Option[RAST.Fn])
 
 @datatype class GumboXComponentContributions(val integrationConstraints: Map[PortIdPath, ISZ[RAST.Fn]],
 
                                              // init contributions
-                                             val IEP_Guarantee: ISZ[RAST.Fn],
+                                             val initializeContributions: InitializeContributions,
 
                                              // compute contributions
                                              val computeContributions: ComputeContributions,
 
-                                            //
+                                             //
                                              val gumboMethods: ISZ[RAST.Fn])
 
 
@@ -93,6 +105,9 @@ object ComputeContributions {
     var localStore = store
     val crustTypeProvider = CRustTypePlugin.getCRustTypeProvider(localStore).get
 
+    var componentContributions = CRustComponentPlugin.getCRustComponentContributions(localStore)
+    var apiContributions = CRustApiPlugin.getCRustApiContributions(localStore).get
+
     val datatypesWithContracts = GumboRustPlugin.getDatatypesWithContracts(localStore)
     val componentsWithContracts = GumboRustPlugin.getThreadsWithContracts(localStore)
 
@@ -100,39 +115,58 @@ object ComputeContributions {
     var items: Map[ThreadIdPath, GumboXComponentContributions] = Map.empty
 
     for (thread <- symbolTable.getThreads() if Util.isRusty(thread)) {
-      assert (!items.contains(thread.path), "Not expecting anyone else to have made gumbox contributions up to this point")
+      assert(!items.contains(thread.path), "Not expecting anyone else to have made gumbox contributions up to this point")
 
       if (datatypesWithContracts.nonEmpty || ops.ISZOps(componentsWithContracts).contains(thread.path)) {
         val subclauseInfoOpt = GumboRustUtil.getGumboSubclauseOpt(thread.path, symbolTable)
 
         val integrationConstraints = processIntegrationConstraints(thread, subclauseInfoOpt, crustTypeProvider, types, localStore, reporter)
 
-        val IEP_Guarantee = processInitialize(thread, datatypeInvariants, integrationConstraints, subclauseInfoOpt, crustTypeProvider, types, localStore, reporter)
+        val initializeContributions = processInitialize(thread, datatypeInvariants, integrationConstraints, subclauseInfoOpt, crustTypeProvider, types, localStore, reporter)
 
         val computeContributions = processCompute(thread, datatypeInvariants, integrationConstraints, subclauseInfoOpt, crustTypeProvider, types, localStore, reporter)
 
         val gumboMethods = processGumboMethods(thread, subclauseInfoOpt, crustTypeProvider, types, localStore, reporter)
 
+        { // update the generated apis to include GUMBOX artifacts
+
+          val testingApiContributions = buildGumboxTestMethods(thread, initializeContributions, computeContributions, subclauseInfoOpt, crustTypeProvider, types, localStore, reporter)
+
+          val apiComponentContributions = apiContributions.apiContributions.get(thread.path).get
+
+          val updated = apiComponentContributions(
+            testingApis =
+              RAST.Use(attributes = ISZ(),
+                ident = RAST.IdentString(s"crate::bridge::${Util.getThreadIdPath(thread)}_GUMBOX as GUMBOX")) +:
+                (apiComponentContributions.testingApis ++ testingApiContributions._1),
+
+            // modify bridge/mod.rs to add the GUMBOX module
+            bridgeModuleContributions =
+              apiComponentContributions.bridgeModuleContributions :+
+                RAST.ItemST(st"pub mod ${Util.getThreadIdPath(thread)}_GUMBOX;")
+          )
+
+          apiContributions = apiContributions.addApiContributions(thread.path, updated)
+
+          // add gumbox test module to tests.rs
+          val existingComponentContributions = componentContributions.componentContributions.get(thread.path).get
+          componentContributions = componentContributions.replaceComponentContributions(
+            componentContributions.componentContributions + thread.path ~>
+              existingComponentContributions(testEntries =
+              existingComponentContributions.testEntries ++ testingApiContributions._2)
+          )
+        }
+
         items = items + thread.path ~> GumboXComponentContributions(
           integrationConstraints = integrationConstraints,
-          IEP_Guarantee = IEP_Guarantee,
+          initializeContributions = initializeContributions,
           computeContributions = computeContributions,
           gumboMethods = gumboMethods)
-
-        { // update bridge/mod.rs to include the GUMBOX module. Need to do this now rather during
-          // finalizing since the Api plugin's finalizer will probably be called first
-          val allContributions = CRustApiPlugin.getCRustApiContributions(localStore).get
-
-          var threadsApiContributions = allContributions.apiContributions.get(thread.path).get
-          threadsApiContributions = threadsApiContributions(bridgeModuleContributions =
-            threadsApiContributions.bridgeModuleContributions :+
-              RAST.ItemST(st"pub mod ${Util.getThreadIdPath(thread)}_GUMBOX;"))
-
-          localStore = CRustApiPlugin.putCRustApiContributions(
-            allContributions.addApiContributions(thread.path, threadsApiContributions), localStore)
-        }
       }
     }
+
+    localStore = CRustApiPlugin.putCRustApiContributions(apiContributions, localStore)
+    localStore = CRustComponentPlugin.putComponentContributions(componentContributions, localStore)
 
     return (GumboXRustPlugin.putGumboXContributions(DefaultGumboXContributions(items), localStore), resources)
   }
@@ -146,7 +180,7 @@ object ComputeContributions {
     subclauseInfoOpt match {
       case Some(c) =>
         var ret: ISZ[RAST.Fn] = ISZ()
-        for(m <- c.annex.methods) {
+        for (m <- c.annex.methods) {
           ret = ret :+ GumboRustUtil.processGumboMethod(
             m = m,
             context = thread,
@@ -208,7 +242,7 @@ object ComputeContributions {
                       ident = RAST.IdentString(port.identifier),
                       kind = RAST.TyPath(ISZ(typeNameProvider.qualifiedRustNameS), Some(aadlType.classifier)))),
                     outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
-                  verusHeader = None(), fnHeader = RAST.FnHeader(F),generics = None()),
+                  verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
                 attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(),
                 body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(rewrittenExp)))),
                 meta = ISZ(RAST.MetaOrigin(port.path)))
@@ -258,7 +292,7 @@ object ComputeContributions {
                               crustTypeProvider: CRustTypeProvider,
                               types: AadlTypes,
                               store: Store,
-                              reporter: Reporter): ISZ[RAST.Fn] = {
+                              reporter: Reporter): InitializeContributions = {
 
     var IEP_Guarantee: ISZ[RAST.Fn] = ISZ()
     var IEP_Guarantee_Params: Set[GGParam] = Set.empty[GGParam] ++
@@ -385,11 +419,11 @@ object ComputeContributions {
     }
     if (IEP_Guarantee.nonEmpty) {
       // call the iep_guar method
-      assert (IEP_Guarantee.size >= 2)
+      assert(IEP_Guarantee.size >= 2)
       val iep_guar_method = IEP_Guarantee(IEP_Guarantee.lastIndex)
 
       bodySegments = bodySegments :+
-        st"${iep_guar_method.ident.prettyST}(${(for(p <- iep_guar_method.sig.fnDecl.inputs) yield p.ident.prettyST, ", ")})"
+        st"${iep_guar_method.ident.prettyST}(${(for (p <- iep_guar_method.sig.fnDecl.inputs) yield p.ident.prettyST, ", ")})"
     }
 
     if (bodySegments.nonEmpty) {
@@ -410,7 +444,7 @@ object ComputeContributions {
         body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(st"""${(bodySegments, "&& \n\n")}""")))),
         meta = ISZ())
     }
-    return IEP_Guarantee
+    return InitializeContributions(sorted_IEP_Post_Params, IEP_Guarantee)
   }
 
 
@@ -440,146 +474,145 @@ object ComputeContributions {
       GumboXRustUtil.stateVarsToParams(subclauseInfoOpt, F, types, crustTypeProvider)
 
     subclauseInfoOpt match {
-      case Some(GclAnnexClauseInfo(GclSubclause(stateVars, _, _, _, _, Some(compute)), gclSymbolTable)) =>
-        { // process top level assume/guarantees
+      case Some(GclAnnexClauseInfo(GclSubclause(stateVars, _, _, _, _, Some(compute)), gclSymbolTable)) => { // process top level assume/guarantees
 
-          var CEP_T_Assum_Params: Set[GGParam] = Set.empty
+        var CEP_T_Assum_Params: Set[GGParam] = Set.empty
 
-          var topLevelAssumeCallsCombined: ISZ[ST] = ISZ()
+        var topLevelAssumeCallsCombined: ISZ[ST] = ISZ()
 
-          var CEP_T_Guar_Params: Set[GGParam] = Set.empty
+        var CEP_T_Guar_Params: Set[GGParam] = Set.empty
 
-          var topLevelGuaranteesCombined: ISZ[ST] = ISZ()
+        var topLevelGuaranteesCombined: ISZ[ST] = ISZ()
 
-          for (g <- compute.assumes) {
-            val gg = GumboXRustUtil.rewriteToExpX(SlangExpUtil.getRexp(g.exp, gclSymbolTable), thread, types, stateVars, crustTypeProvider)
-            val rexp = SlangExpUtil.rewriteExp(
-              rexp = gg.exp,
-              context = thread,
-              inRequires = T,
-              inVerus = F,
-              tp = crustTypeProvider,
-              aadlTypes = types,
-              store = store,
-              reporter = reporter)
+        for (g <- compute.assumes) {
+          val gg = GumboXRustUtil.rewriteToExpX(SlangExpUtil.getRexp(g.exp, gclSymbolTable), thread, types, stateVars, crustTypeProvider)
+          val rexp = SlangExpUtil.rewriteExp(
+            rexp = gg.exp,
+            context = thread,
+            inRequires = T,
+            inVerus = F,
+            tp = crustTypeProvider,
+            aadlTypes = types,
+            store = store,
+            reporter = reporter)
 
-            val methodName = s"compute_spec_${g.id}_assume"
+          val methodName = s"compute_spec_${g.id}_assume"
 
-            CEP_T_Assum_Params = CEP_T_Assum_Params ++ gg.params.elements
+          CEP_T_Assum_Params = CEP_T_Assum_Params ++ gg.params.elements
 
-            val sortedParams = GumboXRustUtil.sortParams(gg.params.elements)
+          val sortedParams = GumboXRustUtil.sortParams(gg.params.elements)
 
-            topLevelAssumeCallsCombined = topLevelAssumeCallsCombined :+ st"$methodName(${(for (p <- sortedParams) yield p.name, ", ")})"
+          topLevelAssumeCallsCombined = topLevelAssumeCallsCombined :+ st"$methodName(${(for (p <- sortedParams) yield p.name, ", ")})"
 
-            CEP_T_Assm__methods = CEP_T_Assm__methods :+ RAST.FnImpl(
-              comments = ISZ(RAST.CommentST(
-                st"""/** Compute Entrypoint Contract
-                    |  *
-                    |  * assumes ${g.id}
-                    |  ${GumboRustUtil.processDescriptor(g.descriptor, "*   ")}
-                    |  ${(paramsToComment(sortedParams), "\n")}
-                    |  */""")),
-              sig = RAST.FnSig(
-                ident = RAST.IdentString(methodName),
-                fnDecl = RAST.FnDecl(
-                  inputs = for (p <- sortedParams) yield p.toRustParam,
-                  outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
-                verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
-              attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(),
-              body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(rexp)))),
-              meta = ISZ())
-          }
-
-          for (g <- compute.guarantees) {
-            val gg = GumboXRustUtil.rewriteToExpX(SlangExpUtil.getRexp(g.exp, gclSymbolTable), thread, types, stateVars, crustTypeProvider)
-            val rexp = SlangExpUtil.rewriteExp(
-              rexp = gg.exp,
-              context = thread,
-              inRequires = F,
-              inVerus = F,
-              tp = crustTypeProvider,
-              aadlTypes = types,
-              store = store,
-              reporter = reporter)
-
-            val methodName = s"compute_spec_${g.id}_guarantee"
-
-            CEP_T_Guar_Params = CEP_T_Guar_Params ++ gg.params.elements
-
-            val sortedParams = GumboXRustUtil.sortParams(gg.params.elements)
-
-            topLevelGuaranteesCombined = topLevelGuaranteesCombined :+ st"$methodName(${(for (p <- sortedParams) yield p.name, ", ")})"
-
-            CEP_T_Guar__methods = CEP_T_Guar__methods :+ RAST.FnImpl(
-              comments = ISZ(RAST.CommentST(
-                st"""/** Compute Entrypoint Contract
-                    |  *
-                    |  * guarantee ${g.id}
-                    |  ${GumboRustUtil.processDescriptor(g.descriptor, "*   ")}
-                    |  ${(paramsToComment(sortedParams), "\n")}
-                    |  */"""
-              )),
-              sig = RAST.FnSig(
-                ident = RAST.IdentString(methodName),
-                fnDecl = RAST.FnDecl(
-                  inputs = for (p <- sortedParams) yield p.toRustParam,
-                  outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
-                verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
-              attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(),
-              body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(rexp)))),
-              meta = ISZ())
-          }
-
-          if (CEP_T_Assm__methods.nonEmpty) {
-
-            CEP_Pre_Params = CEP_Pre_Params ++ CEP_T_Assum_Params.elements
-
-            val sorted_CEP_T_Assm_Params = sortParams(CEP_T_Assum_Params.elements)
-            val CEP_T_Assm_MethodName = GumboXRustUtil.getCompute_CEP_T_Assm_MethodName
-            CEP_T_Assm__methods = CEP_T_Assm__methods :+ RAST.FnImpl(
-              comments = ISZ(RAST.CommentST(
-                st"""/** CEP-T-Assm: Top-level assume contracts for ${thread.identifier}'s compute entrypoint
-                    |  *
-                    |  ${(paramsToComment(sorted_CEP_T_Assm_Params), "\n")}
-                    |  */""")),
-              sig = RAST.FnSig(
-                ident = RAST.IdentString(CEP_T_Assm_MethodName),
-                fnDecl = RAST.FnDecl(
-                  inputs = for(p <- sorted_CEP_T_Assm_Params) yield p.toRustParam,
-                  outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
-                verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
-              attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(),
-              body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
-                st"""${(for (i <- 0 until topLevelAssumeCallsCombined.size) yield st"let r$i: bool = ${topLevelAssumeCallsCombined(i)};", "\n")}
-                    |
-                    |return ${(for (i <- 0 until topLevelAssumeCallsCombined.size) yield s"r$i", " && ")};""")))),
-              meta = ISZ())
-          }
-
-          if (CEP_T_Guar__methods.nonEmpty) {
-            val sorted_CEP_T_Guar_Params = sortParams(CEP_T_Guar_Params.elements)
-            val CEP_T_Guar_MethodName = GumboXRustUtil.getCompute_CEP_T_Guar_MethodName
-            CEP_T_Guar__methods = CEP_T_Guar__methods :+ RAST.FnImpl(
-              comments = ISZ(RAST.CommentST(
-                st"""/** CEP-T-Guar: Top-level guarantee contracts for ${thread.identifier}'s compute entrypoint
-                    |  *
-                    |  ${(paramsToComment(sorted_CEP_T_Guar_Params), "\n")}
-                    |  */"""
-              )),
-              sig = RAST.FnSig(
-                ident = RAST.IdentString(CEP_T_Guar_MethodName),
-                fnDecl = RAST.FnDecl(
-                  inputs = for (p <- sorted_CEP_T_Guar_Params) yield p.toRustParam,
-                  outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
-                verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
-              attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(), meta = ISZ(),
-              body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
-                st"""${(for (i <- 0 until topLevelGuaranteesCombined.size) yield st"let r$i: bool = ${topLevelGuaranteesCombined(i)};", "\n")}
-                    |
-                    |return ${(for (i <- 0 until topLevelGuaranteesCombined.size) yield s"r$i", " && ")};"""))))
-            )
-          }
+          CEP_T_Assm__methods = CEP_T_Assm__methods :+ RAST.FnImpl(
+            comments = ISZ(RAST.CommentST(
+              st"""/** Compute Entrypoint Contract
+                  |  *
+                  |  * assumes ${g.id}
+                  |  ${GumboRustUtil.processDescriptor(g.descriptor, "*   ")}
+                  |  ${(paramsToComment(sortedParams), "\n")}
+                  |  */""")),
+            sig = RAST.FnSig(
+              ident = RAST.IdentString(methodName),
+              fnDecl = RAST.FnDecl(
+                inputs = for (p <- sortedParams) yield p.toRustParam,
+                outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
+              verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
+            attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(),
+            body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(rexp)))),
+            meta = ISZ())
         }
+
+        for (g <- compute.guarantees) {
+          val gg = GumboXRustUtil.rewriteToExpX(SlangExpUtil.getRexp(g.exp, gclSymbolTable), thread, types, stateVars, crustTypeProvider)
+          val rexp = SlangExpUtil.rewriteExp(
+            rexp = gg.exp,
+            context = thread,
+            inRequires = F,
+            inVerus = F,
+            tp = crustTypeProvider,
+            aadlTypes = types,
+            store = store,
+            reporter = reporter)
+
+          val methodName = s"compute_spec_${g.id}_guarantee"
+
+          CEP_T_Guar_Params = CEP_T_Guar_Params ++ gg.params.elements
+
+          val sortedParams = GumboXRustUtil.sortParams(gg.params.elements)
+
+          topLevelGuaranteesCombined = topLevelGuaranteesCombined :+ st"$methodName(${(for (p <- sortedParams) yield p.name, ", ")})"
+
+          CEP_T_Guar__methods = CEP_T_Guar__methods :+ RAST.FnImpl(
+            comments = ISZ(RAST.CommentST(
+              st"""/** Compute Entrypoint Contract
+                  |  *
+                  |  * guarantee ${g.id}
+                  |  ${GumboRustUtil.processDescriptor(g.descriptor, "*   ")}
+                  |  ${(paramsToComment(sortedParams), "\n")}
+                  |  */"""
+            )),
+            sig = RAST.FnSig(
+              ident = RAST.IdentString(methodName),
+              fnDecl = RAST.FnDecl(
+                inputs = for (p <- sortedParams) yield p.toRustParam,
+                outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
+              verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
+            attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(),
+            body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(rexp)))),
+            meta = ISZ())
+        }
+
+        if (CEP_T_Assm__methods.nonEmpty) {
+
+          CEP_Pre_Params = CEP_Pre_Params ++ CEP_T_Assum_Params.elements
+
+          val sorted_CEP_T_Assm_Params = sortParams(CEP_T_Assum_Params.elements)
+          val CEP_T_Assm_MethodName = GumboXRustUtil.getCompute_CEP_T_Assm_MethodName
+          CEP_T_Assm__methods = CEP_T_Assm__methods :+ RAST.FnImpl(
+            comments = ISZ(RAST.CommentST(
+              st"""/** CEP-T-Assm: Top-level assume contracts for ${thread.identifier}'s compute entrypoint
+                  |  *
+                  |  ${(paramsToComment(sorted_CEP_T_Assm_Params), "\n")}
+                  |  */""")),
+            sig = RAST.FnSig(
+              ident = RAST.IdentString(CEP_T_Assm_MethodName),
+              fnDecl = RAST.FnDecl(
+                inputs = for (p <- sorted_CEP_T_Assm_Params) yield p.toRustParam,
+                outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
+              verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
+            attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(),
+            body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
+              st"""${(for (i <- 0 until topLevelAssumeCallsCombined.size) yield st"let r$i: bool = ${topLevelAssumeCallsCombined(i)};", "\n")}
+                  |
+                  |return ${(for (i <- 0 until topLevelAssumeCallsCombined.size) yield s"r$i", " && ")};""")))),
+            meta = ISZ())
+        }
+
+        if (CEP_T_Guar__methods.nonEmpty) {
+          val sorted_CEP_T_Guar_Params = sortParams(CEP_T_Guar_Params.elements)
+          val CEP_T_Guar_MethodName = GumboXRustUtil.getCompute_CEP_T_Guar_MethodName
+          CEP_T_Guar__methods = CEP_T_Guar__methods :+ RAST.FnImpl(
+            comments = ISZ(RAST.CommentST(
+              st"""/** CEP-T-Guar: Top-level guarantee contracts for ${thread.identifier}'s compute entrypoint
+                  |  *
+                  |  ${(paramsToComment(sorted_CEP_T_Guar_Params), "\n")}
+                  |  */"""
+            )),
+            sig = RAST.FnSig(
+              ident = RAST.IdentString(CEP_T_Guar_MethodName),
+              fnDecl = RAST.FnDecl(
+                inputs = for (p <- sorted_CEP_T_Guar_Params) yield p.toRustParam,
+                outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
+              verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
+            attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(), meta = ISZ(),
+            body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
+              st"""${(for (i <- 0 until topLevelGuaranteesCombined.size) yield st"let r$i: bool = ${topLevelGuaranteesCombined(i)};", "\n")}
+                  |
+                  |return ${(for (i <- 0 until topLevelGuaranteesCombined.size) yield s"r$i", " && ")};"""))))
+          )
+        }
+      }
 
         if (compute.cases.nonEmpty) {
           var CEP_T_Case_Params: Set[GGParam] = Set.empty
@@ -590,9 +623,9 @@ object ComputeContributions {
             val rAssm: Option[ST] =
               ccase.assumes match {
                 case Some(assumes) =>
-                  val ggAssm = GumboXRustUtil.rewriteToExpX (SlangExpUtil.getRexp (assumes, gclSymbolTable), thread, types, stateVars, crustTypeProvider)
+                  val ggAssm = GumboXRustUtil.rewriteToExpX(SlangExpUtil.getRexp(assumes, gclSymbolTable), thread, types, stateVars, crustTypeProvider)
                   combinedAssumGuarParams = combinedAssumGuarParams ++ ggAssm.params.elements
-                  Some(SlangExpUtil.rewriteExp (
+                  Some(SlangExpUtil.rewriteExp(
                     rexp = ggAssm.exp,
                     context = thread,
                     inRequires = T,
@@ -640,7 +673,7 @@ object ComputeContributions {
               sig = RAST.FnSig(
                 ident = RAST.IdentString(methodName),
                 fnDecl = RAST.FnDecl(
-                  inputs = for(p <- sortedParams) yield p.toRustParam,
+                  inputs = for (p <- sortedParams) yield p.toRustParam,
                   outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
                 verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
               attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(),
@@ -660,7 +693,7 @@ object ComputeContributions {
             sig = RAST.FnSig(
               ident = RAST.IdentString(CEP_T_Case_MethodName),
               fnDecl = RAST.FnDecl(
-                inputs = for(p <- sorted_CEP_T_Case_Params) yield p.toRustParam,
+                inputs = for (p <- sorted_CEP_T_Case_Params) yield p.toRustParam,
                 outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
               verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
             attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(),
@@ -688,11 +721,11 @@ object ComputeContributions {
         val port = thread.getPortByPath(entry._1).get
         if (GumboXRustUtil.isInPort(port)) {
           for (fn <- entry._2) {
-          val aadlType = MicrokitTypeUtil.getPortType(port)
-          val param = GGPortParam(port, aadlType.classifier, crustTypeProvider.getTypeNameProvider(aadlType))
-          I_Assm_Guar_Params = I_Assm_Guar_Params + param
-          I_Assm_Guar = I_Assm_Guar :+ st"${fn.ident.prettyST}(${param.name})"
-            }
+            val aadlType = MicrokitTypeUtil.getPortType(port)
+            val param = GGPortParam(port, aadlType.classifier, crustTypeProvider.getTypeNameProvider(aadlType))
+            I_Assm_Guar_Params = I_Assm_Guar_Params + param
+            I_Assm_Guar = I_Assm_Guar :+ st"${fn.ident.prettyST}(${param.name})"
+          }
         }
       }
 
@@ -711,7 +744,7 @@ object ComputeContributions {
         val CEP_Assm_call: ISZ[ST] =
           if (CEP_T_Assm__methods.nonEmpty) {
             val lst = CEP_T_Assm__methods(CEP_T_Assm__methods.lastIndex)
-            val args: ISZ[ST] = for(p <- lst.sig.fnDecl.inputs) yield p.ident.prettyST
+            val args: ISZ[ST] = for (p <- lst.sig.fnDecl.inputs) yield p.ident.prettyST
             ISZ(st"${lst.ident.prettyST}(${(args, ", ")})")
           } else {
             ISZ()
@@ -723,9 +756,10 @@ object ComputeContributions {
         //   - call CEP-Assm
 
         var count = 0
+
         def opt(sts: ISZ[ST], desc: String): ST = {
-          val ret =(st"""// $desc
-                        |${(for (i <- 0 until sts.size) yield st"let r${i + count}: bool = ${sts(i)};", "\n")}""")
+          val ret = (st"""// $desc
+                         |${(for (i <- 0 until sts.size) yield st"let r${i + count}: bool = ${sts(i)};", "\n")}""")
           count = count + sts.size
           return ret
         }
@@ -753,7 +787,7 @@ object ComputeContributions {
           sig = RAST.FnSig(
             ident = RAST.IdentString(GumboXRustUtil.getCompute_CEP_Pre_MethodName),
             fnDecl = RAST.FnDecl(
-              inputs = for(p <- sorted_Cep_Pre_Params) yield p.toRustParam,
+              inputs = for (p <- sorted_Cep_Pre_Params) yield p.toRustParam,
               outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
             verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
           attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(), meta = ISZ(),
@@ -767,7 +801,7 @@ object ComputeContributions {
     { // CEP_Post
       var I_Guar_Guard_Params: Set[GGParam] = Set.empty
       var I_Guar_Guard: ISZ[ST] = ISZ()
-      for(entry <- integrationConstraints.entries) {
+      for (entry <- integrationConstraints.entries) {
         val port = thread.getPortByPath(entry._1).get
         val isOptional = !port.isInstanceOf[AadlDataPort]
         if (isOptional) {
@@ -793,7 +827,7 @@ object ComputeContributions {
         val CEP_Guar_call: Option[ST] =
           if (CEP_T_Guar__methods.nonEmpty) {
             val cep_t_guar_fn = CEP_T_Guar__methods(CEP_T_Guar__methods.lastIndex)
-            val args: ISZ[ST] = for(a <- cep_t_guar_fn.sig.fnDecl.inputs) yield a.ident.prettyST
+            val args: ISZ[ST] = for (a <- cep_t_guar_fn.sig.fnDecl.inputs) yield a.ident.prettyST
             Some(st"${cep_t_guar_fn.ident.prettyST}(${(args, ", ")})")
           } else {
             None()
@@ -804,7 +838,7 @@ object ComputeContributions {
         val CEP_T_Case_call: Option[ST] =
           if (CEP_T_Case__methods.nonEmpty) {
             val cep_t_case_fn = CEP_T_Case__methods(CEP_T_Case__methods.lastIndex)
-            val args: ISZ[ST] = for(a <- cep_t_case_fn.sig.fnDecl.inputs) yield a.ident.prettyST
+            val args: ISZ[ST] = for (a <- cep_t_case_fn.sig.fnDecl.inputs) yield a.ident.prettyST
             Some(st"${cep_t_case_fn.ident.prettyST}(${(args, ", ")})")
           } else {
             None()
@@ -825,6 +859,7 @@ object ComputeContributions {
         //  - calls CEP-T-Handlers
 
         var count = 0
+
         def opts(sts: ISZ[ST], desc: String): ST = {
           val ret = (st"""// $desc
                          |${(for (i <- 0 until sts.size) yield st"let r${i + count}: bool = ${sts(i)};", "\n")}""")
@@ -875,8 +910,414 @@ object ComputeContributions {
       CEP_T_Assum__methods = CEP_T_Assm__methods,
       CEP_T_Guar__methods = CEP_T_Guar__methods,
       CEP_T_Case__methods = CEP_T_Case__methods,
+
+      CEP_Pre_Params.elements,
       CEP_Pre = CEP_Pre,
+
+      CEP_Post_Params.elements,
       CEP_Post = CEP_Post)
+  }
+
+  @pure def buildGumboxTestMethods(thread: AadlThread,
+                                   initializeContributions: InitializeContributions,
+                                   computeContributions: ComputeContributions,
+                                   subclauseInfoOpt: Option[GclAnnexClauseInfo], crustTypeProvider: CRustTypeProvider, types: AadlTypes, localStore: Store, reporter: Reporter
+                                  ): (ISZ[RAST.Item], ISZ[RAST.Item]) = {
+    assert(thread.isPeriodic(), s"Need to handle sporadic threads: ${thread.classifierAsString}")
+
+    var test_api_rs_Items: ISZ[RAST.Item] = ISZ()
+    var tests_rs_Items: ISZ[ST] = ISZ()
+
+
+    val testInitializeCB = "testInitializeCB"
+    val testComputeCB = "testComputeCB"
+    val testComputeCBwLV = "testComputeCBwLV"
+
+    { // testInitialiseCB
+      val sorted_iep_post_param = GumboXRustUtil.sortParams(initializeContributions.IEP_Post_Params)
+
+      val postStateFetchOpt: Option[ST] =
+        if (initializeContributions.IEP_Guarantee.nonEmpty)
+          Some(
+            st"""// [RetrieveOutState]: retrieve values of the output ports via get operations and GUMBO declared local state variable
+                |${(for (p <- sorted_iep_post_param) yield st"let ${p.name} = get_${p.originName}();", "\n")}
+                |""")
+        else None()
+
+      val postOpt: Option[ST] =
+        if (initializeContributions.IEP_Guarantee.nonEmpty) {
+          val iep_post = initializeContributions.IEP_Guarantee(initializeContributions.IEP_Guarantee.lastIndex)
+          assert(iep_post.sig.ident.string == GumboXRustUtil.getInitialize_IEP_Post_MethodName)
+          Some(
+            st"""// [CheckPost]: invoke the oracle function
+                |prop_assert!(
+                |  GUMBOX::${iep_post.sig.ident.string}(
+                |    ${(for (p <- sorted_iep_post_param) yield p.name, ",\n")}
+                |  ),
+                |  "Postcondition failed: incorrect output behavior"
+                |);
+                |""")
+        } else {
+          None()
+        }
+
+      val initBody: ST =
+        st"""// [InvokeEntryPoint]: Invoke the entry point
+            |crate::${Util.getThreadIdPath(thread)}_initialize();
+            |
+            |$postStateFetchOpt
+            |$postOpt
+            |// Return Ok(()) if all assertions pass
+            |Ok(())"""
+      val testInitialize = RAST.FnImpl(
+        visibility = RAST.Visibility.Public,
+        sig = RAST.FnSig(
+          ident = RAST.IdentString(testInitializeCB),
+          fnHeader = RAST.FnHeader(F),
+          fnDecl = RAST.FnDecl(
+            inputs = ISZ(),
+            outputs = RAST.FnRetTyImpl(RAST.TyFixMe(st"Result<(), TestCaseError>"))),
+          verusHeader = None(), generics = None()),
+        body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(initBody)))),
+        comments = ISZ(RAST.CommentST(
+          st"""/** Contract-based test harness for the initialize entry point
+              |  */""")),
+        attributes = ISZ(), contract = None(), meta = ISZ())
+
+      test_api_rs_Items = test_api_rs_Items :+ testInitialize
+    }
+
+    { // testInitialize_macro
+      var inputs: ISZ[RAST.Param] = ISZ()
+      inputs = inputs :+ RAST.ParamImpl(RAST.IdentString("$test_name"), RAST.TyPath(ISZ(ISZ("ident")), None()))
+      inputs = inputs :+ RAST.ParamImpl(RAST.IdentString("config"), RAST.TyPath(ISZ(ISZ("$config:expr")), None()))
+
+      val body =
+        st"""proptest!{
+            |  #![proptest_config($$config)]
+            |  #[test]
+            |  #[serial]
+            |  fn $$test_name(empty in ::proptest::strategy::Just(())) {
+            |    $$crate::bridge::test_api::${testInitializeCB}()?;
+            |  }
+            |}"""
+      val testInitialize_CB_macro = RAST.MacroImpl(
+        attributes = ISZ(RAST.AttributeST(inner = F, content = st"macro_export")),
+        ident = RAST.IdentString(s"${testInitializeCB}_macro"),
+        inputs = inputs,
+        comments = ISZ(),
+        body = Some(body))
+
+      test_api_rs_Items = test_api_rs_Items :+ testInitialize_CB_macro
+
+
+      tests_rs_Items = tests_rs_Items :+
+        st"""${testInitializeCB}_macro! {
+            |  prop_${testInitializeCB}_macro, // test name
+            |  config: ProptestConfig { // proptest configuration, built by overriding fields from default config
+            |    cases: numValidComputeTestCases,
+            |    max_global_rejects: numValidComputeTestCases * computeRejectRatio,
+            |    verbose: verbosity,
+            |    ..ProptestConfig::default()
+            |  }
+            |}"""
+    }
+
+
+    val sorted_Pre_State_Params = GumboXRustUtil.sortParams(computeContributions.CEP_Pre_Params)
+    val sorted_Post_State_Params = GumboXRustUtil.sortParams(computeContributions.CEP_Post_Params)
+
+    val preOpt: Option[ST] =
+      if (computeContributions.CEP_Pre.nonEmpty)
+        Some(
+          st"""// [CheckPre]: check/filter based on pre-condition.
+              |prop_assume! {
+              |  GUMBOX::${computeContributions.CEP_Pre.get.sig.ident.prettyST} (
+              |    ${(for (p <- sorted_Pre_State_Params) yield p.name, ",\n")}
+              |  ),
+              |   "Precondition failed: invalid input combination"
+              |}
+              |""")
+      else None()
+
+    val inPorts = sorted_Pre_State_Params.filter(p => p.isInPort)
+    val putInPortOpts: Option[ST] =
+      if (inPorts.nonEmpty)
+        Some(
+          st"""// [PutInPorts]: Set values on the input ports
+              |${(for (p <- inPorts) yield st"put_${p.originName}(${p.name});", "\n")}
+              |""")
+      else None()
+
+    val onlyOutState = sorted_Post_State_Params.filter(p => p.isOutPort || p.kind == SymbolKind.StateVar)
+    val postStateFetchOpt: Option[ST] =
+      if (computeContributions.CEP_Post.nonEmpty) Some(
+        st"""// [RetrieveOutState]: retrieve values of the output ports via get operations and GUMBO declared local state variable
+            |${(for (p <- onlyOutState) yield st"let ${p.name} = get_${p.originName}();", "\n")}
+            |""")
+      else None()
+
+    val postOpt: Option[ST] =
+      if (computeContributions.CEP_Post.nonEmpty)
+        Some(
+          st"""// [CheckPost]: invoke the oracle function
+              |prop_assert!(
+              |  GUMBOX::${computeContributions.CEP_Post.get.sig.ident.prettyST}(
+              |    ${(for (p <- sorted_Post_State_Params) yield p.name, ",\n")}
+              |  ),
+              |  "Postcondition failed: incorrect output behavior"
+              |);
+              |""")
+      else None()
+
+    { // testComputeCB
+      val sorted_pre_without_state_vars = sorted_Pre_State_Params.filter(p => p.isInPort)
+
+      val state_vars = sorted_Pre_State_Params.filter(p => p.isStateVar)
+      var svs: ISZ[ST] = ISZ()
+      for (s <- state_vars) {
+        svs = svs :+ st"let ${s.name}: ${s.typeNameProvider.qualifiedRustName} = get_${s.originName}();"
+      }
+      val saveInLocalOpt: Option[ST] =
+        if (state_vars.nonEmpty)
+          Some(
+            st"""// [SaveInLocal]: retrieve and save the current (input) values of GUMBO-declared local state variables as retrieved
+                |//                from the component state
+                |${(svs, "\n")}
+                |""")
+        else None()
+
+      val computeCBBody: ST =
+        st"""// Initialize the app
+            |crate::${Util.getThreadIdPath(thread)}_initialize();
+            |
+            |$saveInLocalOpt
+            |$preOpt
+            |$putInPortOpts
+            |// [InvokeEntryPoint]: Invoke the entry point
+            |crate::${Util.getThreadIdPath(thread)}_timeTriggered();
+            |
+            |$postStateFetchOpt
+            |$postOpt
+            |// Return Ok(()) if all assertions pass
+            |Ok(())"""
+      val testComputeWithoutStateVars = RAST.FnImpl(
+        visibility = RAST.Visibility.Public,
+        sig = RAST.FnSig(
+          ident = RAST.IdentString(testComputeCB),
+          fnHeader = RAST.FnHeader(F),
+          fnDecl = RAST.FnDecl(
+            inputs = for (p <- sorted_pre_without_state_vars) yield p.toRustParam,
+            outputs = RAST.FnRetTyImpl(RAST.TyFixMe(st"Result<(), TestCaseError>"))),
+          verusHeader = None(), generics = None()),
+        body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(computeCBBody)))),
+        comments = ISZ(RAST.CommentST(
+          st"""/** Contract-based test harness for the compute entry point
+              |  *
+              |  ${(paramsToComment(sorted_pre_without_state_vars), "\n")}
+              |  */""")),
+        attributes = ISZ(), contract = None(), meta = ISZ())
+
+      test_api_rs_Items = test_api_rs_Items :+ testComputeWithoutStateVars
+    }
+
+    { // test_compute_CB_macro
+      var inputs: ISZ[RAST.Param] = ISZ()
+      inputs = inputs :+ RAST.ParamImpl(RAST.IdentString("$test_name"), RAST.TyPath(ISZ(ISZ("ident")), None()))
+      inputs = inputs :+ RAST.ParamImpl(RAST.IdentString("config"), RAST.TyPath(ISZ(ISZ("$config:expr")), None()))
+
+      val sorted_pre_without_state_vars = sorted_Pre_State_Params.filter(p => p.isInPort)
+
+      for (p <- sorted_pre_without_state_vars) {
+        inputs = inputs :+ RAST.ParamImpl(
+          ident = RAST.IdentString(p.name),
+          kind = RAST.TyPath(ISZ(ISZ(s"$$${p.name}_strat:expr")), None())
+        )
+      }
+      val body =
+        st"""proptest!{
+            |  #![proptest_config($$config)]
+            |  #[test]
+            |  #[serial]
+            |  fn $$test_name(
+            |    (${(for (p <- sorted_pre_without_state_vars) yield p.name, ", ")})
+            |    in (${(for (p <- sorted_pre_without_state_vars) yield s"$$${p.name}_strat", ", ")})
+            |  ) {
+            |    $$crate::bridge::test_api::${testComputeCB}(
+            |      ${(for (p <- sorted_pre_without_state_vars) yield p.name, ",\n")}
+            |    )?;
+            |  }
+            |}"""
+      val test_compute_CB_macro = RAST.MacroImpl(
+        attributes = ISZ(RAST.AttributeST(inner = F, content = st"macro_export")),
+        ident = RAST.IdentString(s"${testComputeCB}_macro"),
+        inputs = inputs,
+        comments = ISZ(),
+        body = Some(body))
+
+      test_api_rs_Items = test_api_rs_Items :+ test_compute_CB_macro
+
+      val strategiesOpt: Option[ST] =
+       if(sorted_pre_without_state_vars.nonEmpty) {
+         var strategies: ISZ[ST] = ISZ()
+         for (p <- sorted_pre_without_state_vars) {
+           var d = st"test_api::${(p.typeNameProvider.qualifiedRustNameS, "_")}_strategy_default()"
+           if (p.isOptional) {
+             d = st"test_api::option_strategy_default($d)"
+           }
+           strategies = strategies :+ st"${p.name}: $d"
+         }
+         Some(
+           st"""// strategies for generating each component input
+               |${(strategies, ",\n")}""")
+       } else {
+         None()
+       }
+      tests_rs_Items = tests_rs_Items :+
+        st"""${testComputeCB}_macro! {
+            |  prop_${testComputeCB}_macro, // test name
+            |  config: ProptestConfig { // proptest configuration, built by overriding fields from default config
+            |    cases: numValidComputeTestCases,
+            |    max_global_rejects: numValidComputeTestCases * computeRejectRatio,
+            |    verbose: verbosity,
+            |    ..ProptestConfig::default()
+            |  }${if(strategiesOpt.nonEmpty) "," else ""}
+            |  $strategiesOpt
+            |}"""
+    }
+
+    { // test_compute_CBwL
+      val stateVars = sorted_Pre_State_Params.filter(p => p.isStateVar)
+      val putStateVarOpts: Option[ST] =
+        if (stateVars.nonEmpty)
+          Some(
+            st"""// [SetInStateVars]: set the pre-state values of state variables
+                |${(for (p <- stateVars) yield st"put_${p.originName}(${p.name});", "\n")}
+                |""")
+        else None()
+
+      val computeCBwLBody: ST =
+        st"""// Initialize the app
+            |crate::${Util.getThreadIdPath(thread)}_initialize();
+            |
+            |$preOpt
+            |$putInPortOpts
+            |$putStateVarOpts
+            |// [InvokeEntryPoint]: Invoke the entry point
+            |crate::${Util.getThreadIdPath(thread)}_timeTriggered();
+            |
+            |$postStateFetchOpt
+            |$postOpt
+            |// Return Ok(()) if all assertions pass
+            |Ok(())"""
+
+      val testComputeWithStateVars = RAST.FnImpl(
+        visibility = RAST.Visibility.Public,
+        sig = RAST.FnSig(
+          ident = RAST.IdentString(testComputeCBwLV),
+          fnHeader = RAST.FnHeader(F),
+          fnDecl = RAST.FnDecl(
+            inputs = for (p <- sorted_Pre_State_Params) yield p.toRustParam,
+            outputs = RAST.FnRetTyImpl(RAST.TyFixMe(st"Result<(), TestCaseError>"))),
+          verusHeader = None(), generics = None()),
+        body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(computeCBwLBody)))),
+        comments = ISZ(RAST.CommentST(
+          st"""/** Contract-based test harness for the compute entry point
+              |  *
+              |  ${(paramsToComment(sorted_Pre_State_Params), "\n")}
+              |  */""")),
+        attributes = ISZ(), contract = None(), meta = ISZ())
+
+      test_api_rs_Items = test_api_rs_Items :+ testComputeWithStateVars
+    }
+
+    { // test_compute_CBwL_macro
+      var inputs: ISZ[RAST.Param] = ISZ()
+      inputs = inputs :+ RAST.ParamImpl(RAST.IdentString("$test_name"), RAST.TyPath(ISZ(ISZ("ident")), None()))
+      inputs = inputs :+ RAST.ParamImpl(RAST.IdentString("config"), RAST.TyPath(ISZ(ISZ("$config:expr")), None()))
+
+      for (p <- sorted_Pre_State_Params) {
+        inputs = inputs :+ RAST.ParamImpl(
+          ident = RAST.IdentString(p.name),
+          kind = RAST.TyPath(ISZ(ISZ(s"$$${p.name}_strat:expr")), None())
+        )
+      }
+      val body =
+        st"""proptest!{
+            |  #![proptest_config($$config)]
+            |  #[test]
+            |  #[serial]
+            |  fn $$test_name(
+            |    (${(for (p <- sorted_Pre_State_Params) yield p.name, ", ")})
+            |    in (${(for (p <- sorted_Pre_State_Params) yield s"$$${p.name}_strat", ", ")})
+            |  ) {
+            |    $$crate::bridge::test_api::${testComputeCBwLV}(
+            |      ${(for (p <- sorted_Pre_State_Params) yield p.name, ",\n")}
+            |    )?;
+            |  }
+            |}"""
+      val test_compute_CBwL_macro = RAST.MacroImpl(
+        attributes = ISZ(RAST.AttributeST(inner = F, content = st"macro_export")),
+        ident = RAST.IdentString(s"${testComputeCBwLV}_macro"),
+        inputs = inputs,
+        comments = ISZ(),
+        body = Some(body))
+
+      test_api_rs_Items = test_api_rs_Items :+ test_compute_CBwL_macro
+
+
+      val strategiesOpt: Option[ST] =
+        if(sorted_Pre_State_Params.nonEmpty) {
+          var strategies: ISZ[ST] = ISZ()
+          for (p <- sorted_Pre_State_Params) {
+            var d = st"test_api::${(p.typeNameProvider.qualifiedRustNameS, "_")}_strategy_default()"
+            if (p.isOptional) {
+              d = st"test_api::option_strategy_default($d)"
+            }
+            strategies = strategies :+ st"${p.name}: $d"
+          }
+          Some(
+            st"""// strategies for generating each component input
+                |${(strategies, ",\n")}""")
+        } else {
+          None()
+        }
+      tests_rs_Items = tests_rs_Items :+
+        st"""${testComputeCBwLV}_macro! {
+            |  prop_${testComputeCBwLV}_macro, // test name
+            |  config: ProptestConfig { // proptest configuration, built by overriding fields from default config
+            |    cases: numValidComputeTestCases,
+            |    max_global_rejects: numValidComputeTestCases * computeRejectRatio,
+            |    verbose: verbosity,
+            |    ..ProptestConfig::default()
+            |  }${if (strategiesOpt.nonEmpty) "," else ""}
+            |  $strategiesOpt
+            |}"""
+    }
+
+    val testrsMod = st"""mod GUMBOX_tests {
+                        |  use serial_test::serial;
+                        |  use proptest::prelude::*;
+                        |
+                        |  use crate::bridge::test_api;
+                        |  use crate::testInitializeCB_macro;
+                        |  use crate::testComputeCB_macro;
+                        |  use crate::testComputeCBwLV_macro;
+                        |
+                        |  // number of valid (i.e., non-rejected) test cases that must be executed for the compute method.
+                        |  const numValidComputeTestCases: u32 = 100;
+                        |
+                        |  // how many total test cases (valid + rejected) that may be attempted.
+                        |  //   0 means all inputs must satisfy the precondition (if present),
+                        |  //   5 means at most 5 rejected inputs are allowed per valid test case
+                        |  const computeRejectRatio: u32 = 5;
+                        |
+                        |  const verbosity: u32 = 2;
+                        |
+                        |  ${(tests_rs_Items, "\n\n")}
+                        |}"""
+
+    return (test_api_rs_Items, ISZ(RAST.ItemST(testrsMod)))
   }
 
   @pure override def finalize(model: Aadl, options: HamrCli.CodegenOption,
@@ -898,15 +1339,15 @@ object ComputeContributions {
         entries = entries ++ (for (values <- entry._2.integrationConstraints.values;
                                    v <- values) yield v.prettyST)
 
-        entries = entries ++ (for (i <- entry._2.IEP_Guarantee) yield i.prettyST)
+        entries = entries ++ (for (i <- entry._2.initializeContributions.IEP_Guarantee) yield i.prettyST)
 
-        entries = entries ++ (for(a <- entry._2.computeContributions.CEP_T_Assum__methods) yield a.prettyST)
+        entries = entries ++ (for (a <- entry._2.computeContributions.CEP_T_Assum__methods) yield a.prettyST)
         if (entry._2.computeContributions.CEP_Pre.nonEmpty) {
           entries = entries :+ entry._2.computeContributions.CEP_Pre.get.prettyST
         }
 
-        entries = entries ++ (for(g <- entry._2.computeContributions.CEP_T_Guar__methods) yield g.prettyST)
-        entries = entries ++ (for(c <- entry._2.computeContributions.CEP_T_Case__methods) yield c.prettyST)
+        entries = entries ++ (for (g <- entry._2.computeContributions.CEP_T_Guar__methods) yield g.prettyST)
+        entries = entries ++ (for (c <- entry._2.computeContributions.CEP_T_Case__methods) yield c.prettyST)
 
         if (entry._2.computeContributions.CEP_Post.nonEmpty) {
           entries = entries :+ entry._2.computeContributions.CEP_Post.get.prettyST

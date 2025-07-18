@@ -2,7 +2,7 @@
 package org.sireum.hamr.codegen.microkit.plugins.types
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.CommonUtil.{BoolValue, IdPath, Store, StoreValue}
+import org.sireum.hamr.codegen.common.CommonUtil.{BoolValue, IdPath, Store, StoreValue, TypeIdPath}
 import org.sireum.hamr.codegen.common.StringUtil
 import org.sireum.hamr.codegen.common.containers.Resource
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
@@ -89,7 +89,7 @@ object CRustTypePlugin {
   @strictpure override def canHandle(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): B =
     options.platform == CodegenHamrPlatform.Microkit &&
       !isDisabled(store) &&
-      // TODO this should probably be modelIsCRusty indicating there are components that will be C + Rust rather
+    // TODO this should probably be modelIsCRusty indicating there are components that will be C + Rust rather
       //      than just pure Rust
       MicrokitPlugin.modelIsRusty(store) &&
       MicrokitLinterPlugin.getTouchedTypesOpt(store).nonEmpty &&

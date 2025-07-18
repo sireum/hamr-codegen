@@ -9,6 +9,7 @@ import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
 import org.sireum.hamr.codegen.common.util.HamrCli.CodegenHamrPlatform
 import org.sireum.hamr.codegen.microkit.plugins.component.CRustComponentPlugin
+import org.sireum.hamr.codegen.microkit.plugins.linters.MicrokitLinterPlugin
 import org.sireum.hamr.codegen.microkit.plugins.types.CRustTypePlugin
 import org.sireum.hamr.codegen.microkit.{rust => RustAst}
 import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, MicrokitPlugin}
@@ -54,14 +55,15 @@ object ComponentApiContributions {
 @datatype class ComponentApiContributions( // items for bridge/mod.rs
                                            val bridgeModuleContributions: ISZ[RustAst.Item],
 
-
-                                           // items for extern_c_api.rs
+                                           // items for bridge/extern_c_api.rs
                                            val externCApis: ISZ[RustAst.Item],
                                            val unsafeExternCApiWrappers: ISZ[RustAst.Item],
                                            val externApiTestMockVariables: ISZ[RustAst.Item],
                                            val externApiTestingApis: ISZ[RustAst.Item],
 
+                                           // items for bridge/test_api.rs
                                            val testingApis: ISZ[RustAst.Item],
+
 
                                            // items for bridge api
                                            val unverifiedPutApis: ISZ[RustAst.Item],
@@ -178,6 +180,19 @@ object ComponentApiContributions {
         }
       }
 
+      if (Util.isRusty(srcThread)) {
+        // add testing apis to allow setting the values of incoming ports, and getting
+        // the value of output ports in testing contexts
+        val touchedTypes = MicrokitLinterPlugin.getTouchedTypes(localStore)
+        val crustTypeProvider = CRustTypePlugin.getCRustTypeProvider(localStore).get
+        val testingPortApis: ISZ[RustAst.Item] =
+          CRustApiUtil.propTestOptionMethod() ++
+          CRustApiUtil.generatePropTestDatatypeGenerators(touchedTypes, crustTypeProvider, model, options, types, symbolTable, store, reporter)
+
+        val existingContributions = ret.getOrElse(srcThread.path, ComponentApiContributions.empty)
+        ret = ret + srcThread.path ~> existingContributions(testingApis = existingContributions.testingApis ++ testingPortApis)
+      }
+
     } // end processing connections/ports for threads
 
     return (localStore + CRustApiPlugin.KEY_CrustApiPlugin ~> DefaultCRustApiContributions(ret), resources)
@@ -191,6 +206,9 @@ object ComponentApiContributions {
       val thread = symbolTable.componentMap.get(c._1).get.asInstanceOf[AadlThread]
       val threadId = Util.getThreadIdPath(thread)
       val bridgeDir = CRustApiPlugin.apiDirectory(thread, options)
+
+      val reset_test_globals = for(v <- c._2.externApiTestMockVariables) yield
+        st"*${v.asInstanceOf[RustAst.ItemStatic].ident.string}.lock().unwrap() = None;"
 
       { // extern_c_api.rs
         val content =
@@ -222,6 +240,13 @@ object ComponentApiContributions {
               |  // microkit system we would be able to mutate the shared memory for out ports since they're r/w,
               |  // but we couldn't do that for in ports since they are read-only
               |  ${(for (v <- c._2.externApiTestMockVariables) yield v.prettyST, "\n")}
+              |}
+              |
+              |#[cfg(test)]
+              |pub fn initialize_test_globals() {
+              |  unsafe {
+              |    ${(reset_test_globals, "\n")}
+              |  }
               |}
               |
               |${(for (a <- c._2.externApiTestingApis) yield a.prettyST, "\n\n")}
@@ -304,10 +329,14 @@ object ComponentApiContributions {
 
       { // bridge/test_api.rs
         val content =
-          st"""${Util.doNotEdit}
+          st"""#![cfg(test)]
+              |
+              |${Util.doNotEdit}
               |
               |use crate::bridge::extern_c_api as extern_api;
               |use ${CRustTypePlugin.usePath};
+              |
+              |use proptest::prelude::*;
               |
               |${(for(c <- c._2.testingApis) yield c.prettyST, "\n\n")}"""
         val path = s"$bridgeDir/test_api.rs"
@@ -324,42 +353,6 @@ object ComponentApiContributions {
               |${(for(c <- c._2.bridgeModuleContributions) yield st"${c.prettyST}", "\n")}"""
         val path = s"$bridgeDir/mod.rs"
         resources = resources :+ ResourceUtil.createResource(path, content, T)
-      }
-
-      { // tests.rs
-        val content =
-          st"""${Util.safeToEdit}
-              |
-              |#[cfg(test)]
-              |mod tests {
-              |  // NOTE: need to run tests sequentially to prevent race conditions
-              |  //       on the app and the testing apis which are static
-              |  use serial_test::serial;
-              |
-              |  use crate::bridge::extern_c_api as extern_api;
-              |  use ${CRustTypePlugin.usePath};
-              |
-              |  #[test]
-              |  #[serial]
-              |  fn test_initialization() {
-              |    unsafe {
-              |      crate::${threadId}_initialize();
-              |    }
-              |  }
-              |
-              |  #[test]
-              |  #[serial]
-              |  fn test_compute() {
-              |    unsafe {
-              |      crate::${threadId}_initialize();
-              |
-              |      crate::${threadId}_timeTriggered();
-              |    }
-              |  }
-              |}
-              |"""
-        val path = s"${CRustComponentPlugin.componentCrateDirectory(thread, options)}/src/tests.rs"
-        resources = resources :+ ResourceUtil.createResource(path, content, F)
       }
     }
     return (store + s"FINALIZED_$name" ~> BoolValue(T), resources)

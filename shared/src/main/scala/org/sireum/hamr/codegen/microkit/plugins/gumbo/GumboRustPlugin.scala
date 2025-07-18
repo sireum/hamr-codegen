@@ -314,14 +314,15 @@ object GumboRustPlugin {
         }
       }
 
-      localStore = CRustComponentPlugin.putComponentContributions(localStore,
+      localStore = CRustComponentPlugin.putComponentContributions(
         componentContributions.replaceComponentContributions(
           componentContributions.componentContributions + threadPath ~>
             threadContributions(
               markers = markers,
               requiresVerus = T,
               appStructDef = structDef,
-              appStructImpl = structImpl(items = updatedImplItems))))
+              appStructImpl = structImpl(items = updatedImplItems))),
+        localStore)
 
       makefileItems = makefileItems :+ st"make -C $${CRATES_DIR}/${Util.getThreadIdPath(thread)} verus"
     } // end processing thread's contracts
