@@ -911,10 +911,10 @@ object ComputeContributions {
       CEP_T_Guar__methods = CEP_T_Guar__methods,
       CEP_T_Case__methods = CEP_T_Case__methods,
 
-      CEP_Pre_Params.elements,
+      CEP_Pre_Params = CEP_Pre_Params.elements,
       CEP_Pre = CEP_Pre,
 
-      CEP_Post_Params.elements,
+      CEP_Post_Params = CEP_Post_Params.elements,
       CEP_Post = CEP_Post)
   }
 

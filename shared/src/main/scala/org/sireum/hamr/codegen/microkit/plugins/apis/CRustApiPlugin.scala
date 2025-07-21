@@ -184,7 +184,6 @@ object ComponentApiContributions {
         // add testing apis to allow setting the values of incoming ports, and getting
         // the value of output ports in testing contexts
         val touchedTypes = MicrokitLinterPlugin.getTouchedTypes(localStore)
-        val crustTypeProvider = CRustTypePlugin.getCRustTypeProvider(localStore).get
         val testingPortApis: ISZ[RustAst.Item] =
           CRustApiUtil.propTestOptionMethod() ++
           CRustApiUtil.generatePropTestDatatypeGenerators(touchedTypes, crustTypeProvider, model, options, types, symbolTable, store, reporter)
@@ -207,7 +206,7 @@ object ComponentApiContributions {
       val threadId = Util.getThreadIdPath(thread)
       val bridgeDir = CRustApiPlugin.apiDirectory(thread, options)
 
-      val reset_test_globals = for(v <- c._2.externApiTestMockVariables) yield
+      val reset_test_globals: ISZ[ST] = for(v <- c._2.externApiTestMockVariables) yield
         st"*${v.asInstanceOf[RustAst.ItemStatic].ident.string}.lock().unwrap() = None;"
 
       { // extern_c_api.rs

@@ -392,10 +392,14 @@ object Printers {
 
 @datatype class Generics(val params: ISZ[GenericParam]) extends Item {
   @pure override def prettyST: ST = {
-    if (params.size == 1) return st"<${params(0).prettyST}> "
-    else return (
-    st"""
+    if (params.size == 1) {
+      return st"<${params(0).prettyST}> "
+    }
+    else {
+      return (
+        st"""
         |  <${(for(p <- params) yield p.prettyST, ", \n")}> """)
+    }
   }
 }
 

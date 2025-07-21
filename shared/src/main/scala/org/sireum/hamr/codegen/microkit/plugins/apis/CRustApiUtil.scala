@@ -279,12 +279,12 @@ object CRustApiUtil {
 
       val defaultIdent = RustAst.IdentString(st"${(np.qualifiedRustNameS, "_")}_strategy_default".render)
 
-      def getDefaultGenerator(name: String, t: AadlType): ST = {
-        cRustTypeProvider.getRepresentativeType(t) match {
+      def getDefaultGenerator(name: String, typ: AadlType): ST = {
+        cRustTypeProvider.getRepresentativeType(typ) match {
           case b: BaseType =>
-            st"any::<${MicrokitTypeUtil.translateBaseTypeToRust(t.name)}>()"
+            return st"any::<${MicrokitTypeUtil.translateBaseTypeToRust(typ.name)}>()"
           case _ =>
-            val npx = cRustTypeProvider.getTypeNameProvider(t)
+            val npx = cRustTypeProvider.getTypeNameProvider(typ)
             return st"${(npx.qualifiedRustNameS, "_")}_strategy_default()"
         }
       }
@@ -348,7 +348,7 @@ object CRustApiUtil {
 
         case r: RecordType =>
           val custName = st"${(np.qualifiedRustNameS, "_")}_stategy_cust"
-          val items = for(f <- r.fields.entries) yield getDefaultGenerator(f._1, f._2)
+          val items: ISZ[ST] = for(f <- r.fields.entries) yield getDefaultGenerator(f._1, f._2)
 
           val defaultStrategy = RustAst.FnImpl(
             visibility = RustAst.Visibility.Public,
@@ -404,7 +404,7 @@ object CRustApiUtil {
           ret = ret :+ defaultStrategy :+ custStrategy
 
         case e: EnumType =>
-          val items = for(v <- e.values) yield st"Just(${np.qualifiedRustName}::${v})"
+          val items: ISZ[ST] = for(v <- e.values) yield st"Just(${np.qualifiedRustName}::${v})"
           ret = ret :+ RustAst.FnImpl(
             visibility = RustAst.Visibility.Public,
             sig = RustAst.FnSig(
