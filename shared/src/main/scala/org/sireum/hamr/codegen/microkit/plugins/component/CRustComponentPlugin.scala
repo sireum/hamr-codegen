@@ -76,7 +76,7 @@ object ComponentContributions {}
       //CRustApiPlugin.getCRustApiContributions(store).nonEmpty &&
       !haveHandled(store)
 
-  @strictpure override def canFinalize(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): B =
+  @strictpure override def canFinalizeMicrokit(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): B =
     !isDisabled(store) &&
       haveHandled(store) &&
       !haveFinalized(store)
@@ -249,7 +249,7 @@ object ComponentContributions {}
   }
 
 
-  @pure override def finalize(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
+  @pure override def finalizeMicrokit(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
     var localStore = store
     var resources: ISZ[Resource] = ISZ()
 

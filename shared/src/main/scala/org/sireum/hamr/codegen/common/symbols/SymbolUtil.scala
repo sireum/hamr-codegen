@@ -64,26 +64,6 @@ object SymbolUtil {
   }
 }
 
-
-@msig trait AnnexVisitor {
-  // calling context is a singleton so allow visitor to reset their state if needed b/w invocations
-  def reset: B
-
-  def offerLibraries(annexLibs: ISZ[AnnexLib],
-                     symbolTable: SymbolTable,
-                     aadlTypes: AadlTypes,
-                     store: Store,
-                     reporter: Reporter): (ISZ[AnnexLibInfo], Store)
-
-  def offer(context: AadlComponent,
-            annex: Annex,
-            annexLibs: ISZ[AnnexLibInfo],
-            symbolTable: SymbolTable,
-            aadlTypes: AadlTypes,
-            store: Store,
-            reporter: Reporter): (Option[AnnexClauseInfo], Store)
-}
-
 @datatype class AadlMaps(airComponentMap: HashSMap[String, ir.Component],
                          airFeatureMap: HashSMap[String, ir.Feature],
                          airClassifierMap: HashSMap[String, ir.Component],

@@ -468,7 +468,7 @@ object Printers {
     return (
       st"""${printComments(comments)}
           |${printAttributes(attributes)}
-          |${printVis(visibility)}${sig.prettyST}$contractST $optBody""")
+          |${printVis(visibility)}${sig.prettyST}$contractST$optBody""")
   }
 }
 

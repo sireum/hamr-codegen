@@ -22,6 +22,16 @@ object Plugin {
   @strictpure def isDisabled(store: Store): B =
     store.contains(s"${name}_DISABLED")
 
+  @pure def canFinalize(model: Aadl,
+                        aadlTypes: Option[AadlTypes],
+                        symbolTable: Option[SymbolTable],
+                        codegenResults: CodeGenResults,
+                        store: Store,
+                        options: CodegenOption,
+                        reporter: Reporter): B = {
+    return F
+  }
+
   // finalizePlugin is called prior to codegen returning
   @pure def finalizePlugin(model: Aadl,
                            aadlTypes: Option[AadlTypes],

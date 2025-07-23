@@ -161,6 +161,9 @@ def regenTransformers(): Unit = {
     "-m", "immutable,mutable") ++ asts).at(symbolPackagePath).console.runCheck()
 }
 
+/** Ensures SIREUM_HOME/bin/sireum.jar is being used rather than the downloaded version in
+*   <hamr-dir>/bin/sireum.jar
+*/
 def symLinkSireumJar(): Unit = {
   val sireumjar = home.up.up / "bin" / "sireum.jar"
   val bootstrapSireumjar = homeBin / "sireum.jar"
@@ -180,12 +183,21 @@ def symLinkSireumJar(): Unit = {
   }
 }
 
+def regenReportArtifacts(): Unit = {
+  val sharedRoot = home / "shared" / "src" / "main" / "scala" / "org" / "sireum" / "hamr" / "codegen"
+  val reportContainers: ISZ[Os.Path] = ISZ(
+    sharedRoot / "common" / "report" / "CodegenReport.scala",
+    sharedRoot / "microkit" / "reporting" / "MicrokitReport.scala"
+  )
+  proc"$sireum tool sergen -p org.sireum.hamr.codegen.common.report ${st"${(reportContainers, " ")}".render}".at(sharedRoot / "common" / "report").console.runCheck()
+}
+
 def regenClis(): Unit = {
   symLinkSireumJar()
+
   val utilDir = home / "shared" / "src" / "main" / "scala" / "org" / "sireum" / "hamr" / "codegen" / "common" / "util"
   // NOTE: cliJson.sc emits what's in $SIREUM_HOME/bin/sireum.jar's version of
   //       hamr's cli so regen that first, rebuild sireum.jar, then call this method
-
   proc"${sireum} tools cligen -p org.sireum.hamr.codegen.common.util -n HamrCli -o ${utilDir.value} ${(utilDir / "cliJson.sc")}".console.runCheck()
 
 
@@ -441,6 +453,7 @@ for (i <- 0 until Os.cliArgs.size if continue) {
     case string"tipe" =>
       cloneProjects()
       tipe()
+    case string"regen-report" => regenReportArtifacts()
     case string"regen-trans" => regenTransformers()
     case string"regen-cli" => regenClis()
     //case string"fetch-gumbo" => setupGumboTesting()
@@ -474,7 +487,7 @@ def usage(): Unit = {
   println("HAMR Codegen /build")
   println(
     st"""Usage: ( compile | test | tipe
-        |       | regen-trans | regen-cli
+        |       | regen-trans | regen-cli regen-report
         |       | install-osate-gumbo | install-sbt-mill )+
         |
         |

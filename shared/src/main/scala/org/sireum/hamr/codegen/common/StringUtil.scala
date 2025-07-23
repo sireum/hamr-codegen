@@ -6,6 +6,7 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.containers.Marker
 import org.sireum.message.Reporter
 import org.sireum.ops.StringOps
+import org.sireum.U32._
 
 object StringUtil {
 
@@ -144,6 +145,16 @@ object StringUtil {
       i = i + 1
     }
     return r
+  }
+
+  @pure def isNumber(c: C): B = {
+    val u = conversions.C.toU32(c)
+    return u >= u32"48" && u <= u32"57"
+  }
+
+  @pure def isLetter(c: C): B = {
+    val u = conversions.C.toU32(c)
+    return (u >= u32"65" && u <= u32"90") || (u >= u32"97" && u <= u32"122")
   }
 
   // version of split that preserves empty segments

@@ -91,7 +91,7 @@ object ComputeContributions {
       (GumboRustPlugin.getThreadsWithContracts(store).nonEmpty ||
         GumboRustPlugin.getDatatypesWithContracts(store).nonEmpty)
 
-  @strictpure override def canFinalize(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): B =
+  @strictpure override def canFinalizeMicrokit(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): B =
     options.platform == HamrCli.CodegenHamrPlatform.Microkit &&
       !isDisabled(store) &&
       !alreadyFinalized(store) &&
@@ -1320,8 +1320,8 @@ object ComputeContributions {
     return (test_api_rs_Items, ISZ(RAST.ItemST(testrsMod)))
   }
 
-  @pure override def finalize(model: Aadl, options: HamrCli.CodegenOption,
-                              types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
+  @pure override def finalizeMicrokit(model: Aadl, options: HamrCli.CodegenOption,
+                                     types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
     var localStore = store
     var resources: ISZ[Resource] = ISZ()
 

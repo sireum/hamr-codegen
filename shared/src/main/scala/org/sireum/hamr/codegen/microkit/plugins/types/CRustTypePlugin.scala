@@ -95,7 +95,7 @@ object CRustTypePlugin {
       MicrokitLinterPlugin.getTouchedTypesOpt(store).nonEmpty &&
       !haveProcessedTypes(store)
 
-  @strictpure override def canFinalize(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): B =
+  @strictpure override def canFinalizeMicrokit(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): B =
     options.platform == CodegenHamrPlatform.Microkit &&
       !isDisabled(store) &&
       // TODO this should probably be modelIsCRusty indicating there are components that will be C + Rust rather
@@ -122,7 +122,7 @@ object CRustTypePlugin {
     return (CRustTypePlugin.putCRustTypeProvider(ret, store), resources)
   }
 
-  @pure override def finalize(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
+  @pure override def finalizeMicrokit(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
     var resources: ISZ[Resource] = ISZ()
     val typeProvider = CRustTypePlugin.getCRustTypeProvider(store).get
 

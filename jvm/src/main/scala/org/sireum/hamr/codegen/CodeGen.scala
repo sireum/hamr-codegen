@@ -8,7 +8,6 @@ import org.sireum.hamr.codegen.arsit.Util.ARSIT_INSTRUCTIONS_MESSAGE_KIND
 import org.sireum.hamr.codegen.common.containers._
 import org.sireum.hamr.codegen.common.CommonUtil.Store
 import org.sireum.hamr.codegen.common.plugin.Plugin
-import org.sireum.hamr.codegen.common.resolvers.GclResolver
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.HamrCli.{CodegenHamrPlatform, CodegenOption}
@@ -39,9 +38,18 @@ object CodeGen {
     @pure def finalizePlugins(aadlTypes: Option[AadlTypes], symbolTable: Option[SymbolTable],
                               codegenResults: CodeGenResults, currentStore: Store): (CodeGenResults, Store) = {
       var localStore = currentStore
-      for(p <- plugins) {
-        localStore = p.finalizePlugin(model, aadlTypes, symbolTable, codegenResults, localStore, options, reporter)
+      var continue: B = T
+      while (continue) {
+        var somethingHappened = F
+        for (plugin <- plugins if continue) {
+          if (plugin.canFinalize(model, aadlTypes, symbolTable, codegenResults, localStore, options, reporter)) {
+            localStore = plugin.finalizePlugin(model, aadlTypes, symbolTable, codegenResults, localStore, options, reporter)
+            somethingHappened = T
+          }
+        }
+        continue = somethingHappened
       }
+
       return (codegenResults, localStore)
     }
 

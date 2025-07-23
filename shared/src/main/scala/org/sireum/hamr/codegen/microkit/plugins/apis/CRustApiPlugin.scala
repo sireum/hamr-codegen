@@ -99,13 +99,13 @@ object ComponentApiContributions {
 }
 
 @sig trait CRustApiContributions extends StoreValue {
-  @pure def apiContributions: Map[IdPath, ComponentApiContributions]
+  @pure def apiContributions: HashSMap[IdPath, ComponentApiContributions]
 
   @pure def addApiContributions(threadId: IdPath,
                                 contributions: ComponentApiContributions): CRustApiContributions
 }
 
-@datatype class DefaultCRustApiContributions (val apiContributions: Map[IdPath, ComponentApiContributions]) extends CRustApiContributions {
+@datatype class DefaultCRustApiContributions (val apiContributions: HashSMap[IdPath, ComponentApiContributions]) extends CRustApiContributions {
 
   @pure override def addApiContributions(threadId: IdPath, contributions: ComponentApiContributions): CRustApiContributions = {
     return this(this.apiContributions + threadId ~> contributions)
@@ -124,7 +124,7 @@ object ComponentApiContributions {
       CRustTypePlugin.hasCRustTypeProvider(store) &&
       !haveCreatedApis(store)
 
-  @strictpure override def canFinalize(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): B =
+  @strictpure override def canFinalizeMicrokit(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): B =
     !isDisabled(store) &&
       haveCreatedApis(store) &&
       !alreadyFinalized(store)
@@ -135,7 +135,7 @@ object ComponentApiContributions {
 
     val crustTypeProvider = CRustTypePlugin.getCRustTypeProvider(localStore).get
 
-    var ret: Map[IdPath, ComponentApiContributions] = Map.empty
+    var ret: HashSMap[IdPath, ComponentApiContributions] = HashSMap.empty
 
     for (srcThread <- symbolTable.getThreads()) {
       for (srcPort <- srcThread.getPorts()
@@ -147,8 +147,11 @@ object ComponentApiContributions {
 
               val receiverContributions = CRustApiUtil.processInPort(dstThread, dstPort.asInstanceOf[AadlPort], crustTypeProvider)
 
-              ret = ret + dstThread.path ~>
-                ret.getOrElse(dstThread.path, ComponentApiContributions.empty).combine(receiverContributions)
+              val existing: ComponentApiContributions =
+                if (ret.contains(dstThread.path)) ret.get(dstThread.path).get
+                else ComponentApiContributions.empty
+
+              ret = ret + dstThread.path ~> existing.combine(receiverContributions)
 
             case dstThread: AadlThread =>
             case x =>
@@ -159,8 +162,11 @@ object ComponentApiContributions {
         if (Util.isRusty(srcThread)) {
           val senderContributions = CRustApiUtil.processOutPort(srcThread, srcPort, crustTypeProvider)
 
-          ret = ret + srcThread.path ~>
-            ret.getOrElse(srcThread.path, ComponentApiContributions.empty).combine(senderContributions)
+          val existing: ComponentApiContributions =
+            if (ret.contains(srcThread.path)) ret.get(srcThread.path).get
+            else ComponentApiContributions.empty
+
+          ret = ret + srcThread.path ~> existing.combine(senderContributions)
         }
       } // end processing connections for source port
 
@@ -175,8 +181,12 @@ object ComponentApiContributions {
             } else {
               CRustApiUtil.processOutPort(srcThread, unconnectedPort, crustTypeProvider)
             }
-          ret = ret + srcThread.path ~>
-            ret.getOrElse(srcThread.path, ComponentApiContributions.empty).combine(contributions)
+
+          val existing: ComponentApiContributions =
+            if (ret.contains(srcThread.path)) ret.get(srcThread.path).get
+            else ComponentApiContributions.empty
+
+          ret = ret + srcThread.path ~> existing.combine(contributions)
         }
       }
 
@@ -188,16 +198,20 @@ object ComponentApiContributions {
           CRustApiUtil.propTestOptionMethod() ++
           CRustApiUtil.generatePropTestDatatypeGenerators(touchedTypes, crustTypeProvider, model, options, types, symbolTable, store, reporter)
 
-        val existingContributions = ret.getOrElse(srcThread.path, ComponentApiContributions.empty)
+        val existingContributions: ComponentApiContributions =
+          if (ret.contains(srcThread.path)) ret.get(srcThread.path).get
+          else ComponentApiContributions.empty
+
         ret = ret + srcThread.path ~> existingContributions(testingApis = existingContributions.testingApis ++ testingPortApis)
       }
 
     } // end processing connections/ports for threads
 
-    return (localStore + CRustApiPlugin.KEY_CrustApiPlugin ~> DefaultCRustApiContributions(ret), resources)
+    return (localStore + CRustApiPlugin.KEY_CrustApiPlugin ~>
+      DefaultCRustApiContributions(ret), resources)
   }
 
-  @pure override def finalize(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
+  @pure override def finalizeMicrokit(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
     val contributions = CRustApiPlugin.getCRustApiContributions(store).get
     var resources: ISZ[Resource] = ISZ()
 

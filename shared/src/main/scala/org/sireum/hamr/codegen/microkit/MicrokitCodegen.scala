@@ -748,8 +748,8 @@ object MicrokitCodegen {
       while (continue) {
         var somethingHandled = F
         for (plugin <- microkitFinalizePlugins if continue) {
-          if (plugin.canFinalize(model, options, types, symbolTable, localStore, reporter)) {
-            val results = plugin.finalize(model, options, types, symbolTable, localStore, reporter)
+          if (plugin.canFinalizeMicrokit(model, options, types, symbolTable, localStore, reporter)) {
+            val results = plugin.finalizeMicrokit(model, options, types, symbolTable, localStore, reporter)
             localStore = results._1
             resources = resources ++ results._2
             somethingHandled = T
