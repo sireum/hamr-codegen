@@ -868,7 +868,7 @@ object GeneratorPy {
     if (isEventPort(portType)) {
       publisherCode =
         st"""def put_${handlerName}(self):
-          |    msg = self.${portType}()
+          |    msg = ${portType}()
           |    ${(publishers, "\n")}
         """
     }
