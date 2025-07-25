@@ -49,17 +49,19 @@ object Ros2Codegen {
       case "Cpp" => files =
         Generator.genCppNodePkg(modelName, threadComponents, connectionMap, datatypeMap, options.strictAadlMode,
                                 options.invertTopicBinding, reporter)
-      //case "Python" => files = Generator.genPyNodePkg(modelName, threadComponents, connectionMap, options.strictAadlMode)
+      case "Python" =>
+        files = GeneratorPy.genPyNodePkg(modelName, threadComponents, connectionMap, datatypeMap, options.strictAadlMode,
+                                                      options.invertTopicBinding, reporter)
       case _ => reporter.error(None(), toolName, s"Unknown code type: ${options.ros2NodesLanguage.name}")
     }
 
     options.ros2LaunchLanguage.name match {
-      case "Xml" => files = files ++ Generator.genXmlLaunchPkg(modelName, threadComponents, systemComponents)
-      case "Python" => files = files ++ Generator.genPyLaunchPkg(modelName, threadComponents)
+      case "Xml" => files = files ++ GeneratorLaunch.genXmlLaunchPkg(modelName, threadComponents, systemComponents, options.ros2NodesLanguage.name)
+      case "Python" => files = files ++ GeneratorLaunch.genPyLaunchPkg(modelName, threadComponents, systemComponents, options.ros2NodesLanguage.name)
       case _ => reporter.error(None(), toolName, s"Unknown code type: ${options.ros2NodesLanguage.name}")
     }
 
-    files = files ++ Generator.genInterfacesPkg(modelName, datatypeMap)
+    files = files ++ GeneratorInterfaces.genInterfacesPkg(modelName, datatypeMap, options.ros2NodesLanguage.name)
 
     for (file <- files) {
       var filePath: String = ""
