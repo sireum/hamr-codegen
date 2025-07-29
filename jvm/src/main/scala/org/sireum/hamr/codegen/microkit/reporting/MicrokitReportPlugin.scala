@@ -5,15 +5,16 @@ import org.sireum._
 import org.sireum.U32._
 import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, Store}
 import org.sireum.hamr.codegen.common.StringUtil
+import org.sireum.hamr.codegen.common.containers.{EResource, IResource}
 import org.sireum.hamr.codegen.common.plugin.Plugin
-import org.sireum.hamr.codegen.common.reporting.{CodegenReporting, CodegenReports, JSON}
+import org.sireum.hamr.codegen.common.reporting.{CodegenReporting, CodegenReports, JSON, ResourceReport, Status, ToolReport}
 import org.sireum.hamr.codegen.common.symbols.{AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.{CodeGenResults, HamrCli}
 import org.sireum.hamr.codegen.microkit.plugins.gumbo.GumboRustUtil
 import org.sireum.hamr.codegen.microkit.util.Util
 import org.sireum.hamr.ir.{Aadl, Direction, GclAssume, GclGuarantee, GclNamedElement, GclSubclause}
-import org.sireum.message.{Position, Reporter}
+import org.sireum.message.{Level, Position, Reporter}
 
 @datatype class MicrokitReporterPlugin() extends Plugin {
   val name: String = "MicrokitReporterPlugin"
@@ -56,7 +57,57 @@ import org.sireum.message.{Position, Reporter}
           }
       }
 
+    {
+      var toolReport: ToolReport = CodegenReporting.getCodegenReport(CodegenReporting.KEY_TOOL_REPORT, store).get.asInstanceOf[ToolReport]
+
+      val cstatus: Status.Type =
+        if (reporter.hasError) Status.Failure
+        else Status.Success
+
+      val warningMessages = reporter.messages.filter(m => m.level == Level.Warning)
+      val errorMessages = reporter.messages.filter(m => m.level == Level.Error)
+
+      val resources: ISZ[ResourceReport] =
+        if (reporter.hasError) {
+          ISZ()
+        }
+        else {
+          // must have written resources out so sel4OutputDir must exist
+          assert(sel4OutputDir.exists, sel4OutputDir.value)
+
+          var r: ISZ[ResourceReport] = ISZ()
+          for (resource <- codegenResults.resources) {
+            resource match {
+              case i: IResource =>
+                r = r :+ ResourceReport(
+                  path = sel4OutputDir.relativize(Os.path(i.dstPath)).value,
+                  overwrittenIfExists = i.overwrite)
+              case e: EResource =>
+                halt("Not expecting $e")
+              case e => halt("Not expecting $e")
+            }
+          }
+          r
+        }
+
+      toolReport = toolReport(
+        status = cstatus,
+        warningMessages = warningMessages,
+        errorMessages = errorMessages,
+        resources = resources)
+
+      localStore = CodegenReporting.addCodegenReport(CodegenReporting.KEY_TOOL_REPORT, toolReport, localStore)
+    }
+
+    if (reporter.hasError) {
+      return localStore
+    }
+
+
+
     assert(sel4OutputDir.exists, sel4OutputDir.value)
+
+
 
     var componentReports: HashSMap[IdPathR, ComponentReport] = HashSMap.empty
 
@@ -394,7 +445,6 @@ import org.sireum.message.{Position, Reporter}
 
     val outjson = outputDir / "codegen_report.json"
     outjson.writeOver(json)
-    println(s"Wrote: $outjson")
 
     return localStore
   }
@@ -550,6 +600,5 @@ import org.sireum.message.{Position, Reporter}
     val readme = sel4OutputDir / "codegen_readme.md"
 
     readme.writeOver(readmeContent.render)
-    println(s"Wrote: $readme")
   }
 }

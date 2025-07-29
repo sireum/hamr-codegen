@@ -9,6 +9,7 @@ import org.sireum._
 import org.sireum.Json.Printer._
 import org.sireum.hamr.codegen.common.reporting.CodegenReport
 import org.sireum.hamr.codegen.common.reporting.CodegenReports
+import org.sireum.hamr.codegen.common.reporting.ResourceReport
 import org.sireum.hamr.codegen.common.reporting.ToolReport
 
 object JSON {
@@ -29,10 +30,33 @@ object JSON {
       ))
     }
 
+    @pure def printStatusType(o: Status.Type): ST = {
+      val value: String = o match {
+        case Status.Success => "Success"
+        case Status.Failure => "Failure"
+      }
+      return printObject(ISZ(
+        ("type", printString("Status")),
+        ("value", printString(value))
+      ))
+    }
+
+    @pure def printResourceReport(o: ResourceReport): ST = {
+      return printObject(ISZ(
+        ("type", st""""ResourceReport""""),
+        ("path", printString(o.path)),
+        ("overwrittenIfExists", printB(o.overwrittenIfExists))
+      ))
+    }
+
     @pure def printToolReport(o: ToolReport): ST = {
       return printObject(ISZ(
         ("type", st""""ToolReport""""),
-        ("commandLineArgs", printString(o.commandLineArgs))
+        ("commandLineArgs", printString(o.commandLineArgs)),
+        ("status", printStatusType(o.status)),
+        ("warningMessages", printISZ(F, o.warningMessages, printMessage _)),
+        ("errorMessages", printISZ(F, o.errorMessages, printMessage _)),
+        ("resources", printISZ(F, o.resources, printResourceReport _))
       ))
     }
 
@@ -163,6 +187,45 @@ object JSON {
       return CodegenReports(reports)
     }
 
+    def parseStatusType(): Status.Type = {
+      val r = parseStatusT(F)
+      return r
+    }
+
+    def parseStatusT(typeParsed: B): Status.Type = {
+      if (!typeParsed) {
+        parser.parseObjectType("Status")
+      }
+      parser.parseObjectKey("value")
+      var i = parser.offset
+      val s = parser.parseString()
+      parser.parseObjectNext()
+      Status.byName(s) match {
+        case Some(r) => return r
+        case _ =>
+          parser.parseException(i, s"Invalid element name '$s' for Status.")
+          return Status.byOrdinal(0).get
+      }
+    }
+
+    def parseResourceReport(): ResourceReport = {
+      val r = parseResourceReportT(F)
+      return r
+    }
+
+    def parseResourceReportT(typeParsed: B): ResourceReport = {
+      if (!typeParsed) {
+        parser.parseObjectType("ResourceReport")
+      }
+      parser.parseObjectKey("path")
+      val path = parser.parseString()
+      parser.parseObjectNext()
+      parser.parseObjectKey("overwrittenIfExists")
+      val overwrittenIfExists = parser.parseB()
+      parser.parseObjectNext()
+      return ResourceReport(path, overwrittenIfExists)
+    }
+
     def parseToolReport(): ToolReport = {
       val r = parseToolReportT(F)
       return r
@@ -175,7 +238,19 @@ object JSON {
       parser.parseObjectKey("commandLineArgs")
       val commandLineArgs = parser.parseString()
       parser.parseObjectNext()
-      return ToolReport(commandLineArgs)
+      parser.parseObjectKey("status")
+      val status = parseStatusType()
+      parser.parseObjectNext()
+      parser.parseObjectKey("warningMessages")
+      val warningMessages = parser.parseISZ(parser.parseMessage _)
+      parser.parseObjectNext()
+      parser.parseObjectKey("errorMessages")
+      val errorMessages = parser.parseISZ(parser.parseMessage _)
+      parser.parseObjectNext()
+      parser.parseObjectKey("resources")
+      val resources = parser.parseISZ(parseResourceReport _)
+      parser.parseObjectNext()
+      return ToolReport(commandLineArgs, status, warningMessages, errorMessages, resources)
     }
 
     def parse_microkitreportingIdPathR(): org.sireum.hamr.codegen.microkit.reporting.IdPathR = {
@@ -444,6 +519,24 @@ object JSON {
       return r
     }
     val r = to(s, fCodegenReports _)
+    return r
+  }
+
+  def fromResourceReport(o: ResourceReport, isCompact: B): String = {
+    val st = Printer.printResourceReport(o)
+    if (isCompact) {
+      return st.renderCompact
+    } else {
+      return st.render
+    }
+  }
+
+  def toResourceReport(s: String): Either[ResourceReport, Json.ErrorMsg] = {
+    def fResourceReport(parser: Parser): ResourceReport = {
+      val r = parser.parseResourceReport()
+      return r
+    }
+    val r = to(s, fResourceReport _)
     return r
   }
 

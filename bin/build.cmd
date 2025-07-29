@@ -186,10 +186,10 @@ def symLinkSireumJar(): Unit = {
 def regenReportArtifacts(): Unit = {
   val sharedRoot = home / "shared" / "src" / "main" / "scala" / "org" / "sireum" / "hamr" / "codegen"
   val reportContainers: ISZ[Os.Path] = ISZ(
-    sharedRoot / "common" / "report" / "CodegenReport.scala",
+    sharedRoot / "common" / "reporting" / "CodegenReport.scala",
     sharedRoot / "microkit" / "reporting" / "MicrokitReport.scala"
   )
-  proc"$sireum tool sergen -p org.sireum.hamr.codegen.common.report ${st"${(reportContainers, " ")}".render}".at(sharedRoot / "common" / "report").console.runCheck()
+  proc"$sireum tool sergen -p org.sireum.hamr.codegen.common.reporting ${st"${(reportContainers, " ")}".render}".at(sharedRoot / "common" / "reporting").console.runCheck()
 }
 
 def regenClis(): Unit = {

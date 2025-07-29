@@ -12,6 +12,13 @@ object CodegenReporting {
 
   type ReportStruct = Map[String, CodegenReport]
 
+  @strictpure def emptyToolReport: ToolReport = ToolReport(
+    commandLineArgs = "<empty-arguments>",
+    status = Status.Failure,
+    warningMessages = ISZ(),
+    errorMessages = ISZ(),
+    resources = ISZ())
+
   @strictpure def getCodegenReports(store: Store): Option[ReportStruct] =
     store.get(KEY_CODEGEN_REPORTS) match {
       case Some(r) => Some(r.asInstanceOf[CommonUtil.MapValue[String, CodegenReport]].map)
