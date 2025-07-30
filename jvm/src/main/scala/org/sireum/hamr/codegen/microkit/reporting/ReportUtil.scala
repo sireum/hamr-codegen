@@ -13,10 +13,10 @@ object ReportUtil {
   @pure def buildPos(beginLine: Z, endLine: Z, file: Os.Path,
                      workspaceDir: Os.Path, reportDir: Os.Path): Position = {
     return buildPosH(
-      beginLine + 1, endLine = endLine + 1,
+      beginLine = beginLine + 1, endLine = endLine + 1,
       beginCol = 0, endCol = 0,
       offset = 0, length = 0,
-      file, workspaceDir, reportDir)
+      file = file, workspaceDir = workspaceDir, reportDir = reportDir)
   }
 
   @pure def buildPosA(portPos: Position, workspaceRoot: Os.Path, sel4OutputDir: Os.Path): Position = {

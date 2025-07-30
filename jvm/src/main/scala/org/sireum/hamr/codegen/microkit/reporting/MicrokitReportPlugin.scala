@@ -375,7 +375,8 @@ import org.sireum.message.{Level, Position, Reporter}
                       reporter.warn(None(), name, s"Didn't find assume clause for integration constraint ${assu.id} in $rustComponentApiFile")
                     case beginLine =>
                       assumes = assumes + assu.id ~> ReportUtil.buildPos(
-                        beginLine = beginLine, endLine = beginLine + 1, file = rustComponentApiFile, workspaceRoot, sel4OutputDir)
+                        beginLine = beginLine, endLine = beginLine + 1,
+                        file = rustComponentApiFile, workspaceDir = workspaceRoot, reportDir = sel4OutputDir)
                   }
                 case Some(guar: GclGuarantee) =>
                   ReportUtil.findLineNumber(s"// guarantee ${guar.id}", putApiLine, rustComponentApiContent) match {
@@ -383,7 +384,8 @@ import org.sireum.message.{Level, Position, Reporter}
                       reporter.warn(None(), name, s"Didn't find guarantee clause for integration constraint ${guar.id} in $rustComponentApiFile")
                     case beginLine =>
                       guars = guars + guar.id ~> ReportUtil.buildPos(
-                        beginLine = beginLine, endLine = beginLine + 1, file = rustComponentApiFile, workspaceRoot, sel4OutputDir)
+                        beginLine = beginLine, endLine = beginLine + 1,
+                        file = rustComponentApiFile, workspaceDir = workspaceRoot, reportDir = sel4OutputDir)
                   }
 
                 case Some(x) => halt(s"Unexpected: $x")
