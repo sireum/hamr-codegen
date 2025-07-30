@@ -24,6 +24,29 @@ object CodeGen {
 
   val toolName: String = "HAMR CodeGen"
 
+
+  @pure def finalizePlugins(model: Aadl,
+                            options: CodegenOption,
+                            aadlTypes: Option[AadlTypes], symbolTable: Option[SymbolTable],
+                            plugins: ISZ[Plugin],
+                            codegenResults: CodeGenResults, currentStore: Store,
+                            reporter: Reporter): (CodeGenResults, Store) = {
+    var localStore = currentStore
+    var continue: B = T
+    while (continue) {
+      var somethingHappened = F
+      for (plugin <- plugins if continue) {
+        if (plugin.canFinalize(model, aadlTypes, symbolTable, codegenResults, localStore, options, reporter)) {
+          localStore = plugin.finalizePlugin(model, aadlTypes, symbolTable, codegenResults, localStore, options, reporter)
+          somethingHappened = T
+        }
+      }
+      continue = somethingHappened
+    }
+
+    return (codegenResults, localStore)
+  }
+
   def codeGen(model: Aadl,
               shouldWriteOutResources: B,
               options: CodegenOption,
@@ -34,24 +57,6 @@ object CodeGen {
               proyekIveCallback: SireumProyekIveOption => Z,
               sergenCallback: (SireumToolsSergenOption, Reporter) => Z,
               slangCheckCallback: (SireumToolsSlangcheckGeneratorOption, Reporter) => Z): (CodeGenResults, Store) = {
-
-    @pure def finalizePlugins(aadlTypes: Option[AadlTypes], symbolTable: Option[SymbolTable],
-                              codegenResults: CodeGenResults, currentStore: Store): (CodeGenResults, Store) = {
-      var localStore = currentStore
-      var continue: B = T
-      while (continue) {
-        var somethingHappened = F
-        for (plugin <- plugins if continue) {
-          if (plugin.canFinalize(model, aadlTypes, symbolTable, codegenResults, localStore, options, reporter)) {
-            localStore = plugin.finalizePlugin(model, aadlTypes, symbolTable, codegenResults, localStore, options, reporter)
-            somethingHappened = T
-          }
-        }
-        continue = somethingHappened
-      }
-
-      return (codegenResults, localStore)
-    }
 
     var localStore = store
     if (model.components.size != 1) {
@@ -118,7 +123,12 @@ object CodeGen {
     if (modOptions.runtimeMonitoring && isTranspilerProject) {
       reporter.error(None(), toolName, "Runtime monitoring support for transpiled projects has not been added yet. Disable runtime-monitoring before transpiling")
       reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
-      return finalizePlugins(None(), None(), CodeGenResults.empty, localStore)
+
+      return finalizePlugins(
+        model = model, options = modOptions,
+        aadlTypes = None(), symbolTable = None(),
+        plugins = plugins, codegenResults = CodeGenResults.empty,
+        currentStore = localStore, reporter = reporter)
     }
 
     var arsitResources: ISZ[Resource] = ISZ()
@@ -129,14 +139,22 @@ object CodeGen {
     localStore = result._2
     reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
     if (result._1.isEmpty) {
-      return finalizePlugins(None(), None(), CodeGenResults.empty, localStore)
+
+      return finalizePlugins(
+        model = model, options = modOptions,
+        aadlTypes = None(), symbolTable = None(),
+        plugins = plugins, codegenResults = CodeGenResults.empty, currentStore = localStore, reporter = reporter)
     }
 
     val (rmodel, aadlTypes, symbolTable): (Aadl, AadlTypes, SymbolTable) = (result._1.get.model, result._1.get.types, result._1.get.symbolTable)
 
     if (modOptions.runtimeMonitoring && symbolTable.getThreads().isEmpty) {
       reporter.error(None(), toolName, "Model must contain threads in order to enable runtime monitoring")
-      return finalizePlugins(Some(aadlTypes), Some(symbolTable), CodeGenResults.empty, localStore)
+
+      return finalizePlugins(
+        model = model, options = modOptions,
+        aadlTypes = Some(aadlTypes), symbolTable = Some(symbolTable),
+        plugins = plugins, codegenResults = CodeGenResults.empty, currentStore = localStore, reporter = reporter)
     }
 
     if (~reporter.hasError && runRos2) {
@@ -148,7 +166,13 @@ object CodeGen {
       if (!modOptions.parseableMessages) {
         reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
       }
-      return finalizePlugins(Some(aadlTypes), Some(symbolTable), CodeGenResults(resources = results._1.resources), localStore)
+
+      return finalizePlugins(
+        model = model, options = modOptions,
+        aadlTypes = Some(aadlTypes), symbolTable = Some(symbolTable),
+        plugins = plugins,
+        codegenResults = CodeGenResults(resources = results._1.resources),
+        currentStore = localStore, reporter = reporter)
     }
 
     if (!reporter.hasError && runMicrokit) {
@@ -161,12 +185,17 @@ object CodeGen {
       if (!modOptions.parseableMessages) {
         reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
       }
-      return finalizePlugins(Some(aadlTypes), Some(symbolTable), results._1, localStore)
+
+      return finalizePlugins(
+        model = model, options = modOptions,
+        aadlTypes = Some(aadlTypes), symbolTable = Some(symbolTable),
+        plugins = plugins, codegenResults = results._1,
+        currentStore = localStore, reporter = reporter)
     }
 
     if (!reporter.hasError && runArsit) {
 
-      val genBlessEntryPoints = false
+      val genBlessEntryPoints = F
       val ipc = arsit.util.IpcMechanism.SharedMemory
       val platform = arsit.util.ArsitPlatform.byName(modOptions.platform.name).get
       val fileSep = StringOps(org.sireum.Os.fileSep).first
@@ -364,8 +393,11 @@ object CodeGen {
     }
 
     return finalizePlugins(
-      Some(aadlTypes), Some(symbolTable),
-      CodeGenResults(resources = arsitResources ++ actResources), localStore)
+      model = model, options = modOptions,
+      aadlTypes = Some(aadlTypes), symbolTable = Some(symbolTable),
+      plugins = plugins,
+      codegenResults = CodeGenResults(resources = arsitResources ++ actResources),
+      currentStore = localStore, reporter = reporter)
   }
 
   def printMessages(reporterMessages: ISZ[Message], verbose: B, messageIndex: Z, kindsToFilterOut: ISZ[String]): Z = {

@@ -37,16 +37,6 @@ import org.sireum.message.{Level, Position, Reporter}
     val st = symbolTable.get
     var localStore = store
 
-    val workspaceRoot: Os.Path =
-      options.workspaceRootDir match {
-        case Some(wdir) =>
-          val d = Os.path(wdir)
-          assert(d.exists, d.value)
-          d
-        case _ =>
-          halt(s"Couldn't determine workspace root dir")
-      }
-
     val sel4OutputDir: Os.Path =
       options.sel4OutputDir match {
         case Some(d) => Os.path(d)
@@ -56,6 +46,8 @@ import org.sireum.message.{Level, Position, Reporter}
             case _ => halt("Infeasible: no output directory was specified")
           }
       }
+
+    assert(sel4OutputDir.exists, sel4OutputDir.value)
 
     {
       var toolReport: ToolReport = CodegenReporting.getCodegenReport(CodegenReporting.KEY_TOOL_REPORT, store).get.asInstanceOf[ToolReport]
@@ -99,15 +91,25 @@ import org.sireum.message.{Level, Position, Reporter}
       localStore = CodegenReporting.addCodegenReport(CodegenReporting.KEY_TOOL_REPORT, toolReport, localStore)
     }
 
+    val systemDescription = sel4OutputDir / "microkit.system"
+    assert(systemDescription.exists)
+
+    val workspaceRoot: Os.Path =
+      options.workspaceRootDir match {
+        case Some(wdir) =>
+          val d = Os.path(wdir)
+          assert(d.exists, d.value)
+          d
+        case _ =>
+          println("Model workspace option was not provided. Cannot generate Microkit codegen report")
+
+          return CodegenReporting.addCodegenReport(name,
+            MicrokitReport.empty(sel4OutputDir.relativize(systemDescription).value), localStore)
+      }
+
     if (reporter.hasError) {
       return localStore
     }
-
-
-
-    assert(sel4OutputDir.exists, sel4OutputDir.value)
-
-
 
     var componentReports: HashSMap[IdPathR, ComponentReport] = HashSMap.empty
 
@@ -425,24 +427,35 @@ import org.sireum.message.{Level, Position, Reporter}
 
     } // end for loop processing threads
 
-    val systemDescription = sel4OutputDir / "microkit.system"
-    assert(systemDescription.exists)
-
     val report = MicrokitReport(
       systemDescriptionUri = sel4OutputDir.relativize(systemDescription).value,
       componentReport = componentReports)
 
-    genReadme(
-      report,
-      workspaceRoot,
-      sel4OutputDir,
-      model,
-      aadlTypes,
-      st,
-      codegenResults,
-      store,
-      options,
-      reporter)
+    val isAadl = ops.StringOps(st.rootSystem.component.identifier.pos.get.uriOpt.get).endsWith(".aadl")
+
+    if (isAadl) {
+      val readmeContent = genReadme(
+        report,
+        workspaceRoot,
+        sel4OutputDir,
+        model,
+        aadlTypes,
+        st,
+        codegenResults,
+        store,
+        options,
+        reporter)
+
+      val readme = sel4OutputDir / s"codegen_readme_${if(isAadl) "aadl" else "sysml"}.md"
+      readme.writeOver(readmeContent.render)
+
+      if (options.verbose) {
+        println(s"Wrote: $readme")
+      }
+
+    } else {
+      println("TODO: generate codegen readme for SysMLv2 models")
+    }
 
     localStore = CodegenReporting.addCodegenReport(name, report, localStore)
 
@@ -451,8 +464,12 @@ import org.sireum.message.{Level, Position, Reporter}
     val outputDir = sel4OutputDir / "reporting"
     outputDir.mkdirAll()
 
-    val outjson = outputDir / "codegen_report.json"
+    val outjson = outputDir / s"codegen_report_${if(isAadl) "aadl" else "sysml"}.json"
     outjson.writeOver(json)
+
+    if (options.verbose) {
+      println(s"Wrote: $outjson")
+    }
 
     return localStore
   }
@@ -462,7 +479,7 @@ import org.sireum.message.{Level, Position, Reporter}
                       sel4OutputDir: Os.Path,
                       model: Aadl, aadlTypes: Option[AadlTypes], symbolTable: SymbolTable,
                       codegenResults: CodeGenResults, store: Store,
-                      options: HamrCli.CodegenOption, reporter: Reporter): Unit = {
+                      options: HamrCli.CodegenOption, reporter: Reporter): ST = {
 
     val systemName = symbolTable.rootSystem.classifierAsString
 
@@ -602,8 +619,6 @@ import org.sireum.message.{Level, Position, Reporter}
           |${(behaviorCodeReports, "\n\n")}
           |"""
 
-    val readme = sel4OutputDir / "codegen_readme.md"
-
-    readme.writeOver(readmeContent.render)
+    return readmeContent
   }
 }

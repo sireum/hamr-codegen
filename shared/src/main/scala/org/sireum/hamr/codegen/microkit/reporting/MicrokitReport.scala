@@ -5,6 +5,12 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.reporting.CodegenReport
 import org.sireum.message.Position
 
+object MicrokitReport {
+  @pure def empty(systemDescriptionUri: String): MicrokitReport = {
+    return MicrokitReport(systemDescriptionUri = systemDescriptionUri, componentReport = HashSMap.empty)
+  }
+}
+
 @datatype class IdPathR(val idPath: ISZ[String])
 
 @datatype class MicrokitReport(val systemDescriptionUri: String,
