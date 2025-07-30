@@ -132,6 +132,12 @@ import org.sireum.message.{Level, Position, Reporter}
         val rustComponentDir = sel4OutputDir / "crates" / threadid / "src" / "component"
         assert(rustComponentDir.exists, rustComponentDir.value)
 
+        val externApiFile = rustBridgeDir / "extern_c_api.rs"
+        assert(externApiFile.exists, externApiFile.value)
+
+        val testApiFile = rustBridgeDir / "test_api.rs"
+        assert(testApiFile.exists, testApiFile.value)
+
         val rustComponentApiFile = rustBridgeDir / s"${threadid}_api.rs"
         assert(rustComponentApiFile.exists, rustComponentApiFile.value)
 
@@ -157,7 +163,7 @@ import org.sireum.message.{Level, Position, Reporter}
                   reporter.warn(None(), name, s"Coulnd't find put api for ${in.identifier} in $rustComponentApiFile")
                 case (end, _) =>
                   developerApiReport = developerApiReport + in.identifier ~>
-                    ReportUtil.buildPos(inLine, end, rustComponentApiFile)
+                    ReportUtil.buildPos(inLine, end, rustComponentApiFile, workspaceRoot, sel4OutputDir)
               }
             }
           }
@@ -172,7 +178,7 @@ import org.sireum.message.{Level, Position, Reporter}
                   reporter.warn(None(), name, s"Coulnd't find get api for ${out.identifier} in $rustComponentApiFile")
                 case (end, _) =>
                   developerApiReport = developerApiReport + out.identifier ~>
-                    ReportUtil.buildPos(outLine, end, rustComponentApiFile)
+                    ReportUtil.buildPos(outLine, end, rustComponentApiFile, workspaceRoot, sel4OutputDir)
               }
             }
           }
@@ -200,7 +206,7 @@ import org.sireum.message.{Level, Position, Reporter}
                   case (-1, -1) =>
                     reporter.warn(None(), name, s"Couldn't locate $prefix ${e.id} in $source")
                   case (rstart, rend) =>
-                    ret = ret + e.id ~> ReportUtil.buildPos(start + 1 + rstart, start + 1 + rend + 1, source)
+                    ret = ret + e.id ~> ReportUtil.buildPos(start + 1 + rstart, start + 1 + rend + 1, source, workspaceRoot, sel4OutputDir)
                 }
               }
             case _ => reporter.warn(None(), name, s"Marker block '$marker' not found in $source")
@@ -225,7 +231,7 @@ import org.sireum.message.{Level, Position, Reporter}
                 ReportUtil.getName("fn", trimmed) match {
                   case Some(name) =>
                     val endOfBlock = ReportUtil.scanForClosingBrace(i, gumboxContent)
-                    gumboMethodLocs = gumboMethodLocs + name ~> ReportUtil.buildPos(i, endOfBlock._1, gumboxFile)
+                    gumboMethodLocs = gumboMethodLocs + name ~> ReportUtil.buildPos(i, endOfBlock._1, gumboxFile, workspaceRoot, sel4OutputDir)
                     i = endOfBlock._1
                   case _ => halt("")
                 }
@@ -251,13 +257,13 @@ import org.sireum.message.{Level, Position, Reporter}
               val endOfBlock = ReportUtil.scanForClosingBrace(i, appContent)
               markerLocs = markerLocs ++ endOfBlock._2.entries
 
-              structLoc = Some(ReportUtil.buildPos(i, endOfBlock._1, rustComponentAppFile))
+              structLoc = Some(ReportUtil.buildPos(i, endOfBlock._1, rustComponentAppFile, workspaceRoot, sel4OutputDir))
               i = endOfBlock._1
             }
 
             if (trimmedo.startsWith(s"impl $threadid")) {
               //val endOfBlock = scanForClosingBrace()
-              implLoc = Some(ReportUtil.buildPos(i, i, rustComponentAppFile))
+              implLoc = Some(ReportUtil.buildPos(i, i, rustComponentAppFile, workspaceRoot, sel4OutputDir))
             }
 
             if (trimmedo.startsWith(s"pub fn")) {
@@ -265,7 +271,7 @@ import org.sireum.message.{Level, Position, Reporter}
                 case Some(name) =>
                   val endOfBlock = ReportUtil.scanForClosingBrace(i, appContent)
                   markerLocs = markerLocs ++ endOfBlock._2.entries
-                  methodLocs = methodLocs + name ~> ReportUtil.buildPos(i, endOfBlock._1, rustComponentAppFile)
+                  methodLocs = methodLocs + name ~> ReportUtil.buildPos(i, endOfBlock._1, rustComponentAppFile, workspaceRoot, sel4OutputDir)
                   i = endOfBlock._1
                 case _ => halt("")
               }
@@ -276,7 +282,7 @@ import org.sireum.message.{Level, Position, Reporter}
                 case Some(name) =>
                   val endOfBlock = ReportUtil.scanForClosingBrace(i, appContent)
                   markerLocs = markerLocs ++ endOfBlock._2.entries
-                  gumboMethodLocs = gumboMethodLocs + name ~> ReportUtil.buildPos(i, endOfBlock._1, rustComponentAppFile)
+                  gumboMethodLocs = gumboMethodLocs + name ~> ReportUtil.buildPos(i, endOfBlock._1, rustComponentAppFile, workspaceRoot, sel4OutputDir)
                   i = endOfBlock._1
                 case _ => halt("")
               }
@@ -369,7 +375,7 @@ import org.sireum.message.{Level, Position, Reporter}
                       reporter.warn(None(), name, s"Didn't find assume clause for integration constraint ${assu.id} in $rustComponentApiFile")
                     case beginLine =>
                       assumes = assumes + assu.id ~> ReportUtil.buildPos(
-                        beginLine = beginLine, endLine = beginLine + 1, file = rustComponentApiFile)
+                        beginLine = beginLine, endLine = beginLine + 1, file = rustComponentApiFile, workspaceRoot, sel4OutputDir)
                   }
                 case Some(guar: GclGuarantee) =>
                   ReportUtil.findLineNumber(s"// guarantee ${guar.id}", putApiLine, rustComponentApiContent) match {
@@ -377,7 +383,7 @@ import org.sireum.message.{Level, Position, Reporter}
                       reporter.warn(None(), name, s"Didn't find guarantee clause for integration constraint ${guar.id} in $rustComponentApiFile")
                     case beginLine =>
                       guars = guars + guar.id ~> ReportUtil.buildPos(
-                        beginLine = beginLine, endLine = beginLine + 1, file = rustComponentApiFile)
+                        beginLine = beginLine, endLine = beginLine + 1, file = rustComponentApiFile, workspaceRoot, sel4OutputDir)
                   }
 
                 case Some(x) => halt(s"Unexpected: $x")
@@ -402,10 +408,10 @@ import org.sireum.message.{Level, Position, Reporter}
         rustReport = Some(RustReport(
           entrypointReport = entrypointReport,
           apiReport = RustApiReport(
-            extern_c_apiPath = "todo",
-            developerApiPath = rustComponentApiFile.toUri,
+            extern_c_apiPath = sel4OutputDir.relativize(externApiFile).value,
+            developerApiPath = sel4OutputDir.relativize(rustComponentApiFile).value,
             developerApiReport = developerApiReport,
-            testApiPath = "todo")))
+            testApiPath = sel4OutputDir.relativize(testApiFile).value)))
 
       } // end rust handling
 
@@ -421,7 +427,7 @@ import org.sireum.message.{Level, Position, Reporter}
     assert(systemDescription.exists)
 
     val report = MicrokitReport(
-      systemDescriptionUri = systemDescription.toUri,
+      systemDescriptionUri = sel4OutputDir.relativize(systemDescription).value,
       componentReport = componentReports)
 
     genReadme(
@@ -465,7 +471,7 @@ import org.sireum.message.{Level, Position, Reporter}
       st"""|System: [$systemName]()|
           ||:--|"""
 
-    val packageContent = ReportUtil.parseAadl(workspaceRoot)
+    val packageContent = ReportUtil.parseAadl(workspaceRoot, sel4OutputDir)
 
     var behaviorCodeReports: ISZ[ST] = ISZ()
 
@@ -483,7 +489,7 @@ import org.sireum.message.{Level, Position, Reporter}
         componentReport.annexSubclauses.get("GUMBO") match {
           case (Some(r)) => Some(
             st"""<br>
-                |GUMBO: [Subclause](${ReportUtil.createLink(r, workspaceRoot, sel4OutputDir)})""")
+                |GUMBO: [Subclause](${ReportUtil.createLink(r, sel4OutputDir)})""")
           case _ => None()
         }
 
@@ -495,14 +501,14 @@ import org.sireum.message.{Level, Position, Reporter}
             case Some(r) =>
               assert(gumboOpt.isEmpty)
               gumboOpt = Some(
-                st"""<br>GUMBO: [Subclause](${ReportUtil.createLink(r, workspaceRoot,sel4OutputDir)})""")
+                st"""<br>GUMBO: [Subclause](${ReportUtil.createLink(r, sel4OutputDir)})""")
             case _ =>
           }
-          var s = st"Type: [$typname](${ReportUtil.createLink(typeReport.pos, workspaceRoot, sel4OutputDir)})<br>"
-          s = st"${s}Implementation: [${componentName.s}](${ReportUtil.createLink(componentReport.pos, workspaceRoot, sel4OutputDir)})"
+          var s = st"Type: [$typname](${ReportUtil.createLink(typeReport.pos, sel4OutputDir)})<br>"
+          s = st"${s}Implementation: [${componentName.s}](${ReportUtil.createLink(componentReport.pos, sel4OutputDir)})"
           s
         } else {
-          st"Implementation: [${componentName.s}](${ReportUtil.createLink(componentReport.pos, workspaceRoot,sel4OutputDir)})"
+          st"Implementation: [${componentName.s}](${ReportUtil.createLink(componentReport.pos, sel4OutputDir)})"
         }
 
       val properties: String = {
@@ -524,9 +530,6 @@ import org.sireum.message.{Level, Position, Reporter}
     * Now process codegen artifacts
     ************************************************************/
 
-    val sysDesUri = Os.Path.fromUri(microkitReport.systemDescriptionUri)
-
-
     for (c <- microkitReport.componentReport.entries) {
       val idPath = c._1.idPath
       val id = idPath(idPath.lastIndex)
@@ -544,7 +547,7 @@ import org.sireum.message.{Level, Position, Reporter}
           for(entrypoint <- rust.entrypointReport.entries) {
             bh =
               st"""$bh
-                  |    ${ops.StringOps(entrypoint._1).firstToUpper}: [Rust](${ReportUtil.createLink(entrypoint._2, workspaceRoot, sel4OutputDir)})
+                  |    ${ops.StringOps(entrypoint._1).firstToUpper}: [Rust](${ReportUtil.createLink(entrypoint._2, sel4OutputDir)})
                   |"""
           }
 
@@ -591,7 +594,7 @@ import org.sireum.message.{Level, Position, Reporter}
           |
           |## Rust Code
           |
-          |[Microkit System Description](${sel4OutputDir.relativize(sysDesUri)})
+          |[Microkit System Description](${microkitReport.systemDescriptionUri})
           |
           |### Behavior Code
           |${(behaviorCodeReports, "\n\n")}

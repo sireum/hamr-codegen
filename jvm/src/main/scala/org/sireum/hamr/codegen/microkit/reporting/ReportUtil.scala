@@ -10,18 +10,50 @@ import org.sireum.hamr.ir.{Direction, GclNamedElement}
 
 object ReportUtil {
 
-  @pure def buildPos(beginLine: Z, endLine: Z, file: Os.Path): Position = {
+  @pure def buildPos(beginLine: Z, endLine: Z, file: Os.Path,
+                     workspaceDir: Os.Path, reportDir: Os.Path): Position = {
+    return buildPosH(
+      beginLine + 1, endLine = endLine + 1,
+      beginCol = 0, endCol = 0,
+      offset = 0, length = 0,
+      file, workspaceDir, reportDir)
+  }
+
+  @pure def buildPosA(portPos: Position, workspaceRoot: Os.Path, sel4OutputDir: Os.Path): Position = {
+    return buildPosH(beginLine = portPos.beginLine, endLine = portPos.endLine,
+      beginCol = portPos.beginColumn, endCol = portPos.endColumn,
+      offset = portPos.offset, length = portPos.length,
+      file = Os.path(portPos.uriOpt.get), workspaceDir = workspaceRoot, reportDir = sel4OutputDir)
+  }
+
+  @pure def buildPosH(beginLine: Z, endLine: Z, beginCol: Z, endCol: Z, offset: Z, length: Z,
+                      file: Os.Path, workspaceDir: Os.Path, reportDir: Os.Path): Position = {
     assert (beginLine != -1)
     assert (endLine != -1)
     assert (beginLine <= endLine)
+
+    val f: Os.Path =
+      if (file.exists) {
+        file
+      } else {
+        // e.g. /isolette-artifacts-sel4/aadl/packages/Regulate.aadl
+        val nameo = ops.StringOps(file.value)
+        assert(nameo.startsWith("/"))
+        val sub = nameo.substring(nameo.indexOfFrom('/', 1) + 1, nameo.size)
+        workspaceDir / sub
+      }
+
+    assert(f.exists, f.value)
+    val rel = reportDir.relativize(f)
+
     return FlatPos(
-      uriOpt = Some(file.toUri),
-      beginLine32 = conversions.Z.toU32(beginLine + 1),
-      beginColumn32 = u32"0",
-      endLine32 = conversions.Z.toU32(endLine + 1),
-      endColumn32 = u32"0",
-      offset32 = u32"0",
-      length32 = u32"0")
+      uriOpt = Some(rel.value),
+      beginLine32 = conversions.Z.toU32(beginLine),
+      beginColumn32 = conversions.Z.toU32(beginCol),
+      endLine32 = conversions.Z.toU32(endLine),
+      endColumn32 = conversions.Z.toU32(endCol),
+      offset32 = conversions.Z.toU32(offset),
+      length32 = conversions.Z.toU32(length))
   }
 
   @pure def findLineNumber(str: String, start: Z, content: ISZ[String]): Z = {
@@ -149,23 +181,12 @@ object ReportUtil {
   }
 
 
-  @pure def createLink(position: Position, workspaceDir: Os.Path, rootDir: Os.Path): ST = {
+  @pure def createLink(position: Position, rootDir: Os.Path): ST = {
+
     val fp = position.asInstanceOf[FlatPos]
-    val nameo = ops.StringOps(fp.uriOpt.get)
-    val uri: String =
-      if (nameo.startsWith("file://")) {
-        nameo.s
-      }
-      else{
-        // e.g. /isolette-artifacts-sel4/aadl/packages/Regulate.aadl
-        assert(nameo.startsWith("/"))
-        val sub = nameo.substring(nameo.indexOfFrom('/', 1) + 1, nameo.size)
-        s"${workspaceDir.toUri}/${sub}"
-      }
-    val f = Os.Path.fromUri(uri)
-    assert(f.exists, f.value)
-    val rel = rootDir.relativize(f)
-    return st"$rel#L${fp.beginLine32.toZ}-L${fp.endLine32.toZ}"
+    assert ((rootDir / fp.uriOpt.get).exists, (rootDir / fp.uriOpt.get).value)
+
+    return st"${fp.uriOpt.get}#L${fp.beginLine32.toZ}-L${fp.endLine32.toZ}"
     //return st"$rel#L${fp.beginLine32.toZ}"
   }
 
@@ -198,7 +219,7 @@ object ReportUtil {
   @datatype class ModelComponentReport(val pos: Position,
                                        val annexSubclauses: Map[String, Position])
 
-  @pure def parseAadl(workspaceRoot: Os.Path): Map[String, ModelPackageReport] = {
+  @pure def parseAadl(workspaceRoot: Os.Path, reportDir: Os.Path): Map[String, ModelPackageReport] = {
     var packages = Map.empty[String, ModelPackageReport]
     var libraryAnnexes = Map.empty[String, Position]
 
@@ -226,7 +247,7 @@ object ReportUtil {
             //println(s"searching for '${currentComponent.get._1}'")
             if (line.contains(s"end ${currentComponent.get._1}")) {
               components = components + currentComponent.get._1 ~> ModelComponentReport(
-                buildPos(currentComponent.get._2 - 1, i, f),
+                buildPos(currentComponent.get._2 - 1, i, f, workspaceRoot, reportDir),
                 if (gumbo.nonEmpty) Map.empty[String, Position] + "GUMBO" ~> gumbo.get
                 else Map.empty)
               currentComponent = None()
@@ -236,15 +257,15 @@ object ReportUtil {
               val annexName = getNameH("annex", line, F, T).get
               if (annexName == "GUMBO") {
                 assert(gumbo.isEmpty, s"There should only be only one gumbo subclause per component: $f")
-                gumbo = Some(buildPos(i, i, f))
+                gumbo = Some(buildPos(i, i, f, workspaceRoot, reportDir))
               }
             }
             else if (line.contains("**};") && gumbo.nonEmpty) {
-              gumbo = Some(buildPos(gumbo.get.beginLine - 1, i, f))
+              gumbo = Some(buildPos(gumbo.get.beginLine - 1, i, f, workspaceRoot, reportDir))
             }
           }
           else if (line.startsWith("**}") && gumbo.nonEmpty) {
-            libraryAnnexes = libraryAnnexes + "GUMBO" ~> buildPos(gumbo.get.beginLine - 1, i, f)
+            libraryAnnexes = libraryAnnexes + "GUMBO" ~> buildPos(gumbo.get.beginLine - 1, i, f, workspaceRoot, reportDir)
             gumbo = None()
           }
           else {
@@ -268,7 +289,7 @@ object ReportUtil {
             }
             else if (line.startsWith("annex GUMBO")) {
               // must be a library annex
-              gumbo = Some(buildPos(i, i, f))
+              gumbo = Some(buildPos(i, i, f, workspaceRoot, reportDir))
             }
           }
         }
@@ -306,13 +327,14 @@ object ReportUtil {
         var s = st"""<table>
                     |<tr><th colspan=3>State Variables</th></tr>"""
         for (e <- gumboReport.stateReport.entries) {
-          val cand = gumboOpt.get.annex.state.filter(p => p.name == e._1)
-          assert (cand.size == 1, e.string)
+          val modelCand = gumboOpt.get.annex.state.filter(p => p.name == e._1)
+          assert (modelCand.size == 1, e.string)
+          val modelPos = buildPosA(modelCand(0).posOpt.get, workspaceDir, rootDir)
           s =
             st"""$s
                 |<tr><td>${e._1}</td>
-                |<td><a href=${createLink(cand(0).posOpt.get, workspaceDir, rootDir)}>GUMBO</a></td>
-                |<td><a href=${createLink(e._2, workspaceDir, rootDir)}>Verus</a></td></tr>"""
+                |<td><a href=${createLink(modelPos, rootDir)}>GUMBO</a></td>
+                |<td><a href=${createLink(e._2, rootDir)}>Verus</a></td></tr>"""
         }
         Some(st"$s</table>")
       } else {
@@ -324,15 +346,17 @@ object ReportUtil {
         var s = st"""<table>
                     |<tr><th colspan=4>GUMBO Methods</th></tr>"""
         for (m <- gumboReport.methodsReport.entries) {
-          val cand = gumboOpt.get.annex.methods.filter(p => p.method.sig.id.value == m._1)
-          assert (cand.size == 1, m.string)
+          val modelCand = gumboOpt.get.annex.methods.filter(p => p.method.sig.id.value == m._1)
+          assert (modelCand.size == 1, m.string)
+          val modelPos = buildPosA(modelCand(0).posOpt.get, workspaceDir, rootDir)
+
           val gumbox = gumboXReport.gumboxMethods.get(m._1).get
           s =
             st"""$s
                 |<tr><td>${m._1}</td>
-                |<td><a href=${createLink(cand(0).posOpt.get, workspaceDir, rootDir)}>GUMBO</a></td>
-                |<td><a href=${createLink(m._2, workspaceDir, rootDir)}>Verus</a></td>
-                |<td><a href=${createLink(gumbox, workspaceDir, rootDir)}>GUMBOX</a></td>
+                |<td><a href=${createLink(modelPos, rootDir)}>GUMBO</a></td>
+                |<td><a href=${createLink(m._2, rootDir)}>Verus</a></td>
+                |<td><a href=${createLink(gumbox, rootDir)}>GUMBOX</a></td>
                 |</tr>"""
         }
         Some(st"$s</table>")
@@ -357,28 +381,33 @@ object ReportUtil {
           val codegenLoc = gumboReport.integrationReport.get.guaranteesReport.get(specName).get
           val modelCand = threadsPortSpecs.filter(p => p._2.id == specName)
           assert (modelCand.size == 1, specName.string)
+          val modelPos = buildPosA(modelCand(0)._2.posOpt.get, workspaceDir, rootDir)
+
           val gumbox = gumboXReport.gumboxMethods.get(s"I_Guar_${port._1.identifier}").get
 
           s = st"""$s
                   |<tr><td>guarantee ${specName}</td>
-                  |<td><a href=${createLink(modelCand(0)._2.posOpt.get, workspaceDir, rootDir)}>GUMBO</a></td>
-                  |<td><a href=${createLink(codegenLoc, workspaceDir, rootDir)}>Verus</a></td>
-                  |<td><a href=${createLink(gumbox, workspaceDir, rootDir)}>GUMBOX</a></td>
+                  |<td><a href=${createLink(modelPos, rootDir)}>GUMBO</a></td>
+                  |<td><a href=${createLink(codegenLoc, rootDir)}>Verus</a></td>
+                  |<td><a href=${createLink(gumbox, rootDir)}>GUMBOX</a></td>
                   |</tr>"""
         }
 
         for(port <- threadsPortSpecs if port._1.direction == Direction.In) {
           val specName = port._2.id
           val codegenLoc = gumboReport.integrationReport.get.assumesReport.get(specName).get
+
           val modelCand = threadsPortSpecs.filter(p => p._2.id == specName)
           assert (modelCand.size == 1, specName.string)
+          val modelPos = buildPosA(modelCand(0)._2.posOpt.get, workspaceDir, rootDir)
+
           val gumbox = gumboXReport.gumboxMethods.get(s"I_Assm_${port._1.identifier}").get
 
           s = st"""$s
                   |<tr><td>assume ${specName}</td>
-                  |<td><a href=${createLink(modelCand(0)._2.posOpt.get, workspaceDir, rootDir)}>GUMBO</a></td>
-                  |<td><a href=${createLink(codegenLoc, workspaceDir, rootDir)}>Verus</a></td>
-                  |<td><a href=${createLink(gumbox, workspaceDir, rootDir)}>GUMBOX</a></td>
+                  |<td><a href=${createLink(modelPos, rootDir)}>GUMBO</a></td>
+                  |<td><a href=${createLink(codegenLoc, rootDir)}>Verus</a></td>
+                  |<td><a href=${createLink(gumbox, rootDir)}>GUMBOX</a></td>
                   |</tr>"""
         }
         Some(st"$s</table>")
@@ -393,15 +422,17 @@ object ReportUtil {
           st"""<table>
               |<tr><th colspan=4>Initialize</th></tr>"""
         for (i <- gumboReport.initializeReport.entries) {
-          val cands = gumboOpt.get.annex.initializes.get.guarantees.filter(p => p.id == i._1)
-          assert (cands.size == 1, i._1)
+          val modelCand = gumboOpt.get.annex.initializes.get.guarantees.filter(p => p.id == i._1)
+          assert (modelCand.size == 1, i._1)
+          val modelPos = buildPosA(modelCand(0).posOpt.get, workspaceDir, rootDir)
+
           val gumbox = gumboXReport.gumboxMethods.get(s"initialize_${i._1}").get
           s =
             st"""$s
                 |<tr><td>guarantee ${i._1}</td>
-                |<td><a href=${createLink(cands(0).posOpt.get, workspaceDir, rootDir)}>GUMBO</a></td>
-                |<td><a href=${createLink(i._2, workspaceDir, rootDir)}>Verus</a></td>
-                |<td><a href=${createLink(gumbox, workspaceDir, rootDir)}>GUMBOX</a></td>
+                |<td><a href=${createLink(modelPos, rootDir)}>GUMBO</a></td>
+                |<td><a href=${createLink(i._2, rootDir)}>Verus</a></td>
+                |<td><a href=${createLink(gumbox, rootDir)}>GUMBOX</a></td>
                 |</tr>"""
         }
         Some(st"$s</table>")
@@ -415,43 +446,49 @@ object ReportUtil {
           |<tr><th colspan=4>Compute</th></tr>"""
       if (gumboReport.computeReport.get.assumesReport.nonEmpty) {
         for (a <- gumboReport.computeReport.get.assumesReport.entries) {
-          val cands = gumboOpt.get.annex.compute.get.assumes.filter(p => p.id == a._1)
-          assert(cands.size == 1)
+          val modelCand = gumboOpt.get.annex.compute.get.assumes.filter(p => p.id == a._1)
+          assert(modelCand.size == 1)
+          val modelPos = buildPosA(modelCand(0).posOpt.get, workspaceDir, rootDir)
+
           val gumbox = gumboXReport.gumboxMethods.get(s"compute_spec_${a._1}_assume").get
           s =
             st"""$s
                 |<tr><td>assume ${a._1}</td>
-                |<td><a href=${createLink(cands(0).posOpt.get, workspaceDir, rootDir)}>GUMBO</a></td>
-                |<td><a href=${createLink(a._2, workspaceDir, rootDir)}>Verus</a></td>
-                |<td><a href=${createLink(gumbox, workspaceDir, rootDir)}>GUMBOX</a></td>
+                |<td><a href=${createLink(modelPos, rootDir)}>GUMBO</a></td>
+                |<td><a href=${createLink(a._2, rootDir)}>Verus</a></td>
+                |<td><a href=${createLink(gumbox, rootDir)}>GUMBOX</a></td>
                 |</tr>"""
         }
       }
       if (gumboReport.computeReport.get.guaranteesReport.nonEmpty) {
         for (a <- gumboReport.computeReport.get.guaranteesReport.entries) {
-          val cands = gumboOpt.get.annex.compute.get.guarantees.filter(p => p.id == a._1)
-          assert(cands.size == 1)
+          val modelCand = gumboOpt.get.annex.compute.get.guarantees.filter(p => p.id == a._1)
+          assert(modelCand.size == 1)
+          val modelPos = buildPosA(modelCand(0).posOpt.get, workspaceDir, rootDir)
+
           val gumbox = gumboXReport.gumboxMethods.get(s"compute_spec_${a._1}_guarantee").get
           s =
             st"""$s
                 |<tr><td>guarantee ${a._1}</td>
-                |<td><a href=${createLink(cands(0).posOpt.get, workspaceDir, rootDir)}>GUMBO</a></td>
-                |<td><a href=${createLink(a._2, workspaceDir, rootDir)}>Verus</a></td>
-                |<td><a href=${createLink(gumbox, workspaceDir, rootDir)}>GUMBOX</a></td>
+                |<td><a href=${createLink(modelPos, rootDir)}>GUMBO</a></td>
+                |<td><a href=${createLink(a._2, rootDir)}>Verus</a></td>
+                |<td><a href=${createLink(gumbox, rootDir)}>GUMBOX</a></td>
                 |</tr>"""
         }
       }
       if (gumboReport.computeReport.get.casesReport.nonEmpty) {
         for (a <- gumboReport.computeReport.get.casesReport.entries) {
-          val cands = gumboOpt.get.annex.compute.get.cases.filter(p => p.id == a._1)
-          assert(cands.size == 1)
+          val modelCand = gumboOpt.get.annex.compute.get.cases.filter(p => p.id == a._1)
+          assert(modelCand.size == 1)
+          val modelPos = buildPosA(modelCand(0).posOpt.get, workspaceDir, rootDir)
+
           val gumbox = gumboXReport.gumboxMethods.get(s"compute_case_${a._1}").get
           s =
             st"""$s
                 |<tr><td>case ${a._1}</td>
-                |<td><a href=${createLink(cands(0).posOpt.get, workspaceDir, rootDir)}>GUMBO</a></td>
-                |<td><a href=${createLink(a._2, workspaceDir, rootDir)}>Verus</a></td>
-                |<td><a href=${createLink(gumbox, workspaceDir, rootDir)}>GUMBOX</a></td>
+                |<td><a href=${createLink(modelPos, rootDir)}>GUMBO</a></td>
+                |<td><a href=${createLink(a._2, rootDir)}>Verus</a></td>
+                |<td><a href=${createLink(gumbox, rootDir)}>GUMBOX</a></td>
                 |</tr>"""
         }
       }
@@ -477,10 +514,14 @@ object ReportUtil {
 
     for (a <- apiReport.developerApiReport.entries) {
       val port = thread.getPortByPath(thread.path :+ a._1).get
+      val portPos = port.feature.identifier.pos.get
+
+      val portPosRel = buildPosA(portPos, workspaceRoot, sel4OutputDir)
+
       s = st"""$s
               |<tr><td>${a._1}</td>
-              |<td><a href=${createLink(port.feature.identifier.pos.get, workspaceRoot, sel4OutputDir)}>Model</a></td>
-              |<td><a href=${createLink(a._2, workspaceRoot, sel4OutputDir)}>Rust API</a></td>"""
+              |<td><a href=${createLink(portPosRel, sel4OutputDir)}>Model</a></td>
+              |<td><a href=${createLink(a._2, sel4OutputDir)}>Rust API</a></td>"""
     }
     return st"$s</table>"
   }
