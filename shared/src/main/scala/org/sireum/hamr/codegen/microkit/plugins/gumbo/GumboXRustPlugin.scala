@@ -485,7 +485,13 @@ object ComputeContributions {
         var topLevelGuaranteesCombined: ISZ[ST] = ISZ()
 
         for (g <- compute.assumes) {
-          val gg = GumboXRustUtil.rewriteToExpX(SlangExpUtil.getRexp(g.exp, gclSymbolTable), thread, types, stateVars, crustTypeProvider)
+          val gg = GumboXRustUtil.rewriteToExpX(
+            SlangExpUtil.getRexp(g.exp, gclSymbolTable),
+            thread,
+            types,
+            stateVars,
+            crustTypeProvider)
+
           val rexp = SlangExpUtil.rewriteExp(
             rexp = gg.exp,
             context = thread,

@@ -1,17 +1,18 @@
 // #Sireum
-package org.sireum.hamr.codegen.microkit.reporting
+package org.sireum.hamr.codegen.microkit.plugins.reporting
 
 import org.sireum._
 import org.sireum.U32._
 import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, Store}
 import org.sireum.hamr.codegen.common.StringUtil
-import org.sireum.hamr.codegen.common.containers.{EResource, IResource}
+import org.sireum.hamr.codegen.common.containers.{EResource, InternalResource}
 import org.sireum.hamr.codegen.common.plugin.Plugin
 import org.sireum.hamr.codegen.common.reporting.{CodegenReporting, CodegenReports, JSON, ResourceReport, Status, ToolReport}
 import org.sireum.hamr.codegen.common.symbols.{AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.{CodeGenResults, HamrCli}
 import org.sireum.hamr.codegen.microkit.plugins.gumbo.GumboRustUtil
+import org.sireum.hamr.codegen.microkit.reporting._
 import org.sireum.hamr.codegen.microkit.util.Util
 import org.sireum.hamr.ir.{Aadl, Direction, GclAssume, GclGuarantee, GclNamedElement, GclSubclause}
 import org.sireum.message.{Level, Position, Reporter}
@@ -70,7 +71,7 @@ import org.sireum.message.{Level, Position, Reporter}
           var r: ISZ[ResourceReport] = ISZ()
           for (resource <- codegenResults.resources) {
             resource match {
-              case i: IResource =>
+              case i: InternalResource =>
                 r = r :+ ResourceReport(
                   path = sel4OutputDir.relativize(Os.path(i.dstPath)).value,
                   overwrittenIfExists = i.overwrite)

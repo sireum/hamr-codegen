@@ -171,11 +171,14 @@ object GclResolver {
         case Some(e: AST.ResolvedInfo.Package) => // ignore
         case Some(x) =>
           val fqName: ISZ[String] = x match {
+            case e: AST.ResolvedInfo.LocalVar =>
+              // must be quantifier variable
+              return None()
             case e: AST.ResolvedInfo.Var => e.owner :+ e.id
             case e: AST.ResolvedInfo.Method => e.owner :+ e.id
             case e: AST.ResolvedInfo.Object => e.name
             case x =>
-              reporter.error(o.fullPosOpt, GclResolver.toolName, s"Wasn't expecting $x")
+              reporter.error(o.fullPosOpt, GclResolver.toolName, s"Wasn't expecting $x while resolving Ident")
               ISZ()
           }
           return lookup(o.id.value, fqName, o.resOpt, o.fullPosOpt)

@@ -39,7 +39,7 @@ object GclResolverUtil {
           case "String" => "String"
 
           case x =>
-            reporter.error(b.container.get.identifier.pos, GclResolver.toolName, s"Wasn't expecting $simpleName")
+            reporter.error(b.container.get.identifier.pos, GclResolver.toolName, s"Wasn't expecting $simpleName while trying to get Slang type name")
             "String"
         }
         return ISZ("org", "sireum", simpleSireumName)
@@ -234,6 +234,7 @@ object GclResolverUtil {
     }
 
     // TODO: should use resolveName when possible (currently quantifier params are not resolved)
+
     /*
     scope.resolveName(typeHierarchy.nameMap, ISZ(o.id.value)) match {
       case Some(n) => println(s"Resolved ${o.prettyST.render}")
@@ -313,7 +314,7 @@ object GclResolverUtil {
         pushType(aadlTypes.typeMap.get("Base_Types::Integer").get)
         return irMTransformer.PreResult(F, MNone())
       case ISZ() =>
-      case _ => halt("Infeasible")
+      case _ => halt(st"Infeasible: ${(for (q <- quantifierParams) yield q.idOpt.get.value, ",")}".render)
     }
 
     scope.resolveName(typeHierarchy.nameMap, ISZ(o.id.value)) match {

@@ -11,7 +11,7 @@ import org.sireum.hamr.codegen.microkit.MicrokitCodegen
 import org.sireum.hamr.codegen.microkit.plugins.types.CRustTypeProvider
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
 import org.sireum.lang.{ast => SAST}
-import org.sireum.lang.ast.Exp
+import org.sireum.lang.ast.{Exp, Id}
 import org.sireum.message.{Position, Reporter}
 
 object SlangExpUtil {
@@ -140,18 +140,7 @@ object SlangExpUtil {
               halt(s"Infeasible: this should have been typed by now $exp")
           }
 
-            exp.id.value match {
-              case "get" =>
-                return st"${receiverOptST(exp.receiverOpt, sepS)}unwrap()"
-              case "isEmpty" =>
-                return st"${receiverOptST(exp.receiverOpt, sepS)}is_none()"
-              case "nonEmpty" =>
-                return st"${receiverOptST(exp.receiverOpt, sepS)}is_some()"
-              case "size" =>
-                return st"${receiverOptST(exp.receiverOpt, sepS)}len()"
-              case _ =>
-                return st"${receiverOptST(exp.receiverOpt, sepS)}${exp.id.value}"
-            }
+          return convertSlangMethodsToRust(exp.receiverOpt, exp.id, sepS)
 
         case exp: Exp.Binary =>
           val (leftOpOpt, leftPosOpt): (Option[String], Option[Position]) = exp.left match {
@@ -194,21 +183,21 @@ object SlangExpUtil {
 
               } else {
 
-                val receiverOpt: Option[ST] =
+                val receiverOpt: Option[Exp] =
                   exp.receiverOpt match {
                     case Some(ro) if isThreadSingleton(ro) =>
                       // drop the fully qualified reference to the Slang singleton object
                       None()
-                    case Some(ro) => Some(nestedRewriteExp(ro, None()))
+                    case Some(ro) => Some(ro)//Some(nestedRewriteExp(ro, None()))
                     case  _ => None()
                   }
 
                 val fname: ST =
                   if (exp.ident.id.value == "apply") {
                   assert(receiverOpt.nonEmpty, "What is being applied?")
-                  receiverOpt.get
+                  nestedRewriteExp(receiverOpt.get, None())
                 } else {
-                  st"${if( receiverOpt.nonEmpty) st"${receiverOpt.get}." else st""}${exp.ident.id.value}"
+                  convertSlangMethodsToRust(receiverOpt = receiverOpt, id = exp.ident.id, separator = ".")
                 }
 
                 exp.attr.resOpt match {
@@ -291,32 +280,18 @@ object SlangExpUtil {
           val param = exp.fun.params(0).idOpt.get.value
 
           val lo = nestedRewriteExp(exp.lo, None())
-          val hi = st"${nestedRewriteExp(exp.hi, None())}${if (exp.hiExact) "" else " - 1"}"
+          val hi = nestedRewriteExp(exp.hi, None())
 
-          val body = nestedRewriteExp(exp.fun.exp.asInstanceOf[SAST.Stmt.Expr].exp, None())
+           val body = nestedRewriteExp(exp.fun.exp.asInstanceOf[SAST.Stmt.Expr].exp, None())
 
-          if (inVerus) {
+           if (inVerus) {
             val quantType: String = if (exp.isForall) "forall" else "exists"
 
-            val range = st"$lo <= $param <= $hi"
+            val range = st"$lo <= $param ${if (exp.hiExact) "<=" else "<"} $hi"
 
             return st"$quantType|$param:int| $range && $body"
           } else {
-            val b: ST =
-              if (exp.isForall)
-                st"""if not($body) {
-                    |  return false;
-                    |}
-                    |"""
-              else
-                st"""if $body {
-                    |  return true;
-                    |}"""
-
-            return st"""for $param in $lo .. $hi {
-                       |  $b
-                       |}
-                       |return ${if (exp.isForall) "true" else "false"};"""
+            return st"""($lo..${if (exp.hiExact) "=" else ""}$hi).${if(exp.isForall) "all" else "any"}(|${param}| $body)"""
           }
 
 
@@ -351,6 +326,22 @@ object SlangExpUtil {
         case exp: Exp.TypeCond => halt(s"$exp : ${exp.posOpt}")
       }
     } // end nestedRewriteExp
+
+
+    @pure def convertSlangMethodsToRust(receiverOpt: Option[Exp], id: Id, separator: String): ST = {
+      id.value match {
+        case "get" =>
+          return st"${receiverOptST(receiverOpt, separator)}unwrap()"
+        case "isEmpty" =>
+          return st"${receiverOptST(receiverOpt, separator)}is_none()"
+        case "nonEmpty" =>
+          return st"${receiverOptST(receiverOpt, separator)}is_some()"
+        case "size" =>
+          return st"${receiverOptST(receiverOpt, separator)}len()"
+        case _ =>
+          return st"${receiverOptST(receiverOpt, separator)}${id.value}"
+      }
+    }
 
     @pure def receiverOptST(receiverOpt: Option[Exp], sep: String): Option[ST] = {
       if (receiverOpt.isEmpty) {

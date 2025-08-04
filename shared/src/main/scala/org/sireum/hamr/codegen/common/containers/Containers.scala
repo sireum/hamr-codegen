@@ -61,6 +61,7 @@ object Marker {
                        val endMarker: String)
 
 @sig trait InternalResource extends FileResource {
+  def dstPath: String
   def content: ST
   def markers: ISZ[Marker]
   def overwrite: B

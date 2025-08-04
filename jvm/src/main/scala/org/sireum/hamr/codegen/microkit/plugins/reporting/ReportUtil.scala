@@ -1,11 +1,12 @@
 // #Sireum
-package org.sireum.hamr.codegen.microkit.reporting
+package org.sireum.hamr.codegen.microkit.plugins.reporting
 
 import org.sireum._
 import org.sireum.message.{FlatPos, Position}
 import org.sireum.U32._
 import org.sireum.hamr.codegen.common.StringUtil
-import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlThread, GclAnnexClauseInfo}
+import org.sireum.hamr.codegen.common.symbols.{AadlThread, GclAnnexClauseInfo}
+import org.sireum.hamr.codegen.microkit.reporting._
 import org.sireum.hamr.ir.{Direction, GclNamedElement}
 
 object ReportUtil {

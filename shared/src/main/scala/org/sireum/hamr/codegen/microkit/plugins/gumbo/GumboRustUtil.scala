@@ -202,14 +202,13 @@ object GumboRustUtil {
         val exp: ST = body.stmts(0) match {
           case r: Return =>
             assert (r.expOpt.nonEmpty, "Currently expecting GUMBO methods to return values")
-            SlangExpUtil.rewriteExpH(
+            SlangExpUtil.rewriteExp(
               rexp = SlangExpUtil.getRexp(r.expOpt.get, gclSymbolTable),
               context = context,
-              substitutions = Map.empty,
               inRequires = F,
               inVerus = inVerus,
-              aadlTypes = aadlTypes,
               tp = tp,
+              aadlTypes = aadlTypes,
               store = store,
               reporter = reporter)
           case x =>

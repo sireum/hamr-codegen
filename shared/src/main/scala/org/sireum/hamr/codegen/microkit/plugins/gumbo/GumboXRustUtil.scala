@@ -95,15 +95,22 @@ object GumboXRustUtil {
         case Some(typed: SAST.Typed.Name) =>
           val (typ, _) = getAadlType(typed, aadlTypes)
 
-          val (index, stateVar) = findStateVar(o.id.value, stateVars)
+          o.resOpt match {
+            case Some(e: SAST.ResolvedInfo.LocalVar) =>
+              // must be a quantifier variable so nothing to do
+            case Some(e: SAST.ResolvedInfo.Var) =>
+              val (index, stateVar) = findStateVar(o.id.value, stateVars)
 
-          params = params +
-            GGStateVarParam(
-              stateVar = stateVar,
-              id = index,
-              isPreState = F,
-              aadlType = typ.classifier,
-              typeNameProvider = crustTypeProvider.getTypeNameProvider(typ))
+              params = params +
+                GGStateVarParam(
+                  stateVar = stateVar,
+                  id = index,
+                  isPreState = F,
+                  aadlType = typ.classifier,
+                  typeNameProvider = crustTypeProvider.getTypeNameProvider(typ))
+            case x =>
+              halt(s"Ident $o resolved to $x")
+          }
         case _ =>
       }
       return ir.MTransformer.PreResult(F, MNone[Exp]())
