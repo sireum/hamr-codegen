@@ -84,7 +84,7 @@ import org.sireum.{B, strictpure}
       }
     }
 
-    val attestPath = attestationDir / "attest.json"
+    val attestPath = attestationDir / "appraise.json"
     val provisionPath = attestationDir / "provision.json"
     val scriptPath = attestationDir / "attestation.cmd"
     val modelGolden = attestationDir / "model_golden.txt"
@@ -255,10 +255,10 @@ import org.sireum.{B, strictpure}
                 |exists(env_rodeo_micro_provision)
                 |
                 |val provisionFile: Os.Path = attestation_dir / "provision.json"
-                |val attestFile: Os.Path = attestation_dir / "attest.json"
+                |val appraiseFile: Os.Path = attestation_dir / "appraise.json"
                 |
                 |exists (provisionFile)
-                |exists (attestFile)
+                |exists (appraiseFile)
                 |
                 |val cargo: ST = st"cargo run --release --bin rust-rodeo-client -- -c $$cvm"
                 |
@@ -286,7 +286,7 @@ import org.sireum.{B, strictpure}
                 |
                 |} else {
                 |  val atemp = Os.temp()
-                |  atemp.writeOver(replace(attestFile.read))
+                |  atemp.writeOver(replace(appraiseFile.read))
                 |
                 |  exists(attestation_dir / "model_golden.txt")
                 |  exists(attestation_dir / "codegen_golden.txt")
