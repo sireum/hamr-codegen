@@ -99,6 +99,9 @@ jobs:
           # Installing emacs installs some package(s) that resolve an issue where
           # the OSATE gumbo parser fails to initialize when used in the docker container.
           ${aptInstall} emacs-nox
+          ${aptInstall} emacs-lucid
+          ${aptInstall} emacs-gtk
+          ${aptInstall} emacs
           
           mkdir -p $HOME/.ssh
           touch $HOME/.ssh/config
