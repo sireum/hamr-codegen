@@ -226,7 +226,7 @@ import org.sireum.{B, strictpure}
                 |val verbose: B = ops.ISZOps(Os.cliArgs).contains("verbose")
                 |
                 |if (!(provision |^ appraise)) {
-                |  println("Usage: [provision | appraise] <verbose>")
+                |  println("Usage: (provision | appraise) <verbose>")
                 |  Os.exit(0)
                 |  halt("")
                 |}
