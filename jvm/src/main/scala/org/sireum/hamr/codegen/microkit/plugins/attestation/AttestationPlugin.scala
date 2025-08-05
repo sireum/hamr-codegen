@@ -65,8 +65,9 @@ import org.sireum.{B, strictpure}
 
     val attestationDir = sel4OutputDir / "attestation"
 
-    val modelFiles: ISZ[Os.Path] =
-      Os.Path.walk(workspaceRoot, T, F, p => p.isFile && (if (isAadl) p.ext == "aadl" else p.ext == "sysml"))
+    val lang: String = if (isAadl) "aadl" else "sysml"
+
+    val modelFiles: ISZ[Os.Path] = Os.Path.walk(workspaceRoot, T, F, p => p.isFile && p.ext == lang)
 
     var codegenFiles: ISZ[Os.Path] = ISZ()
 
@@ -84,11 +85,11 @@ import org.sireum.{B, strictpure}
       }
     }
 
-    val attestPath = attestationDir / "appraise.json"
-    val provisionPath = attestationDir / "provision.json"
-    val scriptPath = attestationDir / "attestation.cmd"
-    val modelGolden = attestationDir / "model_golden.txt"
-    val codegenGolden = attestationDir / "codegen_golden.txt"
+    val appraisePath = attestationDir / s"${lang}_appraise.json"
+    val provisionPath = attestationDir / s"${lang}_provision.json"
+    val scriptPath = attestationDir / s"${lang}_attestation.cmd"
+    val modelGolden = attestationDir / s"${lang}_model_golden.txt"
+    val codegenGolden = attestationDir / s"${lang}_codegen_golden.txt"
 
     val provisionModel: ST = provisionST("provision_aadl_targ", attestationDir.relativize(modelGolden).value)
     val attestModel: ST = attestST("aadl_dir_targ", workspace_dir_ENV, attestationDir.relativize(modelGolden).value, workspaceRoot, modelFiles)
@@ -112,7 +113,7 @@ import org.sireum.{B, strictpure}
           |}""".render)
     println(s"Wrote: $provisionPath")
 
-    attestPath.writeOver(
+    appraisePath.writeOver(
       st"""{
           |  "RodeoClientRequest_attest_id": "micro_protocol",
           |  "RodeoClientRequest_attest_args": {
@@ -122,11 +123,11 @@ import org.sireum.{B, strictpure}
           |    }
           |  }
           |}""".render)
-    println(s"Wrote: $attestPath")
+    println(s"Wrote: $appraisePath")
 
     val workspace_dir = attestationDir.relativize(workspaceRoot)
 
-    scriptPath.writeOver(script(workspace_dir.value).render)
+    scriptPath.writeOver(script(workspace_dir.value, lang).render)
     scriptPath.chmod("770")
     println(s"Wrote: $scriptPath")
 
@@ -180,7 +181,7 @@ import org.sireum.{B, strictpure}
           |}""")
   }
 
-  @pure def script(workspace_dir: String): ST = {
+  @pure def script(workspace_dir: String, lang: String): ST = {
     return (st"""::/*#! 2> /dev/null                                   #
                 |@ 2>/dev/null # 2>nul & echo off & goto BOF           #
                 |if [ -z "$${SIREUM_HOME}" ]; then                      #
@@ -254,8 +255,8 @@ import org.sireum.{B, strictpure}
                 |exists(env_roedeo_micro)
                 |exists(env_rodeo_micro_provision)
                 |
-                |val provisionFile: Os.Path = attestation_dir / "provision.json"
-                |val appraiseFile: Os.Path = attestation_dir / "appraise.json"
+                |val provisionFile: Os.Path = attestation_dir / "${lang}_provision.json"
+                |val appraiseFile: Os.Path = attestation_dir / "${lang}_appraise.json"
                 |
                 |exists (provisionFile)
                 |exists (appraiseFile)
@@ -279,8 +280,8 @@ import org.sireum.{B, strictpure}
                 |    p = p.console.echo
                 |  }
                 |  val results = p.run()
-                |  exists(attestation_dir / "model_golden.txt")
-                |  exists(attestation_dir / "codegen_golden.txt")
+                |  exists(attestation_dir / "${lang}_model_golden.txt")
+                |  exists(attestation_dir / "${lang}_codegen_golden.txt")
                 |
                 |  println("Provisioning successful!")
                 |
@@ -288,8 +289,8 @@ import org.sireum.{B, strictpure}
                 |  val atemp = Os.temp()
                 |  atemp.writeOver(replace(appraiseFile.read))
                 |
-                |  exists(attestation_dir / "model_golden.txt")
-                |  exists(attestation_dir / "codegen_golden.txt")
+                |  exists(attestation_dir / "${lang}_model_golden.txt")
+                |  exists(attestation_dir / "${lang}_codegen_golden.txt")
                 |
                 |  val a = st"$$cargo -r $$atemp -e $$env_roedeo_micro"
                 |  var p = proc"$${a.render}".at(rust_am_clients)
