@@ -159,20 +159,11 @@ import org.sireum.{B, strictpure}
   @pure def attestST(name: String, envVar: String, goldenPath: String, root: Os.Path, provisionFiles: ISZ[Os.Path]): ST = {
     val files : ISZ[String] = for(i <- for(p <- provisionFiles) yield root.relativize(p)) yield s"\"$envVar/$i\""
 
-    val files_ : ISZ[String] =
-      if (files.size > 159) {
-        println(st"""Dropping:
-                    |  ${(ops.ISZOps(files).slice(159, files.size), "\n")}""".render)
-        ops.ISZOps(files).slice(0, 159)
-      } else {
-        files
-      }
-
     return (
       st""""$name": {
           |  "env_var": "",
           |  "paths": [
-          |    ${(files_, ",\n")}
+          |    ${(files, ",\n")}
           |  ],
           |  "omit_file_suffixes": [],
           |  "recursive": false,
