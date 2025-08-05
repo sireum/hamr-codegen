@@ -64,6 +64,23 @@ jobs:
           # via workflow dispatch
           VERBOSE_DEBUG: ${{ ( runner.debug == '1' || inputs.verbose == '1' ) && ',verbose' || '' }}
         run: |
+          # Debian Bullseye is no longer fully available on deb.debian.org or security.debian.org,
+          # especially for the armel architecture. Packages have been moved to archive.debian.org,
+          # which no longer supports signed Release files or valid-until metadata.
+          # This forces us to:
+          # 1. Use archive.debian.org URLs instead of deb.debian.org.
+          # 2. Disable APT's date validation with Acquire::Check-Valid-Until "false".
+          
+          cat > /etc/apt/sources.list <<EOF
+          deb http://archive.debian.org/debian bullseye main contrib non-free
+          #deb http://archive.debian.org/debian-security bullseye-security main contrib non-free
+          deb http://archive.debian.org/debian bullseye-updates main contrib non-free
+          EOF
+          
+          echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until
+
+
+
           export SEL4_CAMKES_ENV=true 
           
           # github sets HOME to /github/home but some tools (Sireum's Os.home, Haskell) use
@@ -81,7 +98,7 @@ jobs:
           
           # Installing emacs installs some package(s) that resolve an issue where
           # the OSATE gumbo parser fails to initialize when used in the docker container.
-          ${aptInstall} emacs
+          ${aptInstall} emacs-nox
           
           mkdir -p $HOME/.ssh
           touch $HOME/.ssh/config
