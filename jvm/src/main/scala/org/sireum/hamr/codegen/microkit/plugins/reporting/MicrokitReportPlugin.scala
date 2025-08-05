@@ -73,7 +73,7 @@ import org.sireum.message.{Level, Position, Reporter}
             resource match {
               case i: InternalResource =>
                 r = r :+ ResourceReport(
-                  path = sel4OutputDir.relativize(Os.path(i.dstPath)).value,
+                  path = ReportUtil.deWin(sel4OutputDir.relativize(Os.path(i.dstPath)).value),
                   overwrittenIfExists = i.overwrite)
               case e: EResource =>
                 halt("Not expecting $e")
@@ -105,7 +105,7 @@ import org.sireum.message.{Level, Position, Reporter}
           println("Model workspace option was not provided. Cannot generate Microkit codegen report")
 
           return CodegenReporting.addCodegenReport(name,
-            MicrokitReport.empty(sel4OutputDir.relativize(systemDescription).value), localStore)
+            MicrokitReport.empty(ReportUtil.deWin(sel4OutputDir.relativize(systemDescription).value)), localStore)
       }
 
     if (reporter.hasError) {
@@ -413,10 +413,10 @@ import org.sireum.message.{Level, Position, Reporter}
         rustReport = Some(RustReport(
           entrypointReport = entrypointReport,
           apiReport = RustApiReport(
-            extern_c_apiPath = sel4OutputDir.relativize(externApiFile).value,
-            developerApiPath = sel4OutputDir.relativize(rustComponentApiFile).value,
+            extern_c_apiPath = ReportUtil.deWin(sel4OutputDir.relativize(externApiFile).value),
+            developerApiPath = ReportUtil.deWin(sel4OutputDir.relativize(rustComponentApiFile).value),
             developerApiReport = developerApiReport,
-            testApiPath = sel4OutputDir.relativize(testApiFile).value)))
+            testApiPath = ReportUtil.deWin(sel4OutputDir.relativize(testApiFile).value))))
 
       } // end rust handling
 
@@ -429,7 +429,7 @@ import org.sireum.message.{Level, Position, Reporter}
     } // end for loop processing threads
 
     val report = MicrokitReport(
-      systemDescriptionUri = sel4OutputDir.relativize(systemDescription).value,
+      systemDescriptionUri = ReportUtil.deWin(sel4OutputDir.relativize(systemDescription).value),
       componentReport = componentReports)
 
     val isAadl = ops.StringOps(st.rootSystem.component.identifier.pos.get.uriOpt.get).endsWith(".aadl")
@@ -598,7 +598,7 @@ import org.sireum.message.{Level, Position, Reporter}
 
     val diagramOpt: Option[ST] = {
       ReportUtil.getArchDiagram(workspaceRoot) match {
-        case Some(f) => Some(st"![${f.name}](${sel4OutputDir.relativize(f)})")
+        case Some(f) => Some(st"![${f.name}](${ReportUtil.deWin(sel4OutputDir.relativize(f).value)})")
         case _ => None()
       }
     }

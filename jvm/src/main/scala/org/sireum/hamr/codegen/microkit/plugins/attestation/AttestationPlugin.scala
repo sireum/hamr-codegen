@@ -91,11 +91,11 @@ import org.sireum.{B, strictpure}
     val modelGolden = attestationDir / s"${lang}_model_golden.txt"
     val codegenGolden = attestationDir / s"${lang}_codegen_golden.txt"
 
-    val provisionModel: ST = provisionST("provision_aadl_targ", attestationDir.relativize(modelGolden).value)
-    val attestModel: ST = attestST("aadl_dir_targ", workspace_dir_ENV, attestationDir.relativize(modelGolden).value, workspaceRoot, modelFiles)
+    val provisionModel: ST = provisionST("provision_aadl_targ", deWin(attestationDir.relativize(modelGolden).value))
+    val attestModel: ST = attestST("aadl_dir_targ", workspace_dir_ENV, deWin(attestationDir.relativize(modelGolden).value), workspaceRoot, modelFiles)
 
-    val provisionCodegen: ST = provisionST("provision_microkit_targ", attestationDir.relativize(codegenGolden).value)
-    val attestCodegen = attestST("microkit_dir_targ", codegen_dir_ENV, attestationDir.relativize(codegenGolden).value, sel4OutputDir, codegenFiles)
+    val provisionCodegen: ST = provisionST("provision_microkit_targ", deWin(attestationDir.relativize(codegenGolden).value))
+    val attestCodegen = attestST("microkit_dir_targ", codegen_dir_ENV, deWin(attestationDir.relativize(codegenGolden).value), sel4OutputDir, codegenFiles)
 
     provisionPath.writeOver(
       st"""{
@@ -127,7 +127,7 @@ import org.sireum.{B, strictpure}
 
     val workspace_dir = attestationDir.relativize(workspaceRoot)
 
-    scriptPath.writeOver(script(workspace_dir.value, lang).render)
+    scriptPath.writeOver(script(deWin(workspace_dir.value), lang).render)
     scriptPath.chmod("770")
     println(s"Wrote: $scriptPath")
 
@@ -157,7 +157,7 @@ import org.sireum.{B, strictpure}
   }
 
   @pure def attestST(name: String, envVar: String, goldenPath: String, root: Os.Path, provisionFiles: ISZ[Os.Path]): ST = {
-    val files : ISZ[String] = for(i <- for(p <- provisionFiles) yield root.relativize(p)) yield s"\"$envVar/$i\""
+    val files : ISZ[String] = for(p <- provisionFiles) yield s"\"$envVar/${deWin(root.relativize(p).value)}\""
 
     return (
       st""""$name": {
@@ -303,5 +303,13 @@ import org.sireum.{B, strictpure}
                 |    Os.exit(results.exitCode)
                 |  }
                 |}""")
+  }
+
+  @pure def deWin(url: String): String = {
+    if (Os.isWin) {
+      return ops.StringOps(url).replaceAllChars('\\', '/')
+    } else {
+      return url
+    }
   }
 }

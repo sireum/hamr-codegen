@@ -11,6 +11,14 @@ import org.sireum.hamr.ir.{Direction, GclNamedElement}
 
 object ReportUtil {
 
+  @pure def deWin(url: String): String = {
+    if (Os.isWin) {
+      return ops.StringOps(url).replaceAllChars('\\', '/')
+    } else {
+      return url
+    }
+  }
+
   @pure def buildPos(beginLine: Z, endLine: Z, file: Os.Path,
                      workspaceDir: Os.Path, reportDir: Os.Path): Position = {
     return buildPosH(
@@ -38,8 +46,8 @@ object ReportUtil {
         file
       } else {
         // e.g. /isolette-artifacts-sel4/aadl/packages/Regulate.aadl
-        val nameo = ops.StringOps(file.value)
-        assert(nameo.startsWith("/"))
+        var nameo = ops.StringOps(deWin(file.value))
+        assert(nameo.startsWith("/"), nameo.s)
         val sub = nameo.substring(nameo.indexOfFrom('/', 1) + 1, nameo.size)
         workspaceDir / sub
       }
@@ -48,7 +56,7 @@ object ReportUtil {
     val rel = reportDir.relativize(f)
 
     return FlatPos(
-      uriOpt = Some(rel.value),
+      uriOpt = Some(deWin(rel.value)),
       beginLine32 = conversions.Z.toU32(beginLine),
       beginColumn32 = conversions.Z.toU32(beginCol),
       endLine32 = conversions.Z.toU32(endLine),
