@@ -4,7 +4,7 @@ package org.sireum.hamr.codegen.microkit.plugins.reporting
 import org.sireum._
 import org.sireum.U32._
 import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, Store}
-import org.sireum.hamr.codegen.common.StringUtil
+import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
 import org.sireum.hamr.codegen.common.containers.{EResource, InternalResource}
 import org.sireum.hamr.codegen.common.plugin.Plugin
 import org.sireum.hamr.codegen.common.reporting.{CodegenReporting, CodegenReports, JSON, ResourceReport, Status, ToolReport}
@@ -20,10 +20,13 @@ import org.sireum.message.{Level, Position, Reporter}
 @datatype class MicrokitReporterPlugin() extends Plugin {
   val name: String = "MicrokitReporterPlugin"
 
+  val KEY_MICROKIT_REPORTER_PLUGIN: String = "KEY_MICROKIT_REPORTER_PLUGIN"
+
+  @strictpure def hasFinalized(store: Store): B = store.contains(KEY_MICROKIT_REPORTER_PLUGIN)
+
   @pure override def canFinalize(model: Aadl, aadlTypes: Option[AadlTypes], symbolTable: Option[SymbolTable], codegenResults: CodeGenResults, store: Store, options: HamrCli.CodegenOption, reporter: Reporter): B = {
     return (
-      CodegenReporting.getCodegenReport(name, store).isEmpty &&
-      !reporter.hasError &&
+      !hasFinalized(store) &&
       options.platform == HamrCli.CodegenHamrPlatform.Microkit &&
       symbolTable.nonEmpty)
   }
@@ -36,7 +39,7 @@ import org.sireum.message.{Level, Position, Reporter}
                                     options: HamrCli.CodegenOption,
                                     reporter: Reporter): Store = {
     val st = symbolTable.get
-    var localStore = store
+    var localStore = store + KEY_MICROKIT_REPORTER_PLUGIN ~> CommonUtil.BoolValue(T)
 
     val sel4OutputDir: Os.Path =
       options.sel4OutputDir match {
@@ -92,6 +95,10 @@ import org.sireum.message.{Level, Position, Reporter}
       localStore = CodegenReporting.addCodegenReport(CodegenReporting.KEY_TOOL_REPORT, toolReport, localStore)
     }
 
+    if (reporter.hasError) {
+      return localStore
+    }
+
     val systemDescription = sel4OutputDir / "microkit.system"
     assert(systemDescription.exists)
 
@@ -107,10 +114,6 @@ import org.sireum.message.{Level, Position, Reporter}
           return CodegenReporting.addCodegenReport(name,
             MicrokitReport.empty(ReportUtil.deWin(sel4OutputDir.relativize(systemDescription).value)), localStore)
       }
-
-    if (reporter.hasError) {
-      return localStore
-    }
 
     var componentReports: HashSMap[IdPathR, ComponentReport] = HashSMap.empty
 
@@ -448,7 +451,7 @@ import org.sireum.message.{Level, Position, Reporter}
         reporter)
 
       val readme = sel4OutputDir / s"codegen_readme_${if(isAadl) "aadl" else "sysml"}.md"
-      readme.writeOver(readmeContent.render)
+      ReportUtil.writeOutResource(readmeContent, readme, F)
 
       if (options.verbose) {
         println(s"Wrote: $readme")
@@ -466,7 +469,7 @@ import org.sireum.message.{Level, Position, Reporter}
     outputDir.mkdirAll()
 
     val outjson = outputDir / s"codegen_report_${if(isAadl) "aadl" else "sysml"}.json"
-    outjson.writeOver(json)
+    ReportUtil.writeOutResourceH(json, outjson, F)
 
     if (options.verbose) {
       println(s"Wrote: $outjson")

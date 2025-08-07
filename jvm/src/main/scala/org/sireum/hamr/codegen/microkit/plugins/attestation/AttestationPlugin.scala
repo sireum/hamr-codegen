@@ -8,6 +8,7 @@ import org.sireum.hamr.codegen.common.plugin.Plugin
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.{CodeGenResults, HamrCli}
+import org.sireum.hamr.codegen.microkit.plugins.reporting.ReportUtil
 import org.sireum.hamr.ir.Aadl
 import org.sireum.message.Reporter
 import org.sireum.{B, strictpure}
@@ -39,7 +40,7 @@ import org.sireum.{B, strictpure}
 
     val isAadl = ops.StringOps(symbolTable.rootSystem.component.identifier.pos.get.uriOpt.get).endsWith(".aadl")
 
-    var localStore = store
+    var localStore = store + KEY_ATTESTATION_PLUGIN ~> BoolValue(T)
 
     val workspaceRoot: Os.Path =
       options.workspaceRootDir match {
@@ -87,7 +88,7 @@ import org.sireum.{B, strictpure}
 
     val appraisePath = attestationDir / s"${lang}_appraise.json"
     val provisionPath = attestationDir / s"${lang}_provision.json"
-    val scriptPath = attestationDir / s"${lang}_attestation.cmd"
+    val scriptCmd = attestationDir / s"${lang}_attestation.cmd"
     val modelGolden = attestationDir / s"${lang}_model_golden.txt"
     val codegenGolden = attestationDir / s"${lang}_codegen_golden.txt"
 
@@ -97,7 +98,7 @@ import org.sireum.{B, strictpure}
     val provisionCodegen: ST = provisionST("provision_microkit_targ", deWin(attestationDir.relativize(codegenGolden).value))
     val attestCodegen = attestST("microkit_dir_targ", codegen_dir_ENV, deWin(attestationDir.relativize(codegenGolden).value), sel4OutputDir, codegenFiles)
 
-    provisionPath.writeOver(
+    val provisionContent =
       st"""{
           |  "RodeoClientRequest_attest_id": "micro_provision_protocol",
           |  "RodeoClientRequest_attest_args": {
@@ -110,10 +111,10 @@ import org.sireum.{B, strictpure}
           |      $provisionCodegen
           |    }
           |  }
-          |}""".render)
-    println(s"Wrote: $provisionPath")
+          |}"""
+    ReportUtil.writeOutResource(provisionContent, provisionPath, F)
 
-    appraisePath.writeOver(
+    val appraiseContent =
       st"""{
           |  "RodeoClientRequest_attest_id": "micro_protocol",
           |  "RodeoClientRequest_attest_args": {
@@ -122,28 +123,29 @@ import org.sireum.{B, strictpure}
           |      $attestCodegen
           |    }
           |  }
-          |}""".render)
-    println(s"Wrote: $appraisePath")
+          |}"""
+    ReportUtil.writeOutResource(appraiseContent, appraisePath, F)
 
     val workspace_dir = attestationDir.relativize(workspaceRoot)
 
-    scriptPath.writeOver(script(deWin(workspace_dir.value), lang).render)
-    scriptPath.chmod("770")
-    println(s"Wrote: $scriptPath")
+    ReportUtil.writeOutResource(script(deWin(workspace_dir.value), lang), scriptCmd, T)
 
     Os.env(env_AM_REPOS_ROOT) match {
       case Some(e) =>
-        val results = proc"$scriptPath provision".run()
+        val results = proc"$scriptCmd provision".run()
         if (!results.ok) {
+          println(results.err)
           reporter.error(None(), name, "Provisioning of files failed")
         }
       case _ =>
         println(s"Please set ${env_AM_REPOS_ROOT} environment variable to provision the project")
     }
-    return localStore + KEY_ATTESTATION_PLUGIN ~> BoolValue(T)
+
+    return localStore
   }
 
-  def provisionST(name: String, path: String): ST = {
+
+  @pure def provisionST(name: String, path: String): ST = {
     return (
       st""""$name": {
           |  "env_var": "",

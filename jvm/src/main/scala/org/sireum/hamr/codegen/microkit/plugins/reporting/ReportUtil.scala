@@ -535,4 +535,17 @@ object ReportUtil {
     return st"$s</table>"
   }
 
+  @pure def writeOutResource(content: ST, path: Os.Path, makeCrlf: B): Unit = {
+    writeOutResourceH(content.render, path, makeCrlf)
+  }
+
+  @pure def writeOutResourceH(content: String, path: Os.Path, makeCrlf: B): Unit = {
+    val lineSep: String = if (Os.isWin) "\r\n" else "\n" // ST render uses System.lineSep
+    val replace: String = if (makeCrlf) "\r\n" else "\n"
+    path.writeOver(ops.StringOps(content).replaceAllLiterally(lineSep, replace))
+    if (makeCrlf) {
+      path.chmod("770")
+    }
+    println(s"Wrote: $path")
+  }
 }
