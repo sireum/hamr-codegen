@@ -112,7 +112,7 @@ import org.sireum.{B, strictpure}
           |    }
           |  }
           |}"""
-    ReportUtil.writeOutResource(provisionContent, provisionPath, F)
+    ReportUtil.writeOutResource(provisionContent, provisionPath, F, options.verbose)
 
     val appraiseContent =
       st"""{
@@ -124,18 +124,21 @@ import org.sireum.{B, strictpure}
           |    }
           |  }
           |}"""
-    ReportUtil.writeOutResource(appraiseContent, appraisePath, F)
+    ReportUtil.writeOutResource(appraiseContent, appraisePath, F, options.verbose)
 
     val workspace_dir = attestationDir.relativize(workspaceRoot)
 
-    ReportUtil.writeOutResource(script(deWin(workspace_dir.value), lang), scriptCmd, T)
+    ReportUtil.writeOutResource(script(deWin(workspace_dir.value), lang), scriptCmd, T, options.verbose)
 
     Os.env(env_AM_REPOS_ROOT) match {
       case Some(e) =>
         val results = proc"$scriptCmd provision".run()
         if (!results.ok) {
+          println("Provisioning failed")
           println(results.err)
-          reporter.error(None(), name, "Provisioning of files failed")
+          reporter.error(None(), name, "Provisioning failed")
+        } else {
+          println("Provisioning successful!")
         }
       case _ =>
         println(s"Please set ${env_AM_REPOS_ROOT} environment variable to provision the project")
@@ -297,6 +300,7 @@ import org.sireum.{B, strictpure}
                 |    val o = ops.StringOps(results.out)
                 |    if (o.contains("\"RodeoClientResponse_success\":true")) {
                 |      println("Appraisal successful!")
+                |      Os.exit(0)
                 |    } else {
                 |      println("Appraisal failed")
                 |      Os.exit(1)

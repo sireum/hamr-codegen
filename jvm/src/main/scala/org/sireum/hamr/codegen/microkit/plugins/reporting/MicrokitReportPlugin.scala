@@ -451,11 +451,7 @@ import org.sireum.message.{Level, Position, Reporter}
         reporter)
 
       val readme = sel4OutputDir / s"codegen_readme_${if(isAadl) "aadl" else "sysml"}.md"
-      ReportUtil.writeOutResource(readmeContent, readme, F)
-
-      if (options.verbose) {
-        println(s"Wrote: $readme")
-      }
+      ReportUtil.writeOutResource(readmeContent, readme, F, options.verbose)
 
     } else {
       println("TODO: generate codegen readme for SysMLv2 models")
@@ -469,7 +465,7 @@ import org.sireum.message.{Level, Position, Reporter}
     outputDir.mkdirAll()
 
     val outjson = outputDir / s"codegen_report_${if(isAadl) "aadl" else "sysml"}.json"
-    ReportUtil.writeOutResourceH(json, outjson, F)
+    ReportUtil.writeOutResourceH(json, outjson, F, options.verbose)
 
     if (options.verbose) {
       println(s"Wrote: $outjson")
