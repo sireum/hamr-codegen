@@ -132,7 +132,11 @@ import org.sireum.{B, strictpure}
 
     Os.env(env_AM_REPOS_ROOT) match {
       case Some(e) =>
-        val results = proc"$scriptCmd provision".run()
+        var r = proc"$scriptCmd provision"
+        if (options.verbose) {
+          r = r.echo.console
+        }
+        val results = r.run()
         if (!results.ok) {
           println("Provisioning failed")
           println(results.err)
