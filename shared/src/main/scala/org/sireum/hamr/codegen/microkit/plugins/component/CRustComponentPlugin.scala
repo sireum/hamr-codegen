@@ -4,15 +4,16 @@ package org.sireum.hamr.codegen.microkit.plugins.component
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{BoolValue, IdPath, Store, StoreValue}
 import org.sireum.hamr.codegen.common.containers.{Marker, Resource}
-import org.sireum.hamr.codegen.common.symbols.{AadlThread, SymbolTable}
+import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.plugins.apis.CRustApiPlugin
-import org.sireum.hamr.codegen.microkit.plugins.types.CRustTypePlugin
+import org.sireum.hamr.codegen.microkit.plugins.types.{CRustTypePlugin, CRustTypeProvider}
 import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, MicrokitPlugin}
+import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
 import org.sireum.hamr.codegen.microkit.util.Util.TAB
 import org.sireum.hamr.codegen.microkit.util.{MakefileTarget, MakefileUtil, RustUtil, Util}
-import org.sireum.hamr.ir.Aadl
+import org.sireum.hamr.ir.{Aadl, Direction}
 import org.sireum.message.Reporter
 import org.sireum.hamr.codegen.microkit.{rust => RustAst}
 
@@ -45,7 +46,7 @@ object ComponentContributions {}
                                         val appUses: ISZ[RustAst.Item],
                                         val appStructDef: RustAst.StructDef,
                                         val appStructImpl: RustAst.Impl,
-
+                                        val appFreeFunctions: ISZ[RustAst.Fn],
 
                                         // items for tests.rs
                                         val testEntries: ISZ[RustAst.Item]
@@ -93,17 +94,11 @@ object ComponentContributions {}
 
       val appApiType = CRustApiPlugin.applicationApiType(thread)
 
-      val modDirectives: ISZ[RustAst.Item] = ISZ(
-        RustAst.AttributeST(T, st"allow(non_camel_case_types)"),
-        RustAst.AttributeST(T, st"allow(non_snake_case)"))
+      val modDirectives: ISZ[RustAst.Item] = ISZ()
 
       val uses: ISZ[RustAst.Item] = ISZ(
         RustAst.Use(ISZ(), RustAst.IdentString(CRustTypePlugin.usePath)),
-        RustAst.Use(ISZ(), RustAst.IdentString(s"crate::bridge::${CRustApiPlugin.apiModuleName(thread)}::*")),
-        RustAst.Use(ISZ(
-          RustAst.AttributeST(F, st"cfg(feature = \"sel4\")"),
-          RustAst.AttributeST(F, st"allow(unused_imports)")),
-          RustAst.IdentString(s"log::{error, warn, info, debug, trace}")))
+        RustAst.Use(ISZ(), RustAst.IdentString(s"crate::bridge::${CRustApiPlugin.apiModuleName(thread)}::*")))
 
       val struct = RustAst.StructDef(
         attributes = ISZ(),
@@ -139,8 +134,7 @@ object ComponentContributions {}
         comments = ISZ(), attributes = ISZ(), visibility = RustAst.Visibility.Public, contract = None(), meta = ISZ(),
         body = Some(RustAst.MethodBody(ISZ(
           RustAst.BodyItemST(
-            st"""#[cfg(feature = "sel4")]
-                |info!("initialize entrypoint invoked");""")))))
+            st"""log_info("initialize entrypoint invoked");""")))))
 
       val entrypointFns: ISZ[RustAst.Item] =
         if (thread.isPeriodic())
@@ -163,8 +157,7 @@ object ComponentContributions {}
               verusHeader = None(), fnHeader = RustAst.FnHeader(F)),
             comments = ISZ(), attributes = ISZ(), visibility = RustAst.Visibility.Public, contract = None(), meta = ISZ(),
             body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
-              st"""#[cfg(feature = "sel4")]
-                  |info!("compute entrypoint invoked");"""))))))
+              st"""log_info("compute entrypoint invoked");"""))))))
         else ISZ(RustAst.CommentNonDoc(ISZ(st"NOT YET FOR SPORADIC")))
 
       val notify = RustAst.FnImpl(
@@ -183,8 +176,7 @@ object ComponentContributions {}
           st"""// this method is called when the monitor does not handle the passed in channel
               |match channel {
               |  _ => {
-              |    #[cfg(feature = "sel4")]
-              |    warn!("Unexpected channel {}", channel)
+              |    log_warn_channel(channel)
               |  }
               |}""")))))
 
@@ -193,7 +185,37 @@ object ComponentContributions {}
         items = ISZ[RustAst.Item](newFn, initFn) ++ entrypointFns :+ notify,
         comments = ISZ(), attributes = ISZ(), implIdent = None())
 
-      val testEntries = genTestEntries(thread)
+      val testEntries = genTestEntries(thread, CRustTypePlugin.getCRustTypeProvider(localStore).get)
+
+      var funcs: ISZ[RustAst.Fn] = ISZ()
+
+      funcs = funcs :+ RustAst.FnImpl(
+        sig = RustAst.FnSig(
+          ident = RustAst.IdentString("log_info"),
+          fnDecl = RustAst.FnDecl(
+            inputs = ISZ(
+              RustAst.ParamImpl(
+                ident = RustAst.IdentString("msg"),
+                kind = RustAst.TyPath(ISZ(ISZ("&str")), None()))),
+            outputs = RustAst.FnRetTyDefault()),
+          verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
+        comments = ISZ(), contract = None(), visibility = RustAst.Visibility.Public, attributes = ISZ(), meta = ISZ(),
+        body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
+          st"""log::info!("{0}", msg);""")))))
+
+      funcs = funcs :+ RustAst.FnImpl(
+        sig = RustAst.FnSig(
+          ident = RustAst.IdentString("log_warn_channel"),
+          fnDecl = RustAst.FnDecl(
+            inputs = ISZ(
+              RustAst.ParamImpl(
+                ident = RustAst.IdentString("channel"),
+                kind = RustAst.TyPath(ISZ(ISZ("u32")), None()))),
+            outputs = RustAst.FnRetTyDefault()),
+          verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
+        comments = ISZ(), contract = None(), visibility = RustAst.Visibility.Public, attributes = ISZ(), meta = ISZ(),
+        body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
+          st"""log::warn!("Unexpected channel: {0}", channel);""")))))
 
       ret = ret + thread.path ~>
         ComponentContributions(
@@ -203,6 +225,7 @@ object ComponentContributions {}
           appUses = uses,
           appStructDef = struct,
           appStructImpl = impl,
+          appFreeFunctions = funcs,
 
           testEntries = testEntries)
 
@@ -215,9 +238,22 @@ object ComponentContributions {}
       resources)
   }
 
-  @pure def genTestEntries(thread: AadlThread): ISZ[RustAst.Item] = {
+  @pure def genTestEntries(thread: AadlThread, cRustTypeProvider: CRustTypeProvider): ISZ[RustAst.Item] = {
     val threadId = Util.getThreadIdPath(thread)
     assert(thread.isPeriodic(), s"Not yet handling sporadic threads: ${threadId}")
+
+    val inDataPortInits: Option[ST] = {
+      var ret = ISZ[ST]()
+      for (p <- thread.getPorts().filter(p => p.direction == Direction.In && p.isInstanceOf[AadlDataPort])) {
+        val d = p.asInstanceOf[AadlDataPort]
+        ret = ret :+ st"test_api::put_${p.identifier}(${MicrokitTypeUtil.getCRustTypeDefaultValue(d.aadlType, cRustTypeProvider)});"
+      }
+      if (ret.nonEmpty) Some(st"""
+                                |// populate incoming data ports
+                                |${(ret, "\n")}
+                                |""")
+      else None()
+    }
 
     return ISZ(RustAst.ItemST(
       st"""mod tests {
@@ -231,19 +267,15 @@ object ComponentContributions {}
           |  #[test]
           |  #[serial]
           |  fn test_initialization() {
-          |    unsafe {
-          |      crate::${threadId}_initialize();
-          |    }
-          |  }
+          |    crate::${threadId}_initialize();
+          |}
           |
           |  #[test]
           |  #[serial]
           |  fn test_compute() {
-          |    unsafe {
-          |      crate::${threadId}_initialize();
-          |
-          |      crate::${threadId}_timeTriggered();
-          |    }
+          |    crate::${threadId}_initialize();
+          |    ${(inDataPortInits, "\n")}
+          |    crate::${threadId}_timeTriggered();
           |  }
           |}"""))
   }
@@ -296,18 +328,13 @@ object ComponentContributions {}
               |use crate::component::${CRustComponentPlugin.appModuleName(thread)}::*;
               |use data::*;
               |
-              |#[allow(unused_imports)]
-              |use log::{error, warn, info, debug, trace};
-              |
               |static mut app: Option<$threadId> = None;
               |static mut init_api: ${CRustApiPlugin.applicationApiType(thread)}<${CRustApiPlugin.initializationApiType(thread)}> = api::init_api();
               |static mut compute_api: ${CRustApiPlugin.applicationApiType(thread)}<${CRustApiPlugin.computeApiType(thread)}> = api::compute_api();
               |
               |#[no_mangle]
               |pub extern "C" fn ${threadId}_initialize() {
-              |  #[cfg(not(test))]
-              |  #[cfg(feature = "sel4")]
-              |  logging::LOGGER.set().unwrap();
+              |  logging::init_logging();
               |
               |  unsafe {
               |    #[cfg(test)]
@@ -336,7 +363,7 @@ object ComponentContributions {}
               |#[panic_handler]
               |#[cfg(not(test))]
               |fn panic(info: &core::panic::PanicInfo) -> ! {
-              |  error!("PANIC: {info:#?}");
+              |  log::error!("PANIC: {info:#?}");
               |  loop {}
               |}
               |"""
@@ -346,12 +373,18 @@ object ComponentContributions {}
 
       { // src/logging.rs
         val content =
-          st"""#![cfg(feature = "sel4")]
+          st"""// This file will not be overwritten if codegen is rerun
               |
-              |${Util.safeToEdit}
+              |use log::LevelFilter;
               |
+              |#[cfg(feature = "sel4")]
               |use sel4::debug_print;
-              |use sel4_logging::{LevelFilter, Logger, LoggerBuilder};
+              |
+              |#[cfg(feature = "sel4")]
+              |use sel4_logging::{Logger, LoggerBuilder};
+              |
+              |#[cfg(test)]
+              |use std::sync::Once;
               |
               |const LOG_LEVEL: LevelFilter = {
               |  // LevelFilter::Off // lowest level of logging
@@ -362,11 +395,31 @@ object ComponentContributions {}
               |  LevelFilter::Trace // highest level of logging
               |};
               |
+              |#[cfg(feature = "sel4")]
               |pub static LOGGER: Logger = LoggerBuilder::const_default()
-              |  .level_filter(LOG_LEVEL)
-              |  .write(|s| debug_print!("{}", s))
-              |  .build();
-              |"""
+              |    .level_filter(LOG_LEVEL)
+              |    .write(|s| debug_print!("{}", s))
+              |    .build();
+              |
+              |#[cfg(test)]
+              |static INIT: Once = Once::new();
+              |
+              |pub fn init_logging() {
+              |    #[cfg(all(feature = "sel4", not(test)))]
+              |    {
+              |        LOGGER.set().unwrap();
+              |    }
+              |
+              |    #[cfg(test)]
+              |    {
+              |        INIT.call_once(|| {
+              |            let _ = env_logger::builder()
+              |                .is_test(cfg!(test))
+              |                .filter_level(LOG_LEVEL)
+              |                .try_init();
+              |        });
+              |    }
+              |}"""
         val path = s"$componentSrcDir/logging.rs"
         resources = resources :+ ResourceUtil.createResource(path, content, F)
       }
@@ -379,6 +432,13 @@ object ComponentContributions {}
           st"""${e._2.appStructDef.prettyST}
               |
               |${e._2.appStructImpl.prettyST}"""
+
+        if (e._2.appFreeFunctions.nonEmpty) {
+          body =
+            st"""$body
+                |
+                |${(for(f <- e._2.appFreeFunctions) yield f.prettyST, "\n\n")}"""
+        }
 
         if (e._2.requiresVerus) {
           uses = uses :+ RustAst.Use(ISZ(), RustAst.IdentString("vstd::prelude::*"))
@@ -437,7 +497,8 @@ object ComponentContributions {}
               |[dependencies]
               |log = "0.4.27"
               |sel4 = { git = "https://github.com/seL4/rust-sel4", features = ["single-threaded"], optional = true }
-              |sel4-logging = { git = "https://github.com/seL4/rust-sel4", optional = true}
+              |sel4-logging = { git = "https://github.com/seL4/rust-sel4", optional = true }
+              |linux-raw-sys = { version = "0.11.0", default-features = false }
               |${RustUtil.verusCargoDependencies}
               |data = { path = "../data" }
               |
@@ -446,6 +507,7 @@ object ComponentContributions {}
               |once_cell = "1.21.3"
               |serial_test = "3.2.0"
               |proptest = "1.7.0"
+              |env_logger = "0.11.8"
               |
               |[lib]
               |path = "src/lib.rs"
@@ -454,8 +516,7 @@ object ComponentContributions {}
               |[features]
               |sel4 = ["dep:sel4", "dep:sel4-logging" ]
               |
-              |[package.metadata.verus]
-              |verify = true
+              |${RustUtil.commonCargoTomlEntries}
               |"""
         val path = s"$componentCrateDir/Cargo.toml"
         resources = resources :+ ResourceUtil.createResource(path, content, F)
@@ -470,27 +531,61 @@ object ComponentContributions {}
               |sel4_include_dirs := $$(firstword $$(wildcard $$(microkit_sdk_config_dir)/include \
               |                                            $$(microkit_sdk_config_dir)/debug/include))
               |
-              |all:
-              |${TAB}RUSTC_BOOTSTRAP=1 \
-              |${TAB}SEL4_INCLUDE_DIRS=$$(abspath $$(sel4_include_dirs)) \
-              |${TAB}cargo build \
-              |${TAB}${TAB}--features sel4 \
-              |${TAB}${TAB}-Z build-std=core,alloc,compiler_builtins \
-              |${TAB}${TAB}-Z build-std-features=compiler-builtins-mem \
-              |${TAB}${TAB}--target aarch64-unknown-none \
-              |${TAB}${TAB}--release
+              |ENV_VARS = RUSTC_BOOTSTRAP=1 \
+              |           SEL4_INCLUDE_DIRS=$$(abspath $$(sel4_include_dirs))
+              |
+              |CARGO_FLAGS = -Z build-std=core,alloc,compiler_builtins \
+              |              -Z build-std-features=compiler-builtins-mem \
+              |              --target aarch64-unknown-none
+              |
+              |all: build-verus-release
+              |
+              |build-verus-release:
+              |${TAB}$$(ENV_VARS) cargo-verus build --features sel4 $$(CARGO_FLAGS) --release
+              |
+              |build-verus:
+              |${TAB}$$(ENV_VARS) cargo-verus build --features sel4 $$(CARGO_FLAGS)
+              |
+              |build-release:
+              |${TAB}$$(ENV_VARS) cargo build --features sel4 $$(CARGO_FLAGS) --release
+              |
+              |build:
+              |${TAB}$$(ENV_VARS) cargo build --features sel4 $$(CARGO_FLAGS)
               |
               |verus:
-              |${TAB}RUSTC_BOOTSTRAP=1 \
-              |${TAB}SEL4_INCLUDE_DIRS=$$(abspath $$(sel4_include_dirs)) \
-              |${TAB}cargo verus verify \
-              |${TAB}${TAB}-Z build-std=core,alloc,compiler_builtins \
-              |${TAB}${TAB}-Z build-std-features=compiler-builtins-mem \
-              |${TAB}${TAB}--target aarch64-unknown-none \
-              |${TAB}${TAB}--release
+              |${TAB}$$(ENV_VARS) cargo-verus verify $$(CARGO_FLAGS)
+              |
+              |verus-json:
+              |${TAB}$$(ENV_VARS) cargo-verus verify $$(CARGO_FLAGS) -- --output-json --time > verus_results.json
+              |
+              |# Test Example:
+              |#   Run all unit tests
+              |#   Usage: make test
+              |#
+              |#   Run only unit tests whose name contains 'proptest'
+              |#   Usage: make test args=proptest
+              |
+              |test-release:
+              |${TAB}cargo test $$(args) --release
               |
               |test:
-              |${TAB}cargo test
+              |${TAB}cargo test $$(args)
+              |
+              |# Coverage Example:
+              |#   Generate a test coverage report combining the results of all unit tests
+              |#   Usage: make coverage
+              |#
+              |#   Generate a test coverage report for unit tests whose name contains 'proptest'
+              |#   Usage: make coverage args=proptest
+              |
+              |coverage:
+              |${TAB}cargo install grcov
+              |${TAB}@exists=0; if [ -f target/coverage/report/index.html ]; then exists=1; fi; \
+              |${TAB}rm -rf target/coverage; \
+              |${TAB}CARGO_INCREMENTAL=0 RUSTFLAGS='-Cinstrument-coverage' LLVM_PROFILE_FILE='target/coverage/cargo-test-%p-%m.profraw' \
+              |${TAB}cargo test $$(args); \
+              |${TAB}grcov . --binary-path ./target/debug/deps/ -s . -t html --branch --ignore-not-existing -o target/coverage/report; \
+              |${TAB}if [ $$$$exists -eq 0 ]; then open target/coverage/report/index.html; fi
               |
               |clean:
               |${TAB}cargo clean

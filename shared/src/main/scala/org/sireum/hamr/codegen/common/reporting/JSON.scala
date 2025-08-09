@@ -60,6 +60,14 @@ object JSON {
       ))
     }
 
+    @pure def print_microkitreportingIdPos(o: org.sireum.hamr.codegen.microkit.reporting.IdPos): ST = {
+      return printObject(ISZ(
+        ("type", st""""org.sireum.hamr.codegen.microkit.reporting.IdPos""""),
+        ("id", printString(o.id)),
+        ("pos", printPosition(o.pos))
+      ))
+    }
+
     @pure def print_microkitreportingIdPathR(o: org.sireum.hamr.codegen.microkit.reporting.IdPathR): ST = {
       return printObject(ISZ(
         ("type", st""""org.sireum.hamr.codegen.microkit.reporting.IdPathR""""),
@@ -70,18 +78,108 @@ object JSON {
     @pure def print_microkitreportingMicrokitReport(o: org.sireum.hamr.codegen.microkit.reporting.MicrokitReport): ST = {
       return printObject(ISZ(
         ("type", st""""org.sireum.hamr.codegen.microkit.reporting.MicrokitReport""""),
-        ("systemDescriptionUri", printString(o.systemDescriptionUri)),
         ("componentReport", printHashSMap(F, o.componentReport, print_microkitreportingIdPathR _, print_microkitreportingComponentReport _))
+      ))
+    }
+
+    @pure def print_microkitreportingComponentKindType(o: org.sireum.hamr.codegen.microkit.reporting.ComponentKind.Type): ST = {
+      val value: String = o match {
+        case org.sireum.hamr.codegen.microkit.reporting.ComponentKind.System => "System"
+        case org.sireum.hamr.codegen.microkit.reporting.ComponentKind.Process => "Process"
+        case org.sireum.hamr.codegen.microkit.reporting.ComponentKind.Thread => "Thread"
+        case org.sireum.hamr.codegen.microkit.reporting.ComponentKind.Data => "Data"
+      }
+      return printObject(ISZ(
+        ("type", printString("org.sireum.hamr.codegen.microkit.reporting.ComponentKind")),
+        ("value", printString(value))
+      ))
+    }
+
+    @pure def print_microkitreportingPretty(o: org.sireum.hamr.codegen.microkit.reporting.Pretty): ST = {
+      o match {
+        case o: org.sireum.hamr.codegen.microkit.reporting.PortLanguageArtifact => return print_microkitreportingPortLanguageArtifact(o)
+        case o: org.sireum.hamr.codegen.microkit.reporting.PortReport => return print_microkitreportingPortReport(o)
+      }
+    }
+
+    @pure def print_microkitreportingModelProperties(o: org.sireum.hamr.codegen.microkit.reporting.ModelProperties): ST = {
+      o match {
+        case o: org.sireum.hamr.codegen.microkit.reporting.SimpleProperty => return print_microkitreportingSimpleProperty(o)
+      }
+    }
+
+    @pure def print_microkitreportingSimpleProperty(o: org.sireum.hamr.codegen.microkit.reporting.SimpleProperty): ST = {
+      return printObject(ISZ(
+        ("type", st""""org.sireum.hamr.codegen.microkit.reporting.SimpleProperty""""),
+        ("name", printString(o.name)),
+        ("value", printString(o.value))
       ))
     }
 
     @pure def print_microkitreportingComponentReport(o: org.sireum.hamr.codegen.microkit.reporting.ComponentReport): ST = {
       return printObject(ISZ(
         ("type", st""""org.sireum.hamr.codegen.microkit.reporting.ComponentReport""""),
+        ("path", printISZ(T, o.path, printString _)),
+        ("kind", print_microkitreportingComponentKindType(o.kind)),
+        ("optModelType", printOption(F, o.optModelType, print_microkitreportingIdPos _)),
+        ("modelImplementation", print_microkitreportingIdPos(o.modelImplementation)),
+        ("modelProperties", printISZ(F, o.modelProperties, print_microkitreportingModelProperties _)),
+        ("subcomponents", printISZ(F, o.subcomponents, print_microkitreportingIdPathR _)),
+        ("ports", printHashSMap(F, o.ports, print_microkitreportingIdPathR _, print_microkitreportingPortReport _)),
         ("cCodeReport", printOption(F, o.cCodeReport, print_microkitreportingCCodeReport _)),
         ("rustReport", printOption(F, o.rustReport, print_microkitreportingRustReport _)),
         ("gumboReport", printOption(F, o.gumboReport, print_microkitreportingGumboReport _)),
         ("gumboXReport", printOption(F, o.gumboXReport, print_microkitreportingGumboXReport _))
+      ))
+    }
+
+    @pure def print_microkitreportingPortKindType(o: org.sireum.hamr.codegen.microkit.reporting.PortKind.Type): ST = {
+      val value: String = o match {
+        case org.sireum.hamr.codegen.microkit.reporting.PortKind.Event => "Event"
+        case org.sireum.hamr.codegen.microkit.reporting.PortKind.EventData => "EventData"
+        case org.sireum.hamr.codegen.microkit.reporting.PortKind.Data => "Data"
+      }
+      return printObject(ISZ(
+        ("type", printString("org.sireum.hamr.codegen.microkit.reporting.PortKind")),
+        ("value", printString(value))
+      ))
+    }
+
+    @pure def print_microkitreportingPortDirectionType(o: org.sireum.hamr.codegen.microkit.reporting.PortDirection.Type): ST = {
+      val value: String = o match {
+        case org.sireum.hamr.codegen.microkit.reporting.PortDirection.In => "In"
+        case org.sireum.hamr.codegen.microkit.reporting.PortDirection.Out => "Out"
+      }
+      return printObject(ISZ(
+        ("type", printString("org.sireum.hamr.codegen.microkit.reporting.PortDirection")),
+        ("value", printString(value))
+      ))
+    }
+
+    @pure def print_microkitreportingPortLangRealization(o: org.sireum.hamr.codegen.microkit.reporting.PortLangRealization): ST = {
+      o match {
+        case o: org.sireum.hamr.codegen.microkit.reporting.PortLanguageArtifact => return print_microkitreportingPortLanguageArtifact(o)
+      }
+    }
+
+    @pure def print_microkitreportingPortLanguageArtifact(o: org.sireum.hamr.codegen.microkit.reporting.PortLanguageArtifact): ST = {
+      return printObject(ISZ(
+        ("type", st""""org.sireum.hamr.codegen.microkit.reporting.PortLanguageArtifact""""),
+        ("name", printString(o.name)),
+        ("title", printString(o.title)),
+        ("pos", printPosition(o.pos))
+      ))
+    }
+
+    @pure def print_microkitreportingPortReport(o: org.sireum.hamr.codegen.microkit.reporting.PortReport): ST = {
+      return printObject(ISZ(
+        ("type", st""""org.sireum.hamr.codegen.microkit.reporting.PortReport""""),
+        ("name", printISZ(T, o.name, printString _)),
+        ("kind", print_microkitreportingPortKindType(o.kind)),
+        ("direction", print_microkitreportingPortDirectionType(o.direction)),
+        ("payload", printOption(T, o.payload, printString _)),
+        ("modelPos", printPosition(o.modelPos)),
+        ("languageRealizations", printISZ(F, o.languageRealizations, print_microkitreportingPortLangRealization _))
       ))
     }
 
@@ -106,14 +204,6 @@ object JSON {
         ("developerApiPath", printString(o.developerApiPath)),
         ("developerApiReport", printHashSMap(F, o.developerApiReport, printString _, printPosition _)),
         ("testApiPath", printString(o.testApiPath))
-      ))
-    }
-
-    @pure def print_microkitreportingIdPos(o: org.sireum.hamr.codegen.microkit.reporting.IdPos): ST = {
-      return printObject(ISZ(
-        ("type", st""""org.sireum.hamr.codegen.microkit.reporting.IdPos""""),
-        ("id", printString(o.id)),
-        ("pos", printPosition(o.pos))
       ))
     }
 
@@ -253,6 +343,24 @@ object JSON {
       return ToolReport(commandLineArgs, status, warningMessages, errorMessages, resources)
     }
 
+    def parse_microkitreportingIdPos(): org.sireum.hamr.codegen.microkit.reporting.IdPos = {
+      val r = parse_microkitreportingIdPosT(F)
+      return r
+    }
+
+    def parse_microkitreportingIdPosT(typeParsed: B): org.sireum.hamr.codegen.microkit.reporting.IdPos = {
+      if (!typeParsed) {
+        parser.parseObjectType("org.sireum.hamr.codegen.microkit.reporting.IdPos")
+      }
+      parser.parseObjectKey("id")
+      val id = parser.parseString()
+      parser.parseObjectNext()
+      parser.parseObjectKey("pos")
+      val pos = parser.parsePosition()
+      parser.parseObjectNext()
+      return org.sireum.hamr.codegen.microkit.reporting.IdPos(id, pos)
+    }
+
     def parse_microkitreportingIdPathR(): org.sireum.hamr.codegen.microkit.reporting.IdPathR = {
       val r = parse_microkitreportingIdPathRT(F)
       return r
@@ -277,13 +385,66 @@ object JSON {
       if (!typeParsed) {
         parser.parseObjectType("org.sireum.hamr.codegen.microkit.reporting.MicrokitReport")
       }
-      parser.parseObjectKey("systemDescriptionUri")
-      val systemDescriptionUri = parser.parseString()
-      parser.parseObjectNext()
       parser.parseObjectKey("componentReport")
       val componentReport = parser.parseHashSMap(parse_microkitreportingIdPathR _, parse_microkitreportingComponentReport _)
       parser.parseObjectNext()
-      return org.sireum.hamr.codegen.microkit.reporting.MicrokitReport(systemDescriptionUri, componentReport)
+      return org.sireum.hamr.codegen.microkit.reporting.MicrokitReport(componentReport)
+    }
+
+    def parse_microkitreportingComponentKindType(): org.sireum.hamr.codegen.microkit.reporting.ComponentKind.Type = {
+      val r = parse_microkitreportingComponentKindT(F)
+      return r
+    }
+
+    def parse_microkitreportingComponentKindT(typeParsed: B): org.sireum.hamr.codegen.microkit.reporting.ComponentKind.Type = {
+      if (!typeParsed) {
+        parser.parseObjectType("org.sireum.hamr.codegen.microkit.reporting.ComponentKind")
+      }
+      parser.parseObjectKey("value")
+      var i = parser.offset
+      val s = parser.parseString()
+      parser.parseObjectNext()
+      org.sireum.hamr.codegen.microkit.reporting.ComponentKind.byName(s) match {
+        case Some(r) => return r
+        case _ =>
+          parser.parseException(i, s"Invalid element name '$s' for org.sireum.hamr.codegen.microkit.reporting.ComponentKind.")
+          return org.sireum.hamr.codegen.microkit.reporting.ComponentKind.byOrdinal(0).get
+      }
+    }
+
+    def parse_microkitreportingPretty(): org.sireum.hamr.codegen.microkit.reporting.Pretty = {
+      val t = parser.parseObjectTypes(ISZ("org.sireum.hamr.codegen.microkit.reporting.PortLanguageArtifact", "org.sireum.hamr.codegen.microkit.reporting.PortReport"))
+      t.native match {
+        case "org.sireum.hamr.codegen.microkit.reporting.PortLanguageArtifact" => val r = parse_microkitreportingPortLanguageArtifactT(T); return r
+        case "org.sireum.hamr.codegen.microkit.reporting.PortReport" => val r = parse_microkitreportingPortReportT(T); return r
+        case _ => val r = parse_microkitreportingPortReportT(T); return r
+      }
+    }
+
+    def parse_microkitreportingModelProperties(): org.sireum.hamr.codegen.microkit.reporting.ModelProperties = {
+      val t = parser.parseObjectTypes(ISZ("org.sireum.hamr.codegen.microkit.reporting.SimpleProperty"))
+      t.native match {
+        case "org.sireum.hamr.codegen.microkit.reporting.SimpleProperty" => val r = parse_microkitreportingSimplePropertyT(T); return r
+        case _ => val r = parse_microkitreportingSimplePropertyT(T); return r
+      }
+    }
+
+    def parse_microkitreportingSimpleProperty(): org.sireum.hamr.codegen.microkit.reporting.SimpleProperty = {
+      val r = parse_microkitreportingSimplePropertyT(F)
+      return r
+    }
+
+    def parse_microkitreportingSimplePropertyT(typeParsed: B): org.sireum.hamr.codegen.microkit.reporting.SimpleProperty = {
+      if (!typeParsed) {
+        parser.parseObjectType("org.sireum.hamr.codegen.microkit.reporting.SimpleProperty")
+      }
+      parser.parseObjectKey("name")
+      val name = parser.parseString()
+      parser.parseObjectNext()
+      parser.parseObjectKey("value")
+      val value = parser.parseString()
+      parser.parseObjectNext()
+      return org.sireum.hamr.codegen.microkit.reporting.SimpleProperty(name, value)
     }
 
     def parse_microkitreportingComponentReport(): org.sireum.hamr.codegen.microkit.reporting.ComponentReport = {
@@ -295,6 +456,27 @@ object JSON {
       if (!typeParsed) {
         parser.parseObjectType("org.sireum.hamr.codegen.microkit.reporting.ComponentReport")
       }
+      parser.parseObjectKey("path")
+      val path = parser.parseISZ(parser.parseString _)
+      parser.parseObjectNext()
+      parser.parseObjectKey("kind")
+      val kind = parse_microkitreportingComponentKindType()
+      parser.parseObjectNext()
+      parser.parseObjectKey("optModelType")
+      val optModelType = parser.parseOption(parse_microkitreportingIdPos _)
+      parser.parseObjectNext()
+      parser.parseObjectKey("modelImplementation")
+      val modelImplementation = parse_microkitreportingIdPos()
+      parser.parseObjectNext()
+      parser.parseObjectKey("modelProperties")
+      val modelProperties = parser.parseISZ(parse_microkitreportingModelProperties _)
+      parser.parseObjectNext()
+      parser.parseObjectKey("subcomponents")
+      val subcomponents = parser.parseISZ(parse_microkitreportingIdPathR _)
+      parser.parseObjectNext()
+      parser.parseObjectKey("ports")
+      val ports = parser.parseHashSMap(parse_microkitreportingIdPathR _, parse_microkitreportingPortReport _)
+      parser.parseObjectNext()
       parser.parseObjectKey("cCodeReport")
       val cCodeReport = parser.parseOption(parse_microkitreportingCCodeReport _)
       parser.parseObjectNext()
@@ -307,7 +489,108 @@ object JSON {
       parser.parseObjectKey("gumboXReport")
       val gumboXReport = parser.parseOption(parse_microkitreportingGumboXReport _)
       parser.parseObjectNext()
-      return org.sireum.hamr.codegen.microkit.reporting.ComponentReport(cCodeReport, rustReport, gumboReport, gumboXReport)
+      return org.sireum.hamr.codegen.microkit.reporting.ComponentReport(path, kind, optModelType, modelImplementation, modelProperties, subcomponents, ports, cCodeReport, rustReport, gumboReport, gumboXReport)
+    }
+
+    def parse_microkitreportingPortKindType(): org.sireum.hamr.codegen.microkit.reporting.PortKind.Type = {
+      val r = parse_microkitreportingPortKindT(F)
+      return r
+    }
+
+    def parse_microkitreportingPortKindT(typeParsed: B): org.sireum.hamr.codegen.microkit.reporting.PortKind.Type = {
+      if (!typeParsed) {
+        parser.parseObjectType("org.sireum.hamr.codegen.microkit.reporting.PortKind")
+      }
+      parser.parseObjectKey("value")
+      var i = parser.offset
+      val s = parser.parseString()
+      parser.parseObjectNext()
+      org.sireum.hamr.codegen.microkit.reporting.PortKind.byName(s) match {
+        case Some(r) => return r
+        case _ =>
+          parser.parseException(i, s"Invalid element name '$s' for org.sireum.hamr.codegen.microkit.reporting.PortKind.")
+          return org.sireum.hamr.codegen.microkit.reporting.PortKind.byOrdinal(0).get
+      }
+    }
+
+    def parse_microkitreportingPortDirectionType(): org.sireum.hamr.codegen.microkit.reporting.PortDirection.Type = {
+      val r = parse_microkitreportingPortDirectionT(F)
+      return r
+    }
+
+    def parse_microkitreportingPortDirectionT(typeParsed: B): org.sireum.hamr.codegen.microkit.reporting.PortDirection.Type = {
+      if (!typeParsed) {
+        parser.parseObjectType("org.sireum.hamr.codegen.microkit.reporting.PortDirection")
+      }
+      parser.parseObjectKey("value")
+      var i = parser.offset
+      val s = parser.parseString()
+      parser.parseObjectNext()
+      org.sireum.hamr.codegen.microkit.reporting.PortDirection.byName(s) match {
+        case Some(r) => return r
+        case _ =>
+          parser.parseException(i, s"Invalid element name '$s' for org.sireum.hamr.codegen.microkit.reporting.PortDirection.")
+          return org.sireum.hamr.codegen.microkit.reporting.PortDirection.byOrdinal(0).get
+      }
+    }
+
+    def parse_microkitreportingPortLangRealization(): org.sireum.hamr.codegen.microkit.reporting.PortLangRealization = {
+      val t = parser.parseObjectTypes(ISZ("org.sireum.hamr.codegen.microkit.reporting.PortLanguageArtifact"))
+      t.native match {
+        case "org.sireum.hamr.codegen.microkit.reporting.PortLanguageArtifact" => val r = parse_microkitreportingPortLanguageArtifactT(T); return r
+        case _ => val r = parse_microkitreportingPortLanguageArtifactT(T); return r
+      }
+    }
+
+    def parse_microkitreportingPortLanguageArtifact(): org.sireum.hamr.codegen.microkit.reporting.PortLanguageArtifact = {
+      val r = parse_microkitreportingPortLanguageArtifactT(F)
+      return r
+    }
+
+    def parse_microkitreportingPortLanguageArtifactT(typeParsed: B): org.sireum.hamr.codegen.microkit.reporting.PortLanguageArtifact = {
+      if (!typeParsed) {
+        parser.parseObjectType("org.sireum.hamr.codegen.microkit.reporting.PortLanguageArtifact")
+      }
+      parser.parseObjectKey("name")
+      val name = parser.parseString()
+      parser.parseObjectNext()
+      parser.parseObjectKey("title")
+      val title = parser.parseString()
+      parser.parseObjectNext()
+      parser.parseObjectKey("pos")
+      val pos = parser.parsePosition()
+      parser.parseObjectNext()
+      return org.sireum.hamr.codegen.microkit.reporting.PortLanguageArtifact(name, title, pos)
+    }
+
+    def parse_microkitreportingPortReport(): org.sireum.hamr.codegen.microkit.reporting.PortReport = {
+      val r = parse_microkitreportingPortReportT(F)
+      return r
+    }
+
+    def parse_microkitreportingPortReportT(typeParsed: B): org.sireum.hamr.codegen.microkit.reporting.PortReport = {
+      if (!typeParsed) {
+        parser.parseObjectType("org.sireum.hamr.codegen.microkit.reporting.PortReport")
+      }
+      parser.parseObjectKey("name")
+      val name = parser.parseISZ(parser.parseString _)
+      parser.parseObjectNext()
+      parser.parseObjectKey("kind")
+      val kind = parse_microkitreportingPortKindType()
+      parser.parseObjectNext()
+      parser.parseObjectKey("direction")
+      val direction = parse_microkitreportingPortDirectionType()
+      parser.parseObjectNext()
+      parser.parseObjectKey("payload")
+      val payload = parser.parseOption(parser.parseString _)
+      parser.parseObjectNext()
+      parser.parseObjectKey("modelPos")
+      val modelPos = parser.parsePosition()
+      parser.parseObjectNext()
+      parser.parseObjectKey("languageRealizations")
+      val languageRealizations = parser.parseISZ(parse_microkitreportingPortLangRealization _)
+      parser.parseObjectNext()
+      return org.sireum.hamr.codegen.microkit.reporting.PortReport(name, kind, direction, payload, modelPos, languageRealizations)
     }
 
     def parse_microkitreportingCCodeReport(): org.sireum.hamr.codegen.microkit.reporting.CCodeReport = {
@@ -362,24 +645,6 @@ object JSON {
       val testApiPath = parser.parseString()
       parser.parseObjectNext()
       return org.sireum.hamr.codegen.microkit.reporting.RustApiReport(extern_c_apiPath, developerApiPath, developerApiReport, testApiPath)
-    }
-
-    def parse_microkitreportingIdPos(): org.sireum.hamr.codegen.microkit.reporting.IdPos = {
-      val r = parse_microkitreportingIdPosT(F)
-      return r
-    }
-
-    def parse_microkitreportingIdPosT(typeParsed: B): org.sireum.hamr.codegen.microkit.reporting.IdPos = {
-      if (!typeParsed) {
-        parser.parseObjectType("org.sireum.hamr.codegen.microkit.reporting.IdPos")
-      }
-      parser.parseObjectKey("id")
-      val id = parser.parseString()
-      parser.parseObjectNext()
-      parser.parseObjectKey("pos")
-      val pos = parser.parsePosition()
-      parser.parseObjectNext()
-      return org.sireum.hamr.codegen.microkit.reporting.IdPos(id, pos)
     }
 
     def parse_microkitreportingGumboReport(): org.sireum.hamr.codegen.microkit.reporting.GumboReport = {
@@ -558,6 +823,24 @@ object JSON {
     return r
   }
 
+  def from_microkitreportingIdPos(o: org.sireum.hamr.codegen.microkit.reporting.IdPos, isCompact: B): String = {
+    val st = Printer.print_microkitreportingIdPos(o)
+    if (isCompact) {
+      return st.renderCompact
+    } else {
+      return st.render
+    }
+  }
+
+  def to_microkitreportingIdPos(s: String): Either[org.sireum.hamr.codegen.microkit.reporting.IdPos, Json.ErrorMsg] = {
+    def f_microkitreportingIdPos(parser: Parser): org.sireum.hamr.codegen.microkit.reporting.IdPos = {
+      val r = parser.parse_microkitreportingIdPos()
+      return r
+    }
+    val r = to(s, f_microkitreportingIdPos _)
+    return r
+  }
+
   def from_microkitreportingIdPathR(o: org.sireum.hamr.codegen.microkit.reporting.IdPathR, isCompact: B): String = {
     val st = Printer.print_microkitreportingIdPathR(o)
     if (isCompact) {
@@ -594,6 +877,60 @@ object JSON {
     return r
   }
 
+  def from_microkitreportingPretty(o: org.sireum.hamr.codegen.microkit.reporting.Pretty, isCompact: B): String = {
+    val st = Printer.print_microkitreportingPretty(o)
+    if (isCompact) {
+      return st.renderCompact
+    } else {
+      return st.render
+    }
+  }
+
+  def to_microkitreportingPretty(s: String): Either[org.sireum.hamr.codegen.microkit.reporting.Pretty, Json.ErrorMsg] = {
+    def f_microkitreportingPretty(parser: Parser): org.sireum.hamr.codegen.microkit.reporting.Pretty = {
+      val r = parser.parse_microkitreportingPretty()
+      return r
+    }
+    val r = to(s, f_microkitreportingPretty _)
+    return r
+  }
+
+  def from_microkitreportingModelProperties(o: org.sireum.hamr.codegen.microkit.reporting.ModelProperties, isCompact: B): String = {
+    val st = Printer.print_microkitreportingModelProperties(o)
+    if (isCompact) {
+      return st.renderCompact
+    } else {
+      return st.render
+    }
+  }
+
+  def to_microkitreportingModelProperties(s: String): Either[org.sireum.hamr.codegen.microkit.reporting.ModelProperties, Json.ErrorMsg] = {
+    def f_microkitreportingModelProperties(parser: Parser): org.sireum.hamr.codegen.microkit.reporting.ModelProperties = {
+      val r = parser.parse_microkitreportingModelProperties()
+      return r
+    }
+    val r = to(s, f_microkitreportingModelProperties _)
+    return r
+  }
+
+  def from_microkitreportingSimpleProperty(o: org.sireum.hamr.codegen.microkit.reporting.SimpleProperty, isCompact: B): String = {
+    val st = Printer.print_microkitreportingSimpleProperty(o)
+    if (isCompact) {
+      return st.renderCompact
+    } else {
+      return st.render
+    }
+  }
+
+  def to_microkitreportingSimpleProperty(s: String): Either[org.sireum.hamr.codegen.microkit.reporting.SimpleProperty, Json.ErrorMsg] = {
+    def f_microkitreportingSimpleProperty(parser: Parser): org.sireum.hamr.codegen.microkit.reporting.SimpleProperty = {
+      val r = parser.parse_microkitreportingSimpleProperty()
+      return r
+    }
+    val r = to(s, f_microkitreportingSimpleProperty _)
+    return r
+  }
+
   def from_microkitreportingComponentReport(o: org.sireum.hamr.codegen.microkit.reporting.ComponentReport, isCompact: B): String = {
     val st = Printer.print_microkitreportingComponentReport(o)
     if (isCompact) {
@@ -609,6 +946,60 @@ object JSON {
       return r
     }
     val r = to(s, f_microkitreportingComponentReport _)
+    return r
+  }
+
+  def from_microkitreportingPortLangRealization(o: org.sireum.hamr.codegen.microkit.reporting.PortLangRealization, isCompact: B): String = {
+    val st = Printer.print_microkitreportingPortLangRealization(o)
+    if (isCompact) {
+      return st.renderCompact
+    } else {
+      return st.render
+    }
+  }
+
+  def to_microkitreportingPortLangRealization(s: String): Either[org.sireum.hamr.codegen.microkit.reporting.PortLangRealization, Json.ErrorMsg] = {
+    def f_microkitreportingPortLangRealization(parser: Parser): org.sireum.hamr.codegen.microkit.reporting.PortLangRealization = {
+      val r = parser.parse_microkitreportingPortLangRealization()
+      return r
+    }
+    val r = to(s, f_microkitreportingPortLangRealization _)
+    return r
+  }
+
+  def from_microkitreportingPortLanguageArtifact(o: org.sireum.hamr.codegen.microkit.reporting.PortLanguageArtifact, isCompact: B): String = {
+    val st = Printer.print_microkitreportingPortLanguageArtifact(o)
+    if (isCompact) {
+      return st.renderCompact
+    } else {
+      return st.render
+    }
+  }
+
+  def to_microkitreportingPortLanguageArtifact(s: String): Either[org.sireum.hamr.codegen.microkit.reporting.PortLanguageArtifact, Json.ErrorMsg] = {
+    def f_microkitreportingPortLanguageArtifact(parser: Parser): org.sireum.hamr.codegen.microkit.reporting.PortLanguageArtifact = {
+      val r = parser.parse_microkitreportingPortLanguageArtifact()
+      return r
+    }
+    val r = to(s, f_microkitreportingPortLanguageArtifact _)
+    return r
+  }
+
+  def from_microkitreportingPortReport(o: org.sireum.hamr.codegen.microkit.reporting.PortReport, isCompact: B): String = {
+    val st = Printer.print_microkitreportingPortReport(o)
+    if (isCompact) {
+      return st.renderCompact
+    } else {
+      return st.render
+    }
+  }
+
+  def to_microkitreportingPortReport(s: String): Either[org.sireum.hamr.codegen.microkit.reporting.PortReport, Json.ErrorMsg] = {
+    def f_microkitreportingPortReport(parser: Parser): org.sireum.hamr.codegen.microkit.reporting.PortReport = {
+      val r = parser.parse_microkitreportingPortReport()
+      return r
+    }
+    val r = to(s, f_microkitreportingPortReport _)
     return r
   }
 
@@ -663,24 +1054,6 @@ object JSON {
       return r
     }
     val r = to(s, f_microkitreportingRustApiReport _)
-    return r
-  }
-
-  def from_microkitreportingIdPos(o: org.sireum.hamr.codegen.microkit.reporting.IdPos, isCompact: B): String = {
-    val st = Printer.print_microkitreportingIdPos(o)
-    if (isCompact) {
-      return st.renderCompact
-    } else {
-      return st.render
-    }
-  }
-
-  def to_microkitreportingIdPos(s: String): Either[org.sireum.hamr.codegen.microkit.reporting.IdPos, Json.ErrorMsg] = {
-    def f_microkitreportingIdPos(parser: Parser): org.sireum.hamr.codegen.microkit.reporting.IdPos = {
-      val r = parser.parse_microkitreportingIdPos()
-      return r
-    }
-    val r = to(s, f_microkitreportingIdPos _)
     return r
   }
 

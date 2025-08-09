@@ -4,17 +4,18 @@ package org.sireum.hamr.codegen.microkit.plugins.reporting
 import org.sireum._
 import org.sireum.U32._
 import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, Store}
-import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
+import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.containers.{EResource, InternalResource}
 import org.sireum.hamr.codegen.common.plugin.Plugin
 import org.sireum.hamr.codegen.common.reporting.{CodegenReporting, CodegenReports, JSON, ResourceReport, Status, ToolReport}
-import org.sireum.hamr.codegen.common.symbols.{AadlThread, SymbolTable}
+import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlEventPort, AadlPort, AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.{CodeGenResults, HamrCli}
 import org.sireum.hamr.codegen.microkit.plugins.gumbo.GumboRustUtil
+import org.sireum.hamr.codegen.microkit.plugins.reporting.RustContainers.RustFn
 import org.sireum.hamr.codegen.microkit.reporting._
 import org.sireum.hamr.codegen.microkit.util.Util
-import org.sireum.hamr.ir.{Aadl, Direction, GclAssume, GclGuarantee, GclNamedElement, GclSubclause}
+import org.sireum.hamr.ir.{Aadl, Direction, GclAssume, GclGuarantee, GclSubclause}
 import org.sireum.message.{Level, Position, Reporter}
 
 @datatype class MicrokitReporterPlugin() extends Plugin {
@@ -100,7 +101,16 @@ import org.sireum.message.{Level, Position, Reporter}
     }
 
     val systemDescription = sel4OutputDir / "microkit.system"
-    assert(systemDescription.exists)
+    assert(systemDescription.exists, systemDescription.value)
+
+    val msdOpt = MSDParser.parse(systemDescription, sel4OutputDir)
+
+    if (msdOpt.isEmpty) {
+      println(s"Was not able to parse $systemDescription. No report generated")
+      return localStore
+    }
+
+    val msd = msdOpt.get
 
     val workspaceRoot: Os.Path =
       options.workspaceRootDir match {
@@ -111,13 +121,14 @@ import org.sireum.message.{Level, Position, Reporter}
         case _ =>
           println("Model workspace option was not provided. Cannot generate Microkit codegen report")
 
-          return CodegenReporting.addCodegenReport(name,
-            MicrokitReport.empty(ReportUtil.deWin(sel4OutputDir.relativize(systemDescription).value)), localStore)
+          return localStore
       }
 
     var componentReports: HashSMap[IdPathR, ComponentReport] = HashSMap.empty
 
     for (t <- st.getThreads()) {
+
+      var ports: HashSMap[IdPathR, PortReport] = HashSMap.empty
 
       var cCodeReport: Option[CCodeReport] = None()
       var rustReport: Option[RustReport] = None()
@@ -126,8 +137,52 @@ import org.sireum.message.{Level, Position, Reporter}
 
       val threadid = Util.getThreadIdPath(t)
 
+      val protectionDomain = msd.getProtectionDomain(threadid).get.protection_domains(0)
+
       val inPorts = t.getPorts().filter(p => p.direction == Direction.In)
       val outPorts = t.getPorts().filter(p => p.direction == Direction.Out)
+
+      @pure def addPort(p: AadlPort): Unit = {
+        val (kind, payload, queueSize): (PortKind.Type, Option[String], Z) = p match {
+          case a: AadlDataPort => (PortKind.Data, Some(a.aadlType.name), 1)
+          case a: AadlEventDataPort => (PortKind.EventData, Some(a.aadlType.name), a.queueSize)
+          case a: AadlEventPort => (PortKind.Event, None(), a.queueSize)
+          case x => halt(s"Unexpected: $x")
+        }
+
+        var realizations: ISZ[PortLangRealization] = ISZ()
+
+        val direction: PortDirection.Type = if (p.direction == Direction.In) PortDirection.In else PortDirection.Out
+
+        //realizations = realizations :+ PortLanguageArtifact(
+        //  name = "Model", title = "Model", pos = ReportUtil.buildPosA(p.feature.identifier.pos.get, workspaceRoot, sel4OutputDir))
+
+        val key = s"${p.identifier}_queue_$queueSize"
+        protectionDomain.maps.filter(m => ops.StringOps(m.setvar_vaddr.get).startsWith(key)) match {
+          case ISZ(e) =>
+            realizations = realizations :+ PortLanguageArtifact(
+              name = "Memory Map",
+              title = "Memory Map",
+              pos = e.pos)
+          case x => halt(s"Didn't find a unique map for ${key}: Found ${x.size} in $x")
+        }
+
+        ports = ports + IdPathR(p.path) ~> PortReport(
+          name = p.path,
+          kind = kind,
+          direction = direction,
+          payload = payload,
+          modelPos = ReportUtil.buildPosA(p.feature.identifier.pos.get, workspaceRoot, sel4OutputDir),
+          languageRealizations = realizations)
+      }
+
+      for (i <- inPorts) {
+        addPort(i)
+      }
+
+      for (o <- outPorts) {
+        addPort(o)
+      }
 
       if (Util.isRusty(t)) {
         assert(t.isPeriodic())
@@ -140,163 +195,86 @@ import org.sireum.message.{Level, Position, Reporter}
 
         val externApiFile = rustBridgeDir / "extern_c_api.rs"
         assert(externApiFile.exists, externApiFile.value)
+        val parsedExternApiFile = RustParserSimple.parse(externApiFile, sel4OutputDir)
 
         val testApiFile = rustBridgeDir / "test_api.rs"
         assert(testApiFile.exists, testApiFile.value)
 
         val rustComponentApiFile = rustBridgeDir / s"${threadid}_api.rs"
         assert(rustComponentApiFile.exists, rustComponentApiFile.value)
-
-        val rustComponentApiContent = StringUtil.split_PreserveEmptySegments(rustComponentApiFile.read, c => c == '\n')
-
-        var developerApiReport: HashSMap[String, Position] = HashSMap.empty
-
-        // impl<API: operator_interface_oip_oit_Get_Api> operator_interface_oip_oit_Application_Api<API> {
-        val getApiLine = ReportUtil.findLineNumber(s"impl<API: ${threadid}_Get_Api>", 0, rustComponentApiContent)
-
-        // impl<API: operator_interface_oip_oit_Put_Api> operator_interface_oip_oit_Application_Api<API> {
-        val putApiLine = ReportUtil.findLineNumber(s"impl<API: ${threadid}_Put_Api>", 0, rustComponentApiContent)
-
-        { // process api artifacts
-
-          if (inPorts.nonEmpty) {
-            assert(getApiLine != -1, rustComponentApiFile.toUri)
-            for (in <- inPorts) {
-              val inLine = ReportUtil.findLineNumber(s"pub fn get_${in.identifier}", getApiLine, rustComponentApiContent)
-              assert(inLine != -1, s"$getApiLine 'pub fn get_${in.identifier}' ${rustComponentApiFile.toUri}")
-              ReportUtil.scanForClosingBrace(inLine, rustComponentApiContent) match {
-                case (-1, _) =>
-                  reporter.warn(None(), name, s"Coulnd't find put api for ${in.identifier} in $rustComponentApiFile")
-                case (end, _) =>
-                  developerApiReport = developerApiReport + in.identifier ~>
-                    ReportUtil.buildPos(inLine, end, rustComponentApiFile, workspaceRoot, sel4OutputDir)
-              }
-            }
-          }
-
-          if (outPorts.nonEmpty) {
-            assert(putApiLine != -1)
-            for (out <- outPorts) {
-              val outLine = ReportUtil.findLineNumber(s"pub fn put_${out.identifier}", putApiLine, rustComponentApiContent)
-              assert(outLine != -1, s"$getApiLine 'pub fn put_${out.identifier}' ${rustComponentApiFile.toUri}")
-              ReportUtil.scanForClosingBrace(outLine, rustComponentApiContent) match {
-                case (-1, _) =>
-                  reporter.warn(None(), name, s"Coulnd't find get api for ${out.identifier} in $rustComponentApiFile")
-                case (end, _) =>
-                  developerApiReport = developerApiReport + out.identifier ~>
-                    ReportUtil.buildPos(outLine, end, rustComponentApiFile, workspaceRoot, sel4OutputDir)
-              }
-            }
-          }
-        }
-
+        val parsedRustComponentApiFile = RustParserSimple.parse(rustComponentApiFile, sel4OutputDir)
 
         val rustComponentAppFile = rustComponentDir / s"${threadid}_app.rs"
         assert(rustComponentAppFile.exists, rustComponentAppFile.value)
+        val parsedRustComponentAppFile = RustParserSimple.parse(rustComponentAppFile, sel4OutputDir)
 
-        var structLoc: Option[Position] = None()
-        var implLoc: Option[Position] = None()
+        val componentAppStruct = parsedRustComponentAppFile.structs.get(threadid).get
+        val componentAppImpl = parsedRustComponentAppFile.getImpl(threadid).get
 
-        var methodLocs: HashSMap[String, Position] = HashSMap.empty
-        var gumboMethodLocs: HashSMap[String, Position] = HashSMap.empty
-        var markerLocs: HashSMap[String, (Z, Z)] = HashSMap.empty
+        val gumboxFile = rustBridgeDir / s"${threadid}_GUMBOX.rs"
+        val parsedGumboXFile: Option[RustContainers.RustFile] =
+          if (gumboxFile.exists) Some(RustParserSimple.parse(gumboxFile, sel4OutputDir))
+          else None()
+
+        var developerApiReport: HashSMap[String, Position] = HashSMap.empty
 
 
-        @pure def collectFromMarkedRegion(marker: String, prefix: String, singleLine: B, elems: ISZ[GclNamedElement], content: ISZ[String], source: Os.Path): HashSMap[String, Position] = {
-          var ret = HashSMap.empty[String, Position]
-          markerLocs.get(marker) match {
-            case Some((start, end)) =>
-              val region = ops.ISZOps(content).slice(start + 1, end)
-              for (e <- elems) {
-                ReportUtil.locateText(s"$prefix ${e.id}", singleLine, region) match {
-                  case (-1, -1) =>
-                    reporter.warn(None(), name, s"Couldn't locate $prefix ${e.id} in $source")
-                  case (rstart, rend) =>
-                    ret = ret + e.id ~> ReportUtil.buildPos(start + 1 + rstart, start + 1 + rend + 1, source, workspaceRoot, sel4OutputDir)
-                }
-              }
-            case _ => reporter.warn(None(), name, s"Marker block '$marker' not found in $source")
+        val getApiImpl = parsedRustComponentApiFile.getImplH(
+          Some(RustContainers.GenericParam("API", s"${threadid}_Get_Api")), s"${threadid}_Application_Api")
+        val putApiImpl = parsedRustComponentApiFile.getImplH(
+          Some(RustContainers.GenericParam("API", s"${threadid}_Put_Api")), s"${threadid}_Application_Api")
+
+        { // process api artifacts
+          @pure def addPath(pports: ISZ[AadlPort], rustImpl: RustContainers.RustImpl, rustTrait: RustContainers.RustTrait): Unit = {
+            for (p <- pports) {
+              val typ: String = if (p.direction == Direction.In) "get" else "put"
+
+              val fn1 = rustImpl.methods.get(s"${typ}_${p.identifier}").get
+              var langRs = ISZ[PortLangRealization]() :+ PortLanguageArtifact(
+                name = "Rust/Verus API",
+                title = "Rust/Verus API",
+                pos = fn1.pos)
+
+              val fn2 = rustTrait.methods.get(s"unverified_${typ}_${p.identifier}").get
+              langRs = langRs :+ PortLanguageArtifact(
+                name = "Unverified Rust Interface",
+                title = "Unverified Rust Interface",
+                pos = fn2.pos)
+
+              val fn3 = parsedExternApiFile.functions.get(s"unsafe_${typ}_${p.identifier}").get
+              langRs = langRs :+ PortLanguageArtifact(
+                name = "Rust/C Interface",
+                title = "Rust/C Interface",
+                pos = fn3.pos)
+
+              assert (parsedExternApiFile.externs.size == 1)
+              val fn4 = parsedExternApiFile.externs()(0).methods.get(s"${typ}_${p.identifier}").get
+              langRs = langRs :+ PortLanguageArtifact(
+                name = "C Extern",
+                title = "C Extern",
+                pos = fn4.pos)
+
+              val e: PortReport = ports.get(IdPathR(p.path)).get
+
+              ports = ports + IdPathR(p.path) ~> e(languageRealizations = langRs ++ e.languageRealizations)
+            }
           }
-          return ret
+
+          if (inPorts.nonEmpty) {
+            val getTrait = parsedRustComponentApiFile.traits.get(s"${threadid}_Get_Api").get
+            addPath(inPorts, getApiImpl.get, getTrait)
+          }
+
+          if (outPorts.nonEmpty) {
+            val putTrait = parsedRustComponentApiFile.traits.get(s"${threadid}_Put_Api").get
+            addPath(outPorts, putApiImpl.get, putTrait)
+          }
         }
 
-        val appContent = StringUtil.split_PreserveEmptySegments(rustComponentAppFile.read, c => c == '\n')
-
-        { // process gumboX
-
-          val gumboxFile = rustBridgeDir / s"${threadid}_GUMBOX.rs"
-          if (gumboxFile.exists) {
-
-            val gumboxContent = StringUtil.split_PreserveEmptySegments(gumboxFile.read, c => c == '\n')
-            var i: Z = 0
-            while (i < gumboxContent.size) {
-              val lineo = ops.StringOps(gumboxContent(i))
-              val trimmed = ops.StringOps(ops.StringOps(lineo.s).trim)
-
-              if (trimmed.startsWith("pub fn")) {
-                ReportUtil.getName("fn", trimmed) match {
-                  case Some(name) =>
-                    val endOfBlock = ReportUtil.scanForClosingBrace(i, gumboxContent)
-                    gumboMethodLocs = gumboMethodLocs + name ~> ReportUtil.buildPos(i, endOfBlock._1, gumboxFile, workspaceRoot, sel4OutputDir)
-                    i = endOfBlock._1
-                  case _ => halt("")
-                }
-              }
-              i = i + 1
-            }
-
-            if (gumboMethodLocs.nonEmpty) {
-              gumboxReport = Some(GumboXReport(gumboMethodLocs))
-            }
-          }
-        }
-
-        { // process app contents
-          var i: Z = 0
-          while (i < appContent.size) {
-            val line = appContent(i)
-            val lineo = ops.StringOps(line)
-            val trimmed = lineo.trim
-            val trimmedo = ops.StringOps(trimmed)
-
-            if (trimmedo.startsWith(s"pub struct $threadid")) {
-              val endOfBlock = ReportUtil.scanForClosingBrace(i, appContent)
-              markerLocs = markerLocs ++ endOfBlock._2.entries
-
-              structLoc = Some(ReportUtil.buildPos(i, endOfBlock._1, rustComponentAppFile, workspaceRoot, sel4OutputDir))
-              i = endOfBlock._1
-            }
-
-            if (trimmedo.startsWith(s"impl $threadid")) {
-              //val endOfBlock = scanForClosingBrace()
-              implLoc = Some(ReportUtil.buildPos(i, i, rustComponentAppFile, workspaceRoot, sel4OutputDir))
-            }
-
-            if (trimmedo.startsWith(s"pub fn")) {
-              ReportUtil.getName("fn", trimmedo) match {
-                case Some(name) =>
-                  val endOfBlock = ReportUtil.scanForClosingBrace(i, appContent)
-                  markerLocs = markerLocs ++ endOfBlock._2.entries
-                  methodLocs = methodLocs + name ~> ReportUtil.buildPos(i, endOfBlock._1, rustComponentAppFile, workspaceRoot, sel4OutputDir)
-                  i = endOfBlock._1
-                case _ => halt("")
-              }
-            }
-
-            if (trimmedo.startsWith(s"pub open spec fn")) {
-              ReportUtil.getName("fn", trimmedo) match {
-                case Some(name) =>
-                  val endOfBlock = ReportUtil.scanForClosingBrace(i, appContent)
-                  markerLocs = markerLocs ++ endOfBlock._2.entries
-                  gumboMethodLocs = gumboMethodLocs + name ~> ReportUtil.buildPos(i, endOfBlock._1, rustComponentAppFile, workspaceRoot, sel4OutputDir)
-                  i = endOfBlock._1
-                case _ => halt("")
-              }
-
-            }
-
-            i = i + 1
-          }
+        parsedGumboXFile match {
+          case Some(g) =>
+            gumboxReport = Some(GumboXReport(HashSMap.empty[String, Position] ++ (for(fn <- g.functions.values) yield fn.name ~> fn.pos)))
+          case _ =>
         }
 
         if (ops.ISZOps(t.annexes()).exists(p => p.clause.isInstanceOf[GclSubclause])) {
@@ -311,43 +289,40 @@ import org.sireum.message.{Level, Position, Reporter}
           var initializeReport = HashSMap.empty[String, Position]
           var computeReport: Option[GumboComputeReport] = None()
 
-          if (subclauseInfo.annex.state.nonEmpty) {
-            stateReport = collectFromMarkedRegion("STATE VARS", "pub", T, subclauseInfo.annex.state.asInstanceOf[ISZ[GclNamedElement]], appContent, rustComponentAppFile)
+          for (s <- subclauseInfo.annex.state) {
+            stateReport = stateReport + s.name ~> componentAppStruct.fields.get(s.name).get.pos
           }
 
           if (subclauseInfo.annex.initializes.nonEmpty) {
-            initializeReport = collectFromMarkedRegion("INITIALIZATION ENSURES", "// guarantee", F, subclauseInfo.annex.initializes.get.guarantees.asInstanceOf[ISZ[GclNamedElement]], appContent, rustComponentAppFile)
+            val init = componentAppImpl.methods.get("initialize").get
+            for (guar <- init.ensures.get.gumboClauses) {
+              initializeReport = initializeReport + guar.id ~> guar.pos
+            }
           }
 
           if (subclauseInfo.annex.compute.nonEmpty) {
+            val timeTriggered = componentAppImpl.methods.get("timeTriggered").get
+            val computeClause = subclauseInfo.annex.compute.get
+
             var assumesReport = HashSMap.empty[String, Position]
             var guaranteesReport = HashSMap.empty[String, Position]
             var casesReport = HashSMap.empty[String, Position]
             var handlers = HashSMap.empty[String, Position]
 
-            markerLocs.get("TIME TRIGGERED REQUIRES") match {
-              case Some((start, end)) =>
-                assumesReport = collectFromMarkedRegion("TIME TRIGGERED REQUIRES", "// assume", F, subclauseInfo.annex.compute.get.assumes.asInstanceOf[ISZ[GclNamedElement]], appContent, rustComponentAppFile)
-              case _ =>
+            for (assumes <- computeClause.assumes) {
+              assumesReport = assumesReport + assumes.id ~> timeTriggered.getAssumeClausePos(assumes.id)
             }
 
-            markerLocs.get("TIME TRIGGERED ENSURES") match {
-              case Some((start, end)) =>
-                // guarantee lastCmd
-                if (subclauseInfo.annex.compute.get.guarantees.nonEmpty) {
-                  guaranteesReport = collectFromMarkedRegion("TIME TRIGGERED ENSURES", "// guarantee", F, subclauseInfo.annex.compute.get.guarantees.asInstanceOf[ISZ[GclNamedElement]], appContent, rustComponentAppFile)
-                }
+            for (guar <- computeClause.guarantees) {
+              guaranteesReport = guaranteesReport + guar.id ~> timeTriggered.getGuaranteeClausePos(guar.id)
+            }
 
-                // case REQ_MHS_1
-                if (subclauseInfo.annex.compute.get.cases.nonEmpty) {
-                  casesReport = collectFromMarkedRegion("TIME TRIGGERED ENSURES", "// case", F, subclauseInfo.annex.compute.get.cases.asInstanceOf[ISZ[GclNamedElement]], appContent, rustComponentAppFile)
-                }
+            for (case_ <- computeClause.cases) {
+              casesReport = casesReport + case_.id ~> timeTriggered.getGuaranteeClausePos(case_.id)
+            }
 
-                for (h <- subclauseInfo.annex.compute.get.handlers) {
-                  halt("Need to handle sporadic compute handlers")
-                }
-
-              case _ => reporter.warn(None(), name, s"Marker block for GUMBO compute clauses was not found in $rustComponentAppFile")
+            for (h <- computeClause.handlers) {
+              halt("Need to handle sporadic compute handlers")
             }
 
             computeReport = Some(GumboComputeReport(
@@ -358,12 +333,8 @@ import org.sireum.message.{Level, Position, Reporter}
           }
 
           for (m <- subclauseInfo.annex.methods) {
-            gumboMethodLocs.get(m.method.sig.id.value) match {
-              case Some(pos) =>
-                gumboMethodsReport = gumboMethodsReport + m.method.sig.id.value ~> pos
-              case _ =>
-                reporter.warn(None(), name, s"Did not find GUMBO function ${m.method.sig.id} in $rustComponentAppFile")
-            }
+            val id = m.method.sig.id.value
+            gumboMethodsReport = gumboMethodsReport + id ~> componentAppImpl.methods.get(id).get.pos
           }
 
           for (i <- subclauseInfo.annex.invariants) {
@@ -373,27 +344,19 @@ import org.sireum.message.{Level, Position, Reporter}
           if (subclauseInfo.annex.integration.nonEmpty) {
             var assumes = HashSMap.empty[String, Position]
             var guars =  HashSMap.empty[String, Position]
+
+
             for (p <- t.getPorts()) {
               subclauseInfo.gclSymbolTable.integrationMap.get(p) match {
                 case Some(assu: GclAssume) =>
-                  ReportUtil.findLineNumber(s"// assume ${assu.id}", putApiLine, rustComponentApiContent) match {
-                    case -1 =>
-                      reporter.warn(None(), name, s"Didn't find assume clause for integration constraint ${assu.id} in $rustComponentApiFile")
-                    case beginLine =>
-                      assumes = assumes + assu.id ~> ReportUtil.buildPos(
-                        beginLine = beginLine, endLine = beginLine + 1,
-                        file = rustComponentApiFile, workspaceDir = workspaceRoot, reportDir = sel4OutputDir)
-                  }
-                case Some(guar: GclGuarantee) =>
-                  ReportUtil.findLineNumber(s"// guarantee ${guar.id}", putApiLine, rustComponentApiContent) match {
-                    case -1 =>
-                      reporter.warn(None(), name, s"Didn't find guarantee clause for integration constraint ${guar.id} in $rustComponentApiFile")
-                    case beginLine =>
-                      guars = guars + guar.id ~> ReportUtil.buildPos(
-                        beginLine = beginLine, endLine = beginLine + 1,
-                        file = rustComponentApiFile, workspaceDir = workspaceRoot, reportDir = sel4OutputDir)
-                  }
+                  val fn = getApiImpl.get.methods.get(s"get_${p.identifier}").get
+                  val pos = fn.getGuaranteeClausePos(assu.id)
+                  assumes = assumes + assu.id ~> pos
 
+                case Some(guar: GclGuarantee) =>
+                  val fn = putApiImpl.get.methods.get(s"put_${p.identifier}").get
+                  val pos = fn.getAssumeClausePos(guar.id)
+                  guars = guars + guar.id ~> pos
                 case Some(x) => halt(s"Unexpected: $x")
                 case _ =>
               }
@@ -408,10 +371,12 @@ import org.sireum.message.{Level, Position, Reporter}
             integrationReport = integrationReport,
             initializeReport = initializeReport,
             computeReport = computeReport))
-        }
+        } // end gumbo processing
+
 
         val entrypointReport = HashSMap.empty[String, Position] ++
-          methodLocs.entries.filter(p => p._1 == "initialize" || p._1 == "timeTriggered" || ops.StringOps(p._1).startsWith("handle"))
+          (for(e <- componentAppImpl.methods.entries.filter(p => p._1 == "initialize" || p._1 == "timeTriggered" ||
+            ops.StringOps(p._1).startsWith("handle"))) yield e._2.name ~> e._2.pos)
 
         rustReport = Some(RustReport(
           entrypointReport = entrypointReport,
@@ -423,17 +388,27 @@ import org.sireum.message.{Level, Position, Reporter}
 
       } // end rust handling
 
-      componentReports = componentReports + IdPathR(t.path) ~> ComponentReport(
-        cCodeReport = cCodeReport,
-        rustReport = rustReport,
-        gumboReport = gumboReport,
-        gumboXReport = gumboxReport)
+      val subcomponents: ISZ[IdPathR] = for(s <- t.subComponents) yield IdPathR(s.path)
+
+      val modelImplementation = IdPos(id = t.classifierAsString, pos = t.component.identifier.pos.get)
+
+      componentReports = componentReports + IdPathR(t.path) ~>
+        ComponentReport(
+          path = t.path,
+          kind = ComponentKind.Thread,
+          optModelType = None(),
+          modelImplementation = modelImplementation,
+          modelProperties = ISZ(),
+          subcomponents = subcomponents,
+          ports = ports,
+          cCodeReport = cCodeReport,
+          rustReport = rustReport,
+          gumboReport = gumboReport,
+          gumboXReport = gumboxReport)
 
     } // end for loop processing threads
 
-    val report = MicrokitReport(
-      systemDescriptionUri = ReportUtil.deWin(sel4OutputDir.relativize(systemDescription).value),
-      componentReport = componentReports)
+    val report = MicrokitReport(componentReports)
 
     val isAadl = ops.StringOps(st.rootSystem.component.identifier.pos.get.uriOpt.get).endsWith(".aadl")
 
@@ -508,7 +483,7 @@ import org.sireum.message.{Level, Position, Reporter}
         componentReport.annexSubclauses.get("GUMBO") match {
           case (Some(r)) => Some(
             st"""<br>
-                |GUMBO: [Subclause](${ReportUtil.createLink(r, sel4OutputDir)})""")
+                |GUMBO: [Subclause](${ReportUtil.createLink(r)})""")
           case _ => None()
         }
 
@@ -520,14 +495,14 @@ import org.sireum.message.{Level, Position, Reporter}
             case Some(r) =>
               assert(gumboOpt.isEmpty)
               gumboOpt = Some(
-                st"""<br>GUMBO: [Subclause](${ReportUtil.createLink(r, sel4OutputDir)})""")
+                st"""<br>GUMBO: [Subclause](${ReportUtil.createLink(r)})""")
             case _ =>
           }
-          var s = st"Type: [$typname](${ReportUtil.createLink(typeReport.pos, sel4OutputDir)})<br>"
-          s = st"${s}Implementation: [${componentName.s}](${ReportUtil.createLink(componentReport.pos, sel4OutputDir)})"
+          var s = st"Type: [$typname](${ReportUtil.createLink(typeReport.pos)})<br>"
+          s = st"${s}Implementation: [${componentName.s}](${ReportUtil.createLink(componentReport.pos)})"
           s
         } else {
-          st"Implementation: [${componentName.s}](${ReportUtil.createLink(componentReport.pos, sel4OutputDir)})"
+          st"Implementation: [${componentName.s}](${ReportUtil.createLink(componentReport.pos)})"
         }
 
       val properties: String = {
@@ -559,6 +534,7 @@ import org.sireum.message.{Level, Position, Reporter}
         st"""#### $id: ${component.classifierAsString}
             |
             | - **Entry Points**
+            |
             |"""
 
       c._2.rustReport match {
@@ -566,21 +542,16 @@ import org.sireum.message.{Level, Position, Reporter}
           for(entrypoint <- rust.entrypointReport.entries) {
             bh =
               st"""$bh
-                  |    ${ops.StringOps(entrypoint._1).firstToUpper}: [Rust](${ReportUtil.createLink(entrypoint._2, sel4OutputDir)})
+                  |    ${ops.StringOps(entrypoint._1).firstToUpper}: [Rust](${ReportUtil.createLink(entrypoint._2)})
                   |"""
           }
-
-          val apiReport = ReportUtil.generateApiReport(rust.apiReport, component.asInstanceOf[AadlThread], workspaceRoot, sel4OutputDir)
-          bh =
-            st"""$bh
-                |
-                | - **APIs**
-                |
-                |     $apiReport
-                |"""
         case _ =>
       }
 
+      bh =
+        st"""$bh
+            |
+            |${c._2.prettyPortReport(ReportUtil.createFullLink _)}"""
 
 
       val gumboReportOpt: Option[ST] =
@@ -613,7 +584,6 @@ import org.sireum.message.{Level, Position, Reporter}
           |
           |## Rust Code
           |
-          |[Microkit System Description](${microkitReport.systemDescriptionUri})
           |
           |### Behavior Code
           |${(behaviorCodeReports, "\n\n")}

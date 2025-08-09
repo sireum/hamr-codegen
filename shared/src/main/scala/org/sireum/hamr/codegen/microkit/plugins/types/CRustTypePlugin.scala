@@ -224,8 +224,7 @@ object CRustTypePlugin {
                         |[dependencies]
                         |${RustUtil.verusCargoDependencies}
                         |
-                        |[package.metadata.verus]
-                        |verify = true
+                        |${RustUtil.commonCargoTomlEntries}
                         |"""
       val cargoTomlPath = s"${rootDataDir}/Cargo.toml"
       resources = resources :+ ResourceUtil.createResourceH(path = cargoTomlPath, content = content, overwrite = T, isDatatype = T)
@@ -337,7 +336,7 @@ object CRustTypePlugin {
           RustAst.EnumDef(
             attributes = ISZ(
               RustAst.AttributeST(F, st"repr(C)"),
-              RustAst.AttributeST(F, st"derive(Copy, Clone, Debug, PartialEq, Eq, Structural)")),
+              RustAst.AttributeST(F, st"derive(Copy, Clone, Debug, PartialEq, Eq)")), //, Structural)")),
             visibility = Visibility.Public,
             ident = RustAst.IdentString(getTypeSimpleName(et)),
             items = enumValues)

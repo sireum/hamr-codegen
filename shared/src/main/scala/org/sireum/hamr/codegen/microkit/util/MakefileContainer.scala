@@ -76,7 +76,7 @@ import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
           if (isRustic) {
             st"""# user code
                  |$userRusticName:
-                 |${TAB}make -C $${CRATES_DIR}/$resourceSuffix"""
+                 |${TAB}make -C $${CRATES_DIR}/$resourceSuffix $$(RUST_MAKE_TARGET)"""
           } else {
             st"""# user code
                  |$userObjName: $$(TOP_DIR)/$relativePathSrcDir/$cUserImplFilename Makefile

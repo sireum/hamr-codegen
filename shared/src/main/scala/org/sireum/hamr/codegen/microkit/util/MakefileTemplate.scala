@@ -7,7 +7,16 @@ import org.sireum.hamr.codegen.microkit.util.Util.TAB
 
 object MakefileTemplate {
 
-  def mainMakefile(targets: ISZ[MakefileTarget]): ST = {
+  def mainMakefile(targets: ISZ[MakefileTarget], hasRustCrates: B): ST = {
+    val rustCommentOpt: Option[ST] =
+      if (hasRustCrates)
+        Some(st"""# By default, cargo-verus is used to build Rust crates, and it fails if verification does not succeed.
+                 |# To skip verification, set the RUST_MAKE_TARGET environment variable to use a cargo build target.
+                 |# Example:
+                 |#
+                 |#   RUST_MAKE_TARGET=build-release make
+                 |""")
+      else None()
     val content =
       st"""${Util.doNotEditMakefile}
           |
@@ -45,6 +54,7 @@ object MakefileTemplate {
           |IMAGE_FILE := $$(TOP_BUILD_DIR)/loader.img
           |REPORT_FILE := $$(TOP_BUILD_DIR)/report.txt
           |
+          |${rustCommentOpt}
           |all: $${IMAGE_FILE}
           |
           |qemu $${IMAGE_FILE} $${REPORT_FILE} clean clobber: $$(IMAGE_FILE) $${TOP_BUILD_DIR}/Makefile FORCE

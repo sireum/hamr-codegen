@@ -278,6 +278,7 @@ object CRustApiUtil {
       val np = cRustTypeProvider.getTypeNameProvider(rep)
 
       val defaultIdent = RustAst.IdentString(st"${(np.qualifiedRustNameS, "_")}_strategy_default".render)
+      val custName = st"${(np.qualifiedRustNameS, "_")}_strategy_cust"
 
       def getDefaultGenerator(name: String, typ: AadlType): ST = {
         cRustTypeProvider.getRepresentativeType(typ) match {
@@ -293,8 +294,6 @@ object CRustApiUtil {
         case b: BaseType => // do nothing
 
         case a: ArrayType =>
-          val custName = st"${(np.qualifiedRustNameS, "_")}_stategy_cust"
-
           val baseRep = cRustTypeProvider.getRepresentativeType(a.baseType)
           val baseNp = cRustTypeProvider.getTypeNameProvider(baseRep)
 
@@ -347,7 +346,6 @@ object CRustApiUtil {
           ret = ret :+ defaultStrategy :+ custStrategy
 
         case r: RecordType =>
-          val custName = st"${(np.qualifiedRustNameS, "_")}_stategy_cust"
           val items: ISZ[ST] = for(f <- r.fields.entries) yield getDefaultGenerator(f._1, f._2)
 
           val defaultStrategy = RustAst.FnImpl(
@@ -364,24 +362,24 @@ object CRustApiUtil {
                   |)""")))),
             meta = ISZ(), comments = ISZ(), attributes = ISZ(), contract = None())
 
-          var stategyNames: ISZ[String] = ISZ()
+          var strategyNames: ISZ[String] = ISZ()
           var fieldNames: ISZ[String] = ISZ()
           var params: ISZ[RustAst.Param] = ISZ()
           var generics: ISZ[RustAst.GenericParam] = ISZ()
           for (f <- r.fields.entries) {
             val ft = cRustTypeProvider.getTypeNameProvider(f._2)
-            val stategyName = st"${f._1}_strategy".render
-            stategyNames = stategyNames :+ stategyName
+            val strategyName = st"${f._1}_strategy".render
+            strategyNames = strategyNames :+ strategyName
             fieldNames = fieldNames :+ f._1
 
-            val genericName = st"${(ft.qualifiedRustNameS, "_")}_strategy".render
+            val genericName = st"${f._1}_${(ft.qualifiedRustNameS, "_")}_strategy".render
 
             generics = generics :+ RustAst.GenericParam(
               ident = RustAst.IdentString(genericName),
               attributes = ISZ(),
               bounds = RustAst.GenericBoundFixMe(st"Strategy<Value = ${ft.qualifiedRustName}>"))
             params = params :+ RustAst.ParamImpl(
-              ident = RustAst.IdentString(stategyName),
+              ident = RustAst.IdentString(strategyName),
               kind = RustAst.TyPath(items = ISZ(ISZ(genericName)), aadlType = None()))
           }
 
@@ -396,7 +394,7 @@ object CRustApiUtil {
               generics = Some(RustAst.Generics(generics)),
               fnHeader = RustAst.FnHeader(F), verusHeader = None()),
             body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
-              st"""(${(stategyNames, ", ")}).prop_map(|(${(fieldNames, ", ")})| {
+              st"""(${(strategyNames, ", ")}).prop_map(|(${(fieldNames, ", ")})| {
                   |  ${np.qualifiedRustName} { ${(fieldNames, ", ")} }
                   |})""")))),
             meta = ISZ(), comments = ISZ(), attributes = ISZ(), contract = None())
@@ -404,13 +402,30 @@ object CRustApiUtil {
           ret = ret :+ defaultStrategy :+ custStrategy
 
         case e: EnumType =>
-          val items: ISZ[ST] = for(v <- e.values) yield st"Just(${np.qualifiedRustName}::${v})"
+          val bias_args: ISZ[Z] = for (v <- e.values) yield 1
+          val bias_params: ISZ[RustAst.Param] = for (v <- e.values) yield RustAst.ParamImpl(
+            ident = RustAst.IdentString(s"${v}_bias"),
+            kind = RustAst.TyPath(items = ISZ(ISZ("u32")), aadlType = None()))
+          val items: ISZ[ST] = for(v <- e.values) yield st"${v}_bias => Just(${np.qualifiedRustName}::${v})"
+
           ret = ret :+ RustAst.FnImpl(
             visibility = RustAst.Visibility.Public,
             sig = RustAst.FnSig(
               ident = defaultIdent,
               fnDecl = RustAst.FnDecl(
                 inputs = ISZ(),
+                outputs = RustAst.FnRetTyImpl(RustAst.TyFixMe(st"impl Strategy<Value = ${np.qualifiedRustName}>"))),
+              fnHeader = RustAst.FnHeader(F), generics = None(), verusHeader = None()),
+            body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
+              st"$custName(${(bias_args, ", ")})")))),
+            meta = ISZ(), comments = ISZ(), attributes = ISZ(), contract = None())
+
+          ret = ret :+ RustAst.FnImpl(
+            visibility = RustAst.Visibility.Public,
+            sig = RustAst.FnSig(
+              ident = RustAst.IdentString(custName.render),
+              fnDecl = RustAst.FnDecl(
+                inputs = bias_params,
                 outputs = RustAst.FnRetTyImpl(RustAst.TyFixMe(st"impl Strategy<Value = ${np.qualifiedRustName}>"))),
               fnHeader = RustAst.FnHeader(F), generics = None(), verusHeader = None()),
             body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(

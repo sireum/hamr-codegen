@@ -240,6 +240,22 @@ object GumboRustPlugin {
           }
         }
 
+        var updatedUnverifiedGetApis: ISZ[RAST.Item] = ISZ()
+        for (u <- componentApiContributions.unverifiedGetApis) {
+          u match {
+            case fn: RAST.FnImpl =>
+              val portId = ops.StringOps(fn.ident.string).replaceAllLiterally("unverified_get_", "")
+              if (ensures.contains(portId)) {
+                val ensure = ensures.get(portId).get
+                updatedUnverifiedGetApis = updatedUnverifiedGetApis :+
+                  fn(contract = Some(fn.contract.get(ensures = fn.contract.get.ensures :+ ensure)))
+              } else {
+                updatedUnverifiedGetApis = updatedUnverifiedGetApis :+ fn
+              }
+            case _ => updatedUnverifiedGetApis = updatedUnverifiedGetApis :+ u
+          }
+        }
+
         var updatedGetApis: ISZ[RAST.Item] = ISZ()
         for (u <- componentApiContributions.appApiDefaultGetters) {
           u match {
@@ -258,6 +274,7 @@ object GumboRustPlugin {
 
         val con = crustApiContributions.addApiContributions(threadPath,
           componentApiContributions(
+            unverifiedGetApis = updatedUnverifiedGetApis,
             appApiDefaultPutters = updatedPutApis,
             appApiDefaultGetters = updatedGetApis))
 
@@ -314,6 +331,19 @@ object GumboRustPlugin {
         }
       }
 
+      var freeFuncs: ISZ[RAST.Fn] = ISZ()
+      for (f <- threadContributions.appFreeFunctions) {
+        if (f.ident.string == "log_info" || f.ident.string == "log_warn_channel") {
+          val fi = f.asInstanceOf[RAST.FnImpl]
+          val attrs = fi.attributes
+          freeFuncs = freeFuncs :+ fi(
+            attributes =  attrs :+ RAST.AttributeST(F, st"verifier::external_body")
+          )
+        } else {
+          freeFuncs = freeFuncs :+ f
+        }
+      }
+
       localStore = CRustComponentPlugin.putComponentContributions(
         componentContributions.replaceComponentContributions(
           componentContributions.componentContributions + threadPath ~>
@@ -321,7 +351,8 @@ object GumboRustPlugin {
               markers = markers,
               requiresVerus = T,
               appStructDef = structDef,
-              appStructImpl = structImpl(items = updatedImplItems))),
+              appStructImpl = structImpl(items = updatedImplItems),
+              appFreeFunctions = freeFuncs)),
         localStore)
 
       makefileItems = makefileItems :+ st"make -C $${CRATES_DIR}/${Util.getThreadIdPath(thread)} verus"

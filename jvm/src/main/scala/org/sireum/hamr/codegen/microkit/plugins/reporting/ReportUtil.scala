@@ -6,6 +6,7 @@ import org.sireum.message.{FlatPos, Position}
 import org.sireum.U32._
 import org.sireum.hamr.codegen.common.StringUtil
 import org.sireum.hamr.codegen.common.symbols.{AadlThread, GclAnnexClauseInfo}
+import org.sireum.hamr.codegen.microkit.plugins.reporting.MSDContainers.system
 import org.sireum.hamr.codegen.microkit.reporting._
 import org.sireum.hamr.ir.{Direction, GclNamedElement}
 
@@ -45,11 +46,18 @@ object ReportUtil {
       if (file.exists) {
         file
       } else {
-        // e.g. /isolette-artifacts-sel4/aadl/packages/Regulate.aadl
-        var nameo = ops.StringOps(deWin(file.value))
-        assert(nameo.startsWith("/"), nameo.s)
-        val sub = nameo.substring(nameo.indexOfFrom('/', 1) + 1, nameo.size)
-        workspaceDir / sub
+
+        val nameo = ops.StringOps(deWin(file.value))
+        if (nameo.startsWith("file")) {
+          // probably from sysml
+          Os.Path.fromUri(nameo.s)
+        } else {
+          // probably from osate
+          // e.g. /isolette-artifacts-sel4/aadl/packages/Regulate.aadl
+          assert(nameo.startsWith("/"), nameo.s)
+          val sub = nameo.substring(nameo.indexOfFrom('/', 1) + 1, nameo.size)
+          workspaceDir / sub
+        }
       }
 
     assert(f.exists, f.value)
@@ -65,138 +73,15 @@ object ReportUtil {
       length32 = conversions.Z.toU32(length))
   }
 
-  @pure def findLineNumber(str: String, start: Z, content: ISZ[String]): Z = {
-    assert (start < content.size)
-
-    for (i <- start until content.size) {
-      if (ops.StringOps(content(i)).contains(str)) {
-        return i
-      }
-    }
-    return -1
+  @pure def createFullLink(name: String, title: String, position: Position): ST = {
+    return st"<a title='$title' href='${createLink(position)}'>$name</a>"
   }
 
-
-  @pure def scanForClosingBrace(beginLine: Z, content: ISZ[String]): (Z, HashSMap[String, (Z, Z)]) = {
-    assert (beginLine >= 0)
-    assert(beginLine < content.size)
-
-    var markerLocs: HashSMap[String, (Z, Z)] = HashSMap.empty
-
-    var stack: Stack[String] = Stack.empty
-    var lineIndex = beginLine
-    while (lineIndex < content.size) {
-      val line = conversions.String.toCis(content(lineIndex))
-
-      var inWhitespacePrefix: B = T
-
-      var charIndex: Z = 0
-      while (charIndex < line.size) {
-        val c = line(charIndex)
-
-        if (c == '{') {
-          if (stack.isEmpty || stack.peek.get != "/*") {
-            stack = stack.push("{")
-          }
-        }
-        else if (c == '}') {
-          if (stack.peek.nonEmpty && stack.peek.get != "/*") {
-            // not in a comment block
-            if (stack.peek.nonEmpty && stack.peek.get == "{") {
-              // found closing curly brace
-              stack = stack.pop.get._2
-              if (stack.isEmpty) {
-                return (lineIndex, markerLocs)
-              }
-            } else {
-              halt("Dangling '}'")
-            }
-          }
-        }
-        else if (c == '/' && line(charIndex + 1) == '*') {
-          stack = stack.push("/*")
-          charIndex = charIndex + 1
-        }
-        else if (c == '*' && line(charIndex + 1) == '/') {
-          assert(stack.nonEmpty && stack.peek.get == "/*")
-          stack = stack.pop.get._2
-          charIndex = charIndex + 1
-        }
-        else if (inWhitespacePrefix && c == '/' && line(charIndex + 1) == '/') {
-          // BEGIN MARKER ...
-          if ((charIndex + 15 < line.size) &&
-            line(charIndex + 3) == 'B' && line(charIndex + 4) == 'E' && line(charIndex + 5) == 'G' && line(charIndex + 6) == 'I' && line(charIndex + 7) == 'N' && line(charIndex + 8) == ' ' && line(charIndex + 9) == 'M' && line(charIndex + 10) == 'A' && line(charIndex + 11) == 'R' && line(charIndex + 12) == 'K' && line(charIndex + 13) == 'E' && line(charIndex + 14) == 'R'  && line(charIndex + 15) == ' ') {
-            val name = ops.StringOps(conversions.String.fromCis(ops.ISZOps(line).slice(charIndex + 16, line.size))).trim
-            assert (! markerLocs.contains (name), s"'$name'")
-            markerLocs = markerLocs + name ~> (lineIndex, -1)
-          }
-          // END MARKER ...
-          if ((charIndex + 13 < line.size) &&
-            line(charIndex + 3) == 'E' && line(charIndex + 4) == 'N' && line(charIndex + 5) == 'D' && line(charIndex + 6) == ' ' && line(charIndex + 7) == 'M' && line(charIndex + 8) == 'A' && line(charIndex + 9) == 'R' && line(charIndex + 10) == 'K' && line(charIndex + 11) == 'E' && line(charIndex + 12) == 'R') {
-            val name = ops.StringOps(conversions.String.fromCis(ops.ISZOps(line).slice(charIndex + 14, line.size))).trim
-            val marker = markerLocs.get(name).get
-            markerLocs = markerLocs + name ~> (marker._1, lineIndex)
-          }
-          // ignore rest of characters
-          charIndex = line.size
-        }
-
-        inWhitespacePrefix = inWhitespacePrefix && c.isWhitespace
-
-        charIndex = charIndex + 1
-      }
-      lineIndex = lineIndex + 1
-    }
-    halt("Infeasible if program is well formed")
-  }
-
-  @pure def getName(prefix: String, s: ops.StringOps): Option[String] = {
-    return getNameH(prefix, s, F, F)
-  }
-
-  @pure def getNameH(prefix: String, s: ops.StringOps, scanTillEnd: B, includePeriod: B): Option[String] = {
-    val cis = conversions.String.toCis(s.s)
-    var start: Z = s.stringIndexOf(prefix) + prefix.size + 1
-
-    while (cis(start).isWhitespace) {
-      start = start + 1
-    }
-
-    if (scanTillEnd) {
-      return Some(conversions.String.fromCis(ops.ISZOps(cis).slice(start, s.s.size)))
-    }
-
-    var end: Z = -1
-    var ii: Z = start
-
-    while (end == -1 && ii < cis.size) {
-      if (StringUtil.isLetter(cis(ii)) || StringUtil.isNumber(cis(ii)) || cis(ii) == '_' ||
-        (includePeriod && cis(ii) == '.')) {
-        ii = ii + 1
-      } else {
-        end = ii
-      }
-    }
-    if (end == -1 && ii == cis.size) {
-      end = cis.size
-    }
-
-    if (end != -1) {
-      val s2 = conversions.String.fromCis(ops.ISZOps(cis).slice(start, end))
-      return Some(s2)
-    } else {
-      return None()
-    }
-  }
-
-
-  @pure def createLink(position: Position, rootDir: Os.Path): ST = {
+  @pure def createLink(position: Position): ST = {
 
     val fp = position.asInstanceOf[FlatPos]
-    assert ((rootDir / fp.uriOpt.get).exists, (rootDir / fp.uriOpt.get).value)
 
     return st"${fp.uriOpt.get}#L${fp.beginLine32.toZ}-L${fp.endLine32.toZ}"
-    //return st"$rel#L${fp.beginLine32.toZ}"
   }
 
   @pure def locateText(str: String, singleLine: B, region: ISZ[String]): (Z, Z) = {
@@ -249,7 +134,7 @@ object ReportUtil {
         if (!line.startsWith("--")) {
           if (line.contains("package ")) {
             assert(packageName.isEmpty)
-            packageName = Some(getNameH("package", line, F, T).get)
+            packageName = Some(RustParser.getNameH("package", line, F, T).get)
           }
 
           if (currentComponent.nonEmpty) {
@@ -263,7 +148,7 @@ object ReportUtil {
               gumbo = None()
             }
             else if (line.contains(s"annex ")) {
-              val annexName = getNameH("annex", line, F, T).get
+              val annexName = RustParser.getNameH("annex", line, F, T).get
               if (annexName == "GUMBO") {
                 assert(gumbo.isEmpty, s"There should only be only one gumbo subclause per component: $f")
                 gumbo = Some(buildPos(i, i, f, workspaceRoot, reportDir))
@@ -279,22 +164,22 @@ object ReportUtil {
           }
           else {
             if (line.startsWith("system implementation ")) {
-              currentComponent = Some((getNameH("system implementation", line, F, T).get, i))
+              currentComponent = Some((RustParser.getNameH("system implementation", line, F, T).get, i))
             }
             else if (line.startsWith("system ")) {
-              currentComponent = Some((getNameH("system", line, F, T).get, i))
+              currentComponent = Some((RustParser.getNameH("system", line, F, T).get, i))
             }
             else if (line.startsWith("thread implementation ")) {
-              currentComponent = Some((getNameH("thread implementation", line, F, T).get, i))
+              currentComponent = Some((RustParser.getNameH("thread implementation", line, F, T).get, i))
             }
             else if (line.startsWith("thread ")) {
-              currentComponent = Some((getNameH("thread", line, F, T).get, i))
+              currentComponent = Some((RustParser.getNameH("thread", line, F, T).get, i))
             }
             else if (line.startsWith("data implementation")) {
-              currentComponent = Some((getNameH("data implementation", line, F, T).get, i))
+              currentComponent = Some((RustParser.getNameH("data implementation", line, F, T).get, i))
             }
             else if (line.startsWith("data ")) {
-              currentComponent = Some((getNameH("data", line, F, T).get, i))
+              currentComponent = Some((RustParser.getNameH("data", line, F, T).get, i))
             }
             else if (line.startsWith("annex GUMBO")) {
               // must be a library annex
@@ -342,8 +227,8 @@ object ReportUtil {
           s =
             st"""$s
                 |<tr><td>${e._1}</td>
-                |<td><a href=${createLink(modelPos, rootDir)}>GUMBO</a></td>
-                |<td><a href=${createLink(e._2, rootDir)}>Verus</a></td></tr>"""
+                |<td><a href=${createLink(modelPos)}>GUMBO</a></td>
+                |<td><a href=${createLink(e._2)}>Verus</a></td></tr>"""
         }
         Some(st"$s</table>")
       } else {
@@ -363,9 +248,9 @@ object ReportUtil {
           s =
             st"""$s
                 |<tr><td>${m._1}</td>
-                |<td><a href=${createLink(modelPos, rootDir)}>GUMBO</a></td>
-                |<td><a href=${createLink(m._2, rootDir)}>Verus</a></td>
-                |<td><a href=${createLink(gumbox, rootDir)}>GUMBOX</a></td>
+                |<td><a href=${createLink(modelPos)}>GUMBO</a></td>
+                |<td><a href=${createLink(m._2)}>Verus</a></td>
+                |<td><a href=${createLink(gumbox)}>GUMBOX</a></td>
                 |</tr>"""
         }
         Some(st"$s</table>")
@@ -396,9 +281,9 @@ object ReportUtil {
 
           s = st"""$s
                   |<tr><td>guarantee ${specName}</td>
-                  |<td><a href=${createLink(modelPos, rootDir)}>GUMBO</a></td>
-                  |<td><a href=${createLink(codegenLoc, rootDir)}>Verus</a></td>
-                  |<td><a href=${createLink(gumbox, rootDir)}>GUMBOX</a></td>
+                  |<td><a href=${createLink(modelPos)}>GUMBO</a></td>
+                  |<td><a href=${createLink(codegenLoc)}>Verus</a></td>
+                  |<td><a href=${createLink(gumbox)}>GUMBOX</a></td>
                   |</tr>"""
         }
 
@@ -414,9 +299,9 @@ object ReportUtil {
 
           s = st"""$s
                   |<tr><td>assume ${specName}</td>
-                  |<td><a href=${createLink(modelPos, rootDir)}>GUMBO</a></td>
-                  |<td><a href=${createLink(codegenLoc, rootDir)}>Verus</a></td>
-                  |<td><a href=${createLink(gumbox, rootDir)}>GUMBOX</a></td>
+                  |<td><a href=${createLink(modelPos)}>GUMBO</a></td>
+                  |<td><a href=${createLink(codegenLoc)}>Verus</a></td>
+                  |<td><a href=${createLink(gumbox)}>GUMBOX</a></td>
                   |</tr>"""
         }
         Some(st"$s</table>")
@@ -439,9 +324,9 @@ object ReportUtil {
           s =
             st"""$s
                 |<tr><td>guarantee ${i._1}</td>
-                |<td><a href=${createLink(modelPos, rootDir)}>GUMBO</a></td>
-                |<td><a href=${createLink(i._2, rootDir)}>Verus</a></td>
-                |<td><a href=${createLink(gumbox, rootDir)}>GUMBOX</a></td>
+                |<td><a href=${createLink(modelPos)}>GUMBO</a></td>
+                |<td><a href=${createLink(i._2)}>Verus</a></td>
+                |<td><a href=${createLink(gumbox)}>GUMBOX</a></td>
                 |</tr>"""
         }
         Some(st"$s</table>")
@@ -463,9 +348,9 @@ object ReportUtil {
           s =
             st"""$s
                 |<tr><td>assume ${a._1}</td>
-                |<td><a href=${createLink(modelPos, rootDir)}>GUMBO</a></td>
-                |<td><a href=${createLink(a._2, rootDir)}>Verus</a></td>
-                |<td><a href=${createLink(gumbox, rootDir)}>GUMBOX</a></td>
+                |<td><a href=${createLink(modelPos)}>GUMBO</a></td>
+                |<td><a href=${createLink(a._2)}>Verus</a></td>
+                |<td><a href=${createLink(gumbox)}>GUMBOX</a></td>
                 |</tr>"""
         }
       }
@@ -479,9 +364,9 @@ object ReportUtil {
           s =
             st"""$s
                 |<tr><td>guarantee ${a._1}</td>
-                |<td><a href=${createLink(modelPos, rootDir)}>GUMBO</a></td>
-                |<td><a href=${createLink(a._2, rootDir)}>Verus</a></td>
-                |<td><a href=${createLink(gumbox, rootDir)}>GUMBOX</a></td>
+                |<td><a href=${createLink(modelPos)}>GUMBO</a></td>
+                |<td><a href=${createLink(a._2)}>Verus</a></td>
+                |<td><a href=${createLink(gumbox)}>GUMBOX</a></td>
                 |</tr>"""
         }
       }
@@ -495,9 +380,9 @@ object ReportUtil {
           s =
             st"""$s
                 |<tr><td>case ${a._1}</td>
-                |<td><a href=${createLink(modelPos, rootDir)}>GUMBO</a></td>
-                |<td><a href=${createLink(a._2, rootDir)}>Verus</a></td>
-                |<td><a href=${createLink(gumbox, rootDir)}>GUMBOX</a></td>
+                |<td><a href=${createLink(modelPos)}>GUMBO</a></td>
+                |<td><a href=${createLink(a._2)}>Verus</a></td>
+                |<td><a href=${createLink(gumbox)}>GUMBOX</a></td>
                 |</tr>"""
         }
       }
@@ -529,8 +414,8 @@ object ReportUtil {
 
       s = st"""$s
               |<tr><td>${a._1}</td>
-              |<td><a href=${createLink(portPosRel, sel4OutputDir)}>Model</a></td>
-              |<td><a href=${createLink(a._2, sel4OutputDir)}>Rust API</a></td>"""
+              |<td><a href=${createLink(portPosRel)}>Model</a></td>
+              |<td><a href=${createLink(a._2)}>Rust API</a></td>"""
     }
     return st"$s</table>"
   }
@@ -550,4 +435,8 @@ object ReportUtil {
       println(s"Wrote: $path")
     }
   }
+}
+
+@ext("MSDParser_Ext") object MSDParser {
+  @pure def parse(xml: Os.Path, rootDir: Os.Path): Option[system] = $
 }
