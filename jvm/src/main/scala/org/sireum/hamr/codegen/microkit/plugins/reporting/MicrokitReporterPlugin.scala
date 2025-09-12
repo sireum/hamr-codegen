@@ -442,10 +442,6 @@ import org.sireum.message.{Level, Position, Reporter}
     val outjson = outputDir / s"codegen_report_${if(isAadl) "aadl" else "sysml"}.json"
     ReportUtil.writeOutResourceH(json, outjson, F, options.verbose)
 
-    if (options.verbose) {
-      println(s"Wrote: $outjson")
-    }
-
     return localStore
   }
 

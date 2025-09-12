@@ -421,16 +421,21 @@ object ReportUtil {
   }
 
   @pure def writeOutResource(content: ST, path: Os.Path, makeCrlf: B, verbose: B): Unit = {
-    writeOutResourceH(content.render, path, makeCrlf, verbose)
-  }
-
-  @pure def writeOutResourceH(content: String, path: Os.Path, makeCrlf: B, verbose: B): Unit = {
     val lineSep: String = if (Os.isWin) "\r\n" else "\n" // ST render uses System.lineSep
     val replace: String = if (makeCrlf) "\r\n" else "\n"
-    path.writeOver(ops.StringOps(content).replaceAllLiterally(lineSep, replace))
+    val c: String =
+      if (lineSep == replace) content.render
+      else ops.StringOps(content.render).replaceAllLiterally(lineSep, replace)
+    writeOutResourceH(c, path, makeCrlf, verbose)
+  }
+
+  @pure def writeOutResourceH(content: String, path: Os.Path, makeCrlf: B,verbose: B): Unit = {
+    path.writeOver(content)
+
     if (makeCrlf) {
       path.chmod("770")
     }
+
     if (verbose) {
       println(s"Wrote: $path")
     }
