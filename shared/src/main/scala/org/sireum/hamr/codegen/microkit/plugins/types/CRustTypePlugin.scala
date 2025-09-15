@@ -227,14 +227,14 @@ object CRustTypePlugin {
                         |${RustUtil.commonCargoTomlEntries}
                         |"""
       val cargoTomlPath = s"${rootDataDir}/Cargo.toml"
-      resources = resources :+ ResourceUtil.createResourceH(path = cargoTomlPath, content = content, overwrite = T, isDatatype = T)
+      resources = resources :+ ResourceUtil.createResourceH(path = cargoTomlPath, content = content, overwrite = F, isDatatype = T)
     }
 
     { // rust-toolchain.toml
       val content = RustUtil.defaultRustToolChainToml
 
       val rusttoolchain = s"${rootDataDir}/rust-toolchain.toml"
-      resources = resources :+ ResourceUtil.createResourceH(path = rusttoolchain, content = content, overwrite = T, isDatatype = T)
+      resources = resources :+ ResourceUtil.createResourceH(path = rusttoolchain, content = content, overwrite = F, isDatatype = T)
     }
 
     return (store + s"FINALIZED_$name" ~> BoolValue(true), resources)

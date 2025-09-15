@@ -237,6 +237,7 @@ import org.sireum.ops.StringOps
             dstPath = dstPath,
             content = i.content,
             markers = i.markers,
+            invertMarkers = F,
             overwrite = i.overwrite,
             makeExecutable = i.makeExecutable,
             makeCRLF = i.makeCRLF,

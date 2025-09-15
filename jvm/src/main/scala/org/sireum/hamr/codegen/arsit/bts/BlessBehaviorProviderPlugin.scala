@@ -46,6 +46,7 @@ object BlessBehaviorProviderPlugin {
               dstPath = filename,
               content = st"${t.source}",
               markers = ISZ(),
+              invertMarkers = F,
               overwrite = t.overwrite,
               makeExecutable = F,
               makeCRLF = F,

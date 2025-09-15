@@ -64,6 +64,7 @@ object Marker {
   def dstPath: String
   def content: ST
   def markers: ISZ[Marker]
+  def invertMarkers: B
   def overwrite: B
   def makeExecutable: B
   def makeCRLF: B
@@ -74,13 +75,20 @@ object Marker {
 @datatype class IResource(val dstPath: String,
                           val content: ST,
                           val markers: ISZ[Marker],
+                          val invertMarkers: B,
                           val overwrite: B,
                           val makeExecutable: B,
                           val makeCRLF: B,
 
                           // isDataype indicates whether resource should be added to sergen/slangcheck
                           val isDatatype: B
-                         ) extends InternalResource
+                         ) extends InternalResource {
+
+  // overwrite should be false if invertMarkers is true
+  @spec def validFlags = Invariant(
+    invertMarkers -->: !overwrite
+  )
+}
 
 @sig trait ExternalResource extends FileResource {
   def srcPath: String

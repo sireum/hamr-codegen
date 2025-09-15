@@ -78,7 +78,7 @@ import org.sireum.{B, strictpure}
           val path = Os.path(i.dstPath)
           assert(path.exists, path.value)
 
-          if (i.overwrite) {
+          if (i.overwrite || (i.markers.nonEmpty && i.invertMarkers)) {
             codegenFiles = codegenFiles :+ path
           }
         case e: ExternalResource => halt(s"Not expecting $e")

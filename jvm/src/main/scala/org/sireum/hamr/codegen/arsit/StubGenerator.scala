@@ -308,6 +308,11 @@ import org.sireum.hamr.ir._
   }
 
   def addResourceWithMarkers(baseDir: String, paths: ISZ[String], content: ST, markers: ISZ[Marker], overwrite: B): Unit = {
-    resources = resources :+ ResourceUtil.createResourceWithMarkers(Util.pathAppend(baseDir, paths), content, markers, overwrite)
+    resources = resources :+ ResourceUtil.createResourceWithMarkers(
+      path = Util.pathAppend(baseDir, paths),
+      content = content,
+      markers = markers,
+      invertMarkers = F,
+      overwrite = overwrite)
   }
 }

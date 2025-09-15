@@ -10,60 +10,107 @@ object ResourceUtil {
   def createResource(path: String,
                      content: ST,
                      overwrite: B): FileResource = {
-    return createResourceH(path, content, overwrite, F)
+    return createResourceH(path = path, content = content, overwrite = overwrite, isDatatype = F)
   }
 
   def createResourceH(path: String,
-                     content: ST,
-                     overwrite: B,
-                     isDatatype: B): FileResource = {
-    return IResource(path, content, ISZ(), overwrite, F, F, isDatatype)
+                      content: ST,
+                      overwrite: B,
+                      isDatatype: B): FileResource = {
+    return IResource(
+      dstPath = path,
+      content = content,
+      markers = ISZ(),
+      invertMarkers = F,
+      overwrite = overwrite,
+      makeExecutable = F,
+      makeCRLF = F,
+      isDatatype = isDatatype)
   }
 
   def createResourceWithMarkers(path: String,
                                 content: ST,
                                 markers: ISZ[Marker],
+                                invertMarkers: B,
                                 overwrite: B): FileResource = {
-    return createResourceWithMarkersH(path, content, markers, overwrite, F)
+    return createResourceWithMarkersH(
+      path = path,
+      content = content,
+      markers = markers,
+      invertMarkers = invertMarkers,
+      overwrite = overwrite,
+      isDatatype = F)
   }
 
   def createResourceWithMarkersH(path: String,
                                  content: ST,
                                  markers: ISZ[Marker],
+                                 invertMarkers: B,
                                  overwrite: B,
                                  isDatatype: B): FileResource = {
-    return IResource(path, content, markers, overwrite, F, F, isDatatype)
+
+    assert (invertMarkers -->: !overwrite, "Overwrite should be false when inverted markers are used")
+
+    return IResource(
+      dstPath = path,
+      content = content,
+      markers = markers,
+      invertMarkers = invertMarkers,
+      overwrite = overwrite,
+      makeExecutable = F,
+      makeCRLF = F,
+      isDatatype = isDatatype)
   }
 
   def createExeResource(path: String,
                         content: ST,
                         overwrite: B): FileResource = {
-    return IResource(path, content, ISZ(), overwrite, T, F, F)
+    return IResource(
+      dstPath = path,
+      content = content,
+      markers = ISZ(),
+      invertMarkers = F,
+      overwrite = overwrite,
+      makeExecutable = T,
+      makeCRLF = F,
+      isDatatype = F)
   }
 
   def createExeCrlfResource(path: String,
                             content: ST,
                             overwrite: B): FileResource = {
-    return IResource(path, content, ISZ(), overwrite, T, T, F)
+    return IResource(
+      dstPath = path,
+      content = content,
+      markers = ISZ(),
+      invertMarkers = F,
+      overwrite = overwrite,
+      makeExecutable = T,
+      makeCRLF = T,
+      isDatatype = F)
   }
 
   def createStringResource(path: String,
                            content: String,
                            overwrite: B): FileResource = {
-    return createStringResourceH(path, content, overwrite, F)
+    return createStringResourceH(
+      path = path,
+      content = content,
+      overwrite = overwrite,
+      isDatatype = F)
   }
 
   def createStringResourceH(path: String,
-                           content: String,
-                           overwrite: B,
-                           isDatatype: B): FileResource = {
-    return createResourceH(path, st"${content}", overwrite, isDatatype)
+                            content: String,
+                            overwrite: B,
+                            isDatatype: B): FileResource = {
+    return createResourceH(path = path, content = st"${content}", overwrite = overwrite, isDatatype = isDatatype)
   }
 
   def createExeStringResource(path: String,
                               content: String,
                               overwrite: B): FileResource = {
-    return createExeResource(path, st"${content}", overwrite)
+    return createExeResource(path = path, content = st"${content}", overwrite = overwrite)
   }
 
   def createExternalResource(srcPath: String, dstPath: String, symLink: B): FileResource = {

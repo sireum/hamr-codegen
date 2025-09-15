@@ -53,6 +53,7 @@ object TestMsgPack {
       writer.writeZ(Constants.ITestResource)
       writer.writeString(o.content)
       writer.writeISZ(o.markers, writeTestMarker _)
+      writer.writeB(o.invertMarkers)
       writer.writeB(o.overwrite)
       writer.writeB(o.makeExecutable)
       writer.writeB(o.makeCRLF)
@@ -128,11 +129,12 @@ object TestMsgPack {
       }
       val content = reader.readString()
       val markers = reader.readISZ(readTestMarker _)
+      val invertMarkers = reader.readB()
       val overwrite = reader.readB()
       val makeExecutable = reader.readB()
       val makeCRLF = reader.readB()
       val isDatatype = reader.readB()
-      return ITestResource(content, markers, overwrite, makeExecutable, makeCRLF, isDatatype)
+      return ITestResource(content, markers, invertMarkers, overwrite, makeExecutable, makeCRLF, isDatatype)
     }
 
     def readETestResource(): ETestResource = {

@@ -1074,7 +1074,12 @@ object GumboXRuntimeMonitoring {
           |}"""
 
     val rmpathExt = s"${runtimePath}/RuntimeMonitor_Ext.scala"
-    resources = resources :+ ResourceUtil.createResourceWithMarkers(rmpathExt, runtimeMonitorExt, ISZ(drmMarker), F)
+    resources = resources :+ ResourceUtil.createResourceWithMarkers(
+      path = rmpathExt,
+      content = runtimeMonitorExt,
+      markers = ISZ(drmMarker),
+      invertMarkers = F,
+      overwrite = F)
 
     val gui: ST =
       st"""// #Sireum

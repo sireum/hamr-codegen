@@ -2,12 +2,21 @@
 package org.sireum.hamr.codegen.microkit.util
 
 import org.sireum._
-import org.sireum.hamr.codegen.microkit.util.Util.{KiBytesToHex}
+import org.sireum.hamr.codegen.common.containers.Marker
+import org.sireum.hamr.codegen.microkit.util.Util.KiBytesToHex
 
 @datatype class SystemDescription (val schedulingDomains: ISZ[SchedulingDomain],
                                    val protectionDomains: ISZ[ProtectionDomain],
                                    val memoryRegions: ISZ[MemoryRegion],
                                    val channels: ISZ[Channel]) {
+
+  val contentMarker: Marker = Marker(
+    beginMarker = "<!-- BEGIN MSD CONTENT MARKER -->",
+    endMarker = "<!-- END MSD CONTENT MARKER -->")
+
+  @pure def getMarkers: ISZ[Marker] = {
+    return ISZ(contentMarker)
+  }
 
   val stSchedulingDomain: Option[ST] =
     if (schedulingDomains.nonEmpty) Some(
@@ -23,6 +32,8 @@ import org.sireum.hamr.codegen.microkit.util.Util.{KiBytesToHex}
     val ret =
       st"""<?xml version="1.0" encoding="UTF-8"?>
           |<system>
+          |  <!-- Content in between markers will be preserved if codegen is rerun -->
+          |
           |  $stSchedulingDomain
           |
           |  ${(stProtectionDomains, "\n\n")}
@@ -30,6 +41,9 @@ import org.sireum.hamr.codegen.microkit.util.Util.{KiBytesToHex}
           |  ${(stMemoryRegions, "\n\n")}
           |
           |  ${(stChannels, "\n\n")}
+          |
+          |  ${contentMarker.beginMarker}
+          |  ${contentMarker.endMarker}
           |</system>"""
     return ret
   }
@@ -77,6 +91,8 @@ import org.sireum.hamr.codegen.microkit.util.Util.{KiBytesToHex}
   def toDot: ST
 
   def getDotMemConnections: ISZ[ST]
+
+  def getMarkers: ISZ[Marker]
 }
 
 @datatype class VirtualMachine(val name: String,
@@ -84,7 +100,7 @@ import org.sireum.hamr.codegen.microkit.util.Util.{KiBytesToHex}
                                val schedulingDomain: Option[Z],
                                val memMaps: ISZ[MemoryMap]) extends MicrokitDomain {
 
-  override def prettyST: ST = {
+  @pure override def prettyST: ST = {
     val stMaps: Option[ST] =
       if (memMaps.nonEmpty) Some(st"${(for (m <- memMaps) yield m.prettyST, "\n")}")
       else None()
@@ -94,12 +110,16 @@ import org.sireum.hamr.codegen.microkit.util.Util.{KiBytesToHex}
                 |</virtual_machine>""")
   }
 
-  override def toDot: ST = {
+  @pure override def toDot: ST = {
     return st"toDot: TODO"
   }
 
-  override def getDotMemConnections: ISZ[ST] = {
+  @pure override def getDotMemConnections: ISZ[ST] = {
     return ISZ(st"getDotMemConnections: TODO")
+  }
+
+  @pure override def getMarkers: ISZ[Marker] = {
+    return ISZ()
   }
 }
 
@@ -113,6 +133,14 @@ import org.sireum.hamr.codegen.microkit.util.Util.{KiBytesToHex}
                                   val programImage: String,
 
                                   val children: ISZ[MicrokitDomain]) extends MicrokitDomain {
+  val contentMarker: Marker = Marker(
+    beginMarker = s"<!-- BEGIN CONTENT MARKER $name -->",
+    endMarker = s"<!-- END CONTENT MARKER $name -->")
+
+  @pure override def getMarkers: ISZ[Marker] = {
+    return ISZ(contentMarker) ++ ((for (c <- children) yield c.getMarkers).flatMap((s: ISZ[Marker]) => s))
+  }
+
   @pure def prettyST: ST = {
     val domain: Option[ST] =
       if (schedulingDomain.nonEmpty) Some(st""" domain="domain_${schedulingDomain.get}"""")
@@ -141,6 +169,9 @@ import org.sireum.hamr.codegen.microkit.util.Util.{KiBytesToHex}
           |  $stMaps
           |  $irqsOpt
           |  $stChildren
+          |
+          |  ${contentMarker.beginMarker}
+          |  ${contentMarker.endMarker}
           |</protection_domain>"""
     return ret
   }

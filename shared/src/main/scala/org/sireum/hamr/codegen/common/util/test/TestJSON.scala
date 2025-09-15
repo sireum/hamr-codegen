@@ -37,6 +37,7 @@ object TestJSON {
         ("type", st""""ITestResource""""),
         ("content", printString(o.content)),
         ("markers", printISZ(F, o.markers, printTestMarker _)),
+        ("invertMarkers", printB(o.invertMarkers)),
         ("overwrite", printB(o.overwrite)),
         ("makeExecutable", printB(o.makeExecutable)),
         ("makeCRLF", printB(o.makeCRLF)),
@@ -110,6 +111,9 @@ object TestJSON {
       parser.parseObjectKey("markers")
       val markers = parser.parseISZ(parseTestMarker _)
       parser.parseObjectNext()
+      parser.parseObjectKey("invertMarkers")
+      val invertMarkers = parser.parseB()
+      parser.parseObjectNext()
       parser.parseObjectKey("overwrite")
       val overwrite = parser.parseB()
       parser.parseObjectNext()
@@ -122,7 +126,7 @@ object TestJSON {
       parser.parseObjectKey("isDatatype")
       val isDatatype = parser.parseB()
       parser.parseObjectNext()
-      return ITestResource(content, markers, overwrite, makeExecutable, makeCRLF, isDatatype)
+      return ITestResource(content, markers, invertMarkers, overwrite, makeExecutable, makeCRLF, isDatatype)
     }
 
     def parseETestResource(): ETestResource = {

@@ -8,11 +8,14 @@ import org.sireum._
   def content: String
 }
 
+// JSON serializer cannot serialize STs so create 'testing' versions
+// which store strings instead
 @datatype class TestMarker(val beginMarker: String,
                            val endMarker: String)
 
 @datatype class ITestResource(val content: String,
                               val markers: ISZ[TestMarker],
+                              val invertMarkers: B,
                               val overwrite: B,
                               val makeExecutable: B,
                               val makeCRLF: B,

@@ -73,7 +73,15 @@ object Ros2Codegen {
         case _ => filePath
       }
 
-      resources = resources :+ IResource(absPath, file._2, file._4, file._3, F, F, F)
+      resources = resources :+ IResource(
+        dstPath = absPath,
+        content = file._2,
+        markers = file._4,
+        invertMarkers = T,
+        overwrite = file._3,
+        makeExecutable = F,
+        makeCRLF = F,
+        isDatatype = F)
     }
 
     return (Ros2Results(resources), store)

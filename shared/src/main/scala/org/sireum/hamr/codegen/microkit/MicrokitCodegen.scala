@@ -2,7 +2,7 @@
 package org.sireum.hamr.codegen.microkit
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.containers.Resource
+import org.sireum.hamr.codegen.common.containers.{Marker, Resource}
 import org.sireum.hamr.codegen.common.CommonUtil.{BoolValue, Store}
 import org.sireum.hamr.codegen.common.plugin.Plugin
 import org.sireum.hamr.codegen.common.symbols.{AadlPort, AadlThread, SymbolTable}
@@ -692,6 +692,8 @@ object MicrokitCodegen {
       memoryRegions = memoryRegions :+ s
     }
 
+    val markers: ISZ[Marker] = ((for (p <- xmlProtectionDomains) yield p.getMarkers)).flatMap((s: ISZ[Marker]) => s)
+
     val sd = SystemDescription(
       schedulingDomains = xmlScheds,
       protectionDomains = xmlProtectionDomains,
@@ -699,7 +701,12 @@ object MicrokitCodegen {
       channels = xmlChannels)
 
     val xmlPath = s"${options.sel4OutputDir.get}/${MicrokitCodegen.microkitSystemXmlFilename}"
-    resources = resources :+ ResourceUtil.createResource(path = xmlPath, content = sd.prettyST, overwrite = T)
+    resources = resources :+ ResourceUtil.createResourceWithMarkers(
+      path = xmlPath,
+      content = sd.prettyST,
+      markers = markers,
+      invertMarkers = T,
+      overwrite = F)
 
     val sysDot = sd.toDot
     val dotPath = s"${options.sel4OutputDir.get}/microkit.dot"

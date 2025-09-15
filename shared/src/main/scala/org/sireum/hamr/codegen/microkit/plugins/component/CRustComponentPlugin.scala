@@ -460,7 +460,12 @@ object ComponentContributions {}
               |$body
               |"""
         val path = s"$componentDir/$modName.rs"
-        resources = resources :+ ResourceUtil.createResourceWithMarkers(path, content, e._2.markers, F)
+        resources = resources :+ ResourceUtil.createResourceWithMarkers(
+          path = path,
+          content = content,
+          markers= e._2.markers,
+          invertMarkers = F,
+          overwrite = F)
       }
 
       { // src/component/mod.rs

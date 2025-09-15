@@ -80,6 +80,7 @@ object Arsit {
       path = Util.pathAppend(projectDirectories.architectureDir, ISZ(arsitOptions.packageName, "Platform.scala")),
       content =  PlatformTemplate.createPlatform(arsitOptions.packageName, plaformContributions),
       markers = PlatformTemplate.markers,
+      invertMarkers = F,
       overwrite = F)
 
     val maxPortId: Z = nixPhase.maxPort + ArsitConfigurationPlugin.getAdditionalPortIds(ExperimentalOptions.addPortIds(arsitOptions.experimentalOptions), plugins, ReporterUtil.reporter)
