@@ -5,6 +5,7 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.containers.{Marker, Resource}
 import org.sireum.hamr.codegen.common.CommonUtil.{BoolValue, Store}
 import org.sireum.hamr.codegen.common.plugin.Plugin
+import org.sireum.hamr.codegen.common.properties.Hamr_Microkit_Properties
 import org.sireum.hamr.codegen.common.symbols.{AadlPort, AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.HamrCli.CodegenOption
@@ -77,6 +78,8 @@ object MicrokitCodegen {
           memMaps = ISZ(),
           irqs = ISZ(),
           programImage = s"${MicrokitCodegen.pacerName}.elf",
+          smc = None(),
+          passive = None(),
           children = ISZ())
 
       portPacerToEndOfFrame = getNextPacerChannelId
@@ -360,6 +363,8 @@ object MicrokitCodegen {
           memMaps = childMemMaps,
           irqs = childIrqs,
           programImage = mk.elfName,
+          smc = Hamr_Microkit_Properties.getSmc(t.properties),
+          passive = Hamr_Microkit_Properties.getPassive(t.properties),
           children = vms)
 
       xmlProtectionDomains = xmlProtectionDomains :+
@@ -371,6 +376,8 @@ object MicrokitCodegen {
           memMaps = ISZ(),
           irqs = ISZ(),
           programImage = mk.monElfName,
+          smc = None(),
+          passive = None(),
           children = ISZ(child))
 
       val pacerChannelId = getNextPacerChannelId

@@ -127,6 +127,8 @@ import org.sireum.hamr.codegen.microkit.util.Util.KiBytesToHex
                                   val schedulingDomain: Option[Z],
                                   val id: Option[String],
                                   val stackSizeInKiBytes: Option[Z],
+                                  val smc: Option[B],
+                                  val passive: Option[B],
 
                                   val memMaps: ISZ[MemoryMap],
                                   val irqs: ISZ[IRQ],
@@ -148,6 +150,22 @@ import org.sireum.hamr.codegen.microkit.util.Util.KiBytesToHex
     val stId: Option[ST] =
       if (id.nonEmpty) Some(st""" id="${id.get}"""")
       else None()
+    val stackSizeOpt: Option[ST] =
+      stackSizeInKiBytes match {
+        case Some(k) => Some(st""" stack_size="${KiBytesToHex(k)}"""")
+        case _ => None()
+      }
+    val smcOpt: Option[ST] = {
+      smc match {
+        case Some(v) => Some(st""" smc="${if(v) "true" else "false"}"""")
+        case _ => None()
+      }
+    }
+    val passiveOpt: Option[ST] =
+      passive match {
+        case Some(v) => Some(st""" passive="${if(v) "true" else "false"}"""")
+        case _ => None()
+      }
 
     val stChildren: Option[ST] =
       if (children.nonEmpty) Some(st"${(for (c <- children) yield c.prettyST, "\n")}")
@@ -158,13 +176,9 @@ import org.sireum.hamr.codegen.microkit.util.Util.KiBytesToHex
     val irqsOpt: Option[ST] =
       if (irqs.nonEmpty) Some(st"${(for (i <- irqs) yield i.prettyST, "\n")}")
       else None()
-    val stackSizeOpt: Option[ST] =
-      stackSizeInKiBytes match {
-        case Some(k) => Some(st""" stack_size="${KiBytesToHex(k)}"""")
-        case _ => None()
-      }
+
     val ret =
-      st"""<protection_domain name="$name"$domain$stId$stackSizeOpt>
+      st"""<protection_domain name="$name"$domain$stId$stackSizeOpt$smcOpt$passiveOpt>
           |  <program_image path="$programImage" />
           |  $stMaps
           |  $irqsOpt

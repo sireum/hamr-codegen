@@ -3,6 +3,8 @@
 package org.sireum.hamr.codegen.common.properties
 
 import org.sireum._
+import org.sireum.hamr.ir.Property
+import org.sireum.hamr.ir.ValueProp
 
 object OsateProperties {
   val DATA_MODEL__DATA_REPRESENTATION: String = "Data_Model::Data_Representation"
@@ -48,6 +50,35 @@ object HamrProperties {
   val HAMR__BIT_CODEC_MAX_SIZE: String = "HAMR::Bit_Codec_Max_Size"
   val HAMR__BIT_CODEC_RAW_CONNECTIONS: String = "HAMR::Bit_Codec_Raw_Connections"
   val HAMR__MICROKIT_LANGUAGE: String = "HAMR::Microkit_Language"
+}
+
+object Hamr_Microkit_Properties {
+  val HAMR_MICROKIT__SMC: String = "HAMR_Microkit::SMC"
+  val HAMR_MICROKIT__PASSIVE: String = "HAMR_Microkit::Passive"
+
+  @pure def getBoolValue(properties: ISZ[Property], key: String): Option[B] = {
+    PropertyUtil.getDiscreetPropertyValue(properties, key) match {
+      case Some(ValueProp(value)) =>
+        if (value == "true") {
+          return Some(T)
+        }
+        else if (value == "false") {
+          return Some(F)
+        } else {
+          halt(s"Unexpected value: $value")
+        }
+      case Some(x) => halt(s"Unexpected: $x")
+      case _ => return None()
+    }
+  }
+
+  @pure def getSmc(properties: ISZ[Property]): Option[B] = {
+    return getBoolValue(properties, HAMR_MICROKIT__SMC)
+  }
+
+  @pure def getPassive(properties: ISZ[Property]): Option[B] = {
+    return getBoolValue(properties, HAMR_MICROKIT__PASSIVE)
+  }
 }
 
 object CaseSchedulingProperties {
