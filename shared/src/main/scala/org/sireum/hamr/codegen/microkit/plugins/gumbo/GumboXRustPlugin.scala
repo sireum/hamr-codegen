@@ -224,19 +224,29 @@ object ComputeContributions {
           kind = RAST.TyPath(ISZ(ISZ(s.typeNameProvider.qualifiedRustName)), None()))
       }
 
-      structContainer = structContainer(items = varItems ++ structContainer.items)
-      putterContainer = putterContainer(body = Some(RAST.MethodBody(putterContainerBody)))
+      structContainer = structContainer(
+        ident = RAST.IdentString("PreStateContainer_wLV"),
+        items = varItems ++ structContainer.items)
+      putterContainer = putterContainer(
+        sig  = putterContainer.sig(
+          ident = RAST.IdentString("put_concrete_inputs_container_wLV"),
+          fnDecl = putterContainer.sig.fnDecl(
+            inputs = ISZ(RAST.ParamImpl(
+              ident = RAST.IdentString("container"),
+              kind = RAST.TyPath(ISZ(ISZ("PreStateContainer_wLV")), None())))
+          )
+        ),
+        body = Some(RAST.MethodBody(putterContainerBody)))
       putter = putter(
-        body = Some(RAST.MethodBody(putterBody)),
-        sig = putter.sig(fnDecl = putter.sig.fnDecl(inputs = putterParams ++ putter.sig.fnDecl.inputs))
+        sig = putter.sig(
+          ident = RAST.IdentString("put_concrete_inputs_wLV"),
+          fnDecl = putter.sig.fnDecl(inputs = putterParams ++ putter.sig.fnDecl.inputs)),
+        body = Some(RAST.MethodBody(putterBody))
       )
 
-      val updatedApis =
-        update("PreStateContainer", structContainer,
-          update("put_concrete_inputs_container", putterContainer,
-            update("put_concrete_inputs", putter, testingApis)))
+      val updatedApis = ISZ[RAST.Item](structContainer, putterContainer, putter) ++ testingApis
 
-      return update("PreStateContainer", structContainer, updatedApis)
+      return updatedApis
     }
    }
 
@@ -1003,6 +1013,14 @@ object ComputeContributions {
     var test_api_rs_Items: ISZ[RAST.Item] = ISZ()
     var tests_rs_Items: ISZ[ST] = ISZ()
 
+    test_api_rs_Items = test_api_rs_Items :+ RAST.EnumDef(
+      attributes = ISZ(),
+      visibility = RAST.Visibility.Public,
+      ident = RAST.IdentString("HarnessResult"),
+      items = ISZ[RAST.EnumValue](
+        RAST.EnumValue(RAST.Visibility.Private, RAST.IdentString("RejectedPrecondition"), None()),
+        RAST.EnumValue(RAST.Visibility.Private, RAST.IdentString("FailedPostcondition(TestCaseError)"), None()),
+        RAST.EnumValue(RAST.Visibility.Private, RAST.IdentString("Passed"), None())))
 
     val testInitializeCB = "testInitializeCB"
     val testComputeCB = "testComputeCB"
@@ -1025,12 +1043,11 @@ object ComputeContributions {
           assert(iep_post.sig.ident.string == GumboXRustUtil.getInitialize_IEP_Post_MethodName)
           Some(
             st"""// [CheckPost]: invoke the oracle function
-                |prop_assert!(
-                |  GUMBOX::${iep_post.sig.ident.string}(
-                |    ${(for (p <- sorted_iep_post_param) yield p.name, ",\n")}
-                |  ),
-                |  "Postcondition failed: incorrect output behavior"
-                |);
+                |if !GUMBOX::${iep_post.sig.ident.string} (${(for (p <- sorted_iep_post_param) yield p.name, ", ")}) {
+                |  return HarnessResult::FailedPostcondition(
+                |    TestCaseError::Fail("Postcondition failed: incorrect output behavior".into())
+                |  );
+                |}
                 |""")
         } else {
           None()
@@ -1042,8 +1059,7 @@ object ComputeContributions {
             |
             |$postStateFetchOpt
             |$postOpt
-            |// Return Ok(()) if all assertions pass
-            |Ok(())"""
+            |return HarnessResult::Passed"""
       val testInitialize = RAST.FnImpl(
         visibility = RAST.Visibility.Public,
         sig = RAST.FnSig(
@@ -1051,7 +1067,7 @@ object ComputeContributions {
           fnHeader = RAST.FnHeader(F),
           fnDecl = RAST.FnDecl(
             inputs = ISZ(),
-            outputs = RAST.FnRetTyImpl(RAST.TyFixMe(st"Result<(), TestCaseError>"))),
+            outputs = RAST.FnRetTyImpl(RAST.TyFixMe(st"HarnessResult"))),
           verusHeader = None(), generics = None()),
         body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(initBody)))),
         comments = ISZ(RAST.CommentST(
@@ -1073,7 +1089,15 @@ object ComputeContributions {
             |  #[test]
             |  #[serial]
             |  fn $$test_name(empty in ::proptest::strategy::Just(())) {
-            |    $$crate::bridge::test_api::${testInitializeCB}()?;
+            |    match $$crate::bridge::test_api::${testInitializeCB}() {
+            |      $$crate::bridge::test_api::HarnessResult::RejectedPrecondition => {
+            |        unreachable!("This branch is infeasible")
+            |      }
+            |      $$crate::bridge::test_api::HarnessResult::FailedPostcondition(e) => {
+            |        return Err(e)
+            |      }
+            |      $$crate::bridge::test_api::HarnessResult::Passed => { }
+            |    }
             |  }
             |}"""
       val testInitialize_CB_macro = RAST.MacroImpl(
@@ -1106,11 +1130,8 @@ object ComputeContributions {
       if (computeContributions.CEP_Pre.nonEmpty)
         Some(
           st"""// [CheckPre]: check/filter based on pre-condition.
-              |prop_assume! {
-              |  GUMBOX::${computeContributions.CEP_Pre.get.sig.ident.prettyST} (
-              |    ${(for (p <- sorted_Pre_State_Params) yield p.name, ",\n")}
-              |  ),
-              |   "Precondition failed: invalid input combination"
+              |if !GUMBOX::${computeContributions.CEP_Pre.get.sig.ident.prettyST} (${(for (p <- sorted_Pre_State_Params) yield p.name, ", ")}) {
+              |  return HarnessResult::RejectedPrecondition;
               |}
               |""")
       else None()
@@ -1136,12 +1157,9 @@ object ComputeContributions {
       if (computeContributions.CEP_Post.nonEmpty)
         Some(
           st"""// [CheckPost]: invoke the oracle function
-              |prop_assert!(
-              |  GUMBOX::${computeContributions.CEP_Post.get.sig.ident.prettyST}(
-              |    ${(for (p <- sorted_Post_State_Params) yield p.name, ",\n")}
-              |  ),
-              |  "Postcondition failed: incorrect output behavior"
-              |);
+              |if !GUMBOX::${computeContributions.CEP_Post.get.sig.ident.prettyST}(${(for (p <- sorted_Post_State_Params) yield p.name, ", ")}) {
+              |  return HarnessResult::FailedPostcondition(TestCaseError::Fail("Postcondition failed: incorrect output behavior".into()));
+              |}
               |""")
       else None()
 
@@ -1174,8 +1192,11 @@ object ComputeContributions {
             |
             |$postStateFetchOpt
             |$postOpt
-            |// Return Ok(()) if all assertions pass
-            |Ok(())"""
+            |return HarnessResult::Passed"""
+
+      val computeCBBodyContainer: ST =
+        st"""return $testComputeCB(${(for (p <- sorted_pre_without_state_vars) yield st"container.${p.name}", ", ")})"""
+
       val testComputeWithoutStateVars = RAST.FnImpl(
         visibility = RAST.Visibility.Public,
         sig = RAST.FnSig(
@@ -1183,7 +1204,7 @@ object ComputeContributions {
           fnHeader = RAST.FnHeader(F),
           fnDecl = RAST.FnDecl(
             inputs = for (p <- sorted_pre_without_state_vars) yield p.toRustParam,
-            outputs = RAST.FnRetTyImpl(RAST.TyFixMe(st"Result<(), TestCaseError>"))),
+            outputs = RAST.FnRetTyImpl(RAST.TyFixMe(st"HarnessResult"))),
           verusHeader = None(), generics = None()),
         body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(computeCBBody)))),
         comments = ISZ(RAST.CommentST(
@@ -1194,6 +1215,26 @@ object ComputeContributions {
         attributes = ISZ(), contract = None(), meta = ISZ())
 
       test_api_rs_Items = test_api_rs_Items :+ testComputeWithoutStateVars
+
+
+      val testComputeContainerWithoutStateVars = RAST.FnImpl(
+        visibility = RAST.Visibility.Public,
+        sig = RAST.FnSig(
+          ident = RAST.IdentString(s"${testComputeCB}_container"),
+          fnHeader = RAST.FnHeader(F),
+          fnDecl = RAST.FnDecl(
+            inputs = ISZ(RAST.ParamImpl(
+              ident = RAST.IdentString("container"),
+              kind = RAST.TyPath(ISZ(ISZ("PreStateContainer")), None()))),
+            outputs = RAST.FnRetTyImpl(RAST.TyFixMe(st"HarnessResult"))),
+          verusHeader = None(), generics = None()),
+        body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(computeCBBodyContainer)))),
+        comments = ISZ(RAST.CommentST(
+          st"""/** Contract-based test harness for the compute entry point
+              |  */""")),
+        attributes = ISZ(), contract = None(), meta = ISZ())
+
+      test_api_rs_Items = test_api_rs_Items :+ testComputeContainerWithoutStateVars
     }
 
     { // test_compute_CB_macro
@@ -1218,9 +1259,17 @@ object ComputeContributions {
             |    (${(for (p <- sorted_pre_without_state_vars) yield p.name, ", ")})
             |    in (${(for (p <- sorted_pre_without_state_vars) yield s"$$${p.name}_strat", ", ")})
             |  ) {
-            |    $$crate::bridge::test_api::${testComputeCB}(
-            |      ${(for (p <- sorted_pre_without_state_vars) yield p.name, ",\n")}
-            |    )?;
+            |    match$$crate::bridge::test_api::${testComputeCB}(${(for (p <- sorted_pre_without_state_vars) yield p.name, ", ")}) {
+            |      $$crate::bridge::test_api::HarnessResult::RejectedPrecondition => {
+            |        return Err(proptest::test_runner::TestCaseError::reject(
+            |          "Precondition failed: invalid input combination",
+            |        ))
+            |      }
+            |      $$crate::bridge::test_api::HarnessResult::FailedPostcondition(e) => {
+            |        return Err(e)
+            |      }
+            |      $$crate::bridge::test_api::HarnessResult::Passed => { }
+            |    }
             |  }
             |}"""
       val test_compute_CB_macro = RAST.MacroImpl(
@@ -1261,8 +1310,8 @@ object ComputeContributions {
             |}"""
     }
 
-    { // test_compute_CBwL
-      val stateVars = sorted_Pre_State_Params.filter(p => p.isStateVar)
+    val stateVars = sorted_Pre_State_Params.filter(p => p.isStateVar)
+    if (stateVars.nonEmpty) { // test_compute_CBwL
       val putStateVarOpts: Option[ST] =
         if (stateVars.nonEmpty)
           Some(
@@ -1283,8 +1332,10 @@ object ComputeContributions {
             |
             |$postStateFetchOpt
             |$postOpt
-            |// Return Ok(()) if all assertions pass
-            |Ok(())"""
+            |return HarnessResult::Passed"""
+
+      val computeCBwLBodyContainer: ST =
+        st"""return $testComputeCBwLV(${(for (p <- sorted_Pre_State_Params) yield st"container.${p.name}", ", ")})"""
 
       val testComputeWithStateVars = RAST.FnImpl(
         visibility = RAST.Visibility.Public,
@@ -1293,7 +1344,7 @@ object ComputeContributions {
           fnHeader = RAST.FnHeader(F),
           fnDecl = RAST.FnDecl(
             inputs = for (p <- sorted_Pre_State_Params) yield p.toRustParam,
-            outputs = RAST.FnRetTyImpl(RAST.TyFixMe(st"Result<(), TestCaseError>"))),
+            outputs = RAST.FnRetTyImpl(RAST.TyFixMe(st"HarnessResult"))),
           verusHeader = None(), generics = None()),
         body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(computeCBwLBody)))),
         comments = ISZ(RAST.CommentST(
@@ -1304,6 +1355,25 @@ object ComputeContributions {
         attributes = ISZ(), contract = None(), meta = ISZ())
 
       test_api_rs_Items = test_api_rs_Items :+ testComputeWithStateVars
+
+      val testComputeWithStateVarsContainer = RAST.FnImpl(
+        visibility = RAST.Visibility.Public,
+        sig = RAST.FnSig(
+          ident = RAST.IdentString(s"testComputeCBwLV_container"),
+          fnHeader = RAST.FnHeader(F),
+          fnDecl = RAST.FnDecl(
+            inputs = ISZ(RAST.ParamImpl(
+              ident = RAST.IdentString("container"),
+              kind = RAST.TyPath(ISZ(ISZ("PreStateContainer_wLV")), None()))),
+            outputs = RAST.FnRetTyImpl(RAST.TyFixMe(st"HarnessResult"))),
+          verusHeader = None(), generics = None()),
+        body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(computeCBwLBodyContainer)))),
+        comments = ISZ(RAST.CommentST(
+          st"""/** Contract-based test harness for the compute entry point
+              |  */""")),
+        attributes = ISZ(), contract = None(), meta = ISZ())
+
+      test_api_rs_Items = test_api_rs_Items :+ testComputeWithStateVarsContainer
     }
 
     { // test_compute_CBwL_macro
@@ -1326,9 +1396,17 @@ object ComputeContributions {
             |    (${(for (p <- sorted_Pre_State_Params) yield p.name, ", ")})
             |    in (${(for (p <- sorted_Pre_State_Params) yield s"$$${p.name}_strat", ", ")})
             |  ) {
-            |    $$crate::bridge::test_api::${testComputeCBwLV}(
-            |      ${(for (p <- sorted_Pre_State_Params) yield p.name, ",\n")}
-            |    )?;
+            |    match $$crate::bridge::test_api::${testComputeCBwLV}(${(for (p <- sorted_Pre_State_Params) yield p.name, ", ")}) {
+            |      $$crate::bridge::test_api::HarnessResult::RejectedPrecondition => {
+            |        return Err(proptest::test_runner::TestCaseError::reject(
+            |          "Precondition failed: invalid input combination",
+            |        ))
+            |      }
+            |      $$crate::bridge::test_api::HarnessResult::FailedPostcondition(e) => {
+            |        return Err(e)
+            |      }
+            |      $$crate::bridge::test_api::HarnessResult::Passed => { }
+            |    }
             |  }
             |}"""
       val test_compute_CBwL_macro = RAST.MacroImpl(

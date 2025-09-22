@@ -36,12 +36,12 @@ object CRustApiUtil {
         kind = RustAst.TyPath(items = paramType, aadlType = None()))
 
       bodyItems = bodyItems :+ st"put_${inPort.identifier}(${inPort.identifier});"
-      containerBodyItems = containerBodyItems :+ st"put_${inPort.identifier}(container.${inPort.identifier});"
+      containerBodyItems = containerBodyItems :+ st"put_${inPort.identifier}(container.api_${inPort.identifier});"
 
       structItems = structItems :+ RustAst.StructField(
         visibility = RustAst.Visibility.Public,
         isGhost = F,
-        ident = RustAst.IdentString(inPort.identifier),
+        ident = RustAst.IdentString(s"api_${inPort.identifier}"),
         fieldType = RustAst.TyPath(items = paramType, aadlType = None()))
     }
 

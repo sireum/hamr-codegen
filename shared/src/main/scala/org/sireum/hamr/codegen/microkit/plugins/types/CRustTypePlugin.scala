@@ -325,12 +325,12 @@ object CRustTypePlugin {
         implBody = Some(st"Self { ${(fieldDefaults, ", ")} }")
 
       case et: EnumType =>
-        var enumValues : ISZ[RustAst.Item] = ISZ()
+        var enumValues : ISZ[RustAst.EnumValue] = ISZ()
         for (i <- 0 until et.values.size) {
-          enumValues = enumValues :+ RustAst.CEnumValue(
+          enumValues = enumValues :+ RustAst.EnumValue(
             visibility = Visibility.Public,
             ident = RustAst.IdentString(et.values(i)),
-            value = RustAst.IdentString(i.string))
+            value = Some(RustAst.IdentString(i.string)))
         }
         inVerusItems = inVerusItems :+
           RustAst.EnumDef(

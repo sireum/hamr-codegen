@@ -147,22 +147,22 @@ object Printers {
 @datatype class EnumDef(val attributes: ISZ[Attribute],
                         val visibility: Visibility.Type,
                         val ident: Ident,
-                        val items: ISZ[Item]
+                        val items: ISZ[EnumValue]
                        ) extends Item {
   @pure override def prettyST: ST = {
     return (
       st"""${printAttributes(attributes)}
           |${printVis(visibility)}enum ${ident.prettyST} {
-          |  ${printItems(items, "\n")}
+          |  ${printItems(items.asInstanceOf[ISZ[Item]], "\n")}
           |}""")
   }
 }
 
-@datatype class CEnumValue(val visibility: Visibility.Type,
+@datatype class EnumValue(val visibility: Visibility.Type,
                            val ident: Ident,
-                           val value: Ident) extends Item {
+                           val value: Option[Ident]) extends Item {
   @pure override def prettyST: ST = {
-    return st"${printVis(visibility)}${ident.prettyST} = ${value.prettyST},"
+    return st"${printVis(visibility)}${ident.prettyST}${if(value.nonEmpty) st" = ${value.get.prettyST}" else st""},"
   }
 }
 
