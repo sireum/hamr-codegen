@@ -134,11 +134,13 @@ object ComputeContributions {
 
           val apiComponentContributions = apiContributions.apiContributions.get(thread.path).get
 
+          val testingApis = updatePuttersWithStateVars(apiComponentContributions.testingApis, computeContributions)
+
           val updated = apiComponentContributions(
             testingApis =
               RAST.Use(attributes = ISZ(),
                 ident = RAST.IdentString(s"crate::bridge::${Util.getThreadIdPath(thread)}_GUMBOX as GUMBOX")) +:
-                (apiComponentContributions.testingApis ++ testingApiContributions._1),
+                (testingApis ++ testingApiContributions._1),
 
             // modify bridge/mod.rs to add the GUMBOX module
             bridgeModuleContributions =
@@ -170,6 +172,73 @@ object ComputeContributions {
 
     return (GumboXRustPlugin.putGumboXContributions(DefaultGumboXContributions(items), localStore), resources)
   }
+
+  @pure def updatePuttersWithStateVars(testingApis: ISZ[RAST.Item], computeContributions: ComputeContributions): ISZ[RAST.Item] = {
+    val stateVars = computeContributions.CEP_Pre_Params.filter(p => p.kind == SymbolKind.StateVarPre)
+    if (stateVars.isEmpty) {
+      return testingApis
+    } else {
+      @pure def getItem(id: String): RAST.Item = {
+        for (a <- testingApis) {
+          a match {
+            case s: RAST.StructDef if s.ident.string == id => return s
+            case f: RAST.FnImpl if f.ident.string == id => return f
+            case _ =>
+          }
+        }
+        halt(s"Unexpected: didn't find $id")
+      }
+
+      @pure def update(id: String, item: RAST.Item, items: ISZ[RAST.Item]): ISZ[RAST.Item] = {
+        var ret: ISZ[RAST.Item] = ISZ()
+        for (i <- items) {
+          i match {
+            case s: RAST.StructDef if s.ident.string == id => ret = ret :+ item
+            case f: RAST.FnImpl if f.ident.string == id => ret = ret :+ item
+            case _ => ret = ret :+ i
+          }
+        }
+        return ret
+      }
+
+      var structContainer = getItem("PreStateContainer").asInstanceOf[RAST.StructDef]
+      var putterContainer = getItem("put_concrete_inputs_container").asInstanceOf[RAST.FnImpl]
+      var putter = getItem("put_concrete_inputs").asInstanceOf[RAST.FnImpl]
+
+      var varItems = ISZ[RAST.Item]()
+      var putterContainerBody = putterContainer.body.get.items
+      var putterBody = putter.body.get.items
+      var putterParams = ISZ[RAST.Param]()
+
+      for (s <- stateVars) {
+        varItems = varItems :+ RAST.StructField(
+          visibility = RAST.Visibility.Public,
+          isGhost = F,
+          ident = RAST.IdentString(s.name),
+          fieldType = RAST.TyPath(ISZ(ISZ(s.typeNameProvider.qualifiedRustName)), None()))
+
+        putterContainerBody = RAST.BodyItemST(st"put_${s.originName}(container.${s.name});") +: putterContainerBody
+
+        putterBody = RAST.BodyItemST(st"put_${s.originName}(${s.name});") +: putterBody
+        putterParams = putterParams :+ RAST.ParamImpl(ident = RAST.IdentString(s.name),
+          kind = RAST.TyPath(ISZ(ISZ(s.typeNameProvider.qualifiedRustName)), None()))
+      }
+
+      structContainer = structContainer(items = varItems ++ structContainer.items)
+      putterContainer = putterContainer(body = Some(RAST.MethodBody(putterContainerBody)))
+      putter = putter(
+        body = Some(RAST.MethodBody(putterBody)),
+        sig = putter.sig(fnDecl = putter.sig.fnDecl(inputs = putterParams ++ putter.sig.fnDecl.inputs))
+      )
+
+      val updatedApis =
+        update("PreStateContainer", structContainer,
+          update("put_concrete_inputs_container", putterContainer,
+            update("put_concrete_inputs", putter, testingApis)))
+
+      return update("PreStateContainer", structContainer, updatedApis)
+    }
+   }
 
   @pure def processGumboMethods(thread: AadlThread,
                                 subclauseInfoOpt: Option[GclAnnexClauseInfo],
@@ -1270,7 +1339,6 @@ object ComputeContributions {
         body = Some(body))
 
       test_api_rs_Items = test_api_rs_Items :+ test_compute_CBwL_macro
-
 
       val strategiesOpt: Option[ST] =
         if(sorted_Pre_State_Params.nonEmpty) {

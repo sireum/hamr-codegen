@@ -16,6 +16,68 @@ import org.sireum.hamr.codegen.common.types._
 
 object CRustApiUtil {
 
+  @pure def generateTestingApiConcretePutter(t: AadlThread, crustTypeProvider: CRustTypeProvider): ISZ[RustAst.Item] = {
+    var params: ISZ[RustAst.Param] = ISZ()
+    var structItems: ISZ[RustAst.Item] = ISZ()
+    var bodyItems: ISZ[ST] = ISZ()
+    var containerBodyItems: ISZ[ST] = ISZ()
+    for (inPort <- t.getPorts().filter(p => p.direction == Direction.In)) {
+      val portType: AadlType = crustTypeProvider.getRepresentativeType(MicrokitTypeUtil.getPortType(inPort))
+      val portTypeNameProvider = crustTypeProvider.getTypeNameProvider(portType)
+
+      val paramType: ISZ[ISZ[String]] = if(inPort.isEvent) {
+        ISZ(ISZ("Option"), portTypeNameProvider.qualifiedRustNameS)
+      } else {
+        ISZ(portTypeNameProvider.qualifiedRustNameS)
+      }
+
+      params = params :+ RustAst.ParamImpl(
+        ident = RustAst.IdentString(inPort.identifier),
+        kind = RustAst.TyPath(items = paramType, aadlType = None()))
+
+      bodyItems = bodyItems :+ st"put_${inPort.identifier}(${inPort.identifier});"
+      containerBodyItems = containerBodyItems :+ st"put_${inPort.identifier}(container.${inPort.identifier});"
+
+      structItems = structItems :+ RustAst.StructField(
+        visibility = RustAst.Visibility.Public,
+        isGhost = F,
+        ident = RustAst.IdentString(inPort.identifier),
+        fieldType = RustAst.TyPath(items = paramType, aadlType = None()))
+    }
+
+    val struct = RustAst.StructDef(
+      attributes = ISZ(),
+      visibility = RustAst.Visibility.Public,
+      ident = RustAst.IdentString("PreStateContainer"),
+      items = structItems)
+
+    val containerPutter =  RustAst.FnImpl(
+      visibility = RustAst.Visibility.Public,
+      sig = RustAst.FnSig(
+        ident = RustAst.IdentString("put_concrete_inputs_container"),
+        fnDecl = RustAst.FnDecl(
+          inputs = ISZ(RustAst.ParamImpl(
+            ident = RustAst.IdentString("container"),
+            kind = RustAst.TyPath(items = ISZ(ISZ("PreStateContainer")), aadlType = None()))),
+          outputs = RustAst.FnRetTyDefault()),
+        fnHeader = RustAst.FnHeader(F), verusHeader = None(), generics = None()),
+      body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(st"${(containerBodyItems, "\n")}")))),
+      meta = ISZ(), contract = None(), comments = ISZ(), attributes = ISZ())
+
+    val putter =  RustAst.FnImpl(
+      visibility = RustAst.Visibility.Public,
+      sig = RustAst.FnSig(
+        ident = RustAst.IdentString("put_concrete_inputs"),
+        fnDecl = RustAst.FnDecl(
+          inputs = params,
+          outputs = RustAst.FnRetTyDefault()),
+        fnHeader = RustAst.FnHeader(F), verusHeader = None(), generics = None()),
+      body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(st"${(bodyItems, "\n")}")))),
+      meta = ISZ(), contract = None(), comments = ISZ(), attributes = ISZ())
+
+    return ISZ(struct, containerPutter, putter)
+  }
+
   def processInPort(dstThread: AadlThread, dstPort: AadlPort,
                     crustTypeProvider: CRustTypeProvider): ComponentApiContributions = {
     val portType: AadlType = crustTypeProvider.getRepresentativeType(MicrokitTypeUtil.getPortType(dstPort))
@@ -593,7 +655,15 @@ object CRustApiUtil {
 
   @pure def getCrustTestingArtifacts(p: AadlPort,
                                      aadlType: ISZ[String],
-                                     portTypeNameProvider: CRustTypeNameProvider): (RustAst.Item, RustAst.Item, RustAst.Item) = {
+                                     portTypeNameProvider: CRustTypeNameProvider):
+
+  (RustAst.Item, RustAst.Item, RustAst.Item) = {
+    val paramKind: String =
+      p match {
+        case a:AadlDataPort => "DataPort"
+        case a:AadlEventDataPort => "EventDataPort"
+        case a:AadlEventPort => "EventPort"
+      }
     if (p.direction == Direction.In) {
       val varName = s"IN_${p.identifier}"
       val (externApiBody, testApiBody): (ST, ST) = {
@@ -664,14 +734,15 @@ object CRustApiUtil {
               kind = RustAst.TyPath(items = paramType, aadlType = Some(aadlType)))),
             outputs = RustAst.FnRetTyDefault()),
           verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
-        contract = None(), comments = ISZ(), meta = ISZ(),
+        comments = ISZ(RustAst.CommentRustDoc(ISZ(st"setter for IN $paramKind"))),
+        contract = None(), meta = ISZ(),
         body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(testApiBody)))))
 
       return (externApiTestVariable, externApiMethod, testApiMethod)
 
     } else {
       val varName = s"OUT_${p.identifier}"
-      val variable = RustAst.ItemStatic(
+      val externApiTestVariable = RustAst.ItemStatic(
         ident = RustAst.IdentString(varName),
         visibility = RustAst.Visibility.Public,
         ty = RustAst.TyPath(ISZ(ISZ("Mutex"), ISZ("Option"), portTypeNameProvider.qualifiedRustNameS), Some(aadlType)),
@@ -714,10 +785,11 @@ object CRustApiUtil {
             inputs = ISZ(),
             outputs = RustAst.FnRetTyImpl(retType)),
           verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
-        contract = None(), comments = ISZ(), meta = ISZ(),
+        comments = ISZ(RustAst.CommentRustDoc(ISZ(st"getter for OUT $paramKind"))),
+        contract = None(), meta = ISZ(),
         body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(testApiBody)))))
 
-      return (variable, externApiMethod, testApiMethod)
+      return (externApiTestVariable, externApiMethod, testApiMethod)
     }
   }
 }

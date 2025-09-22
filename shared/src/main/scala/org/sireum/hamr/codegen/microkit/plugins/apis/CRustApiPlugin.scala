@@ -138,73 +138,29 @@ object ComponentApiContributions {
     var ret: HashSMap[IdPath, ComponentApiContributions] = HashSMap.empty
 
     for (srcThread <- symbolTable.getThreads()) {
-      for (srcPort <- srcThread.getPorts()
-           if srcPort.direction == Direction.Out && symbolTable.outConnections.contains(srcPort.path)) {
-        for (outConnection <- symbolTable.getOutConnections(srcPort.path)) {
-          symbolTable.componentMap.get(outConnection.dst.component.name).get match {
-            case dstThread: AadlThread if Util.isRusty(dstThread) =>
-              val dstPort = symbolTable.featureMap.get(outConnection.dst.feature.get.name).get
-
-              val receiverContributions = CRustApiUtil.processInPort(dstThread, dstPort.asInstanceOf[AadlPort], crustTypeProvider)
-
-              val existing: ComponentApiContributions =
-                if (ret.contains(dstThread.path)) ret.get(dstThread.path).get
-                else ComponentApiContributions.empty
-
-              ret = ret + dstThread.path ~> existing.combine(receiverContributions)
-
-            case dstThread: AadlThread =>
-            case x =>
-              halt(s"Infeasible: linter should have rejected a thread connected to the non-thread ${x.classifierAsString}")
-          }
-        } // done processing out connections for the source port
-
-        if (Util.isRusty(srcThread)) {
-          val senderContributions = CRustApiUtil.processOutPort(srcThread, srcPort, crustTypeProvider)
-
-          val existing: ComponentApiContributions =
-            if (ret.contains(srcThread.path)) ret.get(srcThread.path).get
-            else ComponentApiContributions.empty
-
-          ret = ret + srcThread.path ~> existing.combine(senderContributions)
-        }
-      } // end processing connections for source port
-
-      // now handle unconnected ports of the source thread
       if (Util.isRusty(srcThread)) {
-        for (unconnectedPort <- srcThread.getPorts().filter(p => !symbolTable.inConnections.contains(p.path) && !symbolTable.outConnections.contains(p.path))) {
-          val contributions: ComponentApiContributions =
-            if (unconnectedPort.direction == Direction.In) {
-              CRustApiUtil.processInPort(
-                dstThread = srcThread, dstPort = unconnectedPort,
-                crustTypeProvider = crustTypeProvider)
-            } else {
-              CRustApiUtil.processOutPort(srcThread, unconnectedPort, crustTypeProvider)
-            }
+        var contributions = ComponentApiContributions.empty
 
-          val existing: ComponentApiContributions =
-            if (ret.contains(srcThread.path)) ret.get(srcThread.path).get
-            else ComponentApiContributions.empty
+        contributions = contributions(testingApis = contributions.testingApis ++
+          CRustApiUtil.generateTestingApiConcretePutter(srcThread, crustTypeProvider))
 
-          ret = ret + srcThread.path ~> existing.combine(contributions)
+        for (inPort <- srcThread.getPorts().filter(p => p.direction == Direction.In)) {
+          contributions = contributions.combine(CRustApiUtil.processInPort(srcThread, inPort, crustTypeProvider))
         }
-      }
+        for (outPort <- srcThread.getPorts().filter(p => p.direction == Direction.Out)) {
+          contributions = contributions.combine(CRustApiUtil.processOutPort(srcThread, outPort, crustTypeProvider))
+        }
 
-      if (Util.isRusty(srcThread)) {
-        // add testing apis to allow setting the values of incoming ports, and getting
-        // the value of output ports in testing contexts
+        // add proptest generators
         val touchedTypes = MicrokitLinterPlugin.getTouchedTypes(localStore)
         val testingPortApis: ISZ[RustAst.Item] =
           CRustApiUtil.propTestOptionMethod() ++
-          CRustApiUtil.generatePropTestDatatypeGenerators(touchedTypes, crustTypeProvider, model, options, types, symbolTable, store, reporter)
+            CRustApiUtil.generatePropTestDatatypeGenerators(touchedTypes, crustTypeProvider, model, options, types, symbolTable, store, reporter)
 
-        val existingContributions: ComponentApiContributions =
-          if (ret.contains(srcThread.path)) ret.get(srcThread.path).get
-          else ComponentApiContributions.empty
+        contributions = contributions(testingApis = contributions.testingApis ++ testingPortApis)
 
-        ret = ret + srcThread.path ~> existingContributions(testingApis = existingContributions.testingApis ++ testingPortApis)
+        ret = ret + srcThread.path ~> contributions
       }
-
     } // end processing connections/ports for threads
 
     return (localStore + CRustApiPlugin.KEY_CrustApiPlugin ~>

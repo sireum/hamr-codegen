@@ -130,7 +130,6 @@ object GumboRustPlugin {
             val aadlType = typeProvider.getRepresentativeType(types.typeMap.get(sv.classifier).get)
             val np = typeProvider.getTypeNameProvider(aadlType)
             testingApis = testingApis :+ RAST.FnImpl(
-              attributes = ISZ(RAST.AttributeST(F, st"cfg(test)")),
               visibility = RAST.Visibility.Public,
               sig = RAST.FnSig(
                 ident = RAST.IdentString(s"get_${sv.name}"),
@@ -140,7 +139,7 @@ object GumboRustPlugin {
                   outputs = RAST.FnRetTyImpl(RAST.TyPath(items = ISZ(np.qualifiedRustNameS), aadlType = Some(aadlType.classifier)))
                 ),
                 verusHeader = None(), generics = None()),
-              comments = ISZ(), contract = None(), meta =  ISZ(),
+              attributes = ISZ(), comments = ISZ(), contract = None(), meta =  ISZ(),
               body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
                 st"""unsafe {
                     |  match &crate::app {
@@ -151,7 +150,6 @@ object GumboRustPlugin {
 
             val typ = RAST.TyPath(items = ISZ(np.qualifiedRustNameS), aadlType = Some(aadlType.classifier))
             testingApis = testingApis :+ RAST.FnImpl(
-              attributes = ISZ(RAST.AttributeST(F, st"cfg(test)")),
               visibility = RAST.Visibility.Public,
               sig = RAST.FnSig(
                 ident = RAST.IdentString(s"put_${sv.name}"),
@@ -160,7 +158,7 @@ object GumboRustPlugin {
                   inputs = ISZ(RAST.ParamImpl(ident = RAST.IdentString("value"), kind = typ)),
                   outputs = RAST.FnRetTyDefault()),
                 verusHeader = None(), generics = None()),
-              comments = ISZ(), contract = None(), meta =  ISZ(),
+              attributes = ISZ(), comments = ISZ(), contract = None(), meta =  ISZ(),
               body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
                 st"""unsafe {
                     |  match &mut crate::app {
