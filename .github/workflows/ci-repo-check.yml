@@ -22,4 +22,4 @@ jobs:
       - name: Run workflow checker
         env:
           GITHUB_TOKEN: ${{ secrets.REPO_PAT }}
-        run: python3 bin/repocheck.py
+        run: python3 bin/scripts/repocheck.py
