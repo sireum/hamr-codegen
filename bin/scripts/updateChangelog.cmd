@@ -49,12 +49,45 @@ for (c <- commits) {
 
 val changelog = codegenHome / "changelog.md"
 val existing = ops.StringOps(changelog.read)
+
+val tag = existing.stringIndexOf("<!-- released -->")
+assert (tag > 0 && tag < existing.s.size)
+
+val unreleased = ops.StringOps(existing.substring(0, tag - 1))
+
+val p1 = unreleased.stringIndexOf("<!-- begin unreleased commits -->")
+val p2 = unreleased.stringIndexOf("<!-- end unreleased commits -->")
+assert (p1 > 0 && p1 < unreleased.s.size, p1)
+assert (p2 > 0 && p2 < unreleased.s.size, p2)
+
+val unreal = st"""${unreleased.substring(0, p1 + string"<!-- begin unreleased commits -->".size + 1)}
+                 |<details><summary>Commits</summary>
+                 |
+                 |${(for(c <- postRelease) yield st"* ${c.pretty}", "\n\n")}
+                 |</details>
+                 |<br>
+                 |${unreleased.substring(p2, unreleased.s.size)}"""
+
+
+val released = ops.StringOps(existing.substring(tag + string"<!-- released -->".size + 1, existing.s.size))
+
 var newContent: ISZ[ST] = ISZ()
-//for(e <- m.entries if !existing.contains(e._1)) {
-for(e <- m.entries) {
+
+for(e <- m.entries if !released.contains(e._1)) {
+//for(e <- m.entries) {
   val dest = s"https://github.com/sireum/kekinian/releases/tag/${e._1}"
   newContent = newContent :+
     st"""# [${e._1}]($dest)
+        |
+        |<details><summary>How to build</summary>
+        |
+        |```
+        |git clone --rec --depth 1 --branch release/${e._1} https://github.com/sireum/kekinian
+        |cd kekinian
+        |bin/build.cmd
+        |```
+        |
+        |</details>
         |
         |<details><summary>Commits</summary>
         |
@@ -64,11 +97,19 @@ for(e <- m.entries) {
         |"""
 }
 
-changelog.writeOver(
-  st"""${(newContent, "\n\n")}
-      |
-      |${existing.s}""".render)
+val newContentOpt: Option[ST] =
+  if (newContent.isEmpty) None()
+  else Some(
+    st"""${(newContent, "\n\n")}
+        |""")
 
+changelog.writeOver(
+  st"""$unreal
+      |<!-- released -->
+      |$newContentOpt
+      |${released.s}""".render)
+
+println(s"Wrote: $changelog")
 
 object Containers {
   @datatype class commit(val hashy: String,
