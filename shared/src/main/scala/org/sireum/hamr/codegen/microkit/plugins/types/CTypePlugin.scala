@@ -12,7 +12,7 @@ import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
 import org.sireum.hamr.codegen.common.util.HamrCli.CodegenHamrPlatform
 import org.sireum.hamr.codegen.microkit.plugins.linters.MicrokitLinterPlugin
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
-import org.sireum.hamr.codegen.microkit.util.Util
+import org.sireum.hamr.codegen.microkit.util.MicrokitUtil
 import org.sireum.hamr.ir.Aadl
 import org.sireum.message.Reporter
 
@@ -89,7 +89,7 @@ object CTypePlugin {
           |#include <stdbool.h>
           |#include <stdint.h>
           |
-          |${Util.doNotEdit}
+          |${MicrokitUtil.doNotEdit}
           |
           |${(defs, "\n\n")}
           |"""

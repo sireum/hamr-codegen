@@ -3,7 +3,7 @@ package org.sireum.hamr.codegen.microkit.util
 
 import org.sireum._
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen
-import org.sireum.hamr.codegen.microkit.util.Util.TAB
+import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.TAB
 
 object MakefileTemplate {
 
@@ -18,7 +18,7 @@ object MakefileTemplate {
                  |""")
       else None()
     val content =
-      st"""${Util.doNotEditMakefile}
+      st"""${MicrokitUtil.doNotEditMakefile}
           |
           |ifeq ($$(strip $$(MICROKIT_SDK)),)
           |$$(error MICROKIT_SDK must be specified)
@@ -79,7 +79,7 @@ object MakefileTemplate {
     val uniqueBuildEntries: ISZ[String] = (Set.empty[String] ++ (for(be <- buildEntries) yield be.render)).elements
 
     val content =
-      st"""${Util.doNotEditMakefile}
+      st"""${MicrokitUtil.doNotEditMakefile}
           |
           |ifeq ($$(strip $$(MICROKIT_SDK)),)
           |$$(error MICROKIT_SDK must be specified)

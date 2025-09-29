@@ -3,13 +3,13 @@
 package org.sireum.hamr.codegen.microkit.vm
 
 import org.sireum._
-import org.sireum.hamr.codegen.microkit.util.Util
+import org.sireum.hamr.codegen.microkit.util.MicrokitUtil
 
 object VmMakefileTemplate {
 
   @pure def Makefile(threadId: String): ST = {
     val ret =
-      st"""${Util.safeToEditMakefile}
+      st"""${MicrokitUtil.safeToEditMakefile}
           |
           |ifeq ($$(strip $$(MICROKIT_SDK)),)
           |$$(error MICROKIT_SDK must be specified)

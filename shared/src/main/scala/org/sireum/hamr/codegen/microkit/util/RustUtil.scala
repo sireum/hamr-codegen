@@ -2,10 +2,10 @@
 package org.sireum.hamr.codegen.microkit.util
 
 import org.sireum._
+import org.sireum.hamr.codegen.common.CommonUtil.Store
 
 object RustUtil {
 
-  val verusTag: String = "release/0.2025.09.07.6129810"
   val verusChannel: String = "nightly"
 
   val defaultCrateLevelAttributes: ST =
@@ -22,7 +22,7 @@ object RustUtil {
         |#![allow(unused_variables)]"""
 
   val defaultRustToolChainToml: ST =
-    st"""${Util.safeToEditMakefile}
+    st"""${MicrokitUtil.safeToEditMakefile}
         |
         |[toolchain]
         |channel = "$verusChannel"
@@ -34,10 +34,13 @@ object RustUtil {
   //      |builtin = { git = "https://github.com/verus-lang/verus.git", rev="$verusCommitTip" }
   //      |builtin_macros = { git = "https://github.com/verus-lang/verus.git", rev="$verusCommitTip" }"""
 
-  val verusCargoDependencies: ST =
-    st"""vstd = { git = "https://github.com/verus-lang/verus.git", default-features=false, tag="$verusTag"}
-        |verus_builtin = { git = "https://github.com/verus-lang/verus.git", tag="$verusTag" }
-        |verus_builtin_macros = { git = "https://github.com/verus-lang/verus.git", tag="$verusTag" }"""
+  @pure def verusCargoDependencies(store: Store): ST = {
+    val versions = MicrokitUtil.getMicrokitVersions(store)
+    return (
+      st"""vstd = { git = "https://github.com/verus-lang/verus.git", default-features=false, tag="${versions.get("vstd").get}"}
+          |verus_builtin = { git = "https://github.com/verus-lang/verus.git", tag="${versions.get("verus_builtin").get}" }
+          |verus_builtin_macros = { git = "https://github.com/verus-lang/verus.git", tag="${versions.get("verus_builtin_macros").get}" }""")
+  }
 
   val commonCargoTomlEntries: ST =
     st"""[package.metadata.verus]

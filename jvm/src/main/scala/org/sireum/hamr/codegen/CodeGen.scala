@@ -15,6 +15,7 @@ import org.sireum.hamr.codegen.common.util.ModelUtil.ModelElements
 import org.sireum.hamr.codegen.common.util.{CodeGenResults, ExperimentalOptions, ModelUtil}
 import org.sireum.hamr.codegen.common.{DirectoryUtil, StringUtil}
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen
+import org.sireum.hamr.codegen.microkit.util.{JvmMicrokitUtil, MicrokitUtil}
 import org.sireum.hamr.ir.Aadl
 import org.sireum.message._
 import org.sireum.ops.StringOps
@@ -177,7 +178,8 @@ object CodeGen {
 
     if (!reporter.hasError && runMicrokit) {
       reporter.info(None(), toolName, "Generating Microkit artifacts...")
-      val results = MicrokitCodegen().run(rmodel, modOptions, aadlTypes, symbolTable, plugins, localStore, reporter)
+      val results = MicrokitCodegen().run(rmodel, modOptions, aadlTypes, symbolTable, plugins,
+        MicrokitUtil.putMicrokitVersions(localStore, JvmMicrokitUtil.getMicrokitVersions), reporter)
       localStore = results._2
       if (!reporter.hasError) {
         writeOutResources(results._1.resources, reporter)

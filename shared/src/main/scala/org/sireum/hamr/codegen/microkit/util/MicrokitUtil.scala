@@ -2,13 +2,13 @@
 package org.sireum.hamr.codegen.microkit.util
 
 import org.sireum._
+import org.sireum.hamr.codegen.common.CommonUtil.{MapValue, Store}
 import org.sireum.hamr.codegen.common.properties.{HamrProperties, PropertyUtil}
 import org.sireum.hamr.codegen.common.symbols.AadlThread
-
 import org.sireum.hamr.ir
 
 
-object Util {
+object MicrokitUtil {
 
   val TAB: String = "\t"
 
@@ -22,6 +22,14 @@ object Util {
 
   // 0x10_000_000
   val defaultVmRamSizeInKiBytes: Z = bytesToKiBytes(268435456)
+
+  val KEY_MICROKIT_VERSIONS: String = "KEY_MICROKIT_VERSISION"
+
+  @strictpure def getMicrokitVersions(store: Store): Map[String, String] =
+    store.get(KEY_MICROKIT_VERSIONS).get.asInstanceOf[MapValue[String, String]].map
+
+  @strictpure def putMicrokitVersions(store: Store, versions: Map[String, String]): Store =
+    store + KEY_MICROKIT_VERSIONS ~> MapValue(versions)
 
   @strictpure def brand(s:String):String = s"sb_$s"
 

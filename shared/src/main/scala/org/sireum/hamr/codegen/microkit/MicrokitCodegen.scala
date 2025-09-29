@@ -193,9 +193,9 @@ object MicrokitCodegen {
       var retMemoryRegions: ISZ[MemoryRegion] = ISZ()
 
       val isVM = t.toVirtualMachine(symbolTable)
-      val isRustic = Util.isRusty(t)
+      val isRustic = MicrokitUtil.isRusty(t)
 
-      val threadId = Util.getThreadIdPath(t)
+      val threadId = MicrokitUtil.getThreadIdPath(t)
       val threadMonId = st"${threadId}_MON"
 
       var nextMemAddressInKiBytes = 262144
@@ -253,7 +253,7 @@ object MicrokitCodegen {
         val guestRam = VirtualMachineMemoryRegion(
           typ = VirtualMemoryRegionType.RAM,
           threadPath = t.path,
-          sizeInKiBytes = Util.defaultVmRamSizeInKiBytes,
+          sizeInKiBytes = MicrokitUtil.defaultVmRamSizeInKiBytes,
           physicalAddressInKiBytes = None()
         )
 
@@ -336,7 +336,7 @@ object MicrokitCodegen {
       }
 
       val childStackSizeInKiBytes: Option[Z] = t.stackSizeInBytes() match {
-        case Some(bytes) => Some(Util.bytesToKiBytes(bytes))
+        case Some(bytes) => Some(MicrokitUtil.bytesToKiBytes(bytes))
         case _ => None()
       }
 
@@ -407,7 +407,7 @@ object MicrokitCodegen {
       val cMonitorSource =
         st"""#include <microkit.h>
             |
-            |${Util.doNotEdit}
+            |${MicrokitUtil.doNotEdit}
             |
             |#define PORT_PACER $pacerChannelId
             |
@@ -482,7 +482,7 @@ object MicrokitCodegen {
       val cBridgeSource =
         st"""#include "$cHeaderFileName"
             |
-            |${Util.doNotEdit}
+            |${MicrokitUtil.doNotEdit}
             |
             |${(for (u <- cCodeContributions.cBridge_EntrypointMethodSignatures) yield st"$u;", "\n")}
             |
@@ -523,7 +523,7 @@ object MicrokitCodegen {
         } else {
           st"""#include "$cHeaderFileName"
               |
-              |${Util.safeToEdit}
+              |${MicrokitUtil.safeToEdit}
               |
               |${(cCodeContributions.cUser_MethodDefaultImpls, "\n\n")}
               |"""
@@ -550,7 +550,7 @@ object MicrokitCodegen {
             |#include <microkit.h>
             |#include <${MicrokitTypeUtil.cAllTypesFilename}>
             |
-            |${Util.doNotEdit}
+            |${MicrokitUtil.doNotEdit}
             |
             |
             |${(cCodeContributions.cPortApiMethodSigs, ";\n")};
@@ -595,7 +595,7 @@ object MicrokitCodegen {
     } else {
       // plugin initialization phase (one pass)
       // TODO: move to an init plugin
-      val modelIsRusty: B = ops.ISZOps(symbolTable.getThreads()).exists(p => Util.isRusty(p))
+      val modelIsRusty: B = ops.ISZOps(symbolTable.getThreads()).exists(p => MicrokitUtil.isRusty(p))
       if (modelIsRusty) {
         localStore = localStore + MicrokitPlugin.KEY_MODEL_IS_RUSTY ~> BoolValue(T)
       }
@@ -660,7 +660,7 @@ object MicrokitCodegen {
     val allTypesContent =
       st"""#pragma once
           |
-          |${Util.doNotEdit}
+          |${MicrokitUtil.doNotEdit}
           |
           |${(for (i <- typeHeaderFilenames) yield st"#include <$i>", "\n")}
           |"""
@@ -744,12 +744,12 @@ object MicrokitCodegen {
     resources = resources :+ ResourceUtil.createResource(systemmkPath, systemmkContents, T)
 
 
-    val utilIncludePath = s"${options.sel4OutputDir.get}/${Util.utilDir}/${MicrokitCodegen.dirInclude}"
-    val utilSrcPath = s"${options.sel4OutputDir.get}/${Util.utilDir}/${MicrokitCodegen.dirSrc}"
-    resources = resources :+ ResourceUtil.createResource(s"${utilIncludePath}/printf.h", Util.printfh, T)
-    resources = resources :+ ResourceUtil.createResource(s"${utilSrcPath}/printf.c", Util.printfc, T)
-    resources = resources :+ ResourceUtil.createResource(s"${utilIncludePath}/util.h", Util.utilh, T)
-    resources = resources :+ ResourceUtil.createResource(s"${utilSrcPath}/util.c", Util.utilc, T)
+    val utilIncludePath = s"${options.sel4OutputDir.get}/${MicrokitUtil.utilDir}/${MicrokitCodegen.dirInclude}"
+    val utilSrcPath = s"${options.sel4OutputDir.get}/${MicrokitUtil.utilDir}/${MicrokitCodegen.dirSrc}"
+    resources = resources :+ ResourceUtil.createResource(s"${utilIncludePath}/printf.h", MicrokitUtil.printfh, T)
+    resources = resources :+ ResourceUtil.createResource(s"${utilSrcPath}/printf.c", MicrokitUtil.printfc, T)
+    resources = resources :+ ResourceUtil.createResource(s"${utilIncludePath}/util.h", MicrokitUtil.utilh, T)
+    resources = resources :+ ResourceUtil.createResource(s"${utilSrcPath}/util.c", MicrokitUtil.utilc, T)
 
 
     if (reporter.hasError) {

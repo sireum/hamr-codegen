@@ -11,8 +11,8 @@ import org.sireum.hamr.codegen.microkit.plugins.apis.CRustApiPlugin
 import org.sireum.hamr.codegen.microkit.plugins.types.{CRustTypePlugin, CRustTypeProvider}
 import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, MicrokitPlugin}
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
-import org.sireum.hamr.codegen.microkit.util.Util.TAB
-import org.sireum.hamr.codegen.microkit.util.{MakefileTarget, MakefileUtil, RustUtil, Util}
+import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.TAB
+import org.sireum.hamr.codegen.microkit.util.{MakefileTarget, MakefileUtil, RustUtil, MicrokitUtil}
 import org.sireum.hamr.ir.{Aadl, Direction}
 import org.sireum.message.Reporter
 import org.sireum.hamr.codegen.microkit.{rust => RustAst}
@@ -28,11 +28,11 @@ object CRustComponentPlugin {
   @strictpure def putComponentContributions( contributions: CRustComponentContributions, store: Store): Store = store + KEY_CrustComponentPlugin ~> contributions
 
 
-  @strictpure def componentCrateDirectory(thread: AadlThread, options: HamrCli.CodegenOption): String = s"${options.sel4OutputDir.get}/crates/${Util.getThreadIdPath(thread)}"
+  @strictpure def componentCrateDirectory(thread: AadlThread, options: HamrCli.CodegenOption): String = s"${options.sel4OutputDir.get}/crates/${MicrokitUtil.getThreadIdPath(thread)}"
 
   @strictpure def componentDirectory(thread: AadlThread, options: HamrCli.CodegenOption): String = s"${componentCrateDirectory(thread, options)}/src/component"
 
-  @strictpure def appModuleName(thread: AadlThread): String = s"${Util.getThreadIdPath(thread)}_app"
+  @strictpure def appModuleName(thread: AadlThread): String = s"${MicrokitUtil.getThreadIdPath(thread)}_app"
 }
 
 object ComponentContributions {}
@@ -89,8 +89,8 @@ object ComponentContributions {}
     var ret: Map[IdPath, ComponentContributions] = Map.empty
 
     var makefileEntries: ISZ[ST] = ISZ()
-    for (thread <- symbolTable.getThreads() if Util.isRusty(thread)) {
-      val threadId = Util.getThreadIdPath(thread)
+    for (thread <- symbolTable.getThreads() if MicrokitUtil.isRusty(thread)) {
+      val threadId = MicrokitUtil.getThreadIdPath(thread)
 
       val appApiType = CRustApiPlugin.applicationApiType(thread)
 
@@ -239,7 +239,7 @@ object ComponentContributions {}
   }
 
   @pure def genTestEntries(thread: AadlThread, cRustTypeProvider: CRustTypeProvider): ISZ[RustAst.Item] = {
-    val threadId = Util.getThreadIdPath(thread)
+    val threadId = MicrokitUtil.getThreadIdPath(thread)
     assert(thread.isPeriodic(), s"Not yet handling sporadic threads: ${threadId}")
 
     val inDataPortInits: Option[ST] = {
@@ -287,7 +287,7 @@ object ComponentContributions {}
 
     for (e <- CRustComponentPlugin.getCRustComponentContributions(store).componentContributions.entries) {
       val thread = symbolTable.componentMap.get(e._1).get.asInstanceOf[AadlThread]
-      val threadId = Util.getThreadIdPath(thread)
+      val threadId = MicrokitUtil.getThreadIdPath(thread)
 
       val modName = CRustComponentPlugin.appModuleName(thread)
 
@@ -317,7 +317,7 @@ object ComponentContributions {}
               |
               |${RustUtil.defaultCrateLevelAttributes}
               |
-              |${Util.doNotEdit}
+              |${MicrokitUtil.doNotEdit}
               |
               |mod bridge;
               |mod component;
@@ -453,7 +453,7 @@ object ComponentContributions {}
         val content =
           st"""${(for (d <- e._2.appModDirectives) yield d.prettyST, "\n")}
               |
-              |${Util.safeToEdit}
+              |${MicrokitUtil.safeToEdit}
               |
               |${(for (u <- uses) yield u.prettyST, "\n")}
               |
@@ -470,7 +470,7 @@ object ComponentContributions {}
 
       { // src/component/mod.rs
         val content =
-          st"""${Util.doNotEdit}
+          st"""${MicrokitUtil.doNotEdit}
               |
               |pub mod $modName;
               |"""
@@ -482,7 +482,7 @@ object ComponentContributions {}
         val content =
           st"""#![cfg(test)]
               |
-              |${Util.safeToEdit}
+              |${MicrokitUtil.safeToEdit}
               |
               |${(for(i <- e._2.testEntries) yield i.prettyST, "\n\n")}
               |"""
@@ -491,8 +491,10 @@ object ComponentContributions {}
       }
 
       { // Cargo.toml
+        val versions = MicrokitUtil.getMicrokitVersions(localStore)
+
         val content =
-          st"""${Util.safeToEditMakefile}
+          st"""${MicrokitUtil.safeToEditMakefile}
               |
               |[package]
               |name = "$threadId"
@@ -500,19 +502,19 @@ object ComponentContributions {}
               |edition = "2021"
               |
               |[dependencies]
-              |log = "0.4.27"
+              |log = "${versions.get("log").get}"
               |sel4 = { git = "https://github.com/seL4/rust-sel4", features = ["single-threaded"], optional = true }
               |sel4-logging = { git = "https://github.com/seL4/rust-sel4", optional = true }
-              |linux-raw-sys = { version = "0.11.0", default-features = false }
-              |${RustUtil.verusCargoDependencies}
+              |linux-raw-sys = { version = "${versions.get("linux-raw-sys").get}", default-features = false }
+              |${RustUtil.verusCargoDependencies(localStore)}
               |data = { path = "../data" }
               |
               |[dev-dependencies]
-              |lazy_static = "1.5.0"
-              |once_cell = "1.21.3"
-              |serial_test = "3.2.0"
-              |proptest = "1.7.0"
-              |env_logger = "0.11.8"
+              |lazy_static = "${versions.get("lazy_static").get}"
+              |once_cell = "${versions.get("once_cell").get}"
+              |serial_test = "${versions.get("serial_test").get}"
+              |proptest = "${versions.get("proptest").get}"
+              |env_logger = "${versions.get("env_logger").get}"
               |
               |[lib]
               |path = "src/lib.rs"
@@ -529,7 +531,7 @@ object ComponentContributions {}
 
       { // Makefile
         val content =
-          st"""${Util.safeToEditMakefile}
+          st"""${MicrokitUtil.safeToEditMakefile}
               |
               |microkit_sdk_config_dir := $$(MICROKIT_SDK)/board/$$(MICROKIT_BOARD)/$$(MICROKIT_CONFIG)
               |

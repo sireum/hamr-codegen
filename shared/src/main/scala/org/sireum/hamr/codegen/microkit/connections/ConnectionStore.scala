@@ -5,7 +5,7 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.types.AadlType
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
 import org.sireum.hamr.codegen.microkit.util.MemoryRegion
-import org.sireum.hamr.codegen.microkit.util.Util.TAB
+import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.TAB
 
 @sig trait ConnectionStore {
 

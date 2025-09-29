@@ -9,8 +9,8 @@ import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypeNameProvider, Aad
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen
 import org.sireum.hamr.codegen.microkit.connections._
 import org.sireum.hamr.codegen.microkit.plugins.types.{CRustTypePlugin, CRustTypeProvider, CTypeProvider}
-import org.sireum.hamr.codegen.microkit.util.Util
-import org.sireum.hamr.codegen.microkit.util.Util.brand
+import org.sireum.hamr.codegen.microkit.util.MicrokitUtil
+import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.brand
 import org.sireum.hamr.ir
 import org.sireum.hamr.ir.{GclMethod, GclStateVar}
 import org.sireum.lang.{ast => SAST}
@@ -60,12 +60,12 @@ object MicrokitTypeUtil {
        |
        |#include <stdint.h>
        |
-       |${Util.doNotEdit}
+       |${MicrokitUtil.doNotEdit}
        |
        |typedef _Atomic uintmax_t ${eventCounterTypename};
        |"""
 
-  val rustCargoContent: ST = st"""${Util.safeToEditMakefile}
+  val rustCargoContent: ST = st"""${MicrokitUtil.safeToEditMakefile}
                                  |
                                  |[package]
                                  |name = "types"

@@ -14,7 +14,7 @@ import org.sireum.hamr.codegen.microkit.plugins.gumbo.GumboXRustUtil.{GGParam, G
 import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, MicrokitPlugin}
 import org.sireum.hamr.codegen.microkit.plugins.types.{CRustTypePlugin, CRustTypeProvider}
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
-import org.sireum.hamr.codegen.microkit.util.Util
+import org.sireum.hamr.codegen.microkit.util.MicrokitUtil
 import org.sireum.hamr.ir.{Aadl, GclAssume, GclGuarantee, GclSubclause}
 import org.sireum.message.Reporter
 import org.sireum.hamr.codegen.microkit.{rust => RAST}
@@ -114,7 +114,7 @@ object ComputeContributions {
     val datatypeInvariants = GumboRustPlugin.getGumboRustContributions(localStore).get.datatypeInvariants
     var items: Map[ThreadIdPath, GumboXComponentContributions] = Map.empty
 
-    for (thread <- symbolTable.getThreads() if Util.isRusty(thread)) {
+    for (thread <- symbolTable.getThreads() if MicrokitUtil.isRusty(thread)) {
       assert(!items.contains(thread.path), "Not expecting anyone else to have made gumbox contributions up to this point")
 
       if (datatypesWithContracts.nonEmpty || ops.ISZOps(componentsWithContracts).contains(thread.path)) {
@@ -139,13 +139,13 @@ object ComputeContributions {
           val updated = apiComponentContributions(
             testingApis =
               RAST.Use(attributes = ISZ(),
-                ident = RAST.IdentString(s"crate::bridge::${Util.getThreadIdPath(thread)}_GUMBOX as GUMBOX")) +:
+                ident = RAST.IdentString(s"crate::bridge::${MicrokitUtil.getThreadIdPath(thread)}_GUMBOX as GUMBOX")) +:
                 (testingApis ++ testingApiContributions._1),
 
             // modify bridge/mod.rs to add the GUMBOX module
             bridgeModuleContributions =
               apiComponentContributions.bridgeModuleContributions :+
-                RAST.ItemST(st"pub mod ${Util.getThreadIdPath(thread)}_GUMBOX;")
+                RAST.ItemST(st"pub mod ${MicrokitUtil.getThreadIdPath(thread)}_GUMBOX;")
           )
 
           apiContributions = apiContributions.addApiContributions(thread.path, updated)
@@ -1055,7 +1055,7 @@ object ComputeContributions {
 
       val initBody: ST =
         st"""// [InvokeEntryPoint]: Invoke the entry point
-            |crate::${Util.getThreadIdPath(thread)}_initialize();
+            |crate::${MicrokitUtil.getThreadIdPath(thread)}_initialize();
             |
             |$postStateFetchOpt
             |$postOpt
@@ -1182,13 +1182,13 @@ object ComputeContributions {
 
       val computeCBBody: ST =
         st"""// Initialize the app
-            |crate::${Util.getThreadIdPath(thread)}_initialize();
+            |crate::${MicrokitUtil.getThreadIdPath(thread)}_initialize();
             |
             |$saveInLocalOpt
             |$preOpt
             |$putInPortOpts
             |// [InvokeEntryPoint]: Invoke the entry point
-            |crate::${Util.getThreadIdPath(thread)}_timeTriggered();
+            |crate::${MicrokitUtil.getThreadIdPath(thread)}_timeTriggered();
             |
             |$postStateFetchOpt
             |$postOpt
@@ -1322,13 +1322,13 @@ object ComputeContributions {
 
       val computeCBwLBody: ST =
         st"""// Initialize the app
-            |crate::${Util.getThreadIdPath(thread)}_initialize();
+            |crate::${MicrokitUtil.getThreadIdPath(thread)}_initialize();
             |
             |$preOpt
             |$putInPortOpts
             |$putStateVarOpts
             |// [InvokeEntryPoint]: Invoke the entry point
-            |crate::${Util.getThreadIdPath(thread)}_timeTriggered();
+            |crate::${MicrokitUtil.getThreadIdPath(thread)}_timeTriggered();
             |
             |$postStateFetchOpt
             |$postOpt
@@ -1479,7 +1479,7 @@ object ComputeContributions {
 
     for (entry <- GumboXRustPlugin.getGumboXContributions(localStore).get.componentContributions.entries) {
       val thread = symbolTable.componentMap.get(entry._1).get.asInstanceOf[AadlThread]
-      val threadId = Util.getThreadIdPath(thread)
+      val threadId = MicrokitUtil.getThreadIdPath(thread)
 
       { // the gumbox module
         val apiDirectory = CRustApiPlugin.apiDirectory(thread, options)
@@ -1506,7 +1506,7 @@ object ComputeContributions {
         }
 
         val content =
-          st"""${Util.doNotEdit}
+          st"""${MicrokitUtil.doNotEdit}
               |
               |use ${CRustTypePlugin.usePath};
               |

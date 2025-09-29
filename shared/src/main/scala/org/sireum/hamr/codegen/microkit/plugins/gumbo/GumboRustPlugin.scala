@@ -12,7 +12,7 @@ import org.sireum.hamr.codegen.microkit.plugins.{MicrokitInitPlugin, MicrokitPlu
 import org.sireum.hamr.codegen.microkit.plugins.component.CRustComponentPlugin
 import org.sireum.hamr.codegen.microkit.plugins.linters.MicrokitLinterPlugin
 import org.sireum.hamr.codegen.microkit.plugins.types.{CRustTypePlugin, CRustTypeProvider}
-import org.sireum.hamr.codegen.microkit.util.{MakefileTarget, MakefileUtil, Util}
+import org.sireum.hamr.codegen.microkit.util.{MakefileTarget, MakefileUtil, MicrokitUtil}
 import org.sireum.hamr.ir.{Aadl, Direction, GclAssume, GclGuarantee, GclSubclause}
 import org.sireum.message.{Level, Message, Reporter}
 import org.sireum.hamr.codegen.microkit.{MicrokitCodegen, rust => RAST}
@@ -45,12 +45,12 @@ object GumboRustPlugin {
     }
     var localStore = store
     if (options.platform != HamrCli.CodegenHamrPlatform.Microkit ||
-      !ops.ISZOps(symbolTable.getThreads()).exists(p => Util.isRusty(p))) {
+      !ops.ISZOps(symbolTable.getThreads()).exists(p => MicrokitUtil.isRusty(p))) {
       return localStore
     }
     var threadsWithContracts: ISZ[ThreadIdPath] = ISZ()
     var datatypesWithContracts: ISZ[DataIdPath] = ISZ()
-    for (t <- symbolTable.getThreads() if Util.isRusty(t)) {
+    for (t <- symbolTable.getThreads() if MicrokitUtil.isRusty(t)) {
       if(ops.ISZOps(t.annexes()).exists(p => p.clause.isInstanceOf[GclSubclause])) {
         threadsWithContracts = threadsWithContracts :+ t.path
       }
@@ -353,7 +353,7 @@ object GumboRustPlugin {
               appFreeFunctions = freeFuncs)),
         localStore)
 
-      makefileItems = makefileItems :+ st"make -C $${CRATES_DIR}/${Util.getThreadIdPath(thread)} verus"
+      makefileItems = makefileItems :+ st"make -C $${CRATES_DIR}/${MicrokitUtil.getThreadIdPath(thread)} verus"
     } // end processing thread's contracts
 
     return (

@@ -121,10 +121,10 @@ import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
     if (hasUserContent) {
       val elfEntry: ST =
         if (isRustic) {
-          st"""$elfName: $$(${Util.make_UTIL_OBJS}) $$(${MicrokitTypeUtil.make_TYPE_OBJS}) $userRusticName $objName
+          st"""$elfName: $$(${MicrokitUtil.make_UTIL_OBJS}) $$(${MicrokitTypeUtil.make_TYPE_OBJS}) $userRusticName $objName
               |${TAB}$$(LD) $$(LDFLAGS) -L $${CRATES_DIR}/$resourceSuffix/target/aarch64-unknown-none/release $$(filter %.o, $$^) $$(LIBS) -l$resourceSuffix -o $$@"""
         } else {
-          st"""$elfName: $$(${Util.make_UTIL_OBJS}) $$(${MicrokitTypeUtil.make_TYPE_OBJS}) $userObjName $objName
+          st"""$elfName: $$(${MicrokitUtil.make_UTIL_OBJS}) $$(${MicrokitTypeUtil.make_TYPE_OBJS}) $userObjName $objName
               |${TAB}$$(LD) $$(LDFLAGS) $$^ $$(LIBS) -o $$@"""
         }
 
@@ -145,7 +145,7 @@ import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
     }
     else {
       val ret =
-        st"""$elfName: $$(${Util.make_UTIL_OBJS}) $$(${MicrokitTypeUtil.make_TYPE_OBJS}) $objName
+        st"""$elfName: $$(${MicrokitUtil.make_UTIL_OBJS}) $$(${MicrokitTypeUtil.make_TYPE_OBJS}) $objName
             |${TAB}$$(LD) $$(LDFLAGS) $$^ $$(LIBS) -o $$@"""
       return ret
     }

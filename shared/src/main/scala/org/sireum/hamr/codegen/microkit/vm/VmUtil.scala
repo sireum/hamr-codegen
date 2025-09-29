@@ -2,7 +2,7 @@
 package org.sireum.hamr.codegen.microkit.vm
 
 import org.sireum._
-import org.sireum.hamr.codegen.microkit.util.Util
+import org.sireum.hamr.codegen.microkit.util.MicrokitUtil
 
 object VmUtil {
 
@@ -150,7 +150,7 @@ object VmUtil {
           |
           |#include <microkit.h>
           |
-          |${Util.safeToEdit}
+          |${MicrokitUtil.safeToEdit}
           |
           |#if defined(BOARD_qemu_virt_aarch64)
           |#define GUEST_DTB_VADDR           $guestDtbVaddrInHex

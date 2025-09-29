@@ -13,7 +13,7 @@ import org.sireum.hamr.codegen.microkit.plugins.linters.MicrokitLinterPlugin
 import org.sireum.hamr.codegen.microkit.plugins.types.CRustTypePlugin
 import org.sireum.hamr.codegen.microkit.{rust => RustAst}
 import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, MicrokitPlugin}
-import org.sireum.hamr.codegen.microkit.util.Util
+import org.sireum.hamr.codegen.microkit.util.MicrokitUtil
 import org.sireum.hamr.ir.{Aadl, Direction}
 import org.sireum.message.Reporter
 
@@ -34,17 +34,17 @@ object CRustApiPlugin {
 
   val apiResultName: String = "res"
 
-  @strictpure def apiModuleName(thread: AadlThread): String = s"${Util.getThreadIdPath(thread)}_api"
+  @strictpure def apiModuleName(thread: AadlThread): String = s"${MicrokitUtil.getThreadIdPath(thread)}_api"
 
-  @strictpure def applicationApiType(thread: AadlThread): String = s"${Util.getThreadIdPath(thread)}_Application_Api"
+  @strictpure def applicationApiType(thread: AadlThread): String = s"${MicrokitUtil.getThreadIdPath(thread)}_Application_Api"
 
-  @strictpure def initializationApiType(thread: AadlThread): String = s"${Util.getThreadIdPath(thread)}_Initialization_Api"
+  @strictpure def initializationApiType(thread: AadlThread): String = s"${MicrokitUtil.getThreadIdPath(thread)}_Initialization_Api"
 
-  @strictpure def computeApiType(thread: AadlThread): String = s"${Util.getThreadIdPath(thread)}_Compute_Api"
+  @strictpure def computeApiType(thread: AadlThread): String = s"${MicrokitUtil.getThreadIdPath(thread)}_Compute_Api"
 
-  @strictpure def putApiType(thread: AadlThread): String = s"${Util.getThreadIdPath(thread)}_Put_Api"
+  @strictpure def putApiType(thread: AadlThread): String = s"${MicrokitUtil.getThreadIdPath(thread)}_Put_Api"
 
-  @strictpure def fullApiType(thread: AadlThread): String = s"${Util.getThreadIdPath(thread)}_Full_Api"
+  @strictpure def fullApiType(thread: AadlThread): String = s"${MicrokitUtil.getThreadIdPath(thread)}_Full_Api"
 }
 
 object ComponentApiContributions {
@@ -138,7 +138,7 @@ object ComponentApiContributions {
     var ret: HashSMap[IdPath, ComponentApiContributions] = HashSMap.empty
 
     for (srcThread <- symbolTable.getThreads()) {
-      if (Util.isRusty(srcThread)) {
+      if (MicrokitUtil.isRusty(srcThread)) {
         var contributions = ComponentApiContributions.empty
 
         contributions = contributions(testingApis = contributions.testingApis ++
@@ -173,7 +173,7 @@ object ComponentApiContributions {
 
     for (c <- contributions.apiContributions.entries) {
       val thread = symbolTable.componentMap.get(c._1).get.asInstanceOf[AadlThread]
-      val threadId = Util.getThreadIdPath(thread)
+      val threadId = MicrokitUtil.getThreadIdPath(thread)
       val bridgeDir = CRustApiPlugin.apiDirectory(thread, options)
 
       val reset_test_globals: ISZ[ST] = for(v <- c._2.externApiTestMockVariables) yield
@@ -181,7 +181,7 @@ object ComponentApiContributions {
 
       { // extern_c_api.rs
         val content =
-          st"""${Util.doNotEdit}
+          st"""${MicrokitUtil.doNotEdit}
               |
               |//! C-interface for the component.
               |//! This code must be unsafe.
@@ -233,7 +233,7 @@ object ComponentApiContributions {
         val initApiTypeName = CRustApiPlugin.initializationApiType(thread)
         val computeApiTypeName = CRustApiPlugin.computeApiType(thread)
         val content =
-          st"""${Util.doNotEdit}
+          st"""${MicrokitUtil.doNotEdit}
               |
               |use vstd::prelude::*;
               |use ${CRustTypePlugin.usePath};
@@ -300,7 +300,7 @@ object ComponentApiContributions {
         val content =
           st"""#![cfg(test)]
               |
-              |${Util.doNotEdit}
+              |${MicrokitUtil.doNotEdit}
               |
               |use crate::bridge::extern_c_api as extern_api;
               |use ${CRustTypePlugin.usePath};
@@ -314,7 +314,7 @@ object ComponentApiContributions {
 
       { // bridge/mod.rs
         val content =
-          st"""${Util.doNotEdit}
+          st"""${MicrokitUtil.doNotEdit}
               |
               |pub mod extern_c_api;
               |pub mod test_api;

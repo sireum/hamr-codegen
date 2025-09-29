@@ -3,7 +3,7 @@ package org.sireum.hamr.codegen.microkit.util
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.containers.Marker
-import org.sireum.hamr.codegen.microkit.util.Util.KiBytesToHex
+import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
 
 @datatype class SystemDescription (val schedulingDomains: ISZ[SchedulingDomain],
                                    val protectionDomains: ISZ[ProtectionDomain],

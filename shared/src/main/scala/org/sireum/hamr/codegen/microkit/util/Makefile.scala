@@ -3,7 +3,7 @@ package org.sireum.hamr.codegen.microkit.util
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{ISZValue, Store}
-import org.sireum.hamr.codegen.microkit.util.Util.TAB
+import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.TAB
 
 @sig trait MakefileItem
 

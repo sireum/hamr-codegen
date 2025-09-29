@@ -14,7 +14,7 @@ import org.sireum.hamr.codegen.common.util.{CodeGenResults, HamrCli}
 import org.sireum.hamr.codegen.microkit.plugins.gumbo.GumboRustUtil
 import org.sireum.hamr.codegen.microkit.plugins.reporting.RustContainers.RustFn
 import org.sireum.hamr.codegen.microkit.reporting._
-import org.sireum.hamr.codegen.microkit.util.Util
+import org.sireum.hamr.codegen.microkit.util.MicrokitUtil
 import org.sireum.hamr.ir.{Aadl, Direction, GclAssume, GclGuarantee, GclSubclause}
 import org.sireum.message.{Level, Position, Reporter}
 
@@ -135,7 +135,7 @@ import org.sireum.message.{Level, Position, Reporter}
       var gumboReport: Option[GumboReport] = None()
       var gumboxReport: Option[GumboXReport] = None()
 
-      val threadid = Util.getThreadIdPath(t)
+      val threadid = MicrokitUtil.getThreadIdPath(t)
 
       val protectionDomain = msd.getProtectionDomain(threadid).get.protection_domains(0)
 
@@ -184,7 +184,7 @@ import org.sireum.message.{Level, Position, Reporter}
         addPort(o)
       }
 
-      if (Util.isRusty(t)) {
+      if (MicrokitUtil.isRusty(t)) {
         assert(t.isPeriodic())
 
         val rustBridgeDir = sel4OutputDir / "crates" / threadid / "src" / "bridge"

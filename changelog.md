@@ -53,7 +53,7 @@
 
 **Microkit**
 
-  * Added attedtation plugin
+  * Added attestation plugin
 
   * Added Microkit codegen reporting plugin
 

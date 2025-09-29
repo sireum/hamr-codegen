@@ -13,7 +13,7 @@ import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, Microki
 import org.sireum.hamr.codegen.microkit.plugins.linters.MicrokitLinterPlugin
 import org.sireum.hamr.codegen.microkit.rust.Visibility
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
-import org.sireum.hamr.codegen.microkit.util.{RustUtil, Util}
+import org.sireum.hamr.codegen.microkit.util.{RustUtil, MicrokitUtil}
 import org.sireum.hamr.ir.Aadl
 import org.sireum.message.Reporter
 import org.sireum.hamr.codegen.microkit.{rust => RustAst}
@@ -150,7 +150,7 @@ object CRustTypePlugin {
 
       for(p <- modIncludes.entries) { // src/data/<package>/mod.rs
         val packageMod =
-          st"""${Util.doNotEdit}
+          st"""${MicrokitUtil.doNotEdit}
               |
               |${(p._2, "\n")}
               |
@@ -178,7 +178,7 @@ object CRustTypePlugin {
 
       { // src/data/sb_event_counter.rs
         val sbEventCounter =
-          st"""${Util.doNotEdit}
+          st"""${MicrokitUtil.doNotEdit}
               |
               |pub type sb_event_counter_t = usize;
               |"""
@@ -188,7 +188,7 @@ object CRustTypePlugin {
 
       { // src/data/sb_microkit_types.rs
         val sbMicrokitTypes =
-          st"""${Util.doNotEdit}
+          st"""${MicrokitUtil.doNotEdit}
               |
               |pub type microkit_channel = u32;
               |"""
@@ -202,7 +202,7 @@ object CRustTypePlugin {
               |
               |${RustUtil.defaultCrateLevelAttributes}
               |
-              |${Util.doNotEdit}
+              |${MicrokitUtil.doNotEdit}
               |
               |${(for (k <- modIncludes.keys) yield st"pub mod ${(k, "::")};", "\n")}
               |
@@ -214,7 +214,7 @@ object CRustTypePlugin {
       }
 
     { // Cargo.toml
-      val content = st"""${Util.safeToEditMakefile}
+      val content = st"""${MicrokitUtil.safeToEditMakefile}
                         |
                         |[package]
                         |name = "data"
@@ -222,7 +222,7 @@ object CRustTypePlugin {
                         |edition = "2021"
                         |
                         |[dependencies]
-                        |${RustUtil.verusCargoDependencies}
+                        |${RustUtil.verusCargoDependencies(store)}
                         |
                         |${RustUtil.commonCargoTomlEntries}
                         |"""
@@ -278,7 +278,7 @@ object CRustTypePlugin {
 
     var ret: ISZ[RustAst.Item] = ISZ()
 
-    ret = ret :+ RustAst.ItemST(Util.doNotEdit)
+    ret = ret :+ RustAst.ItemST(MicrokitUtil.doNotEdit)
     ret = ret :+ RustAst.Use(ISZ(), RustAst.IdentString("vstd::prelude::*"))
     ret = ret :+ RustAst.Use(ISZ(), RustAst.IdentString("super::*"))
 

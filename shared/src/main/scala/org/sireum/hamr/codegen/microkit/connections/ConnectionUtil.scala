@@ -33,10 +33,10 @@ object ConnectionUtil {
     val pageSize: Z =
       aadlType.bitSize match {
         case Some(bits) =>
-          val p = Util.bytesToKiBytes(Util.bitsToBytes(bits))
-          if (p < Util.defaultPageSizeInKiBytes) Util.defaultPageSizeInKiBytes
+          val p = MicrokitUtil.bytesToKiBytes(MicrokitUtil.bitsToBytes(bits))
+          if (p < MicrokitUtil.defaultPageSizeInKiBytes) MicrokitUtil.defaultPageSizeInKiBytes
           else p
-        case _ => Util.defaultPageSizeInKiBytes
+        case _ => MicrokitUtil.defaultPageSizeInKiBytes
       }
 
     val cTypeName = cTypeNameProvider.mangledName
@@ -141,10 +141,10 @@ object ConnectionUtil {
       val pageSize: Z =
         receiverContribution.aadlType.bitSize match {
           case Some(bits) =>
-            val p = Util.bytesToKiBytes(Util.bitsToBytes(bits))
-            if (p < Util.defaultPageSizeInKiBytes) Util.defaultPageSizeInKiBytes
+            val p = MicrokitUtil.bytesToKiBytes(MicrokitUtil.bitsToBytes(bits))
+            if (p < MicrokitUtil.defaultPageSizeInKiBytes) MicrokitUtil.defaultPageSizeInKiBytes
             else p
-          case _ => Util.defaultPageSizeInKiBytes
+          case _ => MicrokitUtil.defaultPageSizeInKiBytes
         }
 
       val sharedMemVarName = QueueTemplate.getClientEnqueueSharedVarName(srcPort.identifier, receiverContribution.queueSize)
@@ -178,10 +178,10 @@ object ConnectionUtil {
       val pageSize: Z =
         senderPortType.bitSize match {
           case Some(bits) =>
-            val p = Util.bytesToKiBytes(Util.bitsToBytes(bits))
-            if (p < Util.defaultPageSizeInKiBytes) Util.defaultPageSizeInKiBytes
+            val p = MicrokitUtil.bytesToKiBytes(MicrokitUtil.bitsToBytes(bits))
+            if (p < MicrokitUtil.defaultPageSizeInKiBytes) MicrokitUtil.defaultPageSizeInKiBytes
             else p
-          case _ => Util.defaultPageSizeInKiBytes
+          case _ => MicrokitUtil.defaultPageSizeInKiBytes
         }
 
       val queueSize = 1
