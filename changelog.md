@@ -15,7 +15,7 @@ cd kekinian
 
 <details><summary>Commits</summary>
 
-* [626924b](https://github.com/sireum/hamr-codegen/commit/626924b) update submodule
+* [ac97ca7](https://github.com/sireum/hamr-codegen/commit/ac97ca7) update submodule
 
 * [d23d0b6](https://github.com/sireum/hamr-codegen/commit/d23d0b6) microkit: update verus dependencies to 0.2025.09.25.04e8687 release
 
