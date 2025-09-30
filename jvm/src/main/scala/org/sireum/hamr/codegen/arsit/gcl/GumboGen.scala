@@ -29,7 +29,8 @@ object GumboGen {
                                           val modifies: ISZ[ST],
                                           val requires: ISZ[ST],
                                           val ensures: ISZ[ST],
-                                          val flows: ISZ[ST]
+                                          val flows: ISZ[ST],
+                                          val gumboTables: ISZ[ST]
                                          ) extends GclEntryPointContainer
 
   @sig trait GclHolder {
@@ -128,7 +129,8 @@ object GumboGen {
                                                val modifies: Option[ST],
                                                val requires: Option[ST],
                                                val ensures: Option[ST],
-                                               val flows: Option[ST]) extends GclEntryPointContainer
+                                               val flows: Option[ST],
+                                               val gumboTables: Option[ST]) extends GclEntryPointContainer
 
   @datatype class GclEntryPointSporadicCompute(val markers: ISZ[Marker],
                                                val handlers: HashSMap[AadlPort, GclComputeEventHolder]) extends GclEntryPointContainer
@@ -338,6 +340,7 @@ object GumboGen {
         var requires: ISZ[ST] = ISZ()
         var ensures: ISZ[ST] = ISZ()
         var flows: ISZ[ST] = ISZ()
+        var gumboTables: ISZ[ST] = ISZ()
         var markers: ISZ[Marker] = ISZ()
 
         val inits: ISZ[ST] = sc.initializes.get.guarantees.map((m: GclGuarantee) => {
@@ -441,7 +444,7 @@ object GumboGen {
               |  ${optFlows}
               |)"""
 
-        return Some(GclEntryPointInitialize(imports, markers, ret, modifies, requires, ensures, flows))
+        return Some(GclEntryPointInitialize(imports, markers, ret, modifies, requires, ensures, flows,gumboTables))
       } else {
         return None()
       }
@@ -658,6 +661,7 @@ object GumboGen {
     var rmodifies: ISZ[ST] = ISZ()
     var rensures: ISZ[ST] = ISZ()
     var rflows: ISZ[ST] = ISZ()
+    var rgumboTables: ISZ[ST] = ISZ()
 
     def genComputeMarkerCreator(id: String, typ: String): Marker = {
       val m = Marker(
@@ -733,6 +737,64 @@ object GumboGen {
             |  To(${(tos, ", ")})
             |)"""
     }
+
+    //SIERRA BEGIN
+
+    //for each table
+    for(t <- compute.gumboTables){
+      // TODO match statement on t (Not doing it yet since we only have normal tables)
+      //  normal table
+
+      // get normal table
+      val nt: GclNormalTable = t.table
+      // horizontal preds
+      val hps: ISZ[AST.Exp] = nt.horizontalPredicates
+      //vertical preds
+      val vps: ISZ[AST.Exp] = nt.verticalPredicates
+      // result rows
+      val rrs: ISZ[GclResultRow] = nt.resultRows
+      //
+      // where am in table traversal x is horizontal, y is vertical position.
+      var x,y: Z = 0
+
+      //TODO Where to put the deterministic condition?? Ensures? Requires? (probably not requires because
+      //  if it is false, anything is true, which is not something we want)
+      //generalHolder :+ GclEnsuresHolder(nt.id,Some(st"Deterministic"),st"(${("(",vps,") |^ ")})) ^ (${("(",hps,") |^ ")}))")
+
+      // for each row (y position, vertical predicate (v), etc)
+      for(ve <- vps){
+        // get in the form I need.
+        println(ve.posOpt)
+        println(ve.prettyST.render)
+
+        val v = gclSymbolTable.rexprs.get(toKey(ve)).get
+        // results on this row.
+        val row: ISZ[AST.Exp] = rrs(y).results
+        // for each column (x position, horizontal predicate (h), etc)
+        for(he <- hps){
+          // get in the form I need.
+          val h = gclSymbolTable.rexprs.get(toKey(he)).get
+          // get the result at this position "x","y" (in the form I need)
+          val r = gclSymbolTable.rexprs.get(toKey(row(x))).get
+          // construct the ensures elem.
+          //  The general holder is where this *should* be placed, it is filtered and combined
+          //  with anyone
+          generalHolder = generalHolder :+
+            GclEnsuresHolder(nt.id,processDescriptor(Some(s"(${x},${y})"),"//   "),st"((${v}) & (${h})) -->: (${r})") //previously multiline, not needed.
+          // we are going to the next column.
+          x += 1
+        }
+        // go back to the first column.
+        x = 0
+        // we are going to the next row.
+        y += 1
+      }
+
+      //  TODO end of normal table
+      // TODO end of hypothetical match statement
+    }
+    //TODO The enuresTables GclEnsuresHolder(s) need to be placed into the genralEnsures?? Below, when the contract is made.
+    //SIERRA END
 
     val generalRequires: ISZ[GclRequiresHolder] = generalHolder.filter((p: GclHolder) => p.isInstanceOf[GclRequiresHolder]).map((m: GclHolder) => m.asInstanceOf[GclRequiresHolder])
     val generalEnsures: ISZ[GclEnsuresHolder] = generalHolder.filter((p: GclHolder) => p.isInstanceOf[GclEnsuresHolder]).map((m: GclHolder) => m.asInstanceOf[GclEnsuresHolder])

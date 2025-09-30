@@ -74,6 +74,7 @@ import org.sireum.message.Reporter
     var modifies: ISZ[ST] = ISZ()
     var ensures: ISZ[ST] = ISZ()
     var flows: ISZ[ST] = ISZ()
+    var gumboTables: ISZ[ST] = ISZ() //SIERRA
     var resources: ISZ[Resource] = ISZ()
 
     if (!localGumboStore.handledAnnexLibraries) {
@@ -114,6 +115,7 @@ import org.sireum.message.Reporter
             modifies = modifies ++ r.modifies
             ensures = ensures ++ r.ensures
             flows = flows ++ r.flows
+            gumboTables = gumboTables ++ r.gumboTables
             markers = markers ++ r.markers
             imports = imports ++ r.imports
 
