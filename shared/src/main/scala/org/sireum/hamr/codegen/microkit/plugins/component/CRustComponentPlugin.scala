@@ -538,8 +538,10 @@ object ComponentContributions {}
               |sel4_include_dirs := $$(firstword $$(wildcard $$(microkit_sdk_config_dir)/include \
               |                                            $$(microkit_sdk_config_dir)/debug/include))
               |
-              |ENV_VARS = RUSTC_BOOTSTRAP=1 \
-              |           SEL4_INCLUDE_DIRS=$$(abspath $$(sel4_include_dirs))
+              |ENV_VARS = RUSTC_BOOTSTRAP=1
+              |
+              |BUILD_ENV_VARS = $$(ENV_VARS) \
+              |                 SEL4_INCLUDE_DIRS=$$(abspath $$(sel4_include_dirs))
               |
               |CARGO_FLAGS = -Z build-std=core,alloc,compiler_builtins \
               |              -Z build-std-features=compiler-builtins-mem \
@@ -548,16 +550,16 @@ object ComponentContributions {}
               |all: build-verus-release
               |
               |build-verus-release:
-              |${TAB}$$(ENV_VARS) cargo-verus build --features sel4 $$(CARGO_FLAGS) --release
+              |${TAB}$$(BUILD_ENV_VARS) cargo-verus build --features sel4 $$(CARGO_FLAGS) --release
               |
               |build-verus:
-              |${TAB}$$(ENV_VARS) cargo-verus build --features sel4 $$(CARGO_FLAGS)
+              |${TAB}$$(BUILD_ENV_VARS) cargo-verus build --features sel4 $$(CARGO_FLAGS)
               |
               |build-release:
-              |${TAB}$$(ENV_VARS) cargo build --features sel4 $$(CARGO_FLAGS) --release
+              |${TAB}$$(BUILD_ENV_VARS) cargo build --features sel4 $$(CARGO_FLAGS) --release
               |
               |build:
-              |${TAB}$$(ENV_VARS) cargo build --features sel4 $$(CARGO_FLAGS)
+              |${TAB}$$(BUILD_ENV_VARS) cargo build --features sel4 $$(CARGO_FLAGS)
               |
               |verus:
               |${TAB}$$(ENV_VARS) cargo-verus verify $$(CARGO_FLAGS)
