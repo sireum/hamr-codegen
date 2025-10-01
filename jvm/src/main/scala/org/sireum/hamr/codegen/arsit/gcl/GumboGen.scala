@@ -763,6 +763,8 @@ object GumboGen {
         //generalHolder :+ GclEnsuresHolder(nt.id,Some(st"Deterministic"),st"(${("(",vps,") |^ ")})) ^ (${("(",hps,") |^ ")}))")
 
         // for each row (y position, vertical predicate (v), etc)
+        var determinePartHorizontal: ST = st""
+        var determinePartVertical: ST = st""
         for(ve <- vps){
           // get in the form I need.
           println(ve.posOpt)
@@ -770,11 +772,25 @@ object GumboGen {
 
           val v = gclSymbolTable.rexprs.get(toKey(ve)).get
           // results on this row.
+          if(y<vps.length-1){
+            determinePartVertical = st"${determinePartVertical}(${v}) |^ "
+          }
+          else{
+            determinePartVertical = st"${determinePartVertical}(${v})"
+          }
           val row: ISZ[AST.Exp] = rrs(y).results
           // for each column (x position, horizontal predicate (h), etc)
           for(he <- hps){
             // get in the form I need.
             val h = gclSymbolTable.rexprs.get(toKey(he)).get
+            if(y==0) {
+              if (x < hps.length - 1) {
+                determinePartHorizontal = st"${determinePartHorizontal}(${h}) |^ "
+              }
+              else {
+                determinePartHorizontal = st"${determinePartHorizontal}(${h})"
+              }
+            }
             // get the result at this position "x","y" (in the form I need)
             val r = gclSymbolTable.rexprs.get(toKey(row(x))).get
             // construct the ensures elem.
@@ -785,12 +801,15 @@ object GumboGen {
             // we are going to the next column.
             x += 1
           }
+
           // go back to the first column.
           x = 0
           // we are going to the next row.
           y += 1
         }
-
+        generalHolder =
+          GclEnsuresHolder(nt.id,processDescriptor(Some(s"Deterministic Check"),"//   "),st"(${determinePartHorizontal}) & (${determinePartVertical})") +:
+            generalHolder
         //  TODO end of normal table
         // TODO end of hypothetical match statement
       }
