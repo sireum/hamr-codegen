@@ -741,57 +741,59 @@ object GumboGen {
     //SIERRA BEGIN
 
     //for each table
-    for(t <- compute.gumboTables){
-      // TODO match statement on t (Not doing it yet since we only have normal tables)
-      //  normal table
+    if(compute.gumboTables.nonEmpty){
+      for(t <- compute.gumboTables){
+        // TODO match statement on t (Not doing it yet since we only have normal tables)
+        //  normal table
 
-      // get normal table
-      val nt: GclNormalTable = t.table
-      // horizontal preds
-      val hps: ISZ[AST.Exp] = nt.horizontalPredicates
-      //vertical preds
-      val vps: ISZ[AST.Exp] = nt.verticalPredicates
-      // result rows
-      val rrs: ISZ[GclResultRow] = nt.resultRows
-      //
-      // where am in table traversal x is horizontal, y is vertical position.
-      var x,y: Z = 0
+        // get normal table
+        val nt: GclNormalTable = t.table
+        // horizontal preds
+        val hps: ISZ[AST.Exp] = nt.horizontalPredicates
+        //vertical preds
+        val vps: ISZ[AST.Exp] = nt.verticalPredicates
+        // result rows
+        val rrs: ISZ[GclResultRow] = nt.resultRows
+        //
+        // where am in table traversal x is horizontal, y is vertical position.
+        var x,y: Z = 0
 
-      //TODO Where to put the deterministic condition?? Ensures? Requires? (probably not requires because
-      //  if it is false, anything is true, which is not something we want)
-      //generalHolder :+ GclEnsuresHolder(nt.id,Some(st"Deterministic"),st"(${("(",vps,") |^ ")})) ^ (${("(",hps,") |^ ")}))")
+        //TODO Where to put the deterministic condition?? Ensures? Requires? (probably not requires because
+        //  if it is false, anything is true, which is not something we want)
+        //generalHolder :+ GclEnsuresHolder(nt.id,Some(st"Deterministic"),st"(${("(",vps,") |^ ")})) ^ (${("(",hps,") |^ ")}))")
 
-      // for each row (y position, vertical predicate (v), etc)
-      for(ve <- vps){
-        // get in the form I need.
-        println(ve.posOpt)
-        println(ve.prettyST.render)
-
-        val v = gclSymbolTable.rexprs.get(toKey(ve)).get
-        // results on this row.
-        val row: ISZ[AST.Exp] = rrs(y).results
-        // for each column (x position, horizontal predicate (h), etc)
-        for(he <- hps){
+        // for each row (y position, vertical predicate (v), etc)
+        for(ve <- vps){
           // get in the form I need.
-          val h = gclSymbolTable.rexprs.get(toKey(he)).get
-          // get the result at this position "x","y" (in the form I need)
-          val r = gclSymbolTable.rexprs.get(toKey(row(x))).get
-          // construct the ensures elem.
-          //  The general holder is where this *should* be placed, it is filtered and combined
-          //  with anyone
-          generalHolder = generalHolder :+
-            GclEnsuresHolder(nt.id,processDescriptor(Some(s"(${x},${y})"),"//   "),st"((${v}) & (${h})) -->: (${r})") //previously multiline, not needed.
-          // we are going to the next column.
-          x += 1
-        }
-        // go back to the first column.
-        x = 0
-        // we are going to the next row.
-        y += 1
-      }
+          println(ve.posOpt)
+          println(ve.prettyST.render)
 
-      //  TODO end of normal table
-      // TODO end of hypothetical match statement
+          val v = gclSymbolTable.rexprs.get(toKey(ve)).get
+          // results on this row.
+          val row: ISZ[AST.Exp] = rrs(y).results
+          // for each column (x position, horizontal predicate (h), etc)
+          for(he <- hps){
+            // get in the form I need.
+            val h = gclSymbolTable.rexprs.get(toKey(he)).get
+            // get the result at this position "x","y" (in the form I need)
+            val r = gclSymbolTable.rexprs.get(toKey(row(x))).get
+            // construct the ensures elem.
+            //  The general holder is where this *should* be placed, it is filtered and combined
+            //  with anyone
+            generalHolder = generalHolder :+
+              GclEnsuresHolder(nt.id,processDescriptor(Some(s"(${x},${y})"),"//   "),st"((${v}) & (${h})) -->: (${r})") //previously multiline, not needed.
+            // we are going to the next column.
+            x += 1
+          }
+          // go back to the first column.
+          x = 0
+          // we are going to the next row.
+          y += 1
+        }
+
+        //  TODO end of normal table
+        // TODO end of hypothetical match statement
+      }
     }
     //TODO The enuresTables GclEnsuresHolder(s) need to be placed into the genralEnsures?? Below, when the contract is made.
     //SIERRA END
