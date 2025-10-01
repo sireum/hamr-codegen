@@ -758,13 +758,10 @@ object GumboGen {
         // where am in table traversal x is horizontal, y is vertical position.
         var x,y: Z = 0
 
-        //TODO Where to put the deterministic condition?? Ensures? Requires? (probably not requires because
-        //  if it is false, anything is true, which is not something we want)
         //generalHolder :+ GclEnsuresHolder(nt.id,Some(st"Deterministic"),st"(${("(",vps,") |^ ")})) ^ (${("(",hps,") |^ ")}))")
 
         // for each row (y position, vertical predicate (v), etc)
-        var determinePartHorizontal: ST = st""
-        var determinePartVertical: ST = st""
+        var deterministicST: ST = st""
         for(ve <- vps){
           // get in the form I need.
           println(ve.posOpt)
@@ -772,25 +769,11 @@ object GumboGen {
 
           val v = gclSymbolTable.rexprs.get(toKey(ve)).get
           // results on this row.
-          if(y<vps.length-1){
-            determinePartVertical = st"${determinePartVertical}(${v}) |^ "
-          }
-          else{
-            determinePartVertical = st"${determinePartVertical}(${v})"
-          }
           val row: ISZ[AST.Exp] = rrs(y).results
           // for each column (x position, horizontal predicate (h), etc)
           for(he <- hps){
             // get in the form I need.
             val h = gclSymbolTable.rexprs.get(toKey(he)).get
-            if(y==0) {
-              if (x < hps.length - 1) {
-                determinePartHorizontal = st"${determinePartHorizontal}(${h}) |^ "
-              }
-              else {
-                determinePartHorizontal = st"${determinePartHorizontal}(${h})"
-              }
-            }
             // get the result at this position "x","y" (in the form I need)
             val r = gclSymbolTable.rexprs.get(toKey(row(x))).get
             // construct the ensures elem.
@@ -807,8 +790,42 @@ object GumboGen {
           // we are going to the next row.
           y += 1
         }
+        var a: Z = 0
+        var b: Z = 0
+        for(ve1 <- vps){
+          val v1 = gclSymbolTable.rexprs.get(toKey(ve1)).get
+          for(ve2 <- vps){
+            val v2 = gclSymbolTable.rexprs.get(toKey(ve2)).get
+            if(b<a){
+                deterministicST = st"${deterministicST}(${v1} |^ ${v2}) ^ "
+            }
+            b = b + 1
+          }
+          b = 0
+          a = a + 1
+        }
+        a = 0
+        b = 0
+        for(he1 <- hps){
+          val h1 = gclSymbolTable.rexprs.get(toKey(he1)).get
+          for(he2 <- hps){
+            val h2 = gclSymbolTable.rexprs.get(toKey(he2)).get
+            if(b<a){
+              if(a < hps.length - 1 & b < hps.length - 2) {
+                deterministicST = st"${deterministicST}(${h1} |^ ${h2}) ^ "
+              }
+              else{
+                deterministicST = st"${deterministicST}(${h1} |^ ${h2})"
+              }
+            }
+            b = b + 1
+          }
+          b = 0
+          a = a + 1
+        }
+        //if(a < vps.length - 1 & b < vps.length - 2){
         generalHolder =
-          GclEnsuresHolder(nt.id,processDescriptor(Some(s"Deterministic Check"),"//   "),st"(${determinePartHorizontal}) & (${determinePartVertical})") +:
+          GclEnsuresHolder(nt.id,processDescriptor(Some(s"Deterministic Check"),"//   "),deterministicST) +:
             generalHolder
         //  TODO end of normal table
         // TODO end of hypothetical match statement
