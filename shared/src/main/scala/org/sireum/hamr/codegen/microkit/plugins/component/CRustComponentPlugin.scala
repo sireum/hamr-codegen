@@ -88,7 +88,8 @@ object ComponentContributions {}
 
     var ret: Map[IdPath, ComponentContributions] = Map.empty
 
-    var makefileEntries: ISZ[ST] = ISZ()
+    var makefileTestEntries: ISZ[ST] = ISZ()
+    var makefileCleanEntries: ISZ[ST] = ISZ()
     for (thread <- symbolTable.getThreads() if MicrokitUtil.isRusty(thread)) {
       val threadId = MicrokitUtil.getThreadIdPath(thread)
 
@@ -229,13 +230,26 @@ object ComponentContributions {}
 
           testEntries = testEntries)
 
-      makefileEntries = makefileEntries :+ st"make -C $${CRATES_DIR}/$threadId test"
+      makefileTestEntries = makefileTestEntries :+ st"make -C $${CRATES_DIR}/$threadId test"
+
+      makefileCleanEntries = makefileCleanEntries :+ st"make -C $${CRATES_DIR}/$threadId clean"
     } // end handling crusty components
 
-    return (
-      MakefileUtil.addMainMakefileTarget(MakefileTarget(name = "test", dependencies = ISZ(), body = makefileEntries),
-        CRustComponentPlugin.putComponentContributions(DefaultCRustComponentContributions(ret), localStore)),
-      resources)
+    localStore = MakefileUtil.addMakefileTargets(
+      ISZ("Makefile"),
+      ISZ(MakefileTarget(name = "test", allowMultiple = T, dependencies = ISZ(st"$${TOP_BUILD_DIR}/Makefile"), body = ISZ(st"$${MAKE} -C $${TOP_BUILD_DIR} test"))),
+      localStore)
+
+    localStore = MakefileUtil.addMakefileTargets(
+      ISZ("system.mk"),
+      ISZ(
+        MakefileTarget(name = "test", allowMultiple = T, dependencies = ISZ(), body = makefileTestEntries),
+        MakefileTarget(name = "clean", allowMultiple = T, dependencies = ISZ(), body = makefileCleanEntries)),
+      localStore)
+
+    localStore = CRustComponentPlugin.putComponentContributions(DefaultCRustComponentContributions(ret), localStore)
+
+    return (localStore, resources)
   }
 
   @pure def genTestEntries(thread: AadlThread, cRustTypeProvider: CRustTypeProvider): ISZ[RustAst.Item] = {

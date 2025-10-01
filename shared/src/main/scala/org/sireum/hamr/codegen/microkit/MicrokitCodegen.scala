@@ -594,6 +594,8 @@ object MicrokitCodegen {
       return (CodeGenResults.empty, localStore)
     } else {
       // plugin initialization phase (one pass)
+      localStore = MakefileUtil.addMakefileTargets(ISZ("Makefile"), ISZ(), localStore)
+      localStore = MakefileUtil.addMakefileTargets(ISZ("system.mk"), ISZ(), localStore)
       // TODO: move to an init plugin
       val modelIsRusty: B = ops.ISZOps(symbolTable.getThreads()).exists(p => MicrokitUtil.isRusty(p))
       if (modelIsRusty) {
@@ -719,7 +721,7 @@ object MicrokitCodegen {
     val dotPath = s"${options.sel4OutputDir.get}/microkit.dot"
     resources = resources :+ ResourceUtil.createResource(path = dotPath, content = sysDot, overwrite = T)
 
-    val makefileContents = MakefileTemplate.mainMakefile(MakefileUtil.getMainMakefileTarget(localStore).elements, MicrokitPlugin.modelIsRusty(localStore))
+    val makefileContents = MakefileTemplate.mainMakefile(MakefileUtil.getMakefileTargets(ISZ("Makefile"), localStore), MicrokitPlugin.modelIsRusty(localStore))
     val makefilePath = s"${options.sel4OutputDir.get}/Makefile"
     resources = resources :+ ResourceUtil.createResource(makefilePath, makefileContents, T)
 
@@ -738,7 +740,8 @@ object MicrokitCodegen {
       elfFiles = elfFiles,
       typeObjectNames = typeObjectNames,
       buildEntries = buildEntries,
-      elfEntries = elfEntries)
+      elfEntries = elfEntries,
+      miscTargets = MakefileUtil.getMakefileTargets(ISZ("system.mk"), localStore))
 
     val systemmkPath = s"${options.sel4OutputDir.get}/${MicrokitCodegen.systemMakeFilename}"
     resources = resources :+ ResourceUtil.createResource(systemmkPath, systemmkContents, T)

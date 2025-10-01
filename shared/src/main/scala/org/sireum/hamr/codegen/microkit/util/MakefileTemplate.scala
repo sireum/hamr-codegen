@@ -7,7 +7,7 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.TAB
 
 object MakefileTemplate {
 
-  def mainMakefile(targets: ISZ[MakefileTarget], hasRustCrates: B): ST = {
+  def mainMakefile(miscTargets: ISZ[MakefileTarget], hasRustCrates: B): ST = {
     val rustCommentOpt: Option[ST] =
       if (hasRustCrates)
         Some(st"""# By default, cargo-verus is used to build Rust crates, and it fails if verification does not succeed.
@@ -17,12 +17,15 @@ object MakefileTemplate {
                  |#   RUST_MAKE_TARGET=build-release make
                  |""")
       else None()
+    val miscTargetsOpt: Option[ST] =
+      if(miscTargets.nonEmpty) Some(
+        st"""${(for(t <- miscTargets) yield t.prettyST, "\n\n")}
+            |""")
+      else None()
+
     val content =
       st"""${MicrokitUtil.doNotEditMakefile}
           |
-          |ifeq ($$(strip $$(MICROKIT_SDK)),)
-          |$$(error MICROKIT_SDK must be specified)
-          |endif
           |override MICROKIT_SDK := $$(abspath $${MICROKIT_SDK})
           |
           |SYSTEM_MAKEFILE ?= system.mk
@@ -57,15 +60,31 @@ object MakefileTemplate {
           |${rustCommentOpt}
           |all: $${IMAGE_FILE}
           |
-          |qemu $${IMAGE_FILE} $${REPORT_FILE} clean clobber: $$(IMAGE_FILE) $${TOP_BUILD_DIR}/Makefile FORCE
-          |	$${MAKE} -C $${TOP_BUILD_DIR} $$(notdir $$@)
+          |.PHONY: check_microkit
+          |check_microkit:
+          |${TAB}@if [ -z "$$(strip $$(MICROKIT_BOARD))" ]; then \
+          |${TAB}${TAB}echo "MICROKIT_BOARD must be specified"; \
+          |${TAB}${TAB}exit 1; \
+          |${TAB}fi
+          |${TAB}@if [ -z "$$(strip $$(MICROKIT_SDK))" ]; then \
+          |${TAB}${TAB}echo "MICROKIT_SDK must be specified"; \
+          |${TAB}${TAB}exit 1; \
+          |${TAB}fi
+          |
+          |qemu $${IMAGE_FILE} $${REPORT_FILE}: check_microkit $$(IMAGE_FILE) $${TOP_BUILD_DIR}/Makefile FORCE
+          |${TAB}$${MAKE} -C $${TOP_BUILD_DIR} $$(notdir $$@)
+          |
+          |clean:: $${TOP_BUILD_DIR}/Makefile
+          |${TAB}$${MAKE} -C $${TOP_BUILD_DIR} clean
+          |
+          |clobber:: clean
+          |${TAB}rm -rf $$(TOP_DIR)/build
           |
           |$${TOP_BUILD_DIR}/Makefile: $$(SYSTEM_MAKEFILE)
-          |	mkdir -p $${TOP_BUILD_DIR}
-          |	cp $$(SYSTEM_MAKEFILE) $${TOP_BUILD_DIR}/Makefile
+          |${TAB}mkdir -p $${TOP_BUILD_DIR}
+          |${TAB}cp $$(SYSTEM_MAKEFILE) $${TOP_BUILD_DIR}/Makefile
           |
-          |${(for(t <- targets) yield t.prettyST, "\n\n")}
-          |
+          |$miscTargetsOpt
           |FORCE:
           |"""
     return content
@@ -74,26 +93,19 @@ object MakefileTemplate {
   @pure def systemMakefile(elfFiles: ISZ[String],
                            typeObjectNames: ISZ[String],
                            buildEntries: ISZ[ST],
-                           elfEntries: ISZ[ST]): ST = {
+                           elfEntries: ISZ[ST],
+                           miscTargets: ISZ[MakefileTarget]): ST = {
 
     val uniqueBuildEntries: ISZ[String] = (Set.empty[String] ++ (for(be <- buildEntries) yield be.render)).elements
+
+    val miscTargetsOpt: Option[ST] =
+      if (miscTargets.nonEmpty) Some(st"""${(for(t <- miscTargets) yield t.prettyST, "\n\n")}""")
+      else None()
 
     val content =
       st"""${MicrokitUtil.doNotEditMakefile}
           |
-          |ifeq ($$(strip $$(MICROKIT_SDK)),)
-          |$$(error MICROKIT_SDK must be specified)
-          |endif
-          |
           |MICROKIT_TOOL ?= $$(MICROKIT_SDK)/bin/microkit
-          |
-          |ifeq ("$$(wildcard $$(MICROKIT_TOOL))","")
-          |$$(error Microkit tool not found at $${MICROKIT_TOOL})
-          |endif
-          |
-          |ifeq ($$(strip $$(MICROKIT_BOARD)),)
-          |$$(error MICROKIT_BOARD must be specified)
-          |endif
           |
           |CFLAGS := -mcpu=$$(CPU) \
           |${TAB}-mstrict-align \
@@ -151,10 +163,9 @@ object MakefileTemplate {
           |${TAB}${TAB}${TAB}-nographic
           |
           |clean::
-          |${TAB}rm -f $${(oFiles, " ")}
+          |${TAB}rm -f *.o
           |
-          |clobber:: clean
-          |${TAB}rm -f ${(elfFiles, " ")} $${IMAGE_FILE} $${REPORT_FILE}
+          |$miscTargetsOpt
           |"""
     return content
   }

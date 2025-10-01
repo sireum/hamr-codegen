@@ -110,7 +110,7 @@ object GumboRustPlugin {
       }
     }
 
-    var makefileItems: ISZ[ST] = ISZ()
+    var makefileVerusItems: ISZ[ST] = ISZ()
     for (threadPath <- GumboRustPlugin.getThreadsWithContracts(localStore)) {
       var markers: ISZ[Marker] = ISZ()
       val thread = symbolTable.componentMap.get(threadPath).get.asInstanceOf[AadlThread]
@@ -353,13 +353,13 @@ object GumboRustPlugin {
               appFreeFunctions = freeFuncs)),
         localStore)
 
-      makefileItems = makefileItems :+ st"make -C $${CRATES_DIR}/${MicrokitUtil.getThreadIdPath(thread)} verus"
+      makefileVerusItems = makefileVerusItems :+ st"make -C $${CRATES_DIR}/${MicrokitUtil.getThreadIdPath(thread)} verus"
     } // end processing thread's contracts
 
-    return (
-      MakefileUtil.addMainMakefileTarget(MakefileTarget(name = "verus", dependencies = ISZ(), body = makefileItems),
-        GumboRustPlugin.putGumboRustContributions(DefaultGumboRustContributions(datatypeInvariants), localStore)),
-        ISZ())
+    localStore = MakefileUtil.addMakefileTargets(ISZ("system.mk"), ISZ(MakefileTarget(name = "verus", allowMultiple = F, dependencies = ISZ(), body = makefileVerusItems)), localStore)
+    localStore = MakefileUtil.addMakefileTargets(ISZ("Makefile"), ISZ(MakefileTarget(name = "verus", allowMultiple = F, dependencies = ISZ(st"$${TOP_BUILD_DIR}/Makefile"), body = ISZ(st"$${MAKE} -C $${TOP_BUILD_DIR} verus"))), localStore)
+
+    return (GumboRustPlugin.putGumboRustContributions(DefaultGumboRustContributions(datatypeInvariants), localStore), ISZ())
   }
 
   @pure def handleIntegrationConstraints(thread: AadlThread,
