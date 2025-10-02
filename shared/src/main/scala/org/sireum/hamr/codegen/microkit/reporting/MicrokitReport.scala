@@ -78,7 +78,9 @@ import org.sireum.message.Position
                                      val pos: Position) extends PortLangRealization {
 
   @pure override def pretty(linkRenderer: (String, String, Position) => ST): ST = {
-    return linkRenderer(name, title, pos)
+    val sameLine = pos.beginLine == pos.endLine
+    val lines: String = s"Line${if(sameLine) "" else "s"} ${pos.beginLine}${if(!sameLine) s"-${pos.endLine}" else ""}"
+    return linkRenderer(name, s"${title}: $lines", pos)
   }
 }
 
@@ -99,9 +101,9 @@ import org.sireum.message.Position
 
     val realizations: ST =
       if (direction == PortDirection.In)
-        st"${(for (r <- ops.ISZOps(languageRealizations).reverse) yield r.pretty(linkRenderer), " -> ")}"
+        st"${(for (r <- ops.ISZOps(languageRealizations).reverse) yield r.pretty(linkRenderer), " → ")}"
       else
-        st"${(for (r <- languageRealizations) yield r.pretty(linkRenderer), " -> ")}"
+        st"${(for (r <- languageRealizations) yield r.pretty(linkRenderer), " → ")}"
 
     val id = name(name.lastIndex)
     return (

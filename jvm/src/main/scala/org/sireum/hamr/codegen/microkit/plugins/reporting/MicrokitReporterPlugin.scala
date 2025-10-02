@@ -142,6 +142,14 @@ import org.sireum.message.{Level, Position, Reporter}
       val inPorts = t.getPorts().filter(p => p.direction == Direction.In)
       val outPorts = t.getPorts().filter(p => p.direction == Direction.Out)
 
+      val cComponentDir = sel4OutputDir / "components" / threadid / "src"
+      assert(cComponentDir.exists, cComponentDir.value)
+
+      val cBridgeFile = cComponentDir / s"$threadid.c"
+      assert (cBridgeFile.exists, cBridgeFile.value)
+
+      val cFile = CParser.parse(cBridgeFile, sel4OutputDir)
+
       @pure def addPort(p: AadlPort): Unit = {
         val (kind, payload, queueSize): (PortKind.Type, Option[String], Z) = p match {
           case a: AadlDataPort => (PortKind.Data, Some(a.aadlType.name), 1)
@@ -154,10 +162,22 @@ import org.sireum.message.{Level, Position, Reporter}
 
         val direction: PortDirection.Type = if (p.direction == Direction.In) PortDirection.In else PortDirection.Out
 
-        //realizations = realizations :+ PortLanguageArtifact(
-        //  name = "Model", title = "Model", pos = ReportUtil.buildPosA(p.feature.identifier.pos.get, workspaceRoot, sel4OutputDir))
-
         val key = s"${p.identifier}_queue_$queueSize"
+
+        val methodName = s"${if (p.direction == Direction.In) "get" else "put"}_${p.identifier}"
+        val cMethod = cFile.getMethgod(methodName)
+        realizations = realizations :+ PortLanguageArtifact(
+          name = "C Interface",
+          title = "C Interface",
+          pos = cMethod.pos)
+
+
+        val sharedMemVar = cFile.getField(key)
+        realizations = realizations :+ PortLanguageArtifact(
+          name = "C var_addr",
+          title = "C Shared Memory Variable",
+          pos = sharedMemVar.pos)
+
         protectionDomain.maps.filter(m => ops.StringOps(m.setvar_vaddr.get).startsWith(key)) match {
           case ISZ(e) =>
             realizations = realizations :+ PortLanguageArtifact(

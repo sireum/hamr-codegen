@@ -81,7 +81,7 @@ object ReportUtil {
 
     val fp = position.asInstanceOf[FlatPos]
 
-    return st"${fp.uriOpt.get}#L${fp.beginLine32.toZ}-L${fp.endLine32.toZ}"
+    return st"${fp.uriOpt.get}#L${fp.beginLine32.toZ}" //-L${fp.endLine32.toZ}"
   }
 
   @pure def locateText(str: String, singleLine: B, region: ISZ[String]): (Z, Z) = {
