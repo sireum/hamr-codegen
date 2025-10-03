@@ -28,7 +28,7 @@ if [ -f "$0.com" ] && [ "$0.com" -nt "$0" ]; then                               
   exec "$0.com" "$@"                                                                                        #
 else                                                                                                        #
   rm -fR "$0.com"                                                                                           #
-  exec "${SIREUM_HOME}/bin/sireum" slang run -n "$0" "$@"                                                   #
+  exec "${SIREUM_HOME}/bin/sireum" slang run "$0" "$@"                                                      #
 fi                                                                                                          #
 :BOF
 setlocal
@@ -40,7 +40,7 @@ set NEWER=False
 if exist %~dpnx0.com for /f %%i in ('powershell -noprofile -executionpolicy bypass -command "(Get-Item %~dpnx0.com).LastWriteTime -gt (Get-Item %~dpnx0).LastWriteTime"') do @set NEWER=%%i
 if "%NEWER%" == "True" goto native
 del "%~dpnx0.com" > nul 2>&1
-"%~dp0sireum.bat" slang run -n "%0" %*
+"%~dp0sireum.bat" slang run "%0" %*
 exit /B %errorlevel%
 :native
 %~dpnx0.com %*
@@ -63,13 +63,6 @@ val sireumHome: Os.Path = {
 }
 val sireum: Os.Path = sireumHome / "bin" / (if (Os.isWin) "sireum.bat" else "sireum")
 val appDir: Os.Path = sireumHome / "bin" / (if (Os.isMac) "mac" else if (Os.isWin) "win" else "linux")
-
-val osateDir: Os.Path = {
-  Os.env("OSATE_HOME") match {
-    case Some(s) => Os.path(s)
-    case _ => appDir / s"osate${if (Os.isMac) ".app" else ""}"
-  }
-}
 
 val proyekName: String = "sireum-proyek"
 val project: Os.Path = homeBin / "project-standalone.cmd"
@@ -386,6 +379,13 @@ def installOsateGumbo(): B = {
 
   val hamrJar = s"org.sireum.aadl.osate.hamr_${versions.get("org.sireum.aadl.osate.plugins.version_alt").get}.jar"
   val gumboJar = s"org.sireum.aadl.gumbo_${versions.get("org.sireum.aadl.gumbo.plugins.version_alt").get}.jar"
+
+  val osateDir: Os.Path = {
+    Os.env("OSATE_HOME") match {
+      case Some(s) => Os.path(s)
+      case _ => appDir / s"osate${if (Os.isMac) ".app" else ""}"
+    }
+  }
 
   val pluginsDir: Os.Path =
     if (Os.isMac) osateDir / "Contents" / "Eclipse" / "plugins"
