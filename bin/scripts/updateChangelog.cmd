@@ -10,8 +10,8 @@ import Containers._
 val sireumHome = Sireum.homeOpt.get
 val codegenHome = sireumHome / "hamr" / "codegen"
 
-// git tag -l | xargs git tag -d   # delete all local tags
-// git fetch --tags                # fetch fresh tags from remote
+Os.proc(ISZ("bash", "-c", "git tag -l | xargs git tag -d")).at(sireumHome).runCheck()
+proc"git fetch --tags".at(sireumHome).runCheck()
 
 val codegenCommits = ops.StringOps(proc"git log --pretty=format:%H|%ct|%s".at(codegenHome).runCheck().out).split(c => c == '\n')
 var commits: ISZ[commit] = ISZ()
@@ -20,30 +20,32 @@ for (e <- codegenCommits) {
   commits = commits :+ commit(content(0), Z(content(1)).get, content(2))
 }
 
-val tags = ops.StringOps(proc"git for-each-ref --sort=creatordate --format=%(refname:short)|%(creatordate:unix) refs/tags".at(sireumHome).runCheck().out).split(c => c == '\n')
+val currentCodegenCommitTS = Z(ops.StringOps(Os.proc(ISZ("bash", "-c", s"git ls-tree HEAD hamr/codegen  | awk '{print $$3}' | xargs -I{} git -C hamr/codegen show -s --format=%ct {}")).at(sireumHome).runCheck().out).trim).get
+
+val tags = ops.StringOps(proc"git for-each-ref --sort=committerdate --format=%(refname:short)|%(committerdate:unix) refs/tags".at(sireumHome).runCheck().out).split(c => c == '\n')
 var releases: ISZ[release] = ISZ()
 for (t <- tags) {
   val content = ops.StringOps(t).split(c => c == '|')
-  releases = releases :+ release(content(0), Z(content(1)).get)
+  val hamrCommitTS = ops.StringOps(Os.proc(ISZ("bash", "-c", s"git ls-tree -r ${content(0)} hamr/codegen  | awk '{print $$3}' | xargs -I{} git -C hamr/codegen show -s --format=%ct {}")).at(sireumHome).runCheck().out).trim
+  releases = releases :+ release(tag = content(0), tagTimeStamp = Z(content(1)).get, codegenTimeStamp = Z(hamrCommitTS).get)
 }
 
-var m = HashSMap.empty[String, ISZ[commit]]
-var postRelease: ISZ[commit] = ISZ()
+var released = HashSMap.empty[release, ISZ[commit]]
+var preRelease: ISZ[commit] = ISZ()
 
-for (c <- commits) {
-  //val co = ops.StringOps(c.message)
-  var placed = F //co.contains("update submodule")
-  for(r <- releases if !placed && r.tag != "dev") {
-    if (c.date.compareTo(r.date) <= 0) {
-      if (!m.contains(r.tag)) {
-        m = m + r.tag ~> ISZ()
+for (commit <- commits) {
+  var placed = F
+  for(release <- releases if !placed) {
+    if (commit.date.compareTo(release.codegenDate) <= 0) {
+      if (!released.contains(release)) {
+        released = released + release ~> ISZ()
       }
-      m = m + r.tag ~> (m.get(r.tag).get :+ c)
+      released = released + release ~> (released.get(release).get :+ commit)
       placed = T
     }
   }
-  if (!placed) {
-    postRelease = postRelease :+ c
+  if (!placed && commit.timeStamp <= currentCodegenCommitTS) {
+    preRelease = preRelease :+ commit
   }
 }
 
@@ -53,48 +55,40 @@ val existing = ops.StringOps(changelog.read)
 val tag = existing.stringIndexOf("<!-- released -->")
 assert (tag > 0 && tag < existing.s.size)
 
-val unreleased = ops.StringOps(existing.substring(0, tag - 1))
-
-val p1 = unreleased.stringIndexOf("<!-- begin unreleased commits -->")
-val p2 = unreleased.stringIndexOf("<!-- end unreleased commits -->")
-assert (p1 > 0 && p1 < unreleased.s.size, p1)
-assert (p2 > 0 && p2 < unreleased.s.size, p2)
-
-val unreal = st"""${unreleased.substring(0, p1 + string"<!-- begin unreleased commits -->".size + 1)}
-                 |<details><summary>Commits</summary>
-                 |
-                 |${(for(c <- postRelease) yield st"* ${c.pretty}", "\n\n")}
-                 |</details>
-                 |<br>
-                 |${unreleased.substring(p2, unreleased.s.size)}"""
-
-
-val released = ops.StringOps(existing.substring(tag + string"<!-- released -->".size + 1, existing.s.size))
+val releasedSection = ops.StringOps(existing.substring(tag + string"<!-- released -->".size + 1, existing.s.size))
 
 var newContent: ISZ[ST] = ISZ()
+var dev = st""
 
-for(e <- m.entries if !released.contains(e._1)) {
-//for(e <- m.entries) {
-  val dest = s"https://github.com/sireum/kekinian/releases/tag/${e._1}"
-  newContent = newContent :+
-    st"""# [${e._1}]($dest)
+for(e <- released.entries) {
+  val dest = s"https://github.com/sireum/kekinian/releases/tag/${e._1.tag}"
+  val content =
+    st"""<!-- begin ${e._1.tag} -->
+        |# [${e._1.tag}]($dest) ${if (e._1.tag == "dev") s" <font size=3>as of ${e._1.tagDate.format(java.time.format.DateTimeFormatter.ofPattern(string"yyyy-MM-dd".native))}</font>" else "" }
         |
         |<details><summary>How to build</summary>
         |
         |```
-        |git clone --rec --depth 1 --branch release/${e._1} https://github.com/sireum/kekinian
+        |git clone --rec --depth 1 --branch release/${e._1.tag} https://github.com/sireum/kekinian.git
         |cd kekinian
-        |bin/build.cmd
+        |./bin/build.cmd
         |```
         |
         |</details>
         |
         |<details><summary>Commits</summary>
         |
-        |${(for(c <- e._2) yield st"* ${c.pretty}", "\n\n")}
+        |${(for (c <- e._2) yield st"* ${c.pretty}", "\n\n")}
         |</details>
         |<br>
+        |<!-- end ${e._1.tag} -->
         |"""
+
+  if (e._1.tag == "dev") {
+    dev = content
+  } else if (!releasedSection.contains(s"<!-- begin ${e._1.tag} -->")) {
+    newContent = newContent :+ content
+  }
 }
 
 val newContentOpt: Option[ST] =
@@ -103,11 +97,36 @@ val newContentOpt: Option[ST] =
     st"""${(newContent, "\n\n")}
         |""")
 
+val preReleaseContent =
+  st"""<!-- begin pre-release -->
+      |# Pre-Release
+      |
+      |<details><summary>How to build</summary>
+      |
+      |```
+      |git clone --rec --depth 1 https://github.com/sireum/kekinian.git
+      |cd kekinian
+      |./bin/build.cmd
+      |```
+      |
+      |</details>
+      |
+      |<details><summary>Commits</summary>
+      |
+      |${(for (c <- preRelease) yield st"* ${c.pretty}", "\n\n")}
+      |</details>
+      |<br>
+      |<!-- end pre-release -->
+      |"""
+
 changelog.writeOver(
-  st"""$unreal
+  st"""*Last Updated ${java.time.LocalDate.now()}*
+      |
+      |$preReleaseContent
+      |$dev
       |<!-- released -->
       |$newContentOpt
-      |${released.s}""".render)
+      |${releasedSection.s}""".render)
 
 println(s"Wrote: $changelog")
 
@@ -126,9 +145,14 @@ object Containers {
   }
 
   @datatype class release(val tag: String,
-                          val timeStamp: Z) {
-    @pure def date: ZonedDateTime = {
-      return Instant.ofEpochSecond(timeStamp.toLong).atZone(ZoneId.systemDefault());
+                          val tagTimeStamp: Z,
+                          val codegenTimeStamp: Z) {
+    @pure def tagDate: ZonedDateTime = {
+      return Instant.ofEpochSecond(tagTimeStamp.toLong).atZone(ZoneId.systemDefault());
+    }
+
+    @pure def codegenDate: ZonedDateTime = {
+      return Instant.ofEpochSecond(codegenTimeStamp.toLong).atZone(ZoneId.systemDefault());
     }
   }
 }
