@@ -33,7 +33,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/dev https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch dev https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -96,7 +96,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250924.c877daf https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250924.c877daf https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -145,7 +145,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250825.20d1bda https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250825.20d1bda https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -214,7 +214,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250721.f13c8b0e https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250721.f13c8b0e https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -275,7 +275,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250630.0392c909 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250630.0392c909 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -346,7 +346,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250603.ae9204b1 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250603.ae9204b1 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -403,7 +403,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250421.c5f6fe7d https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250421.c5f6fe7d https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -454,7 +454,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250321.dc36763 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250321.dc36763 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -539,7 +539,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250211.0cf652c https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250211.0cf652c https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -580,7 +580,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250124.83153a7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250124.83153a7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -605,7 +605,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250115.20107b2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250115.20107b2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -652,7 +652,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241202.c94661b https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241202.c94661b https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -681,7 +681,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241122.a3b711d https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241122.a3b711d https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -728,7 +728,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241104.1c0dea6 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241104.1c0dea6 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -771,7 +771,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241028.60464f2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241028.60464f2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -796,7 +796,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241024.6da7a54 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241024.6da7a54 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -833,7 +833,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241017.f6e1eff https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241017.f6e1eff https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -858,7 +858,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241016.60c1a61 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241016.60c1a61 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -881,7 +881,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241015.9f71e14 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241015.9f71e14 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -902,7 +902,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241011.21df31a https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241011.21df31a https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -931,7 +931,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241003.c5bebe8 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241003.c5bebe8 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -976,7 +976,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240927.ff60856 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240927.ff60856 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -1007,7 +1007,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240924.9739da6 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240924.9739da6 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -1038,7 +1038,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240916.58541b9 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240916.58541b9 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -1065,7 +1065,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240913.333bacf https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240913.333bacf https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -1152,7 +1152,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240717.e27fd06 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240717.e27fd06 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -1181,7 +1181,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240508.f1c262c https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240508.f1c262c https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -1224,7 +1224,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240409.bb9a698 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240409.bb9a698 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -1279,7 +1279,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240229.03709b7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240229.03709b7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -1328,7 +1328,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240219.acd4b33 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240219.acd4b33 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -1351,7 +1351,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240126.221b644 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240126.221b644 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -1388,7 +1388,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231212.3ca2940 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231212.3ca2940 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -1453,7 +1453,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231025.3258446 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231025.3258446 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -1492,7 +1492,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231019.967e9e3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231019.967e9e3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -1513,7 +1513,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231012.254e926 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231012.254e926 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -1566,7 +1566,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230922.4ff94f3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230922.4ff94f3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -1589,7 +1589,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230921.331f54a https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230921.331f54a https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -1642,7 +1642,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230815.c628ec4 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230815.c628ec4 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -1721,7 +1721,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230523.a5432f0 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230523.a5432f0 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -1842,7 +1842,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230504.2861e45 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230504.2861e45 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -1863,7 +1863,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230417.061c405 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230417.061c405 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -1908,7 +1908,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230330.51aa33e https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230330.51aa33e https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -1957,7 +1957,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230228.964dbb2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230228.964dbb2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -2058,7 +2058,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230111.54ac097 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230111.54ac097 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -2103,7 +2103,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221216.cf6bed3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221216.cf6bed3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -2170,7 +2170,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221130.c350258 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221130.c350258 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -2213,7 +2213,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221110.3001643 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221110.3001643 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -2260,7 +2260,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221006.c8a44f5 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221006.c8a44f5 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -2285,7 +2285,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220926.e3e8203 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220926.e3e8203 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -2338,7 +2338,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220822.8603817 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220822.8603817 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -2401,7 +2401,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220701.e3f6d0e https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220701.e3f6d0e https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -2486,7 +2486,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220526.4bb6bfe https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220526.4bb6bfe https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -2513,7 +2513,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220513.725f0c2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220513.725f0c2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -2564,7 +2564,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220502.83e1a78 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220502.83e1a78 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -2635,7 +2635,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220414.3ed18e3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220414.3ed18e3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -2718,7 +2718,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220321.26aca77 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220321.26aca77 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -2745,7 +2745,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220302.7ee2ecc https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220302.7ee2ecc https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -2778,7 +2778,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220211.d12a474 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220211.d12a474 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -2801,7 +2801,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220128.7d1855b https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220128.7d1855b https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -2862,7 +2862,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211223.c717627 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211223.c717627 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -2891,7 +2891,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211207.54c5b35 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211207.54c5b35 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -2920,7 +2920,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211103.09b1e32 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211103.09b1e32 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -2993,7 +2993,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211020.ddd6008 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211020.ddd6008 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -3042,7 +3042,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210930.abd2495 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210930.abd2495 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -3107,7 +3107,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210913.ab8f3db https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210913.ab8f3db https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -3200,7 +3200,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210901.36f6227 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210901.36f6227 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -3239,7 +3239,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210824.72bece8 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210824.72bece8 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -3278,7 +3278,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210816.dd5f584 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210816.dd5f584 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -3373,7 +3373,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210617.8a885a8 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210617.8a885a8 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -3418,7 +3418,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210528.cf3c649 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210528.cf3c649 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -3459,7 +3459,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210512.a968fb3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210512.a968fb3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -3516,7 +3516,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210427.9cd2a8a https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210427.9cd2a8a https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -3589,7 +3589,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210411.c273380 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210411.c273380 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -3656,7 +3656,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210318.5f39324 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210318.5f39324 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -3683,7 +3683,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210301.ba1a6ba https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210301.ba1a6ba https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -3712,7 +3712,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210223.a67b618 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210223.a67b618 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -3733,7 +3733,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210208.5e0cfa7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210208.5e0cfa7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -3766,7 +3766,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210120.9bbeb24 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210120.9bbeb24 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -3815,7 +3815,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201221.b159c6f https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201221.b159c6f https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -3860,7 +3860,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201120.058f5f5 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201120.058f5f5 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -3885,7 +3885,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201116.092a7d9 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201116.092a7d9 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -3914,7 +3914,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201109.deb4e5d https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201109.deb4e5d https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -3957,7 +3957,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201009.ec05fb7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201009.ec05fb7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -4004,7 +4004,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200915.72510af https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200915.72510af https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -4031,7 +4031,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200902.3184e0c https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200902.3184e0c https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -4058,7 +4058,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200829.aeb1500 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200829.aeb1500 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -4227,7 +4227,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200614.8787cf0 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200614.8787cf0 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -4346,7 +4346,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200214.5d56812 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200214.5d56812 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -4415,7 +4415,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250924.c877daf https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250924.c877daf https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -4458,7 +4458,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250825.20d1bda https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250825.20d1bda https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -4519,7 +4519,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250721.f13c8b0e https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250721.f13c8b0e https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -4556,7 +4556,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250630.0392c909 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250630.0392c909 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -4619,7 +4619,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250603.ae9204b1 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250603.ae9204b1 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -4668,7 +4668,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250421.c5f6fe7d https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250421.c5f6fe7d https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -4719,7 +4719,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250321.dc36763 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250321.dc36763 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -4804,7 +4804,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250211.0cf652c https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250211.0cf652c https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -4845,7 +4845,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250124.83153a7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250124.83153a7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -4870,7 +4870,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250115.20107b2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250115.20107b2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -4917,7 +4917,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241202.c94661b https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241202.c94661b https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -4946,7 +4946,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241122.a3b711d https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241122.a3b711d https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -4993,7 +4993,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241104.1c0dea6 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241104.1c0dea6 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -5036,7 +5036,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241028.60464f2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241028.60464f2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -5061,7 +5061,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241024.6da7a54 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241024.6da7a54 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -5098,7 +5098,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241017.f6e1eff https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241017.f6e1eff https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -5123,7 +5123,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241016.60c1a61 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241016.60c1a61 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -5146,7 +5146,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241015.9f71e14 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241015.9f71e14 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -5167,7 +5167,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241011.21df31a https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241011.21df31a https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -5196,7 +5196,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241003.c5bebe8 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241003.c5bebe8 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -5241,7 +5241,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240927.ff60856 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240927.ff60856 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -5272,7 +5272,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240924.9739da6 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240924.9739da6 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -5303,7 +5303,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240916.58541b9 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240916.58541b9 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -5330,7 +5330,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240913.333bacf https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240913.333bacf https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -5417,7 +5417,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240717.e27fd06 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240717.e27fd06 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -5446,7 +5446,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240508.f1c262c https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240508.f1c262c https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -5489,7 +5489,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240409.bb9a698 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240409.bb9a698 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -5544,7 +5544,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240229.03709b7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240229.03709b7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -5593,7 +5593,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240219.acd4b33 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240219.acd4b33 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -5616,7 +5616,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240126.221b644 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240126.221b644 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -5653,7 +5653,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231212.3ca2940 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231212.3ca2940 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -5718,7 +5718,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231025.3258446 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231025.3258446 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -5757,7 +5757,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231019.967e9e3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231019.967e9e3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -5778,7 +5778,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231012.254e926 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231012.254e926 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -5831,7 +5831,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230922.4ff94f3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230922.4ff94f3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -5854,7 +5854,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230921.331f54a https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230921.331f54a https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -5907,7 +5907,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230815.c628ec4 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230815.c628ec4 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -5986,7 +5986,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230523.a5432f0 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230523.a5432f0 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -6107,7 +6107,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230504.2861e45 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230504.2861e45 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -6128,7 +6128,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230417.061c405 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230417.061c405 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -6173,7 +6173,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230330.51aa33e https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230330.51aa33e https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -6222,7 +6222,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230228.964dbb2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230228.964dbb2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -6323,7 +6323,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230111.54ac097 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230111.54ac097 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -6368,7 +6368,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221216.cf6bed3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221216.cf6bed3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -6435,7 +6435,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221130.c350258 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221130.c350258 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -6478,7 +6478,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221110.3001643 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221110.3001643 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -6525,7 +6525,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221006.c8a44f5 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221006.c8a44f5 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -6550,7 +6550,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220926.e3e8203 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220926.e3e8203 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -6603,7 +6603,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220822.8603817 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220822.8603817 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -6666,7 +6666,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220701.e3f6d0e https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220701.e3f6d0e https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -6751,7 +6751,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220526.4bb6bfe https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220526.4bb6bfe https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -6778,7 +6778,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220513.725f0c2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220513.725f0c2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -6829,7 +6829,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220502.83e1a78 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220502.83e1a78 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -6900,7 +6900,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220414.3ed18e3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220414.3ed18e3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -6983,7 +6983,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220321.26aca77 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220321.26aca77 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -7010,7 +7010,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220302.7ee2ecc https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220302.7ee2ecc https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -7043,7 +7043,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220211.d12a474 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220211.d12a474 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -7066,7 +7066,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220128.7d1855b https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220128.7d1855b https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -7127,7 +7127,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211223.c717627 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211223.c717627 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -7156,7 +7156,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211207.54c5b35 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211207.54c5b35 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -7185,7 +7185,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211103.09b1e32 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211103.09b1e32 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -7258,7 +7258,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211020.ddd6008 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211020.ddd6008 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -7307,7 +7307,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210930.abd2495 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210930.abd2495 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -7372,7 +7372,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210913.ab8f3db https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210913.ab8f3db https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -7465,7 +7465,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210901.36f6227 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210901.36f6227 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -7504,7 +7504,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210824.72bece8 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210824.72bece8 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -7543,7 +7543,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210816.dd5f584 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210816.dd5f584 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -7638,7 +7638,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210617.8a885a8 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210617.8a885a8 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -7683,7 +7683,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210528.cf3c649 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210528.cf3c649 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -7724,7 +7724,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210512.a968fb3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210512.a968fb3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -7781,7 +7781,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210427.9cd2a8a https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210427.9cd2a8a https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -7854,7 +7854,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210411.c273380 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210411.c273380 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -7921,7 +7921,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210318.5f39324 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210318.5f39324 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -7948,7 +7948,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210301.ba1a6ba https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210301.ba1a6ba https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -7977,7 +7977,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210223.a67b618 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210223.a67b618 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -7998,7 +7998,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210208.5e0cfa7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210208.5e0cfa7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -8031,7 +8031,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210120.9bbeb24 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210120.9bbeb24 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -8080,7 +8080,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201221.b159c6f https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201221.b159c6f https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -8125,7 +8125,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201120.058f5f5 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201120.058f5f5 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -8150,7 +8150,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201116.092a7d9 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201116.092a7d9 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -8179,7 +8179,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201109.deb4e5d https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201109.deb4e5d https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -8222,7 +8222,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201009.ec05fb7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201009.ec05fb7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -8269,7 +8269,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200915.72510af https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200915.72510af https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -8296,7 +8296,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200902.3184e0c https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200902.3184e0c https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -8323,7 +8323,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200829.aeb1500 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200829.aeb1500 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -8492,7 +8492,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200614.8787cf0 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200614.8787cf0 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -8611,7 +8611,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200214.5d56812 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200214.5d56812 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -8680,7 +8680,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250924.c877daf https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250924.c877daf https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -8723,7 +8723,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250825.20d1bda https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250825.20d1bda https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -8784,7 +8784,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250721.f13c8b0e https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250721.f13c8b0e https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -8821,7 +8821,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250630.0392c909 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250630.0392c909 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -8884,7 +8884,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250603.ae9204b1 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250603.ae9204b1 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -8933,7 +8933,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250421.c5f6fe7d https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250421.c5f6fe7d https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -8984,7 +8984,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250321.dc36763 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250321.dc36763 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -9069,7 +9069,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250211.0cf652c https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250211.0cf652c https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -9110,7 +9110,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250124.83153a7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250124.83153a7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -9135,7 +9135,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250115.20107b2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250115.20107b2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -9182,7 +9182,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241202.c94661b https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241202.c94661b https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -9211,7 +9211,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241122.a3b711d https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241122.a3b711d https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -9258,7 +9258,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241104.1c0dea6 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241104.1c0dea6 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -9301,7 +9301,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241028.60464f2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241028.60464f2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -9326,7 +9326,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241024.6da7a54 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241024.6da7a54 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -9363,7 +9363,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241017.f6e1eff https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241017.f6e1eff https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -9388,7 +9388,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241016.60c1a61 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241016.60c1a61 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -9411,7 +9411,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241015.9f71e14 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241015.9f71e14 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -9432,7 +9432,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241011.21df31a https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241011.21df31a https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -9461,7 +9461,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241003.c5bebe8 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241003.c5bebe8 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -9506,7 +9506,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240927.ff60856 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240927.ff60856 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -9537,7 +9537,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240924.9739da6 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240924.9739da6 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -9568,7 +9568,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240916.58541b9 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240916.58541b9 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -9595,7 +9595,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240913.333bacf https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240913.333bacf https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -9682,7 +9682,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240717.e27fd06 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240717.e27fd06 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -9711,7 +9711,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240508.f1c262c https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240508.f1c262c https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -9754,7 +9754,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240409.bb9a698 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240409.bb9a698 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -9809,7 +9809,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240229.03709b7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240229.03709b7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -9858,7 +9858,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240219.acd4b33 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240219.acd4b33 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -9881,7 +9881,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240126.221b644 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240126.221b644 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -9918,7 +9918,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231212.3ca2940 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231212.3ca2940 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -9983,7 +9983,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231025.3258446 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231025.3258446 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -10022,7 +10022,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231019.967e9e3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231019.967e9e3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -10043,7 +10043,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231012.254e926 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231012.254e926 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -10096,7 +10096,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230922.4ff94f3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230922.4ff94f3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -10119,7 +10119,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230921.331f54a https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230921.331f54a https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -10172,7 +10172,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230815.c628ec4 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230815.c628ec4 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -10251,7 +10251,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230523.a5432f0 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230523.a5432f0 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -10372,7 +10372,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230504.2861e45 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230504.2861e45 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -10393,7 +10393,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230417.061c405 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230417.061c405 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -10438,7 +10438,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230330.51aa33e https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230330.51aa33e https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -10487,7 +10487,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230228.964dbb2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230228.964dbb2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -10588,7 +10588,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230111.54ac097 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230111.54ac097 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -10633,7 +10633,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221216.cf6bed3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221216.cf6bed3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -10700,7 +10700,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221130.c350258 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221130.c350258 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -10743,7 +10743,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221110.3001643 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221110.3001643 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -10790,7 +10790,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221006.c8a44f5 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221006.c8a44f5 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -10815,7 +10815,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220926.e3e8203 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220926.e3e8203 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -10868,7 +10868,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220822.8603817 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220822.8603817 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -10931,7 +10931,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220701.e3f6d0e https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220701.e3f6d0e https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -11016,7 +11016,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220526.4bb6bfe https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220526.4bb6bfe https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -11043,7 +11043,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220513.725f0c2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220513.725f0c2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -11094,7 +11094,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220502.83e1a78 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220502.83e1a78 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -11165,7 +11165,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220414.3ed18e3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220414.3ed18e3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -11248,7 +11248,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220321.26aca77 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220321.26aca77 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -11275,7 +11275,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220302.7ee2ecc https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220302.7ee2ecc https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -11308,7 +11308,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220211.d12a474 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220211.d12a474 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -11331,7 +11331,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220128.7d1855b https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220128.7d1855b https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -11392,7 +11392,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211223.c717627 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211223.c717627 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -11421,7 +11421,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211207.54c5b35 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211207.54c5b35 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -11450,7 +11450,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211103.09b1e32 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211103.09b1e32 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -11523,7 +11523,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211020.ddd6008 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211020.ddd6008 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -11572,7 +11572,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210930.abd2495 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210930.abd2495 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -11637,7 +11637,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210913.ab8f3db https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210913.ab8f3db https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -11730,7 +11730,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210901.36f6227 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210901.36f6227 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -11769,7 +11769,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210824.72bece8 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210824.72bece8 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -11808,7 +11808,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210816.dd5f584 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210816.dd5f584 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -11903,7 +11903,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210617.8a885a8 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210617.8a885a8 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -11948,7 +11948,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210528.cf3c649 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210528.cf3c649 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -11989,7 +11989,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210512.a968fb3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210512.a968fb3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -12046,7 +12046,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210427.9cd2a8a https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210427.9cd2a8a https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -12119,7 +12119,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210411.c273380 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210411.c273380 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -12186,7 +12186,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210318.5f39324 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210318.5f39324 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -12213,7 +12213,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210301.ba1a6ba https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210301.ba1a6ba https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -12242,7 +12242,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210223.a67b618 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210223.a67b618 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -12263,7 +12263,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210208.5e0cfa7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210208.5e0cfa7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -12296,7 +12296,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210120.9bbeb24 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210120.9bbeb24 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -12345,7 +12345,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201221.b159c6f https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201221.b159c6f https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -12390,7 +12390,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201120.058f5f5 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201120.058f5f5 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -12415,7 +12415,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201116.092a7d9 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201116.092a7d9 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -12444,7 +12444,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201109.deb4e5d https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201109.deb4e5d https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -12487,7 +12487,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201009.ec05fb7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201009.ec05fb7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -12534,7 +12534,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200915.72510af https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200915.72510af https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -12561,7 +12561,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200902.3184e0c https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200902.3184e0c https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -12588,7 +12588,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200829.aeb1500 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200829.aeb1500 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -12757,7 +12757,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200614.8787cf0 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200614.8787cf0 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -12876,7 +12876,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200214.5d56812 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200214.5d56812 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -12945,7 +12945,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250924.c877daf https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250924.c877daf https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -12988,7 +12988,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250825.20d1bda https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250825.20d1bda https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -13049,7 +13049,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250721.f13c8b0e https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250721.f13c8b0e https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -13086,7 +13086,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250630.0392c909 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250630.0392c909 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -13149,7 +13149,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250603.ae9204b1 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250603.ae9204b1 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -13198,7 +13198,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250421.c5f6fe7d https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250421.c5f6fe7d https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -13249,7 +13249,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250321.dc36763 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250321.dc36763 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -13334,7 +13334,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250211.0cf652c https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250211.0cf652c https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -13375,7 +13375,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250124.83153a7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250124.83153a7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -13400,7 +13400,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250115.20107b2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250115.20107b2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -13447,7 +13447,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241202.c94661b https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241202.c94661b https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -13476,7 +13476,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241122.a3b711d https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241122.a3b711d https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -13523,7 +13523,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241104.1c0dea6 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241104.1c0dea6 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -13566,7 +13566,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241028.60464f2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241028.60464f2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -13591,7 +13591,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241024.6da7a54 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241024.6da7a54 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -13628,7 +13628,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241017.f6e1eff https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241017.f6e1eff https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -13653,7 +13653,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241016.60c1a61 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241016.60c1a61 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -13676,7 +13676,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241015.9f71e14 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241015.9f71e14 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -13697,7 +13697,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241011.21df31a https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241011.21df31a https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -13726,7 +13726,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241003.c5bebe8 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241003.c5bebe8 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -13771,7 +13771,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240927.ff60856 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240927.ff60856 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -13802,7 +13802,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240924.9739da6 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240924.9739da6 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -13833,7 +13833,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240916.58541b9 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240916.58541b9 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -13860,7 +13860,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240913.333bacf https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240913.333bacf https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -13947,7 +13947,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240717.e27fd06 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240717.e27fd06 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -13976,7 +13976,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240508.f1c262c https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240508.f1c262c https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -14019,7 +14019,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240409.bb9a698 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240409.bb9a698 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -14074,7 +14074,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240229.03709b7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240229.03709b7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -14123,7 +14123,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240219.acd4b33 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240219.acd4b33 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -14146,7 +14146,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240126.221b644 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240126.221b644 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -14183,7 +14183,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231212.3ca2940 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231212.3ca2940 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -14248,7 +14248,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231025.3258446 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231025.3258446 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -14287,7 +14287,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231019.967e9e3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231019.967e9e3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -14308,7 +14308,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231012.254e926 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231012.254e926 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -14361,7 +14361,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230922.4ff94f3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230922.4ff94f3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -14384,7 +14384,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230921.331f54a https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230921.331f54a https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -14437,7 +14437,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230815.c628ec4 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230815.c628ec4 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -14516,7 +14516,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230523.a5432f0 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230523.a5432f0 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -14637,7 +14637,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230504.2861e45 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230504.2861e45 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -14658,7 +14658,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230417.061c405 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230417.061c405 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -14703,7 +14703,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230330.51aa33e https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230330.51aa33e https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -14752,7 +14752,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230228.964dbb2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230228.964dbb2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -14853,7 +14853,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230111.54ac097 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230111.54ac097 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -14898,7 +14898,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221216.cf6bed3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221216.cf6bed3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -14965,7 +14965,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221130.c350258 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221130.c350258 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -15008,7 +15008,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221110.3001643 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221110.3001643 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -15055,7 +15055,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221006.c8a44f5 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221006.c8a44f5 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -15080,7 +15080,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220926.e3e8203 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220926.e3e8203 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -15133,7 +15133,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220822.8603817 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220822.8603817 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -15196,7 +15196,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220701.e3f6d0e https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220701.e3f6d0e https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -15281,7 +15281,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220526.4bb6bfe https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220526.4bb6bfe https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -15308,7 +15308,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220513.725f0c2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220513.725f0c2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -15359,7 +15359,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220502.83e1a78 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220502.83e1a78 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -15430,7 +15430,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220414.3ed18e3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220414.3ed18e3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -15513,7 +15513,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220321.26aca77 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220321.26aca77 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -15540,7 +15540,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220302.7ee2ecc https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220302.7ee2ecc https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -15573,7 +15573,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220211.d12a474 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220211.d12a474 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -15596,7 +15596,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220128.7d1855b https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220128.7d1855b https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -15657,7 +15657,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211223.c717627 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211223.c717627 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -15686,7 +15686,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211207.54c5b35 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211207.54c5b35 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -15715,7 +15715,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211103.09b1e32 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211103.09b1e32 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -15788,7 +15788,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211020.ddd6008 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211020.ddd6008 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -15837,7 +15837,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210930.abd2495 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210930.abd2495 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -15902,7 +15902,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210913.ab8f3db https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210913.ab8f3db https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -15995,7 +15995,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210901.36f6227 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210901.36f6227 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -16034,7 +16034,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210824.72bece8 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210824.72bece8 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -16073,7 +16073,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210816.dd5f584 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210816.dd5f584 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -16168,7 +16168,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210617.8a885a8 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210617.8a885a8 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -16213,7 +16213,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210528.cf3c649 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210528.cf3c649 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -16254,7 +16254,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210512.a968fb3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210512.a968fb3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -16311,7 +16311,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210427.9cd2a8a https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210427.9cd2a8a https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -16384,7 +16384,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210411.c273380 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210411.c273380 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -16451,7 +16451,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210318.5f39324 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210318.5f39324 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -16478,7 +16478,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210301.ba1a6ba https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210301.ba1a6ba https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -16507,7 +16507,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210223.a67b618 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210223.a67b618 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -16528,7 +16528,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210208.5e0cfa7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210208.5e0cfa7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -16561,7 +16561,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210120.9bbeb24 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210120.9bbeb24 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -16610,7 +16610,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201221.b159c6f https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201221.b159c6f https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -16655,7 +16655,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201120.058f5f5 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201120.058f5f5 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -16680,7 +16680,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201116.092a7d9 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201116.092a7d9 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -16709,7 +16709,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201109.deb4e5d https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201109.deb4e5d https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -16752,7 +16752,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201009.ec05fb7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201009.ec05fb7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -16799,7 +16799,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200915.72510af https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200915.72510af https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -16826,7 +16826,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200902.3184e0c https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200902.3184e0c https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -16853,7 +16853,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200829.aeb1500 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200829.aeb1500 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -17022,7 +17022,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200614.8787cf0 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200614.8787cf0 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -17141,7 +17141,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200214.5d56812 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200214.5d56812 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -17210,7 +17210,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250924.c877daf https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250924.c877daf https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -17253,7 +17253,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250825.20d1bda https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250825.20d1bda https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -17314,7 +17314,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250721.f13c8b0e https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250721.f13c8b0e https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -17351,7 +17351,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250630.0392c909 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250630.0392c909 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -17414,7 +17414,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250603.ae9204b1 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250603.ae9204b1 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -17463,7 +17463,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250421.c5f6fe7d https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250421.c5f6fe7d https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -17514,7 +17514,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250321.dc36763 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250321.dc36763 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -17599,7 +17599,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250211.0cf652c https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250211.0cf652c https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -17640,7 +17640,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250124.83153a7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250124.83153a7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -17665,7 +17665,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250115.20107b2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250115.20107b2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -17712,7 +17712,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241202.c94661b https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241202.c94661b https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -17741,7 +17741,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241122.a3b711d https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241122.a3b711d https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -17788,7 +17788,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241104.1c0dea6 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241104.1c0dea6 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -17831,7 +17831,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241028.60464f2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241028.60464f2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -17856,7 +17856,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241024.6da7a54 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241024.6da7a54 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -17893,7 +17893,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241017.f6e1eff https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241017.f6e1eff https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -17918,7 +17918,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241016.60c1a61 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241016.60c1a61 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -17941,7 +17941,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241015.9f71e14 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241015.9f71e14 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -17962,7 +17962,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241011.21df31a https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241011.21df31a https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -17991,7 +17991,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241003.c5bebe8 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241003.c5bebe8 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -18036,7 +18036,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240927.ff60856 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240927.ff60856 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -18067,7 +18067,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240924.9739da6 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240924.9739da6 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -18098,7 +18098,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240916.58541b9 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240916.58541b9 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -18125,7 +18125,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240913.333bacf https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240913.333bacf https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -18212,7 +18212,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240717.e27fd06 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240717.e27fd06 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -18241,7 +18241,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240508.f1c262c https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240508.f1c262c https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -18284,7 +18284,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240409.bb9a698 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240409.bb9a698 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -18339,7 +18339,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240229.03709b7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240229.03709b7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -18388,7 +18388,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240219.acd4b33 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240219.acd4b33 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -18411,7 +18411,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240126.221b644 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240126.221b644 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -18448,7 +18448,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231212.3ca2940 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231212.3ca2940 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -18513,7 +18513,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231025.3258446 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231025.3258446 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -18552,7 +18552,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231019.967e9e3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231019.967e9e3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -18573,7 +18573,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231012.254e926 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231012.254e926 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -18626,7 +18626,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230922.4ff94f3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230922.4ff94f3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -18649,7 +18649,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230921.331f54a https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230921.331f54a https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -18702,7 +18702,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230815.c628ec4 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230815.c628ec4 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -18781,7 +18781,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230523.a5432f0 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230523.a5432f0 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -18902,7 +18902,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230504.2861e45 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230504.2861e45 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -18923,7 +18923,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230417.061c405 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230417.061c405 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -18968,7 +18968,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230330.51aa33e https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230330.51aa33e https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -19017,7 +19017,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230228.964dbb2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230228.964dbb2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -19118,7 +19118,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230111.54ac097 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230111.54ac097 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -19163,7 +19163,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221216.cf6bed3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221216.cf6bed3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -19230,7 +19230,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221130.c350258 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221130.c350258 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -19273,7 +19273,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221110.3001643 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221110.3001643 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -19320,7 +19320,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221006.c8a44f5 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221006.c8a44f5 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -19345,7 +19345,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220926.e3e8203 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220926.e3e8203 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -19398,7 +19398,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220822.8603817 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220822.8603817 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -19461,7 +19461,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220701.e3f6d0e https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220701.e3f6d0e https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -19546,7 +19546,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220526.4bb6bfe https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220526.4bb6bfe https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -19573,7 +19573,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220513.725f0c2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220513.725f0c2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -19624,7 +19624,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220502.83e1a78 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220502.83e1a78 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -19695,7 +19695,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220414.3ed18e3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220414.3ed18e3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -19778,7 +19778,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220321.26aca77 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220321.26aca77 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -19805,7 +19805,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220302.7ee2ecc https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220302.7ee2ecc https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -19838,7 +19838,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220211.d12a474 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220211.d12a474 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -19861,7 +19861,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220128.7d1855b https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220128.7d1855b https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -19922,7 +19922,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211223.c717627 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211223.c717627 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -19951,7 +19951,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211207.54c5b35 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211207.54c5b35 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -19980,7 +19980,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211103.09b1e32 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211103.09b1e32 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -20053,7 +20053,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211020.ddd6008 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211020.ddd6008 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -20102,7 +20102,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210930.abd2495 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210930.abd2495 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -20167,7 +20167,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210913.ab8f3db https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210913.ab8f3db https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -20260,7 +20260,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210901.36f6227 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210901.36f6227 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -20299,7 +20299,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210824.72bece8 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210824.72bece8 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -20338,7 +20338,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210816.dd5f584 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210816.dd5f584 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -20433,7 +20433,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210617.8a885a8 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210617.8a885a8 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -20478,7 +20478,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210528.cf3c649 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210528.cf3c649 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -20519,7 +20519,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210512.a968fb3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210512.a968fb3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -20576,7 +20576,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210427.9cd2a8a https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210427.9cd2a8a https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -20649,7 +20649,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210411.c273380 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210411.c273380 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -20716,7 +20716,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210318.5f39324 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210318.5f39324 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -20743,7 +20743,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210301.ba1a6ba https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210301.ba1a6ba https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -20772,7 +20772,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210223.a67b618 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210223.a67b618 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -20793,7 +20793,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210208.5e0cfa7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210208.5e0cfa7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -20826,7 +20826,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210120.9bbeb24 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210120.9bbeb24 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -20875,7 +20875,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201221.b159c6f https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201221.b159c6f https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -20920,7 +20920,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201120.058f5f5 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201120.058f5f5 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -20945,7 +20945,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201116.092a7d9 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201116.092a7d9 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -20974,7 +20974,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201109.deb4e5d https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201109.deb4e5d https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -21017,7 +21017,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201009.ec05fb7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201009.ec05fb7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -21064,7 +21064,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200915.72510af https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200915.72510af https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -21091,7 +21091,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200902.3184e0c https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200902.3184e0c https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -21118,7 +21118,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200829.aeb1500 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200829.aeb1500 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -21287,7 +21287,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200614.8787cf0 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200614.8787cf0 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -21406,7 +21406,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200214.5d56812 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200214.5d56812 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -21475,7 +21475,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250924.c877daf https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250924.c877daf https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -21518,7 +21518,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250825.20d1bda https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250825.20d1bda https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -21579,7 +21579,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250721.f13c8b0e https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250721.f13c8b0e https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -21616,7 +21616,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250630.0392c909 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250630.0392c909 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -21679,7 +21679,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250603.ae9204b1 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250603.ae9204b1 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -21728,7 +21728,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250421.c5f6fe7d https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250421.c5f6fe7d https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -21779,7 +21779,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250321.dc36763 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250321.dc36763 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -21864,7 +21864,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250211.0cf652c https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250211.0cf652c https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -21905,7 +21905,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250124.83153a7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250124.83153a7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -21930,7 +21930,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250115.20107b2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250115.20107b2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -21977,7 +21977,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241202.c94661b https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241202.c94661b https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -22006,7 +22006,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241122.a3b711d https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241122.a3b711d https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -22053,7 +22053,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241104.1c0dea6 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241104.1c0dea6 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -22096,7 +22096,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241028.60464f2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241028.60464f2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -22121,7 +22121,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241024.6da7a54 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241024.6da7a54 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -22158,7 +22158,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241017.f6e1eff https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241017.f6e1eff https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -22183,7 +22183,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241016.60c1a61 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241016.60c1a61 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -22206,7 +22206,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241015.9f71e14 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241015.9f71e14 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -22227,7 +22227,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241011.21df31a https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241011.21df31a https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -22256,7 +22256,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241003.c5bebe8 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241003.c5bebe8 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -22301,7 +22301,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240927.ff60856 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240927.ff60856 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -22332,7 +22332,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240924.9739da6 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240924.9739da6 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -22363,7 +22363,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240916.58541b9 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240916.58541b9 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -22390,7 +22390,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240913.333bacf https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240913.333bacf https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -22477,7 +22477,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240717.e27fd06 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240717.e27fd06 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -22506,7 +22506,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240508.f1c262c https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240508.f1c262c https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -22549,7 +22549,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240409.bb9a698 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240409.bb9a698 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -22604,7 +22604,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240229.03709b7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240229.03709b7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -22653,7 +22653,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240219.acd4b33 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240219.acd4b33 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -22676,7 +22676,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240126.221b644 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240126.221b644 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -22713,7 +22713,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231212.3ca2940 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231212.3ca2940 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -22778,7 +22778,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231025.3258446 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231025.3258446 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -22817,7 +22817,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231019.967e9e3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231019.967e9e3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -22838,7 +22838,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231012.254e926 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231012.254e926 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -22891,7 +22891,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230922.4ff94f3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230922.4ff94f3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -22914,7 +22914,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230921.331f54a https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230921.331f54a https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -22967,7 +22967,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230815.c628ec4 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230815.c628ec4 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -23046,7 +23046,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230523.a5432f0 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230523.a5432f0 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -23167,7 +23167,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230504.2861e45 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230504.2861e45 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -23188,7 +23188,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230417.061c405 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230417.061c405 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -23233,7 +23233,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230330.51aa33e https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230330.51aa33e https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -23282,7 +23282,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230228.964dbb2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230228.964dbb2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -23383,7 +23383,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230111.54ac097 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230111.54ac097 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -23428,7 +23428,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221216.cf6bed3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221216.cf6bed3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -23495,7 +23495,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221130.c350258 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221130.c350258 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -23538,7 +23538,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221110.3001643 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221110.3001643 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -23585,7 +23585,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221006.c8a44f5 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221006.c8a44f5 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -23610,7 +23610,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220926.e3e8203 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220926.e3e8203 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -23663,7 +23663,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220822.8603817 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220822.8603817 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -23726,7 +23726,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220701.e3f6d0e https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220701.e3f6d0e https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -23811,7 +23811,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220526.4bb6bfe https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220526.4bb6bfe https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -23838,7 +23838,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220513.725f0c2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220513.725f0c2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -23889,7 +23889,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220502.83e1a78 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220502.83e1a78 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -23960,7 +23960,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220414.3ed18e3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220414.3ed18e3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -24043,7 +24043,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220321.26aca77 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220321.26aca77 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -24070,7 +24070,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220302.7ee2ecc https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220302.7ee2ecc https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -24103,7 +24103,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220211.d12a474 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220211.d12a474 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -24126,7 +24126,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220128.7d1855b https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220128.7d1855b https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -24187,7 +24187,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211223.c717627 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211223.c717627 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -24216,7 +24216,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211207.54c5b35 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211207.54c5b35 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -24245,7 +24245,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211103.09b1e32 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211103.09b1e32 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -24318,7 +24318,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211020.ddd6008 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211020.ddd6008 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -24367,7 +24367,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210930.abd2495 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210930.abd2495 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -24432,7 +24432,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210913.ab8f3db https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210913.ab8f3db https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -24525,7 +24525,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210901.36f6227 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210901.36f6227 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -24564,7 +24564,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210824.72bece8 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210824.72bece8 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -24603,7 +24603,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210816.dd5f584 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210816.dd5f584 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -24698,7 +24698,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210617.8a885a8 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210617.8a885a8 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -24743,7 +24743,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210528.cf3c649 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210528.cf3c649 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -24784,7 +24784,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210512.a968fb3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210512.a968fb3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -24841,7 +24841,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210427.9cd2a8a https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210427.9cd2a8a https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -24914,7 +24914,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210411.c273380 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210411.c273380 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -24981,7 +24981,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210318.5f39324 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210318.5f39324 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -25008,7 +25008,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210301.ba1a6ba https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210301.ba1a6ba https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -25037,7 +25037,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210223.a67b618 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210223.a67b618 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -25058,7 +25058,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210208.5e0cfa7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210208.5e0cfa7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -25091,7 +25091,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210120.9bbeb24 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210120.9bbeb24 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -25140,7 +25140,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201221.b159c6f https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201221.b159c6f https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -25185,7 +25185,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201120.058f5f5 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201120.058f5f5 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -25210,7 +25210,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201116.092a7d9 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201116.092a7d9 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -25239,7 +25239,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201109.deb4e5d https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201109.deb4e5d https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -25282,7 +25282,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201009.ec05fb7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201009.ec05fb7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -25329,7 +25329,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200915.72510af https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200915.72510af https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -25356,7 +25356,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200902.3184e0c https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200902.3184e0c https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -25383,7 +25383,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200829.aeb1500 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200829.aeb1500 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -25552,7 +25552,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200614.8787cf0 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200614.8787cf0 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -25671,7 +25671,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200214.5d56812 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200214.5d56812 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -25740,7 +25740,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250924.c877daf https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250924.c877daf https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -25783,7 +25783,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250825.20d1bda https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250825.20d1bda https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -25844,7 +25844,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250721.f13c8b0e https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250721.f13c8b0e https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -25881,7 +25881,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250630.0392c909 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250630.0392c909 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -25944,7 +25944,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250603.ae9204b1 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250603.ae9204b1 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -25993,7 +25993,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250421.c5f6fe7d https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250421.c5f6fe7d https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -26044,7 +26044,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250321.dc36763 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250321.dc36763 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -26129,7 +26129,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250211.0cf652c https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250211.0cf652c https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -26170,7 +26170,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250124.83153a7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250124.83153a7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -26195,7 +26195,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250115.20107b2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250115.20107b2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -26242,7 +26242,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241202.c94661b https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241202.c94661b https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -26271,7 +26271,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241122.a3b711d https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241122.a3b711d https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -26318,7 +26318,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241104.1c0dea6 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241104.1c0dea6 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -26361,7 +26361,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241028.60464f2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241028.60464f2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -26386,7 +26386,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241024.6da7a54 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241024.6da7a54 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -26423,7 +26423,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241017.f6e1eff https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241017.f6e1eff https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -26448,7 +26448,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241016.60c1a61 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241016.60c1a61 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -26471,7 +26471,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241015.9f71e14 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241015.9f71e14 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -26492,7 +26492,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241011.21df31a https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241011.21df31a https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -26521,7 +26521,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241003.c5bebe8 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241003.c5bebe8 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -26566,7 +26566,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240927.ff60856 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240927.ff60856 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -26597,7 +26597,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240924.9739da6 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240924.9739da6 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -26628,7 +26628,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240916.58541b9 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240916.58541b9 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -26655,7 +26655,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240913.333bacf https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240913.333bacf https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -26742,7 +26742,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240717.e27fd06 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240717.e27fd06 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -26771,7 +26771,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240508.f1c262c https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240508.f1c262c https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -26814,7 +26814,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240409.bb9a698 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240409.bb9a698 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -26869,7 +26869,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240229.03709b7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240229.03709b7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -26918,7 +26918,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240219.acd4b33 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240219.acd4b33 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -26941,7 +26941,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240126.221b644 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240126.221b644 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -26978,7 +26978,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231212.3ca2940 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231212.3ca2940 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -27043,7 +27043,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231025.3258446 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231025.3258446 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -27082,7 +27082,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231019.967e9e3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231019.967e9e3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -27103,7 +27103,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231012.254e926 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231012.254e926 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -27156,7 +27156,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230922.4ff94f3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230922.4ff94f3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -27179,7 +27179,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230921.331f54a https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230921.331f54a https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -27232,7 +27232,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230815.c628ec4 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230815.c628ec4 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -27311,7 +27311,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230523.a5432f0 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230523.a5432f0 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -27432,7 +27432,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230504.2861e45 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230504.2861e45 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -27453,7 +27453,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230417.061c405 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230417.061c405 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -27498,7 +27498,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230330.51aa33e https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230330.51aa33e https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -27547,7 +27547,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230228.964dbb2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230228.964dbb2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -27648,7 +27648,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230111.54ac097 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230111.54ac097 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -27693,7 +27693,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221216.cf6bed3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221216.cf6bed3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -27760,7 +27760,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221130.c350258 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221130.c350258 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -27803,7 +27803,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221110.3001643 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221110.3001643 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -27850,7 +27850,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221006.c8a44f5 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221006.c8a44f5 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -27875,7 +27875,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220926.e3e8203 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220926.e3e8203 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -27928,7 +27928,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220822.8603817 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220822.8603817 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -27991,7 +27991,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220701.e3f6d0e https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220701.e3f6d0e https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -28076,7 +28076,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220526.4bb6bfe https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220526.4bb6bfe https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -28103,7 +28103,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220513.725f0c2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220513.725f0c2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -28154,7 +28154,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220502.83e1a78 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220502.83e1a78 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -28225,7 +28225,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220414.3ed18e3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220414.3ed18e3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -28308,7 +28308,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220321.26aca77 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220321.26aca77 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -28335,7 +28335,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220302.7ee2ecc https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220302.7ee2ecc https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -28368,7 +28368,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220211.d12a474 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220211.d12a474 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -28391,7 +28391,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220128.7d1855b https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220128.7d1855b https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -28452,7 +28452,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211223.c717627 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211223.c717627 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -28481,7 +28481,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211207.54c5b35 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211207.54c5b35 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -28510,7 +28510,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211103.09b1e32 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211103.09b1e32 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -28583,7 +28583,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211020.ddd6008 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211020.ddd6008 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -28632,7 +28632,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210930.abd2495 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210930.abd2495 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -28697,7 +28697,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210913.ab8f3db https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210913.ab8f3db https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -28790,7 +28790,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210901.36f6227 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210901.36f6227 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -28829,7 +28829,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210824.72bece8 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210824.72bece8 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -28868,7 +28868,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210816.dd5f584 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210816.dd5f584 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -28963,7 +28963,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210617.8a885a8 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210617.8a885a8 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -29008,7 +29008,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210528.cf3c649 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210528.cf3c649 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -29049,7 +29049,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210512.a968fb3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210512.a968fb3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -29106,7 +29106,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210427.9cd2a8a https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210427.9cd2a8a https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -29179,7 +29179,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210411.c273380 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210411.c273380 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -29246,7 +29246,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210318.5f39324 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210318.5f39324 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -29273,7 +29273,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210301.ba1a6ba https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210301.ba1a6ba https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -29302,7 +29302,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210223.a67b618 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210223.a67b618 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -29323,7 +29323,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210208.5e0cfa7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210208.5e0cfa7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -29356,7 +29356,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210120.9bbeb24 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210120.9bbeb24 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -29405,7 +29405,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201221.b159c6f https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201221.b159c6f https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -29450,7 +29450,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201120.058f5f5 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201120.058f5f5 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -29475,7 +29475,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201116.092a7d9 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201116.092a7d9 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -29504,7 +29504,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201109.deb4e5d https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201109.deb4e5d https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -29547,7 +29547,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201009.ec05fb7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201009.ec05fb7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -29594,7 +29594,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200915.72510af https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200915.72510af https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -29621,7 +29621,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200902.3184e0c https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200902.3184e0c https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -29648,7 +29648,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200829.aeb1500 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200829.aeb1500 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -29817,7 +29817,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200614.8787cf0 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200614.8787cf0 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -29936,7 +29936,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200214.5d56812 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200214.5d56812 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -30005,7 +30005,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250924.c877daf https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250924.c877daf https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -30048,7 +30048,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250825.20d1bda https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250825.20d1bda https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -30109,7 +30109,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250721.f13c8b0e https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250721.f13c8b0e https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -30146,7 +30146,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250630.0392c909 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250630.0392c909 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -30209,7 +30209,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250603.ae9204b1 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250603.ae9204b1 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -30258,7 +30258,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250421.c5f6fe7d https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250421.c5f6fe7d https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -30309,7 +30309,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250321.dc36763 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250321.dc36763 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -30394,7 +30394,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250211.0cf652c https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250211.0cf652c https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -30435,7 +30435,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250124.83153a7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250124.83153a7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -30460,7 +30460,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250115.20107b2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250115.20107b2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -30507,7 +30507,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241202.c94661b https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241202.c94661b https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -30536,7 +30536,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241122.a3b711d https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241122.a3b711d https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -30583,7 +30583,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241104.1c0dea6 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241104.1c0dea6 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -30626,7 +30626,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241028.60464f2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241028.60464f2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -30651,7 +30651,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241024.6da7a54 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241024.6da7a54 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -30688,7 +30688,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241017.f6e1eff https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241017.f6e1eff https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -30713,7 +30713,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241016.60c1a61 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241016.60c1a61 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -30736,7 +30736,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241015.9f71e14 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241015.9f71e14 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -30757,7 +30757,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241011.21df31a https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241011.21df31a https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -30786,7 +30786,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241003.c5bebe8 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241003.c5bebe8 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -30831,7 +30831,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240927.ff60856 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240927.ff60856 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -30862,7 +30862,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240924.9739da6 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240924.9739da6 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -30893,7 +30893,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240916.58541b9 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240916.58541b9 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -30920,7 +30920,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240913.333bacf https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240913.333bacf https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -31007,7 +31007,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240717.e27fd06 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240717.e27fd06 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -31036,7 +31036,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240508.f1c262c https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240508.f1c262c https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -31079,7 +31079,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240409.bb9a698 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240409.bb9a698 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -31134,7 +31134,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240229.03709b7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240229.03709b7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -31183,7 +31183,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240219.acd4b33 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240219.acd4b33 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -31206,7 +31206,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240126.221b644 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240126.221b644 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -31243,7 +31243,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231212.3ca2940 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231212.3ca2940 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -31308,7 +31308,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231025.3258446 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231025.3258446 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -31347,7 +31347,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231019.967e9e3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231019.967e9e3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -31368,7 +31368,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231012.254e926 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231012.254e926 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -31421,7 +31421,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230922.4ff94f3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230922.4ff94f3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -31444,7 +31444,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230921.331f54a https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230921.331f54a https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -31497,7 +31497,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230815.c628ec4 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230815.c628ec4 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -31576,7 +31576,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230523.a5432f0 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230523.a5432f0 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -31697,7 +31697,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230504.2861e45 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230504.2861e45 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -31718,7 +31718,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230417.061c405 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230417.061c405 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -31763,7 +31763,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230330.51aa33e https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230330.51aa33e https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -31812,7 +31812,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230228.964dbb2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230228.964dbb2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -31913,7 +31913,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230111.54ac097 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230111.54ac097 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -31958,7 +31958,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221216.cf6bed3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221216.cf6bed3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -32025,7 +32025,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221130.c350258 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221130.c350258 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -32068,7 +32068,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221110.3001643 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221110.3001643 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -32115,7 +32115,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221006.c8a44f5 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221006.c8a44f5 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -32140,7 +32140,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220926.e3e8203 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220926.e3e8203 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -32193,7 +32193,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220822.8603817 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220822.8603817 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -32256,7 +32256,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220701.e3f6d0e https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220701.e3f6d0e https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -32341,7 +32341,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220526.4bb6bfe https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220526.4bb6bfe https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -32368,7 +32368,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220513.725f0c2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220513.725f0c2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -32419,7 +32419,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220502.83e1a78 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220502.83e1a78 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -32490,7 +32490,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220414.3ed18e3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220414.3ed18e3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -32573,7 +32573,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220321.26aca77 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220321.26aca77 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -32600,7 +32600,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220302.7ee2ecc https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220302.7ee2ecc https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -32633,7 +32633,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220211.d12a474 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220211.d12a474 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -32656,7 +32656,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220128.7d1855b https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220128.7d1855b https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -32717,7 +32717,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211223.c717627 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211223.c717627 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -32746,7 +32746,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211207.54c5b35 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211207.54c5b35 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -32775,7 +32775,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211103.09b1e32 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211103.09b1e32 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -32848,7 +32848,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211020.ddd6008 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211020.ddd6008 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -32897,7 +32897,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210930.abd2495 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210930.abd2495 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -32962,7 +32962,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210913.ab8f3db https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210913.ab8f3db https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -33055,7 +33055,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210901.36f6227 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210901.36f6227 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -33094,7 +33094,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210824.72bece8 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210824.72bece8 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -33133,7 +33133,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210816.dd5f584 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210816.dd5f584 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -33228,7 +33228,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210617.8a885a8 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210617.8a885a8 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -33273,7 +33273,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210528.cf3c649 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210528.cf3c649 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -33314,7 +33314,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210512.a968fb3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210512.a968fb3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -33371,7 +33371,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210427.9cd2a8a https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210427.9cd2a8a https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -33444,7 +33444,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210411.c273380 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210411.c273380 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -33511,7 +33511,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210318.5f39324 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210318.5f39324 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -33538,7 +33538,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210301.ba1a6ba https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210301.ba1a6ba https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -33567,7 +33567,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210223.a67b618 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210223.a67b618 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -33588,7 +33588,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210208.5e0cfa7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210208.5e0cfa7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -33621,7 +33621,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210120.9bbeb24 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210120.9bbeb24 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -33670,7 +33670,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201221.b159c6f https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201221.b159c6f https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -33715,7 +33715,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201120.058f5f5 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201120.058f5f5 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -33740,7 +33740,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201116.092a7d9 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201116.092a7d9 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -33769,7 +33769,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201109.deb4e5d https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201109.deb4e5d https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -33812,7 +33812,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201009.ec05fb7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201009.ec05fb7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -33859,7 +33859,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200915.72510af https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200915.72510af https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -33886,7 +33886,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200902.3184e0c https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200902.3184e0c https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -33913,7 +33913,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200829.aeb1500 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200829.aeb1500 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -34082,7 +34082,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200614.8787cf0 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200614.8787cf0 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -34201,7 +34201,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200214.5d56812 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200214.5d56812 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -34270,7 +34270,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250924.c877daf https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250924.c877daf https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -34313,7 +34313,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250825.20d1bda https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250825.20d1bda https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -34374,7 +34374,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250721.f13c8b0e https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250721.f13c8b0e https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -34411,7 +34411,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250630.0392c909 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250630.0392c909 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -34474,7 +34474,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250603.ae9204b1 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250603.ae9204b1 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -34523,7 +34523,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250421.c5f6fe7d https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250421.c5f6fe7d https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -34574,7 +34574,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250321.dc36763 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250321.dc36763 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -34659,7 +34659,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250211.0cf652c https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250211.0cf652c https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -34700,7 +34700,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250124.83153a7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250124.83153a7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -34725,7 +34725,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250115.20107b2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250115.20107b2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -34772,7 +34772,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241202.c94661b https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241202.c94661b https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -34801,7 +34801,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241122.a3b711d https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241122.a3b711d https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -34848,7 +34848,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241104.1c0dea6 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241104.1c0dea6 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -34891,7 +34891,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241028.60464f2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241028.60464f2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -34916,7 +34916,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241024.6da7a54 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241024.6da7a54 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -34953,7 +34953,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241017.f6e1eff https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241017.f6e1eff https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -34978,7 +34978,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241016.60c1a61 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241016.60c1a61 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -35001,7 +35001,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241015.9f71e14 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241015.9f71e14 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -35022,7 +35022,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241011.21df31a https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241011.21df31a https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -35051,7 +35051,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241003.c5bebe8 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241003.c5bebe8 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -35096,7 +35096,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240927.ff60856 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240927.ff60856 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -35127,7 +35127,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240924.9739da6 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240924.9739da6 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -35158,7 +35158,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240916.58541b9 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240916.58541b9 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -35185,7 +35185,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240913.333bacf https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240913.333bacf https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -35272,7 +35272,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240717.e27fd06 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240717.e27fd06 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -35301,7 +35301,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240508.f1c262c https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240508.f1c262c https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -35344,7 +35344,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240409.bb9a698 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240409.bb9a698 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -35399,7 +35399,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240229.03709b7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240229.03709b7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -35448,7 +35448,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240219.acd4b33 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240219.acd4b33 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -35471,7 +35471,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240126.221b644 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240126.221b644 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -35508,7 +35508,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231212.3ca2940 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231212.3ca2940 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -35573,7 +35573,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231025.3258446 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231025.3258446 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -35612,7 +35612,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231019.967e9e3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231019.967e9e3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -35633,7 +35633,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231012.254e926 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231012.254e926 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -35686,7 +35686,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230922.4ff94f3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230922.4ff94f3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -35709,7 +35709,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230921.331f54a https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230921.331f54a https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -35762,7 +35762,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230815.c628ec4 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230815.c628ec4 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -35841,7 +35841,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230523.a5432f0 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230523.a5432f0 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -35962,7 +35962,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230504.2861e45 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230504.2861e45 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -35983,7 +35983,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230417.061c405 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230417.061c405 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -36028,7 +36028,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230330.51aa33e https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230330.51aa33e https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -36077,7 +36077,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230228.964dbb2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230228.964dbb2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -36178,7 +36178,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230111.54ac097 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230111.54ac097 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -36223,7 +36223,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221216.cf6bed3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221216.cf6bed3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -36290,7 +36290,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221130.c350258 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221130.c350258 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -36333,7 +36333,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221110.3001643 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221110.3001643 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -36380,7 +36380,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221006.c8a44f5 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221006.c8a44f5 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -36405,7 +36405,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220926.e3e8203 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220926.e3e8203 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -36458,7 +36458,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220822.8603817 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220822.8603817 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -36521,7 +36521,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220701.e3f6d0e https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220701.e3f6d0e https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -36606,7 +36606,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220526.4bb6bfe https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220526.4bb6bfe https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -36633,7 +36633,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220513.725f0c2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220513.725f0c2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -36684,7 +36684,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220502.83e1a78 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220502.83e1a78 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -36755,7 +36755,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220414.3ed18e3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220414.3ed18e3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -36838,7 +36838,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220321.26aca77 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220321.26aca77 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -36865,7 +36865,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220302.7ee2ecc https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220302.7ee2ecc https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -36898,7 +36898,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220211.d12a474 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220211.d12a474 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -36921,7 +36921,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220128.7d1855b https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220128.7d1855b https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -36982,7 +36982,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211223.c717627 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211223.c717627 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -37011,7 +37011,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211207.54c5b35 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211207.54c5b35 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -37040,7 +37040,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211103.09b1e32 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211103.09b1e32 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -37113,7 +37113,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211020.ddd6008 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211020.ddd6008 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -37162,7 +37162,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210930.abd2495 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210930.abd2495 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -37227,7 +37227,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210913.ab8f3db https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210913.ab8f3db https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -37320,7 +37320,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210901.36f6227 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210901.36f6227 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -37359,7 +37359,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210824.72bece8 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210824.72bece8 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -37398,7 +37398,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210816.dd5f584 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210816.dd5f584 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -37493,7 +37493,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210617.8a885a8 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210617.8a885a8 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -37538,7 +37538,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210528.cf3c649 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210528.cf3c649 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -37579,7 +37579,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210512.a968fb3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210512.a968fb3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -37636,7 +37636,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210427.9cd2a8a https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210427.9cd2a8a https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -37709,7 +37709,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210411.c273380 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210411.c273380 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -37776,7 +37776,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210318.5f39324 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210318.5f39324 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -37803,7 +37803,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210301.ba1a6ba https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210301.ba1a6ba https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -37832,7 +37832,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210223.a67b618 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210223.a67b618 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -37853,7 +37853,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210208.5e0cfa7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210208.5e0cfa7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -37886,7 +37886,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210120.9bbeb24 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210120.9bbeb24 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -37935,7 +37935,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201221.b159c6f https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201221.b159c6f https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -37980,7 +37980,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201120.058f5f5 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201120.058f5f5 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -38005,7 +38005,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201116.092a7d9 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201116.092a7d9 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -38034,7 +38034,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201109.deb4e5d https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201109.deb4e5d https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -38077,7 +38077,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201009.ec05fb7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201009.ec05fb7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -38124,7 +38124,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200915.72510af https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200915.72510af https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -38151,7 +38151,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200902.3184e0c https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200902.3184e0c https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -38178,7 +38178,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200829.aeb1500 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200829.aeb1500 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -38347,7 +38347,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200614.8787cf0 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200614.8787cf0 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -38466,7 +38466,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200214.5d56812 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200214.5d56812 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -38535,7 +38535,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250924.c877daf https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250924.c877daf https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -38578,7 +38578,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250825.20d1bda https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250825.20d1bda https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -38639,7 +38639,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250721.f13c8b0e https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250721.f13c8b0e https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -38676,7 +38676,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250630.0392c909 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250630.0392c909 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -38739,7 +38739,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250603.ae9204b1 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250603.ae9204b1 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -38788,7 +38788,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250421.c5f6fe7d https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250421.c5f6fe7d https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -38839,7 +38839,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250321.dc36763 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250321.dc36763 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -38924,7 +38924,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250211.0cf652c https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250211.0cf652c https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -38965,7 +38965,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250124.83153a7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250124.83153a7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -38990,7 +38990,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250115.20107b2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250115.20107b2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -39037,7 +39037,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241202.c94661b https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241202.c94661b https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -39066,7 +39066,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241122.a3b711d https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241122.a3b711d https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -39113,7 +39113,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241104.1c0dea6 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241104.1c0dea6 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -39156,7 +39156,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241028.60464f2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241028.60464f2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -39181,7 +39181,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241024.6da7a54 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241024.6da7a54 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -39218,7 +39218,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241017.f6e1eff https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241017.f6e1eff https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -39243,7 +39243,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241016.60c1a61 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241016.60c1a61 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -39266,7 +39266,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241015.9f71e14 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241015.9f71e14 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -39287,7 +39287,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241011.21df31a https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241011.21df31a https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -39316,7 +39316,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241003.c5bebe8 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241003.c5bebe8 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -39361,7 +39361,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240927.ff60856 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240927.ff60856 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -39392,7 +39392,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240924.9739da6 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240924.9739da6 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -39423,7 +39423,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240916.58541b9 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240916.58541b9 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -39450,7 +39450,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240913.333bacf https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240913.333bacf https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -39537,7 +39537,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240717.e27fd06 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240717.e27fd06 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -39566,7 +39566,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240508.f1c262c https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240508.f1c262c https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -39609,7 +39609,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240409.bb9a698 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240409.bb9a698 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -39664,7 +39664,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240229.03709b7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240229.03709b7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -39713,7 +39713,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240219.acd4b33 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240219.acd4b33 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -39736,7 +39736,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240126.221b644 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240126.221b644 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -39773,7 +39773,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231212.3ca2940 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231212.3ca2940 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -39838,7 +39838,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231025.3258446 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231025.3258446 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -39877,7 +39877,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231019.967e9e3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231019.967e9e3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -39898,7 +39898,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231012.254e926 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231012.254e926 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -39951,7 +39951,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230922.4ff94f3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230922.4ff94f3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -39974,7 +39974,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230921.331f54a https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230921.331f54a https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -40027,7 +40027,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230815.c628ec4 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230815.c628ec4 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -40106,7 +40106,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230523.a5432f0 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230523.a5432f0 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -40227,7 +40227,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230504.2861e45 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230504.2861e45 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -40248,7 +40248,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230417.061c405 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230417.061c405 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -40293,7 +40293,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230330.51aa33e https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230330.51aa33e https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -40342,7 +40342,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230228.964dbb2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230228.964dbb2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -40443,7 +40443,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230111.54ac097 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230111.54ac097 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -40488,7 +40488,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221216.cf6bed3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221216.cf6bed3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -40555,7 +40555,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221130.c350258 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221130.c350258 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -40598,7 +40598,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221110.3001643 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221110.3001643 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -40645,7 +40645,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221006.c8a44f5 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221006.c8a44f5 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -40670,7 +40670,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220926.e3e8203 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220926.e3e8203 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -40723,7 +40723,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220822.8603817 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220822.8603817 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -40786,7 +40786,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220701.e3f6d0e https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220701.e3f6d0e https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -40871,7 +40871,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220526.4bb6bfe https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220526.4bb6bfe https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -40898,7 +40898,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220513.725f0c2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220513.725f0c2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -40949,7 +40949,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220502.83e1a78 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220502.83e1a78 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -41020,7 +41020,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220414.3ed18e3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220414.3ed18e3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -41103,7 +41103,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220321.26aca77 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220321.26aca77 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -41130,7 +41130,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220302.7ee2ecc https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220302.7ee2ecc https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -41163,7 +41163,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220211.d12a474 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220211.d12a474 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -41186,7 +41186,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220128.7d1855b https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220128.7d1855b https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -41247,7 +41247,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211223.c717627 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211223.c717627 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -41276,7 +41276,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211207.54c5b35 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211207.54c5b35 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -41305,7 +41305,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211103.09b1e32 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211103.09b1e32 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -41378,7 +41378,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211020.ddd6008 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211020.ddd6008 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -41427,7 +41427,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210930.abd2495 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210930.abd2495 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -41492,7 +41492,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210913.ab8f3db https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210913.ab8f3db https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -41585,7 +41585,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210901.36f6227 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210901.36f6227 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -41624,7 +41624,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210824.72bece8 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210824.72bece8 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -41663,7 +41663,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210816.dd5f584 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210816.dd5f584 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -41758,7 +41758,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210617.8a885a8 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210617.8a885a8 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -41803,7 +41803,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210528.cf3c649 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210528.cf3c649 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -41844,7 +41844,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210512.a968fb3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210512.a968fb3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -41901,7 +41901,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210427.9cd2a8a https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210427.9cd2a8a https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -41974,7 +41974,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210411.c273380 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210411.c273380 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -42041,7 +42041,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210318.5f39324 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210318.5f39324 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -42068,7 +42068,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210301.ba1a6ba https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210301.ba1a6ba https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -42097,7 +42097,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210223.a67b618 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210223.a67b618 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -42118,7 +42118,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210208.5e0cfa7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210208.5e0cfa7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -42151,7 +42151,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210120.9bbeb24 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210120.9bbeb24 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -42200,7 +42200,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201221.b159c6f https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201221.b159c6f https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -42245,7 +42245,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201120.058f5f5 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201120.058f5f5 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -42270,7 +42270,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201116.092a7d9 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201116.092a7d9 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -42299,7 +42299,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201109.deb4e5d https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201109.deb4e5d https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -42342,7 +42342,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201009.ec05fb7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201009.ec05fb7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -42389,7 +42389,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200915.72510af https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200915.72510af https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -42416,7 +42416,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200902.3184e0c https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200902.3184e0c https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -42443,7 +42443,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200829.aeb1500 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200829.aeb1500 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -42612,7 +42612,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200614.8787cf0 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200614.8787cf0 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -42731,7 +42731,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200214.5d56812 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200214.5d56812 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -42800,7 +42800,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250924.c877daf https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250924.c877daf https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -42843,7 +42843,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250825.20d1bda https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250825.20d1bda https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -42904,7 +42904,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250721.f13c8b0e https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250721.f13c8b0e https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -42941,7 +42941,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250630.0392c909 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250630.0392c909 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -43004,7 +43004,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250603.ae9204b1 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250603.ae9204b1 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -43053,7 +43053,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250421.c5f6fe7d https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250421.c5f6fe7d https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -43104,7 +43104,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250321.dc36763 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250321.dc36763 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -43189,7 +43189,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250211.0cf652c https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250211.0cf652c https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -43230,7 +43230,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250124.83153a7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250124.83153a7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -43255,7 +43255,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250115.20107b2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250115.20107b2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -43302,7 +43302,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241202.c94661b https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241202.c94661b https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -43331,7 +43331,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241122.a3b711d https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241122.a3b711d https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -43378,7 +43378,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241104.1c0dea6 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241104.1c0dea6 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -43421,7 +43421,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241028.60464f2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241028.60464f2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -43446,7 +43446,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241024.6da7a54 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241024.6da7a54 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -43483,7 +43483,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241017.f6e1eff https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241017.f6e1eff https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -43508,7 +43508,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241016.60c1a61 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241016.60c1a61 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -43531,7 +43531,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241015.9f71e14 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241015.9f71e14 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -43552,7 +43552,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241011.21df31a https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241011.21df31a https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -43581,7 +43581,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241003.c5bebe8 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241003.c5bebe8 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -43626,7 +43626,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240927.ff60856 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240927.ff60856 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -43657,7 +43657,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240924.9739da6 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240924.9739da6 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -43688,7 +43688,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240916.58541b9 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240916.58541b9 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -43715,7 +43715,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240913.333bacf https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240913.333bacf https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -43802,7 +43802,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240717.e27fd06 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240717.e27fd06 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -43831,7 +43831,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240508.f1c262c https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240508.f1c262c https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -43874,7 +43874,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240409.bb9a698 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240409.bb9a698 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -43929,7 +43929,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240229.03709b7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240229.03709b7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -43978,7 +43978,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240219.acd4b33 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240219.acd4b33 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -44001,7 +44001,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240126.221b644 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240126.221b644 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -44038,7 +44038,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231212.3ca2940 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231212.3ca2940 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -44103,7 +44103,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231025.3258446 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231025.3258446 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -44142,7 +44142,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231019.967e9e3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231019.967e9e3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -44163,7 +44163,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231012.254e926 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231012.254e926 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -44216,7 +44216,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230922.4ff94f3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230922.4ff94f3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -44239,7 +44239,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230921.331f54a https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230921.331f54a https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -44292,7 +44292,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230815.c628ec4 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230815.c628ec4 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -44371,7 +44371,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230523.a5432f0 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230523.a5432f0 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -44492,7 +44492,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230504.2861e45 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230504.2861e45 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -44513,7 +44513,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230417.061c405 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230417.061c405 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -44558,7 +44558,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230330.51aa33e https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230330.51aa33e https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -44607,7 +44607,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230228.964dbb2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230228.964dbb2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -44708,7 +44708,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230111.54ac097 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230111.54ac097 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -44753,7 +44753,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221216.cf6bed3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221216.cf6bed3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -44820,7 +44820,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221130.c350258 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221130.c350258 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -44863,7 +44863,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221110.3001643 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221110.3001643 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -44910,7 +44910,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221006.c8a44f5 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221006.c8a44f5 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -44935,7 +44935,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220926.e3e8203 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220926.e3e8203 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -44988,7 +44988,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220822.8603817 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220822.8603817 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -45051,7 +45051,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220701.e3f6d0e https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220701.e3f6d0e https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -45136,7 +45136,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220526.4bb6bfe https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220526.4bb6bfe https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -45163,7 +45163,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220513.725f0c2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220513.725f0c2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -45214,7 +45214,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220502.83e1a78 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220502.83e1a78 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -45285,7 +45285,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220414.3ed18e3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220414.3ed18e3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -45368,7 +45368,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220321.26aca77 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220321.26aca77 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -45395,7 +45395,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220302.7ee2ecc https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220302.7ee2ecc https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -45428,7 +45428,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220211.d12a474 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220211.d12a474 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -45451,7 +45451,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220128.7d1855b https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220128.7d1855b https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -45512,7 +45512,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211223.c717627 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211223.c717627 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -45541,7 +45541,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211207.54c5b35 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211207.54c5b35 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -45570,7 +45570,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211103.09b1e32 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211103.09b1e32 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -45643,7 +45643,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211020.ddd6008 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211020.ddd6008 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -45692,7 +45692,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210930.abd2495 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210930.abd2495 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -45757,7 +45757,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210913.ab8f3db https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210913.ab8f3db https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -45850,7 +45850,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210901.36f6227 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210901.36f6227 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -45889,7 +45889,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210824.72bece8 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210824.72bece8 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -45928,7 +45928,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210816.dd5f584 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210816.dd5f584 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -46023,7 +46023,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210617.8a885a8 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210617.8a885a8 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -46068,7 +46068,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210528.cf3c649 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210528.cf3c649 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -46109,7 +46109,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210512.a968fb3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210512.a968fb3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -46166,7 +46166,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210427.9cd2a8a https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210427.9cd2a8a https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -46239,7 +46239,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210411.c273380 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210411.c273380 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -46306,7 +46306,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210318.5f39324 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210318.5f39324 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -46333,7 +46333,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210301.ba1a6ba https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210301.ba1a6ba https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -46362,7 +46362,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210223.a67b618 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210223.a67b618 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -46383,7 +46383,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210208.5e0cfa7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210208.5e0cfa7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -46416,7 +46416,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210120.9bbeb24 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210120.9bbeb24 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -46465,7 +46465,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201221.b159c6f https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201221.b159c6f https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -46510,7 +46510,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201120.058f5f5 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201120.058f5f5 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -46535,7 +46535,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201116.092a7d9 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201116.092a7d9 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -46564,7 +46564,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201109.deb4e5d https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201109.deb4e5d https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -46607,7 +46607,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201009.ec05fb7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201009.ec05fb7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -46654,7 +46654,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200915.72510af https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200915.72510af https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -46681,7 +46681,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200902.3184e0c https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200902.3184e0c https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -46708,7 +46708,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200829.aeb1500 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200829.aeb1500 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -46877,7 +46877,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200614.8787cf0 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200614.8787cf0 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -46996,7 +46996,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200214.5d56812 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200214.5d56812 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -47065,7 +47065,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250924.c877daf https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250924.c877daf https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -47108,7 +47108,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250825.20d1bda https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250825.20d1bda https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -47169,7 +47169,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250721.f13c8b0e https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250721.f13c8b0e https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -47206,7 +47206,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250630.0392c909 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250630.0392c909 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -47269,7 +47269,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250603.ae9204b1 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250603.ae9204b1 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -47318,7 +47318,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250421.c5f6fe7d https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250421.c5f6fe7d https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -47369,7 +47369,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250321.dc36763 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250321.dc36763 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -47454,7 +47454,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250211.0cf652c https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250211.0cf652c https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -47495,7 +47495,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250124.83153a7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250124.83153a7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -47520,7 +47520,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20250115.20107b2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20250115.20107b2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -47567,7 +47567,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241202.c94661b https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241202.c94661b https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -47596,7 +47596,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241122.a3b711d https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241122.a3b711d https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -47643,7 +47643,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241104.1c0dea6 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241104.1c0dea6 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -47686,7 +47686,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241028.60464f2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241028.60464f2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -47711,7 +47711,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241024.6da7a54 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241024.6da7a54 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -47748,7 +47748,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241017.f6e1eff https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241017.f6e1eff https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -47773,7 +47773,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241016.60c1a61 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241016.60c1a61 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -47796,7 +47796,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241015.9f71e14 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241015.9f71e14 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -47817,7 +47817,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241011.21df31a https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241011.21df31a https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -47846,7 +47846,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20241003.c5bebe8 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20241003.c5bebe8 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -47891,7 +47891,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240927.ff60856 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240927.ff60856 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -47922,7 +47922,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240924.9739da6 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240924.9739da6 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -47953,7 +47953,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240916.58541b9 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240916.58541b9 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -47980,7 +47980,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240913.333bacf https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240913.333bacf https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -48067,7 +48067,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240717.e27fd06 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240717.e27fd06 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -48096,7 +48096,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240508.f1c262c https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240508.f1c262c https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -48139,7 +48139,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240409.bb9a698 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240409.bb9a698 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -48194,7 +48194,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240229.03709b7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240229.03709b7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -48243,7 +48243,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240219.acd4b33 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240219.acd4b33 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -48266,7 +48266,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20240126.221b644 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20240126.221b644 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -48303,7 +48303,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231212.3ca2940 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231212.3ca2940 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -48368,7 +48368,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231025.3258446 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231025.3258446 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -48407,7 +48407,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231019.967e9e3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231019.967e9e3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -48428,7 +48428,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20231012.254e926 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20231012.254e926 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -48481,7 +48481,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230922.4ff94f3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230922.4ff94f3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -48504,7 +48504,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230921.331f54a https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230921.331f54a https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -48557,7 +48557,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230815.c628ec4 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230815.c628ec4 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -48636,7 +48636,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230523.a5432f0 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230523.a5432f0 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -48757,7 +48757,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230504.2861e45 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230504.2861e45 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -48778,7 +48778,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230417.061c405 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230417.061c405 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -48823,7 +48823,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230330.51aa33e https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230330.51aa33e https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -48872,7 +48872,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230228.964dbb2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230228.964dbb2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -48973,7 +48973,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20230111.54ac097 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20230111.54ac097 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -49018,7 +49018,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221216.cf6bed3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221216.cf6bed3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -49085,7 +49085,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221130.c350258 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221130.c350258 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -49128,7 +49128,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221110.3001643 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221110.3001643 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -49175,7 +49175,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20221006.c8a44f5 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20221006.c8a44f5 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -49200,7 +49200,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220926.e3e8203 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220926.e3e8203 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -49253,7 +49253,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220822.8603817 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220822.8603817 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -49316,7 +49316,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220701.e3f6d0e https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220701.e3f6d0e https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -49401,7 +49401,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220526.4bb6bfe https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220526.4bb6bfe https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -49428,7 +49428,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220513.725f0c2 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220513.725f0c2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -49479,7 +49479,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220502.83e1a78 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220502.83e1a78 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -49550,7 +49550,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220414.3ed18e3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220414.3ed18e3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -49633,7 +49633,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220321.26aca77 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220321.26aca77 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -49660,7 +49660,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220302.7ee2ecc https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220302.7ee2ecc https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -49693,7 +49693,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220211.d12a474 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220211.d12a474 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -49716,7 +49716,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20220128.7d1855b https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20220128.7d1855b https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -49777,7 +49777,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211223.c717627 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211223.c717627 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -49806,7 +49806,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211207.54c5b35 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211207.54c5b35 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -49835,7 +49835,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211103.09b1e32 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211103.09b1e32 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -49908,7 +49908,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20211020.ddd6008 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20211020.ddd6008 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -49957,7 +49957,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210930.abd2495 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210930.abd2495 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -50022,7 +50022,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210913.ab8f3db https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210913.ab8f3db https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -50115,7 +50115,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210901.36f6227 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210901.36f6227 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -50154,7 +50154,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210824.72bece8 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210824.72bece8 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -50193,7 +50193,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210816.dd5f584 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210816.dd5f584 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -50288,7 +50288,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210617.8a885a8 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210617.8a885a8 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -50333,7 +50333,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210528.cf3c649 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210528.cf3c649 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -50374,7 +50374,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210512.a968fb3 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210512.a968fb3 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -50431,7 +50431,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210427.9cd2a8a https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210427.9cd2a8a https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -50504,7 +50504,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210411.c273380 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210411.c273380 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -50571,7 +50571,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210318.5f39324 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210318.5f39324 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -50598,7 +50598,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210301.ba1a6ba https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210301.ba1a6ba https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -50627,7 +50627,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210223.a67b618 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210223.a67b618 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -50648,7 +50648,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210208.5e0cfa7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210208.5e0cfa7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -50681,7 +50681,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20210120.9bbeb24 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20210120.9bbeb24 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -50730,7 +50730,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201221.b159c6f https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201221.b159c6f https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -50775,7 +50775,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201120.058f5f5 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201120.058f5f5 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -50800,7 +50800,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201116.092a7d9 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201116.092a7d9 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -50829,7 +50829,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201109.deb4e5d https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201109.deb4e5d https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -50872,7 +50872,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20201009.ec05fb7 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20201009.ec05fb7 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -50919,7 +50919,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200915.72510af https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200915.72510af https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -50946,7 +50946,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200902.3184e0c https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200902.3184e0c https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -50973,7 +50973,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200829.aeb1500 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200829.aeb1500 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -51142,7 +51142,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200614.8787cf0 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200614.8787cf0 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -51261,7 +51261,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch release/4.20200214.5d56812 https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20200214.5d56812 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```

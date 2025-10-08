@@ -69,7 +69,7 @@ for(e <- released.entries) {
         |<details><summary>How to build</summary>
         |
         |```
-        |git clone --rec --depth 1 --branch release/${e._1.tag} https://github.com/sireum/kekinian.git
+        |git clone --rec --depth 1 --branch ${e._1.tag} https://github.com/sireum/kekinian.git
         |cd kekinian
         |./bin/build.cmd
         |```
