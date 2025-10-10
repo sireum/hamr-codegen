@@ -4,18 +4,17 @@ package org.sireum.hamr.codegen.microkit.plugins.component
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{BoolValue, IdPath, Store, StoreValue}
 import org.sireum.hamr.codegen.common.containers.{Marker, Resource}
-import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlThread, SymbolTable}
+import org.sireum.hamr.codegen.common.symbols.{AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.plugins.apis.CRustApiPlugin
-import org.sireum.hamr.codegen.microkit.plugins.types.{CRustTypePlugin, CRustTypeProvider}
+import org.sireum.hamr.codegen.microkit.plugins.types.CRustTypePlugin
 import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, MicrokitPlugin}
-import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.TAB
-import org.sireum.hamr.codegen.microkit.util.{MakefileTarget, MakefileUtil, RustUtil, MicrokitUtil}
-import org.sireum.hamr.ir.{Aadl, Direction}
+import org.sireum.hamr.codegen.microkit.util.{MakefileTarget, MakefileUtil, MicrokitUtil, RustUtil}
+import org.sireum.hamr.codegen.microkit.{rust => RAST}
+import org.sireum.hamr.ir.Aadl
 import org.sireum.message.Reporter
-import org.sireum.hamr.codegen.microkit.{rust => RustAst}
 
 object CRustComponentPlugin {
 
@@ -25,7 +24,7 @@ object CRustComponentPlugin {
 
   @strictpure def getCRustComponentContributions(store: Store): CRustComponentContributions = store.get(KEY_CrustComponentPlugin).get.asInstanceOf[CRustComponentContributions]
 
-  @strictpure def putComponentContributions( contributions: CRustComponentContributions, store: Store): Store = store + KEY_CrustComponentPlugin ~> contributions
+  @strictpure def putComponentContributions(contributions: CRustComponentContributions, store: Store): Store = store + KEY_CrustComponentPlugin ~> contributions
 
 
   @strictpure def componentCrateDirectory(thread: AadlThread, options: HamrCli.CodegenOption): String = s"${options.sel4OutputDir.get}/crates/${MicrokitUtil.getThreadIdPath(thread)}"
@@ -42,14 +41,11 @@ object ComponentContributions {}
 
                                         // items for component/<thread-path>_app.rs
                                         val requiresVerus: B,
-                                        val appModDirectives: ISZ[RustAst.Item],
-                                        val appUses: ISZ[RustAst.Item],
-                                        val appStructDef: RustAst.StructDef,
-                                        val appStructImpl: RustAst.Impl,
-                                        val appFreeFunctions: ISZ[RustAst.Fn],
-
-                                        // items for tests.rs
-                                        val testEntries: ISZ[RustAst.Item]
+                                        val appModDirectives: ISZ[RAST.Item],
+                                        val appUses: ISZ[RAST.Item],
+                                        val appStructDef: RAST.StructDef,
+                                        val appStructImpl: RAST.Impl,
+                                        val appFreeFunctions: ISZ[RAST.Fn]
                                       )
 
 @sig trait CRustComponentContributions extends StoreValue {
@@ -95,85 +91,85 @@ object ComponentContributions {}
 
       val appApiType = CRustApiPlugin.applicationApiType(thread)
 
-      val modDirectives: ISZ[RustAst.Item] = ISZ()
+      val modDirectives: ISZ[RAST.Item] = ISZ()
 
-      val uses: ISZ[RustAst.Item] = ISZ(
-        RustAst.Use(ISZ(), RustAst.IdentString(CRustTypePlugin.usePath)),
-        RustAst.Use(ISZ(), RustAst.IdentString(s"crate::bridge::${CRustApiPlugin.apiModuleName(thread)}::*")))
+      val uses: ISZ[RAST.Item] = ISZ(
+        RAST.Use(ISZ(), RAST.IdentString(CRustTypePlugin.usePath)),
+        RAST.Use(ISZ(), RAST.IdentString(s"crate::bridge::${CRustApiPlugin.apiModuleName(thread)}::*")))
 
-      val struct = RustAst.StructDef(
+      val struct = RAST.StructDef(
         attributes = ISZ(),
-        visibility = RustAst.Visibility.Public,
-        ident = RustAst.IdentString(threadId),
+        visibility = RAST.Visibility.Public,
+        ident = RAST.IdentString(threadId),
         items = ISZ())
 
-      val newFn = RustAst.FnImpl(
-        sig = RustAst.FnSig(
-          ident = RustAst.IdentString("new"),
-          fnDecl = RustAst.FnDecl(inputs = ISZ(), outputs = RustAst.FnRetTyImpl(RustAst.TyPath(ISZ(ISZ("Self")), None()))),
-          verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
-        comments = ISZ(), attributes = ISZ(), visibility = RustAst.Visibility.Public, contract = None(), meta = ISZ(),
-        body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemSelf(ISZ())))))
+      val newFn = RAST.FnImpl(
+        sig = RAST.FnSig(
+          ident = RAST.IdentString("new"),
+          fnDecl = RAST.FnDecl(inputs = ISZ(), outputs = RAST.FnRetTyImpl(RAST.TyPath(ISZ(ISZ("Self")), None()))),
+          verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
+        comments = ISZ(), attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(), meta = ISZ(),
+        body = Some(RAST.MethodBody(ISZ(RAST.BodyItemSelf(ISZ())))))
 
-      val initFn = RustAst.FnImpl(
-        sig = RustAst.FnSig(
-          ident = RustAst.IdentString("initialize"),
-          generics = Some(RustAst.Generics(ISZ(RustAst.GenericParam(
-            ident = RustAst.IdentString("API"),
+      val initFn = RAST.FnImpl(
+        sig = RAST.FnSig(
+          ident = RAST.IdentString("initialize"),
+          generics = Some(RAST.Generics(ISZ(RAST.GenericParam(
+            ident = RAST.IdentString("API"),
             attributes = ISZ(),
-            bounds = RustAst.GenericBoundFixMe(st"${CRustApiPlugin.putApiType(thread)}"))))),
-          fnDecl = RustAst.FnDecl(
+            bounds = RAST.GenericBoundFixMe(st"${CRustApiPlugin.putApiType(thread)}"))))),
+          fnDecl = RAST.FnDecl(
             inputs = ISZ(
-              RustAst.ParamFixMe(st"&mut self"),
-              RustAst.ParamImpl(
-                ident = RustAst.IdentString("api"),
-                kind = RustAst.TyRef(None(), RustAst.MutTy(
-                  ty = RustAst.TyPath(ISZ(ISZ(appApiType), ISZ("API")), None()), mutbl = RustAst.Mutability.Mut)))
+              RAST.ParamFixMe(st"&mut self"),
+              RAST.ParamImpl(
+                ident = RAST.IdentString("api"),
+                kind = RAST.TyRef(None(), RAST.MutTy(
+                  ty = RAST.TyPath(ISZ(ISZ(appApiType), ISZ("API")), None()), mutbl = RAST.Mutability.Mut)))
             ),
-            outputs = RustAst.FnRetTyDefault()),
-          verusHeader = None(), fnHeader = RustAst.FnHeader(F)),
-        comments = ISZ(), attributes = ISZ(), visibility = RustAst.Visibility.Public, contract = None(), meta = ISZ(),
-        body = Some(RustAst.MethodBody(ISZ(
-          RustAst.BodyItemST(
+            outputs = RAST.FnRetTyDefault()),
+          verusHeader = None(), fnHeader = RAST.FnHeader(F)),
+        comments = ISZ(), attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(), meta = ISZ(),
+        body = Some(RAST.MethodBody(ISZ(
+          RAST.BodyItemST(
             st"""log_info("initialize entrypoint invoked");""")))))
 
-      val entrypointFns: ISZ[RustAst.Item] =
+      val entrypointFns: ISZ[RAST.Item] =
         if (thread.isPeriodic())
-          ISZ(RustAst.FnImpl(
-            sig = RustAst.FnSig(
-              ident = RustAst.IdentString("timeTriggered"),
-              generics = Some(RustAst.Generics(ISZ(RustAst.GenericParam(
-                ident = RustAst.IdentString("API"),
+          ISZ(RAST.FnImpl(
+            sig = RAST.FnSig(
+              ident = RAST.IdentString("timeTriggered"),
+              generics = Some(RAST.Generics(ISZ(RAST.GenericParam(
+                ident = RAST.IdentString("API"),
                 attributes = ISZ(),
-                bounds = RustAst.GenericBoundFixMe(st"${CRustApiPlugin.fullApiType(thread)}"))))),
-              fnDecl = RustAst.FnDecl(
+                bounds = RAST.GenericBoundFixMe(st"${CRustApiPlugin.fullApiType(thread)}"))))),
+              fnDecl = RAST.FnDecl(
                 inputs = ISZ(
-                  RustAst.ParamFixMe(st"&mut self"),
-                  RustAst.ParamImpl(
-                    ident = RustAst.IdentString("api"),
-                    kind = RustAst.TyRef(None(), RustAst.MutTy(
-                      ty = RustAst.TyPath(ISZ(ISZ(appApiType), ISZ("API")), None()), mutbl = RustAst.Mutability.Mut)))
+                  RAST.ParamFixMe(st"&mut self"),
+                  RAST.ParamImpl(
+                    ident = RAST.IdentString("api"),
+                    kind = RAST.TyRef(None(), RAST.MutTy(
+                      ty = RAST.TyPath(ISZ(ISZ(appApiType), ISZ("API")), None()), mutbl = RAST.Mutability.Mut)))
                 ),
-                outputs = RustAst.FnRetTyDefault()),
-              verusHeader = None(), fnHeader = RustAst.FnHeader(F)),
-            comments = ISZ(), attributes = ISZ(), visibility = RustAst.Visibility.Public, contract = None(), meta = ISZ(),
-            body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
+                outputs = RAST.FnRetTyDefault()),
+              verusHeader = None(), fnHeader = RAST.FnHeader(F)),
+            comments = ISZ(), attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(), meta = ISZ(),
+            body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
               st"""log_info("compute entrypoint invoked");"""))))))
-        else ISZ(RustAst.CommentNonDoc(ISZ(st"NOT YET FOR SPORADIC")))
+        else ISZ(RAST.CommentNonDoc(ISZ(st"NOT YET FOR SPORADIC")))
 
-      val notify = RustAst.FnImpl(
-        sig = RustAst.FnSig(
-          ident = RustAst.IdentString("notify"),
-          fnDecl = RustAst.FnDecl(
+      val notify = RAST.FnImpl(
+        sig = RAST.FnSig(
+          ident = RAST.IdentString("notify"),
+          fnDecl = RAST.FnDecl(
             inputs = ISZ(
-              RustAst.ParamFixMe(st"&mut self"),
-              RustAst.ParamImpl(
-                ident = RustAst.IdentString("channel"),
-                kind = RustAst.TyPath(ISZ(ISZ("microkit_channel")), None()))),
-            outputs = RustAst.FnRetTyDefault()),
-          verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
-        comments = ISZ(), contract = None(), visibility = RustAst.Visibility.Public, attributes = ISZ(), meta = ISZ(),
-        body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
+              RAST.ParamFixMe(st"&mut self"),
+              RAST.ParamImpl(
+                ident = RAST.IdentString("channel"),
+                kind = RAST.TyPath(ISZ(ISZ("microkit_channel")), None()))),
+            outputs = RAST.FnRetTyDefault()),
+          verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
+        comments = ISZ(), contract = None(), visibility = RAST.Visibility.Public, attributes = ISZ(), meta = ISZ(),
+        body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
           st"""// this method is called when the monitor does not handle the passed in channel
               |match channel {
               |  _ => {
@@ -181,41 +177,39 @@ object ComponentContributions {}
               |  }
               |}""")))))
 
-      val impl = RustAst.ImplBase(
-        forIdent = RustAst.IdentString(threadId),
-        items = ISZ[RustAst.Item](newFn, initFn) ++ entrypointFns :+ notify,
+      val impl = RAST.ImplBase(
+        forIdent = RAST.IdentString(threadId),
+        items = ISZ[RAST.Item](newFn, initFn) ++ entrypointFns :+ notify,
         comments = ISZ(), attributes = ISZ(), implIdent = None())
 
-      val testEntries = genTestEntries(thread, CRustTypePlugin.getCRustTypeProvider(localStore).get)
+      var funcs: ISZ[RAST.Fn] = ISZ()
 
-      var funcs: ISZ[RustAst.Fn] = ISZ()
-
-      funcs = funcs :+ RustAst.FnImpl(
-        sig = RustAst.FnSig(
-          ident = RustAst.IdentString("log_info"),
-          fnDecl = RustAst.FnDecl(
+      funcs = funcs :+ RAST.FnImpl(
+        sig = RAST.FnSig(
+          ident = RAST.IdentString("log_info"),
+          fnDecl = RAST.FnDecl(
             inputs = ISZ(
-              RustAst.ParamImpl(
-                ident = RustAst.IdentString("msg"),
-                kind = RustAst.TyPath(ISZ(ISZ("&str")), None()))),
-            outputs = RustAst.FnRetTyDefault()),
-          verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
-        comments = ISZ(), contract = None(), visibility = RustAst.Visibility.Public, attributes = ISZ(), meta = ISZ(),
-        body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
+              RAST.ParamImpl(
+                ident = RAST.IdentString("msg"),
+                kind = RAST.TyPath(ISZ(ISZ("&str")), None()))),
+            outputs = RAST.FnRetTyDefault()),
+          verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
+        comments = ISZ(), contract = None(), visibility = RAST.Visibility.Public, attributes = ISZ(), meta = ISZ(),
+        body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
           st"""log::info!("{0}", msg);""")))))
 
-      funcs = funcs :+ RustAst.FnImpl(
-        sig = RustAst.FnSig(
-          ident = RustAst.IdentString("log_warn_channel"),
-          fnDecl = RustAst.FnDecl(
+      funcs = funcs :+ RAST.FnImpl(
+        sig = RAST.FnSig(
+          ident = RAST.IdentString("log_warn_channel"),
+          fnDecl = RAST.FnDecl(
             inputs = ISZ(
-              RustAst.ParamImpl(
-                ident = RustAst.IdentString("channel"),
-                kind = RustAst.TyPath(ISZ(ISZ("u32")), None()))),
-            outputs = RustAst.FnRetTyDefault()),
-          verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
-        comments = ISZ(), contract = None(), visibility = RustAst.Visibility.Public, attributes = ISZ(), meta = ISZ(),
-        body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
+              RAST.ParamImpl(
+                ident = RAST.IdentString("channel"),
+                kind = RAST.TyPath(ISZ(ISZ("u32")), None()))),
+            outputs = RAST.FnRetTyDefault()),
+          verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
+        comments = ISZ(), contract = None(), visibility = RAST.Visibility.Public, attributes = ISZ(), meta = ISZ(),
+        body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
           st"""log::warn!("Unexpected channel: {0}", channel);""")))))
 
       ret = ret + thread.path ~>
@@ -226,9 +220,7 @@ object ComponentContributions {}
           appUses = uses,
           appStructDef = struct,
           appStructImpl = impl,
-          appFreeFunctions = funcs,
-
-          testEntries = testEntries)
+          appFreeFunctions = funcs)
 
       makefileTestEntries = makefileTestEntries :+ st"make -C $${CRATES_DIR}/$threadId test"
 
@@ -252,49 +244,6 @@ object ComponentContributions {}
     return (localStore, resources)
   }
 
-  @pure def genTestEntries(thread: AadlThread, cRustTypeProvider: CRustTypeProvider): ISZ[RustAst.Item] = {
-    val threadId = MicrokitUtil.getThreadIdPath(thread)
-    assert(thread.isPeriodic(), s"Not yet handling sporadic threads: ${threadId}")
-
-    val inDataPortInits: Option[ST] = {
-      var ret = ISZ[ST]()
-      for (p <- thread.getPorts().filter(p => p.direction == Direction.In && p.isInstanceOf[AadlDataPort])) {
-        val d = p.asInstanceOf[AadlDataPort]
-        ret = ret :+ st"test_api::put_${p.identifier}(${MicrokitTypeUtil.getCRustTypeDefaultValue(d.aadlType, cRustTypeProvider)});"
-      }
-      if (ret.nonEmpty) Some(st"""
-                                |// populate incoming data ports
-                                |${(ret, "\n")}
-                                |""")
-      else None()
-    }
-
-    return ISZ(RustAst.ItemST(
-      st"""mod tests {
-          |  // NOTE: need to run tests sequentially to prevent race conditions
-          |  //       on the app and the testing apis which are static
-          |  use serial_test::serial;
-          |
-          |  use crate::bridge::test_api;
-          |  use ${CRustTypePlugin.usePath};
-          |
-          |  #[test]
-          |  #[serial]
-          |  fn test_initialization() {
-          |    crate::${threadId}_initialize();
-          |}
-          |
-          |  #[test]
-          |  #[serial]
-          |  fn test_compute() {
-          |    crate::${threadId}_initialize();
-          |    ${(inDataPortInits, "\n")}
-          |    crate::${threadId}_timeTriggered();
-          |  }
-          |}"""))
-  }
-
-
   @pure override def finalizeMicrokit(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
     var localStore = store
     var resources: ISZ[Resource] = ISZ()
@@ -306,7 +255,7 @@ object ComponentContributions {}
       val modName = CRustComponentPlugin.appModuleName(thread)
 
       val componentCrateDir = CRustComponentPlugin.componentCrateDirectory(thread, options)
-      val componentSrcDir = s"${CRustComponentPlugin.componentCrateDirectory(thread, options)}/src"
+      val componentSrcDir = s"$componentCrateDir/src"
       val componentDir = CRustComponentPlugin.componentDirectory(thread, options)
 
       { // for now just emit src/lib.rs as a resource
@@ -336,7 +285,9 @@ object ComponentContributions {}
               |mod bridge;
               |mod component;
               |mod logging;
-              |mod tests;
+              |
+              |#[cfg(test)]
+              |mod test;
               |
               |use crate::bridge::${CRustApiPlugin.apiModuleName(thread)}::{self as api, *};
               |use crate::component::${CRustComponentPlugin.appModuleName(thread)}::*;
@@ -455,7 +406,7 @@ object ComponentContributions {}
         }
 
         if (e._2.requiresVerus) {
-          uses = uses :+ RustAst.Use(ISZ(), RustAst.IdentString("vstd::prelude::*"))
+          uses = uses :+ RAST.Use(ISZ(), RAST.IdentString("vstd::prelude::*"))
 
           body =
             st"""verus! {
@@ -489,18 +440,6 @@ object ComponentContributions {}
               |pub mod $modName;
               |"""
         val path = s"$componentDir/mod.rs"
-        resources = resources :+ ResourceUtil.createResource(path, content, F)
-      }
-
-      { // tests.rs
-        val content =
-          st"""#![cfg(test)]
-              |
-              |${MicrokitUtil.safeToEdit}
-              |
-              |${(for(i <- e._2.testEntries) yield i.prettyST, "\n\n")}
-              |"""
-        val path = s"${CRustComponentPlugin.componentCrateDirectory(thread, options)}/src/tests.rs"
         resources = resources :+ ResourceUtil.createResource(path, content, F)
       }
 

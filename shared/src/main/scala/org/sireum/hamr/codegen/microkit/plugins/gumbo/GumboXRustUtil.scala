@@ -2,16 +2,16 @@
 package org.sireum.hamr.codegen.microkit.plugins.gumbo
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.CommonUtil.{TypeIdPath, splitClassifier}
-import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlEventPort, AadlFeature, AadlFeatureData, AadlFeatureEvent, AadlPort, AadlThread, GclAnnexClauseInfo}
-import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, TypeResolver, TypeUtil}
+import org.sireum.hamr.codegen.common.CommonUtil.TypeIdPath
+import org.sireum.hamr.codegen.common.symbols._
+import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes}
 import org.sireum.hamr.codegen.microkit.plugins.types.{CRustTypeNameProvider, CRustTypeProvider}
 import org.sireum.hamr.codegen.microkit.rust.Param
+import org.sireum.hamr.codegen.microkit.{rust => RAST}
+import org.sireum.hamr.ir
 import org.sireum.hamr.ir.{Direction, GclStateVar, GclSubclause}
 import org.sireum.lang.ast.Exp
 import org.sireum.lang.{ast => SAST}
-import org.sireum.hamr.ir
-import org.sireum.hamr.codegen.microkit.{rust => RAST}
 
 object GumboXRustUtil {
 

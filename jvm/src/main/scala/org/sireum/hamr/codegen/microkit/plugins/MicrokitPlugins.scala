@@ -6,6 +6,7 @@ import org.sireum.hamr.codegen.common.plugin.Plugin
 import org.sireum.hamr.codegen.microkit.plugins.apis.DefaultCRustApiPlugin
 import org.sireum.hamr.codegen.microkit.plugins.attestation.AttestationPlugin
 import org.sireum.hamr.codegen.microkit.plugins.component.DefaultCRustComponentPlugin
+import org.sireum.hamr.codegen.microkit.plugins.testing.DefaultCRustTestingPlugin
 import org.sireum.hamr.codegen.microkit.plugins.gumbo.{DefaultGumboRustPlugin, DefaultGumboXPlugin}
 import org.sireum.hamr.codegen.microkit.plugins.linters.DefaultMicrokitLinterPlugin
 import org.sireum.hamr.codegen.microkit.plugins.reporting.MicrokitReporterPlugin
@@ -26,6 +27,9 @@ object MicrokitPlugins {
 
     // component-ers
     DefaultCRustComponentPlugin(),
+
+    // test-ers
+    DefaultCRustTestingPlugin(),
 
     // gumbo-ers
     DefaultGumboRustPlugin(),

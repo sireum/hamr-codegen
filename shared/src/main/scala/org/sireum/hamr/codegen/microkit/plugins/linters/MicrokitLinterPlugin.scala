@@ -2,8 +2,8 @@
 package org.sireum.hamr.codegen.microkit.plugins.linters
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, Store, StoreValue}
-import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlEventPort, AadlPort, AadlProcess, AadlProcessor, AadlThread, AadlVirtualProcessor, Dispatch_Protocol, SymbolTable}
+import org.sireum.hamr.codegen.common.CommonUtil.{Store, StoreValue}
+import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes}
 import org.sireum.hamr.codegen.common.util.HamrCli
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen

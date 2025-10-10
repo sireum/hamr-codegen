@@ -2,21 +2,21 @@
 package org.sireum.hamr.codegen.microkit.plugins.types
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.CommonUtil.{BoolValue, IdPath, Store, StoreValue, TypeIdPath}
+import org.sireum.hamr.codegen.common.CommonUtil.{BoolValue, IdPath, Store, StoreValue}
 import org.sireum.hamr.codegen.common.StringUtil
 import org.sireum.hamr.codegen.common.containers.Resource
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
-import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, ArrayType, BaseType, EnumType, RecordType, TypeUtil}
-import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
+import org.sireum.hamr.codegen.common.types._
 import org.sireum.hamr.codegen.common.util.HamrCli.CodegenHamrPlatform
-import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, MicrokitPlugin}
+import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.plugins.linters.MicrokitLinterPlugin
+import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, MicrokitPlugin}
 import org.sireum.hamr.codegen.microkit.rust.Visibility
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
-import org.sireum.hamr.codegen.microkit.util.{RustUtil, MicrokitUtil}
+import org.sireum.hamr.codegen.microkit.util.{MicrokitUtil, RustUtil}
+import org.sireum.hamr.codegen.microkit.{rust => RAST}
 import org.sireum.hamr.ir.Aadl
 import org.sireum.message.Reporter
-import org.sireum.hamr.codegen.microkit.{rust => RustAst}
 
 // a type provider for C + Rust microkit components (ie. a C microkit component that
 // calls out to a rust crate)
@@ -59,10 +59,10 @@ object CRustTypePlugin {
 
   @pure def getRepresentativeType(aadlType: AadlType): AadlType
 
-  @pure def rustTypeDefs: HashSMap[String, ISZ[RustAst.Item]]
+  @pure def rustTypeDefs: HashSMap[String, ISZ[RAST.Item]]
 }
 
-@datatype class DefaultCRustTypeProvider(val rustTypeDefs: HashSMap[String, ISZ[RustAst.Item]],
+@datatype class DefaultCRustTypeProvider(val rustTypeDefs: HashSMap[String, ISZ[RAST.Item]],
 
                                          // use getTypeNameProvider rather than the following fields
                                          val PRIVATE_typeNameProvider: Map[String, CRustTypeNameProvider],
@@ -114,7 +114,7 @@ object CRustTypePlugin {
         aadlTypeName ~> getTypeNameProvider(types.typeMap.get(aadlTypeName).get, touchedTypes.substitutionTypeMap, reporter))) +
       MicrokitTypeUtil.eventPortTypeName ~> getTypeNameProvider(MicrokitTypeUtil.eventPortType, touchedTypes.substitutionTypeMap, reporter)
 
-    val rustItems = HashSMap.empty[String, ISZ[RustAst.Item]] ++ (
+    val rustItems = HashSMap.empty[String, ISZ[RAST.Item]] ++ (
       for (aadlTypeName <- touchedTypes.orderedDependencies if !TypeUtil.isBaseTypeS(aadlTypeName) || TypeUtil.isBaseTypesStringS(aadlTypeName)) yield
         aadlTypeName ~> getRustItems(types.typeMap.get(aadlTypeName).get, typeNameProvider, touchedTypes.substitutionTypeMap))
 
@@ -254,7 +254,7 @@ object CRustTypePlugin {
 
   @pure def getRustItems(aadlType: AadlType,
                          typeNameProvider: Map[String, CRustTypeNameProvider],
-                         substitutions: Map[String, AadlType]): ISZ[RustAst.Item] = {
+                         substitutions: Map[String, AadlType]): ISZ[RAST.Item] = {
     @pure def getTypeSimpleName(a: AadlType): String = {
       return typeNameProvider.get(substitutions.getOrElse(a.name, a).name).get.simpleRustName
     }
@@ -276,28 +276,28 @@ object CRustTypePlugin {
       }
     }
 
-    var ret: ISZ[RustAst.Item] = ISZ()
+    var ret: ISZ[RAST.Item] = ISZ()
 
-    ret = ret :+ RustAst.ItemST(MicrokitUtil.doNotEdit)
-    ret = ret :+ RustAst.Use(ISZ(), RustAst.IdentString("vstd::prelude::*"))
-    ret = ret :+ RustAst.Use(ISZ(), RustAst.IdentString("super::*"))
+    ret = ret :+ RAST.ItemST(MicrokitUtil.doNotEdit)
+    ret = ret :+ RAST.Use(ISZ(), RAST.IdentString("vstd::prelude::*"))
+    ret = ret :+ RAST.Use(ISZ(), RAST.IdentString("super::*"))
 
-    var uses: Set[RustAst.IdentString] = Set.empty
+    var uses: Set[RAST.IdentString] = Set.empty
 
     // TODO is it safe to always assume type defs will be in verus (ie. even if there are no contracts)
-    var inVerusItems: ISZ[RustAst.Item] = ISZ()
+    var inVerusItems: ISZ[RAST.Item] = ISZ()
 
     val substituteType = substitutions.getOrElse(aadlType.name, aadlType)
     val aadlTypePackageName = ops.ISZOps(getTypePackageNamesName(substituteType)).dropRight(1)
 
-    @pure def addType(t: AadlType): RustAst.TypeAadl = {
+    @pure def addType(t: AadlType): RAST.TypeAadl = {
       val subT = substitutions.getOrElse(t.name, t)
       val qualfiedName = getTypePackageNamesName(subT)
       val tPackageName = ops.ISZOps(qualfiedName).dropRight(1)
       if (!subT.isInstanceOf[BaseType] && aadlTypePackageName != tPackageName) {
-        uses = uses + RustAst.IdentString(st"super::${(tPackageName, "::")}::*".render)
+        uses = uses + RAST.IdentString(st"super::${(tPackageName, "::")}::*".render)
       }
-      return RustAst.TypeAadl(
+      return RAST.TypeAadl(
         qualifiedNameS = qualfiedName,
         aadlTypeName = subT.classifier)
     }
@@ -305,61 +305,61 @@ object CRustTypePlugin {
     var implBody: Option[ST] = None()
     substituteType match {
       case rt: RecordType =>
-        val fields: ISZ[RustAst.StructField] = for (f <- rt.fields.entries) yield
-          RustAst.StructField(
+        val fields: ISZ[RAST.StructField] = for (f <- rt.fields.entries) yield
+          RAST.StructField(
             visibility = Visibility.Public,
             isGhost = F,
-            ident = RustAst.IdentString(f._1),
+            ident = RAST.IdentString(f._1),
             fieldType = addType(f._2))
         inVerusItems = inVerusItems :+
-          RustAst.StructDef(
+          RAST.StructDef(
             attributes = ISZ(
-              RustAst.AttributeST(F, st"repr(C)"),
-              RustAst.AttributeST(F, st"derive(Debug, Clone, Copy, PartialEq, Eq)")),
+              RAST.AttributeST(F, st"repr(C)"),
+              RAST.AttributeST(F, st"derive(Debug, Clone, Copy, PartialEq, Eq)")),
             visibility = Visibility.Public,
-            ident = RustAst.IdentString(getTypeSimpleName(rt)),
-            items = fields.asInstanceOf[ISZ[RustAst.Item]])
+            ident = RAST.IdentString(getTypeSimpleName(rt)),
+            items = fields.asInstanceOf[ISZ[RAST.Item]])
 
         val fieldDefaults: ISZ[ST] = for (f <- rt.fields.entries) yield
           st"${f._1}: ${getCRustTypeDefaultValue(f._2)}"
         implBody = Some(st"Self { ${(fieldDefaults, ", ")} }")
 
       case et: EnumType =>
-        var enumValues : ISZ[RustAst.EnumValue] = ISZ()
+        var enumValues : ISZ[RAST.EnumValue] = ISZ()
         for (i <- 0 until et.values.size) {
-          enumValues = enumValues :+ RustAst.EnumValue(
+          enumValues = enumValues :+ RAST.EnumValue(
             visibility = Visibility.Public,
-            ident = RustAst.IdentString(et.values(i)),
-            value = Some(RustAst.IdentString(i.string)))
+            ident = RAST.IdentString(et.values(i)),
+            value = Some(RAST.IdentString(i.string)))
         }
         inVerusItems = inVerusItems :+
-          RustAst.EnumDef(
+          RAST.EnumDef(
             attributes = ISZ(
-              RustAst.AttributeST(F, st"repr(C)"),
-              RustAst.AttributeST(F, st"derive(Copy, Clone, Debug, PartialEq, Eq)")), //, Structural)")),
+              RAST.AttributeST(F, st"repr(C)"),
+              RAST.AttributeST(F, st"derive(Copy, Clone, Debug, PartialEq, Eq)")), //, Structural)")),
             visibility = Visibility.Public,
-            ident = RustAst.IdentString(getTypeSimpleName(et)),
+            ident = RAST.IdentString(getTypeSimpleName(et)),
             items = enumValues)
 
         implBody = Some(st"${getTypeSimpleName(et)}::${et.values(0)}")
 
       case at: ArrayType =>
         val np = typeNameProvider.get(at.name).get
-        var dims: ISZ[RustAst.Ident] = ISZ()
-        var companions: ISZ[RustAst.Item] = ISZ()
+        var dims: ISZ[RAST.Ident] = ISZ()
+        var companions: ISZ[RAST.Item] = ISZ()
         val byteSize = at.bitSize.get / 8
-        companions = companions :+ RustAst.ItemString(s"pub const ${CRustTypePlugin.getArraySizeName(np)}: usize = $byteSize;")
+        companions = companions :+ RAST.ItemString(s"pub const ${CRustTypePlugin.getArraySizeName(np)}: usize = $byteSize;")
         for (i <- 0 until at.dimensions.size) {
           val dimName = CRustTypePlugin.getArrayDimName(np, i)
-          companions = companions :+ RustAst.ItemString(s"pub const $dimName: usize = ${at.dimensions(i)};")
-          dims = dims :+ RustAst.IdentString(dimName)
+          companions = companions :+ RAST.ItemString(s"pub const $dimName: usize = ${at.dimensions(i)};")
+          dims = dims :+ RAST.IdentString(dimName)
         }
         inVerusItems = inVerusItems :+
-          RustAst.Array(
+          RAST.Array(
             companions = companions,
             attributes = ISZ(),
             visibility = Visibility.Public,
-            ident = RustAst.IdentString(getTypeSimpleName(at)),
+            ident = RAST.IdentString(getTypeSimpleName(at)),
             dims = dims,
             elemType = addType(at.baseType))
 
@@ -371,25 +371,25 @@ object CRustTypePlugin {
     }
 
     for (u <- uses.elements) {
-      ret = ret :+ RustAst.Use(ISZ(), u)
+      ret = ret :+ RAST.Use(ISZ(), u)
     }
     if (implBody.nonEmpty) {
       inVerusItems = inVerusItems :+
-        RustAst.ImplBase(
-          implIdent = Some(RustAst.IdentString("Default")),
-          forIdent = RustAst.IdentString(getTypeSimpleName(aadlType)),
-          items = ISZ(RustAst.FnImpl(
-            sig = RustAst.FnSig(
+        RAST.ImplBase(
+          implIdent = Some(RAST.IdentString("Default")),
+          forIdent = RAST.IdentString(getTypeSimpleName(aadlType)),
+          items = ISZ(RAST.FnImpl(
+            sig = RAST.FnSig(
               verusHeader = None(),
-              fnHeader = RustAst.FnHeader(F),
-              ident = RustAst.IdentString("default"),
+              fnHeader = RAST.FnHeader(F),
+              ident = RAST.IdentString("default"),
               generics = None(),
-              fnDecl = RustAst.FnDecl(ISZ(), RustAst.FnRetTyImpl(RustAst.TypeRust(ISZ("Self"))))),
-            comments = ISZ(), attributes = ISZ(), visibility = RustAst.Visibility.Private, contract = None(), meta = ISZ(),
-            body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(implBody.get)))))),
+              fnDecl = RAST.FnDecl(ISZ(), RAST.FnRetTyImpl(RAST.TypeRust(ISZ("Self"))))),
+            comments = ISZ(), attributes = ISZ(), visibility = RAST.Visibility.Private, contract = None(), meta = ISZ(),
+            body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(implBody.get)))))),
           comments = ISZ(),attributes = ISZ())
     }
-    return ret :+ RustAst.MacCall("verus", inVerusItems)
+    return ret :+ RAST.MacCall("verus", inVerusItems)
   }
 }
 

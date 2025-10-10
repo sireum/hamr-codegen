@@ -2,22 +2,23 @@
 package org.sireum.hamr.codegen.microkit.plugins.gumbo
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.CommonUtil.{BoolValue, DataIdPath, IdPath, PortIdPath, Store, StoreValue, ThreadIdPath}
+import org.sireum.hamr.codegen.common.CommonUtil._
 import org.sireum.hamr.codegen.common.containers.Resource
 import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlThread, GclAnnexClauseInfo, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlTypes
-import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
 import org.sireum.hamr.codegen.common.util.HamrCli.CodegenHamrPlatform
+import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.plugins.apis.CRustApiPlugin
-import org.sireum.hamr.codegen.microkit.plugins.component.CRustComponentPlugin
-import org.sireum.hamr.codegen.microkit.plugins.gumbo.GumboXRustUtil.{GGParam, GGPortParam, SymbolKind, paramsToComment, sortParams}
-import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, MicrokitPlugin}
+import org.sireum.hamr.codegen.microkit.plugins.component.CRustComponentStoreUtil
+import org.sireum.hamr.codegen.microkit.plugins.gumbo.GumboXRustUtil._
+import org.sireum.hamr.codegen.microkit.plugins.testing.CRustTestingPlugin
 import org.sireum.hamr.codegen.microkit.plugins.types.{CRustTypePlugin, CRustTypeProvider}
+import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, MicrokitPlugin}
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil
+import org.sireum.hamr.codegen.microkit.{rust => RAST}
 import org.sireum.hamr.ir.{Aadl, GclAssume, GclGuarantee, GclSubclause}
 import org.sireum.message.Reporter
-import org.sireum.hamr.codegen.microkit.{rust => RAST}
 
 object GumboXRustPlugin {
 
@@ -39,6 +40,7 @@ object GumboXComponentContributions {
     Map.empty,
     InitializeContributions.empty,
     ComputeContributions.empty,
+    ISZ(),
     ISZ())
 }
 
@@ -72,7 +74,9 @@ object ComputeContributions {
                                              val computeContributions: ComputeContributions,
 
                                              //
-                                             val gumboMethods: ISZ[RAST.Fn])
+                                             val gumboMethods: ISZ[RAST.Fn],
+
+                                             val cb_apis: ISZ[RAST.Item])
 
 
 @sig trait GumboXRustPlugin extends MicrokitPlugin with MicrokitFinalizePlugin {
@@ -86,6 +90,7 @@ object ComputeContributions {
       !isDisabled(store) &&
       !haveHandled(store) &&
       CRustTypePlugin.hasCRustTypeProvider(store) &&
+      CRustTestingPlugin.getCRustTestingContributions(store).nonEmpty &&
       // gumbo rust plugin provides datatype invariant rust methods
       GumboRustPlugin.getGumboRustContributions(store).nonEmpty &&
       (GumboRustPlugin.getThreadsWithContracts(store).nonEmpty ||
@@ -105,8 +110,7 @@ object ComputeContributions {
     var localStore = store
     val crustTypeProvider = CRustTypePlugin.getCRustTypeProvider(localStore).get
 
-    var componentContributions = CRustComponentPlugin.getCRustComponentContributions(localStore)
-    var apiContributions = CRustApiPlugin.getCRustApiContributions(localStore).get
+    var testingContributions = CRustTestingPlugin.getCRustTestingContributions(localStore).get.testingContributions
 
     val datatypesWithContracts = GumboRustPlugin.getDatatypesWithContracts(localStore)
     val componentsWithContracts = GumboRustPlugin.getThreadsWithContracts(localStore)
@@ -118,6 +122,8 @@ object ComputeContributions {
       assert(!items.contains(thread.path), "Not expecting anyone else to have made gumbox contributions up to this point")
 
       if (datatypesWithContracts.nonEmpty || ops.ISZOps(componentsWithContracts).contains(thread.path)) {
+        val threadId = MicrokitUtil.getThreadIdPath(thread)
+
         val subclauseInfoOpt = GumboRustUtil.getGumboSubclauseOpt(thread.path, symbolTable)
 
         val integrationConstraints = processIntegrationConstraints(thread, subclauseInfoOpt, crustTypeProvider, types, localStore, reporter)
@@ -128,47 +134,38 @@ object ComputeContributions {
 
         val gumboMethods = processGumboMethods(thread, subclauseInfoOpt, crustTypeProvider, types, localStore, reporter)
 
-        { // update the generated apis to include GUMBOX artifacts
+        val (cb_api_Entries, test_api_Entries, gumboTestModEntries) = buildGumboxTestMethods(thread, initializeContributions, computeContributions, subclauseInfoOpt, crustTypeProvider, types, localStore, reporter)
 
-          val testingApiContributions = buildGumboxTestMethods(thread, initializeContributions, computeContributions, subclauseInfoOpt, crustTypeProvider, types, localStore, reporter)
+        val existingTestingContributions = testingContributions.get(thread.path).get
 
-          val apiComponentContributions = apiContributions.apiContributions.get(thread.path).get
+        val updatedTestingApis = updatePuttersWithStateVars(existingTestingContributions.testApiEntries ++ test_api_Entries, computeContributions)
 
-          val testingApis = updatePuttersWithStateVars(apiComponentContributions.testingApis, computeContributions)
+        val updatedUtilModEntries = existingTestingContributions.utilModEntries :+
+          RAST.Mod(RAST.Visibility.Public, RAST.IdentString(s"cb_apis")) :+
+          RAST.Mod(RAST.Visibility.Public, RAST.IdentString(s"generators"))
 
-          val updated = apiComponentContributions(
-            testingApis =
-              RAST.Use(attributes = ISZ(),
-                ident = RAST.IdentString(s"crate::bridge::${MicrokitUtil.getThreadIdPath(thread)}_GUMBOX as GUMBOX")) +:
-                (testingApis ++ testingApiContributions._1),
+        localStore = CRustComponentStoreUtil.addBridgeModule(
+          thread = thread.path,
+          mod = RAST.Mod(RAST.Visibility.Public, RAST.IdentString(s"${threadId}_GUMBOX")),
+          store = localStore)
 
-            // modify bridge/mod.rs to add the GUMBOX module
-            bridgeModuleContributions =
-              apiComponentContributions.bridgeModuleContributions :+
-                RAST.ItemST(st"pub mod ${MicrokitUtil.getThreadIdPath(thread)}_GUMBOX;")
-          )
-
-          apiContributions = apiContributions.addApiContributions(thread.path, updated)
-
-          // add gumbox test module to tests.rs
-          val existingComponentContributions = componentContributions.componentContributions.get(thread.path).get
-          componentContributions = componentContributions.replaceComponentContributions(
-            componentContributions.componentContributions + thread.path ~>
-              existingComponentContributions(testEntries =
-              existingComponentContributions.testEntries ++ testingApiContributions._2)
-          )
-        }
+        testingContributions = testingContributions + thread.path ~>
+          existingTestingContributions(
+            utilModEntries = updatedUtilModEntries,
+            testsEntries = existingTestingContributions.testsEntries ++ gumboTestModEntries,
+            testApiEntries = updatedTestingApis)
 
         items = items + thread.path ~> GumboXComponentContributions(
           integrationConstraints = integrationConstraints,
           initializeContributions = initializeContributions,
           computeContributions = computeContributions,
-          gumboMethods = gumboMethods)
+          gumboMethods = gumboMethods,
+          cb_apis = cb_api_Entries)
       }
     }
 
-    localStore = CRustApiPlugin.putCRustApiContributions(apiContributions, localStore)
-    localStore = CRustComponentPlugin.putComponentContributions(componentContributions, localStore)
+    localStore = CRustTestingPlugin.putCRustTestingContributions(
+      CRustTestingPlugin.CRustTestingContributions(testingContributions), localStore)
 
     return (GumboXRustPlugin.putGumboXContributions(DefaultGumboXContributions(items), localStore), resources)
   }
@@ -225,21 +222,21 @@ object ComputeContributions {
       }
 
       structContainer = structContainer(
-        ident = RAST.IdentString("PreStateContainer_wLV"),
+        ident = RAST.IdentString("PreStateContainer_wGSV"),
         items = varItems ++ structContainer.items)
       putterContainer = putterContainer(
-        sig  = putterContainer.sig(
-          ident = RAST.IdentString("put_concrete_inputs_container_wLV"),
+        sig = putterContainer.sig(
+          ident = RAST.IdentString("put_concrete_inputs_container_wGSV"),
           fnDecl = putterContainer.sig.fnDecl(
             inputs = ISZ(RAST.ParamImpl(
               ident = RAST.IdentString("container"),
-              kind = RAST.TyPath(ISZ(ISZ("PreStateContainer_wLV")), None())))
+              kind = RAST.TyPath(ISZ(ISZ("PreStateContainer_wGSV")), None())))
           )
         ),
         body = Some(RAST.MethodBody(putterContainerBody)))
       putter = putter(
         sig = putter.sig(
-          ident = RAST.IdentString("put_concrete_inputs_wLV"),
+          ident = RAST.IdentString("put_concrete_inputs_wGSV"),
           fnDecl = putter.sig.fnDecl(inputs = putterParams ++ putter.sig.fnDecl.inputs)),
         body = Some(RAST.MethodBody(putterBody))
       )
@@ -248,7 +245,7 @@ object ComputeContributions {
 
       return updatedApis
     }
-   }
+  }
 
   @pure def processGumboMethods(thread: AadlThread,
                                 subclauseInfoOpt: Option[GclAnnexClauseInfo],
@@ -1007,13 +1004,14 @@ object ComputeContributions {
                                    initializeContributions: InitializeContributions,
                                    computeContributions: ComputeContributions,
                                    subclauseInfoOpt: Option[GclAnnexClauseInfo], crustTypeProvider: CRustTypeProvider, types: AadlTypes, localStore: Store, reporter: Reporter
-                                  ): (ISZ[RAST.Item], ISZ[RAST.Item]) = {
+                                  ): (ISZ[RAST.Item], ISZ[RAST.Item], ISZ[RAST.Item]) = {
     assert(thread.isPeriodic(), s"Need to handle sporadic threads: ${thread.classifierAsString}")
 
+    var cb_api_Items: ISZ[RAST.Item] = ISZ()
     var test_api_rs_Items: ISZ[RAST.Item] = ISZ()
     var tests_rs_Items: ISZ[ST] = ISZ()
 
-    test_api_rs_Items = test_api_rs_Items :+ RAST.EnumDef(
+    cb_api_Items = cb_api_Items :+ RAST.EnumDef(
       attributes = ISZ(),
       visibility = RAST.Visibility.Public,
       ident = RAST.IdentString("HarnessResult"),
@@ -1024,7 +1022,7 @@ object ComputeContributions {
 
     val testInitializeCB = "testInitializeCB"
     val testComputeCB = "testComputeCB"
-    val testComputeCBwLV = "testComputeCBwLV"
+    val testComputeCBwGSV = "testComputeCBwGSV"
 
     { // testInitialiseCB
       val sorted_iep_post_param = GumboXRustUtil.sortParams(initializeContributions.IEP_Post_Params)
@@ -1075,7 +1073,7 @@ object ComputeContributions {
               |  */""")),
         attributes = ISZ(), contract = None(), meta = ISZ())
 
-      test_api_rs_Items = test_api_rs_Items :+ testInitialize
+      cb_api_Items = cb_api_Items :+ testInitialize
     }
 
     { // testInitialize_macro
@@ -1089,14 +1087,14 @@ object ComputeContributions {
             |  #[test]
             |  #[serial]
             |  fn $$test_name(empty in ::proptest::strategy::Just(())) {
-            |    match $$crate::bridge::test_api::${testInitializeCB}() {
-            |      $$crate::bridge::test_api::HarnessResult::RejectedPrecondition => {
+            |    match $$crate::test::util::cb_apis::${testInitializeCB}() {
+            |      $$crate::test::util::cb_apis::HarnessResult::RejectedPrecondition => {
             |        unreachable!("This branch is infeasible")
             |      }
-            |      $$crate::bridge::test_api::HarnessResult::FailedPostcondition(e) => {
+            |      $$crate::test::util::cb_apis::HarnessResult::FailedPostcondition(e) => {
             |        return Err(e)
             |      }
-            |      $$crate::bridge::test_api::HarnessResult::Passed => { }
+            |      $$crate::test::util::cb_apis::HarnessResult::Passed => { }
             |    }
             |  }
             |}"""
@@ -1107,7 +1105,7 @@ object ComputeContributions {
         comments = ISZ(),
         body = Some(body))
 
-      test_api_rs_Items = test_api_rs_Items :+ testInitialize_CB_macro
+      cb_api_Items = cb_api_Items :+ testInitialize_CB_macro
 
 
       tests_rs_Items = tests_rs_Items :+
@@ -1214,7 +1212,7 @@ object ComputeContributions {
               |  */""")),
         attributes = ISZ(), contract = None(), meta = ISZ())
 
-      test_api_rs_Items = test_api_rs_Items :+ testComputeWithoutStateVars
+      cb_api_Items = cb_api_Items :+ testComputeWithoutStateVars
 
 
       val testComputeContainerWithoutStateVars = RAST.FnImpl(
@@ -1234,7 +1232,7 @@ object ComputeContributions {
               |  */""")),
         attributes = ISZ(), contract = None(), meta = ISZ())
 
-      test_api_rs_Items = test_api_rs_Items :+ testComputeContainerWithoutStateVars
+      cb_api_Items = cb_api_Items :+ testComputeContainerWithoutStateVars
     }
 
     { // test_compute_CB_macro
@@ -1250,25 +1248,30 @@ object ComputeContributions {
           kind = RAST.TyPath(ISZ(ISZ(s"$$${p.name}_strat:expr")), None())
         )
       }
+
+      val app: ST =
+        if (sorted_pre_without_state_vars.isEmpty) st"empty in ::proptest::strategy::Just(())"
+        else st"""(${(for (p <- sorted_pre_without_state_vars) yield p.name, ", ")})
+                 |    in (${(for (p <- sorted_pre_without_state_vars) yield s"$$${p.name}_strat", ", ")})"""
+
       val body =
         st"""proptest!{
             |  #![proptest_config($$config)]
             |  #[test]
             |  #[serial]
             |  fn $$test_name(
-            |    (${(for (p <- sorted_pre_without_state_vars) yield p.name, ", ")})
-            |    in (${(for (p <- sorted_pre_without_state_vars) yield s"$$${p.name}_strat", ", ")})
+            |    $app
             |  ) {
-            |    match$$crate::bridge::test_api::${testComputeCB}(${(for (p <- sorted_pre_without_state_vars) yield p.name, ", ")}) {
-            |      $$crate::bridge::test_api::HarnessResult::RejectedPrecondition => {
+            |    match$$crate::test::util::cb_apis::${testComputeCB}(${(for (p <- sorted_pre_without_state_vars) yield p.name, ", ")}) {
+            |      $$crate::test::util::cb_apis::HarnessResult::RejectedPrecondition => {
             |        return Err(proptest::test_runner::TestCaseError::reject(
             |          "Precondition failed: invalid input combination",
             |        ))
             |      }
-            |      $$crate::bridge::test_api::HarnessResult::FailedPostcondition(e) => {
+            |      $$crate::test::util::cb_apis::HarnessResult::FailedPostcondition(e) => {
             |        return Err(e)
             |      }
-            |      $$crate::bridge::test_api::HarnessResult::Passed => { }
+            |      $$crate::test::util::cb_apis::HarnessResult::Passed => { }
             |    }
             |  }
             |}"""
@@ -1279,24 +1282,24 @@ object ComputeContributions {
         comments = ISZ(),
         body = Some(body))
 
-      test_api_rs_Items = test_api_rs_Items :+ test_compute_CB_macro
+      cb_api_Items = cb_api_Items :+ test_compute_CB_macro
 
       val strategiesOpt: Option[ST] =
-       if(sorted_pre_without_state_vars.nonEmpty) {
-         var strategies: ISZ[ST] = ISZ()
-         for (p <- sorted_pre_without_state_vars) {
-           var d = st"test_api::${(p.typeNameProvider.qualifiedRustNameS, "_")}_strategy_default()"
-           if (p.isOptional) {
-             d = st"test_api::option_strategy_default($d)"
-           }
-           strategies = strategies :+ st"${p.name}: $d"
-         }
-         Some(
-           st"""// strategies for generating each component input
-               |${(strategies, ",\n")}""")
-       } else {
-         None()
-       }
+        if (sorted_pre_without_state_vars.nonEmpty) {
+          var strategies: ISZ[ST] = ISZ()
+          for (p <- sorted_pre_without_state_vars) {
+            var d = st"generators::${(p.typeNameProvider.qualifiedRustNameS, "_")}_strategy_default()"
+            if (p.isOptional) {
+              d = st"generators::option_strategy_default($d)"
+            }
+            strategies = strategies :+ st"${p.name}: $d"
+          }
+          Some(
+            st"""// strategies for generating each component input
+                |${(strategies, ",\n")}""")
+        } else {
+          None()
+        }
       tests_rs_Items = tests_rs_Items :+
         st"""${testComputeCB}_macro! {
             |  prop_${testComputeCB}_macro, // test name
@@ -1305,7 +1308,7 @@ object ComputeContributions {
             |    max_global_rejects: numValidComputeTestCases * computeRejectRatio,
             |    verbose: verbosity,
             |    ..ProptestConfig::default()
-            |  }${if(strategiesOpt.nonEmpty) "," else ""}
+            |  }${if (strategiesOpt.nonEmpty) "," else ""}
             |  $strategiesOpt
             |}"""
     }
@@ -1335,12 +1338,12 @@ object ComputeContributions {
             |return HarnessResult::Passed"""
 
       val computeCBwLBodyContainer: ST =
-        st"""return $testComputeCBwLV(${(for (p <- sorted_Pre_State_Params) yield st"container.${p.name}", ", ")})"""
+        st"""return $testComputeCBwGSV(${(for (p <- sorted_Pre_State_Params) yield st"container.${p.name}", ", ")})"""
 
       val testComputeWithStateVars = RAST.FnImpl(
         visibility = RAST.Visibility.Public,
         sig = RAST.FnSig(
-          ident = RAST.IdentString(testComputeCBwLV),
+          ident = RAST.IdentString(testComputeCBwGSV),
           fnHeader = RAST.FnHeader(F),
           fnDecl = RAST.FnDecl(
             inputs = for (p <- sorted_Pre_State_Params) yield p.toRustParam,
@@ -1354,17 +1357,17 @@ object ComputeContributions {
               |  */""")),
         attributes = ISZ(), contract = None(), meta = ISZ())
 
-      test_api_rs_Items = test_api_rs_Items :+ testComputeWithStateVars
+      cb_api_Items = cb_api_Items :+ testComputeWithStateVars
 
       val testComputeWithStateVarsContainer = RAST.FnImpl(
         visibility = RAST.Visibility.Public,
         sig = RAST.FnSig(
-          ident = RAST.IdentString(s"testComputeCBwLV_container"),
+          ident = RAST.IdentString(s"testComputeCBwGSV_container"),
           fnHeader = RAST.FnHeader(F),
           fnDecl = RAST.FnDecl(
             inputs = ISZ(RAST.ParamImpl(
               ident = RAST.IdentString("container"),
-              kind = RAST.TyPath(ISZ(ISZ("PreStateContainer_wLV")), None()))),
+              kind = RAST.TyPath(ISZ(ISZ("PreStateContainer_wGSV")), None()))),
             outputs = RAST.FnRetTyImpl(RAST.TyFixMe(st"HarnessResult"))),
           verusHeader = None(), generics = None()),
         body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(computeCBwLBodyContainer)))),
@@ -1373,10 +1376,10 @@ object ComputeContributions {
               |  */""")),
         attributes = ISZ(), contract = None(), meta = ISZ())
 
-      test_api_rs_Items = test_api_rs_Items :+ testComputeWithStateVarsContainer
+      cb_api_Items = cb_api_Items :+ testComputeWithStateVarsContainer
     }
 
-    { // test_compute_CBwL_macro
+    if (stateVars.nonEmpty) { // test_compute_CBwL_macro
       var inputs: ISZ[RAST.Param] = ISZ()
       inputs = inputs :+ RAST.ParamImpl(RAST.IdentString("$test_name"), RAST.TyPath(ISZ(ISZ("ident")), None()))
       inputs = inputs :+ RAST.ParamImpl(RAST.IdentString("config"), RAST.TyPath(ISZ(ISZ("$config:expr")), None()))
@@ -1387,44 +1390,48 @@ object ComputeContributions {
           kind = RAST.TyPath(ISZ(ISZ(s"$$${p.name}_strat:expr")), None())
         )
       }
+
+      val app: ST =
+        if (sorted_Pre_State_Params.isEmpty) st"empty in ::proptest::strategy::Just(())"
+        else st"""(${(for (p <- sorted_Pre_State_Params) yield p.name, ", ")})
+                 |    in (${(for (p <- sorted_Pre_State_Params) yield s"$$${p.name}_strat", ", ")})"""
       val body =
         st"""proptest!{
             |  #![proptest_config($$config)]
             |  #[test]
             |  #[serial]
             |  fn $$test_name(
-            |    (${(for (p <- sorted_Pre_State_Params) yield p.name, ", ")})
-            |    in (${(for (p <- sorted_Pre_State_Params) yield s"$$${p.name}_strat", ", ")})
+            |    $app
             |  ) {
-            |    match $$crate::bridge::test_api::${testComputeCBwLV}(${(for (p <- sorted_Pre_State_Params) yield p.name, ", ")}) {
-            |      $$crate::bridge::test_api::HarnessResult::RejectedPrecondition => {
+            |    match $$crate::test::util::cb_apis::${testComputeCBwGSV}(${(for (p <- sorted_Pre_State_Params) yield p.name, ", ")}) {
+            |      $$crate::test::util::cb_apis::HarnessResult::RejectedPrecondition => {
             |        return Err(proptest::test_runner::TestCaseError::reject(
             |          "Precondition failed: invalid input combination",
             |        ))
             |      }
-            |      $$crate::bridge::test_api::HarnessResult::FailedPostcondition(e) => {
+            |      $$crate::test::util::cb_apis::HarnessResult::FailedPostcondition(e) => {
             |        return Err(e)
             |      }
-            |      $$crate::bridge::test_api::HarnessResult::Passed => { }
+            |      $$crate::test::util::cb_apis::HarnessResult::Passed => { }
             |    }
             |  }
             |}"""
       val test_compute_CBwL_macro = RAST.MacroImpl(
         attributes = ISZ(RAST.AttributeST(inner = F, content = st"macro_export")),
-        ident = RAST.IdentString(s"${testComputeCBwLV}_macro"),
+        ident = RAST.IdentString(s"${testComputeCBwGSV}_macro"),
         inputs = inputs,
         comments = ISZ(),
         body = Some(body))
 
-      test_api_rs_Items = test_api_rs_Items :+ test_compute_CBwL_macro
+      cb_api_Items = cb_api_Items :+ test_compute_CBwL_macro
 
       val strategiesOpt: Option[ST] =
-        if(sorted_Pre_State_Params.nonEmpty) {
+        if (sorted_Pre_State_Params.nonEmpty) {
           var strategies: ISZ[ST] = ISZ()
           for (p <- sorted_Pre_State_Params) {
-            var d = st"test_api::${(p.typeNameProvider.qualifiedRustNameS, "_")}_strategy_default()"
+            var d = st"generators::${(p.typeNameProvider.qualifiedRustNameS, "_")}_strategy_default()"
             if (p.isOptional) {
-              d = st"test_api::option_strategy_default($d)"
+              d = st"generators::option_strategy_default($d)"
             }
             strategies = strategies :+ st"${p.name}: $d"
           }
@@ -1435,8 +1442,8 @@ object ComputeContributions {
           None()
         }
       tests_rs_Items = tests_rs_Items :+
-        st"""${testComputeCBwLV}_macro! {
-            |  prop_${testComputeCBwLV}_macro, // test name
+        st"""${testComputeCBwGSV}_macro! {
+            |  prop_${testComputeCBwGSV}_macro, // test name
             |  config: ProptestConfig { // proptest configuration, built by overriding fields from default config
             |    cases: numValidComputeTestCases,
             |    max_global_rejects: numValidComputeTestCases * computeRejectRatio,
@@ -1447,39 +1454,47 @@ object ComputeContributions {
             |}"""
     }
 
-    val testrsMod = st"""mod GUMBOX_tests {
-                        |  use serial_test::serial;
-                        |  use proptest::prelude::*;
-                        |
-                        |  use crate::bridge::test_api;
-                        |  use crate::testInitializeCB_macro;
-                        |  use crate::testComputeCB_macro;
-                        |  use crate::testComputeCBwLV_macro;
-                        |
-                        |  // number of valid (i.e., non-rejected) test cases that must be executed for the compute method.
-                        |  const numValidComputeTestCases: u32 = 100;
-                        |
-                        |  // how many total test cases (valid + rejected) that may be attempted.
-                        |  //   0 means all inputs must satisfy the precondition (if present),
-                        |  //   5 means at most 5 rejected inputs are allowed per valid test case
-                        |  const computeRejectRatio: u32 = 5;
-                        |
-                        |  const verbosity: u32 = 2;
-                        |
-                        |  ${(tests_rs_Items, "\n\n")}
-                        |}"""
+    val lvMacroOpt: Option[ST] =
+      if (stateVars.nonEmpty) Some(st"  use crate::testComputeCBwGSV_macro;")
+      else None()
 
-    return (test_api_rs_Items, ISZ(RAST.ItemST(testrsMod)))
+    val testrsMod =
+      st"""mod GUMBOX_tests {
+          |  use serial_test::serial;
+          |  use proptest::prelude::*;
+          |
+          |  use crate::test::util::*;
+          |  use crate::testInitializeCB_macro;
+          |  use crate::testComputeCB_macro;
+          |  $lvMacroOpt
+          |
+          |  // number of valid (i.e., non-rejected) test cases that must be executed for the compute method.
+          |  const numValidComputeTestCases: u32 = 100;
+          |
+          |  // how many total test cases (valid + rejected) that may be attempted.
+          |  //   0 means all inputs must satisfy the precondition (if present),
+          |  //   5 means at most 5 rejected inputs are allowed per valid test case
+          |  const computeRejectRatio: u32 = 5;
+          |
+          |  const verbosity: u32 = 2;
+          |
+          |  ${(tests_rs_Items, "\n\n")}
+          |}"""
+
+    return (cb_api_Items, test_api_rs_Items, ISZ(RAST.ItemST(testrsMod)))
   }
 
   @pure override def finalizeMicrokit(model: Aadl, options: HamrCli.CodegenOption,
-                                     types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
+                                      types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
     var localStore = store
     var resources: ISZ[Resource] = ISZ()
 
     for (entry <- GumboXRustPlugin.getGumboXContributions(localStore).get.componentContributions.entries) {
       val thread = symbolTable.componentMap.get(entry._1).get.asInstanceOf[AadlThread]
       val threadId = MicrokitUtil.getThreadIdPath(thread)
+
+      val testDir = s"${options.sel4OutputDir.get}/crates/${threadId}/src/test"
+      val testUtilDir = s"$testDir/util"
 
       { // the gumbox module
         val apiDirectory = CRustApiPlugin.apiDirectory(thread, options)
@@ -1525,6 +1540,24 @@ object ComputeContributions {
               |${(entries, "\n\n")}
               |"""
         val path = s"$apiDirectory/${threadId}_GUMBOX.rs"
+        resources = resources :+ ResourceUtil.createResource(path, content, T)
+      }
+
+      { // cb_api
+        val content =
+          st"""${MicrokitUtil.doNotEdit}
+              |
+              |use data::*;
+              |
+              |use proptest::prelude::*;
+              |
+              |use super::test_apis::*;
+              |
+              |use crate::bridge::${threadId}_GUMBOX as GUMBOX;
+              |
+              |${(for (e <- entry._2.cb_apis) yield e.prettyST, "\n\n")}
+              |"""
+        val path = s"$testUtilDir/cb_apis.rs"
         resources = resources :+ ResourceUtil.createResource(path, content, T)
       }
     }

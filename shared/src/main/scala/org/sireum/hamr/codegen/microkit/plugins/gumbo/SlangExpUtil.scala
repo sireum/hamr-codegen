@@ -10,8 +10,8 @@ import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen
 import org.sireum.hamr.codegen.microkit.plugins.types.CRustTypeProvider
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
-import org.sireum.lang.{ast => SAST}
 import org.sireum.lang.ast.{Exp, Id}
+import org.sireum.lang.{ast => SAST}
 import org.sireum.message.{Position, Reporter}
 
 object SlangExpUtil {

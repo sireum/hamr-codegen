@@ -105,10 +105,18 @@ object Printers {
 
 @datatype class Use(val attributes: ISZ[Attribute],
                     val ident: Ident) extends Item {
-  override def prettyST: ST = {
+  @pure override def prettyST: ST = {
     return (
       st"""${printAttributes(attributes)}
           |use ${ident.prettyST};""")
+  }
+}
+
+@datatype class Mod(val visibility: Visibility.Type,
+                    val ident: Ident) extends Item {
+
+  @pure override def prettyST: ST = {
+    return (st"${printVis(visibility)}mod ${ident.prettyST};")
   }
 }
 

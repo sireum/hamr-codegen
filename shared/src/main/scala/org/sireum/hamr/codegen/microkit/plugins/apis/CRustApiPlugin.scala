@@ -4,16 +4,15 @@ package org.sireum.hamr.codegen.microkit.plugins.apis
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{BoolValue, IdPath, Store, StoreValue}
 import org.sireum.hamr.codegen.common.containers.Resource
-import org.sireum.hamr.codegen.common.symbols.{AadlPort, AadlThread, SymbolTable}
+import org.sireum.hamr.codegen.common.symbols.{AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlTypes
-import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
 import org.sireum.hamr.codegen.common.util.HamrCli.CodegenHamrPlatform
+import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.plugins.component.CRustComponentPlugin
-import org.sireum.hamr.codegen.microkit.plugins.linters.MicrokitLinterPlugin
 import org.sireum.hamr.codegen.microkit.plugins.types.CRustTypePlugin
-import org.sireum.hamr.codegen.microkit.{rust => RustAst}
 import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, MicrokitPlugin}
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil
+import org.sireum.hamr.codegen.microkit.{rust => RAST}
 import org.sireum.hamr.ir.{Aadl, Direction}
 import org.sireum.message.Reporter
 
@@ -49,31 +48,27 @@ object CRustApiPlugin {
 
 object ComponentApiContributions {
   @strictpure def empty: ComponentApiContributions = ComponentApiContributions(
-    ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ())
+    ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ())
 }
 
 @datatype class ComponentApiContributions( // items for bridge/mod.rs
-                                           val bridgeModuleContributions: ISZ[RustAst.Item],
+                                           val bridgeModuleContributions: ISZ[RAST.Item],
 
                                            // items for bridge/extern_c_api.rs
-                                           val externCApis: ISZ[RustAst.Item],
-                                           val unsafeExternCApiWrappers: ISZ[RustAst.Item],
-                                           val externApiTestMockVariables: ISZ[RustAst.Item],
-                                           val externApiTestingApis: ISZ[RustAst.Item],
-
-                                           // items for bridge/test_api.rs
-                                           val testingApis: ISZ[RustAst.Item],
-
+                                           val externCApis: ISZ[RAST.Item],
+                                           val unsafeExternCApiWrappers: ISZ[RAST.Item],
+                                           val externApiTestMockVariables: ISZ[RAST.Item],
+                                           val externApiTestingApis: ISZ[RAST.Item],
 
                                            // items for bridge api
-                                           val unverifiedPutApis: ISZ[RustAst.Item],
-                                           val unverifiedGetApis: ISZ[RustAst.Item],
+                                           val unverifiedPutApis: ISZ[RAST.Item],
+                                           val unverifiedGetApis: ISZ[RAST.Item],
 
-                                           val appApiDefaultPutters: ISZ[RustAst.Item],
-                                           val appApiDefaultGetters: ISZ[RustAst.Item],
+                                           val appApiDefaultPutters: ISZ[RAST.Item],
+                                           val appApiDefaultGetters: ISZ[RAST.Item],
 
-                                           val ghostVariables: ISZ[RustAst.Item],
-                                           val ghostInitializations: ISZ[RustAst.Item]) {
+                                           val ghostVariables: ISZ[RAST.Item],
+                                           val ghostInitializations: ISZ[RAST.Item]) {
   @pure def combine(other: ComponentApiContributions): ComponentApiContributions = {
     val ret = this
     return ret(
@@ -83,8 +78,6 @@ object ComponentApiContributions {
       unsafeExternCApiWrappers = this.unsafeExternCApiWrappers ++ other.unsafeExternCApiWrappers,
       externApiTestMockVariables = this.externApiTestMockVariables ++ other.externApiTestMockVariables,
       externApiTestingApis = this.externApiTestingApis ++ other.externApiTestingApis,
-
-      testingApis = this.testingApis ++ other.testingApis,
 
       unverifiedPutApis = this.unverifiedPutApis ++ other.unverifiedPutApis,
       unverifiedGetApis = this.unverifiedGetApis ++ other.unverifiedGetApis,
@@ -141,23 +134,12 @@ object ComponentApiContributions {
       if (MicrokitUtil.isRusty(srcThread)) {
         var contributions = ComponentApiContributions.empty
 
-        contributions = contributions(testingApis = contributions.testingApis ++
-          CRustApiUtil.generateTestingApiConcretePutter(srcThread, crustTypeProvider))
-
         for (inPort <- srcThread.getPorts().filter(p => p.direction == Direction.In)) {
           contributions = contributions.combine(CRustApiUtil.processInPort(srcThread, inPort, crustTypeProvider))
         }
         for (outPort <- srcThread.getPorts().filter(p => p.direction == Direction.Out)) {
           contributions = contributions.combine(CRustApiUtil.processOutPort(srcThread, outPort, crustTypeProvider))
         }
-
-        // add proptest generators
-        val touchedTypes = MicrokitLinterPlugin.getTouchedTypes(localStore)
-        val testingPortApis: ISZ[RustAst.Item] =
-          CRustApiUtil.propTestOptionMethod() ++
-            CRustApiUtil.generatePropTestDatatypeGenerators(touchedTypes, crustTypeProvider, model, options, types, symbolTable, store, reporter)
-
-        contributions = contributions(testingApis = contributions.testingApis ++ testingPortApis)
 
         ret = ret + srcThread.path ~> contributions
       }
@@ -177,7 +159,7 @@ object ComponentApiContributions {
       val bridgeDir = CRustApiPlugin.apiDirectory(thread, options)
 
       val reset_test_globals: ISZ[ST] = for(v <- c._2.externApiTestMockVariables) yield
-        st"*${v.asInstanceOf[RustAst.ItemStatic].ident.string}.lock().unwrap() = None;"
+        st"*${v.asInstanceOf[RAST.ItemStatic].ident.string}.lock().unwrap() = None;"
 
       { // extern_c_api.rs
         val content =
@@ -296,28 +278,11 @@ object ComponentApiContributions {
         resources = resources :+ ResourceUtil.createResource(path, content, T)
       }
 
-      { // bridge/test_api.rs
-        val content =
-          st"""#![cfg(test)]
-              |
-              |${MicrokitUtil.doNotEdit}
-              |
-              |use crate::bridge::extern_c_api as extern_api;
-              |use ${CRustTypePlugin.usePath};
-              |
-              |use proptest::prelude::*;
-              |
-              |${(for(c <- c._2.testingApis) yield c.prettyST, "\n\n")}"""
-        val path = s"$bridgeDir/test_api.rs"
-        resources = resources :+ ResourceUtil.createResource(path, content, T)
-      }
-
       { // bridge/mod.rs
         val content =
           st"""${MicrokitUtil.doNotEdit}
               |
               |pub mod extern_c_api;
-              |pub mod test_api;
               |pub mod ${threadId}_api;
               |${(for(c <- c._2.bridgeModuleContributions) yield st"${c.prettyST}", "\n")}"""
         val path = s"$bridgeDir/mod.rs"

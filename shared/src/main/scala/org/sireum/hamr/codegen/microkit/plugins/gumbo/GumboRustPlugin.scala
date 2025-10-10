@@ -2,20 +2,21 @@
 package org.sireum.hamr.codegen.microkit.plugins.gumbo
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.CommonUtil.{BoolValue, DataIdPath, ISZValue, Store, StoreValue, ThreadIdPath, TypeIdPath}
+import org.sireum.hamr.codegen.common.CommonUtil._
 import org.sireum.hamr.codegen.common.containers.{Marker, Resource}
-import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlEventPort, AadlThread, GclAnnexClauseInfo, SymbolTable}
+import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes}
 import org.sireum.hamr.codegen.common.util.HamrCli
 import org.sireum.hamr.codegen.microkit.plugins.apis.CRustApiPlugin
-import org.sireum.hamr.codegen.microkit.plugins.{MicrokitInitPlugin, MicrokitPlugin}
 import org.sireum.hamr.codegen.microkit.plugins.component.CRustComponentPlugin
 import org.sireum.hamr.codegen.microkit.plugins.linters.MicrokitLinterPlugin
+import org.sireum.hamr.codegen.microkit.plugins.testing.CRustTestingPlugin
 import org.sireum.hamr.codegen.microkit.plugins.types.{CRustTypePlugin, CRustTypeProvider}
+import org.sireum.hamr.codegen.microkit.plugins.{MicrokitInitPlugin, MicrokitPlugin}
 import org.sireum.hamr.codegen.microkit.util.{MakefileTarget, MakefileUtil, MicrokitUtil}
-import org.sireum.hamr.ir.{Aadl, Direction, GclAssume, GclGuarantee, GclSubclause}
-import org.sireum.message.{Level, Message, Reporter}
 import org.sireum.hamr.codegen.microkit.{MicrokitCodegen, rust => RAST}
+import org.sireum.hamr.ir._
+import org.sireum.message.{Level, Message, Reporter}
 
 object GumboRustPlugin {
   val KEY_GumboRustPlugin: String = "KEY_GumboRustPlugin"
@@ -167,11 +168,14 @@ object GumboRustPlugin {
                     |  }
                     |}""" )))))
           }
-          val apiContributions = CRustApiPlugin.getCRustApiContributions(localStore).get
-          var apis = apiContributions.apiContributions.get(threadPath).get
-          apis = apis(testingApis = apis.testingApis ++ testingApis)
-          localStore = CRustApiPlugin.putCRustApiContributions(
-            apiContributions.addApiContributions(threadPath, apis), localStore)
+
+          val testingContributions = CRustTestingPlugin.getCRustTestingContributions(localStore).get.testingContributions
+          val existing = testingContributions.get(thread.path).get
+          localStore = CRustTestingPlugin.putCRustTestingContributions(
+            CRustTestingPlugin.CRustTestingContributions(
+              testingContributions + thread.path ~> existing(testApiEntries = existing.testApiEntries ++ testingApis)),
+            localStore
+          )
         }
 
         { // add a Rust field to the struct definition for each state variable

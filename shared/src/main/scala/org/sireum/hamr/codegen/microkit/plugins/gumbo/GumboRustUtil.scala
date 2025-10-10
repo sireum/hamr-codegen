@@ -2,7 +2,7 @@
 package org.sireum.hamr.codegen.microkit.plugins.gumbo
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, Store, TypeIdPath}
+import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, Store}
 import org.sireum.hamr.codegen.common.StringUtil
 import org.sireum.hamr.codegen.common.symbols.{AadlComponent, GclAnnexClauseInfo, GclSymbolTable, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlTypes
@@ -10,10 +10,10 @@ import org.sireum.hamr.codegen.microkit.plugins.types.{CRustTypeNameProvider, CR
 import org.sireum.hamr.codegen.microkit.rust.FnVerusHeader
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
 import org.sireum.hamr.codegen.microkit.{rust => RAST}
-import org.sireum.hamr.ir.{GclAssume, GclCaseStatement, GclGuarantee, GclInvariant, GclMethod, GclSpec, GclStateVar}
+import org.sireum.hamr.ir._
 import org.sireum.lang.ast.Stmt.Return
-import org.sireum.message.Reporter
 import org.sireum.lang.{ast => SAST}
+import org.sireum.message.Reporter
 
 object GumboRustUtil {
 

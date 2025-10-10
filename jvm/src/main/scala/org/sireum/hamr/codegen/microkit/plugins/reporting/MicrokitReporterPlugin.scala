@@ -217,7 +217,10 @@ import org.sireum.message.{Level, Position, Reporter}
         assert(externApiFile.exists, externApiFile.value)
         val parsedExternApiFile = RustParserSimple.parse(externApiFile, sel4OutputDir)
 
-        val testApiFile = rustBridgeDir / "test_api.rs"
+        val rustTestDir = sel4OutputDir / "crates" / threadid / "src" / "test"
+        val rustTestUtilDir = rustTestDir / "util"
+
+        val testApiFile = rustTestUtilDir / "test_apis.rs"
         assert(testApiFile.exists, testApiFile.value)
 
         val rustComponentApiFile = rustBridgeDir / s"${threadid}_api.rs"

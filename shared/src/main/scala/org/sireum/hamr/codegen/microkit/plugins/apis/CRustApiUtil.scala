@@ -2,96 +2,27 @@
 package org.sireum.hamr.codegen.microkit.plugins.apis
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.CommonUtil.Store
-import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlEventPort, AadlFeatureEvent, AadlPort, AadlThread, SymbolTable}
-import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes}
-import org.sireum.hamr.codegen.common.util.HamrCli
-import org.sireum.hamr.codegen.microkit.plugins.linters.TouchedTypes
-import org.sireum.hamr.codegen.microkit.plugins.types.{CRustTypeNameProvider, CRustTypePlugin, CRustTypeProvider}
-import org.sireum.hamr.codegen.microkit.{rust => RustAst}
-import org.sireum.hamr.codegen.microkit.types.{MicrokitTypeUtil, QueueTemplate}
-import org.sireum.hamr.ir.{Aadl, Direction}
-import org.sireum.message.Reporter
-import org.sireum.hamr.codegen.common.types._
+import org.sireum.hamr.codegen.common.symbols._
+import org.sireum.hamr.codegen.common.types.AadlType
+import org.sireum.hamr.codegen.microkit.plugins.types.{CRustTypeNameProvider, CRustTypeProvider}
+import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
+import org.sireum.hamr.codegen.microkit.{rust => RAST}
+import org.sireum.hamr.ir.Direction
 
 object CRustApiUtil {
-
-  @pure def generateTestingApiConcretePutter(t: AadlThread, crustTypeProvider: CRustTypeProvider): ISZ[RustAst.Item] = {
-    var params: ISZ[RustAst.Param] = ISZ()
-    var structItems: ISZ[RustAst.Item] = ISZ()
-    var bodyItems: ISZ[ST] = ISZ()
-    var containerBodyItems: ISZ[ST] = ISZ()
-    for (inPort <- t.getPorts().filter(p => p.direction == Direction.In)) {
-      val portType: AadlType = crustTypeProvider.getRepresentativeType(MicrokitTypeUtil.getPortType(inPort))
-      val portTypeNameProvider = crustTypeProvider.getTypeNameProvider(portType)
-
-      val paramType: ISZ[ISZ[String]] = if(inPort.isEvent) {
-        ISZ(ISZ("Option"), portTypeNameProvider.qualifiedRustNameS)
-      } else {
-        ISZ(portTypeNameProvider.qualifiedRustNameS)
-      }
-
-      params = params :+ RustAst.ParamImpl(
-        ident = RustAst.IdentString(inPort.identifier),
-        kind = RustAst.TyPath(items = paramType, aadlType = None()))
-
-      bodyItems = bodyItems :+ st"put_${inPort.identifier}(${inPort.identifier});"
-      containerBodyItems = containerBodyItems :+ st"put_${inPort.identifier}(container.api_${inPort.identifier});"
-
-      structItems = structItems :+ RustAst.StructField(
-        visibility = RustAst.Visibility.Public,
-        isGhost = F,
-        ident = RustAst.IdentString(s"api_${inPort.identifier}"),
-        fieldType = RustAst.TyPath(items = paramType, aadlType = None()))
-    }
-
-    val struct = RustAst.StructDef(
-      attributes = ISZ(),
-      visibility = RustAst.Visibility.Public,
-      ident = RustAst.IdentString("PreStateContainer"),
-      items = structItems)
-
-    val containerPutter =  RustAst.FnImpl(
-      visibility = RustAst.Visibility.Public,
-      sig = RustAst.FnSig(
-        ident = RustAst.IdentString("put_concrete_inputs_container"),
-        fnDecl = RustAst.FnDecl(
-          inputs = ISZ(RustAst.ParamImpl(
-            ident = RustAst.IdentString("container"),
-            kind = RustAst.TyPath(items = ISZ(ISZ("PreStateContainer")), aadlType = None()))),
-          outputs = RustAst.FnRetTyDefault()),
-        fnHeader = RustAst.FnHeader(F), verusHeader = None(), generics = None()),
-      body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(st"${(containerBodyItems, "\n")}")))),
-      meta = ISZ(), contract = None(), comments = ISZ(), attributes = ISZ())
-
-    val putter =  RustAst.FnImpl(
-      visibility = RustAst.Visibility.Public,
-      sig = RustAst.FnSig(
-        ident = RustAst.IdentString("put_concrete_inputs"),
-        fnDecl = RustAst.FnDecl(
-          inputs = params,
-          outputs = RustAst.FnRetTyDefault()),
-        fnHeader = RustAst.FnHeader(F), verusHeader = None(), generics = None()),
-      body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(st"${(bodyItems, "\n")}")))),
-      meta = ISZ(), contract = None(), comments = ISZ(), attributes = ISZ())
-
-    return ISZ(struct, containerPutter, putter)
-  }
 
   def processInPort(dstThread: AadlThread, dstPort: AadlPort,
                     crustTypeProvider: CRustTypeProvider): ComponentApiContributions = {
     val portType: AadlType = crustTypeProvider.getRepresentativeType(MicrokitTypeUtil.getPortType(dstPort))
     val portTypeNameProvider = crustTypeProvider.getTypeNameProvider(portType)
 
-    val testingArtifacts = getCrustTestingArtifacts(dstPort, portType.classifier, portTypeNameProvider)
+    val (externApiTestVariable, externApiMethod) = getCrustTestingArtifacts(dstPort, portType.classifier, portTypeNameProvider)
 
     return ComponentApiContributions.empty(
       externCApis = ISZ(getCExternMethodSig(dstPort, portType, portTypeNameProvider)),
       unsafeExternCApiWrappers = ISZ(getUnsafeGetWrapper(dstPort, portType, crustTypeProvider)),
-      externApiTestMockVariables = ISZ(testingArtifacts._1),
-      externApiTestingApis = ISZ(testingArtifacts._2),
-
-      testingApis = ISZ(testingArtifacts._3),
+      externApiTestMockVariables = ISZ(externApiTestVariable),
+      externApiTestingApis = ISZ(externApiMethod),
 
       //putApis = ISZ(),
       unverifiedGetApis = ISZ(getBridgeGetApi(dstPort, portType, crustTypeProvider)),
@@ -108,15 +39,13 @@ object CRustApiUtil {
     val portType: AadlType = crustTypeProvider.getRepresentativeType(MicrokitTypeUtil.getPortType(srcPort))
     val portTypeNameProvider = crustTypeProvider.getTypeNameProvider(portType)
 
-    val testingArtifacts = getCrustTestingArtifacts(srcPort, portType.classifier, portTypeNameProvider)
+    val (externApiTestVariable, externApiMethod) = getCrustTestingArtifacts(srcPort, portType.classifier, portTypeNameProvider)
 
     return ComponentApiContributions.empty(
       externCApis = ISZ(getCExternMethodSig(srcPort, portType, portTypeNameProvider)),
       unsafeExternCApiWrappers = ISZ(getUnsafePutWrapper(srcPort, portType, crustTypeProvider)),
-      externApiTestMockVariables = ISZ(testingArtifacts._1),
-      externApiTestingApis = ISZ(testingArtifacts._2),
-
-      testingApis = ISZ(testingArtifacts._3),
+      externApiTestMockVariables = ISZ(externApiTestVariable),
+      externApiTestingApis = ISZ(externApiMethod),
 
       unverifiedPutApis = ISZ(getBridgePutApi(srcPort, portType, crustTypeProvider)),
       //getApis = ISZ(),
@@ -129,18 +58,18 @@ object CRustApiUtil {
     )
   }
 
-  @pure def getGhostInitializations(port: AadlPort, a: AadlType, crustTypeProvider: CRustTypeProvider): RustAst.Item = {
+  @pure def getGhostInitializations(port: AadlPort, a: AadlType, crustTypeProvider: CRustTypeProvider): RAST.Item = {
     return (
       if (port.isInstanceOf[AadlDataPort])
-      RustAst.ItemST(st"${getGhostName(port)}: ${MicrokitTypeUtil.getCRustTypeDefaultVerusValue(a, crustTypeProvider)}")
-      else RustAst.ItemST(st"${getGhostName(port)}: None"))
+      RAST.ItemST(st"${getGhostName(port)}: ${MicrokitTypeUtil.getCRustTypeDefaultVerusValue(a, crustTypeProvider)}")
+      else RAST.ItemST(st"${getGhostName(port)}: None"))
   }
 
   @pure def getGhostName(port: AadlPort): String = {
     return port.identifier
   }
 
-  @pure def getGhostVariable(port: AadlPort, aadlType: AadlType, typeNameProvider: CRustTypeNameProvider): RustAst.Item = {
+  @pure def getGhostVariable(port: AadlPort, aadlType: AadlType, typeNameProvider: CRustTypeNameProvider): RAST.Item = {
     val ghostName = getGhostName(port)
     val fieldType: ISZ[ISZ[String]] =
       port match {
@@ -148,75 +77,75 @@ object CRustApiUtil {
         case i:AadlDataPort => ISZ(typeNameProvider.qualifiedRustNameS)
         case i:AadlEventDataPort => ISZ(ISZ("Option"), typeNameProvider.qualifiedRustNameS)
       }
-    return RustAst.StructField(
-      visibility = RustAst.Visibility.Public,
+    return RAST.StructField(
+      visibility = RAST.Visibility.Public,
       isGhost = T,
-      ident = RustAst.IdentString(ghostName),
-      fieldType = RustAst.TyPath(fieldType, Some(aadlType.classifier)))
+      ident = RAST.IdentString(ghostName),
+      fieldType = RAST.TyPath(fieldType, Some(aadlType.classifier)))
   }
 
-  @pure def getCExternMethodSig(port: AadlPort, aadlType: AadlType, crustTypeNameProvider: CRustTypeNameProvider): RustAst.FnSig = {
+  @pure def getCExternMethodSig(port: AadlPort, aadlType: AadlType, crustTypeNameProvider: CRustTypeNameProvider): RAST.FnSig = {
     val methodName: String =
       if (port.direction == Direction.In) s"get_${port.identifier}"
       else s"put_${port.identifier}"
-    val args: ISZ[RustAst.Param] =
+    val args: ISZ[RAST.Param] =
       if (port.isInstanceOf[AadlEventPort]) ISZ()
       else ISZ(
-        RustAst.ParamImpl(
-          ident = RustAst.IdentString("value"),
-          kind = RustAst.TyPtr(
-            RustAst.MutTy(
-              ty = RustAst.TyPath(ISZ(crustTypeNameProvider.qualifiedRustNameS), Some(aadlType.classifier)),
-              mutbl = RustAst.Mutability.Mut))))
-    return RustAst.FnSig(
+        RAST.ParamImpl(
+          ident = RAST.IdentString("value"),
+          kind = RAST.TyPtr(
+            RAST.MutTy(
+              ty = RAST.TyPath(ISZ(crustTypeNameProvider.qualifiedRustNameS), Some(aadlType.classifier)),
+              mutbl = RAST.Mutability.Mut))))
+    return RAST.FnSig(
       verusHeader = None(),
-      fnHeader = RustAst.FnHeader(F),
-      ident = RustAst.IdentString(methodName),
+      fnHeader = RAST.FnHeader(F),
+      ident = RAST.IdentString(methodName),
       generics = None(),
-      fnDecl = RustAst.FnDecl(inputs = args, outputs = RustAst.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)))
+      fnDecl = RAST.FnDecl(inputs = args, outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)))
   }
 
-  @pure def getUnsafePutWrapper(srcPort: AadlPort, aadlType: AadlType, crustTypeProvider: CRustTypeProvider): RustAst.Fn = {
+  @pure def getUnsafePutWrapper(srcPort: AadlPort, aadlType: AadlType, crustTypeProvider: CRustTypeProvider): RAST.Fn = {
     val externMethodName = s"put_${srcPort.identifier}"
     val unsafeMethodName = s"unsafe_$externMethodName"
     val tn = crustTypeProvider.getTypeNameProvider(aadlType)
-    val inputs: ISZ[RustAst.Param] =
+    val inputs: ISZ[RAST.Param] =
       if (srcPort.isInstanceOf[AadlEventPort]) ISZ()
       else ISZ(
-        RustAst.ParamImpl(
-          ident = RustAst.IdentString("value"),
-          kind = RustAst.TyRef(
+        RAST.ParamImpl(
+          ident = RAST.IdentString("value"),
+          kind = RAST.TyRef(
             lifetime = None(),
-            mutty = RustAst.MutTy(
-              ty = RustAst.TyPath(ISZ(tn.qualifiedRustNameS), Some(aadlType.classifier)),
-              mutbl = RustAst.Mutability.Not))))
+            mutty = RAST.MutTy(
+              ty = RAST.TyPath(ISZ(tn.qualifiedRustNameS), Some(aadlType.classifier)),
+              mutbl = RAST.Mutability.Not))))
     val body: ST =
       st"""unsafe {
           |  return $externMethodName(value as *const ${tn.qualifiedRustName} as *mut ${tn.qualifiedRustName});
           |}"""
-    return RustAst.FnImpl(
-      visibility = RustAst.Visibility.Public,
-      sig = RustAst.FnSig(
-        ident = RustAst.IdentString(unsafeMethodName),
-        fnDecl = RustAst.FnDecl(
+    return RAST.FnImpl(
+      visibility = RAST.Visibility.Public,
+      sig = RAST.FnSig(
+        ident = RAST.IdentString(unsafeMethodName),
+        fnDecl = RAST.FnDecl(
           inputs = inputs,
-          outputs = RustAst.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)
+          outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)
         ),
-        verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
+        verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
       comments = ISZ(), attributes = ISZ(), contract = None(), meta = ISZ(),
-      body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(body)))))
+      body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(body)))))
   }
 
-  @pure def getUnsafeGetWrapper(port: AadlPort, aadlType: AadlType, crustTypeProvider: CRustTypeProvider): RustAst.Fn = {
+  @pure def getUnsafeGetWrapper(port: AadlPort, aadlType: AadlType, crustTypeProvider: CRustTypeProvider): RAST.Fn = {
     val tn = crustTypeProvider.getTypeNameProvider(aadlType)
     val externCMethodName = s"get_${port.identifier}"
     val unsafeMethodName = s"unsafe_$externCMethodName"
     val defaultValue = MicrokitTypeUtil.getCRustTypeDefaultValue(aadlType, crustTypeProvider)
-    var returnType: RustAst.Ty = MicrokitTypeUtil.rustBoolType
+    var returnType: RAST.Ty = MicrokitTypeUtil.rustBoolType
     val body: ST =
       port match {
         case i: AadlEventDataPort =>
-          returnType = RustAst.TyPath(ISZ(ISZ("Option"), tn.qualifiedRustNameS), Some(aadlType.classifier))
+          returnType = RAST.TyPath(ISZ(ISZ("Option"), tn.qualifiedRustNameS), Some(aadlType.classifier))
 
           st"""unsafe {
               |  let value: *mut ${tn.qualifiedRustName} = &mut $defaultValue;
@@ -227,7 +156,7 @@ object CRustApiUtil {
               |  }
               |}"""
         case i: AadlDataPort =>
-          returnType = RustAst.TyPath(ISZ(tn.qualifiedRustNameS), Some(aadlType.classifier))
+          returnType = RAST.TyPath(ISZ(tn.qualifiedRustNameS), Some(aadlType.classifier))
 
           st"""unsafe {
               |  let value: *mut ${tn.qualifiedRustName} = &mut $defaultValue;
@@ -241,433 +170,199 @@ object CRustApiUtil {
               |  return $externCMethodName();
               |}"""
       }
-    return RustAst.FnImpl(
-      visibility = RustAst.Visibility.Public,
-      sig = RustAst.FnSig(
-        ident = RustAst.IdentString(unsafeMethodName),
-        fnDecl = RustAst.FnDecl(
+    return RAST.FnImpl(
+      visibility = RAST.Visibility.Public,
+      sig = RAST.FnSig(
+        ident = RAST.IdentString(unsafeMethodName),
+        fnDecl = RAST.FnDecl(
           inputs = ISZ(),
-          outputs = RustAst.FnRetTyImpl(returnType)),
-        verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
+          outputs = RAST.FnRetTyImpl(returnType)),
+        verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
       comments = ISZ(), attributes = ISZ(), contract = None(), meta = ISZ(),
-      body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(body)))))
+      body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(body)))))
   }
 
-  @pure def getApiContract(srcPort: AadlPort, srcThread: AadlThread): ISZ[RustAst.Expr] = {
-    var r: ISZ[RustAst.Expr] = ISZ()
+  @pure def getApiContract(srcPort: AadlPort, srcThread: AadlThread): ISZ[RAST.Expr] = {
+    var r: ISZ[RAST.Expr] = ISZ()
     for (otherPort <- srcThread.getPorts()) {
       if (srcPort.path == otherPort.path) {
         if (srcPort.direction == Direction.Out) {
           srcPort match {
             case i: AadlEventPort =>
-              r = r :+ RustAst.ExprST(st"self.${srcPort.identifier} == ${CRustApiPlugin.apiParameterName}")
+              r = r :+ RAST.ExprST(st"self.${srcPort.identifier} == ${CRustApiPlugin.apiParameterName}")
             case i: AadlDataPort =>
-              r = r :+ RustAst.ExprST(st"self.${srcPort.identifier} == ${CRustApiPlugin.apiParameterName}")
+              r = r :+ RAST.ExprST(st"self.${srcPort.identifier} == ${CRustApiPlugin.apiParameterName}")
             case i: AadlEventDataPort =>
-              r = r :+ RustAst.ExprST(st"self.${srcPort.identifier} == Some(${CRustApiPlugin.apiParameterName})")
+              r = r :+ RAST.ExprST(st"self.${srcPort.identifier} == Some(${CRustApiPlugin.apiParameterName})")
           }
         } else {
-          r = r :+ RustAst.ExprST(st"old(self).${otherPort.identifier} == self.${otherPort.identifier}")
-          r = r :+ RustAst.ExprST(st"${CRustApiPlugin.apiResultName} == self.${srcPort.identifier}")
+          r = r :+ RAST.ExprST(st"old(self).${otherPort.identifier} == self.${otherPort.identifier}")
+          r = r :+ RAST.ExprST(st"${CRustApiPlugin.apiResultName} == self.${srcPort.identifier}")
         }
       } else {
-        r = r :+ RustAst.ExprST(st"old(self).${otherPort.identifier} == self.${otherPort.identifier}")
+        r = r :+ RAST.ExprST(st"old(self).${otherPort.identifier} == self.${otherPort.identifier}")
       }
     }
     return r
   }
 
-  @pure def propTestOptionMethod(): ISZ[RustAst.Item] = {
-    var generics: ISZ[RustAst.GenericParam] = ISZ()
-    generics = generics :+ RustAst.GenericParam(
-      ident = RustAst.IdentString("T"),
-      attributes = ISZ(),
-      bounds = RustAst.GenericBoundFixMe(st"Clone + std::fmt::Debug"))
-    generics = generics :+ RustAst.GenericParam(
-      ident = RustAst.IdentString("S"),
-      attributes = ISZ(),
-      bounds = RustAst.GenericBoundFixMe(st" Strategy<Value = T>"))
-
-    val defaultStrategy = RustAst.FnImpl(
-      visibility = RustAst.Visibility.Public,
-      sig = RustAst.FnSig(
-        ident = RustAst.IdentString("option_strategy_default"),
-        fnDecl = RustAst.FnDecl(
-          inputs = ISZ(
-            RustAst.ParamImpl(
-              ident = RustAst.IdentString("base"),
-              kind = RustAst.TyPath(ISZ(ISZ("S")), None()))),
-          outputs = RustAst.FnRetTyImpl(
-            RustAst.TyFixMe(st"impl Strategy<Value = Option<T>>"))),
-        generics = Some(RustAst.Generics(generics)),
-        fnHeader = RustAst.FnHeader(F), verusHeader = None()),
-      body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
-        st"""option_strategy_bias(1, base)""")))),
-      meta = ISZ(), comments = ISZ(), attributes = ISZ(), contract = None())
-
-    val custStrategy = RustAst.FnImpl(
-      visibility = RustAst.Visibility.Public,
-      sig = RustAst.FnSig(
-        ident = RustAst.IdentString("option_strategy_bias"),
-        fnDecl = RustAst.FnDecl(
-          inputs = ISZ(
-            RustAst.ParamImpl(
-              ident = RustAst.IdentString("bias"),
-              kind = RustAst.TyPath(ISZ(ISZ("u32")), None())),
-            RustAst.ParamImpl(
-              ident = RustAst.IdentString("base"),
-              kind = RustAst.TyPath(ISZ(ISZ("S")), None()))),
-          outputs = RustAst.FnRetTyImpl(
-            RustAst.TyFixMe(st"impl Strategy<Value = Option<T>>"))),
-        generics = Some(RustAst.Generics(generics)),
-        fnHeader = RustAst.FnHeader(F), verusHeader = None()),
-      body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
-        st"""prop_oneof![
-            |  bias => base.prop_map(Some),
-            |  1 => Just(None),
-            |]""")))),
-      meta = ISZ(), comments = ISZ(), attributes = ISZ(), contract = None())
-
-    return ISZ(defaultStrategy, custStrategy)
-  }
-
-  @pure def generatePropTestDatatypeGenerators(touchedTypes: TouchedTypes, cRustTypeProvider: CRustTypeProvider,
-                                               model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): ISZ[RustAst.Item] = {
-    var ret: ISZ[RustAst.Item] = ISZ()
-    for (t <- touchedTypes.orderedDependencies) {
-      val o = types.typeMap.get(t).get
-      val rep = cRustTypeProvider.getRepresentativeType(o)
-      val np = cRustTypeProvider.getTypeNameProvider(rep)
-
-      val defaultIdent = RustAst.IdentString(st"${(np.qualifiedRustNameS, "_")}_strategy_default".render)
-      val custName = st"${(np.qualifiedRustNameS, "_")}_strategy_cust"
-
-      def getDefaultGenerator(name: String, typ: AadlType): ST = {
-        cRustTypeProvider.getRepresentativeType(typ) match {
-          case b: BaseType =>
-            return st"any::<${MicrokitTypeUtil.translateBaseTypeToRust(typ.name)}>()"
-          case _ =>
-            val npx = cRustTypeProvider.getTypeNameProvider(typ)
-            return st"${(npx.qualifiedRustNameS, "_")}_strategy_default()"
-        }
-      }
-
-      rep match {
-        case b: BaseType => // do nothing
-
-        case a: ArrayType =>
-          val baseRep = cRustTypeProvider.getRepresentativeType(a.baseType)
-          val baseNp = cRustTypeProvider.getTypeNameProvider(baseRep)
-
-          val defaultStrategy = RustAst.FnImpl(
-            visibility = RustAst.Visibility.Public,
-            sig = RustAst.FnSig(
-              ident = defaultIdent,
-              fnDecl = RustAst.FnDecl(
-                inputs = ISZ(),
-                outputs = RustAst.FnRetTyImpl(RustAst.TyFixMe(st"impl Strategy<Value = ${np.qualifiedRustName}>"))),
-              fnHeader = RustAst.FnHeader(F), generics = None(), verusHeader = None()),
-            body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
-              st"""$custName(${getDefaultGenerator("base_strategy", baseRep)})""")))),
-            meta = ISZ(), comments = ISZ(), attributes = ISZ(), contract = None())
-
-
-
-          val baseStrategyName = st"${(baseNp.qualifiedRustNameS, "_")}_strategy".render
-          val baseGeneric =
-            RustAst.GenericParam(
-              ident = RustAst.IdentString(baseStrategyName),
-              attributes = ISZ(),
-              bounds = RustAst.GenericBoundFixMe(st"Strategy<Value = ${baseNp.qualifiedRustName}>"))
-
-          val dim = st"${(np.packageRustNames, "::")}::${CRustTypePlugin.getArrayDimName(np, 0)}"
-
-          val paramName = "base_strategy"
-          val param = RustAst.ParamImpl(
-            ident = RustAst.IdentString(paramName),
-            kind = RustAst.TyPath(items = ISZ(ISZ(baseStrategyName)), aadlType = None()))
-
-          val custStrategy = RustAst.FnImpl(
-            visibility = RustAst.Visibility.Public,
-            sig = RustAst.FnSig(
-              ident = RustAst.IdentString(custName.render),
-              fnDecl = RustAst.FnDecl(
-                inputs = ISZ(param),
-                outputs = RustAst.FnRetTyImpl(
-                  RustAst.TyFixMe(st"impl Strategy<Value = ${np.qualifiedRustName}>"))),
-              generics = Some(RustAst.Generics(ISZ(baseGeneric))),
-              fnHeader = RustAst.FnHeader(F), verusHeader = None()),
-            body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
-              st"""proptest::collection::vec(base_strategy, $dim)
-                  |  .prop_map(|v| {
-                  |    let boxed: Box<[${baseNp.qualifiedRustName}; $dim]> = v.into_boxed_slice().try_into().unwrap();
-                  |    *boxed
-                  |})""")))),
-            meta = ISZ(), comments = ISZ(), attributes = ISZ(), contract = None())
-
-          ret = ret :+ defaultStrategy :+ custStrategy
-
-        case r: RecordType =>
-          val items: ISZ[ST] = for(f <- r.fields.entries) yield getDefaultGenerator(f._1, f._2)
-
-          val defaultStrategy = RustAst.FnImpl(
-            visibility = RustAst.Visibility.Public,
-            sig = RustAst.FnSig(
-              ident = defaultIdent,
-              fnDecl = RustAst.FnDecl(
-                inputs = ISZ(),
-                outputs = RustAst.FnRetTyImpl(RustAst.TyFixMe(st"impl Strategy<Value = ${np.qualifiedRustName}>"))),
-              fnHeader = RustAst.FnHeader(F), generics = None(), verusHeader = None()),
-            body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
-              st"""$custName(
-                  |  ${(items, ",\n")}
-                  |)""")))),
-            meta = ISZ(), comments = ISZ(), attributes = ISZ(), contract = None())
-
-          var strategyNames: ISZ[String] = ISZ()
-          var fieldNames: ISZ[String] = ISZ()
-          var params: ISZ[RustAst.Param] = ISZ()
-          var generics: ISZ[RustAst.GenericParam] = ISZ()
-          for (f <- r.fields.entries) {
-            val ft = cRustTypeProvider.getTypeNameProvider(f._2)
-            val strategyName = st"${f._1}_strategy".render
-            strategyNames = strategyNames :+ strategyName
-            fieldNames = fieldNames :+ f._1
-
-            val genericName = st"${f._1}_${(ft.qualifiedRustNameS, "_")}_strategy".render
-
-            generics = generics :+ RustAst.GenericParam(
-              ident = RustAst.IdentString(genericName),
-              attributes = ISZ(),
-              bounds = RustAst.GenericBoundFixMe(st"Strategy<Value = ${ft.qualifiedRustName}>"))
-            params = params :+ RustAst.ParamImpl(
-              ident = RustAst.IdentString(strategyName),
-              kind = RustAst.TyPath(items = ISZ(ISZ(genericName)), aadlType = None()))
-          }
-
-          val custStrategy = RustAst.FnImpl(
-            visibility = RustAst.Visibility.Public,
-            sig = RustAst.FnSig(
-              ident = RustAst.IdentString(custName.render),
-              fnDecl = RustAst.FnDecl(
-                inputs = params,
-                outputs = RustAst.FnRetTyImpl(
-                  RustAst.TyFixMe(st"impl Strategy<Value = ${np.qualifiedRustName}>"))),
-              generics = Some(RustAst.Generics(generics)),
-              fnHeader = RustAst.FnHeader(F), verusHeader = None()),
-            body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
-              st"""(${(strategyNames, ", ")}).prop_map(|(${(fieldNames, ", ")})| {
-                  |  ${np.qualifiedRustName} { ${(fieldNames, ", ")} }
-                  |})""")))),
-            meta = ISZ(), comments = ISZ(), attributes = ISZ(), contract = None())
-
-          ret = ret :+ defaultStrategy :+ custStrategy
-
-        case e: EnumType =>
-          val bias_args: ISZ[Z] = for (v <- e.values) yield 1
-          val bias_params: ISZ[RustAst.Param] = for (v <- e.values) yield RustAst.ParamImpl(
-            ident = RustAst.IdentString(s"${v}_bias"),
-            kind = RustAst.TyPath(items = ISZ(ISZ("u32")), aadlType = None()))
-          val items: ISZ[ST] = for(v <- e.values) yield st"${v}_bias => Just(${np.qualifiedRustName}::${v})"
-
-          ret = ret :+ RustAst.FnImpl(
-            visibility = RustAst.Visibility.Public,
-            sig = RustAst.FnSig(
-              ident = defaultIdent,
-              fnDecl = RustAst.FnDecl(
-                inputs = ISZ(),
-                outputs = RustAst.FnRetTyImpl(RustAst.TyFixMe(st"impl Strategy<Value = ${np.qualifiedRustName}>"))),
-              fnHeader = RustAst.FnHeader(F), generics = None(), verusHeader = None()),
-            body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
-              st"$custName(${(bias_args, ", ")})")))),
-            meta = ISZ(), comments = ISZ(), attributes = ISZ(), contract = None())
-
-          ret = ret :+ RustAst.FnImpl(
-            visibility = RustAst.Visibility.Public,
-            sig = RustAst.FnSig(
-              ident = RustAst.IdentString(custName.render),
-              fnDecl = RustAst.FnDecl(
-                inputs = bias_params,
-                outputs = RustAst.FnRetTyImpl(RustAst.TyFixMe(st"impl Strategy<Value = ${np.qualifiedRustName}>"))),
-              fnHeader = RustAst.FnHeader(F), generics = None(), verusHeader = None()),
-            body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
-              st"""prop_oneof![
-                  |  ${(items, ",\n")}
-                  |]""")))),
-            meta = ISZ(), comments = ISZ(), attributes = ISZ(), contract = None())
-        case x =>
-          halt("Unexpected type: $x")
-      }
-    }
-
-    return ret
-  }
-
-  @pure def getApiDefaultPutter(srcThread: AadlThread, srcPort: AadlPort, aadlType: AadlType, crustTypeProvider: CRustTypeProvider): RustAst.Item = {
+  @pure def getApiDefaultPutter(srcThread: AadlThread, srcPort: AadlPort, aadlType: AadlType, crustTypeProvider: CRustTypeProvider): RAST.Item = {
     val methodName = s"put_${srcPort.identifier}"
     val unverifiedMethodName = s"unverified_$methodName"
     val ghostName = getGhostName(srcPort)
     val portTypeNP = crustTypeProvider.getTypeNameProvider(aadlType)
     val ensures = getApiContract(srcPort, srcThread)
-    val bodyGhost: RustAst.BodyItem =
+    val bodyGhost: RAST.BodyItem =
       srcPort match {
-        case i: AadlEventPort => RustAst.BodyItemST(st"self.${ghostName} = Some(${CRustApiPlugin.apiParameterName});")
-        case i: AadlDataPort => RustAst.BodyItemST(st"self.${ghostName} = ${CRustApiPlugin.apiParameterName};")
-        case i: AadlEventDataPort => RustAst.BodyItemST(st"self.${ghostName} = Some(${CRustApiPlugin.apiParameterName});")
+        case i: AadlEventPort => RAST.BodyItemST(st"self.${ghostName} = Some(${CRustApiPlugin.apiParameterName});")
+        case i: AadlDataPort => RAST.BodyItemST(st"self.${ghostName} = ${CRustApiPlugin.apiParameterName};")
+        case i: AadlEventDataPort => RAST.BodyItemST(st"self.${ghostName} = Some(${CRustApiPlugin.apiParameterName});")
       }
-    return RustAst.FnImpl(
-      sig = RustAst.FnSig(
-        ident = RustAst.IdentString(methodName),
-        fnDecl = RustAst.FnDecl(
+    return RAST.FnImpl(
+      sig = RAST.FnSig(
+        ident = RAST.IdentString(methodName),
+        fnDecl = RAST.FnDecl(
           inputs = ISZ(
-            RustAst.ParamFixMe(st"&mut self"),
-            RustAst.ParamImpl(ident = RustAst.IdentString(CRustApiPlugin.apiParameterName), kind = RustAst.TyPath(ISZ(portTypeNP.qualifiedRustNameS), Some(aadlType.classifier)))),
-          outputs = RustAst.FnRetTyDefault()),
-        verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
-      contract = Some(RustAst.FnContract(
+            RAST.ParamFixMe(st"&mut self"),
+            RAST.ParamImpl(ident = RAST.IdentString(CRustApiPlugin.apiParameterName), kind = RAST.TyPath(ISZ(portTypeNP.qualifiedRustNameS), Some(aadlType.classifier)))),
+          outputs = RAST.FnRetTyDefault()),
+        verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
+      contract = Some(RAST.FnContract(
         optEnsuresMarker = None(),
         ensures = ensures,
         optRequiresMarker = None(),
         requires = ISZ())),
-      comments = ISZ(), attributes = ISZ(), visibility = RustAst.Visibility.Public, meta = ISZ(),
-      body = Some(RustAst.MethodBody(
+      comments = ISZ(), attributes = ISZ(), visibility = RAST.Visibility.Public, meta = ISZ(),
+      body = Some(RAST.MethodBody(
         ISZ(
-          RustAst.BodyItemST(st"self.api.${unverifiedMethodName}(${CRustApiPlugin.apiParameterName});"),
+          RAST.BodyItemST(st"self.api.${unverifiedMethodName}(${CRustApiPlugin.apiParameterName});"),
           bodyGhost))))
   }
 
-  @pure def getApiDefaultGetter(thread: AadlThread, port: AadlPort, aadlType: AadlType, crustTypeProvider: CRustTypeProvider): RustAst.Item = {
+  @pure def getApiDefaultGetter(thread: AadlThread, port: AadlPort, aadlType: AadlType, crustTypeProvider: CRustTypeProvider): RAST.Item = {
     val methodName = s"get_${port.identifier}"
     val unverifiedMethodName = s"unverified_$methodName"
     val ghostName = getGhostName(port)
     val portTypeNP = crustTypeProvider.getTypeNameProvider(aadlType)
     val ensures = getApiContract(port, thread)
-    val retType: RustAst.FnRetTy =
+    val retType: RAST.FnRetTy =
       port match {
-        case i: AadlDataPort => RustAst.FnRetTyImpl(RustAst.TyTuple(ISZ(
-          RustAst.TyFixMe(st"${CRustApiPlugin.apiResultName} : ${portTypeNP.qualifiedRustName}"))))
-        case i: AadlEventPort => RustAst.FnRetTyImpl(RustAst.TyTuple(ISZ(
-          RustAst.TyFixMe(st"${CRustApiPlugin.apiResultName} : ${portTypeNP.qualifiedRustName}"))))
-        case i: AadlEventDataPort => RustAst.FnRetTyImpl(RustAst.TyTuple(ISZ(
-          RustAst.TyFixMe(st"${CRustApiPlugin.apiResultName} : Option<${portTypeNP.qualifiedRustName}>"))))
+        case i: AadlDataPort => RAST.FnRetTyImpl(RAST.TyTuple(ISZ(
+          RAST.TyFixMe(st"${CRustApiPlugin.apiResultName} : ${portTypeNP.qualifiedRustName}"))))
+        case i: AadlEventPort => RAST.FnRetTyImpl(RAST.TyTuple(ISZ(
+          RAST.TyFixMe(st"${CRustApiPlugin.apiResultName} : ${portTypeNP.qualifiedRustName}"))))
+        case i: AadlEventDataPort => RAST.FnRetTyImpl(RAST.TyTuple(ISZ(
+          RAST.TyFixMe(st"${CRustApiPlugin.apiResultName} : Option<${portTypeNP.qualifiedRustName}>"))))
       }
-    return RustAst.FnImpl(
-      sig = RustAst.FnSig(
-        ident = RustAst.IdentString(methodName),
-        fnDecl = RustAst.FnDecl(
+    return RAST.FnImpl(
+      sig = RAST.FnSig(
+        ident = RAST.IdentString(methodName),
+        fnDecl = RAST.FnDecl(
           inputs = ISZ(
-            RustAst.ParamFixMe(st"&mut self")),
+            RAST.ParamFixMe(st"&mut self")),
           outputs = retType),
-        verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
-      contract = Some(RustAst.FnContract(
+        verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
+      contract = Some(RAST.FnContract(
         optEnsuresMarker = None(),
         ensures = ensures,
         optRequiresMarker = None(),
         requires = ISZ())),
-      comments = ISZ(), attributes = ISZ(), visibility = RustAst.Visibility.Public, meta = ISZ(),
-      body = Some(RustAst.MethodBody(
-        ISZ(RustAst.BodyItemST(st"self.api.${unverifiedMethodName}(&Ghost(self.${ghostName}))")))))
+      comments = ISZ(), attributes = ISZ(), visibility = RAST.Visibility.Public, meta = ISZ(),
+      body = Some(RAST.MethodBody(
+        ISZ(RAST.BodyItemST(st"self.api.${unverifiedMethodName}(&Ghost(self.${ghostName}))")))))
   }
 
-  @pure def getBridgePutApi(port: AadlPort, aadlType: AadlType, crustTypeProvider: CRustTypeProvider): RustAst.Item = {
+  @pure def getBridgePutApi(port: AadlPort, aadlType: AadlType, crustTypeProvider: CRustTypeProvider): RAST.Item = {
     val methodName = s"unverified_put_${port.identifier}"
     val unsafeMethodName = s"unsafe_put_${port.identifier}"
     val isEventPort = port.isInstanceOf[AadlEventPort]
     val portTypeNP = crustTypeProvider.getTypeNameProvider(aadlType)
-    val args: ISZ[RustAst.Param] =
+    val args: ISZ[RAST.Param] =
       if (isEventPort) ISZ()
       else ISZ(
-        RustAst.ParamFixMe(st"&mut self"),
-        RustAst.ParamImpl(
-          ident = RustAst.IdentString(CRustApiPlugin.apiParameterName),
-          kind = RustAst.TyPath(ISZ(portTypeNP.qualifiedRustNameS), Some(aadlType.classifier))))
-    val body: RustAst.BodyItem =
-      if (isEventPort) RustAst.BodyItemST(st"extern_api::$unsafeMethodName();")
-      else RustAst.BodyItemST(st"extern_api::$unsafeMethodName(&${CRustApiPlugin.apiParameterName});")
-    return RustAst.FnImpl(
-      attributes = ISZ(RustAst.AttributeST(F, st"verifier::external_body")),
-      sig = RustAst.FnSig(
-        ident = RustAst.IdentString(methodName),
-        fnDecl = RustAst.FnDecl(args, RustAst.FnRetTyDefault()),
-        verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
-      comments = ISZ(), visibility = RustAst.Visibility.Private, contract = None(), meta = ISZ(),
-      body = Some(RustAst.MethodBody(ISZ(body))))
+        RAST.ParamFixMe(st"&mut self"),
+        RAST.ParamImpl(
+          ident = RAST.IdentString(CRustApiPlugin.apiParameterName),
+          kind = RAST.TyPath(ISZ(portTypeNP.qualifiedRustNameS), Some(aadlType.classifier))))
+    val body: RAST.BodyItem =
+      if (isEventPort) RAST.BodyItemST(st"extern_api::$unsafeMethodName();")
+      else RAST.BodyItemST(st"extern_api::$unsafeMethodName(&${CRustApiPlugin.apiParameterName});")
+    return RAST.FnImpl(
+      attributes = ISZ(RAST.AttributeST(F, st"verifier::external_body")),
+      sig = RAST.FnSig(
+        ident = RAST.IdentString(methodName),
+        fnDecl = RAST.FnDecl(args, RAST.FnRetTyDefault()),
+        verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
+      comments = ISZ(), visibility = RAST.Visibility.Private, contract = None(), meta = ISZ(),
+      body = Some(RAST.MethodBody(ISZ(body))))
   }
 
-  @pure def getBridgeGetApi(port: AadlPort, aadlType: AadlType, crustTypeProvider: CRustTypeProvider): RustAst.FnImpl = {
+  @pure def getBridgeGetApi(port: AadlPort, aadlType: AadlType, crustTypeProvider: CRustTypeProvider): RAST.FnImpl = {
     val methodName = s"unverified_get_${port.identifier}"
     val unsafeMethodName = s"unsafe_get_${port.identifier}"
     val isEventPort = port.isInstanceOf[AadlEventPort]
     val portTypeNP = crustTypeProvider.getTypeNameProvider(aadlType)
-    val args: ISZ[RustAst.Param] =
+    val args: ISZ[RAST.Param] =
       port match {
         case i: AadlEventPort => ISZ()
         case i: AadlDataPort => ISZ(
-          RustAst.ParamFixMe(st"&mut self"),
-          RustAst.ParamImpl(
-            ident = RustAst.IdentString(CRustApiPlugin.apiParameterName),
-            kind = RustAst.TyRef(
+          RAST.ParamFixMe(st"&mut self"),
+          RAST.ParamImpl(
+            ident = RAST.IdentString(CRustApiPlugin.apiParameterName),
+            kind = RAST.TyRef(
               lifetime = None(),
-              mutty = RustAst.MutTy(
-                ty = RustAst.TyPath(ISZ(ISZ("Ghost"), portTypeNP.qualifiedRustNameS), Some(aadlType.classifier)),
-                mutbl = RustAst.Mutability.Not))))
+              mutty = RAST.MutTy(
+                ty = RAST.TyPath(ISZ(ISZ("Ghost"), portTypeNP.qualifiedRustNameS), Some(aadlType.classifier)),
+                mutbl = RAST.Mutability.Not))))
         case i: AadlEventDataPort => ISZ(
-          RustAst.ParamFixMe(st"&mut self"),
-          RustAst.ParamImpl(
-            ident = RustAst.IdentString(CRustApiPlugin.apiParameterName),
-            kind = RustAst.TyRef(
+          RAST.ParamFixMe(st"&mut self"),
+          RAST.ParamImpl(
+            ident = RAST.IdentString(CRustApiPlugin.apiParameterName),
+            kind = RAST.TyRef(
               lifetime = None(),
-              mutty = RustAst.MutTy(
-                ty = RustAst.TyPath(ISZ(ISZ("Ghost"), ISZ("Option"), portTypeNP.qualifiedRustNameS), Some(aadlType.classifier)),
-                mutbl = RustAst.Mutability.Not))))
+              mutty = RAST.MutTy(
+                ty = RAST.TyPath(ISZ(ISZ("Ghost"), ISZ("Option"), portTypeNP.qualifiedRustNameS), Some(aadlType.classifier)),
+                mutbl = RAST.Mutability.Not))))
       }
-    val retType: RustAst.FnRetTy =
+    val retType: RAST.FnRetTy =
       port match {
-        case i: AadlEventPort => RustAst.FnRetTyImpl(
-          RustAst.TyTuple(ISZ(RustAst.TyFixMe(st"${CRustApiPlugin.apiResultName} : bool"))))
-        case i: AadlDataPort => RustAst.FnRetTyImpl(
-          RustAst.TyTuple(ISZ(RustAst.TyFixMe(st"${CRustApiPlugin.apiResultName} : ${portTypeNP.qualifiedRustName}"))))
-        case i: AadlEventDataPort => RustAst.FnRetTyImpl(
-          RustAst.TyTuple(ISZ(RustAst.TyFixMe(st"${CRustApiPlugin.apiResultName} : Option<${portTypeNP.qualifiedRustName}>"))))
+        case i: AadlEventPort => RAST.FnRetTyImpl(
+          RAST.TyTuple(ISZ(RAST.TyFixMe(st"${CRustApiPlugin.apiResultName} : bool"))))
+        case i: AadlDataPort => RAST.FnRetTyImpl(
+          RAST.TyTuple(ISZ(RAST.TyFixMe(st"${CRustApiPlugin.apiResultName} : ${portTypeNP.qualifiedRustName}"))))
+        case i: AadlEventDataPort => RAST.FnRetTyImpl(
+          RAST.TyTuple(ISZ(RAST.TyFixMe(st"${CRustApiPlugin.apiResultName} : Option<${portTypeNP.qualifiedRustName}>"))))
       }
 
-    val body: RustAst.BodyItem =
-      if (isEventPort) RustAst.BodyItemST(st"extern_api::$unsafeMethodName();")
-      else RustAst.BodyItemST(st"return extern_api::$unsafeMethodName();")
-    return RustAst.FnImpl(
-      attributes = ISZ(RustAst.AttributeST(F, st"verifier::external_body")),
-      sig = RustAst.FnSig(
-        ident = RustAst.IdentString(methodName),
-        fnDecl = RustAst.FnDecl(
+    val body: RAST.BodyItem =
+      if (isEventPort) RAST.BodyItemST(st"extern_api::$unsafeMethodName();")
+      else RAST.BodyItemST(st"return extern_api::$unsafeMethodName();")
+    return RAST.FnImpl(
+      attributes = ISZ(RAST.AttributeST(F, st"verifier::external_body")),
+      sig = RAST.FnSig(
+        ident = RAST.IdentString(methodName),
+        fnDecl = RAST.FnDecl(
           inputs = args,
           outputs = retType),
-        verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
+        verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
       // TODO: probably move all verus to gumbo plug
-      contract = Some(RustAst.FnContract(
+      contract = Some(RAST.FnContract(
         optRequiresMarker = None(),
         requires = ISZ(),
         optEnsuresMarker = None(),
-        ensures = ISZ(RustAst.ExprST(st"${CRustApiPlugin.apiResultName} == ${CRustApiPlugin.apiParameterName}@")))),
-      comments = ISZ(), visibility = RustAst.Visibility.Private, meta = ISZ(),
-      body = Some(RustAst.MethodBody(ISZ(body))))
+        ensures = ISZ(RAST.ExprST(st"${CRustApiPlugin.apiResultName} == ${CRustApiPlugin.apiParameterName}@")))),
+      comments = ISZ(), visibility = RAST.Visibility.Private, meta = ISZ(),
+      body = Some(RAST.MethodBody(ISZ(body))))
   }
 
 
   @pure def getCrustTestingArtifacts(p: AadlPort,
                                      aadlType: ISZ[String],
-                                     portTypeNameProvider: CRustTypeNameProvider):
-
-  (RustAst.Item, RustAst.Item, RustAst.Item) = {
-    val paramKind: String =
-      p match {
-        case a:AadlDataPort => "DataPort"
-        case a:AadlEventDataPort => "EventDataPort"
-        case a:AadlEventPort => "EventPort"
-      }
+                                     portTypeNameProvider: CRustTypeNameProvider): (RAST.Item, RAST.Item) = {
     if (p.direction == Direction.In) {
       val varName = s"IN_${p.identifier}"
-      val (externApiBody, testApiBody): (ST, ST) = {
-        val eBody: ST = if (p.isEvent) {
+      val externApiBody: ST =
+        if (p.isEvent) {
           st"""unsafe {
               |  match *$varName.lock().unwrap() {
               |    Some(v) => {
@@ -684,112 +379,60 @@ object CRustApiUtil {
               |}"""
         }
 
-        val tBody: ST = if (p.isEvent) {
-          st"*extern_api::$varName.lock().unwrap() = value"
-        } else {
-          st"*extern_api::$varName.lock().unwrap() = Some(value)"
-        }
+      val externApiTestVariable = RAST.ItemStatic(
+        ident = RAST.IdentString(varName),
+        visibility = RAST.Visibility.Public,
+        ty = RAST.TyPath(ISZ(ISZ("Mutex"), ISZ("Option"), portTypeNameProvider.qualifiedRustNameS), Some(aadlType)),
+        mutability = RAST.Mutability.Not,
+        expr = RAST.ExprST(st"Mutex::new(None);"))
 
-        (eBody, tBody)
-      }
+      val externApiMethod = RAST.FnImpl(
+        attributes = ISZ(RAST.AttributeST(F, st"cfg(test)")),
+        sig = RAST.FnSig(
+          ident = RAST.IdentString(s"get_${p.identifier}"),
+          fnDecl = RAST.FnDecl(
+            inputs = ISZ(RAST.ParamImpl(
+              ident = RAST.IdentString("value"),
+              kind = RAST.TyPtr(mutty =
+                RAST.MutTy(
+                  ty = RAST.TyPath(ISZ(portTypeNameProvider.qualifiedRustNameS), Some(aadlType)),
+                  mutbl = RAST.Mutability.Mut)))),
+            outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
+          verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
+        comments = ISZ(), visibility = RAST.Visibility.Public, contract = None(), meta = ISZ(),
+        body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(externApiBody)))))
 
-      val externApiTestVariable = RustAst.ItemStatic(
-        ident = RustAst.IdentString(varName),
-        visibility = RustAst.Visibility.Public,
-        ty = RustAst.TyPath(ISZ(ISZ("Mutex"), ISZ("Option"), portTypeNameProvider.qualifiedRustNameS), Some(aadlType)),
-        mutability = RustAst.Mutability.Not,
-        expr = RustAst.ExprST(st"Mutex::new(None);"))
-
-      val externApiMethod = RustAst.FnImpl(
-        attributes = ISZ(RustAst.AttributeST(F, st"cfg(test)")),
-        sig = RustAst.FnSig(
-          ident = RustAst.IdentString(s"get_${p.identifier}"),
-          fnDecl = RustAst.FnDecl(
-            inputs = ISZ(RustAst.ParamImpl(
-              ident = RustAst.IdentString("value"),
-              kind = RustAst.TyPtr(mutty =
-                RustAst.MutTy(
-                  ty = RustAst.TyPath(ISZ(portTypeNameProvider.qualifiedRustNameS), Some(aadlType)),
-                  mutbl = RustAst.Mutability.Mut)))),
-            outputs = RustAst.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
-          verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
-        comments = ISZ(), visibility = RustAst.Visibility.Public, contract = None(), meta = ISZ(),
-        body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(externApiBody)))))
-
-
-      val paramType: ISZ[ISZ[String]] = if(p.isEvent) {
-        ISZ(ISZ("Option"), portTypeNameProvider.qualifiedRustNameS)
-      } else {
-        ISZ(portTypeNameProvider.qualifiedRustNameS)
-      }
-
-      val testApiMethod = RustAst.FnImpl(
-        attributes = ISZ(),
-        visibility = RustAst.Visibility.Public,
-        sig = RustAst.FnSig(
-          ident = RustAst.IdentString(s"put_${p.identifier}"),
-          fnDecl = RustAst.FnDecl(
-            inputs = ISZ(RustAst.ParamImpl(
-              ident = RustAst.IdentString("value"),
-              kind = RustAst.TyPath(items = paramType, aadlType = Some(aadlType)))),
-            outputs = RustAst.FnRetTyDefault()),
-          verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
-        comments = ISZ(RustAst.CommentRustDoc(ISZ(st"setter for IN $paramKind"))),
-        contract = None(), meta = ISZ(),
-        body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(testApiBody)))))
-
-      return (externApiTestVariable, externApiMethod, testApiMethod)
+      return (externApiTestVariable, externApiMethod)
 
     } else {
       val varName = s"OUT_${p.identifier}"
-      val externApiTestVariable = RustAst.ItemStatic(
-        ident = RustAst.IdentString(varName),
-        visibility = RustAst.Visibility.Public,
-        ty = RustAst.TyPath(ISZ(ISZ("Mutex"), ISZ("Option"), portTypeNameProvider.qualifiedRustNameS), Some(aadlType)),
-        mutability = RustAst.Mutability.Not,
-        expr = RustAst.ExprST(st"Mutex::new(None);"))
-      val externApiMethod = RustAst.FnImpl(
-        attributes = ISZ(RustAst.AttributeST(F, st"cfg(test)")),
-        sig = RustAst.FnSig(
-          ident = RustAst.IdentString(s"put_${p.identifier}"),
-          fnDecl = RustAst.FnDecl(
-            inputs = ISZ(RustAst.ParamImpl(
-              ident = RustAst.IdentString("value"),
-              kind = RustAst.TyPtr(mutty =
-                RustAst.MutTy(
-                  ty = RustAst.TyPath(ISZ(portTypeNameProvider.qualifiedRustNameS), Some(aadlType)),
-                  mutbl = RustAst.Mutability.Mut)))),
-            outputs = RustAst.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
-          verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
-        comments = ISZ(), visibility = RustAst.Visibility.Public, contract = None(), meta = ISZ(),
-        body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(
+      val externApiTestVariable = RAST.ItemStatic(
+        ident = RAST.IdentString(varName),
+        visibility = RAST.Visibility.Public,
+        ty = RAST.TyPath(ISZ(ISZ("Mutex"), ISZ("Option"), portTypeNameProvider.qualifiedRustNameS), Some(aadlType)),
+        mutability = RAST.Mutability.Not,
+        expr = RAST.ExprST(st"Mutex::new(None);"))
+      val externApiMethod = RAST.FnImpl(
+        attributes = ISZ(RAST.AttributeST(F, st"cfg(test)")),
+        sig = RAST.FnSig(
+          ident = RAST.IdentString(s"put_${p.identifier}"),
+          fnDecl = RAST.FnDecl(
+            inputs = ISZ(RAST.ParamImpl(
+              ident = RAST.IdentString("value"),
+              kind = RAST.TyPtr(mutty =
+                RAST.MutTy(
+                  ty = RAST.TyPath(ISZ(portTypeNameProvider.qualifiedRustNameS), Some(aadlType)),
+                  mutbl = RAST.Mutability.Mut)))),
+            outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
+          verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
+        comments = ISZ(), visibility = RAST.Visibility.Public, contract = None(), meta = ISZ(),
+        body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
           st"""unsafe {
               |  *$varName.lock().unwrap() = Some(*value);
               |  return true;
               |}""")))))
 
-
-      val (testApiBody, retType): (ST, RustAst.Ty) = {
-        if (p.isEvent) {
-          (st"return extern_api::$varName.lock().unwrap().clone()", RustAst.TyPath(items = ISZ(ISZ("Option"), portTypeNameProvider.qualifiedRustNameS), aadlType = Some(aadlType)))
-        } else {
-          (st"""return extern_api::$varName.lock().unwrap().expect("Not expecting None")""", RustAst.TyPath(items = ISZ(portTypeNameProvider.qualifiedRustNameS), aadlType = Some(aadlType)))
-        }
-      }
-      val testApiMethod = RustAst.FnImpl(
-        attributes = ISZ(),
-        visibility = RustAst.Visibility.Public,
-        sig = RustAst.FnSig(
-          ident = RustAst.IdentString(s"get_${p.identifier}"),
-          fnDecl = RustAst.FnDecl(
-            inputs = ISZ(),
-            outputs = RustAst.FnRetTyImpl(retType)),
-          verusHeader = None(), fnHeader = RustAst.FnHeader(F), generics = None()),
-        comments = ISZ(RustAst.CommentRustDoc(ISZ(st"getter for OUT $paramKind"))),
-        contract = None(), meta = ISZ(),
-        body = Some(RustAst.MethodBody(ISZ(RustAst.BodyItemST(testApiBody)))))
-
-      return (externApiTestVariable, externApiMethod, testApiMethod)
+      return (externApiTestVariable, externApiMethod)
     }
   }
 }
