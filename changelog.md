@@ -1,4 +1,4 @@
-*Last Updated 2025-10-08*
+*Last Updated 2025-10-20*
 
 <!-- begin pre-release -->
 # Pre-Release
@@ -20,7 +20,7 @@ cd kekinian
 <!-- end pre-release -->
 
 <!-- begin dev -->
-# [dev](https://github.com/sireum/kekinian/releases/tag/dev)  <font size=3>as of 2025-10-06</font>
+# [dev](https://github.com/sireum/kekinian/releases/tag/dev)  <font size=3>as of 2025-10-20</font>
 
 **Microkit**
 
@@ -92,6 +92,20 @@ cd kekinian
 **Phantom**
 
   * Updated to OSATE 2.17
+
+**Backward Incompatibilities**
+
+  * **Microkit**
+  
+    * ``lib.rs`` now calls a new ``logging::init_logging`` method introduced in this release.  This adds supporting infrastructure for improved logging setup.  Codegen does not overwrite ``src/logging.rs`` so developers must manually update this file to match the current version (e.g. [diff](https://github.com/loonwerks/INSPECTA-models/compare/ed1f7d4f37a265d8acec08869a272a0766f4ead8..8787ed906601c7365f2a6fabe769b4cea6e65014?path=isolette/hamr/microkit/crates/thermostat_rt_mhs_mhs/src/logging.rs#diff-77db27613bbbe4a3713275fe6f6c87566f2db95c6f997bed59f46f8864e9bcef)), or delete the file and rerun codegen to regenerate it.
+
+      To remove all ``src/logging.rs`` files recursively from the project:
+
+      ```
+      find . -path "*/src/logging.rs" -type f -delete
+      ```
+
+    * ``test_api::testComputeCBwLV`` method is no longer generated for components that do do not contain GUMBO state variables.  Existing test cases making use of this method should be deleted, or rewritten to use ``test_api::testComputCB`` instead.
 
 <details><summary>How to build</summary>
 
