@@ -693,7 +693,11 @@ object MicrokitCodegen {
     for (x <- ops.ISZOps(xmlSchedulingDomains).sortWith((a, b) => a.id < b.id)) {
       xmlScheds = xmlScheds :+ pacerSlot :+ x
     }
-    xmlScheds = xmlScheds :+ SchedulingDomain(id = 0, length = framePeriod - usedBudget)
+
+    if (framePeriod - usedBudget > 0) {
+      // switch to domain 0 to use up the rest of the budget
+      xmlScheds = xmlScheds :+ SchedulingDomain(id = 0, length = framePeriod - usedBudget)
+    }
 
 
     for (e <- connectionStore;
@@ -713,7 +717,7 @@ object MicrokitCodegen {
     resources = resources :+ ResourceUtil.createResourceWithMarkers(
       path = xmlPath,
       content = sd.prettyST,
-      markers = markers,
+      markers = markers ++ sd.getMarkers,
       invertMarkers = T,
       overwrite = F)
 

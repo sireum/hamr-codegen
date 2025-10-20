@@ -123,7 +123,7 @@ object StringUtil {
             }
             val str: String =
               if (code.nonEmpty && code(0) == "") {
-                // ST hack.  ST's sequence expansion will drop entries until if finds one
+                // ST hack.  ST's sequence expansion will drop entries until it finds one
                 // that is not the empty string "".  To preserve these lines, replace the
                 // first entry with a space if the first entry is the empty string
                 val _code = " " +: ops.ISZOps(code).drop(1)
