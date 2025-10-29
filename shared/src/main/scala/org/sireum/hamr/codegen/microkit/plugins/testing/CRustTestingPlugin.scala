@@ -524,16 +524,6 @@ object CRustTestingPlugin {
         resources = resources :+ ResourceUtil.createResource(path, content, F)
       }
 
-      { // src/test/util/mod.rs
-        val content =
-          st"""${MicrokitUtil.doNotEdit}
-              |
-              |${(for(i <- e._2.utilModEntries) yield  i.prettyST, "\n\n")}
-              |"""
-        val path = s"$componentTestUtilDir/mod.rs"
-        resources = resources :+ ResourceUtil.createResource(path, content, F)
-      }
-
       { // src/test/tests.rs
         val content =
           st"""${MicrokitUtil.safeToEdit}
@@ -542,6 +532,16 @@ object CRustTestingPlugin {
               |"""
         val path = s"$componentTestDir/tests.rs"
         resources = resources :+ ResourceUtil.createResource(path, content, F)
+      }
+
+      { // src/test/util/mod.rs
+        val content =
+          st"""${MicrokitUtil.doNotEdit}
+              |
+              |${(for(i <- e._2.utilModEntries) yield  i.prettyST, "\n\n")}
+              |"""
+        val path = s"$componentTestUtilDir/mod.rs"
+        resources = resources :+ ResourceUtil.createResource(path, content, T)
       }
 
       { // src/test/util/generators.rs
@@ -555,7 +555,7 @@ object CRustTestingPlugin {
               |${(for(p <- e._2.proptestEntries) yield p.prettyST, "\n\n")}
               |"""
         val path = s"$componentTestUtilDir/generators.rs"
-        resources = resources :+ ResourceUtil.createResource(path, content, F)
+        resources = resources :+ ResourceUtil.createResource(path, content, T)
       }
 
       { // src/test/util/test_apis.rs
@@ -570,7 +570,7 @@ object CRustTestingPlugin {
               |${(for(i <- e._2.testApiEntries) yield i.prettyST, "\n\n")}
               |"""
         val path = s"$componentTestUtilDir/test_apis.rs"
-        resources = resources :+ ResourceUtil.createResource(path, content, F)
+        resources = resources :+ ResourceUtil.createResource(path, content, T)
       }
     }
 
