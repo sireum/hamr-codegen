@@ -3,7 +3,7 @@ package org.sireum.hamr.codegen.common.resolvers
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlDataPort, AadlEventDataPort, SymbolTable}
-import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, ArrayType, BaseType, EnumType, TypeResolver, TypeUtil}
+import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, ArrayType, BaseType, EnumType, RecordType, TypeResolver, TypeUtil}
 import org.sireum.hamr.ir.{GclMethod, GclStateVar, MTransformer, MTransformer => irMTransformer}
 import org.sireum.message.Reporter
 import org.sireum.lang.{ast => AST}
@@ -132,12 +132,22 @@ object GclResolverUtil {
         case Some(x) => halt(s"Unexpected: ${x.name}")
         case _ =>
           receiverOpt = irMTransformer.transformOption(o.receiverOpt, transform_langastExp _)
-          ident = transform_langastExpIdent(o.ident)
-          popType match {
-            case a: ArrayType =>
-              arrayType = Some(a)
-            case _ =>
+          currType match {
+            case Some(r: RecordType) =>
+              r.fields.get(o.ident.id.value).get match {
+                case a: ArrayType =>
+                  arrayType = Some(a)
+                case _ =>
+              }
+            case x =>
+              ident = transform_langastExpIdent(o.ident)
+              popType match {
+                case a: ArrayType =>
+                  arrayType = Some(a)
+                case _ =>
+              }
           }
+          currType = None()
       }
     }
 
@@ -202,6 +212,7 @@ object GclResolverUtil {
     currType match {
       case Some(a: ArrayType) =>
         assert(o.id.value == "size")
+        currType = None()
         return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(o(receiverOpt = receiver.getOrElse(o.receiverOpt))))
       case Some(b: BaseType) if GclResolverUtil.isBaseTypeConverter(o.id.value) =>
         val fromType = GclResolverUtil.getSlangName(b, Reporter.create)
@@ -218,7 +229,14 @@ object GclResolverUtil {
           args = ISZ(receiver.getOrElse(o.receiverOpt).get),
           attr = emptyRAttr)
 
+        currType = None()
+
         return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(invoke))
+      case Some(r: RecordType) =>
+        val fieldType = r.fields.get(o.id.value).get
+        currType = None()
+        pushType(fieldType)
+        return org.sireum.hamr.ir.MTransformer.PreResult(F, MNone())
       case _ =>
         //halt(
         //  st"""TODO: ${o.prettyST.render}

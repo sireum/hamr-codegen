@@ -131,7 +131,7 @@ object RustParserSimple {
 
   @datatype class LeftCurlyBrace(val startingOffset: Z) extends Brace
 
-  @pure def parse(f: Os.Path, rootDir: Os.Path): RustFile = {
+  @pure def parse(f: Os.Path, rootDir: Os.Path, userModifable: B): RustFile = {
 
     val content = conversions.String.toCis(f.read)
 
@@ -416,11 +416,19 @@ object RustParserSimple {
 
     @pure def parseContract(): (Option[VerusBlock], Option[VerusBlock]) = {
       var blocks: Stack[VerusBlock] = Stack.empty
+      var optMarker: Option[Marker] = None()
 
       while (offset < content.size && content(offset) != '{') {
         consumeWhiteSpaceAndCommentsH(F) match {
           case ((Some(marker), None())) =>
-          case ((None(), Some(gumboId))) =>
+            if (optMarker.isEmpty) {
+              assert (marker.isBegin, s"Did not find the begin marker for ${marker.id}")
+              optMarker = Some(marker)
+            } else {
+              assert (!marker.isBegin, s"Was expecting to find end marker for ${optMarker.get.id}, but found ${marker.id} instead")
+              optMarker = None()
+            }
+          case ((None(), Some(gumboId))) if !userModifable || optMarker.nonEmpty =>
             consumeWhiteSpaceAndComments()
             var lastCharCol = col
             var lastCharOffset = offset
@@ -483,7 +491,7 @@ object RustParserSimple {
         }
       }
       return (a,b)
-    }
+    } // end parseContract
 
     while (offset < content.size) {
       consumeWhiteSpaceAndComments()

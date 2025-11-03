@@ -86,15 +86,14 @@ object RustContainers {
       for (vb <- requires.get.gumboClauses if vb.id == id) {
         return vb.pos
       }
-      halt(s"Didn't find assume clause $id in $name")
+      halt(s"Didn't find assume clause $id in function $name")
     }
 
     @pure def getGuaranteeClausePos(id: String): Position = {
       for (vb <- ensures.get.gumboClauses if vb.id == id) {
         return vb.pos
       }
-      println(ensures.get.gumboClauses)
-      halt(s"Didn't find guarantee clause $id in $name")
+      halt(s"Didn't find guarantee clause $id in function $name")
     }
 
   }

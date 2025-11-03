@@ -287,9 +287,11 @@ object SlangExpUtil {
            if (inVerus) {
             val quantType: String = if (exp.isForall) "forall" else "exists"
 
+             val op: String = if (exp.isForall) "==>" else "&&"
+
             val range = st"$lo <= $param ${if (exp.hiExact) "<=" else "<"} $hi"
 
-            return st"$quantType|$param:int| $range && $body"
+            return st"$quantType|$param:int| $range $op $body"
           } else {
             return st"""($lo..${if (exp.hiExact) "=" else ""}$hi).${if(exp.isForall) "all" else "any"}(|${param}| $body)"""
           }

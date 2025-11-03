@@ -519,11 +519,11 @@ object Printers {
       else if (optRequiresMarker.isEmpty)
         Some(
           st"""requires
-              |  ${(for(r <- requires) yield r.prettyST, ",\n")}""")
+              |  ${(for(r <- requires) yield r.prettyST, ",\n")},""")
       else Some(
         st"""requires
             |  ${optRequiresMarker.get.beginMarker}
-            |  ${(for(r <- requires) yield r.prettyST, ",\n")}
+            |  ${(for(r <- requires) yield r.prettyST, ",\n")},
             |  ${optRequiresMarker.get.endMarker}""")
 
     val optEnsures: Option[ST] =
@@ -531,11 +531,11 @@ object Printers {
       else if (optEnsuresMarker.isEmpty)
         Some(
         st"""ensures
-            |  ${(for(r <- ensures) yield r.prettyST, ",\n")}""")
+            |  ${(for(r <- ensures) yield r.prettyST, ",\n")},""")
       else Some(
         st"""ensures
             |  ${optEnsuresMarker.get.beginMarker}
-            |  ${(for(r <- ensures) yield r.prettyST, ",\n")}
+            |  ${(for(r <- ensures) yield r.prettyST, ",\n")},
             |  ${optEnsuresMarker.get.endMarker}"""
       )
     return (

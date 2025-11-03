@@ -215,7 +215,7 @@ import org.sireum.message.{Level, Position, Reporter}
 
         val externApiFile = rustBridgeDir / "extern_c_api.rs"
         assert(externApiFile.exists, externApiFile.value)
-        val parsedExternApiFile = RustParserSimple.parse(externApiFile, sel4OutputDir)
+        val parsedExternApiFile = RustParserSimple.parse(externApiFile, sel4OutputDir, F)
 
         val rustTestDir = sel4OutputDir / "crates" / threadid / "src" / "test"
         val rustTestUtilDir = rustTestDir / "util"
@@ -225,18 +225,18 @@ import org.sireum.message.{Level, Position, Reporter}
 
         val rustComponentApiFile = rustBridgeDir / s"${threadid}_api.rs"
         assert(rustComponentApiFile.exists, rustComponentApiFile.value)
-        val parsedRustComponentApiFile = RustParserSimple.parse(rustComponentApiFile, sel4OutputDir)
+        val parsedRustComponentApiFile = RustParserSimple.parse(rustComponentApiFile, sel4OutputDir, F)
 
         val rustComponentAppFile = rustComponentDir / s"${threadid}_app.rs"
         assert(rustComponentAppFile.exists, rustComponentAppFile.value)
-        val parsedRustComponentAppFile = RustParserSimple.parse(rustComponentAppFile, sel4OutputDir)
+        val parsedRustComponentAppFile = RustParserSimple.parse(rustComponentAppFile, sel4OutputDir, T)
 
         val componentAppStruct = parsedRustComponentAppFile.structs.get(threadid).get
         val componentAppImpl = parsedRustComponentAppFile.getImpl(threadid).get
 
         val gumboxFile = rustBridgeDir / s"${threadid}_GUMBOX.rs"
         val parsedGumboXFile: Option[RustContainers.RustFile] =
-          if (gumboxFile.exists) Some(RustParserSimple.parse(gumboxFile, sel4OutputDir))
+          if (gumboxFile.exists) Some(RustParserSimple.parse(gumboxFile, sel4OutputDir, F))
           else None()
 
         var developerApiReport: HashSMap[String, Position] = HashSMap.empty

@@ -27,6 +27,14 @@ object GclResolver {
   @strictpure def putIndexingTypeFingerprints(m: Map[String, TypeIdPath], store: Store): Store =
     store + KEY_IndexingTypeFingerprints ~> MapValue(m)
 
+  val KEY_SlangTypeToAadlType: String = "KEY_SlangTypeToAadlType"
+  @strictpure def getSlangTypeToAadlType(store: Store): Map[AST.Typed, TypeIdPath] =
+    store.getOrElse(KEY_SlangTypeToAadlType, MapValue[AST.Typed, TypeIdPath](Map.empty))
+      .asInstanceOf[MapValue[AST.Typed, TypeIdPath]].map
+
+  @strictpure def putSlangTypeToAadlType(m: Map[AST.Typed, TypeIdPath], store: Store): Store =
+    store + KEY_SlangTypeToAadlType ~> MapValue(m)
+
   @sig trait SymbolHolder
 
   @datatype class AadlSymbolHolder(symbol: AadlSymbol) extends SymbolHolder
@@ -62,6 +70,8 @@ object GclResolver {
                              val context: AadlComponent,
                              val isContextGeneralAssumeClause: B,
                              val optHandledPort: Option[AadlPort],
+                             val indexingTypeFingerprints: Map[String, TypeIdPath],
+
                              val stateVars: ISZ[GclStateVar],
                              val specFuncs: Map[ISZ[String], GclMethod],
                              val symbolTable: SymbolTable) extends org.sireum.hamr.ir.MTransformer {
@@ -132,7 +142,7 @@ object GclResolver {
                 // must be a call to a data type constructor
                 return None()
               case _ =>
-                reporter.error(optPos, toolName, s"Could not find ${name} in thread component ${a.identifier}")
+                //reporter.error(optPos, toolName, s"Could not find ${name} in thread component ${a.identifier}")
                 return None()
             }
           }
@@ -154,7 +164,11 @@ object GclResolver {
         if (p.isInstanceOf[AadlEventPort]) TypeUtil.EmptyType
         else p.asInstanceOf[AadlFeatureData].aadlType
 
-      val ids = aadlType.nameProvider.classifier
+      val ids: TypeIdPath = aadlType match {
+        case e: EnumType => aadlType.nameProvider.classifier :+ "Type"
+        case _ => aadlType.nameProvider.classifier
+      }
+
       val typedName = AST.Typed.Name(ids = ids, args = ISZ())
 
       var typedOpt: Option[AST.Typed] = Some(typedName)
@@ -452,6 +466,10 @@ object GclResolver {
                   //reporter.error(o.fullPosOpt, toolName, s"Expecting the method ${rid.value} to be in a synthetic package called ${GUMBO__Library}")
                 }
                 s
+              case _ if indexingTypeFingerprints.contains(o.ident.id.value) =>
+                // rewritten indexing into an array
+                return MNone()
+
               case _ =>
                 // receiver is empty so must be a call to a subclause gumbo function so
                 // use the fully qualified name of the generated Slang function
@@ -546,11 +564,13 @@ object GclResolver {
                      mode: RewriteMode.Type,
                      context: AadlComponent,
                      isContextGeneralAssumeClause: B,
+                     indexingTypeFingerprints: Map[String, TypeIdPath],
                      stateVars: ISZ[GclStateVar],
                      methods: Map[ISZ[String], GclMethod],
                      symbolTable: SymbolTable,
                      reporter: Reporter): (MOption[Exp], ISZ[SymbolHolder], ISZ[AadlPort]) = {
-    return collectSymbolsH(exp, mode, context, isContextGeneralAssumeClause, None(), stateVars, methods, symbolTable, reporter)
+    return collectSymbolsH(exp, mode, context, isContextGeneralAssumeClause, None(), indexingTypeFingerprints,
+      stateVars, methods, symbolTable, reporter)
   }
 
   def collectSymbolsH(exp: Exp,
@@ -558,6 +578,7 @@ object GclResolver {
                       context: AadlComponent,
                       isContextGeneralAssumeClause: B,
                       optHandledPort: Option[AadlPort],
+                      indexingTypeFingerprints: Map[String, TypeIdPath],
                       stateVars: ISZ[GclStateVar],
                       methods: Map[ISZ[String], GclMethod],
                       symbolTable: SymbolTable,
@@ -566,7 +587,8 @@ object GclResolver {
       // already in an inconsistent state
       return (MNone(), ISZ(), ISZ())
     } else {
-      val sf = SymbolFinder(mode, context, isContextGeneralAssumeClause, optHandledPort, stateVars, methods, symbolTable)
+      val sf = SymbolFinder(mode, context, isContextGeneralAssumeClause, optHandledPort,
+        indexingTypeFingerprints, stateVars, methods, symbolTable)
       val rexp = sf.transform_langastExp(exp)
       reporter.reports(sf.reporter.messages)
       return (rexp, sf.symbols.elements, sf.apiReferences.elements)
@@ -611,6 +633,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
   var arrayIndexInterpolateImports: ISZ[AST.Stmt.Import] = ISZ()
   var indexingTypeFingerprints: Map[String, TypeIdPath] = Map.empty
+  var slangTypeToAadlType: Map[AST.Typed, TypeIdPath] = Map.empty
 
   def reset: B = {
     rexprs = HashMap.empty
@@ -945,7 +968,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
           if (!reporter.hasError) {
             val (expTrans, symbols, apiRefs) =
-              GclResolver.collectSymbols(expTipe, RewriteMode.Normal, component, F, ISZ(), gclMethods, symbolTable, reporter)
+              GclResolver.collectSymbols(expTipe, RewriteMode.Normal, component, F, indexingTypeFingerprints,
+            ISZ(), gclMethods, symbolTable, reporter)
 
             val resolvedExpr: AST.Exp = expTrans match {
               case MSome(et2) => et2
@@ -1010,7 +1034,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           case e: Exp.Ident =>
             visitSlangExp(exp = e, context = context, mode = TypeChecker.ModeContext.Spec, scope = scope, typeHierarchy = typeHierarchy, reporter = reporter) match {
               case Some((rexp, roptType)) =>
-                val (rexp2, symbols, _) = GclResolver.collectSymbols(rexp, RewriteMode.Api, component, F, s.state, gclMethods, symbolTable, reporter)
+                val (rexp2, symbols, _) = GclResolver.collectSymbols(rexp, RewriteMode.Api, component, F, indexingTypeFingerprints,
+                  s.state, gclMethods, symbolTable, reporter)
                 if (!reporter.hasError) {
                   if (symbols.size != 1) {
                     reporter.error(e.fullPosOpt, GclResolver.toolName, s"From/To expressions should resolve to exactly one symbol, instead resolved to ${symbols.size}")
@@ -1054,7 +1079,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             case e: Exp.Ident =>
               visitSlangExp(exp = e, context = context, mode = TypeChecker.ModeContext.Spec, scope = scope, typeHierarchy = typeHierarchy, reporter = reporter) match {
                 case Some((rexp, roptType)) =>
-                  val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.Normal, component, F, s.state, gclMethods, symbolTable, reporter)
+                  val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.Normal, component, F, indexingTypeFingerprints,
+                    s.state, gclMethods, symbolTable, reporter)
                   apiReferences = apiReferences ++ apiRefs
 
                   if (!reporter.hasError) {
@@ -1101,7 +1127,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             stateVars = s.state, specFuns = gclMethods,
             symbolTable = symbolTable, aadlTypes = aadlTypes,
             scope = scope, typeHierarchy = typeHierarchy, reporter = reporter)
-          val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, F, s.state, gclMethods, symbolTable, reporter)
+          val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, F, indexingTypeFingerprints,
+            s.state, gclMethods, symbolTable, reporter)
           apiReferences = apiReferences ++ apiRefs
 
           if (rexp2.isEmpty) {
@@ -1142,7 +1169,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 stateVars = s.state, specFuns = gclMethods,
                 symbolTable = symbolTable, aadlTypes = aadlTypes,
                 scope = scope, typeHierarchy = typeHierarchy, reporter = reporter)
-              val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, T, s.state, gclMethods, symbolTable, reporter)
+              val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, T, indexingTypeFingerprints,
+                s.state, gclMethods, symbolTable, reporter)
               apiReferences = apiReferences ++ apiRefs
 
               for (sym <- symbols) {
@@ -1170,7 +1198,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               stateVars = s.state, specFuns = gclMethods,
               symbolTable = symbolTable, aadlTypes = aadlTypes,
               scope = scope, typeHierarchy = typeHierarchy, reporter = reporter)
-            val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, F, s.state, gclMethods, symbolTable, reporter)
+            val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, F, indexingTypeFingerprints,
+              s.state, gclMethods, symbolTable, reporter)
             apiReferences = apiReferences ++ apiRefs
 
             rexprs = rexprs + (
@@ -1191,7 +1220,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                   stateVars = s.state, specFuns = gclMethods,
                   symbolTable = symbolTable, aadlTypes = aadlTypes,
                   scope = scope, typeHierarchy = typeHierarchy, reporter = reporter)
-                val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, F, s.state, gclMethods, symbolTable, reporter)
+                val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, F, indexingTypeFingerprints,
+                  s.state, gclMethods, symbolTable, reporter)
                 apiReferences = apiReferences ++ apiRefs
 
                 for (sym <- symbols) {
@@ -1215,7 +1245,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 stateVars = s.state, specFuns = gclMethods,
                 symbolTable = symbolTable, aadlTypes = aadlTypes,
                 scope = scope, typeHierarchy = typeHierarchy, reporter = reporter)
-              val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, F, s.state, gclMethods, symbolTable, reporter)
+              val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, F, indexingTypeFingerprints,
+                s.state, gclMethods, symbolTable, reporter)
               apiReferences = apiReferences ++ apiRefs
 
               if (rexp2.isEmpty) {
@@ -1230,7 +1261,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
             visitSlangExp(exp = handler.port, context = context, mode = TypeChecker.ModeContext.Spec, scope = scope, typeHierarchy = typeHierarchy, reporter = reporter) match {
               case Some((rexp, roptType)) =>
-                val (hexp, symbols, _) = GclResolver.collectSymbols(rexp, RewriteMode.Normal, component, F, s.state, gclMethods, symbolTable, reporter)
+                val (hexp, symbols, _) = GclResolver.collectSymbols(rexp, RewriteMode.Normal, component, F, indexingTypeFingerprints,
+                  s.state, gclMethods, symbolTable, reporter)
                 if (!reporter.hasError) {
                   if (symbols.size != 1) {
                     reporter.error(handler.port.fullPosOpt, GclResolver.toolName, s"Handler should resolve to exactly one symbol, instead resolved to ${symbols.size}")
@@ -1267,7 +1299,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 stateVars = s.state, specFuns = gclMethods,
                 symbolTable = symbolTable, aadlTypes = aadlTypes,
                 scope = scope, typeHierarchy = typeHierarchy, reporter = reporter)
-              val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, T, s.state, gclMethods, symbolTable, reporter)
+              val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, T, indexingTypeFingerprints,
+                s.state, gclMethods, symbolTable, reporter)
               apiReferences = apiReferences ++ apiRefs
 
               for (sym <- symbols) {
@@ -1295,7 +1328,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 symbolTable = symbolTable, aadlTypes = aadlTypes,
                 scope = scope, typeHierarchy = typeHierarchy, reporter = reporter)
 
-              val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, F, s.state, gclMethods, symbolTable, reporter)
+              val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, F, indexingTypeFingerprints,
+                s.state, gclMethods, symbolTable, reporter)
               apiReferences = apiReferences ++ apiRefs
 
               rexprs = rexprs + (
@@ -1316,7 +1350,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                     stateVars = s.state, specFuns = gclMethods,
                     symbolTable = symbolTable, aadlTypes = aadlTypes,
                     scope = scope, typeHierarchy = typeHierarchy, reporter = reporter)
-                  val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, F, s.state, gclMethods, symbolTable, reporter)
+                  val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, F, indexingTypeFingerprints,
+                    s.state, gclMethods, symbolTable, reporter)
                   apiReferences = apiReferences ++ apiRefs
 
                   for (sym <- symbols) {
@@ -1338,7 +1373,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                   stateVars = s.state, specFuns = gclMethods,
                   symbolTable = symbolTable, aadlTypes = aadlTypes,
                   scope = scope, typeHierarchy = typeHierarchy, reporter = reporter)
-                val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, F, s.state, gclMethods, symbolTable, reporter)
+                val (rexp2, _, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.ApiGet, component, F, indexingTypeFingerprints,
+                  s.state, gclMethods, symbolTable, reporter)
                 apiReferences = apiReferences ++ apiRefs
 
                 rexprs = rexprs + (
@@ -1379,7 +1415,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         case Some((rexp, roptType)) =>
           roptType match {
             case Some(AST.Typed.Name(ISZ("org", "sireum", "B"), _)) =>
-              val (rexp2, _, _) = GclResolver.collectSymbols(rexp, RewriteMode.Normal, component, F, ISZ(), libMethods, symbolTable, reporter)
+              val (rexp2, _, _) = GclResolver.collectSymbols(rexp, RewriteMode.Normal, component, F, indexingTypeFingerprints,
+                ISZ(), libMethods, symbolTable, reporter)
               if (rexp2.isEmpty) {
                 rexprs = rexprs + (toKey(i.exp) ~> rexp)
               } else {
@@ -1533,6 +1570,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
           val enumx: TypeInfo.Enum = TypeInfo.Enum(qualifiedName, elements, posOpt)
 
+          slangTypeToAadlType = slangTypeToAadlType + enumx.tpe ~> qualifiedTypeName
           globalTypeMap = globalTypeMap + (qualifiedTypeName ~> enumx)
 
           if (!globalNameMap.contains(qualifiedName)) {
@@ -1636,6 +1674,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                     ))))),
               attr = emptyAttr))
 
+          slangTypeToAadlType = slangTypeToAadlType + AST.Typed.Name(ids = qualifiedTypeName, args = ISZ()) ~> qualifiedTypeName
+          slangTypeToAadlType = slangTypeToAadlType + ta.tpe ~> qualifiedTypeName
           globalTypeMap = globalTypeMap + (qualifiedTypeName ~> ta)
 
 
@@ -1882,6 +1922,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             scope = scope,
             ast = ast)
 
+          slangTypeToAadlType = slangTypeToAadlType + ta.tpe ~> qualifiedTypeName
           globalTypeMap = globalTypeMap + (qualifiedTypeName ~> ta)
 
           val gclAnnexes = b.container.get.annexes.filter((a: Annex) => a.clause.isInstanceOf[GclSubclause]).map((a: Annex) => a.clause.asInstanceOf[GclSubclause])
@@ -2625,6 +2666,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         scope = adtScope,
         ast = adtAst)
 
+      slangTypeToAadlType = slangTypeToAadlType + typeInfoAdt.tpe ~> adtQualifiedName
       globalTypeMap = globalTypeMap + (adtQualifiedName ~> typeInfoAdt)
 
       // build companion object for data type def
@@ -2750,7 +2792,10 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           Some(GclAnnexClauseInfo(gclSubclause, gclSymbolTable))
         case _ => None()
       }
-      return (result, GclResolver.putIndexingTypeFingerprints(indexingTypeFingerprints, store))
+
+      val s1 = GclResolver.putIndexingTypeFingerprints(indexingTypeFingerprints, store)
+      val s2 = GclResolver.putSlangTypeToAadlType(slangTypeToAadlType, s1)
+      return (result, s2)
     }
   }
 
@@ -2798,7 +2843,9 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       }
     }
 
-    return (ret, GclResolver.putIndexingTypeFingerprints(indexingTypeFingerprints, store))
+    val s1 = GclResolver.putIndexingTypeFingerprints(indexingTypeFingerprints, store)
+    val s2 = GclResolver.putSlangTypeToAadlType(slangTypeToAadlType, s1)
+    return (ret, s2)
   }
 
 }

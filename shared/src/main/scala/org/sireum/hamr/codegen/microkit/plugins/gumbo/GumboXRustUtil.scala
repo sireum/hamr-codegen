@@ -2,7 +2,7 @@
 package org.sireum.hamr.codegen.microkit.plugins.gumbo
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.CommonUtil.TypeIdPath
+import org.sireum.hamr.codegen.common.CommonUtil.{Store, TypeIdPath}
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes}
 import org.sireum.hamr.codegen.microkit.plugins.types.{CRustTypeNameProvider, CRustTypeProvider}
@@ -15,16 +15,19 @@ import org.sireum.lang.{ast => SAST}
 
 object GumboXRustUtil {
 
-  def getAadlType(typ: SAST.Typed.Name, aadlTypes: AadlTypes): (AadlType, B) = {
-    var isOptional: B = F
-    val ids: ISZ[String] = typ match {
+  def getAadlType(typ: SAST.Typed.Name, aadlTypes: AadlTypes, slangTypesToAadlTypes: Map[SAST.Typed, TypeIdPath]): (AadlType, B) = {
+    typ match {
       case SAST.Typed.Name(SAST.Typed.optionName, ISZ(i: SAST.Typed.Name)) =>
-        isOptional = T
-        i.ids
-      case _ => typ.ids
+        val idPath = slangTypesToAadlTypes.get(i).get
+        return (aadlTypes.getTypeByPath(idPath), T)
+        //i.ids
+      case _ =>
+        val idPath = slangTypesToAadlTypes.get(typ).get
+        return (aadlTypes.getTypeByPath(idPath), F)
+        //typ.ids
     }
 
-    return (aadlTypes.getTypeByPath(ids), isOptional)
+    //return (aadlTypes.getTypeByPath(ids), isOptional)
   }
 
   @datatype class GGExpParamHolder(val params: Set[GGParam],
@@ -33,6 +36,7 @@ object GumboXRustUtil {
   @record class EE(context: AadlThread,
                    aadlTypes: AadlTypes,
                    stateVars: ISZ[GclStateVar],
+                   slangTypesToAadlTypes: Map[SAST.Typed, TypeIdPath],
                    crustTypeProvider: CRustTypeProvider) extends ir.MTransformer {
 
     var params: Set[GGParam] = Set.empty
@@ -41,7 +45,7 @@ object GumboXRustUtil {
       o match {
         case Exp.Select(Some(Exp.Ident(SAST.Id("api"))), id, attr) =>
           val typed = o.attr.typedOpt.get.asInstanceOf[SAST.Typed.Name]
-          val (typ, _) = getAadlType(typed, aadlTypes)
+          val (typ, _) = getAadlType(typed, aadlTypes, slangTypesToAadlTypes)
           val ports = context.getPorts().filter(p => p.identifier == id.value)
           assert(ports.size == 1)
           val param = GGPortParam(
@@ -54,6 +58,13 @@ object GumboXRustUtil {
         case _ =>
           return ir.MTransformer.PreResult(T, MNone[SAST.Exp]())
       }
+    }
+
+    def isStateVar(name: String, vars: ISZ[GclStateVar]): B = {
+      for (i <- 0 until vars.size if vars(i).name == name) {
+        return T
+      }
+      return F
     }
 
     def findStateVar(name: String, vars: ISZ[GclStateVar]): (Z, GclStateVar) = {
@@ -73,17 +84,20 @@ object GumboXRustUtil {
             case x => halt(s"Infeasible: ${i.id.value} had the following for its typed opt ${x}")
           }
 
-          val (typ, _) = getAadlType(typed, aadlTypes)
+          val (typ, _) = getAadlType(typed, aadlTypes, slangTypesToAadlTypes)
 
-          val (index, stateVar) = findStateVar(i.id.value, stateVars)
+          if (isStateVar(i.id.value, stateVars)) {
+            val (index, stateVar) = findStateVar(i.id.value, stateVars)
 
-          params = params +
-            GGStateVarParam(
-              stateVar = stateVar,
-              id = index,
-              isPreState = T,
-              aadlType = typ.classifier,
-              typeNameProvider = crustTypeProvider.getTypeNameProvider(typ))
+            params = params +
+              GGStateVarParam(
+                stateVar = stateVar,
+                id = index,
+                isPreState = T,
+                aadlType = typ.classifier,
+                typeNameProvider = crustTypeProvider.getTypeNameProvider(typ))
+          }
+
           SAST.Exp.Ident(id = SAST.Id(value = name, attr = o.attr), attr = i.attr)
         case _ => halt(s"Unexpected ${o.exp}")
       }
@@ -93,21 +107,24 @@ object GumboXRustUtil {
     override def pre_langastExpIdent(o: Exp.Ident): ir.MTransformer.PreResult[Exp] = {
       o.attr.typedOpt match {
         case Some(typed: SAST.Typed.Name) =>
-          val (typ, _) = getAadlType(typed, aadlTypes)
+          val (typ, _) = getAadlType(typed, aadlTypes, slangTypesToAadlTypes)
 
           o.resOpt match {
             case Some(e: SAST.ResolvedInfo.LocalVar) =>
               // must be a quantifier variable so nothing to do
             case Some(e: SAST.ResolvedInfo.Var) =>
-              val (index, stateVar) = findStateVar(o.id.value, stateVars)
 
-              params = params +
-                GGStateVarParam(
-                  stateVar = stateVar,
-                  id = index,
-                  isPreState = F,
-                  aadlType = typ.classifier,
-                  typeNameProvider = crustTypeProvider.getTypeNameProvider(typ))
+              if (isStateVar(o.id.value, stateVars)) {
+                val (index, stateVar) = findStateVar(o.id.value, stateVars)
+
+                params = params +
+                  GGStateVarParam(
+                    stateVar = stateVar,
+                    id = index,
+                    isPreState = F,
+                    aadlType = typ.classifier,
+                    typeNameProvider = crustTypeProvider.getTypeNameProvider(typ))
+              }
             case x =>
               halt(s"Ident $o resolved to $x")
           }
@@ -233,8 +250,10 @@ object GumboXRustUtil {
       ops.ISZOps(partition).sortWith((a,b) => a.name <= b.name)).flatMap(a => a)
   }
 
-  @pure def rewriteToExpX(exp: Exp, thread: AadlThread, types: AadlTypes, stateVars: ISZ[GclStateVar], crustTypeProvider: CRustTypeProvider): GGExpParamHolder = {
-    val e = EE(thread, types, stateVars, crustTypeProvider)
+  @pure def rewriteToExpX(exp: Exp, thread: AadlThread, types: AadlTypes, stateVars: ISZ[GclStateVar],
+                          slangTypesToAadlTypes: Map[SAST.Typed, TypeIdPath],
+                          crustTypeProvider: CRustTypeProvider): GGExpParamHolder = {
+    val e = EE(thread, types, stateVars, slangTypesToAadlTypes, crustTypeProvider)
     e.transform_langastExp(exp) match {
       case MSome(x) => return GGExpParamHolder(e.params, x)
       case _ => return GGExpParamHolder(e.params, exp)
