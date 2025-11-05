@@ -745,89 +745,92 @@ object GumboGen {
       for(t <- compute.gumboTables){
         // TODO match statement on t (Not doing it yet since we only have normal tables)
         //  normal table
+        if(t.normal.nonEmpty){
+          // get normal table
+          val nt: GclNormalTable = t.normal.get
+          // horizontal preds
+          val hps: ISZ[AST.Exp] = nt.horizontalPredicates
+          //vertical preds
+          val vps: ISZ[AST.Exp] = nt.verticalPredicates
+          // result rows
+          val rrs: ISZ[GclResultRow] = nt.resultRows
+          //
+          // where am in table traversal x is horizontal, y is vertical position.
+          var x,y: Z = 0
 
-        // get normal table
-        val nt: GclNormalTable = t.table
-        // horizontal preds
-        val hps: ISZ[AST.Exp] = nt.horizontalPredicates
-        //vertical preds
-        val vps: ISZ[AST.Exp] = nt.verticalPredicates
-        // result rows
-        val rrs: ISZ[GclResultRow] = nt.resultRows
-        //
-        // where am in table traversal x is horizontal, y is vertical position.
-        var x,y: Z = 0
+          //generalHolder :+ GclEnsuresHolder(nt.id,Some(st"Deterministic"),st"(${("(",vps,") |^ ")})) ^ (${("(",hps,") |^ ")}))")
 
-        //generalHolder :+ GclEnsuresHolder(nt.id,Some(st"Deterministic"),st"(${("(",vps,") |^ ")})) ^ (${("(",hps,") |^ ")}))")
-
-        // for each row (y position, vertical predicate (v), etc)
-        var deterministicST: ST = st""
-        for(ve <- vps){
-          // get in the form I need.
-          println(ve.posOpt)
-          println(ve.prettyST.render)
-
-          val v = gclSymbolTable.rexprs.get(toKey(ve)).get
-          // results on this row.
-          val row: ISZ[AST.Exp] = rrs(y).results
-          // for each column (x position, horizontal predicate (h), etc)
-          for(he <- hps){
+          // for each row (y position, vertical predicate (v), etc)
+          var deterministicST: ST = st""
+          for(ve <- vps){
             // get in the form I need.
-            val h = gclSymbolTable.rexprs.get(toKey(he)).get
-            // get the result at this position "x","y" (in the form I need)
-            val r = gclSymbolTable.rexprs.get(toKey(row(x))).get
-            // construct the ensures elem.
-            //  The general holder is where this *should* be placed, it is filtered and combined
-            //  with anyone
-            generalHolder = generalHolder :+
-              GclEnsuresHolder(nt.id,processDescriptor(Some(s"(${x},${y})"),"//   "),st"((${v}) & (${h})) -->: (${r})") //previously multiline, not needed.
-            // we are going to the next column.
-            x += 1
-          }
+            println(ve.posOpt)
+            println(ve.prettyST.render)
 
-          // go back to the first column.
-          x = 0
-          // we are going to the next row.
-          y += 1
-        }
-        var a: Z = 0
-        var b: Z = 0
-        for(ve1 <- vps){
-          val v1 = gclSymbolTable.rexprs.get(toKey(ve1)).get
-          for(ve2 <- vps){
-            val v2 = gclSymbolTable.rexprs.get(toKey(ve2)).get
-            if(b<a){
+            val v = gclSymbolTable.rexprs.get(toKey(ve)).get
+            // results on this row.
+            val row: ISZ[AST.Exp] = rrs(y).results
+            // for each column (x position, horizontal predicate (h), etc)
+            for(he <- hps){
+              // get in the form I need.
+              val h = gclSymbolTable.rexprs.get(toKey(he)).get
+              // get the result at this position "x","y" (in the form I need)
+              val r = gclSymbolTable.rexprs.get(toKey(row(x))).get
+              // construct the ensures elem.
+              //  The general holder is where this *should* be placed, it is filtered and combined
+              //  with anyone
+              val rv = GumboGen.StateVarInRewriter().wrapStateVarsInInput(v)
+              val rh = GumboGen.StateVarInRewriter().wrapStateVarsInInput(h)
+              generalHolder = generalHolder :+
+                GclEnsuresHolder(nt.id,processDescriptor(Some(s"(${x},${y})"),"//   "),st"((${rv}) & (${rh})) -->: (${r})") //previously multiline, not needed.
+              // we are going to the next column.
+              x += 1
+            }
+
+            // go back to the first column.
+            x = 0
+            // we are going to the next row.
+            y += 1
+          }
+          var a: Z = 0
+          var b: Z = 0
+          for(ve1 <- vps){
+            val v1 = gclSymbolTable.rexprs.get(toKey(ve1)).get
+            for(ve2 <- vps){
+              val v2 = gclSymbolTable.rexprs.get(toKey(ve2)).get
+              if(b<a){
                 deterministicST = st"${deterministicST}(${v1} |^ ${v2}) ^ "
-            }
-            b = b + 1
-          }
-          b = 0
-          a = a + 1
-        }
-        a = 0
-        b = 0
-        for(he1 <- hps){
-          val h1 = gclSymbolTable.rexprs.get(toKey(he1)).get
-          for(he2 <- hps){
-            val h2 = gclSymbolTable.rexprs.get(toKey(he2)).get
-            if(b<a){
-              if(a < hps.length - 1 & b < hps.length - 2) {
-                deterministicST = st"${deterministicST}(${h1} |^ ${h2}) ^ "
               }
-              else{
-                deterministicST = st"${deterministicST}(${h1} |^ ${h2})"
-              }
+              b = b + 1
             }
-            b = b + 1
+            b = 0
+            a = a + 1
           }
+          a = 0
           b = 0
-          a = a + 1
+          for(he1 <- hps){
+            val h1 = gclSymbolTable.rexprs.get(toKey(he1)).get
+            for(he2 <- hps){
+              val h2 = gclSymbolTable.rexprs.get(toKey(he2)).get
+              if(b<a){
+                if(a < hps.length - 1 & b < hps.length - 2) {
+                  deterministicST = st"${deterministicST}(${h1} |^ ${h2}) ^ "
+                }
+                else{
+                  deterministicST = st"${deterministicST}(${h1} |^ ${h2})"
+                }
+              }
+              b = b + 1
+            }
+            b = 0
+            a = a + 1
+          }
+          //if(a < vps.length - 1 & b < vps.length - 2){
+          generalHolder =
+            GclEnsuresHolder(nt.id,processDescriptor(Some(s"Deterministic Check"),"//   "),deterministicST) +:
+              generalHolder
+          //  TODO end of normal table
         }
-        //if(a < vps.length - 1 & b < vps.length - 2){
-        generalHolder =
-          GclEnsuresHolder(nt.id,processDescriptor(Some(s"Deterministic Check"),"//   "),deterministicST) +:
-            generalHolder
-        //  TODO end of normal table
         // TODO end of hypothetical match statement
       }
     }

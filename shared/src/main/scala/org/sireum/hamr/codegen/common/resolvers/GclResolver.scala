@@ -1375,99 +1375,229 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           for (table <- s.compute.get.gumboTables) {// for each table.
             //note, for now, only norm table; this is where I'd check when there are other possiblities.
             // If we see there is already a table with this id, report an error at the normal table.
+            if(table.normal.nonEmpty){
+              // CHECK 1 :: UNIQUE ID
+              val norm = table.normal.get
+              if(seenTableIds.contains(norm.id)) {
+                reporter.error(norm.posOpt, GclResolver.toolName, s"Duplicate spec name: ${norm.id}")
+              }
+              seenTableIds += norm.id // append this id to the ids we have seen.
 
-            // CHECK 1 :: UNIQUE ID
-            if(seenTableIds.contains(table.table.id)) {
-              reporter.error(table.table.posOpt, GclResolver.toolName, s"Duplicate spec name: ${table.table.id}")
-            }
-            seenTableIds += table.table.id // append this id to the ids we have seen.
-
-            //CHECK 2 :: ALL BOOLEAN PREDICATES (And conversion)
-            var hpreds: ISZ[Exp] = for(p <- table.table.horizontalPredicates) yield typeCheckBoolExp(
-              exp = p, context = context,
-              mode = TypeChecker.ModeContext.Spec,
-              component = Some(component),
-              params = ISZ(),
-              stateVars = s.state, specFuns = gclMethods,
-              symbolTable = symbolTable, aadlTypes = aadlTypes,
-              scope = scope, typeHierarchy = typeHierarchy, reporter = reporter
-            ) // Type checked.
-            var vpreds: ISZ[Exp] = for(p <- table.table.verticalPredicates) yield typeCheckBoolExp(
-              exp = p, context = context,
-              mode = TypeChecker.ModeContext.Spec,
-              component = Some(component),
-              params = ISZ(),
-              stateVars = s.state, specFuns = gclMethods,
-              symbolTable = symbolTable, aadlTypes = aadlTypes,
-              scope = scope, typeHierarchy = typeHierarchy, reporter = reporter
-            )
-            var rres: ISZ[ISZ[Exp]] =
-              for(row: GclResultRow <- table.table.resultRows) yield (
-                for(r:Exp <- row.results) yield typeCheckBoolExp(
-                  exp = r, context = context,
-                  mode = TypeChecker.ModeContext.Spec,
-                  component = Some(component),
-                  params = ISZ(),
-                  stateVars = s.state, specFuns = gclMethods,
-                  symbolTable = symbolTable, aadlTypes = aadlTypes,
-                  scope = scope, typeHierarchy = typeHierarchy, reporter = reporter
-                )
-                )
-
-            // SYMBOL-MAPPING
-            //    HORIZONTAL
-            var i: Z = 0
-            for(p <- hpreds) {
-              if(p.prettyST.render=="current_tempWstatus.value < lower_desired_temp.value"){
-                assert(true)
-              }
-              val (conp, _, apiRefs) = GclResolver.collectSymbols(p, RewriteMode.ApiGet, component, F, s.state, gclMethods, symbolTable, reporter)
-              if(conp.isEmpty){
-                rexprs = rexprs + toKey(table.table.horizontalPredicates(i)) ~> p
-              }
-              else {
-                rexprs = rexprs + toKey(table.table.horizontalPredicates(i)) ~> conp.get
-              }
-              apiReferences = apiReferences ++ apiRefs
-              i=i+1
-            }
-            //    VERTICAL
-            i = 0
-            for(p <- vpreds) {
-              if(p.prettyST.render=="current_tempWstatus.value < lower_desired_temp.value"){
-                assert(true)
-              }
-              val (conp, _, apiRefs) = GclResolver.collectSymbols(p, RewriteMode.ApiGet, component, F, s.state, gclMethods, symbolTable, reporter)
-              if(conp.isEmpty){
-                rexprs = rexprs + toKey(table.table.verticalPredicates(i)) ~> p
-              }
-              else {
-                rexprs = rexprs + toKey(table.table.verticalPredicates(i)) ~> conp.get
-              }
-              apiReferences = apiReferences ++ apiRefs
-              i=i+1
-            }
-            //    RESULTS
-            var ri: Z = 0
-            i = 0
-            for(row <- rres){
-              i = 0
-              for(r <- row){
-                if(r.prettyST.render=="current_tempWstatus.value < lower_desired_temp.value"){
-                  assert(true)
+              //CHECK 2 :: ALL BOOLEAN PREDICATES (And conversion)
+              var hpreds: ISZ[Exp] = for(p <- norm.horizontalPredicates) yield typeCheckBoolExp(
+                exp = p, context = context,
+                mode = TypeChecker.ModeContext.Spec,
+                component = Some(component),
+                params = ISZ(),
+                stateVars = s.state, specFuns = gclMethods,
+                symbolTable = symbolTable, aadlTypes = aadlTypes,
+                scope = scope, typeHierarchy = typeHierarchy, reporter = reporter
+              ) // Type checked.
+              var vpreds: ISZ[Exp] = for(p <- norm.verticalPredicates) yield typeCheckBoolExp(
+                exp = p, context = context,
+                mode = TypeChecker.ModeContext.Spec,
+                component = Some(component),
+                params = ISZ(),
+                stateVars = s.state, specFuns = gclMethods,
+                symbolTable = symbolTable, aadlTypes = aadlTypes,
+                scope = scope, typeHierarchy = typeHierarchy, reporter = reporter
+              )
+              var rres: ISZ[ISZ[Exp]] =
+                for(row: GclResultRow <- norm.resultRows) yield (
+                  for(r:Exp <- row.results) yield typeCheckBoolExp(
+                    exp = r, context = context,
+                    mode = TypeChecker.ModeContext.Spec,
+                    component = Some(component),
+                    params = ISZ(),
+                    stateVars = s.state, specFuns = gclMethods,
+                    symbolTable = symbolTable, aadlTypes = aadlTypes,
+                    scope = scope, typeHierarchy = typeHierarchy, reporter = reporter
+                  )
+                  )
+              //CHECK 3 :: ALL RESULT ROWS ARE THE SAME LENGTH AS THE HORIZONTAL PREDICATE LIST
+              // note: The height of the results block is enforced on the grammar level.
+              val tableWidth: Z = norm.horizontalPredicates.length
+              for(row: GclResultRow <- norm.resultRows) {
+                if(row.results.length != tableWidth){
+                  reporter.error(row.posOpt,GclResolver.toolName,s"Each Result Row Must be the same length as the list of horizontal predicates.")
                 }
-                val (conr,_,apiRefs) = GclResolver.collectSymbols(r,RewriteMode.ApiGet,component,F,s.state,gclMethods,symbolTable, reporter)
-                if(conr.isEmpty){
-                  rexprs = rexprs + toKey(table.table.resultRows(ri).results(i)) ~> r
+              }
+
+              // SYMBOL-MAPPING
+              //    HORIZONTAL
+              var i: Z = 0
+              for(p <- hpreds) {
+                val (conp, _, apiRefs) = GclResolver.collectSymbols(p, RewriteMode.ApiGet, component, F, s.state, gclMethods, symbolTable, reporter)
+                if(conp.isEmpty){
+                  rexprs = rexprs + toKey(norm.horizontalPredicates(i)) ~> p
                 }
-                else{
-                  rexprs = rexprs + toKey(table.table.resultRows(ri).results(i)) ~> conr.get
+                else {
+                  rexprs = rexprs + toKey(norm.horizontalPredicates(i)) ~> conp.get
                 }
                 apiReferences = apiReferences ++ apiRefs
                 i=i+1
               }
-              ri = ri + 1
+              //    VERTICAL
+              i = 0
+              for(p <- vpreds) {
+                val (conp, _, apiRefs) = GclResolver.collectSymbols(p, RewriteMode.ApiGet, component, F, s.state, gclMethods, symbolTable, reporter)
+                if(conp.isEmpty){
+                  rexprs = rexprs + toKey(norm.verticalPredicates(i)) ~> p
+                }
+                else {
+                  rexprs = rexprs + toKey(norm.verticalPredicates(i)) ~> conp.get
+                }
+                apiReferences = apiReferences ++ apiRefs
+                i=i+1
+              }
+              //    RESULTS
+              var ri: Z = 0
+              i = 0
+              for(row <- rres){
+                i = 0
+                for(r <- row){
+                  if(r.prettyST.render=="current_tempWstatus.value < lower_desired_temp.value"){
+                    assert(true)
+                  }
+                  val (conr,_,apiRefs) = GclResolver.collectSymbols(r,RewriteMode.ApiGet,component,F,s.state,gclMethods,symbolTable, reporter)
+                  if(conr.isEmpty){
+                    rexprs = rexprs + toKey(norm.resultRows(ri).results(i)) ~> r
+                  }
+                  else{
+                    rexprs = rexprs + toKey(norm.resultRows(ri).results(i)) ~> conr.get
+                  }
+                  apiReferences = apiReferences ++ apiRefs
+                  i=i+1
+                }
+                ri = ri + 1
+              }
             }
+            else if (table.nested.nonEmpty){ // N E S T E D - T A B L E S
+              // CHECK 1 :: UNIQUE ID
+              val nest = table.nested.get
+              if(seenTableIds.contains(nest.id)) {
+                reporter.error(nest.posOpt, GclResolver.toolName, s"Duplicate spec name: ${nest.id}")
+              }
+              seenTableIds += nest.id // append this id to the ids we have seen.
+              //CHECK 2 :: ALL BOOLEAN PREDICATES (And conversion)
+              var hpreds: ISZ[Exp] = for(p <- nest.horizontalPredicates) yield typeCheckBoolExp(
+                exp = p, context = context,
+                mode = TypeChecker.ModeContext.Spec,
+                component = Some(component),
+                params = ISZ(),
+                stateVars = s.state, specFuns = gclMethods,
+                symbolTable = symbolTable, aadlTypes = aadlTypes,
+                scope = scope, typeHierarchy = typeHierarchy, reporter = reporter
+              ) // Type checked.
+
+              var vprs: ISZ[ISZ[Exp]] =
+                for(row: GclBlankRow <- nest.verticalPredicateRows) yield (
+                  for(r:Exp <- row.results) yield typeCheckBoolExp(
+                    exp = r, context = context,
+                    mode = TypeChecker.ModeContext.Spec,
+                    component = Some(component),
+                    params = ISZ(),
+                    stateVars = s.state, specFuns = gclMethods,
+                    symbolTable = symbolTable, aadlTypes = aadlTypes,
+                    scope = scope, typeHierarchy = typeHierarchy, reporter = reporter
+                  )
+                  )
+              var rres: ISZ[ISZ[Exp]] =
+                for(row: GclResultRow <- nest.resultRows) yield (
+                  for(r:Exp <- row.results) yield typeCheckBoolExp(
+                    exp = r, context = context,
+                    mode = TypeChecker.ModeContext.Spec,
+                    component = Some(component),
+                    params = ISZ(),
+                    stateVars = s.state, specFuns = gclMethods,
+                    symbolTable = symbolTable, aadlTypes = aadlTypes,
+                    scope = scope, typeHierarchy = typeHierarchy, reporter = reporter
+                  )
+                  )
+              // CHECK 3 :: ALL RESULT ROWS ARE THE SAME LENGTH AS THE HORIZONTAL PREDICATE LIST
+              // note: The height of the results block is enforced on the grammar level.
+              val tableWidth: Z = nest.horizontalPredicates.length
+              for(row: GclResultRow <- nest.resultRows) {
+                if(row.results.length != tableWidth){
+                  reporter.error(row.posOpt,GclResolver.toolName,s"Each Result Row Must be the same length as the list of horizontal predicates.")
+                }
+              }
+              val first: B = T
+              var targetLength: Z = 0
+              var currentLength: Z = 0
+              for(row: GclBlankRow <- nest.verticalPredicateRows) {
+                if(first){
+                  if(row.blanks.length > 0){
+                    reporter.error(row.posOpt,GclResolver.toolName,s"First Vertical Predicate row may not contain blanks.")
+                  }
+                  else{
+                    targetLength = row.results.length
+                    currentLength = targetLength
+                  }
+                }
+                else{
+                  if((row.blanks.length + row.results.length) != targetLength){
+                    reporter.error(row.posOpt,GclResolver.toolName,s"Each Vertical Predicate row must be the size same.")
+                  }
+                }
+              }
+              // SYMBOL-MAPPING
+              //    HORIZONTAL
+              var i: Z = 0
+              for(p <- hpreds) {
+                val (conp, _, apiRefs) = GclResolver.collectSymbols(p, RewriteMode.ApiGet, component, F, s.state, gclMethods, symbolTable, reporter)
+                if(conp.isEmpty){
+                  rexprs = rexprs + toKey(nest.horizontalPredicates(i)) ~> p
+                }
+                else {
+                  rexprs = rexprs + toKey(nest.horizontalPredicates(i)) ~> conp.get
+                }
+                apiReferences = apiReferences ++ apiRefs
+                i=i+1
+              }
+              i = 0
+              //    RESULTS
+              var ri: Z = 0
+              i = 0
+              for(row <- rres){
+                i = 0
+                for(r <- row){
+                  if(r.prettyST.render=="current_tempWstatus.value < lower_desired_temp.value"){
+                    assert(true)
+                  }
+                  val (conr,_,apiRefs) = GclResolver.collectSymbols(r,RewriteMode.ApiGet,component,F,s.state,gclMethods,symbolTable, reporter)
+                  if(conr.isEmpty){
+                    rexprs = rexprs + toKey(nest.resultRows(ri).results(i)) ~> r
+                  }
+                  else{
+                    rexprs = rexprs + toKey(nest.resultRows(ri).results(i)) ~> conr.get
+                  }
+                  apiReferences = apiReferences ++ apiRefs
+                  i=i+1
+                }
+                ri = ri + 1
+              }
+              //    VERTICAL
+              ri = 0
+              i = 0
+              for(row <- vprs){
+                i = 0
+                for(r <- row){
+                  val (conr,_,apiRefs) = GclResolver.collectSymbols(r,RewriteMode.ApiGet,component,F,s.state,gclMethods,symbolTable, reporter)
+                  if(conr.isEmpty){
+                    rexprs = rexprs + toKey(nest.resultRows(ri).results(i)) ~> r
+                  }
+                  else{
+                    rexprs = rexprs + toKey(nest.resultRows(ri).results(i)) ~> conr.get
+                  }
+                  apiReferences = apiReferences ++ apiRefs
+                  i=i+1
+                }
+                ri = ri + 1
+              }
+
+            }
+
           }
           //SIERRA END
         }
