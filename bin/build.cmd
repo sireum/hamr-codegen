@@ -62,7 +62,7 @@ val sireumHome: Os.Path = {
   }
 }
 val sireum: Os.Path = sireumHome / "bin" / (if (Os.isWin) "sireum.bat" else "sireum")
-val appDir: Os.Path = sireumHome / "bin" / (if (Os.isMac) "mac" else if (Os.isWin) "win" else "linux")
+val appDir: Os.Path = home / "bin" / (if (Os.isMac) "mac" else if (Os.isWin) "win" else "linux")
 
 val proyekName: String = "sireum-proyek"
 val project: Os.Path = homeBin / "project-standalone.cmd"
