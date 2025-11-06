@@ -653,32 +653,6 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
     return T
   }
 
-  def globalImports(symbolTable: SymbolTable): ISZ[AST.Stmt.Import] = {
-
-    val emptyAttr = AST.Attr(None())
-
-    val sireumImporters: ISZ[AST.Stmt.Import.Importer] = {
-      val keys = GclUtil.interpolatorLookup.keys.map((m: String) => ops.StringOps(m).firstToUpper)
-      keys.map((m: String) =>
-        AST.Stmt.Import.Importer(
-          name = AST.Name(
-            ids = ISZ[AST.Id](AST.Id("org", emptyAttr), AST.Id("sireum", emptyAttr), AST.Id(m, emptyAttr)),
-            attr = emptyAttr),
-          selectorOpt = Some(AST.Stmt.Import.WildcardSelector())
-        )
-      ) :+ AST.Stmt.Import.Importer(
-        name = AST.Name(
-          ids = ISZ[AST.Id](AST.Id("org", emptyAttr), AST.Id("sireum", emptyAttr)),
-          attr = emptyAttr),
-        selectorOpt = Some(AST.Stmt.Import.WildcardSelector())
-      )
-    }
-
-    return (
-      arrayIndexInterpolateImports ++
-        (for (m <- sireumImporters) yield AST.Stmt.Import(importers = ISZ(m), attr = emptyAttr)))
-  }
-
   def fetchPort(name: Name, context: AadlComponent): Option[AadlPort] = {
     val n = CommonUtil.getName(name)
     for (p <- context.getPorts() if p.identifier == n) {
@@ -1460,6 +1434,43 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
   }
 
   def buildTypeMap(gclLibs: ISZ[GclLib], aadlTypes: AadlTypes, symbolTable: SymbolTable, reporter: Reporter): Unit = {
+
+    def globalImports(packageName: ISZ[String]): ISZ[AST.Stmt.Import] = {
+
+      val emptyAttr = AST.Attr(None())
+
+      val libImport: ISZ[AST.Stmt.Import.Importer] = {
+        for(l <- gclLibs.filter(f => f.containingPackage.name == packageName)) yield 
+          AST.Stmt.Import.Importer(
+            name = AST.Name(
+              ids = (for(n <- l.containingPackage.name) yield AST.Id(n, emptyAttr)) :+ AST.Id("GUMBO__Library", emptyAttr), attr = emptyAttr),
+            selectorOpt = Some(AST.Stmt.Import.WildcardSelector()))
+      }
+
+      assert (libImport.size <= 1, libImport.size.string)
+
+      val sireumImporters: ISZ[AST.Stmt.Import.Importer] = {
+        val keys = GclUtil.interpolatorLookup.keys.map((m: String) => ops.StringOps(m).firstToUpper)
+        keys.map((m: String) =>
+          AST.Stmt.Import.Importer(
+            name = AST.Name(
+              ids = ISZ[AST.Id](AST.Id("org", emptyAttr), AST.Id("sireum", emptyAttr), AST.Id(m, emptyAttr)),
+              attr = emptyAttr),
+            selectorOpt = Some(AST.Stmt.Import.WildcardSelector())
+          )
+        ) :+ AST.Stmt.Import.Importer(
+          name = AST.Name(
+            ids = ISZ[AST.Id](AST.Id("org", emptyAttr), AST.Id("sireum", emptyAttr)),
+            attr = emptyAttr),
+          selectorOpt = Some(AST.Stmt.Import.WildcardSelector())
+        )
+      }
+
+      return (
+        arrayIndexInterpolateImports ++
+          (for (m <- libImport ++ sireumImporters) yield AST.Stmt.Import(importers = ISZ(m), attr = emptyAttr)))
+    }
+
     if (builtTypeInfo) {
       return
     }
@@ -1507,41 +1518,42 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       )
     }
 
-    def buildTypeInfo(aadlType: AadlType): TypeInfo = {
-      val TODO_TYPE: TypeInfo.Adt = {
-        val adtAst: AST.Stmt.Adt =
-          AST.Stmt.Adt(
-            isRoot = F,
-            isDatatype = T,
-            isUnclonable = F,
-            id = AST.Id("TODO", AST.Attr(None())),
-            typeParams = ISZ(),
-            params = ISZ(),
-            parents = ISZ(),
-            stmts = ISZ(),
-            attr = AST.Attr(None()))
+    @pure def TODO_TYPE(t: AadlType): TypeInfo.Adt = {
+      val adtAst: AST.Stmt.Adt =
+        AST.Stmt.Adt(
+          isRoot = F,
+          isDatatype = T,
+          isUnclonable = F,
+          id = AST.Id("TODO", AST.Attr(None())),
+          typeParams = ISZ(),
+          params = ISZ(),
+          parents = ISZ(),
+          stmts = ISZ(),
+          attr = AST.Attr(None()))
 
-        TypeInfo.Adt(
-          owner = ISZ("TODO"),
-          outlined = F,
-          contractOutlined = F,
-          typeChecked = F,
-          tpe = AST.Typed.Name(ISZ(s"TODO_${aadlType.name}"), ISZ()),
-          constructorTypeOpt = None(),
-          constructorResOpt = None(),
-          extractorTypeMap = Map.empty,
-          extractorResOpt = None(),
-          ancestors = ISZ(),
-          specVars = HashSMap.empty,
-          vars = HashSMap.empty,
-          specMethods = HashSMap.empty,
-          methods = HashSMap.empty,
-          refinements = HashSMap.empty,
-          invariants = HashSMap.empty,
-          dataRefinements = ISZ(),
-          scope = scope(ISZ("TODO"), globalImports(symbolTable), ISZ("TODO")),
-          ast = adtAst)
-      }
+      return TypeInfo.Adt(
+        owner = ISZ("TODO"),
+        outlined = F,
+        contractOutlined = F,
+        typeChecked = F,
+        tpe = AST.Typed.Name(ISZ(s"TODO_${t.name}"), ISZ()),
+        constructorTypeOpt = None(),
+        constructorResOpt = None(),
+        extractorTypeMap = Map.empty,
+        extractorResOpt = None(),
+        ancestors = ISZ(),
+        specVars = HashSMap.empty,
+        vars = HashSMap.empty,
+        specMethods = HashSMap.empty,
+        methods = HashSMap.empty,
+        refinements = HashSMap.empty,
+        invariants = HashSMap.empty,
+        dataRefinements = ISZ(),
+        scope = scope(ISZ("TODO"), globalImports(ISZ("TODO")), ISZ("TODO", s"TODO_${t.name}")),
+        ast = adtAst)
+    }
+
+    def buildTypeInfo(aadlType: AadlType): TypeInfo = {
 
       val qualifiedName = aadlType.classifier
 
@@ -1626,7 +1638,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
           val baseTypeFQN: ISZ[String] = GclResolverUtil.getSlangName(a.baseType, reporter)
 
-          val adtScope = scope(packageName, globalImports(symbolTable), packageName)
+          val adtScope = scope(packageName, globalImports(packageName), qualifiedTypeName)
 
           modelContainsBoundArrays = modelContainsBoundArrays || a.dimensions.nonEmpty
 
@@ -1885,7 +1897,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
           val imports: ISZ[AST.Stmt.Import] = ISZ()
 
-          val scope: Scope.Global = Scope.Global(packageName, imports, packageName)
+          val scope: Scope.Global = Scope.Global(packageName, imports, qualifiedTypeName)
 
           val slangName = GclResolverUtil.getSlangName(b, reporter)
 
@@ -1962,15 +1974,15 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             refinements = HashSMap.empty,
             invariants = HashSMap.empty,
             dataRefinements = ISZ(),
-            scope = scope(ISZ("art"), globalImports(symbolTable), ISZ("art")),
+            scope = scope(ISZ("art"), globalImports(ISZ("art")), ISZ("art", "Empty")),
             ast = adtAst)
 
           globalTypeMap = globalTypeMap + (ISZ("art", "Empty") ~> typeInfoAdt)
 
           return typeInfoAdt
 
-        case b: BitType => return TODO_TYPE
-        case x => return TODO_TYPE
+        case b: BitType => return TODO_TYPE(b)
+        case x => return TODO_TYPE(x)
       }
     }
 
@@ -2000,7 +2012,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         case _ =>
       }
 
-      val adtScope = scope(packageName, globalImports(symbolTable), packageName)
+      val adtScope = scope(packageName, globalImports(packageName), adtQualifiedName)
 
       for (gclMethod <- g.methods) {
         val fqMethodName = (adtQualifiedName :+ gclMethod.method.sig.id.value)
@@ -2181,7 +2193,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       buildPackageInfo(threadsOwner)
 
       // enclosingName is the same as the packageName
-      val threadsScope = scope(threadsOwner, globalImports(symbolTable), threadsOwner)
+      val threadsScope = scope(threadsOwner, globalImports(threadsOwner), threadsName)
 
       val gclAnnexes = component.annexes.filter((a: Annex) => a.clause.isInstanceOf[GclSubclause]).map((a: Annex) => a.clause.asInstanceOf[GclSubclause])
 
@@ -2226,7 +2238,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           isInObject = T,
           scope = scope(
             packageName = threadsPackageName,
-            imports = globalImports(symbolTable),
+            imports = globalImports(threadsPackageName),
             enclosingName = threadsName),
           ast = AST.Stmt.Var(
             isSpec = F,
@@ -2459,7 +2471,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       buildPackageInfo(packageName)
 
       // enclosingName is the same as the packageName
-      val adtScope = scope(packageName, globalImports(symbolTable), packageName)
+      val adtScope = scope(packageName, globalImports(packageName), packageName)
 
       var paramVars = HashSMap.empty[String, Info.Var]
       var constructorParamVars = ISZ[String]()
@@ -2765,12 +2777,17 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               globalNameMap.get(qualifiedName) match {
                 case Some(o: Info.Object) =>
                   val packageName = ops.ISZOps(o.name).dropRight(1)
+
+                  /*
                   val global = Scope.Global(
                     packageName = packageName,
                     imports = globalImports(symbolTable),
                     enclosingName = o.name
                   )
-                  Scope.Local.create(HashMap.empty, global)
+                  */
+
+                  //Scope.Local.create(HashMap.empty, global)
+                  Scope.Local.create(HashMap.empty, o.scope)
 
                 case _ =>
                   reporter.error(None(), toolName, s"Could not resolve name for GCL Subclause: ${qualifiedName}")
@@ -2813,12 +2830,15 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           val qualifiedName = gclLib.containingPackage.name :+ GUMBO__Library
           globalNameMap.get(qualifiedName) match {
             case Some(o: Info.Object) =>
+              /*
               val global = Scope.Global(
                 packageName = qualifiedName,
                 imports = globalImports(symbolTable),
                 enclosingName = o.name
               )
-              val localScope = Scope.Local.create(HashMap.empty, global)
+              */
+              //val localScope = Scope.Local.create(HashMap.empty, global)
+              val localScope = Scope.Local.create(HashMap.empty, o.scope)
 
               val typeHierarchy: TypeHierarchy = TypeHierarchy(
                 nameMap = globalNameMap,
