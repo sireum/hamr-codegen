@@ -129,6 +129,8 @@ object SlangExpUtil {
               o.owner match {
                 case ISZ("org", "sireum", "conversions") =>
                   "NA"
+                case x if o.id == "GUMBO__Library" =>
+                  halt(s"Need to handle calls to GUMBO library annex functions: ${exp.prettyST.render}")
                 case x =>
                   halt(s"Need to handle ${exp.prettyST.render}")
               }

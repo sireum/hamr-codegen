@@ -120,6 +120,11 @@ object MicrokitLinterPlugin {
         }
       }
     }
+
+    if (symbolTable.annexLibInfos.filter(p => p.isInstanceOf[GclAnnexLibInfo]).nonEmpty) {
+      reporter.error(None(), MicrokitCodegen.toolName, "GUMBO Library Annexes are not yet supported for Microkit/Verus")
+    }
+
     return (localStore, !reporter.hasError)
   }
 
