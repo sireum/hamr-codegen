@@ -22,7 +22,8 @@ object MSDContainers {
     }
   }
 
-  @datatype class domain_schedule(val entries: ISZ[ScheduleEntry],
+  @datatype class domain_schedule(val href: String,
+                                  val entries: ISZ[ScheduleEntry],
                                   val pos: Position) extends PosElement
 
   @datatype class ScheduleEntry(val name: String,

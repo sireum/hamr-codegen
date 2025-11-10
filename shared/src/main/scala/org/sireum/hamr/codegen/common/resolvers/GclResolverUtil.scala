@@ -50,13 +50,89 @@ object GclResolverUtil {
     }
   }
 
-  val baseTypeConverters: ISZ[String] = ISZ(
-    "toU16"
-    // TODO: fill in rest
-  )
+  val baseTypeConvertersMap: Map[String, ISZ[String]] = {
+    @strictpure def s(dest: String): ISZ[String] =
+      ISZ(s"to$dest")
 
-  @pure def isBaseTypeConverter(s: String): B = {
-    return ops.ISZOps(baseTypeConverters).contains(s)
+    @strictpure def m(dest: String): ISZ[String] =
+      for (i <- ISZ[Z](8, 16, 32, 64)) yield s"to$dest$i"
+
+    @pure def p(includeR: B): ISZ[String] = {
+      var ret: ISZ[String] = ISZ()
+      ret = ret ++ s("B")
+
+      ret = ret ++ s("Z")
+
+      //ret = ret ++ s("N")
+      //ret = ret ++ m("N")
+
+      ret = ret ++ m("S")
+
+      ret = ret ++ m("U")
+
+      if (includeR) {
+        ret = ret ++ s("R")
+      }
+      return ret
+    }
+
+    var ret: Map[String, ISZ[String]] = Map.empty
+
+    @pure def add(origin: String, dests: ISZ[String]): Unit = {
+      ret = ret + (origin ~> (ret.getOrElse(origin, ISZ()) ++ dests))
+    }
+
+    add("B", p(T))
+    add("B", s("F32"))
+    add("B", s("F64"))
+
+    add("C", s("U32"))
+
+    add("Z", p(T))
+
+    /*
+    add("N", p(T))
+    add("N8", p(T))
+    add("N16", p(T))
+    add("N32", p(T))
+    add("N64", p(T))
+    */
+
+    add("S8", p(F))
+    add("S16", p(F))
+    add("S32", p(F))
+    add("S64", p(F))
+    add("U8", p(F))
+    add("U16", p(F))
+
+    add("U32", p(F))
+    add("U32", s("F32"))
+    add("U32", s("C"))
+
+    add("U64", p(F))
+    add("U64", s("F64"))
+
+    add("F32", s("B"))
+    add("F32", s("F32"))
+    add("F32", s("F64"))
+    add("F32", s("R"))
+
+    add("F64", s("B"))
+    add("F64", s("F64"))
+    add("F64", s("R"))
+
+    add("R", s("B"))
+    add("R", s("Z"))
+    //add("R", s("N"))
+    add("R", s("R"))
+
+    ret
+  }
+
+
+  @pure def isBaseTypeConverter(baseType: BaseType, s: String, reporter: Reporter): B = {
+    val slangName = getSlangName(baseType, reporter)
+    return ops.ISZOps(baseTypeConvertersMap.get(slangName(slangName.lastIndex)).get).contains(s)
   }
 }
 
@@ -74,6 +150,8 @@ object GclResolverUtil {
   val emptyRAttr: AST.ResolvedAttr = AST.ResolvedAttr(None(), None(), None())
 
   var quantifierParams: ISZ[Exp.Fun.Param] = ISZ()
+
+  val reporter: Reporter = Reporter.create
 
   def popType: AadlType = {
     val ret: AadlType = currType.get
@@ -215,20 +293,21 @@ object GclResolverUtil {
         assert(o.id.value == "size")
         currType = None()
         return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(o(receiverOpt = receiver.getOrElse(o.receiverOpt))))
-      case Some(b: BaseType) if GclResolverUtil.isBaseTypeConverter(o.id.value) =>
-        val fromType = GclResolverUtil.getSlangName(b, Reporter.create)
+
+      case Some(b: BaseType) if GclResolverUtil.isBaseTypeConverter(b, o.id.value, reporter) =>
+        val fromType: ISZ[String] = GclResolverUtil.getSlangName(b, Reporter.create)
 
         // e.g. u8"0".toU16 --> conversions.U8.toU16(u8"0")
         val invoke = AST.Exp.Invoke(
           receiverOpt = Some(
             Exp.Select(
-              receiverOpt = Some(Exp.Select(receiverOpt = None(), id = AST.Id("conversions", emptyAttr), targs = ISZ(), attr = emptyRAttr)),
-              id = AST.Id(fromType(fromType.lastIndex), emptyAttr), targs = ISZ(), attr = emptyRAttr)
+              receiverOpt = Some(Exp.Select(receiverOpt = None(), id = AST.Id("conversions", o.id.attr), targs = ISZ(), attr = o.attr)),
+              id = AST.Id(fromType(fromType.lastIndex), o.id.attr), targs = ISZ(), attr = o.attr)
           ),
           ident = Exp.Ident(id = o.id, attr = o.attr),
           targs = ISZ(),
           args = ISZ(receiver.getOrElse(o.receiverOpt).get),
-          attr = emptyRAttr)
+          attr = o.attr)
 
         currType = None()
 

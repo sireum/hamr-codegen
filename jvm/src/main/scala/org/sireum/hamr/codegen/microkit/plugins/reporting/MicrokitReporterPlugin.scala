@@ -103,7 +103,7 @@ import org.sireum.message.{Level, Position, Reporter}
     val systemDescription = sel4OutputDir / "microkit.system"
     assert(systemDescription.exists, systemDescription.value)
 
-    val msdOpt = MSDParser.parse(systemDescription, sel4OutputDir)
+    val msdOpt = MSDParser.parse(systemDescription, sel4OutputDir, reporter)
 
     if (msdOpt.isEmpty) {
       println(s"Was not able to parse $systemDescription. No report generated")

@@ -24,6 +24,7 @@ object MicrokitCodegen {
   val toolName: String = "Mircokit Codegen"
 
   val microkitSystemXmlFilename: String = "microkit.system"
+  val microkitScheduleXmlFilename: String = "microkit.schedule.xml"
   val systemMakeFilename: String = "system.mk"
 
   val pacerName: String = "pacer"
@@ -713,13 +714,16 @@ object MicrokitCodegen {
       memoryRegions = memoryRegions,
       channels = xmlChannels)
 
-    val xmlPath = s"${options.sel4OutputDir.get}/${MicrokitCodegen.microkitSystemXmlFilename}"
+    val sdXmlPath = s"${options.sel4OutputDir.get}/${MicrokitCodegen.microkitSystemXmlFilename}"
     resources = resources :+ ResourceUtil.createResourceWithMarkers(
-      path = xmlPath,
+      path = sdXmlPath,
       content = sd.prettyST,
       markers = markers ++ sd.getMarkers,
       invertMarkers = T,
       overwrite = F)
+
+    val sdScheduleXmlPath = s"${options.sel4OutputDir.get}/${MicrokitCodegen.microkitScheduleXmlFilename}"
+    resources = resources :+ ResourceUtil.createResource(sdScheduleXmlPath, sd.scheduleText, F)
 
     val sysDot = sd.toDot
     val dotPath = s"${options.sel4OutputDir.get}/microkit.dot"

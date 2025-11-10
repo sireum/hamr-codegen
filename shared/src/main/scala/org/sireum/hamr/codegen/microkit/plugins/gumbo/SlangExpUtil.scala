@@ -73,13 +73,19 @@ object SlangExpUtil {
                          store: Store,
                          reporter: Reporter): ST = {
 
-    var optCastType: Option[TypeIdPath] = None()
-    @pure def pushCast(t: TypeIdPath): Unit = {
+    var optCastType: Option[SAST.Typed.Name] = None()
+    @pure def pushCast(t: SAST.Typed.Name): Unit = {
       if (optCastType.isEmpty) {
         optCastType = Some(t)
       } else {
-        assert(optCastType.get == t)
+        //assert(optCastType.get == t, s"Wanted to push $t but stack contained ${optCastType.get}")
       }
+    }
+
+    @pure def popCastType(): SAST.Typed.Name = {
+      val v = optCastType.get
+      optCastType = None()
+      return v
     }
 
     @pure def nestedRewriteExp(d: Exp, sep: Option[String]): ST = {
@@ -174,15 +180,21 @@ object SlangExpUtil {
 
                 // unit type conversion (e.g. conversions.U8.toU16(v))
 
-                //val fromType = getUnitConversionFromType(exp)
+
                 val toType: SAST.Typed.Name = getUnitConversionToType(exp).get
-                val aadlType = MicrokitTypeUtil.getAadlTypeFromSlangTypeH(toType, aadlTypes)
-                val np = tp.getTypeNameProvider(aadlType)
 
-                pushCast(np.qualifiedRustNameS)
+                if (toType.ids == ISZ("org", "sireum", "Z")) {
+                  reporter.error(exp.posOpt, MicrokitCodegen.toolName, "Unbounded integer string interpolates are not supported for Microkit")
+                  return st"INVALID"
+                } else {
+                  val aadlType = MicrokitTypeUtil.getAadlTypeFromSlangTypeH(toType, aadlTypes)
 
-                return st"((${args(0)}) as ${(np.qualifiedRustNameS, "::")})"
+                  val np = tp.getTypeNameProvider(aadlType)
 
+                  pushCast(toType)
+
+                  return st"((${args(0)}) as ${(np.qualifiedRustNameS, "::")})"
+                }
               } else {
 
                 val receiverOpt: Option[Exp] =
@@ -298,11 +310,11 @@ object SlangExpUtil {
             return st"""($lo..${if (exp.hiExact) "=" else ""}$hi).${if(exp.isForall) "all" else "any"}(|${param}| $body)"""
           }
 
+        case exp: Exp.LitC => return exp.prettyST
 
         case exp: Exp.InvokeNamed => halt(s"$exp : ${exp.posOpt}")
         case exp: Exp.Old => halt(s"$exp : ${exp.posOpt}")
         case exp: Exp.Result => halt(s"$exp : ${exp.posOpt}")
-        case exp: Exp.LitC => halt(s"$exp : ${exp.posOpt}")
         case exp: Exp.LitF32 => halt(s"$exp : ${exp.posOpt}")
         case exp: Exp.LitF64 => halt(s"$exp : ${exp.posOpt}")
         case exp: Exp.LitR => halt(s"$exp : ${exp.posOpt}")
@@ -620,11 +632,35 @@ object SlangExpUtil {
 
     val ret = nestedRewriteExp(rexp, None())
 
-    if (inVerus && optCastType.nonEmpty) {
-      return st"($ret) as ${(optCastType.get, "::")}"
+    (inVerus, optCastType, rexp.typedOpt) match {
+      case (T, Some(t), Some(s: SAST.Typed.Name)) if t == s =>
+        popCastType()
+        /*
+         * e.g. Verus will type ((byte0) as u16) * 256u16 + ((byte1) as u16) as int rather than u16
+         *      when in spec mode.  In exec world, the outer cast is not needed
+         *
+         *    pub open spec fn two_bytes_to_u16(byte0: u8, byte1: u8) -> u16 {
+         *      (((byte0) as u16) * 256u16 + ((byte1) as u16)) as u16
+         *    }
+         */
+        val aadlType = MicrokitTypeUtil.getAadlTypeFromSlangTypeH(t, aadlTypes)
+        val np = tp.getTypeNameProvider(aadlType)
+
+        return st"($ret) as ${(np.qualifiedRustNameS, "::")}"
+
+      case _ =>
+        return ret
+    }
+
+    /*
+    if (inVerus && optCastType.nonEmpty && expectedReturnType.nonEmpty) {
+      val castType = popCastType()
+      val eType = expectedReturnType.get.
+        return st"($ret) as ${(popCastType(), "::")}"
     } else {
       return ret
     }
+    */
   }
 
   @pure def isUnitConversionOperation(e: Exp.Invoke): B = {

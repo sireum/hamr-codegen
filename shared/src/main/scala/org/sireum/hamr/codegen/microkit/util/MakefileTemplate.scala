@@ -121,6 +121,7 @@ object MakefileTemplate {
           |LIBS := --start-group -lmicrokit -Tmicrokit.ld --end-group
           |
           |SYSTEM_FILE := $$(TOP_DIR)/${MicrokitCodegen.microkitSystemXmlFilename}
+          |SCHEDULE_FILE := $$(TOP_DIR)/${MicrokitCodegen.microkitScheduleXmlFilename}
           |
           |IMAGES := ${(elfFiles, " ")}
           |IMAGE_FILE = loader.img
@@ -151,7 +152,8 @@ object MakefileTemplate {
           |${(elfEntries, "\n\n")}
           |
           |$$(IMAGE_FILE): $$(IMAGES) $$(SYSTEM_FILE)
-          |${TAB}$$(MICROKIT_TOOL) $$(SYSTEM_FILE) --search-path $$(TOP_BUILD_DIR) --board $$(MICROKIT_BOARD) --config $$(MICROKIT_CONFIG) -o $$(IMAGE_FILE) -r $$(REPORT_FILE)
+          |${TAB}xmllint --xinclude $$(SYSTEM_FILE) -o $$(SYSTEM_FILE).merged
+          |${TAB}$$(MICROKIT_TOOL) $$(SYSTEM_FILE).merged --search-path $$(TOP_BUILD_DIR) --board $$(MICROKIT_BOARD) --config $$(MICROKIT_CONFIG) -o $$(IMAGE_FILE) -r $$(REPORT_FILE)
           |
           |
           |qemu: $$(IMAGE_FILE)

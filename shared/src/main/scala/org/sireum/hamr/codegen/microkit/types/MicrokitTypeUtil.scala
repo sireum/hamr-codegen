@@ -234,14 +234,16 @@ object MicrokitTypeUtil {
       case ISZ("org", "sireum", baseType) =>
         baseType match {
 
+          case "C" => return aadlTypes.typeMap.get("Base_Types::Character").get
+
           case "B" => return aadlTypes.typeMap.get("Base_Types::Boolean").get
 
           case "Z" => return aadlTypes.typeMap.get("Base_Types::Integer").get
 
-          case "S8" => return aadlTypes.typeMap.get("Base_Types::Signed_8").get
-          case "S16" => return aadlTypes.typeMap.get("Base_Types::Signed_16").get
-          case "S32" => return aadlTypes.typeMap.get("Base_Types::Signed_32").get
-          case "S64" => return aadlTypes.typeMap.get("Base_Types::Signed_64").get
+          case "S8" => return aadlTypes.typeMap.get("Base_Types::Integer_8").get
+          case "S16" => return aadlTypes.typeMap.get("Base_Types::Integer_16").get
+          case "S32" => return aadlTypes.typeMap.get("Base_Types::Integer_32").get
+          case "S64" => return aadlTypes.typeMap.get("Base_Types::Integer_64").get
 
           case "U8" => return aadlTypes.typeMap.get("Base_Types::Unsigned_8").get
           case "U16" => return aadlTypes.typeMap.get("Base_Types::Unsigned_16").get
@@ -278,6 +280,8 @@ object MicrokitTypeUtil {
       aadlType.name match {
         case "Base_Types::Float" =>
           reporter.error(posOpt, MicrokitCodegen.toolName, "Unbounded Float is not supported for Microkit")
+        case "Base_Types::Integer" =>
+          reporter.error(posOpt, MicrokitCodegen.toolName, "Unbounded Integer is not supported for Microkit")
         case "Base_Types::String" =>
           TypeUtil.getArrayDimensions(aadlType.container.get) match {
             case ISZ() =>

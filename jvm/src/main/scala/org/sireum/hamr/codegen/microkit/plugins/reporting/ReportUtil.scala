@@ -2,7 +2,7 @@
 package org.sireum.hamr.codegen.microkit.plugins.reporting
 
 import org.sireum._
-import org.sireum.message.{FlatPos, Position}
+import org.sireum.message.{FlatPos, Position, Reporter}
 import org.sireum.U32._
 import org.sireum.hamr.codegen.common.StringUtil
 import org.sireum.hamr.codegen.common.symbols.{AadlThread, GclAnnexClauseInfo}
@@ -443,5 +443,5 @@ object ReportUtil {
 }
 
 @ext("MSDParser_Ext") object MSDParser {
-  @pure def parse(xml: Os.Path, rootDir: Os.Path): Option[system] = $
+  @pure def parse(xml: Os.Path, rootDir: Os.Path, reporter: Reporter): Option[system] = $
 }

@@ -3,6 +3,7 @@ package org.sireum.hamr.codegen.microkit.util
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.containers.Marker
+import org.sireum.hamr.codegen.microkit.MicrokitCodegen
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
 
 @datatype class SystemDescription (val schedulingDomains: ISZ[SchedulingDomain],
@@ -25,16 +26,23 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
           |</domain_schedule>""")
     else None()
 
+  @pure def scheduleText: ST = {
+    return (
+      st"""${MicrokitUtil.safeToEditXml}
+          |
+          |$stSchedulingDomain""")
+  }
+
   @pure def prettyST: ST = {
     val stProtectionDomains: ISZ[ST] = for (pd <- protectionDomains) yield pd.prettyST
     val stMemoryRegions: ISZ[ST] = for (mr <- memoryRegions) yield mr.prettyST
     val stChannels: ISZ[ST] = for (c <- channels) yield c.prettyST
     val ret =
       st"""<?xml version="1.0" encoding="UTF-8"?>
-          |<system>
+          |<system xmlns:xi="http://www.w3.org/2001/XInclude">
           |  <!-- Content in between markers will be preserved if codegen is rerun -->
           |
-          |  $stSchedulingDomain
+          |  <xi:include href="${MicrokitCodegen.microkitScheduleXmlFilename}" />
           |
           |  ${(stProtectionDomains, "\n\n")}
           |

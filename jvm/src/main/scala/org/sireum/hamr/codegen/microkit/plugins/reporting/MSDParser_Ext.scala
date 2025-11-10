@@ -1,6 +1,7 @@
 package org.sireum.hamr.codegen.microkit.plugins.reporting
 
-import org.sireum.message.{FlatPos, Position}
+import org.sireum.hamr.codegen.microkit.MicrokitCodegen
+import org.sireum.message.{FlatPos, Position, Reporter}
 import org.sireum.{ISZ, Os, U32, None => SNone, Option => SOption, Some => SSome, String => SString}
 import org.xml.sax.helpers.DefaultHandler
 import org.xml.sax.{Attributes, InputSource, Locator}
@@ -23,7 +24,7 @@ object MSDParser_Ext {
                        children: collection.mutable.ListBuffer[NodeSpan] = collection.mutable.ListBuffer()
                      )
 
-  def parse(xmlFile: Os.Path, rootDir: Os.Path): SOption[system] = {
+  def parse(xmlFile: Os.Path, rootDir: Os.Path, reporter: Reporter): SOption[system] = {
 
     class CountingReader(underlying: Reader) extends Reader {
       var line: Int = 1
@@ -134,10 +135,21 @@ object MSDParser_Ext {
         var channels: ISZ[channel] = ISZ()
         for (c <- root.children) {
           c.label match {
-            case "domain_schedule" => domainSchedule = SSome(parseDomainSchedule(c, xmlFile, rootDir))
+            //case "domain_schedule" => domainSchedule = SSome(parseDomainSchedule(c, xmlFile, rootDir))
             case "protection_domain" => protectionDomains = protectionDomains :+ parseProtectionDomain(c, xmlFile, rootDir)
             case "memory_region" => memoryRegions = memoryRegions :+ parseMemoryRegion(c, xmlFile, rootDir)
             case "channel" => channels = channels :+ parseChannel(c, xmlFile, rootDir)
+            case "xi:include" =>
+              c.attrs.get("href") match {
+                case Some(p) =>
+                  val schedulePath = rootDir / p
+                  if (!schedulePath.exists) {
+                    reporter.error(org.sireum.None(), MicrokitCodegen.toolName, s"Didn't find file containing the static schedule at $schedulePath")
+                  } else {
+                    domainSchedule = SSome(domain_schedule(p, ISZ(), buildPosition(c, xmlFile, rootDir)))
+                  }
+                case _ =>
+              }
             case x => throw new RuntimeException(s"Unexpected: $x")
           }
         }
@@ -173,6 +185,7 @@ object MSDParser_Ext {
     return memory_region(name = c.attrs("name"), size = c.attrs("size"), pos = buildPosition(c, xmlFile, rootDir))
   }
 
+  /*
   private def parseDomainSchedule(c: NodeSpan, xmlFile: Os.Path, rootDir: Os.Path): domain_schedule = {
     var entries: ISZ[ScheduleEntry] = ISZ()
     for (c <- c.children) {
@@ -180,6 +193,7 @@ object MSDParser_Ext {
     }
     return domain_schedule(entries = entries, pos = buildPosition(c, xmlFile, rootDir))
   }
+  */
 
   private def parseProtectionDomain(pd: NodeSpan, f: Os.Path, rootDir: Os.Path): protection_domain = {
     val name = pd.attrs("name")
