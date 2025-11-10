@@ -389,14 +389,16 @@ object RustParserSimple {
     }
 
     @pure def balanceBrace(): Unit = {
-      assert (content(offset) == '{')
+      assert (content(offset) == '{' || content(offset) == '(')
+      val openBrace = content(offset)
+      val closeBrace: C = if (openBrace == '{') '}' else ')'
 
       var s: Stack[C] = Stack.empty
       while (offset < content.size) {
-        if (content(offset) == '{') {
-          s = s.push('{')
-        } else if (content(offset) == '}') {
-          assert (s.peek.nonEmpty && s.peek.get == '{')
+        if (content(offset) == openBrace) {
+          s = s.push(openBrace)
+        } else if (content(offset) == closeBrace) {
+          assert (s.peek.nonEmpty && s.peek.get == openBrace, s"$s --- $closeBrace at ${f.name} ($line, $col)")
           s = s.pop.get._2
           if (s.isEmpty) {
             return
@@ -418,6 +420,39 @@ object RustParserSimple {
       var blocks: Stack[VerusBlock] = Stack.empty
       var optMarker: Option[Marker] = None()
 
+      // return T if if/else block was consumer, F otherwise
+      @pure def consumeIfElseBlock(): B = {
+        consumeWhiteSpaceAndComments()
+        if (offset + 2 < content.size && content(offset) == 'i' && content(offset + 1) == 'f' && content(offset + 2) == ' ' ) {
+          assert (content(offset + 3) == '(', s"Expected opening brace of then block but found ${content(offset + 3)}")
+          offset = offset + 3
+          col = col + 3
+          balanceBrace()
+          assert (content(offset) == ')')
+          increment()
+          consumeWhiteSpaceAndComments()
+
+          assert(content(offset) == '{')
+          balanceBrace()
+          assert (content(offset) == '}')
+          increment()
+          consumeWhiteSpaceAndComments()
+
+          assert (content(offset) == 'e' && content(offset + 1) == 'l' && content(offset + 2) == 's' && content(offset + 3) == 'e' && content(offset + 4) == ' ', s"Expected 'else ' at ($line, $col)")
+          offset = offset + 5
+          col = col + 5
+          consumeWhiteSpaceAndComments()
+
+          assert (content(offset) == '{', s"Expected opening brace of else block but found ${content(offset)}")
+          balanceBrace()
+          assert (content(offset) == '}')
+          increment()
+          consumeWhiteSpaceAndComments()
+          return T
+        }
+        return F
+      }
+
       while (offset < content.size && content(offset) != '{') {
         consumeWhiteSpaceAndCommentsH(F) match {
           case ((Some(marker), None())) =>
@@ -434,17 +469,28 @@ object RustParserSimple {
             var lastCharOffset = offset
             var lastValidLine = line
             while(offset < content.size &&
+              // continue consuming characters until we see
+              //   1) ',' contract clause separator, or,
+              //   2) '/' beginning of a comment, or,
+              //   3) 'ensurses' the start of the ensures block, or,
+              //   4) '{' the beginning of the method body
               content(offset) != ',' &&
               content(offset) != '/' &&
               !(offset + 7 < content.size && content(offset) == 'e' && content(offset + 1) == 'n' && content(offset + 2) == 's' && content(offset + 3) == 'u' && content(offset + 4) == 'r' && content(offset + 5) == 'e' && content(offset + 6) == 's' && isEndOfKeyword(offset + 7)) &&
               content(offset) != '{' ) {
-              if (!content(offset).isWhitespace) {
-                lastCharCol = col
-                lastCharOffset = offset
-                lastValidLine = line
+              if (consumeIfElseBlock()) {
+                // rust/verus requires curly braces for if/else branches so need to consume
+                // the entire 'if (..) { .. } else { .. }' block
+              } else {
+                if (!content(offset).isWhitespace) {
+                  lastCharCol = col
+                  lastCharOffset = offset
+                  lastValidLine = line
+                }
+                increment()
               }
-              increment()
             }
+
             if (blocks.isEmpty) {
               assume(T)
             }

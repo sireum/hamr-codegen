@@ -73,6 +73,25 @@ object SlangExpUtil {
                          store: Store,
                          reporter: Reporter): ST = {
 
+    var quantifiers: Stack[String] = Stack.empty
+    var expressionContainsQuantifier: B = F
+    var quantifierUsedInIndexingExpr: B = F
+    var appliedTrigger: B = F
+
+    @pure def applyTrigger(rewrittenExp: ST, posOpt: Option[Position]): ST = {
+      if (inVerus && !appliedTrigger && expressionContainsQuantifier && quantifierUsedInIndexingExpr) {
+        expressionContainsQuantifier = F
+        quantifierUsedInIndexingExpr = F
+        appliedTrigger = T
+
+        reporter.info(posOpt = posOpt, kind = MicrokitCodegen.toolName, message = s"Inferred trigger for '${rewrittenExp.render}'")
+
+        return st"#[trigger] $rewrittenExp"
+      } else {
+        return rewrittenExp
+      }
+    }
+
     var optCastType: Option[SAST.Typed.Name] = None()
     @pure def pushCast(t: SAST.Typed.Name): Unit = {
       if (optCastType.isEmpty) {
@@ -162,8 +181,8 @@ object SlangExpUtil {
 
           return BinaryPrettyST(
             slangParentOp = exp.op, parentPos = exp.posOpt,
-            left = nestedRewriteExp(exp.left, sep), leftSlangOp = leftOpOpt, isLeftIf = exp.left.isInstanceOf[Exp.If], leftPos = leftPosOpt,
-            right = nestedRewriteExp(exp.right, sep), rightSlangOp = rightOpOpt, isRightIf = exp.right.isInstanceOf[Exp.If], rightPos = rightPosOpt)
+            left = applyTrigger(nestedRewriteExp(exp.left, sep), exp.left.posOpt), leftSlangOp = leftOpOpt, isLeftIf = exp.left.isInstanceOf[Exp.If], leftPos = leftPosOpt,
+            right = applyTrigger(nestedRewriteExp(exp.right, sep), exp.right.posOpt), rightSlangOp = rightOpOpt, isRightIf = exp.right.isInstanceOf[Exp.If], rightPos = rightPosOpt)
 
         case exp: Exp.Invoke =>
           GclResolver.getIndexingTypeFingerprints(store).get(exp.ident.id.value) match {
@@ -229,6 +248,10 @@ object SlangExpUtil {
                       }
                     } else {
                       // array indexing expression
+
+                      if (!appliedTrigger && expressionContainsQuantifier) {
+                        quantifierUsedInIndexingExpr = T
+                      }
                       return st"$fname[${(args, ", ")}]"
                     }
                   case _ =>
@@ -254,6 +277,11 @@ object SlangExpUtil {
                   }
                 }
               }
+            case Some(x: SAST.ResolvedInfo.LocalVar) =>
+              if (inVerus && ops.ISZOps(quantifiers.elements).contains(x.id) && !appliedTrigger) {
+                expressionContainsQuantifier = T
+              }
+              return exp.id.prettyST
             case _ =>
               if (exp.id.value == "api" && inRequires) {
                 return st"old(${exp.id.prettyST})"
@@ -269,6 +297,7 @@ object SlangExpUtil {
               halt(s"Only expecting Ident to be wrapped in In(): ${exp.exp}")
           }
         case exp: Exp.If =>
+          // rust/verus requires curly braces
           return st"""if (${nestedRewriteExp(exp.cond, None())}) {
                      |  ${nestedRewriteExp(exp.thenExp, None())}
                      |} else {
@@ -296,7 +325,9 @@ object SlangExpUtil {
           val lo = nestedRewriteExp(exp.lo, None())
           val hi = nestedRewriteExp(exp.hi, None())
 
-           val body = nestedRewriteExp(exp.fun.exp.asInstanceOf[SAST.Stmt.Expr].exp, None())
+          quantifiers = quantifiers.push(param)
+          val body = nestedRewriteExp(exp.fun.exp.asInstanceOf[SAST.Stmt.Expr].exp, None())
+          quantifiers = quantifiers.pop.get._2
 
            if (inVerus) {
             val quantType: String = if (exp.isForall) "forall" else "exists"
