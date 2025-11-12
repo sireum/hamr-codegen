@@ -313,6 +313,7 @@ object CRustTypePlugin {
             fieldType = addType(f._2))
         inVerusItems = inVerusItems :+
           RAST.StructDef(
+            comments = ISZ(),
             attributes = ISZ(
               RAST.AttributeST(F, st"repr(C)"),
               RAST.AttributeST(F, st"derive(Debug, Clone, Copy, PartialEq, Eq)")),

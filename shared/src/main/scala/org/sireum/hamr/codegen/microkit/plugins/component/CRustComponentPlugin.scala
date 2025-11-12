@@ -98,10 +98,9 @@ object ComponentContributions {}
         RAST.Use(ISZ(), RAST.IdentString(s"crate::bridge::${CRustApiPlugin.apiModuleName(thread)}::*")))
 
       val struct = RAST.StructDef(
-        attributes = ISZ(),
         visibility = RAST.Visibility.Public,
         ident = RAST.IdentString(threadId),
-        items = ISZ())
+        comments = ISZ(), attributes = ISZ(), items = ISZ())
 
       val newFn = RAST.FnImpl(
         sig = RAST.FnSig(

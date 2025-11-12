@@ -174,13 +174,15 @@ object Printers {
   }
 }
 
-@datatype class StructDef(val attributes: ISZ[Attribute],
+@datatype class StructDef(val comments: ISZ[Comment],
+                          val attributes: ISZ[Attribute],
                           val visibility: Visibility.Type,
                           val ident: Ident,
                           val items: ISZ[Item]) extends Item {
   @pure override def prettyST: ST = {
     return (
-      st"""${printAttributes(attributes)}
+      st"""${printComments(comments)}
+          |${printAttributes(attributes)}
           |${printVis(visibility)}struct ${ident.prettyST} {
           |  ${printItems(items, ",\n")}
           |}""")

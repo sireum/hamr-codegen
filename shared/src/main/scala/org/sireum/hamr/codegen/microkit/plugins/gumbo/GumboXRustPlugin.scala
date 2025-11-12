@@ -39,40 +39,40 @@ object GumboXRustPlugin {
 object GumboXComponentContributions {
   @strictpure def empty: GumboXComponentContributions = GumboXComponentContributions(
     Map.empty,
-    InitializeContributions.empty,
-    ComputeContributions.empty,
+    GumboXInitializeContributions.empty,
+    GumboXComputeContributions.empty,
     ISZ(),
     ISZ())
 }
 
-object InitializeContributions {
-  @strictpure def empty: InitializeContributions = InitializeContributions(ISZ(), ISZ())
+object GumboXInitializeContributions {
+  @strictpure def empty: GumboXInitializeContributions = GumboXInitializeContributions(ISZ(), ISZ())
 }
 
-@datatype class InitializeContributions(val IEP_Post_Params: ISZ[GGParam],
-                                        val IEP_Guarantee: ISZ[RAST.Fn])
+@datatype class GumboXInitializeContributions(val IEP_Post_Params: ISZ[GGParam],
+                                              val IEP_Guarantee: ISZ[RAST.Fn])
 
-object ComputeContributions {
-  @strictpure def empty: ComputeContributions = ComputeContributions(ISZ(), ISZ(), ISZ(), ISZ(), None(), ISZ(), None())
+object GumboXComputeContributions {
+  @strictpure def empty: GumboXComputeContributions = GumboXComputeContributions(ISZ(), ISZ(), ISZ(), ISZ(), None(), ISZ(), None())
 }
 
-@datatype class ComputeContributions(val CEP_T_Assum__methods: ISZ[RAST.Fn],
-                                     val CEP_T_Guar__methods: ISZ[RAST.Fn],
-                                     val CEP_T_Case__methods: ISZ[RAST.Fn],
+@datatype class GumboXComputeContributions(val CEP_T_Assum__methods: ISZ[RAST.Fn],
+                                           val CEP_T_Guar__methods: ISZ[RAST.Fn],
+                                           val CEP_T_Case__methods: ISZ[RAST.Fn],
 
-                                     val CEP_Pre_Params: ISZ[GGParam],
-                                     val CEP_Pre: Option[RAST.Fn],
+                                           val CEP_Pre_Params: ISZ[GGParam],
+                                           val CEP_Pre: Option[RAST.Fn],
 
-                                     val CEP_Post_Params: ISZ[GGParam],
-                                     val CEP_Post: Option[RAST.Fn])
+                                           val CEP_Post_Params: ISZ[GGParam],
+                                           val CEP_Post: Option[RAST.Fn])
 
 @datatype class GumboXComponentContributions(val integrationConstraints: Map[PortIdPath, ISZ[RAST.Fn]],
 
                                              // init contributions
-                                             val initializeContributions: InitializeContributions,
+                                             val initializeContributions: GumboXInitializeContributions,
 
                                              // compute contributions
-                                             val computeContributions: ComputeContributions,
+                                             val computeContributions: GumboXComputeContributions,
 
                                              //
                                              val gumboMethods: ISZ[RAST.Fn],
@@ -171,7 +171,7 @@ object ComputeContributions {
     return (GumboXRustPlugin.putGumboXContributions(DefaultGumboXContributions(items), localStore), resources)
   }
 
-  @pure def updatePuttersWithStateVars(testingApis: ISZ[RAST.Item], computeContributions: ComputeContributions): ISZ[RAST.Item] = {
+  @pure def updatePuttersWithStateVars(testingApis: ISZ[RAST.Item], computeContributions: GumboXComputeContributions): ISZ[RAST.Item] = {
     val stateVars = computeContributions.CEP_Pre_Params.filter(p => p.kind == SymbolKind.StateVarPre)
     if (stateVars.isEmpty) {
       return testingApis
@@ -187,64 +187,76 @@ object ComputeContributions {
         halt(s"Unexpected: didn't find $id")
       }
 
-      @pure def update(id: String, item: RAST.Item, items: ISZ[RAST.Item]): ISZ[RAST.Item] = {
+      @pure def putAfter(id: String, item: RAST.Item, items: ISZ[RAST.Item]): ISZ[RAST.Item] = {
         var ret: ISZ[RAST.Item] = ISZ()
         for (i <- items) {
           i match {
-            case s: RAST.StructDef if s.ident.string == id => ret = ret :+ item
-            case f: RAST.FnImpl if f.ident.string == id => ret = ret :+ item
+            case s: RAST.StructDef if s.ident.string == id => ret = ret :+ s :+ item
+            case f: RAST.FnImpl if f.ident.string == id => ret = ret :+ f :+ item
             case _ => ret = ret :+ i
           }
         }
         return ret
       }
 
-      var structContainer = getItem("PreStateContainer").asInstanceOf[RAST.StructDef]
-      var putterContainer = getItem("put_concrete_inputs_container").asInstanceOf[RAST.FnImpl]
-      var putter = getItem("put_concrete_inputs").asInstanceOf[RAST.FnImpl]
+      val origStructContainer = getItem("PreStateContainer").asInstanceOf[RAST.StructDef]
+      val origPutterViaContainer = getItem("put_concrete_inputs_container").asInstanceOf[RAST.FnImpl]
+      val origPutter = getItem("put_concrete_inputs").asInstanceOf[RAST.FnImpl]
 
-      var varItems = ISZ[RAST.Item]()
-      var putterContainerBody = putterContainer.body.get.items
-      var putterBody = putter.body.get.items
-      var putterParams = ISZ[RAST.Param]()
+      var gsvFields = ISZ[RAST.Item]()
+      var gsvPutterViaContainerBody = origPutterViaContainer.body.get.items
+      var gsvPutterBody = origPutter.body.get.items
+      var gsvPutterParams = ISZ[RAST.Param]()
 
       for (s <- stateVars) {
-        varItems = varItems :+ RAST.StructField(
+        gsvFields = gsvFields :+ RAST.StructField(
           visibility = RAST.Visibility.Public,
           isGhost = F,
           ident = RAST.IdentString(s.name),
           fieldType = RAST.TyPath(ISZ(ISZ(s.typeNameProvider.qualifiedRustName)), None()))
 
-        putterContainerBody = RAST.BodyItemST(st"put_${s.originName}(container.${s.name});") +: putterContainerBody
+        gsvPutterViaContainerBody = RAST.BodyItemST(st"put_${s.originName}(container.${s.name});") +: gsvPutterViaContainerBody
 
-        putterBody = RAST.BodyItemST(st"put_${s.originName}(${s.name});") +: putterBody
-        putterParams = putterParams :+ RAST.ParamImpl(ident = RAST.IdentString(s.name),
+        gsvPutterBody = RAST.BodyItemST(st"put_${s.originName}(${s.name});") +: gsvPutterBody
+
+        gsvPutterParams = gsvPutterParams :+ RAST.ParamImpl(ident = RAST.IdentString(s.name),
           kind = RAST.TyPath(ISZ(ISZ(s.typeNameProvider.qualifiedRustName)), None()))
       }
 
-      structContainer = structContainer(
+      // copy the original container and add the GUMBO state vars to it
+      val gsvStructContainer = origStructContainer(
+        comments = ISZ(RAST.CommentRustDoc(ISZ(st"container for component's incoming port values and GUMBO state variables"))),
         ident = RAST.IdentString("PreStateContainer_wGSV"),
-        items = varItems ++ structContainer.items)
-      putterContainer = putterContainer(
-        sig = putterContainer.sig(
+        items = gsvFields ++ origStructContainer.items)
+
+      // copy the original putter via container and add the updated body to it
+      val gsvPutterContainer = origPutterViaContainer(
+        comments = ISZ(RAST.CommentRustDoc(ISZ(st"setter for component's incoming port values and GUMBO state variables"))),
+        sig = origPutterViaContainer.sig(
           ident = RAST.IdentString("put_concrete_inputs_container_wGSV"),
-          fnDecl = putterContainer.sig.fnDecl(
+          fnDecl = origPutterViaContainer.sig.fnDecl(
             inputs = ISZ(RAST.ParamImpl(
               ident = RAST.IdentString("container"),
               kind = RAST.TyPath(ISZ(ISZ("PreStateContainer_wGSV")), None())))
           )
         ),
-        body = Some(RAST.MethodBody(putterContainerBody)))
-      putter = putter(
-        sig = putter.sig(
+        body = Some(RAST.MethodBody(gsvPutterViaContainerBody)))
+
+      // copy the original put_concrete_inputs and add the GUMBO state var params and body items to it
+      val gsvPutter = origPutter(
+        comments = ISZ(RAST.CommentRustDoc(ISZ(st"setter for component's incoming port values and GUMBO state variables"))),
+        sig = origPutter.sig(
           ident = RAST.IdentString("put_concrete_inputs_wGSV"),
-          fnDecl = putter.sig.fnDecl(inputs = putterParams ++ putter.sig.fnDecl.inputs)),
-        body = Some(RAST.MethodBody(putterBody))
+          fnDecl = origPutter.sig.fnDecl(inputs = gsvPutterParams ++ origPutter.sig.fnDecl.inputs)),
+        body = Some(RAST.MethodBody(gsvPutterBody))
       )
 
-      val updatedApis = ISZ[RAST.Item](structContainer, putterContainer, putter) ++ testingApis
+      var ret = testingApis
+      ret = putAfter("PreStateContainer", gsvStructContainer, testingApis)
+      ret = putAfter("put_concrete_inputs_container", gsvPutterContainer, ret)
+      ret = putAfter("put_concrete_inputs", gsvPutter, ret)
 
-      return updatedApis
+      return ret
     }
   }
 
@@ -369,7 +381,7 @@ object ComputeContributions {
                               crustTypeProvider: CRustTypeProvider,
                               types: AadlTypes,
                               store: Store,
-                              reporter: Reporter): InitializeContributions = {
+                              reporter: Reporter): GumboXInitializeContributions = {
 
     var IEP_Guarantee: ISZ[RAST.Fn] = ISZ()
     var IEP_Guarantee_Params: Set[GGParam] = Set.empty[GGParam] ++
@@ -522,7 +534,7 @@ object ComputeContributions {
         body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(st"""${(bodySegments, "&& \n\n")}""")))),
         meta = ISZ())
     }
-    return InitializeContributions(sorted_IEP_Post_Params, IEP_Guarantee)
+    return GumboXInitializeContributions(sorted_IEP_Post_Params, IEP_Guarantee)
   }
 
 
@@ -533,7 +545,7 @@ object ComputeContributions {
                            crustTypeProvider: CRustTypeProvider,
                            types: AadlTypes,
                            store: Store,
-                           reporter: Reporter): ComputeContributions = {
+                           reporter: Reporter): GumboXComputeContributions = {
 
     var CEP_T_Assm__methods: ISZ[RAST.Fn] = ISZ()
     var CEP_T_Guar__methods: ISZ[RAST.Fn] = ISZ()
@@ -994,7 +1006,7 @@ object ComputeContributions {
       }
     }
 
-    return ComputeContributions(
+    return GumboXComputeContributions(
       CEP_T_Assum__methods = CEP_T_Assm__methods,
       CEP_T_Guar__methods = CEP_T_Guar__methods,
       CEP_T_Case__methods = CEP_T_Case__methods,
@@ -1007,8 +1019,8 @@ object ComputeContributions {
   }
 
   @pure def buildGumboxTestMethods(thread: AadlThread,
-                                   initializeContributions: InitializeContributions,
-                                   computeContributions: ComputeContributions,
+                                   initializeContributions: GumboXInitializeContributions,
+                                   computeContributions: GumboXComputeContributions,
                                    subclauseInfoOpt: Option[GclAnnexClauseInfo], crustTypeProvider: CRustTypeProvider, types: AadlTypes, localStore: Store, reporter: Reporter
                                   ): (ISZ[RAST.Item], ISZ[RAST.Item], ISZ[RAST.Item]) = {
     assert(thread.isPeriodic(), s"Need to handle sporadic threads: ${thread.classifierAsString}")

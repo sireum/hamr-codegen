@@ -199,12 +199,14 @@ object CRustTestingPlugin {
     }
 
     val struct = RAST.StructDef(
+      comments = ISZ(RAST.CommentRustDoc(ISZ(st"container for component's incoming port values"))),
       attributes = ISZ(),
       visibility = RAST.Visibility.Public,
       ident = RAST.IdentString("PreStateContainer"),
       items = structItems)
 
     val containerPutter =  RAST.FnImpl(
+      comments = ISZ(RAST.CommentRustDoc(ISZ(st"setter for component's incoming port values"))),
       visibility = RAST.Visibility.Public,
       sig = RAST.FnSig(
         ident = RAST.IdentString("put_concrete_inputs_container"),
@@ -215,9 +217,10 @@ object CRustTestingPlugin {
           outputs = RAST.FnRetTyDefault()),
         fnHeader = RAST.FnHeader(F), verusHeader = None(), generics = None()),
       body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(st"${(containerBodyItems, "\n")}")))),
-      meta = ISZ(), contract = None(), comments = ISZ(), attributes = ISZ())
+      meta = ISZ(), contract = None(), attributes = ISZ())
 
     val putter =  RAST.FnImpl(
+      comments = ISZ(RAST.CommentRustDoc(ISZ(st"setter for component's incoming port values"))),
       visibility = RAST.Visibility.Public,
       sig = RAST.FnSig(
         ident = RAST.IdentString("put_concrete_inputs"),
@@ -226,7 +229,7 @@ object CRustTestingPlugin {
           outputs = RAST.FnRetTyDefault()),
         fnHeader = RAST.FnHeader(F), verusHeader = None(), generics = None()),
       body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(st"${(bodyItems, "\n")}")))),
-      meta = ISZ(), contract = None(), comments = ISZ(), attributes = ISZ())
+      meta = ISZ(), contract = None(), attributes = ISZ())
 
     return ISZ(struct, containerPutter, putter)
   }
