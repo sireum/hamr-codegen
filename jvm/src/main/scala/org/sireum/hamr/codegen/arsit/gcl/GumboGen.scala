@@ -653,29 +653,127 @@ object GumboGen {
   }
 
   def gumboTableGetGclEnsuresHolderDeterministicCheck(id:String, sets: ISZ[ISZ[AST.Exp]]): ISZ[GclEnsuresHolder] = {
-    var a: Z = 0
-    var b: Z = 0
     var i: Z = 0
     var ret: ISZ[GclEnsuresHolder] = ISZ()
     for(set <- sets){
       var deterministicST: ST = st""
       val gclehId: String = s"Deterministic Check: Set ${i}"
-      for(a <- 0 until set.length){
-        for(b <- (a+1) until set.length){
-          val p1 = set(a)
-          val p2 = set(b)
-          val x = gclSymbolTable.rexprs.get(toKey(p1)).get
-          val y = gclSymbolTable.rexprs.get(toKey(p2)).get
-          if(!(a == set.length-2 & b == set.length-1)){
-            deterministicST = st"${deterministicST}((${x}) |^ (${y})) ^ \n"
-          }
-          else{
-            deterministicST = st"${deterministicST}((${x}) |^ (${y}))"
+      if(set.length == 1){
+        val p = set(0)
+        val x = gclSymbolTable.rexprs.get(toKey(p)).get
+        deterministicST = st"${deterministicST} (${x})"
+      }
+      else{
+        for(a <- 0 until set.length){
+          for(b <- (a+1) until set.length){
+            val p1 = set(a)
+            val p2 = set(b)
+            val x = gclSymbolTable.rexprs.get(toKey(p1)).get
+            val y = gclSymbolTable.rexprs.get(toKey(p2)).get
+            if(!(a == set.length-2 & b == set.length-1)){
+              deterministicST = st"${deterministicST}((${x}) |^ (${y})) & \n"
+            }
+            else{
+              deterministicST = st"${deterministicST}((${x}) |^ (${y}))"
+            }
           }
         }
       }
       ret = ret :+ GclEnsuresHolder(id,processDescriptor(Some(gclehId),"//   "),deterministicST)
       i = i + 1
+    }
+    return ret
+  }
+
+  def gumboTableGetGclEnsuresHolderDeterministicCheckCaseTable(id:String, sets: ISZ[ISZ[AST.Exp]], caseExps: ISZ[AST.Exp], caseEval: AST.Exp): ISZ[GclEnsuresHolder] = {
+    var i: Z = 0
+    var ret: ISZ[GclEnsuresHolder] = ISZ()
+    if(caseExps.nonEmpty){
+      var deterministicST: ST = st""
+      val gclehId: String = s"Deterministic Check: Set ${i}"
+      if(caseExps.length == 1){
+        val p = caseExps(0)
+        val x = gclSymbolTable.rexprs.get(toKey(p)).get
+        deterministicST = st"${deterministicST} (${x})"
+      }
+      else{
+        for(a <- 0 until caseExps.length){
+          for(b <- (a+1) until caseExps.length){
+            val p1 = caseExps(a)
+            val p2 = caseExps(b)
+            val x = gclSymbolTable.rexprs.get(toKey(p1)).get
+            val y = gclSymbolTable.rexprs.get(toKey(p2)).get
+            val ce = GumboGen.StateVarInRewriter().wrapStateVarsInInput(gclSymbolTable.rexprs.get(toKey(caseEval)).get)
+            val xr: ST = st"(${ce}) == (${x})"
+            val yr: ST = st"(${ce}) == (${y})"
+            if(!(a == caseExps.length-2 & b == caseExps.length-1)){
+              deterministicST = st"${deterministicST}((${xr}) |^ (${yr})) & \n"
+            }
+            else{
+              deterministicST = st"${deterministicST}((${xr}) |^ (${yr}))"
+            }
+          }
+        }
+      }
+      ret = ret :+ GclEnsuresHolder(id,processDescriptor(Some(gclehId),"//   "),deterministicST)
+      i = i + 1
+    }
+    for(set <- sets){
+      var deterministicST: ST = st""
+      val gclehId: String = s"Deterministic Check: Set ${i}"
+      if(set.length == 1){
+        val p = set(0)
+        val x = gclSymbolTable.rexprs.get(toKey(p)).get
+        deterministicST = st"${deterministicST} (${x})"
+      }
+      else{
+        for(a <- 0 until set.length){
+          for(b <- (a+1) until set.length){
+            val p1 = set(a)
+            val p2 = set(b)
+            val x = gclSymbolTable.rexprs.get(toKey(p1)).get
+            val y = gclSymbolTable.rexprs.get(toKey(p2)).get
+            if(!(a == set.length-2 & b == set.length-1)){
+              deterministicST = st"${deterministicST}((${x}) |^ (${y})) & \n"
+            }
+            else{
+              deterministicST = st"${deterministicST}((${x}) |^ (${y}))"
+            }
+          }
+        }
+      }
+      ret = ret :+ GclEnsuresHolder(id,processDescriptor(Some(gclehId),"//   "),deterministicST)
+      i = i + 1
+    }
+    return ret
+  }
+
+  def gumboTableGetGclEnsuresHolderCasesCaseTable(id: String, cases: ISZ[ISZ[AST.Exp]], resultRows: ISZ[GclResultRow], caseEval: AST.Exp): ISZ[GclEnsuresHolder] = {
+    var i: Z = 0
+    var ret: ISZ[GclEnsuresHolder] = ISZ()
+    var x: Z = 0
+    var y: Z = 0
+    val cer = GumboGen.StateVarInRewriter().wrapStateVarsInInput(gclSymbolTable.rexprs.get(toKey(caseEval)).get)
+    for (rr <- resultRows) {
+      for (r <- rr.results) {
+        val re = gclSymbolTable.rexprs.get(toKey(r)).get
+        val c: ISZ[AST.Exp] = cases(i)
+        val cr = GumboGen.StateVarInRewriter().wrapStateVarsInInput(gclSymbolTable.rexprs.get(toKey(c(0))).get)
+        var ensures: ST = st"((${cer}) == (${cr})) & "
+        for (a <- 1 until c.length) {
+          val ca = GumboGen.StateVarInRewriter().wrapStateVarsInInput(gclSymbolTable.rexprs.get(toKey(c(a))).get)
+          ensures = st"${ensures}(${ca})"
+          if (a != c.length - 1) {
+            ensures = st"${ensures} & "
+          }
+        }
+        ensures = st"(${ensures}) -->: (${re})"
+        ret = ret :+ GclEnsuresHolder(id, processDescriptor(Some(s"(${x},${y})"), "//   "), ensures)
+        i = i + 1
+        x = x + 1
+      }
+      x = 0
+      y = y + 1
     }
     return ret
   }
@@ -691,6 +789,14 @@ object GumboGen {
         val c: ISZ[AST.Exp] = cases(i)
         var ensures: ST = st""
         for(a <- 0 until c.length){
+          val ca = GumboGen.StateVarInRewriter().wrapStateVarsInInput(gclSymbolTable.rexprs.get(toKey(c(a))).get)
+          ensures = st"${ensures}(${ca})"
+          if(a != c.length-1){
+            ensures = st"${ensures} & "
+          }
+        }
+        /*
+        for(a <- 0 until c.length){
           for(b <- (a+1) until c.length){
             val ca = GumboGen.StateVarInRewriter().wrapStateVarsInInput(gclSymbolTable.rexprs.get(toKey(c(a))).get)
             val cb = GumboGen.StateVarInRewriter().wrapStateVarsInInput(gclSymbolTable.rexprs.get(toKey(c(b))).get)
@@ -700,6 +806,7 @@ object GumboGen {
             }
           }
         }
+         */
         ensures = st"(${ensures}) -->: (${re})"
         ret = ret :+ GclEnsuresHolder(id,processDescriptor(Some(s"(${x},${y})"),"//   "),ensures)
         i = i + 1
@@ -911,6 +1018,77 @@ object GumboGen {
           }
           //  TODO end of normal table
         }
+        else if(t.cases.nonEmpty){
+          val ct: GclCaseTable = t.cases.get
+          // horizontal preds
+          val hps: ISZ[AST.Exp] = ct.horizontalPredicates
+          //vertical predicate rows
+          val vprs: ISZ[GclBlankRow] = ct.verticalPredicateRows
+          // result rows
+          val rrs: ISZ[GclResultRow] = ct.resultRows
+          // vertical predicate row length
+          val vrl: Z = vprs(0).results.length
+
+          var lastRowLength: Z = -1
+          var lastRowStartColumn: Z = -1
+
+          // BUILD CASES TABLE SETS
+          var sets: ISZ[ISZ[AST.Exp]] = ISZ(hps)
+          var activeSet: ISZ[AST.Exp] = ISZ()
+          var caseExps: ISZ[AST.Exp] = ISZ()
+
+          for(vpr <- vprs){
+            if(vpr.results.length == 2){
+              val vp = vpr.results(1)
+              caseExps = caseExps :+ vpr.results(0)
+              if(activeSet.length > 0){
+                sets = sets :+ activeSet
+              }
+              activeSet = ISZ(vp)
+            }
+            else{
+              val vp = vpr.results(0)
+              activeSet = activeSet :+ vp
+            }
+          }
+          // finish building sets
+
+          // BUILD CASES TABLE CASES
+          // vpc: Vertical Predicate Cases (left hand side of implies)
+          var cases: ISZ[ISZ[AST.Exp]] = ISZ()
+          var active: ISZ[AST.Exp] = ISZ()
+
+          for(vpr <- vprs){
+            if(vpr.blanks.length > 0){ //if we have blanks
+              for(i <- 0 until vpr.results.length){//for each non-blank
+                active = ops.ISZOps(active).dropRight(1)//remove an expression to make room.
+              }
+              for(r <- vpr.results){//then for each result
+                active = active :+ r//add it to the active case
+              }
+            }
+            else{//if there is no blanks the case is just results
+              active = vpr.results
+            }
+            if(active.length != vrl){//DEBUG
+              print("Error Sierra")
+            }
+            for(hp <- hps){//for each vertical predicate
+              cases = cases :+ (active:+hp)//add a case where
+            }
+          }
+          // finished building cases
+
+          val determinismHolders: ISZ[GclEnsuresHolder] = gumboTableGetGclEnsuresHolderDeterministicCheckCaseTable(ct.id,sets,caseExps,ct.caseEval)
+          val casesHolders: ISZ[GclEnsuresHolder] = gumboTableGetGclEnsuresHolderCasesCaseTable(ct.id,cases,rrs,ct.caseEval)
+
+          for ( h <- determinismHolders){
+            generalHolder = generalHolder :+ h
+          }
+          for (h <- casesHolders){
+            generalHolder = generalHolder :+ h
+          }
+        }
         else if(t.nested.nonEmpty){
           // get nested table
           val nt: GclNestedTable = t.nested.get
@@ -950,7 +1128,7 @@ object GumboGen {
           // finished building cases
 
           // BUILD NESTED TABLE SETS
-          var sets: ISZ[ISZ[AST.Exp]] = ISZ()
+          var sets: ISZ[ISZ[AST.Exp]] = ISZ(hps)
           var activeSets: MSZ[ISZ[AST.Exp]] = MSZ()
           for(i <- 0 until vrl){ // add enough sets to where there is one for each column.
             activeSets = activeSets :+ ISZ()
@@ -985,7 +1163,7 @@ object GumboGen {
           val casesHolders: ISZ[GclEnsuresHolder] = gumboTableGetGclEnsuresHolderCases(nt.id,cases,rrs)
 
           for ( h <- determinismHolders){
-            generalHolder = h +: generalHolder
+            generalHolder = generalHolder :+ h
           }
           for (h <- casesHolders){
             generalHolder = generalHolder :+ h

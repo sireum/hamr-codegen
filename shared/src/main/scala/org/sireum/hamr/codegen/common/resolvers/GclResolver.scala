@@ -1541,25 +1541,151 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 }
               }
               // CHECK 5 :: CASE EVAL EXPRESSION IS OF A ENUMERABLE TYPE
-              visitSlangExp(exp = cases.caseEval, context = context, mode = TypeChecker.ModeContext.Spec, scope = scope, typeHierarchy = typeHierarchy, reporter = reporter) match {
+              var tmr: Option[TypeInfo] = None()
+              val ce: Option[(AST.Exp, Option[AST.Typed])] = visitSlangExp(
+                exp = cases.caseEval,
+                context = context,
+                mode = TypeChecker.ModeContext.Spec,
+                scope = scope,
+                typeHierarchy = typeHierarchy,
+                reporter = reporter
+              )
+              ce match {
                 case Some((rexp, roptType)) =>
                   roptType match{
                     case Some(n: AST.Typed.Enum) =>
-                      typeHierarchy.typeMap.get(n.name) match {
+                      val tmr = typeHierarchy.typeMap.get(n.name)
+                      tmr match {
                         case Some(t:TypeInfo.Enum) =>
                           val elems = t.elements
                         case _ =>
+                          reporter.error(cases.caseEval.posOpt,GclResolver.toolName,s"Error case eval for case tables must be of type enum.")
                       }
                     case Some(n: AST.Typed.Name) =>
-                      typeHierarchy.typeMap.get(n.ids) match {
+                      tmr = typeHierarchy.typeMap.get(n.ids)
+                      tmr match {
+                        case Some(t:TypeInfo.Enum) =>
                         case _ =>
+                          reporter.error(cases.caseEval.posOpt,GclResolver.toolName,s"Error case eval for case tables must be of type enum.")
                       }
                     case _ =>
-                      reporter.error(cases.caseEval.posOpt,GclResolver.toolName,s"Error")
+                      reporter.error(cases.caseEval.posOpt,GclResolver.toolName,s"Error case eval for case tables must be of type enum.")
                   }
                 case _ =>
-                  reporter.error(cases.caseEval.posOpt,GclResolver.toolName,s"Error")
+                  reporter.error(cases.caseEval.posOpt,GclResolver.toolName,s"Error case eval for case tables must be of type enum.")
               }
+              //CHECK 6 :: FIRST COLUMN OF VERTICAL PREDICATE ROWS MUST BE ENUM TYPES MATCHING CASE EVAL
+              for (r <- cases.verticalPredicateRows){
+                if(r.blanks.length == 0){
+                  visitSlangExp(exp = r.results(0), context = context, mode = TypeChecker.ModeContext.Spec, scope = scope, typeHierarchy = typeHierarchy, reporter = reporter) match {
+                    case Some((rexp, roptType)) =>
+                      roptType match{
+                        case Some(n: AST.Typed.Enum) =>
+                          val tmr = typeHierarchy.typeMap.get(n.name)
+                          tmr match {
+                            case Some(t:TypeInfo.Enum) =>
+                              val elems = t.elements
+                            case _ =>
+                              reporter.error(r.results(0).posOpt,GclResolver.toolName,s"Error all vertical predicates in the first column of a case table must be an enum value matching the type of case eval.")
+                          }
+                        case Some(n: AST.Typed.Name) =>
+                          val tmpr = typeHierarchy.typeMap.get(n.ids)
+                          tmpr match {
+                            case Some(t:TypeInfo.Enum) =>
+                              if(tmpr.get != tmr.get){
+                                reporter.error(r.results(0).posOpt,GclResolver.toolName,s"Error all vertical predicates in the first column of a case table must be an enum value matching the type of case eval.")
+                              }
+                            case _ =>
+                              reporter.error(r.results(0).posOpt,GclResolver.toolName,s"Error all vertical predicates in the first column of a case table must be an enum value matching the type of case eval.")
+                          }
+                        case _ =>
+                          reporter.error(r.results(0).posOpt,GclResolver.toolName,s"Error all vertical predicates in the first column of a case table must be an enum value matching the type of case eval.")
+                      }
+                    case _ =>
+                      reporter.error(r.results(0).posOpt,GclResolver.toolName,s"Error all vertical predicates in the first column of a case table must be an enum value matching the type of case eval.")
+                  }
+                }
+              }
+              //CHECK 7 :: SECOND COLUMN OF VERTICAL PREDICATE ROWS MUST BE BOOL TYPES
+              var vpreds: ISZ[Exp] = for(p <- cases.verticalPredicateRows) yield typeCheckBoolExp(
+                exp = p.results(p.results.length-1), context = context,
+                mode = TypeChecker.ModeContext.Spec,
+                component = Some(component),
+                params = ISZ(),
+                stateVars = s.state, specFuns = gclMethods,
+                symbolTable = symbolTable, aadlTypes = aadlTypes,
+                scope = scope, typeHierarchy = typeHierarchy, reporter = reporter
+              )
+              var vprs: ISZ[ISZ[Exp]] =
+                for(row: GclBlankRow <- cases.verticalPredicateRows) yield (
+                  for(r:Exp <- row.results) yield visitSlangExp(
+                    exp = r,
+                    context = context,
+                    mode = TypeChecker.ModeContext.Spec,
+                    scope = scope,
+                    typeHierarchy = typeHierarchy,
+                    reporter = reporter
+                  ).get._1
+                  )
+              // SYMBOL-MAPPING
+              //    HORIZONTAL
+              var i: Z = 0
+              for(p <- hpreds) {
+                val (conp, _, apiRefs) = GclResolver.collectSymbols(p, RewriteMode.ApiGet, component, F, s.state, gclMethods, symbolTable, reporter)
+                if(conp.isEmpty){
+                  rexprs = rexprs + toKey(cases.horizontalPredicates(i)) ~> p
+                }
+                else {
+                  rexprs = rexprs + toKey(cases.horizontalPredicates(i)) ~> conp.get
+                }
+                apiReferences = apiReferences ++ apiRefs
+                i=i+1
+              }
+              i = 0
+              //    RESULTS
+              var ri: Z = 0
+              i = 0
+              for(row <- rres){
+                i = 0
+                for(r <- row){
+                  val (conr,_,apiRefs) = GclResolver.collectSymbols(r,RewriteMode.ApiGet,component,F,s.state,gclMethods,symbolTable, reporter)
+                  if(conr.isEmpty){
+                    rexprs = rexprs + toKey(cases.resultRows(ri).results(i)) ~> r
+                  }
+                  else{
+                    rexprs = rexprs + toKey(cases.resultRows(ri).results(i)) ~> conr.get
+                  }
+                  apiReferences = apiReferences ++ apiRefs
+                  i=i+1
+                }
+                ri = ri + 1
+              }
+              //    VERTICAL
+              ri = 0
+              i = 0
+              for(row <- vprs){
+                i = 0
+                for(r <- row){
+                  val (conr,_,apiRefs) = GclResolver.collectSymbols(r,RewriteMode.ApiGet,component,F,s.state,gclMethods,symbolTable, reporter)
+                  if(conr.isEmpty){
+                    rexprs = rexprs + toKey(cases.verticalPredicateRows(ri).results(i)) ~> r
+                  }
+                  else{
+                    rexprs = rexprs + toKey(cases.verticalPredicateRows(ri).results(i)) ~> conr.get
+                  }
+                  apiReferences = apiReferences ++ apiRefs
+                  i=i+1
+                }
+                ri = ri + 1
+              }
+              val (conr,_,apiRefs) = GclResolver.collectSymbols(ce.get._1,RewriteMode.ApiGet,component,F,s.state,gclMethods,symbolTable,reporter)
+                if(conr.isEmpty){
+                  rexprs = rexprs + toKey(cases.caseEval) ~> ce.get._1
+                }
+                else{
+                  rexprs = rexprs + toKey(cases.caseEval) ~> conr.get
+                }
+                apiReferences = apiReferences ++ apiRefs
             }
             else if (table.nested.nonEmpty){ // N E S T E D - T A B L E S
               // CHECK 1 :: UNIQUE ID
@@ -1651,9 +1777,6 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               for(row <- rres){
                 i = 0
                 for(r <- row){
-                  if(r.prettyST.render=="current_tempWstatus.value < lower_desired_temp.value"){
-                    assert(true)
-                  }
                   val (conr,_,apiRefs) = GclResolver.collectSymbols(r,RewriteMode.ApiGet,component,F,s.state,gclMethods,symbolTable, reporter)
                   if(conr.isEmpty){
                     rexprs = rexprs + toKey(nest.resultRows(ri).results(i)) ~> r
@@ -1674,10 +1797,10 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 for(r <- row){
                   val (conr,_,apiRefs) = GclResolver.collectSymbols(r,RewriteMode.ApiGet,component,F,s.state,gclMethods,symbolTable, reporter)
                   if(conr.isEmpty){
-                    rexprs = rexprs + toKey(nest.resultRows(ri).results(i)) ~> r
+                    rexprs = rexprs + toKey(nest.verticalPredicateRows(ri).results(i)) ~> r
                   }
                   else{
-                    rexprs = rexprs + toKey(nest.resultRows(ri).results(i)) ~> conr.get
+                    rexprs = rexprs + toKey(nest.verticalPredicateRows(ri).results(i)) ~> conr.get
                   }
                   apiReferences = apiReferences ++ apiRefs
                   i=i+1
