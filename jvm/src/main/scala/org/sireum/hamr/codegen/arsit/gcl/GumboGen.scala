@@ -1051,6 +1051,9 @@ object GumboGen {
               activeSet = activeSet :+ vp
             }
           }
+          if(activeSet.length > 0){
+            sets = sets :+ activeSet
+          }
           // finish building sets
 
           // BUILD CASES TABLE CASES
