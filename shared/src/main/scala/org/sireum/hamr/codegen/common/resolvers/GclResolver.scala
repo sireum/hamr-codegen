@@ -1371,6 +1371,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
           //SIERRA BEGIN
           //
+
           var seenTableIds: Set[String] = Set.empty// To keep track of tables declared at this scope (the parent initialize clause).
           for (table <- s.compute.get.gumboTables) {// for each table.
             //note, for now, only norm table; this is where I'd check when there are other possiblities.
@@ -1379,9 +1380,20 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               // CHECK 1 :: UNIQUE ID
               val norm = table.normal.get
               if(seenTableIds.contains(norm.id)) {
-                reporter.error(norm.posOpt, GclResolver.toolName, s"Duplicate spec name: ${norm.id}")
+                reporter.error(norm.posOpt, GclResolver.toolName, s"Duplicate table name: ${norm.id}")
               }
               seenTableIds += norm.id // append this id to the ids we have seen.
+
+              ///////////////////////////////////////////////////////////////////////////////////////////////////////
+                //val myexp: Exp = norm.resultRows(0).results(0) //example, not really what I am using
+
+                //1. Check if  myexp is of a enum type (this is what I am evaluating on for my "cases")
+
+
+                //2. Check if myexp is a literal value of a enum type (this is the literal value for a given "case")
+
+
+              ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
               //CHECK 2 :: ALL BOOLEAN PREDICATES (And conversion)
               var hpreds: ISZ[Exp] = for(p <- norm.horizontalPredicates) yield typeCheckBoolExp(
@@ -1404,6 +1416,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               )
               var rres: ISZ[ISZ[Exp]] =
                 for(row: GclResultRow <- norm.resultRows) yield (
+
                   for(r:Exp <- row.results) yield typeCheckBoolExp(
                     exp = r, context = context,
                     mode = TypeChecker.ModeContext.Spec,
@@ -1472,11 +1485,87 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 ri = ri + 1
               }
             }
+            else if (table.cases.nonEmpty){// CASE TABLE
+              // CHECK 1 :: UNIQUE ID
+              val cases = table.cases.get
+              if(seenTableIds.contains(cases.id)){
+                reporter.error(cases.posOpt,GclResolver.toolName,s"Duplicate table name: ${cases.id}")
+              }
+              seenTableIds += cases.id
+              //CHECK 2 :: ALL BOOLEAN HORIZONTAL PREDICATES AND RESULTS (And conversion)
+              var hpreds: ISZ[Exp] = for(p <- cases.horizontalPredicates) yield typeCheckBoolExp(
+                exp = p, context = context,
+                mode = TypeChecker.ModeContext.Spec,
+                component = Some(component),
+                params = ISZ(),
+                stateVars = s.state, specFuns = gclMethods,
+                symbolTable = symbolTable, aadlTypes = aadlTypes,
+                scope = scope, typeHierarchy = typeHierarchy, reporter = reporter
+              )
+              var rres: ISZ[ISZ[Exp]] =
+                for(row: GclResultRow <- cases.resultRows) yield (
+                  for(r:Exp <- row.results) yield typeCheckBoolExp(
+                    exp = r, context = context,
+                    mode = TypeChecker.ModeContext.Spec,
+                    component = Some(component),
+                    params = ISZ(),
+                    stateVars = s.state, specFuns = gclMethods,
+                    symbolTable = symbolTable, aadlTypes = aadlTypes,
+                    scope = scope, typeHierarchy = typeHierarchy, reporter = reporter
+                  )
+                  )
+              // CHECK 3 :: ALL RESULT ROWS ARE THE SAME LENGTH AS THE HORIZONTAL PREDICATE LIST
+              // note: The height of the results block is enforced on the grammar level.
+              val tableWidth: Z = cases.horizontalPredicates.length
+              for(row: GclResultRow <- cases.resultRows) {
+                if(row.results.length != tableWidth){
+                  reporter.error(row.posOpt,GclResolver.toolName,s"Each Result Row Must be the same length as the list of horizontal predicates.")
+                }
+              }
+              // CHECK 4 :: ALL VERTICAL PREDICATE ROWS ARE OF LENGTH 2 AND THE FIRST ROW CONTAINS NO BLANKS.
+              var first: B = T
+              var targetLength: Z = 2
+              for(row: GclBlankRow <- cases.verticalPredicateRows) {
+                if(first){
+                  if(row.blanks.length > 0 | ((row.blanks.length + row.results.length) != targetLength)){
+                    reporter.error(row.posOpt,GclResolver.toolName,s"First Vertical Predicate row may not contain blanks and must have a size of two.")
+                  }
+                  else{
+                    first = F
+                  }
+                }
+                else{
+                  if((row.blanks.length + row.results.length) != targetLength){
+                    reporter.error(row.posOpt,GclResolver.toolName,s"Each Vertical Predicate row must be the size same.")
+                  }
+                }
+              }
+              // CHECK 5 :: CASE EVAL EXPRESSION IS OF A ENUMERABLE TYPE
+              visitSlangExp(exp = cases.caseEval, context = context, mode = TypeChecker.ModeContext.Spec, scope = scope, typeHierarchy = typeHierarchy, reporter = reporter) match {
+                case Some((rexp, roptType)) =>
+                  roptType match{
+                    case Some(n: AST.Typed.Enum) =>
+                      typeHierarchy.typeMap.get(n.name) match {
+                        case Some(t:TypeInfo.Enum) =>
+                          val elems = t.elements
+                        case _ =>
+                      }
+                    case Some(n: AST.Typed.Name) =>
+                      typeHierarchy.typeMap.get(n.ids) match {
+                        case _ =>
+                      }
+                    case _ =>
+                      reporter.error(cases.caseEval.posOpt,GclResolver.toolName,s"Error")
+                  }
+                case _ =>
+                  reporter.error(cases.caseEval.posOpt,GclResolver.toolName,s"Error")
+              }
+            }
             else if (table.nested.nonEmpty){ // N E S T E D - T A B L E S
               // CHECK 1 :: UNIQUE ID
               val nest = table.nested.get
               if(seenTableIds.contains(nest.id)) {
-                reporter.error(nest.posOpt, GclResolver.toolName, s"Duplicate spec name: ${nest.id}")
+                reporter.error(nest.posOpt, GclResolver.toolName, s"Duplicate table name: ${nest.id}")
               }
               seenTableIds += nest.id // append this id to the ids we have seen.
               //CHECK 2 :: ALL BOOLEAN PREDICATES (And conversion)
@@ -1522,9 +1611,9 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                   reporter.error(row.posOpt,GclResolver.toolName,s"Each Result Row Must be the same length as the list of horizontal predicates.")
                 }
               }
-              val first: B = T
+              // CHECK 4 :: ALL VERTICAL PREDICATE ROWS ARE THE SAME LENGTH AND THE FIRST ROW CONTAINS NO BLANKS.
+              var first: B = T
               var targetLength: Z = 0
-              var currentLength: Z = 0
               for(row: GclBlankRow <- nest.verticalPredicateRows) {
                 if(first){
                   if(row.blanks.length > 0){
@@ -1532,7 +1621,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                   }
                   else{
                     targetLength = row.results.length
-                    currentLength = targetLength
+                    first = false
                   }
                 }
                 else{
