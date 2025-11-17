@@ -1934,7 +1934,9 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             scope = scope,
             ast = ast)
 
+          slangTypeToAadlType = slangTypeToAadlType + AST.Typed.Name(ids = b.classifier, args = ISZ()) ~> qualifiedTypeName
           slangTypeToAadlType = slangTypeToAadlType + ta.tpe ~> qualifiedTypeName
+
           globalTypeMap = globalTypeMap + (qualifiedTypeName ~> ta)
 
           val gclAnnexes = b.container.get.annexes.filter((a: Annex) => a.clause.isInstanceOf[GclSubclause]).map((a: Annex) => a.clause.asInstanceOf[GclSubclause])
