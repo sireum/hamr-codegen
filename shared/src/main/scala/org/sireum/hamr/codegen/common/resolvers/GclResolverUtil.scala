@@ -38,6 +38,13 @@ object GclResolverUtil {
           case "Character" => "C"
           case "String" => "String"
 
+
+          // the 2025.11 omg library adds prefixes to the following
+          case "Data_Float_32" => "F32"
+          case "Data_Float_64" => "F64"
+          case "Data_Float" => "R"
+          case "Data_Boolean" => "B"
+
           case x =>
             reporter.error(b.container.get.identifier.pos, GclResolver.toolName, s"Wasn't expecting $simpleName while trying to get Slang type name")
             "String"

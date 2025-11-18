@@ -54,6 +54,14 @@ object TypeUtil {
 
       case "Character" => SlangType.C
       case "String" => SlangType.String
+
+      // the 2025.11 omg library adds prefixes to the following
+      case "Data_Float" => SlangType.R
+      case "Data_Float_32" => SlangType.F32
+      case "Data_Float_64" => SlangType.F64
+
+      case "Data_Boolean" => SlangType.B
+
     }
     return t
   }
