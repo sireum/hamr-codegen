@@ -117,10 +117,13 @@ object ComponentApiContributions {
       CRustTypePlugin.hasCRustTypeProvider(store) &&
       !haveCreatedApis(store)
 
-  @strictpure override def canFinalizeMicrokit(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): B =
-    !isDisabled(store) &&
-      haveCreatedApis(store) &&
-      !alreadyFinalized(store)
+  @pure override def canFinalizeMicrokit(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): B = {
+    return (
+      !reporter.hasError &&
+        !isDisabled(store) &&
+        haveCreatedApis(store) &&
+        !alreadyFinalized(store))
+  }
 
   @pure override def handle(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
     var localStore = store

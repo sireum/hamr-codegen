@@ -180,7 +180,7 @@ object SymbolResolver {
               } else {
                 CommonUtil.getLastName(dst.identifier)
               }
-              reporter.info(None(), CommonUtil.toolName, s"Ignoring ${src.category} to ${dst.category} connection: ${srcName} -> ${dstName}")
+              //reporter.info(None(), CommonUtil.toolName, s"Ignoring ${src.category} to ${dst.category} connection: ${srcName} -> ${dstName}")
             }
           }
         }

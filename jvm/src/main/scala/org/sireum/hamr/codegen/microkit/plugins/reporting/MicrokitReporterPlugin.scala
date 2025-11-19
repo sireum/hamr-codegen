@@ -27,6 +27,7 @@ import org.sireum.message.{Level, Position, Reporter}
 
   @pure override def canFinalize(model: Aadl, aadlTypes: Option[AadlTypes], symbolTable: Option[SymbolTable], codegenResults: CodeGenResults, store: Store, options: HamrCli.CodegenOption, reporter: Reporter): B = {
     return (
+      !reporter.hasError &&
       !hasFinalized(store) &&
       options.platform == HamrCli.CodegenHamrPlatform.Microkit &&
       symbolTable.nonEmpty)
@@ -52,7 +53,7 @@ import org.sireum.message.{Level, Position, Reporter}
           }
       }
 
-    assert(sel4OutputDir.exists, sel4OutputDir.value)
+    assert(sel4OutputDir.exists, s"seL4 output directory does not exist: ${sel4OutputDir.value}")
 
     {
       var toolReport: ToolReport = CodegenReporting.getCodegenReport(CodegenReporting.KEY_TOOL_REPORT, store).get.asInstanceOf[ToolReport]

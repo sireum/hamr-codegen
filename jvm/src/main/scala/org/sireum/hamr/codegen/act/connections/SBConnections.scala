@@ -76,8 +76,8 @@ object SBConnections {
         }
 
         if (srcProcess == dstProcess && srcProcess.toVirtualMachine(symbolTable)) {
-          val mesg = s"Ignoring internal connection ${CommonUtil.getLastName(conn.name)} since the parent process ${srcProcess.identifier} is going to a VM"
-          Util.reporter.info(conn.name.pos, Util.toolName, mesg)
+          //val mesg = s"Ignoring internal connection ${CommonUtil.getLastName(conn.name)} since the parent process ${srcProcess.identifier} is going to a VM"
+          //Util.reporter.info(conn.name.pos, Util.toolName, mesg)
         } else {
 
           val connconn: SBConnectionContainer = SBConnectionContainer(connectionOrigin = conn,

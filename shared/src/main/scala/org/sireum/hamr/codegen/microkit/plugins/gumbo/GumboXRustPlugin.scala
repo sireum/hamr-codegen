@@ -97,13 +97,16 @@ object GumboXComputeContributions {
       (GumboRustPlugin.getThreadsWithContracts(store).nonEmpty ||
         GumboRustPlugin.getDatatypesWithContracts(store).nonEmpty)
 
-  @strictpure override def canFinalizeMicrokit(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): B =
-    options.platform == HamrCli.CodegenHamrPlatform.Microkit &&
-      !isDisabled(store) &&
-      !alreadyFinalized(store) &&
-      GumboXRustPlugin.getGumboXContributions(store).nonEmpty &&
-      // will need to add the gumboX module to the bridge's mod.rs file
-      CRustApiPlugin.getCRustApiContributions(store).nonEmpty
+  @pure override def canFinalizeMicrokit(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): B = {
+    return (
+      options.platform == HamrCli.CodegenHamrPlatform.Microkit &&
+        !reporter.hasError &&
+        !isDisabled(store) &&
+        !alreadyFinalized(store) &&
+        GumboXRustPlugin.getGumboXContributions(store).nonEmpty &&
+        // will need to add the gumboX module to the bridge's mod.rs file
+        CRustApiPlugin.getCRustApiContributions(store).nonEmpty)
+  }
 
   @pure override def handle(model: Aadl, options: HamrCli.CodegenOption,
                             types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {

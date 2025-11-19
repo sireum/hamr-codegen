@@ -562,18 +562,6 @@ object MicrokitCodegen {
       return (child, retMemoryRegions, computeExecutionTime)
     } // end processThread
 
-    val boundProcessors = symbolTable.getAllActualBoundProcessors()
-    if (boundProcessors.size != 1) {
-      reporter.error(None(), toolName, "Currently only handling models with exactly one actual bound processor")
-      return (CodeGenResults.empty, localStore)
-    }
-
-    var framePeriod: Z = 0
-    boundProcessors(0).getFramePeriod() match {
-      case Some(z) => framePeriod = z
-      case _ => halt("Infeasible: linter should have ensured bound processor has frame period")
-    }
-
     if (!reporter.hasError) { // linting phase (one pass)
       var validModel = T
       for (p <- plugins) {
@@ -684,6 +672,16 @@ object MicrokitCodegen {
     val pacerSlot = SchedulingDomain(id = MicrokitCodegen.pacerSchedulingDomain, length = MicrokitCodegen.pacerComputeExecutionTime)
     val currentScheduleSize = xmlSchedulingDomains.size
     usedBudget = usedBudget + (currentScheduleSize * MicrokitCodegen.pacerComputeExecutionTime)
+
+
+    val boundProcessors = symbolTable.getAllActualBoundProcessors()
+    assert (boundProcessors.size == 1, "Linter should have ensured there is exactly one bound processor")
+
+    var framePeriod: Z = 0
+    boundProcessors(0).getFramePeriod() match {
+      case Some(z) => framePeriod = z
+      case _ => halt("Infeasible: linter should have ensured bound processor has frame period")
+    }
 
     if (usedBudget > framePeriod) {
       reporter.error(None(), toolName, s"Frame period ${framePeriod} is too small for the used budget ${usedBudget}")

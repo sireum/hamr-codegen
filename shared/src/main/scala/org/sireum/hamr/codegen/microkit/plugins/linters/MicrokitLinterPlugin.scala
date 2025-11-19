@@ -26,6 +26,8 @@ object MicrokitLinterPlugin {
 @sig trait MicrokitLinterPlugin extends MicrokitLintPlugin {
   @pure override def validModel(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes,
                                 symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, B) = {
+    val modelPos = symbolTable.rootSystem.component.identifier.pos
+
     if (isDisabled(store)) {
       return (store, T)
     }
@@ -39,7 +41,13 @@ object MicrokitLinterPlugin {
       TouchedTypes(touchedTypes._1, touchedTypes._2)
 
     if (types.rawConnections) {
-      reporter.error(None(), MicrokitCodegen.toolName, "Raw connections are not currently supported")
+      reporter.error(modelPos, MicrokitCodegen.toolName, "Raw connections are not currently supported")
+    }
+
+    val boundProcessors = symbolTable.getAllActualBoundProcessors()
+    if (boundProcessors.size !=1) {
+      reporter.error(modelPos, MicrokitCodegen.toolName, s"Model must contain exactly one actual bound processor, found ${boundProcessors.size}")
+      return (localStore, F)
     }
 
     for (process <- allProcesses) {

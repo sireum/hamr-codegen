@@ -291,7 +291,7 @@ object MicrokitTypeUtil {
                 maxString = Some(aadlType.asInstanceOf[BaseType])
               }
             case _ =>
-              reporter.error(None(), MicrokitCodegen.toolName, s"Only a single dimension is allowed for Strings")
+              reporter.error(posOpt, MicrokitCodegen.toolName, s"Only a single dimension is allowed for Strings")
           }
         // don't add to ret as strings are treated as arrays by introducing an ArrayType
         case _ =>
@@ -300,28 +300,28 @@ object MicrokitTypeUtil {
               t.kind match {
                 case ArraySizeKind.Fixed =>
                 case x =>
-                  reporter.error(None(), MicrokitCodegen.toolName, s"Only Fixed arrays are currently supported: ${t.name} (attach 'HAMR::Array_Size_Kind => Fixed' to the data component)")
+                  reporter.error(posOpt, MicrokitCodegen.toolName, s"Only Fixed arrays are currently supported: ${t.name} (attach 'HAMR::Array_Size_Kind => Fixed' to the data component)")
               }
               t.dimensions match {
                 case ISZ() =>
-                  reporter.error(None(), MicrokitCodegen.toolName, s"Unbounded arrays are not currently supported: ${t.name}")
+                  reporter.error(posOpt, MicrokitCodegen.toolName, s"Unbounded arrays are not currently supported: ${t.name}")
                 case ISZ(dim) =>
                   if (dim <= 0) {
-                    reporter.error(None(), MicrokitCodegen.toolName, s"Array dimension must by >= 1: ${t.name}")
+                    reporter.error(posOpt, MicrokitCodegen.toolName, s"Array dimension must by >= 1: ${t.name}")
                   }
                 case _ =>
-                  reporter.error(None(), MicrokitCodegen.toolName, s"Multi dimensional arrays are not currently supported: ${t.name}")
+                  reporter.error(posOpt, MicrokitCodegen.toolName, s"Multi dimensional arrays are not currently supported: ${t.name}")
               }
               PropertyUtil.getUnitPropZ(aadlType.properties, OsateProperties.MEMORY_PROPERTIES__DATA_SIZE) match {
                 case None() =>
-                  reporter.error(None(), MicrokitCodegen.toolName, s"${OsateProperties.MEMORY_PROPERTIES__DATA_SIZE} must be specified for ${t.name}")
+                  reporter.error(posOpt, MicrokitCodegen.toolName, s"${OsateProperties.MEMORY_PROPERTIES__DATA_SIZE} must be specified for ${t.name}")
                 case _ =>
                   PropertyUtil.getUnitPropZ(aadlType.properties, HamrProperties.HAMR__BIT_CODEC_MAX_SIZE) match {
                     case Some(_) =>
-                      reporter.error(None(), MicrokitCodegen.toolName, s"Microkit codegen does not currently support both ${OsateProperties.MEMORY_PROPERTIES__DATA_SIZE} and ${HamrProperties.HAMR__BIT_CODEC_MAX_SIZE} being specified for ${t.name}")
+                      reporter.error(posOpt, MicrokitCodegen.toolName, s"Microkit codegen does not currently support both ${OsateProperties.MEMORY_PROPERTIES__DATA_SIZE} and ${HamrProperties.HAMR__BIT_CODEC_MAX_SIZE} being specified for ${t.name}")
                     case _ =>
                       if (t.bitSize.isEmpty || t.bitSize.get <= 0) {
-                        reporter.error(None(), MicrokitCodegen.toolName, s"Bit size > 0 must be specified for ${t.name}")
+                        reporter.error(posOpt, MicrokitCodegen.toolName, s"Bit size > 0 must be specified for ${t.name}")
                       }
                   }
               }
