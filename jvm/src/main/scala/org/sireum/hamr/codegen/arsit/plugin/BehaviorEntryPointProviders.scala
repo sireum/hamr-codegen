@@ -113,7 +113,7 @@ object BehaviorEntryPointProviders {
     if (optMethod.nonEmpty) {
       return (ret(method = optMethod.get), localStore)
     } else {
-      @pure def processNonCases(entries: ISZ[NonCaseContractBlock]): ST = {
+      @pure def processNonCases(entries: ISZ[NonCaseContractBlock]): Option[ST] = {
         @strictpure def wrap(prefix: String, es: ISZ[ST]): Option[ST] =
           if (es.isEmpty) None()
           else Some(
@@ -128,9 +128,13 @@ object BehaviorEntryPointProviders {
           wrap("Ensures", entries.flatMap(f => f.contractEnsures)),
           wrap("InfoFlows", entries.flatMap(f => f.contractFlows))).filter(f => f.nonEmpty).map((m: Option[ST]) => m.get)
 
-        return (st"""Contract(
-                    |  ${(_entries, ",\n")}
-                    |)""")
+        if (_entries.nonEmpty) {
+          return Some(st"""Contract(
+                      |  ${(_entries, ",\n")}
+                      |)""")
+        } else {
+          return None()
+        }
       }
 
       val optContract: Option[ST] =
@@ -138,7 +142,7 @@ object BehaviorEntryPointProviders {
           st"""Contract(
               |  ${(cases, ",\n")}
               |)""")
-        else if (noncases.nonEmpty) Some(processNonCases(noncases))
+        else if (noncases.nonEmpty) processNonCases(noncases)
         else None()
 
       val body: ST = if (optBody.nonEmpty) optBody.get else defaultMethodBody
