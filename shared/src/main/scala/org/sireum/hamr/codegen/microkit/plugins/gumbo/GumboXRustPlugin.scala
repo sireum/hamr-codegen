@@ -895,7 +895,7 @@ object GumboXComputeContributions {
             verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
           attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(), meta = ISZ(),
           body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
-            st"""${(bodySegments, " & \n\n")}
+            st"""${(bodySegments, "\n\n")}
                 |
                 |return ${(for (i <- 0 until count) yield s"r$i", " && ")};"""))))))
       }

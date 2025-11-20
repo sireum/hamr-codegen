@@ -129,6 +129,7 @@ object ReportUtil {
       var gumbo: Option[Position] = None()
 
       for (i <- 0 until content.size) {
+        val lineLower = ops.StringOps(ops.StringOps(ops.StringOps(content(i)).trim).toLower)
         val line = ops.StringOps(ops.StringOps(content(i)).trim)
 
         if (!line.startsWith("--")) {
@@ -139,7 +140,7 @@ object ReportUtil {
 
           if (currentComponent.nonEmpty) {
             //println(s"searching for '${currentComponent.get._1}'")
-            if (line.contains(s"end ${currentComponent.get._1}")) {
+            if (lineLower.contains(s"end ${ops.StringOps(currentComponent.get._1).toLower}")) {
               components = components + currentComponent.get._1 ~> ModelComponentReport(
                 buildPos(currentComponent.get._2 - 1, i, f, workspaceRoot, reportDir),
                 if (gumbo.nonEmpty) Map.empty[String, Position] + "GUMBO" ~> gumbo.get
