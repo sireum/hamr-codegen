@@ -12,53 +12,52 @@ import org.sireum.hamr.ir._
 @sig trait AadlSymbol
 
 @sig trait AadlComponent extends AadlSymbol {
-  def component: ir.Component
+  @pure def component: ir.Component
 
   @pure def properties: ISZ[ir.Property] = {
     return component.properties
   }
 
-  def parent: IdPath
+  @pure def parent: IdPath
 
-  def path: IdPath
+  @pure def path: IdPath
 
-  def pathAsString(sep: String): String = {
+  @pure def pathAsString(sep: String): String = {
     return st"${(path, sep)}".render
   }
 
-  def identifier: String
+  @pure def identifier: String
 
-  def features: ISZ[AadlFeature]
+  @pure def features: ISZ[AadlFeature]
 
-  def subComponents: ISZ[AadlComponent]
+  @pure def subComponents: ISZ[AadlComponent]
 
-  def connectionInstances: ISZ[ir.ConnectionInstance]
+  @pure def connectionInstances: ISZ[ir.ConnectionInstance]
 
-
-  def getFeatureAccesses(): ISZ[AadlAccessFeature] = {
+  @pure def getFeatureAccesses(): ISZ[AadlAccessFeature] = {
     return features.filter(p => p.isInstanceOf[AadlAccessFeature]).map(m => m.asInstanceOf[AadlAccessFeature])
   }
 
-  def getPorts(): ISZ[AadlPort] = {
+  @pure def getPorts(): ISZ[AadlPort] = {
     return features.filter(p => p.isInstanceOf[AadlPort]).map(m => m.asInstanceOf[AadlPort])
   }
 
-  def getPortByPath(path: ISZ[String]): Option[AadlPort] = {
+  @pure def getPortByPath(path: ISZ[String]): Option[AadlPort] = {
     getPorts().filter(p => p.path == path) match {
       case ISZ(p) => return Some(p)
       case _ => return None()
     }
   }
 
-  def annexes(): ISZ[ir.Annex] = {
+  @pure def annexes(): ISZ[ir.Annex] = {
     return component.annexes
   }
 
-  def classifierAsString: String = {
+  @pure def classifierAsString: String = {
     return component.classifier.get.name
   }
 
-  def classifier: ISZ[String] = {
+  @pure def classifier: ISZ[String] = {
     return ops.StringOps(ops.StringOps(classifierAsString).replaceAllLiterally("::", "^")).split(c => c == '^')
   }
 }
@@ -74,29 +73,29 @@ import org.sireum.hamr.ir._
   // returns whether the system has HAMR::Bit_Codec_Raw_Connections set to true.  If true,
   // and if this is the top level system, then the resolver guarantees all data components
   // flowing through connections have the max bit codec property attached
-  def getUseRawConnection(): B = {
+  @pure def getUseRawConnection(): B = {
     return PropertyUtil.getUseRawConnection(component.properties)
   }
 
-  def getDomainMappings(): Map[IdPath, Z] = {
+  @pure def getDomainMappings(): Map[IdPath, Z] = {
     return PropertyUtil.getDomainMappings(component.properties)
   }
 }
 
 @sig trait Processor extends AadlComponent {
-  def component: ir.Component
+  @pure def component: ir.Component
 
-  def parent: IdPath
+  @pure def parent: IdPath
 
-  def path: IdPath
+  @pure def path: IdPath
 
-  def identifier: String
+  @pure def identifier: String
 
-  def subComponents: ISZ[AadlComponent]
+  @pure def subComponents: ISZ[AadlComponent]
 
-  def connectionInstances: ISZ[ir.ConnectionInstance]
+  @pure def connectionInstances: ISZ[ir.ConnectionInstance]
 
-  def getFramePeriod(): Option[Z] = {
+  @pure def getFramePeriod(): Option[Z] = {
     val ret: Option[Z] = PropertyUtil.getDiscreetPropertyValue(component.properties, OsateProperties.TIMING_PROPERTIES__FRAME_PERIOD) match {
       case Some(ir.UnitProp(value, unit)) =>
         assert(unit.nonEmpty, s"frame period's unit not provided for ${identifier}")
@@ -106,7 +105,7 @@ import org.sireum.hamr.ir._
     return ret
   }
 
-  def getClockPeriod(): Option[Z] = {
+  @pure def getClockPeriod(): Option[Z] = {
     val ret: Option[Z] = PropertyUtil.getDiscreetPropertyValue(component.properties, OsateProperties.TIMING_PROPERTIES__CLOCK_PERIOD) match {
       case Some(ir.UnitProp(value, unit)) =>
         assert(unit.nonEmpty, s"clock period's unit not provided for ${identifier}")
@@ -116,15 +115,15 @@ import org.sireum.hamr.ir._
     return ret
   }
 
-  def getMaxDomain(): Option[Z] = {
+  @pure def getMaxDomain(): Option[Z] = {
     return PropertyUtil.getUnitPropZ(component.properties, CaseSchedulingProperties.MAX_DOMAIN)
   }
 
-  def getSlotTime(): Option[Z] = {
+  @pure def getSlotTime(): Option[Z] = {
     return PropertyUtil.getUnitPropZ(component.properties, OsateProperties.TIMING_PROPERTIES__SLOT_TIME)
   }
 
-  def getScheduleSourceText(): Option[String] = {
+  @pure def getScheduleSourceText(): Option[String] = {
     val ret: Option[String] = PropertyUtil.getDiscreetPropertyValue(component.properties, CaseSchedulingProperties.SCHEDULE_SOURCE_TEXT) match {
       case Some(ir.ValueProp(value)) => Some(value)
       case _ => None()
@@ -132,8 +131,7 @@ import org.sireum.hamr.ir._
     return ret
   }
 
-
-  def getPacingMethod(): Option[CaseSchedulingProperties.PacingMethod.Type] = {
+  @pure def getPacingMethod(): Option[CaseSchedulingProperties.PacingMethod.Type] = {
     val ret: Option[CaseSchedulingProperties.PacingMethod.Type] = PropertyUtil.getDiscreetPropertyValue(component.properties, CaseSchedulingProperties.PACING_METHOD) match {
       case Some(ir.ValueProp("Pacer")) => Some(CaseSchedulingProperties.PacingMethod.Pacer)
       case Some(ir.ValueProp("Self_Pacing")) => Some(CaseSchedulingProperties.PacingMethod.SelfPacing)
@@ -146,15 +144,15 @@ import org.sireum.hamr.ir._
 
 
 @sig trait AadlDispatchableComponent {
-  def dispatchProtocol: Dispatch_Protocol.Type
+  @pure def dispatchProtocol: Dispatch_Protocol.Type
 
-  def period: Option[Z]
+  @pure def period: Option[Z]
 
-  def isPeriodic(): B = {
+  @pure def isPeriodic(): B = {
     return dispatchProtocol == Dispatch_Protocol.Periodic
   }
 
-  def isSporadic(): B = {
+  @pure def isSporadic(): B = {
     return dispatchProtocol == Dispatch_Protocol.Sporadic
   }
 }
@@ -186,11 +184,7 @@ import org.sireum.hamr.ir._
                             val subComponents: ISZ[AadlComponent],
                             val connectionInstances: ISZ[ir.ConnectionInstance]) extends AadlComponent {
 
-  def getDomainMapping(symbolTable: SymbolTable): Option[Z] = {
-    return symbolTable.rootSystem.getDomainMappings().get(path)
-  }
-
-  def getDomain(symbolTable: SymbolTable): Option[Z] = {
+  @pure def getDomain(symbolTable: SymbolTable): Option[Z] = {
     val ret: Option[Z] = symbolTable.rootSystem.getDomainMappings().get(path) match {
       case Some(z) => Some(z)
       case _ => PropertyUtil.getUnitPropZ(component.properties, CaseSchedulingProperties.DOMAIN)
@@ -201,7 +195,7 @@ import org.sireum.hamr.ir._
   /**
     *  @return T if bound to a virtual processor or it has HAMR::Component_Type => VIRTUAL_MACHINE
     */
-  def toVirtualMachine(symbolTable: SymbolTable): B = {
+  @pure def toVirtualMachine(symbolTable: SymbolTable): B = {
 
     // or is the parent a virtual processor (symbol checking phase ensures the virtual processor
     // is bound to an actual processor)
@@ -211,7 +205,7 @@ import org.sireum.hamr.ir._
     }
   }
 
-  def getBoundProcessor(symbolTable: SymbolTable): Option[Processor] = {
+  @pure def getBoundProcessor(symbolTable: SymbolTable): Option[Processor] = {
     symbolTable.getBoundProcessors(this) match {
       case ISZ(p) => return Some(p)
       case x if x.isEmpty => return None()
@@ -220,7 +214,7 @@ import org.sireum.hamr.ir._
     }
   }
 
-  def getThreads(): ISZ[AadlThread] = {
+  @pure def getThreads(): ISZ[AadlThread] = {
     return subComponents.filter((p: AadlComponent) => p.isInstanceOf[AadlThread]).map((m: AadlComponent) => m.asInstanceOf[AadlThread])
   }
 }
@@ -235,9 +229,9 @@ import org.sireum.hamr.ir._
 
 @sig trait AadlThreadOrDevice extends AadlComponent with AadlDispatchableComponent {
 
-  def period: Option[Z]
+  @pure def period: Option[Z]
 
-  def getComputeExecutionTime(): Option[(Z, Z)] = {
+  @pure def getComputeExecutionTime(): Option[(Z, Z)] = {
     val ret: Option[(Z, Z)] = PropertyUtil.getDiscreetPropertyValue(component.properties, OsateProperties.TIMING_PROPERTIES__COMPUTE_EXECUTION_TIME) match {
       case Some(ir.RangeProp(low, high)) =>
         assert(low.unit.nonEmpty, s"unit not provided for min compute execution time for ${identifier}")
@@ -252,7 +246,7 @@ import org.sireum.hamr.ir._
     return ret
   }
 
-  def getMaxComputeExecutionTime(): Z = {
+  @pure def getMaxComputeExecutionTime(): Z = {
     val ret: Z = getComputeExecutionTime() match {
       case Some((low, high)) => high
       case _ => z"0"
@@ -260,7 +254,7 @@ import org.sireum.hamr.ir._
     return ret
   }
 
-  def getParent(symbolTable: SymbolTable): AadlProcess = {
+  @pure def getParent(symbolTable: SymbolTable): AadlProcess = {
     val _parent = symbolTable.componentMap.get(parent).get
 
     val ret: AadlProcess = _parent match {
@@ -271,22 +265,22 @@ import org.sireum.hamr.ir._
     return ret
   }
 
-  def getDomain(symbolTable: SymbolTable): Option[Z] = {
+  @pure def getDomain(symbolTable: SymbolTable): Option[Z] = {
     this match {
       case a: AadlDevice => return None()
       case a: AadlThread => return getParent(symbolTable).getDomain(symbolTable)
     }
   }
 
-  def getComputeEntrypointSourceText(): Option[String] = {
+  @pure def getComputeEntrypointSourceText(): Option[String] = {
     return PropertyUtil.getComputeEntrypointSourceText(component.properties)
   }
 
-  def toVirtualMachine(symbolTable: SymbolTable): B = {
+  @pure def toVirtualMachine(symbolTable: SymbolTable): B = {
     return getParent(symbolTable).toVirtualMachine(symbolTable)
   }
 
-  def isCakeMLComponent(): B = {
+  @pure def isCakeMLComponent(): B = {
     val ret: B = PropertyUtil.getDiscreetPropertyValue(component.properties, CasePropertiesProperties.PROP__CASE_PROPERTIES__COMPONENT_LANGUAGE) match {
       case Some(ir.ValueProp("CakeML")) => T
       case _ => F
@@ -294,7 +288,7 @@ import org.sireum.hamr.ir._
     return ret
   }
 
-  def stackSizeInBytes(): Option[Z] = {
+  @pure def stackSizeInBytes(): Option[Z] = {
     return PropertyUtil.getStackSizeInBytes(component)
   }
 }
@@ -331,7 +325,7 @@ import org.sireum.hamr.ir._
                                val connectionInstances: ISZ[ir.ConnectionInstance],
 
                                val features: ISZ[AadlFeature]) extends AadlComponent {
-  def getClassifier(): String = {
+  @pure def getClassifier(): String = {
     var s = ops.StringOps(component.classifier.get.name)
     val index = s.lastIndexOf(':') + 1
     s = ops.StringOps(s.substring(index, component.classifier.get.name.size))
@@ -402,13 +396,13 @@ import org.sireum.hamr.ir._
 ***********************************************************************************/
 
 @sig trait AadlFeature extends AadlSymbol {
-  def feature: ir.Feature
+  @pure def feature: ir.Feature
 
   // The identifiers of features groups this feature is nested within.
   // Needed to ensure generated slang/c/etc identifiers are unique
-  def featureGroupIds: ISZ[String]
+  @pure def featureGroupIds: ISZ[String]
 
-  def identifier: String = {
+  @pure def identifier: String = {
     val id = CommonUtil.getLastName(feature.identifier)
     val ret: String =
       if (featureGroupIds.nonEmpty) st"${(featureGroupIds, "_")}_${id}".render
@@ -416,24 +410,24 @@ import org.sireum.hamr.ir._
     return ret
   }
 
-  def path: IdPath = {
+  @pure def path: IdPath = {
     return feature.identifier.name
   }
 
-  def pathAsString(sep: String): String = {
+  @pure def pathAsString(sep: String): String = {
     return st"${(path, sep)}".render
   }
 }
 
 @sig trait AadlDirectedFeature extends AadlFeature {
 
-  override def feature: ir.FeatureEnd
+  @pure override def feature: ir.FeatureEnd
 
-  def direction: ir.Direction.Type
+  @pure def direction: ir.Direction.Type
 }
 
 @sig trait AadlFeatureData {
-  def aadlType: AadlType
+  @pure def aadlType: AadlType
 }
 
 @sig trait AadlPort extends AadlDirectedFeature {
@@ -442,11 +436,11 @@ import org.sireum.hamr.ir._
 }
 
 @sig trait AadlFeatureEvent extends AadlDirectedFeature {
-  def queueSize: Z = {
+  @pure def queueSize: Z = {
     return PropertyUtil.getQueueSize(feature, 1)
   }
 
-  def getComputeEntrypointSourceText(): Option[String] = {
+  @pure def getComputeEntrypointSourceText(): Option[String] = {
     return PropertyUtil.getComputeEntrypointSourceText(feature.properties)
   }
 }
@@ -479,16 +473,16 @@ import org.sireum.hamr.ir._
                               val aadlType: AadlType,
                               val direction: ir.Direction.Type) extends AadlDirectedFeature with AadlFeatureData {
 
-  def getName(): String = {
+  @pure def getName(): String = {
     return CommonUtil.getLastName(feature.identifier)
   }
 }
 
 @sig trait AadlAccessFeature extends AadlFeature {
 
-  override def feature: ir.FeatureAccess
+  @pure override def feature: ir.FeatureAccess
 
-  def kind: ir.AccessType.Type
+  @pure def kind: ir.AccessType.Type
 
 }
 
@@ -526,11 +520,11 @@ import org.sireum.hamr.ir._
 
                                    val connectionInstance: ir.ConnectionInstance) extends AadlConnection {
 
-  def getConnectionKind(): ir.ConnectionKind.Type = {
+  @pure def getConnectionKind(): ir.ConnectionKind.Type = {
     return connectionInstance.kind
   }
 
-  def getProperties(): ISZ[ir.Property] = {
+  @pure def getProperties(): ISZ[ir.Property] = {
     return connectionInstance.properties
   }
 }
@@ -545,11 +539,11 @@ import org.sireum.hamr.ir._
 @sig trait AnnexInfo
 
 @sig trait AnnexLibInfo extends AnnexInfo {
-  def annex: AnnexLib
+  @pure def annex: AnnexLib
 }
 
 @sig trait AnnexClauseInfo extends AnnexInfo {
-  def annex: AnnexClause
+  @pure def annex: AnnexClause
 }
 
 @datatype class GclAnnexLibInfo(val annex: GclLib,
@@ -563,4 +557,3 @@ import org.sireum.hamr.ir._
                              val btsSymbolTable: BTSSymbolTable) extends AnnexClauseInfo
 
 @datatype class TodoAnnexInfo(val annex: AnnexClause) extends AnnexClauseInfo
-

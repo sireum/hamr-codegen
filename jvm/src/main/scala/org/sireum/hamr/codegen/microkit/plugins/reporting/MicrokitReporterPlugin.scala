@@ -359,7 +359,7 @@ import org.sireum.message.{Level, Position, Reporter}
           for (m <- subclauseInfo.annex.methods) {
             val id = m.method.sig.id.value
             componentCrateFunctions.get(id) match {
-              case Some(m)=>
+              case Some(_)=>
                 gumboMethodsReport = gumboMethodsReport + id ~> componentCrateFunctions.get(id).get.pos
               case _ =>
                 reporter.error(m.posOpt, name, s"Couldn't locate crate level gumbo function: ${CRustComponentPlugin.appModuleName(t)}::$id")

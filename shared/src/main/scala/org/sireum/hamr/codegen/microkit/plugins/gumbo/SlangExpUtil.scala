@@ -285,7 +285,7 @@ object SlangExpUtil {
                         assert(receiverOpt.nonEmpty, "What is being applied?")
                         nestedRewriteExp(receiverOpt.get, None())
                       } else {
-                        convertSlangMethodsToRust(receiverOpt = exp.receiverOpt, id = exp.ident.id, exp.attr, separator = ".")
+                        convertSlangMethodsToRust(receiverOpt = exp.receiverOpt, id = exp.ident.id, attr = exp.attr, separator = ".")
                       }
                     if (exp.ident.id.value == "IS") {
                       // array construction
