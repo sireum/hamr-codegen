@@ -145,7 +145,7 @@ import org.sireum.{B, strictpure}
           println("Provisioning successful!")
         }
       case _ =>
-        println(s"Please set ${env_AM_REPOS_ROOT} environment variable to provision the project")
+        println(s"Please set ${env_AM_REPOS_ROOT} environment variable if you want HAMR to provision the project")
     }
 
     return localStore
