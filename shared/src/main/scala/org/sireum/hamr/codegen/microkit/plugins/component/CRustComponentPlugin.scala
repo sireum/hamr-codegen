@@ -4,7 +4,7 @@ package org.sireum.hamr.codegen.microkit.plugins.component
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{BoolValue, IdPath, Store, StoreValue}
 import org.sireum.hamr.codegen.common.containers.{Marker, Resource}
-import org.sireum.hamr.codegen.common.symbols.{AadlThread, SymbolTable}
+import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.plugins.apis.CRustApiPlugin
@@ -27,26 +27,26 @@ object CRustComponentPlugin {
   @strictpure def putComponentContributions(contributions: CRustComponentContributions, store: Store): Store = store + KEY_CrustComponentPlugin ~> contributions
 
 
-  @strictpure def componentCrateDirectory(thread: AadlThread, options: HamrCli.CodegenOption): String = s"${options.sel4OutputDir.get}/crates/${MicrokitUtil.getThreadIdPath(thread)}"
+  @strictpure def componentCrateDirectory(thread: AadlThread, options: HamrCli.CodegenOption): String = s"${options.sel4OutputDir.get}/crates/${MicrokitUtil.getComponentIdPath(thread)}"
 
   @strictpure def componentDirectory(thread: AadlThread, options: HamrCli.CodegenOption): String = s"${componentCrateDirectory(thread, options)}/src/component"
 
-  @strictpure def appModuleName(thread: AadlThread): String = s"${MicrokitUtil.getThreadIdPath(thread)}_app"
+  @strictpure def appModuleName(component: AadlComponent): String = s"${MicrokitUtil.getComponentIdPath(component)}_app"
 }
 
 object ComponentContributions {}
 
-@datatype class ComponentContributions( // markers for component/<thread-path>_app.rs
-                                        val markers: ISZ[Marker],
+@datatype class ComponentContributions(// markers for component/<thread-path>_app.rs
+                                       val markers: ISZ[Marker],
 
-                                        // items for component/<thread-path>_app.rs
-                                        val requiresVerus: B,
-                                        val appModDirectives: ISZ[RAST.Item],
-                                        val appUses: ISZ[RAST.Item],
-                                        val appStructDef: RAST.StructDef,
-                                        val appStructImpl: RAST.Impl,
-                                        val appFreeFunctions: ISZ[RAST.Fn]
-                                      )
+                                       // items for component/<thread-path>_app.rs
+                                       val requiresVerus: B,
+                                       val appModDirectives: ISZ[RAST.Item],
+                                       val appUses: ISZ[RAST.Item],
+                                       val appStructDef: RAST.StructDef,
+                                       val appStructImpl: RAST.Impl,
+
+                                       val crateLevelEntries: ISZ[RAST.Item])
 
 @sig trait CRustComponentContributions extends StoreValue {
   @pure def componentContributions: Map[IdPath, ComponentContributions]
@@ -90,7 +90,7 @@ object ComponentContributions {}
     var makefileTestEntries: ISZ[ST] = ISZ()
     var makefileCleanEntries: ISZ[ST] = ISZ()
     for (thread <- symbolTable.getThreads() if MicrokitUtil.isRusty(thread)) {
-      val threadId = MicrokitUtil.getThreadIdPath(thread)
+      val threadId = MicrokitUtil.getComponentIdPath(thread)
 
       val appApiType = CRustApiPlugin.applicationApiType(thread)
 
@@ -184,7 +184,7 @@ object ComponentContributions {}
         items = ISZ[RAST.Item](newFn, initFn) ++ entrypointFns :+ notify,
         comments = ISZ(), attributes = ISZ(), implIdent = None())
 
-      var funcs: ISZ[RAST.Fn] = ISZ()
+      var funcs: ISZ[RAST.Item] = ISZ()
 
       funcs = funcs :+ RAST.FnImpl(
         sig = RAST.FnSig(
@@ -222,7 +222,7 @@ object ComponentContributions {}
           appUses = uses,
           appStructDef = struct,
           appStructImpl = impl,
-          appFreeFunctions = funcs)
+          crateLevelEntries = funcs)
 
       makefileTestEntries = makefileTestEntries :+ st"make -C $${CRATES_DIR}/$threadId test"
 
@@ -252,7 +252,7 @@ object ComponentContributions {}
 
     for (e <- CRustComponentPlugin.getCRustComponentContributions(store).componentContributions.entries) {
       val thread = symbolTable.componentMap.get(e._1).get.asInstanceOf[AadlThread]
-      val threadId = MicrokitUtil.getThreadIdPath(thread)
+      val threadId = MicrokitUtil.getComponentIdPath(thread)
 
       val modName = CRustComponentPlugin.appModuleName(thread)
 
@@ -400,11 +400,11 @@ object ComponentContributions {}
               |
               |${e._2.appStructImpl.prettyST}"""
 
-        if (e._2.appFreeFunctions.nonEmpty) {
+        if (e._2.crateLevelEntries.nonEmpty) {
           body =
             st"""$body
                 |
-                |${(for(f <- e._2.appFreeFunctions) yield f.prettyST, "\n\n")}"""
+                |${(for(f <- e._2.crateLevelEntries) yield f.prettyST, "\n\n")}"""
         }
 
         if (e._2.requiresVerus) {
@@ -457,12 +457,11 @@ object ComponentContributions {}
               |edition = "2021"
               |
               |[dependencies]
-              |log = "${versions.get("log").get}"
-              |sel4 = { git = "https://github.com/seL4/rust-sel4", features = ["single-threaded"], optional = true }
-              |sel4-logging = { git = "https://github.com/seL4/rust-sel4", optional = true }
-              |linux-raw-sys = { version = "${versions.get("linux-raw-sys").get}", default-features = false }
-              |${RustUtil.verusCargoDependencies(localStore)}
               |data = { path = "../data" }
+              |linux-raw-sys = { version = "${versions.get("linux-raw-sys").get}", default-features = false }
+              |log = "${versions.get("log").get}"
+              |${RustUtil.sel4CargoDependencies(localStore)}
+              |${RustUtil.verusCargoDependencies(localStore)}
               |
               |[dev-dependencies]
               |lazy_static = "${versions.get("lazy_static").get}"

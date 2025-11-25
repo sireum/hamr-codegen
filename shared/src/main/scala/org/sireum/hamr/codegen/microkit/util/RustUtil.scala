@@ -37,7 +37,7 @@ object RustUtil {
   @pure def verusCargoDependencies(store: Store): ST = {
     val versions = MicrokitUtil.getMicrokitVersions(store)
     return (
-      st"""vstd = { git = "https://github.com/verus-lang/verus.git", default-features=false, tag="${versions.get("vstd").get}"}
+      st"""vstd = { git = "https://github.com/verus-lang/verus.git", default-features=false, tag="${versions.get("vstd").get}" }
           |verus_builtin = { git = "https://github.com/verus-lang/verus.git", tag="${versions.get("verus_builtin").get}" }
           |verus_builtin_macros = { git = "https://github.com/verus-lang/verus.git", tag="${versions.get("verus_builtin_macros").get}" }""")
   }
@@ -46,4 +46,19 @@ object RustUtil {
     st"""[package.metadata.verus]
         |verify = true
         |"""
+
+  @pure def sel4CargoDependencies(store: Store) : ST = {
+    val versions = MicrokitUtil.getMicrokitVersions(store)
+    val sel4Opt: Option[ST] = versions.get("sel4") match {
+      case Some(v) => Some(st""", tag="$v" """)
+      case _ => None()
+    }
+    val sel4LoggingOpt: Option[ST] = versions.get("sel4-logging") match {
+      case Some(v) => Some(st""", tag="$v" """)
+      case _ => None()
+    }
+    return (
+      st"""sel4 = { git = "https://github.com/seL4/rust-sel4", features = ["single-threaded"], optional = true$sel4Opt}
+          |sel4-logging = { git = "https://github.com/seL4/rust-sel4", optional = true$sel4LoggingOpt}""")
+  }
 }
