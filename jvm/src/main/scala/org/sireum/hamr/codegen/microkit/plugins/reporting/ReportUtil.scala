@@ -135,7 +135,7 @@ object ReportUtil {
         if (!line.startsWith("--")) {
           if (line.contains("package ")) {
             assert(packageName.isEmpty)
-            packageName = Some(RustParser.getNameH("package", line, F, T).get)
+            packageName = Some(ParsingUtil.getNameH("package", line, F, T).get)
           }
 
           if (currentComponent.nonEmpty) {
@@ -149,7 +149,7 @@ object ReportUtil {
               gumbo = None()
             }
             else if (line.contains(s"annex ")) {
-              val annexName = RustParser.getNameH("annex", line, F, T).get
+              val annexName = ParsingUtil.getNameH("annex", line, F, T).get
               if (annexName == "GUMBO") {
                 assert(gumbo.isEmpty, s"There should only be only one gumbo subclause per component: $f")
                 gumbo = Some(buildPos(i, i, f, workspaceRoot, reportDir))
@@ -165,22 +165,22 @@ object ReportUtil {
           }
           else {
             if (line.startsWith("system implementation ")) {
-              currentComponent = Some((RustParser.getNameH("system implementation", line, F, T).get, i))
+              currentComponent = Some((ParsingUtil.getNameH("system implementation", line, F, T).get, i))
             }
             else if (line.startsWith("system ")) {
-              currentComponent = Some((RustParser.getNameH("system", line, F, T).get, i))
+              currentComponent = Some((ParsingUtil.getNameH("system", line, F, T).get, i))
             }
             else if (line.startsWith("thread implementation ")) {
-              currentComponent = Some((RustParser.getNameH("thread implementation", line, F, T).get, i))
+              currentComponent = Some((ParsingUtil.getNameH("thread implementation", line, F, T).get, i))
             }
             else if (line.startsWith("thread ")) {
-              currentComponent = Some((RustParser.getNameH("thread", line, F, T).get, i))
+              currentComponent = Some((ParsingUtil.getNameH("thread", line, F, T).get, i))
             }
             else if (line.startsWith("data implementation")) {
-              currentComponent = Some((RustParser.getNameH("data implementation", line, F, T).get, i))
+              currentComponent = Some((ParsingUtil.getNameH("data implementation", line, F, T).get, i))
             }
             else if (line.startsWith("data ")) {
-              currentComponent = Some((RustParser.getNameH("data", line, F, T).get, i))
+              currentComponent = Some((ParsingUtil.getNameH("data", line, F, T).get, i))
             }
             else if (line.startsWith("annex GUMBO")) {
               // must be a library annex

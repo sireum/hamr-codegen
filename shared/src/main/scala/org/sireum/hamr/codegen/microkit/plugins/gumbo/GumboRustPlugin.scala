@@ -9,6 +9,7 @@ import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes}
 import org.sireum.hamr.codegen.common.util.HamrCli
 import org.sireum.hamr.codegen.microkit.plugins.apis.CRustApiPlugin
 import org.sireum.hamr.codegen.microkit.plugins.component.CRustComponentPlugin
+import org.sireum.hamr.codegen.microkit.plugins.gumbo.SlangExpUtil.Context
 import org.sireum.hamr.codegen.microkit.plugins.linters.MicrokitLinterPlugin
 import org.sireum.hamr.codegen.microkit.plugins.testing.CRustTestingPlugin
 import org.sireum.hamr.codegen.microkit.plugins.types.{CRustTypePlugin, CRustTypeProvider}
@@ -120,6 +121,7 @@ object GumboRustPlugin {
       val threadContributions = componentContributions.componentContributions.get(threadPath).get
       var structDef = threadContributions.appStructDef
       var structImpl = threadContributions.appStructImpl.asInstanceOf[RAST.ImplBase]
+      var crateLevelEntries = threadContributions.crateLevelEntries
 
       var optStateVarInits: ISZ[ST] = ISZ()
       if (subclauseInfo.annex.state.nonEmpty) {
@@ -194,13 +196,13 @@ object GumboRustPlugin {
       }
 
       if (subclauseInfo.annex.methods.nonEmpty) {
-        // add Verus methods to the struct implementation for each method
 
         var funs: ISZ[RAST.Fn] = ISZ()
         for (m <- subclauseInfo.annex.methods) {
           funs = funs :+ GumboRustUtil.processGumboMethod(
             m = m,
-            context = thread,
+            component = thread,
+            isLibraryMethod = F,
 
             inVerus = T,
 
@@ -210,9 +212,10 @@ object GumboRustPlugin {
             store = localStore,
             reporter = reporter)
         }
+
         val m = Marker.createMarker("GUMBO METHODS")
         markers = markers :+ m
-        structImpl = structImpl(items = structImpl.items :+ RAST.MarkerWrap(m, funs.asInstanceOf[ISZ[RAST.Item]], "\n\n"))
+        crateLevelEntries = crateLevelEntries :+ RAST.MarkerWrap(m, funs.asInstanceOf[ISZ[RAST.Item]], "\n\n")
       }
 
       if (subclauseInfo.annex.integration.nonEmpty) {
@@ -335,18 +338,18 @@ object GumboRustPlugin {
         }
       }
 
-      var freeFuncs: ISZ[RAST.Fn] = ISZ()
-      for (f <- threadContributions.appFreeFunctions) {
-        if (f.ident.string == "log_info" || f.ident.string == "log_warn_channel") {
-          val fi = f.asInstanceOf[RAST.FnImpl]
-          val attrs = fi.attributes
-          freeFuncs = freeFuncs :+ fi(
-            attributes =  attrs :+ RAST.AttributeST(F, st"verifier::external_body")
-          )
-        } else {
-          freeFuncs = freeFuncs :+ f
+      var annotatedCrateLevelItems: ISZ[RAST.Item] = ISZ()
+      for (f <- crateLevelEntries) {
+        f match {
+          case (fi: RAST.FnImpl) if fi.ident.string == "log_info" || fi.ident.string == "log_warn_channel" =>
+            val attrs = fi.attributes
+            annotatedCrateLevelItems = annotatedCrateLevelItems :+ fi(
+              attributes =  attrs :+ RAST.AttributeST(F, st"verifier::external_body"))
+          case _ =>
+            annotatedCrateLevelItems = annotatedCrateLevelItems :+ f
         }
       }
+      crateLevelEntries = annotatedCrateLevelItems
 
       localStore = CRustComponentPlugin.putComponentContributions(
         componentContributions.replaceComponentContributions(
@@ -356,10 +359,10 @@ object GumboRustPlugin {
               requiresVerus = T,
               appStructDef = structDef,
               appStructImpl = structImpl(items = updatedImplItems),
-              appFreeFunctions = freeFuncs)),
+              crateLevelEntries = annotatedCrateLevelItems)),
         localStore)
 
-      makefileVerusItems = makefileVerusItems :+ st"make -C $${CRATES_DIR}/${MicrokitUtil.getThreadIdPath(thread)} verus"
+      makefileVerusItems = makefileVerusItems :+ st"make -C $${CRATES_DIR}/${MicrokitUtil.getComponentIdPath(thread)} verus"
     } // end processing thread's contracts
 
     localStore = MakefileUtil.addMakefileTargets(ISZ("system.mk"), ISZ(MakefileTarget(name = "verus", allowMultiple = F, dependencies = ISZ(), body = makefileVerusItems)), localStore)
@@ -399,7 +402,9 @@ object GumboRustPlugin {
                 val subs = Map.empty[String, String] + p.identifier ~> s"${CRustApiPlugin.apiResultName}"
                 ensures = ensures + p.identifier ~> GumboRustUtil.processGumboSpecH(
                   spec = a,
-                  context = thread, substitutions = subs,
+                  component = thread,
+                  context = Context.integration_constraint,
+                  substitutions = subs,
                   isAssumeRequires = F,
                   types = types,
                   tp = tp,
@@ -416,10 +421,13 @@ object GumboRustPlugin {
               val subs = Map.empty[String, String] + p.identifier ~> s"${CRustApiPlugin.apiParameterName}"
               requires = requires + p.identifier ~> GumboRustUtil.processGumboSpecH(
                 spec = g,
-                context = thread,
+                component = thread,
+                context = Context.integration_constraint,
+
                 substitutions = subs,
 
                 isAssumeRequires = F,
+
                 types = types,
                 tp = tp,
                 gclSymbolTable = subclauseInfo.gclSymbolTable,
@@ -447,7 +455,9 @@ object GumboRustPlugin {
     val ensures: ISZ[RAST.Expr] = for (g <- subclauseInfo.annex.initializes.get.guarantees) yield
       GumboRustUtil.processGumboSpec(
         spec = g,
-        context = thread,
+        component = thread,
+        context = Context.initialize_clause,
+
         isAssumeRequires = F,
 
         types = types,
@@ -481,7 +491,8 @@ object GumboRustPlugin {
       for (r <- subclauseInfo.annex.compute.get.assumes) yield
         GumboRustUtil.processGumboSpec(
           spec = r,
-          context = thread,
+          component = thread,
+          context = Context.compute_clause,
           isAssumeRequires = T,
           types = types,
           tp = tp,
@@ -504,7 +515,8 @@ object GumboRustPlugin {
       (for (r <- subclauseInfo.annex.compute.get.guarantees) yield
         GumboRustUtil.processGumboSpec(
           spec = r,
-          context = thread,
+          component = thread,
+          context = Context.compute_clause,
           isAssumeRequires = F,
           types = types,
           tp = tp,
@@ -515,7 +527,7 @@ object GumboRustPlugin {
         (for (c <- subclauseInfo.annex.compute.get.cases) yield
           GumboRustUtil.processGumboCase(
             c = c,
-            context = thread,
+            component = thread,
             store = store,
             aadlTypes = types ,
             tp = tp,

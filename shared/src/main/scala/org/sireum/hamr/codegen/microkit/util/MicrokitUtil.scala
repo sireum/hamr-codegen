@@ -4,7 +4,7 @@ package org.sireum.hamr.codegen.microkit.util
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{MapValue, Store}
 import org.sireum.hamr.codegen.common.properties.{HamrProperties, PropertyUtil}
-import org.sireum.hamr.codegen.common.symbols.AadlThread
+import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlThread}
 import org.sireum.hamr.ir
 
 
@@ -56,8 +56,8 @@ object MicrokitUtil {
     }
   }
 
-  @strictpure def getThreadIdPath(thread: AadlThread): String =
-    st"${(ops.ISZOps(thread.path).drop(1), "_")}".render
+  @strictpure def getComponentIdPath(component: AadlComponent): String =
+    st"${(ops.ISZOps(component.path).drop(1), "_")}".render
 
   @pure def bitsToBytes(bits: Z): Z = {
     return Extensions.bitsToBytes(bits)

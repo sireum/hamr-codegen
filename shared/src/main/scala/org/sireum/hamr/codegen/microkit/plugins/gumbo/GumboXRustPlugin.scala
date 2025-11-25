@@ -12,6 +12,7 @@ import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.plugins.apis.CRustApiPlugin
 import org.sireum.hamr.codegen.microkit.plugins.component.CRustComponentStoreUtil
 import org.sireum.hamr.codegen.microkit.plugins.gumbo.GumboXRustUtil._
+import org.sireum.hamr.codegen.microkit.plugins.gumbo.SlangExpUtil.Context
 import org.sireum.hamr.codegen.microkit.plugins.testing.CRustTestingPlugin
 import org.sireum.hamr.codegen.microkit.plugins.types.{CRustTypePlugin, CRustTypeProvider}
 import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, MicrokitPlugin}
@@ -126,7 +127,7 @@ object GumboXComputeContributions {
       assert(!items.contains(thread.path), "Not expecting anyone else to have made gumbox contributions up to this point")
 
       if (datatypesWithContracts.nonEmpty || ops.ISZOps(componentsWithContracts).contains(thread.path)) {
-        val threadId = MicrokitUtil.getThreadIdPath(thread)
+        val threadId = MicrokitUtil.getComponentIdPath(thread)
 
         val subclauseInfoOpt = GumboRustUtil.getGumboSubclauseOpt(thread.path, symbolTable)
 
@@ -136,7 +137,7 @@ object GumboXComputeContributions {
 
         val computeContributions = processCompute(thread, datatypeInvariants, integrationConstraints, subclauseInfoOpt, crustTypeProvider, types, localStore, reporter)
 
-        val gumboMethods = processGumboMethods(thread, subclauseInfoOpt, crustTypeProvider, types, localStore, reporter)
+        val gumboMethods = processGumboSubclauseMethods(thread, subclauseInfoOpt, crustTypeProvider, types, localStore, reporter)
 
         val (cb_api_Entries, test_api_Entries, gumboTestModEntries) = buildGumboxTestMethods(thread, initializeContributions, computeContributions, subclauseInfoOpt, crustTypeProvider, types, localStore, reporter)
 
@@ -263,19 +264,20 @@ object GumboXComputeContributions {
     }
   }
 
-  @pure def processGumboMethods(thread: AadlThread,
-                                subclauseInfoOpt: Option[GclAnnexClauseInfo],
-                                crustTypeProvider: CRustTypeProvider,
-                                types: AadlTypes,
-                                store: Store,
-                                reporter: Reporter): ISZ[RAST.Fn] = {
+  @pure def processGumboSubclauseMethods(thread: AadlThread,
+                                        subclauseInfoOpt: Option[GclAnnexClauseInfo],
+                                        crustTypeProvider: CRustTypeProvider,
+                                        types: AadlTypes,
+                                        store: Store,
+                                        reporter: Reporter): ISZ[RAST.Fn] = {
     subclauseInfoOpt match {
       case Some(c) =>
         var ret: ISZ[RAST.Fn] = ISZ()
         for (m <- c.annex.methods) {
           ret = ret :+ GumboRustUtil.processGumboMethod(
             m = m,
-            context = thread,
+            component = thread,
+            isLibraryMethod = F,
             inVerus = F,
             aadlTypes = types,
             tp = crustTypeProvider,
@@ -305,7 +307,8 @@ object GumboXComputeContributions {
           val clause = gclSymbolTable.integrationMap.get(port).get
           val rewrittenExp = SlangExpUtil.rewriteExp(
             rexp = SlangExpUtil.getRexp(clause.exp, gclSymbolTable),
-            context = thread,
+            component = thread,
+            context = Context.integration_constraint,
 
             // integration GclGuarantees become verus requires clauses and
             // integration GclAssumes become verus ensures clauses
@@ -402,9 +405,12 @@ object GumboXComputeContributions {
             GclResolver.getSlangTypeToAadlType(store), crustTypeProvider)
           val rewrittenExp = SlangExpUtil.rewriteExp(
             rexp = gg.exp,
-            context = thread,
+            component = thread,
+            context = Context.initialize_clause,
+
             inRequires = F,
             inVerus = F,
+
             tp = crustTypeProvider,
             aadlTypes = types,
             store = store,
@@ -588,7 +594,8 @@ object GumboXComputeContributions {
 
           val rexp = SlangExpUtil.rewriteExp(
             rexp = gg.exp,
-            context = thread,
+            component = thread,
+            context = Context.compute_clause,
             inRequires = T,
             inVerus = F,
             tp = crustTypeProvider,
@@ -628,7 +635,8 @@ object GumboXComputeContributions {
             GclResolver.getSlangTypeToAadlType(store), crustTypeProvider)
           val rexp = SlangExpUtil.rewriteExp(
             rexp = gg.exp,
-            context = thread,
+            component = thread,
+            context = Context.compute_clause,
             inRequires = F,
             inVerus = F,
             tp = crustTypeProvider,
@@ -729,7 +737,8 @@ object GumboXComputeContributions {
                   combinedAssumGuarParams = combinedAssumGuarParams ++ ggAssm.params.elements
                   Some(SlangExpUtil.rewriteExp(
                     rexp = ggAssm.exp,
-                    context = thread,
+                    component = thread,
+                    context = Context.compute_clause,
                     inRequires = T,
                     inVerus = F,
                     tp = crustTypeProvider,
@@ -743,7 +752,8 @@ object GumboXComputeContributions {
               GclResolver.getSlangTypeToAadlType(store), crustTypeProvider)
             val rGuar = SlangExpUtil.rewriteExp(
               rexp = ggGuar.exp,
-              context = thread,
+              component = thread,
+              context = Context.compute_clause,
               inRequires = F,
               inVerus = F,
               tp = crustTypeProvider,
@@ -1074,7 +1084,7 @@ object GumboXComputeContributions {
 
       val initBody: ST =
         st"""// [InvokeEntryPoint]: Invoke the entry point
-            |crate::${MicrokitUtil.getThreadIdPath(thread)}_initialize();
+            |crate::${MicrokitUtil.getComponentIdPath(thread)}_initialize();
             |
             |$postStateFetchOpt
             |$postOpt
@@ -1201,13 +1211,13 @@ object GumboXComputeContributions {
 
       val computeCBBody: ST =
         st"""// Initialize the app
-            |crate::${MicrokitUtil.getThreadIdPath(thread)}_initialize();
+            |crate::${MicrokitUtil.getComponentIdPath(thread)}_initialize();
             |
             |$saveInLocalOpt
             |$preOpt
             |$putInPortOpts
             |// [InvokeEntryPoint]: Invoke the entry point
-            |crate::${MicrokitUtil.getThreadIdPath(thread)}_timeTriggered();
+            |crate::${MicrokitUtil.getComponentIdPath(thread)}_timeTriggered();
             |
             |$postStateFetchOpt
             |$postOpt
@@ -1346,13 +1356,13 @@ object GumboXComputeContributions {
 
       val computeCBwLBody: ST =
         st"""// Initialize the app
-            |crate::${MicrokitUtil.getThreadIdPath(thread)}_initialize();
+            |crate::${MicrokitUtil.getComponentIdPath(thread)}_initialize();
             |
             |$preOpt
             |$putInPortOpts
             |$putStateVarOpts
             |// [InvokeEntryPoint]: Invoke the entry point
-            |crate::${MicrokitUtil.getThreadIdPath(thread)}_timeTriggered();
+            |crate::${MicrokitUtil.getComponentIdPath(thread)}_timeTriggered();
             |
             |$postStateFetchOpt
             |$postOpt
@@ -1512,7 +1522,7 @@ object GumboXComputeContributions {
 
     for (entry <- GumboXRustPlugin.getGumboXContributions(localStore).get.componentContributions.entries) {
       val thread = symbolTable.componentMap.get(entry._1).get.asInstanceOf[AadlThread]
-      val threadId = MicrokitUtil.getThreadIdPath(thread)
+      val threadId = MicrokitUtil.getComponentIdPath(thread)
 
       val testDir = s"${options.sel4OutputDir.get}/crates/${threadId}/src/test"
       val testUtilDir = s"$testDir/util"

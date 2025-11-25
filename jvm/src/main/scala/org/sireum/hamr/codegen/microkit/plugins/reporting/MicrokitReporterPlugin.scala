@@ -2,8 +2,7 @@
 package org.sireum.hamr.codegen.microkit.plugins.reporting
 
 import org.sireum._
-import org.sireum.U32._
-import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, Store}
+import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, Store, toolName}
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.containers.{EResource, InternalResource}
 import org.sireum.hamr.codegen.common.plugin.Plugin
@@ -11,8 +10,8 @@ import org.sireum.hamr.codegen.common.reporting.{CodegenReporting, CodegenReport
 import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlEventPort, AadlPort, AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.{CodeGenResults, HamrCli}
+import org.sireum.hamr.codegen.microkit.plugins.component.CRustComponentPlugin
 import org.sireum.hamr.codegen.microkit.plugins.gumbo.GumboRustUtil
-import org.sireum.hamr.codegen.microkit.plugins.reporting.RustContainers.RustFn
 import org.sireum.hamr.codegen.microkit.reporting._
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil
 import org.sireum.hamr.ir.{Aadl, Direction, GclAssume, GclGuarantee, GclSubclause}
@@ -136,7 +135,7 @@ import org.sireum.message.{Level, Position, Reporter}
       var gumboReport: Option[GumboReport] = None()
       var gumboxReport: Option[GumboXReport] = None()
 
-      val threadid = MicrokitUtil.getThreadIdPath(t)
+      val threadid = MicrokitUtil.getComponentIdPath(t)
 
       val protectionDomain = msd.getProtectionDomain(threadid).get.protection_domains(0)
 
@@ -234,6 +233,7 @@ import org.sireum.message.{Level, Position, Reporter}
 
         val componentAppStruct = parsedRustComponentAppFile.structs.get(threadid).get
         val componentAppImpl = parsedRustComponentAppFile.getImpl(threadid).get
+        val componentCrateFunctions = parsedRustComponentAppFile.functions
 
         val gumboxFile = rustBridgeDir / s"${threadid}_GUMBOX.rs"
         val parsedGumboXFile: Option[RustContainers.RustFile] =
@@ -358,7 +358,12 @@ import org.sireum.message.{Level, Position, Reporter}
 
           for (m <- subclauseInfo.annex.methods) {
             val id = m.method.sig.id.value
-            gumboMethodsReport = gumboMethodsReport + id ~> componentAppImpl.methods.get(id).get.pos
+            componentCrateFunctions.get(id) match {
+              case Some(m)=>
+                gumboMethodsReport = gumboMethodsReport + id ~> componentCrateFunctions.get(id).get.pos
+              case _ =>
+                reporter.error(m.posOpt, name, s"Couldn't locate crate level gumbo function: ${CRustComponentPlugin.appModuleName(t)}::$id")
+            }
           }
 
           for (i <- subclauseInfo.annex.invariants) {

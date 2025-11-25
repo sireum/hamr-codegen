@@ -70,7 +70,7 @@ object CRustTestingPlugin {
     var ret: Map[IdPath, CRustTestingPlugin.CRustTestingContribution] = Map.empty
 
     for (thread <- symbolTable.getThreads() if MicrokitUtil.isRusty(thread)) {
-      val threadId = MicrokitUtil.getThreadIdPath(thread)
+      val threadId = MicrokitUtil.getComponentIdPath(thread)
 
       val crustTypeProvider = CRustTypePlugin.getCRustTypeProvider(localStore).get
 
@@ -466,7 +466,7 @@ object CRustTestingPlugin {
   }
 
   @pure def genTestEntries(thread: AadlThread, cRustTypeProvider: CRustTypeProvider): ISZ[RAST.Item] = {
-    val threadId = MicrokitUtil.getThreadIdPath(thread)
+    val threadId = MicrokitUtil.getComponentIdPath(thread)
     assert(thread.isPeriodic(), s"Not yet handling sporadic threads: ${threadId}")
 
     val inDataPortInits: Option[ST] = {
@@ -513,7 +513,7 @@ object CRustTestingPlugin {
 
     for (e <- CRustTestingPlugin.getCRustTestingContributions(store).get.testingContributions.entries) {
       val thread = symbolTable.componentMap.get(e._1).get.asInstanceOf[AadlThread]
-      val threadId = MicrokitUtil.getThreadIdPath(thread)
+      val threadId = MicrokitUtil.getComponentIdPath(thread)
 
       val componentCrateDir = CRustComponentPlugin.componentCrateDirectory(thread, options)
       val componentSrcDir = s"$componentCrateDir/src"

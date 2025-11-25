@@ -8,6 +8,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver
 import org.sireum.hamr.codegen.common.symbols.{AadlComponent, GclSymbolTable, SymTableKey}
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen
+import org.sireum.hamr.codegen.microkit.plugins.component.CRustComponentPlugin
 import org.sireum.hamr.codegen.microkit.plugins.types.CRustTypeProvider
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
 import org.sireum.lang.ast.{Exp, Id}
@@ -23,6 +24,15 @@ object SlangExpUtil {
     val BiImplication: String = "<==>"
   }
 
+  @enum object Context {
+    "integration_constraint"
+    "initialize_clause"
+    "compute_clause"
+    "datatype_invariant"
+    "subclause_function"
+    "library_function"
+  }
+
   @strictpure def toKey(e: SAST.Exp): SymTableKey = SymTableKey(e, e.fullPosOpt)
 
   @pure def getRexp(exp: SAST.Exp, gclSymbolTable: GclSymbolTable): SAST.Exp = {
@@ -30,20 +40,23 @@ object SlangExpUtil {
   }
 
   @pure def rewriteExp(rexp: Exp,
-                       context: AadlComponent,
+                       component: AadlComponent,
+                       context: Context.Type,
 
                        inRequires: B,
-                       inVerus: B,
+                       inVerus: B, // verus or GUMBOX
 
                        tp: CRustTypeProvider,
                        aadlTypes: AadlTypes,
                        store: Store,
                        reporter: Reporter): ST = {
-    return rewriteExpH(rexp, context, Map.empty, inRequires, inVerus, tp, aadlTypes, store, reporter)
+    return rewriteExpH(rexp, component, context, Map.empty, inRequires, inVerus, tp, aadlTypes, store, reporter)
   }
 
   @pure def rewriteExpH(rexp: Exp,
-                        context: AadlComponent,
+
+                        component: AadlComponent,
+                        context: Context.Type,
 
                         substitutions: Map[String, String],
 
@@ -54,11 +67,12 @@ object SlangExpUtil {
                         aadlTypes: AadlTypes,
                         store: Store,
                         reporter: Reporter): ST = {
-    return rewriteExpHL(rexp, context, substitutions, inRequires, inVerus, F, F, tp, aadlTypes, store, reporter)
+    return rewriteExpHL(rexp, component, context, substitutions, inRequires, inVerus, F, F, tp, aadlTypes, store, reporter)
   }
 
   @pure def rewriteExpHL(rexp: Exp,
-                         context: AadlComponent,
+                         component: AadlComponent,
+                         context: Context.Type,
 
                          substitutions: Map[String, String],
 
@@ -167,7 +181,7 @@ object SlangExpUtil {
               halt(s"Infeasible: this should have been typed by now $exp")
           }
 
-          return convertSlangMethodsToRust(exp.receiverOpt, exp.id, sepS)
+          return convertSlangMethodsToRust(exp.receiverOpt, exp.id, exp.attr, sepS)
 
         case exp: Exp.Binary =>
           val (leftOpOpt, leftPosOpt): (Option[String], Option[Position]) = exp.left match {
@@ -216,25 +230,63 @@ object SlangExpUtil {
                 }
               } else {
 
-                val receiverOpt: Option[Exp] =
-                  exp.receiverOpt match {
-                    case Some(ro) if isThreadSingleton(ro) =>
-                      // drop the fully qualified reference to the Slang singleton object
-                      None()
-                    case Some(ro) => Some(ro)//Some(nestedRewriteExp(ro, None()))
-                    case  _ => None()
+                @pure def useFullyQualified(): String = {
+                  exp.attr match {
+                    case SAST.ResolvedAttr(Some(m: SAST.ResolvedInfo.Method), Some(t))=>
+                      if (component.classifier == m.owner) {
+                        if(!inVerus) {
+                          // emitting GUMBOX, call local GUMBOX function
+                          return ""
+                        } else {
+                          // emitting Verus
+                          context match {
+                            case Context.integration_constraint =>
+                              // emitting Verus in bridge/api so use fully qualified name to components crate
+                              return s"crate::component::${CRustComponentPlugin.appModuleName(component)}::"
+                            case Context.datatype_invariant =>
+                              // datatype invariants should only be calling library functions
+                              halt("Probably infeasible: datatype invariant calling a subclause function")
+                            case _ => return ""
+                          }
+                        }
+                      } else {
+                        halt(s"Diff: ${component.classifier} -- ${m.owner}")
+                      }
+                    case _ =>
+                      halt(s"invoke not resolved: $exp")
                   }
-
-                val fname: ST =
-                  if (exp.ident.id.value == "apply") {
-                  assert(receiverOpt.nonEmpty, "What is being applied?")
-                  nestedRewriteExp(receiverOpt.get, None())
-                } else {
-                  convertSlangMethodsToRust(receiverOpt = receiverOpt, id = exp.ident.id, separator = ".")
                 }
 
                 exp.attr.resOpt match {
                   case Some(m: SAST.ResolvedInfo.Method) if m.owner == ISZ("org", "sireum") && m.id == "IS" =>
+
+                    @pure def isThreadSingleton(e: Exp): B = {
+                      e match {
+                        case Exp.Select(None(), id, _) =>
+                          val classifier = StringUtil.sanitizeName(component.classifier(component.classifier.lastIndex))
+                          val path = st"${(ops.ISZOps(component.path).drop(1), "_")}".render
+
+                          return s"${classifier}_$path" == id.value
+                        case _ => return F
+                      }
+                    }
+
+                    val receiverOpt: Option[Exp] =
+                      exp.receiverOpt match {
+                        case Some(ro) if isThreadSingleton(ro) =>
+                          // drop the fully qualified reference to the Slang singleton object
+                          None()
+                        case Some(ro) => Some(ro)//Some(nestedRewriteExp(ro, None()))
+                        case  _ => None()
+                      }
+
+                    val fname: ST =
+                      if (exp.ident.id.value == "apply") {
+                        assert(receiverOpt.nonEmpty, "What is being applied?")
+                        nestedRewriteExp(receiverOpt.get, None())
+                      } else {
+                        convertSlangMethodsToRust(receiverOpt = exp.receiverOpt, id = exp.ident.id, exp.attr, separator = ".")
+                      }
                     if (exp.ident.id.value == "IS") {
                       // array construction
                       m.tpeOpt.get.ret.asInstanceOf[SAST.Typed.Name].args(0).asInstanceOf[SAST.Typed.Name].ids match {
@@ -256,7 +308,7 @@ object SlangExpUtil {
                     }
                   case _ =>
                     // normal method invocation
-                    return st"${if (inVerus) "Self::" else ""}$fname(${(args, ",")})"
+                    return st"${useFullyQualified()}${exp.ident.id.value}(${(args, ",")})"
                 }
               }
           }
@@ -375,7 +427,7 @@ object SlangExpUtil {
     } // end nestedRewriteExp
 
 
-    @pure def convertSlangMethodsToRust(receiverOpt: Option[Exp], id: Id, separator: String): ST = {
+    @pure def convertSlangMethodsToRust(receiverOpt: Option[SAST.Exp], id: SAST.Id, attr: SAST.ResolvedAttr, separator: String): ST = {
       id.value match {
         case "get" =>
           return st"${receiverOptST(receiverOpt, separator)}unwrap()"
@@ -386,7 +438,31 @@ object SlangExpUtil {
         case "size" =>
           return st"${receiverOptST(receiverOpt, separator)}len()"
         case _ =>
-          return st"${receiverOptST(receiverOpt, separator)}${id.value}"
+          val fq: ST = attr match {
+            case SAST.ResolvedAttr(Some(m: SAST.ResolvedInfo.Method), Some(t))=>
+              if (component.classifier == m.owner) {
+                if(!inVerus) {
+                  // emitting GUMBOX, call local GUMBOX function
+                  st""
+                } else {
+                  // emitting Verus
+                  context match {
+                    case Context.integration_constraint =>
+                      // emitting Verus in bridge/api so use fully qualified name to components crate
+                      st"crate::component::${CRustComponentPlugin.appModuleName(component)}::"
+                    case Context.datatype_invariant =>
+                      // datatype invariants should only be calling library functions
+                      halt("Probably infeasible: datatype invariant calling a subclause function")
+                    case _ => st""
+                  }
+                }
+              } else {
+                st"${receiverOptST(receiverOpt = receiverOpt, sep = separator)}"
+              }
+            case _ =>
+              st"${receiverOptST(receiverOpt = receiverOpt, sep = separator)}"
+          }
+          return st"${fq}${id.value}"
       }
     }
 
@@ -398,19 +474,8 @@ object SlangExpUtil {
         case exp: Exp.This => halt("Not expecting 'this' in a gumbo contract")
         case exp =>
           return (
-            if (Exp.shouldParenthesize(exp)) Some(st"x(${nestedRewriteExp(exp, Some(sep))})$sep")
+            if (Exp.shouldParenthesize(exp)) Some(st"(${nestedRewriteExp(exp, Some(sep))})$sep")
             else Some(st"${nestedRewriteExp(exp, Some(sep))}$sep"))
-      }
-    }
-
-    @pure def isThreadSingleton(e: Exp): B = {
-      e match {
-        case Exp.Select(None(), id, _) =>
-          val classifier = StringUtil.sanitizeName(context.classifier(context.classifier.lastIndex))
-          val path = st"${(ops.ISZOps(context.path).drop(1), "_")}".render
-
-          return s"${classifier}_$path" == id.value
-        case _ => return F
       }
     }
 

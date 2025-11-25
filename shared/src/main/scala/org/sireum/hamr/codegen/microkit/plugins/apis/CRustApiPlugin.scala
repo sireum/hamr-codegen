@@ -33,17 +33,17 @@ object CRustApiPlugin {
 
   val apiResultName: String = "res"
 
-  @strictpure def apiModuleName(thread: AadlThread): String = s"${MicrokitUtil.getThreadIdPath(thread)}_api"
+  @strictpure def apiModuleName(thread: AadlThread): String = s"${MicrokitUtil.getComponentIdPath(thread)}_api"
 
-  @strictpure def applicationApiType(thread: AadlThread): String = s"${MicrokitUtil.getThreadIdPath(thread)}_Application_Api"
+  @strictpure def applicationApiType(thread: AadlThread): String = s"${MicrokitUtil.getComponentIdPath(thread)}_Application_Api"
 
-  @strictpure def initializationApiType(thread: AadlThread): String = s"${MicrokitUtil.getThreadIdPath(thread)}_Initialization_Api"
+  @strictpure def initializationApiType(thread: AadlThread): String = s"${MicrokitUtil.getComponentIdPath(thread)}_Initialization_Api"
 
-  @strictpure def computeApiType(thread: AadlThread): String = s"${MicrokitUtil.getThreadIdPath(thread)}_Compute_Api"
+  @strictpure def computeApiType(thread: AadlThread): String = s"${MicrokitUtil.getComponentIdPath(thread)}_Compute_Api"
 
-  @strictpure def putApiType(thread: AadlThread): String = s"${MicrokitUtil.getThreadIdPath(thread)}_Put_Api"
+  @strictpure def putApiType(thread: AadlThread): String = s"${MicrokitUtil.getComponentIdPath(thread)}_Put_Api"
 
-  @strictpure def fullApiType(thread: AadlThread): String = s"${MicrokitUtil.getThreadIdPath(thread)}_Full_Api"
+  @strictpure def fullApiType(thread: AadlThread): String = s"${MicrokitUtil.getComponentIdPath(thread)}_Full_Api"
 }
 
 object ComponentApiContributions {
@@ -158,7 +158,7 @@ object ComponentApiContributions {
 
     for (c <- contributions.apiContributions.entries) {
       val thread = symbolTable.componentMap.get(c._1).get.asInstanceOf[AadlThread]
-      val threadId = MicrokitUtil.getThreadIdPath(thread)
+      val threadId = MicrokitUtil.getComponentIdPath(thread)
       val bridgeDir = CRustApiPlugin.apiDirectory(thread, options)
 
       val reset_test_globals: ISZ[ST] = for(v <- c._2.externApiTestMockVariables) yield

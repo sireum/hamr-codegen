@@ -196,7 +196,7 @@ object MicrokitCodegen {
       val isVM = t.toVirtualMachine(symbolTable)
       val isRustic = MicrokitUtil.isRusty(t)
 
-      val threadId = MicrokitUtil.getThreadIdPath(t)
+      val threadId = MicrokitUtil.getComponentIdPath(t)
       val threadMonId = st"${threadId}_MON"
 
       var nextMemAddressInKiBytes = 262144

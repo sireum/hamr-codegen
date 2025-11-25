@@ -6,6 +6,7 @@ import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, Store}
 import org.sireum.hamr.codegen.common.StringUtil
 import org.sireum.hamr.codegen.common.symbols.{AadlComponent, GclAnnexClauseInfo, GclSymbolTable, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlTypes
+import org.sireum.hamr.codegen.microkit.plugins.gumbo.SlangExpUtil.Context
 import org.sireum.hamr.codegen.microkit.plugins.types.{CRustTypeNameProvider, CRustTypeProvider}
 import org.sireum.hamr.codegen.microkit.rust.FnVerusHeader
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
@@ -62,7 +63,10 @@ object GumboRustUtil {
   }
 
   @pure def processGumboSpec(spec: GclSpec,
-                             context: AadlComponent,
+
+                             component: AadlComponent,
+                             context: Context.Type,
+
                              isAssumeRequires: B,
 
                              types: AadlTypes,
@@ -70,13 +74,17 @@ object GumboRustUtil {
                              gclSymbolTable: GclSymbolTable,
                              store: Store,
                              reporter: Reporter): RAST.Expr = {
-    return processGumboSpecH(spec, context, Map.empty, isAssumeRequires, types, tp, gclSymbolTable, store, reporter)
+    return processGumboSpecH(spec, component, context, isAssumeRequires, Map.empty, types, tp, gclSymbolTable, store, reporter)
   }
 
   @pure def processGumboSpecH(spec: GclSpec,
-                              context: AadlComponent,
-                              substitutions: Map[String, String],
+
+                              component: AadlComponent,
+                              context: Context.Type,
+
                               isAssumeRequires: B,
+
+                              substitutions: Map[String, String],
 
                               types: AadlTypes,
                               tp: CRustTypeProvider,
@@ -93,7 +101,9 @@ object GumboRustUtil {
     val verusExp =
       SlangExpUtil.rewriteExpH(
         rexp = SlangExpUtil.getRexp(spec.exp, gclSymbolTable),
+        component = component,
         context = context,
+
         inRequires = isAssumeRequires,
         inVerus = T,
         substitutions = substitutions,
@@ -108,7 +118,7 @@ object GumboRustUtil {
   }
 
   @pure def processGumboCase(c: GclCaseStatement,
-                             context: AadlComponent,
+                             component: AadlComponent,
 
                              aadlTypes: AadlTypes,
                              tp: CRustTypeProvider,
@@ -119,7 +129,8 @@ object GumboRustUtil {
       if (c.assumes.nonEmpty)
         Some(SlangExpUtil.rewriteExpH(
           rexp = SlangExpUtil.getRexp(c.assumes.get, gclSymbolTable),
-          context = context,
+          component = component,
+          context = Context.compute_clause,
           substitutions = Map.empty,
           inRequires = T,
           inVerus = T,
@@ -131,7 +142,8 @@ object GumboRustUtil {
     val ensures =
       SlangExpUtil.rewriteExpH(
         rexp = SlangExpUtil.getRexp(c.guarantees, gclSymbolTable),
-        context = context,
+        component = component,
+        context = Context.compute_clause,
         substitutions = Map.empty,
         inRequires = F,
         inVerus = T,
@@ -166,7 +178,8 @@ object GumboRustUtil {
   }
 
   def processGumboMethod(m: GclMethod,
-                         context: AadlComponent,
+                         component: AadlComponent,
+                         isLibraryMethod: B,
 
                          inVerus: B,
 
@@ -204,7 +217,8 @@ object GumboRustUtil {
             assert (r.expOpt.nonEmpty, "Currently expecting GUMBO methods to return values")
             SlangExpUtil.rewriteExp(
               rexp = SlangExpUtil.getRexp(r.expOpt.get, gclSymbolTable),
-              context = context,
+              component = component,
+              context = if (isLibraryMethod) Context.library_function else Context.subclause_function,
               inRequires = F,
               inVerus = inVerus,
               tp = tp,
