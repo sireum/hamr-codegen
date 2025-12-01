@@ -6,15 +6,16 @@ import org.sireum.hamr.codegen.common.CommonUtil._
 import org.sireum.hamr.codegen.common.containers.{Marker, Resource}
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes}
-import org.sireum.hamr.codegen.common.util.HamrCli
+import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.plugins.apis.CRustApiPlugin
 import org.sireum.hamr.codegen.microkit.plugins.component.CRustComponentPlugin
 import org.sireum.hamr.codegen.microkit.plugins.gumbo.SlangExpUtil.Context
 import org.sireum.hamr.codegen.microkit.plugins.linters.MicrokitLinterPlugin
 import org.sireum.hamr.codegen.microkit.plugins.testing.CRustTestingPlugin
 import org.sireum.hamr.codegen.microkit.plugins.types.{CRustTypePlugin, CRustTypeProvider}
-import org.sireum.hamr.codegen.microkit.plugins.{MicrokitInitPlugin, MicrokitPlugin}
-import org.sireum.hamr.codegen.microkit.util.{MakefileTarget, MakefileUtil, MicrokitUtil}
+import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, MicrokitInitPlugin, MicrokitPlugin}
+import org.sireum.hamr.codegen.microkit.rust.Item
+import org.sireum.hamr.codegen.microkit.util.{MakefileTarget, MakefileUtil, MicrokitUtil, RustUtil}
 import org.sireum.hamr.codegen.microkit.{MicrokitCodegen, rust => RAST}
 import org.sireum.hamr.ir._
 import org.sireum.message.{Level, Message, Reporter}
@@ -31,15 +32,27 @@ object GumboRustPlugin {
   @strictpure def putGumboRustContributions(contributions: GumboRustContributions, store: Store): Store = store + KEY_GumboRustPlugin ~> contributions
   @strictpure def putThreadsWithContracts(i: ISZ[ThreadIdPath], store: Store): Store = store + KEY_twc ~> ISZValue(i)
   @strictpure def putDatatypesWithContracts(i: ISZ[DataIdPath], store: Store): Store = store + KEY_dwc ~> ISZValue(i)
+
+  @strictpure def getGclLibraryAnnexes(symbolTable: SymbolTable): ISZ[GclAnnexLibInfo] =
+    symbolTable.annexLibInfos.filter(p => p.isInstanceOf[GclAnnexLibInfo]).asInstanceOf[ISZ[GclAnnexLibInfo]]
+
 }
 
 @sig trait GumboRustContributions extends StoreValue {
   @pure def datatypeInvariants: Map[DataIdPath, ISZ[RAST.Fn]]
+
+  @pure def libraryAnnexes: Map[String, ISZ[RAST.Item]]
+
+  @pure def setLibraryAnnexes(m: Map[String, ISZ[RAST.Item]]): GumboRustContributions
 }
 
-@datatype class DefaultGumboRustContributions(val datatypeInvariants: Map[DataIdPath, ISZ[RAST.Fn]]) extends GumboRustContributions
+@datatype class DefaultGumboRustContributions(val datatypeInvariants: Map[DataIdPath, ISZ[RAST.Fn]],
+                                              val libraryAnnexes: Map[String, ISZ[RAST.Item]]) extends GumboRustContributions {
 
-@sig trait GumboRustPlugin extends MicrokitInitPlugin with MicrokitPlugin {
+  @strictpure override def setLibraryAnnexes(m: Map[String, ISZ[Item]]): GumboRustContributions = DefaultGumboRustContributions(datatypeInvariants, m)
+}
+
+@sig trait GumboRustPlugin extends MicrokitInitPlugin with MicrokitPlugin with MicrokitFinalizePlugin {
 
   @pure override def init(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): Store = {
     if (isDisabled(store)) {
@@ -92,7 +105,25 @@ object GumboRustPlugin {
       CRustComponentPlugin.hasCRustComponentContributions(store) &&
       //
       (GumboRustPlugin.getThreadsWithContracts(store).nonEmpty ||
-        GumboRustPlugin.getDatatypesWithContracts(store).nonEmpty)
+        GumboRustPlugin.getDatatypesWithContracts(store).nonEmpty ||
+        GumboRustPlugin.getGclLibraryAnnexes(symbolTable).nonEmpty)
+
+
+  @strictpure def alreadyFinalized(store: Store): B = store.contains(s"FINALIZED_$name")
+
+  @pure override def canFinalizeMicrokit(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): B = {
+    val hasLibraryAnnexes: B = GumboRustPlugin.getGumboRustContributions(store) match {
+      case Some(c) => c.libraryAnnexes.nonEmpty
+      case _ => F
+    }
+
+    return (options.platform == HamrCli.CodegenHamrPlatform.Microkit &&
+      !reporter.hasError &&
+      !isDisabled(store) &&
+      !alreadyFinalized(store) &&
+      hasLibraryAnnexes)
+  }
+
 
   @pure override def handle(model: Aadl,
                             options: HamrCli.CodegenOption,
@@ -113,6 +144,17 @@ object GumboRustPlugin {
     }
 
     var makefileVerusItems: ISZ[ST] = ISZ()
+
+    var libraryAnnexes: Map[String, ISZ[RAST.Item]] = Map.empty
+    for(gclLib <-  GumboRustPlugin.getGclLibraryAnnexes(symbolTable)) {
+      assert(gclLib.name.size == 2 && gclLib.name(1) == "GUMBO__Library", gclLib.name.string)
+      val name = gclLib.name(0)
+      libraryAnnexes = libraryAnnexes + name ~> ISZ(
+        RAST.MacCall(macName = "verus", items = handleGclLibrary(gclLib, symbolTable, types, store, reporter)))
+    }
+
+    val crateDeps: ISZ[ST] = for (k <- libraryAnnexes.keys) yield st"""$k = { path = "../$k" }"""
+
     for (threadPath <- GumboRustPlugin.getThreadsWithContracts(localStore)) {
       var markers: ISZ[Marker] = ISZ()
       val thread = symbolTable.componentMap.get(threadPath).get.asInstanceOf[AadlThread]
@@ -120,8 +162,9 @@ object GumboRustPlugin {
       val componentContributions = CRustComponentPlugin.getCRustComponentContributions(localStore)
       val threadContributions = componentContributions.componentContributions.get(threadPath).get
       var structDef = threadContributions.appStructDef
-      var structImpl = threadContributions.appStructImpl.asInstanceOf[RAST.ImplBase]
+      val structImpl = threadContributions.appStructImpl.asInstanceOf[RAST.ImplBase]
       var crateLevelEntries = threadContributions.crateLevelEntries
+      val crateDependencies = threadContributions.crateDependencies ++ crateDeps
 
       var optStateVarInits: ISZ[ST] = ISZ()
       if (subclauseInfo.annex.state.nonEmpty) {
@@ -201,7 +244,9 @@ object GumboRustPlugin {
         for (m <- subclauseInfo.annex.methods) {
           funs = funs :+ GumboRustUtil.processGumboMethod(
             m = m,
-            component = thread,
+
+            owner = thread.classifier,
+            optComponent = Some(thread),
             isLibraryMethod = F,
 
             inVerus = T,
@@ -359,7 +404,8 @@ object GumboRustPlugin {
               requiresVerus = T,
               appStructDef = structDef,
               appStructImpl = structImpl(items = updatedImplItems),
-              crateLevelEntries = annotatedCrateLevelItems)),
+              crateLevelEntries = annotatedCrateLevelItems,
+              crateDependencies = crateDependencies)),
         localStore)
 
       makefileVerusItems = makefileVerusItems :+ st"make -C $${CRATES_DIR}/${MicrokitUtil.getComponentIdPath(thread)} verus"
@@ -368,7 +414,24 @@ object GumboRustPlugin {
     localStore = MakefileUtil.addMakefileTargets(ISZ("system.mk"), ISZ(MakefileTarget(name = "verus", allowMultiple = F, dependencies = ISZ(), body = makefileVerusItems)), localStore)
     localStore = MakefileUtil.addMakefileTargets(ISZ("Makefile"), ISZ(MakefileTarget(name = "verus", allowMultiple = F, dependencies = ISZ(st"$${TOP_BUILD_DIR}/Makefile"), body = ISZ(st"$${MAKE} -C $${TOP_BUILD_DIR} verus"))), localStore)
 
-    return (GumboRustPlugin.putGumboRustContributions(DefaultGumboRustContributions(datatypeInvariants), localStore), ISZ())
+    return (GumboRustPlugin.putGumboRustContributions(DefaultGumboRustContributions(datatypeInvariants, libraryAnnexes), localStore), ISZ())
+  }
+
+  @pure def handleGclLibrary(gclLib: GclAnnexLibInfo, symbolTable: SymbolTable, types: AadlTypes, store: Store, reporter: Reporter): ISZ[RAST.Item] = {
+    val GclAnnexLibInfo(annex, name, gclSymbolTable) = gclLib
+    return (for(m <- annex.methods) yield GumboRustUtil.processGumboMethod(
+      m = m,
+
+      owner = gclLib.name,
+      optComponent = None(),
+      isLibraryMethod = T,
+
+      inVerus = T,
+      aadlTypes = types,
+      tp = CRustTypePlugin.getCRustTypeProvider(store).get,
+      gclSymbolTable = gclSymbolTable,
+      store = store,
+      reporter = reporter))
   }
 
   @pure def handleIntegrationConstraints(thread: AadlThread,
@@ -554,6 +617,72 @@ object GumboRustPlugin {
         requires = requires,
         optEnsuresMarker = optEnsuresMarker,
         ensures = ensures))))
+  }
+
+  @pure override def finalizeMicrokit(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
+    GumboRustPlugin.getGumboRustContributions(store) match {
+      case Some(c) =>
+        // write out any gumbo library annex crates
+
+        assert (c.libraryAnnexes.nonEmpty)
+        var localStore = store
+        var resources: ISZ[Resource] = ISZ()
+
+        for (e <- c.libraryAnnexes.entries) {
+
+          val rootDir = s"${options.sel4OutputDir.get}/crates/${e._1}"
+
+          { // crates/<aadl-package-name>/src/lib.rs
+            val path = s"$rootDir/src/lib.rs"
+
+            val content =
+              st"""#![cfg_attr(not(test), no_std)]
+                  |
+                  |${RustUtil.defaultCrateLevelAttributes}
+                  |
+                  |${MicrokitUtil.doNotEdit}
+                  |
+                  |use data::*;
+                  |use vstd::prelude::*;
+                  |
+                  |${GumboRustUtil.RustImplicationMacros}
+                  |
+                  |${(for (i <- e._2) yield i.prettyST, "\n\n")}"""
+
+            resources = resources :+ ResourceUtil.createResource(path, content, T)
+          }
+
+          { // crates/<aadl-package-name>/Cargo.toml
+            val content = st"""${MicrokitUtil.safeToEditMakefile}
+                              |
+                              |[package]
+                              |name = "${e._1}"
+                              |version = "0.1.0"
+                              |edition = "2021"
+                              |
+                              |[dependencies]
+                              |data = { path="../data" }
+                              |${RustUtil.verusCargoDependencies(store)}
+                              |
+                              |${RustUtil.commonCargoTomlEntries}
+                              |"""
+            val cargoTomlPath = s"${rootDir}/Cargo.toml"
+            resources = resources :+ ResourceUtil.createResourceH(path = cargoTomlPath, content = content, overwrite = F, isDatatype = T)
+          }
+
+          { // crates/<aadl-package-name>/rust-toolchain.toml
+            val content = RustUtil.defaultRustToolChainToml
+
+            val rusttoolchain = s"${rootDir}/rust-toolchain.toml"
+            resources = resources :+ ResourceUtil.createResourceH(path = rusttoolchain, content = content, overwrite = F, isDatatype = T)
+
+          }
+        }
+
+        return (localStore + s"FINALIZED_$name" ~> BoolValue(T), resources)
+
+      case _ => halt("Infeasible")
+    }
   }
 }
 

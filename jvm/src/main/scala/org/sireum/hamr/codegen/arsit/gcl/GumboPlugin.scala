@@ -19,7 +19,7 @@ import org.sireum.message.Reporter
 
   val name: String = "Gumbo Plugin"
 
-  @strictpure def getAnnexLibraries(symbolTable: SymbolTable): ISZ[GclAnnexLibInfo] =
+  @strictpure def getGclAnnexLibraries(symbolTable: SymbolTable): ISZ[GclAnnexLibInfo] =
     symbolTable.annexLibInfos.filter(f => f.isInstanceOf[GclAnnexLibInfo]).map(m => m.asInstanceOf[GclAnnexLibInfo])
 
   def canHandleBehaviorEntryPointProvider(entryPoint: EntryPoints.Type,
@@ -32,7 +32,7 @@ import org.sireum.message.Reporter
 
                                           store: Store): B = {
     val localGumboStore = GumboXPluginStore.getGumboStore(store)
-    val needToProcessGclAnnexLibraries = !localGumboStore.handledAnnexLibraries && getAnnexLibraries(symbolTable).nonEmpty
+    val needToProcessGclAnnexLibraries = !localGumboStore.handledAnnexLibraries && getGclAnnexLibraries(symbolTable).nonEmpty
 
     val needToProcessComponentsGclSubclause: B = resolvedAnnexSubclauses.filter(p => p.isInstanceOf[GclAnnexClauseInfo]) match {
       // GCL's symbol resolver ensures there's at most one GCL clause per component
@@ -77,7 +77,7 @@ import org.sireum.message.Reporter
     var resources: ISZ[Resource] = ISZ()
 
     if (!localGumboStore.handledAnnexLibraries) {
-      for (gclLib <- getAnnexLibraries(symbolTable)) {
+      for (gclLib <- getGclAnnexLibraries(symbolTable)) {
         val (content, filename) = GumboGen.processGclLibrary(gclLib, symbolTable, aadlTypes, componentNames.basePackage, store)
         // TODO: treat libraries as datatype files since datatype invariants may use the libraries functions
         //       (i.e. the file containing the library will need to be given to slangcheck)
@@ -139,7 +139,7 @@ import org.sireum.message.Reporter
         }
 
       case _ =>
-        if (!getAnnexLibraries(symbolTable).nonEmpty) {
+        if (!getGclAnnexLibraries(symbolTable).nonEmpty) {
           halt(s"Infeasible: the system doesn't have GCL annex libraries and ${component.identifier} does not have a GCL subclause so why did the ${this.name} offer agree to handle the component?")
         }
     }

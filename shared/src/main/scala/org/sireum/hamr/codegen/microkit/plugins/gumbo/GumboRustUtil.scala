@@ -18,6 +18,18 @@ import org.sireum.message.Reporter
 
 object GumboRustUtil {
 
+  val RustImplicationMacros: ST = st"""macro_rules! implies {
+                                      |  ($$lhs: expr, $$rhs: expr) => {
+                                      |    !$$lhs || $$rhs
+                                      |  };
+                                      |}
+                                      |
+                                      |macro_rules! impliesL {
+                                      |  ($$lhs: expr, $$rhs: expr) => {
+                                      |    !$$lhs | $$rhs
+                                      |  };
+                                      |}"""
+
   @pure def getGumboSubclauseOpt(threadId: IdPath, symbolTable: SymbolTable): Option[GclAnnexClauseInfo] = {
     symbolTable.annexClauseInfos.get(threadId) match {
       case Some(clauses) =>
@@ -101,7 +113,9 @@ object GumboRustUtil {
     val verusExp =
       SlangExpUtil.rewriteExpH(
         rexp = SlangExpUtil.getRexp(spec.exp, gclSymbolTable),
-        component = component,
+
+        owner = component.classifier,
+        optComponent = Some(component),
         context = context,
 
         inRequires = isAssumeRequires,
@@ -129,8 +143,11 @@ object GumboRustUtil {
       if (c.assumes.nonEmpty)
         Some(SlangExpUtil.rewriteExpH(
           rexp = SlangExpUtil.getRexp(c.assumes.get, gclSymbolTable),
-          component = component,
+
+          owner = component.classifier,
+          optComponent = Some(component),
           context = Context.compute_clause,
+
           substitutions = Map.empty,
           inRequires = T,
           inVerus = T,
@@ -142,8 +159,11 @@ object GumboRustUtil {
     val ensures =
       SlangExpUtil.rewriteExpH(
         rexp = SlangExpUtil.getRexp(c.guarantees, gclSymbolTable),
-        component = component,
+
+        owner = component.classifier,
+        optComponent = Some(component),
         context = Context.compute_clause,
+
         substitutions = Map.empty,
         inRequires = F,
         inVerus = T,
@@ -178,7 +198,9 @@ object GumboRustUtil {
   }
 
   def processGumboMethod(m: GclMethod,
-                         component: AadlComponent,
+
+                         owner: IdPath,
+                         optComponent: Option[AadlComponent],
                          isLibraryMethod: B,
 
                          inVerus: B,
@@ -217,8 +239,11 @@ object GumboRustUtil {
             assert (r.expOpt.nonEmpty, "Currently expecting GUMBO methods to return values")
             SlangExpUtil.rewriteExp(
               rexp = SlangExpUtil.getRexp(r.expOpt.get, gclSymbolTable),
-              component = component,
+
+              owner = owner,
+              optComponent = optComponent,
               context = if (isLibraryMethod) Context.library_function else Context.subclause_function,
+
               inRequires = F,
               inVerus = inVerus,
               tp = tp,
@@ -233,12 +258,14 @@ object GumboRustUtil {
       case _ => None()
     }
 
+    val id: String = s"${m.method.sig.id.value}${if (isLibraryMethod && inVerus) "_spec" else ""}"
+
     return RAST.FnImpl(
       comments = ISZ(),
       attributes = ISZ(),
       visibility = RAST.Visibility.Public,
       sig = RAST.FnSig(
-        ident = RAST.IdentString(m.method.sig.id.value),
+        ident = RAST.IdentString(id),
         fnDecl = RAST.FnDecl(
           inputs = inputs,
           outputs = RAST.FnRetTyImpl(RAST.TyPath(ISZ(r(m.method.sig.returnType.asInstanceOf[SAST.Type.Named]).qualifiedRustNameS), None()))

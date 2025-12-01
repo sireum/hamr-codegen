@@ -46,7 +46,10 @@ object ComponentContributions {}
                                        val appStructDef: RAST.StructDef,
                                        val appStructImpl: RAST.Impl,
 
-                                       val crateLevelEntries: ISZ[RAST.Item])
+                                       val crateLevelEntries: ISZ[RAST.Item],
+
+                                       // items for Cargo.toml's [dependencies] table
+                                       val crateDependencies: ISZ[ST])
 
 @sig trait CRustComponentContributions extends StoreValue {
   @pure def componentContributions: Map[IdPath, ComponentContributions]
@@ -222,7 +225,8 @@ object ComponentContributions {}
           appUses = uses,
           appStructDef = struct,
           appStructImpl = impl,
-          crateLevelEntries = funcs)
+          crateLevelEntries = funcs,
+          crateDependencies = ISZ())
 
       makefileTestEntries = makefileTestEntries :+ st"make -C $${CRATES_DIR}/$threadId test"
 
@@ -448,6 +452,10 @@ object ComponentContributions {}
       { // Cargo.toml
         val versions = MicrokitUtil.getMicrokitVersions(localStore)
 
+        val optDeps: Option[ST] =
+          if (e._2.crateDependencies.nonEmpty) Some(st"${(e._2.crateDependencies, "\n")}")
+          else None()
+
         val content =
           st"""${MicrokitUtil.safeToEditMakefile}
               |
@@ -462,6 +470,7 @@ object ComponentContributions {}
               |log = "${versions.get("log").get}"
               |${RustUtil.sel4CargoDependencies(localStore)}
               |${RustUtil.verusCargoDependencies(localStore)}
+              |$optDeps
               |
               |[dev-dependencies]
               |lazy_static = "${versions.get("lazy_static").get}"

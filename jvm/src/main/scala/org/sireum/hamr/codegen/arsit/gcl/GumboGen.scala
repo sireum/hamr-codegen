@@ -287,7 +287,7 @@ object GumboGen {
     val GclAnnexLibInfo(annex, name, gclSymbolTable) = gclLib
 
     val gg = GumboGen(gclSymbolTable = gclSymbolTable, symbolTable = symbolTable, aadlTypes = aadlTypes, basePackageName = basePackage)
-    val methods = annex.methods.map((m: GclMethod) => gg.processGclMethod(m, store))
+    val methods: ISZ[ST] = for (m <- annex.methods) yield gg.processGclMethod(m, store)
 
     val filename: ISZ[String] = ISZ(basePackage) ++ annex.containingPackage.name :+ s"${GUMBO__Library}.scala"
 

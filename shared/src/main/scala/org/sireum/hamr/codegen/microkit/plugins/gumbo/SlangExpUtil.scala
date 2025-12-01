@@ -2,7 +2,7 @@
 package org.sireum.hamr.codegen.microkit.plugins.gumbo
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.CommonUtil.{Store, TypeIdPath}
+import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, Store, TypeIdPath}
 import org.sireum.hamr.codegen.common.StringUtil
 import org.sireum.hamr.codegen.common.resolvers.GclResolver
 import org.sireum.hamr.codegen.common.symbols.{AadlComponent, GclSymbolTable, SymTableKey}
@@ -40,7 +40,9 @@ object SlangExpUtil {
   }
 
   @pure def rewriteExp(rexp: Exp,
-                       component: AadlComponent,
+
+                       owner: IdPath,
+                       optComponent: Option[AadlComponent],
                        context: Context.Type,
 
                        inRequires: B,
@@ -50,12 +52,13 @@ object SlangExpUtil {
                        aadlTypes: AadlTypes,
                        store: Store,
                        reporter: Reporter): ST = {
-    return rewriteExpH(rexp, component, context, Map.empty, inRequires, inVerus, tp, aadlTypes, store, reporter)
+    return rewriteExpH(rexp, owner, optComponent, context, Map.empty, inRequires, inVerus, tp, aadlTypes, store, reporter)
   }
 
   @pure def rewriteExpH(rexp: Exp,
 
-                        component: AadlComponent,
+                        owner: IdPath,
+                        optComponent: Option[AadlComponent],
                         context: Context.Type,
 
                         substitutions: Map[String, String],
@@ -67,11 +70,13 @@ object SlangExpUtil {
                         aadlTypes: AadlTypes,
                         store: Store,
                         reporter: Reporter): ST = {
-    return rewriteExpHL(rexp, component, context, substitutions, inRequires, inVerus, F, F, tp, aadlTypes, store, reporter)
+    return rewriteExpHL(rexp, owner, optComponent, context, substitutions, inRequires, inVerus, F, F, tp, aadlTypes, store, reporter)
   }
 
   @pure def rewriteExpHL(rexp: Exp,
-                         component: AadlComponent,
+
+                         owner: IdPath,
+                         optComponent: Option[AadlComponent],
                          context: Context.Type,
 
                          substitutions: Map[String, String],
@@ -230,27 +235,49 @@ object SlangExpUtil {
                 }
               } else {
 
-                @pure def useFullyQualified(): String = {
+                @pure def genMethodCall(): ST = {
                   exp.attr match {
-                    case SAST.ResolvedAttr(Some(m: SAST.ResolvedInfo.Method), Some(t))=>
-                      if (component.classifier == m.owner) {
-                        if(!inVerus) {
-                          // emitting GUMBOX, call local GUMBOX function
-                          return ""
-                        } else {
-                          // emitting Verus
-                          context match {
-                            case Context.integration_constraint =>
-                              // emitting Verus in bridge/api so use fully qualified name to components crate
-                              return s"crate::component::${CRustComponentPlugin.appModuleName(component)}::"
-                            case Context.datatype_invariant =>
-                              // datatype invariants should only be calling library functions
-                              halt("Probably infeasible: datatype invariant calling a subclause function")
-                            case _ => return ""
+                    case SAST.ResolvedAttr(Some(m: SAST.ResolvedInfo.Method), Some(t)) =>
+                      m.owner match {
+                        case ISZ(aadlPackageName, "GUMBO__Library") =>
+                          // making a call to a gumbo library annex function
+
+                          val id: String = s"${exp.ident.id.value}${if (inVerus) "_spec" else ""}"
+
+                          if (m.owner == owner) {
+                            return st"$id(${(args, ", ")})"
+                          } else {
+                            val crate = s"$aadlPackageName::"
+                            return st"$crate$id(${(args, ", ")})"
                           }
-                        }
-                      } else {
-                        halt(s"Diff: ${component.classifier} -- ${m.owner}")
+                        case _ =>
+                          val id = exp.ident.id.value
+
+                          optComponent match {
+                            case Some(component) =>
+                              if (component.classifier == m.owner) {
+                                if(!inVerus) {
+                                  // emitting GUMBOX, call local GUMBOX function
+                                  return st"$id(${(args, ", ")})"
+                                } else {
+                                  // emitting Verus
+                                  context match {
+                                    case Context.integration_constraint =>
+                                      // emitting Verus in bridge/api so use fully qualified name to components crate
+                                      return st"crate::component::${CRustComponentPlugin.appModuleName(component)}::$id(${(args, ", ")})"
+                                    case Context.datatype_invariant =>
+                                      // datatype invariants should only be calling library functions
+                                      halt("Probably infeasible: datatype invariant calling a subclause function")
+                                    case _ =>
+                                      return st"$id(${(args, ", ")})"
+                                  }
+                                }
+                              } else {
+                                halt(s"Diff: ${component.classifier} -- ${m.owner}")
+                              }
+                            case _ =>
+                              halt(exp.string)
+                          }
                       }
                     case _ =>
                       halt(s"invoke not resolved: $exp")
@@ -261,12 +288,16 @@ object SlangExpUtil {
                   case Some(m: SAST.ResolvedInfo.Method) if m.owner == ISZ("org", "sireum") && m.id == "IS" =>
 
                     @pure def isThreadSingleton(e: Exp): B = {
-                      e match {
-                        case Exp.Select(None(), id, _) =>
-                          val classifier = StringUtil.sanitizeName(component.classifier(component.classifier.lastIndex))
-                          val path = st"${(ops.ISZOps(component.path).drop(1), "_")}".render
+                      optComponent match {
+                        case Some(component) =>
+                          e match {
+                            case Exp.Select(None(), id, _) =>
+                              val classifier = StringUtil.sanitizeName(component.classifier(component.classifier.lastIndex))
+                              val path = st"${(ops.ISZOps(component.path).drop(1), "_")}".render
 
-                          return s"${classifier}_$path" == id.value
+                              return s"${classifier}_$path" == id.value
+                            case _ => return F
+                          }
                         case _ => return F
                       }
                     }
@@ -308,7 +339,7 @@ object SlangExpUtil {
                     }
                   case _ =>
                     // normal method invocation
-                    return st"${useFullyQualified()}${exp.ident.id.value}(${(args, ",")})"
+                    return genMethodCall()
                 }
               }
           }
@@ -439,25 +470,30 @@ object SlangExpUtil {
           return st"${receiverOptST(receiverOpt, separator)}len()"
         case _ =>
           val fq: ST = attr match {
-            case SAST.ResolvedAttr(Some(m: SAST.ResolvedInfo.Method), Some(t))=>
-              if (component.classifier == m.owner) {
-                if(!inVerus) {
-                  // emitting GUMBOX, call local GUMBOX function
-                  st""
-                } else {
-                  // emitting Verus
-                  context match {
-                    case Context.integration_constraint =>
-                      // emitting Verus in bridge/api so use fully qualified name to components crate
-                      st"crate::component::${CRustComponentPlugin.appModuleName(component)}::"
-                    case Context.datatype_invariant =>
-                      // datatype invariants should only be calling library functions
-                      halt("Probably infeasible: datatype invariant calling a subclause function")
-                    case _ => st""
+            case SAST.ResolvedAttr(Some(m: SAST.ResolvedInfo.Method), Some(t)) =>
+              optComponent match {
+                case Some(component) =>
+                  if (component.classifier == m.owner) {
+                    if(!inVerus) {
+                      // emitting GUMBOX, call local GUMBOX function
+                      st""
+                    } else {
+                      // emitting Verus
+                      context match {
+                        case Context.integration_constraint =>
+                          // emitting Verus in bridge/api so use fully qualified name to components crate
+                          st"crate::component::${CRustComponentPlugin.appModuleName(component)}::"
+                        case Context.datatype_invariant =>
+                          // datatype invariants should only be calling library functions
+                          halt("Probably infeasible: datatype invariant calling a subclause function")
+                        case _ => st""
+                      }
+                    }
+                  } else {
+                    st"${receiverOptST(receiverOpt = receiverOpt, sep = separator)}"
                   }
-                }
-              } else {
-                st"${receiverOptST(receiverOpt = receiverOpt, sep = separator)}"
+                case _ =>
+                  halt(rexp.string)
               }
             case _ =>
               st"${receiverOptST(receiverOpt = receiverOpt, sep = separator)}"

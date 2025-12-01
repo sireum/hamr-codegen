@@ -5,7 +5,7 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil._
 import org.sireum.hamr.codegen.common.containers.Resource
 import org.sireum.hamr.codegen.common.resolvers.GclResolver
-import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlThread, GclAnnexClauseInfo, SymbolTable}
+import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlThread, GclAnnexClauseInfo, GclAnnexLibInfo, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.HamrCli.CodegenHamrPlatform
 import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
@@ -96,7 +96,8 @@ object GumboXComputeContributions {
       // gumbo rust plugin provides datatype invariant rust methods
       GumboRustPlugin.getGumboRustContributions(store).nonEmpty &&
       (GumboRustPlugin.getThreadsWithContracts(store).nonEmpty ||
-        GumboRustPlugin.getDatatypesWithContracts(store).nonEmpty)
+        GumboRustPlugin.getDatatypesWithContracts(store).nonEmpty ||
+        GumboRustPlugin.getGclLibraryAnnexes(symbolTable).nonEmpty)
 
   @pure override def canFinalizeMicrokit(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): B = {
     return (
@@ -122,6 +123,15 @@ object GumboXComputeContributions {
 
     val datatypeInvariants = GumboRustPlugin.getGumboRustContributions(localStore).get.datatypeInvariants
     var items: Map[ThreadIdPath, GumboXComponentContributions] = Map.empty
+
+    var libraryAnnexes: Map[String, ISZ[RAST.Item]] = GumboRustPlugin.getGumboRustContributions(localStore).get.libraryAnnexes
+    for(gclLib <- GumboRustPlugin.getGclLibraryAnnexes(symbolTable)) {
+      assert(gclLib.name.size == 2 && gclLib.name(1) == "GUMBO__Library", gclLib.name.string)
+      val name = gclLib.name(0)
+      val verusFunctions = libraryAnnexes.get(name).get
+      libraryAnnexes = libraryAnnexes + name ~>
+        (handleGclLibrary(gclLib, symbolTable, types, store, reporter) ++ verusFunctions)
+    }
 
     for (thread <- symbolTable.getThreads() if MicrokitUtil.isRusty(thread)) {
       assert(!items.contains(thread.path), "Not expecting anyone else to have made gumbox contributions up to this point")
@@ -172,7 +182,27 @@ object GumboXComputeContributions {
     localStore = CRustTestingPlugin.putCRustTestingContributions(
       CRustTestingPlugin.CRustTestingContributions(testingContributions), localStore)
 
+    localStore = GumboRustPlugin.putGumboRustContributions(
+      GumboRustPlugin.getGumboRustContributions(localStore).get.setLibraryAnnexes(libraryAnnexes), localStore)
+
     return (GumboXRustPlugin.putGumboXContributions(DefaultGumboXContributions(items), localStore), resources)
+  }
+
+  @pure def handleGclLibrary(gclLib: GclAnnexLibInfo, symbolTable: SymbolTable, types: AadlTypes, store: Store, reporter: Reporter): ISZ[RAST.Item] = {
+    val GclAnnexLibInfo(annex, name, gclSymbolTable) = gclLib
+    return (for(m <- annex.methods) yield GumboRustUtil.processGumboMethod(
+      m = m,
+
+      owner = gclLib.name,
+      optComponent = None(),
+      isLibraryMethod = T,
+
+      inVerus = F,
+      aadlTypes = types,
+      tp = CRustTypePlugin.getCRustTypeProvider(store).get,
+      gclSymbolTable = gclSymbolTable,
+      store = store,
+      reporter = reporter))
   }
 
   @pure def updatePuttersWithStateVars(testingApis: ISZ[RAST.Item], computeContributions: GumboXComputeContributions): ISZ[RAST.Item] = {
@@ -276,8 +306,11 @@ object GumboXComputeContributions {
         for (m <- c.annex.methods) {
           ret = ret :+ GumboRustUtil.processGumboMethod(
             m = m,
-            component = thread,
+
+            owner = thread.classifier,
+            optComponent = Some(thread),
             isLibraryMethod = F,
+
             inVerus = F,
             aadlTypes = types,
             tp = crustTypeProvider,
@@ -307,7 +340,9 @@ object GumboXComputeContributions {
           val clause = gclSymbolTable.integrationMap.get(port).get
           val rewrittenExp = SlangExpUtil.rewriteExp(
             rexp = SlangExpUtil.getRexp(clause.exp, gclSymbolTable),
-            component = thread,
+
+            owner = thread.classifier,
+            optComponent = Some(thread),
             context = Context.integration_constraint,
 
             // integration GclGuarantees become verus requires clauses and
@@ -405,7 +440,9 @@ object GumboXComputeContributions {
             GclResolver.getSlangTypeToAadlType(store), crustTypeProvider)
           val rewrittenExp = SlangExpUtil.rewriteExp(
             rexp = gg.exp,
-            component = thread,
+
+            owner = thread.classifier,
+            optComponent = Some(thread),
             context = Context.initialize_clause,
 
             inRequires = F,
@@ -594,8 +631,11 @@ object GumboXComputeContributions {
 
           val rexp = SlangExpUtil.rewriteExp(
             rexp = gg.exp,
-            component = thread,
+
+            owner = thread.classifier,
+            optComponent = Some(thread),
             context = Context.compute_clause,
+
             inRequires = T,
             inVerus = F,
             tp = crustTypeProvider,
@@ -635,8 +675,11 @@ object GumboXComputeContributions {
             GclResolver.getSlangTypeToAadlType(store), crustTypeProvider)
           val rexp = SlangExpUtil.rewriteExp(
             rexp = gg.exp,
-            component = thread,
+
+            owner = thread.classifier,
+            optComponent = Some(thread),
             context = Context.compute_clause,
+
             inRequires = F,
             inVerus = F,
             tp = crustTypeProvider,
@@ -737,8 +780,11 @@ object GumboXComputeContributions {
                   combinedAssumGuarParams = combinedAssumGuarParams ++ ggAssm.params.elements
                   Some(SlangExpUtil.rewriteExp(
                     rexp = ggAssm.exp,
-                    component = thread,
+
+                    owner = thread.classifier,
+                    optComponent = Some(thread),
                     context = Context.compute_clause,
+
                     inRequires = T,
                     inVerus = F,
                     tp = crustTypeProvider,
@@ -752,8 +798,11 @@ object GumboXComputeContributions {
               GclResolver.getSlangTypeToAadlType(store), crustTypeProvider)
             val rGuar = SlangExpUtil.rewriteExp(
               rexp = ggGuar.exp,
-              component = thread,
+
+              owner = thread.classifier,
+              optComponent = Some(thread),
               context = Context.compute_clause,
+
               inRequires = F,
               inVerus = F,
               tp = crustTypeProvider,
@@ -1556,17 +1605,7 @@ object GumboXComputeContributions {
               |
               |use ${CRustTypePlugin.usePath};
               |
-              |macro_rules! implies {
-              |  ($$lhs: expr, $$rhs: expr) => {
-              |    !$$lhs || $$rhs
-              |  };
-              |}
-              |
-              |macro_rules! impliesL {
-              |  ($$lhs: expr, $$rhs: expr) => {
-              |    !$$lhs | $$rhs
-              |  };
-              |}
+              |${GumboRustUtil.RustImplicationMacros}
               |
               |${(entries, "\n\n")}
               |"""
