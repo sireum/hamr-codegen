@@ -74,6 +74,10 @@ object RustContainers {
   @datatype class VerusBlock(val isRequiresBlock: B,
                              val gumboClauses: ISZ[GumboClause])
 
+  @datatype class RustConst(val name: String,
+                           val visibility: Visibility.Type,
+                           val pos: Position) extends RustItem
+
   @datatype class RustFn(val name: String,
                          val visibility: Visibility.Type,
                          val isConst: B,
@@ -120,14 +124,17 @@ object RustContainers {
 
   @datatype class RustExtern (val name: String,
                               val methods: Map[String, RustFn],
+                              val constants: Map[String, RustConst],
                               val pos: Position) extends RustMethodContainer
 
   @datatype class RustTrait(val name: String,
                             val methods: Map[String, RustFn],
+                            val constants: Map[String, RustConst],
                             val pos: Position) extends RustMethodContainer
 
   @datatype class RustStruct(val name: String,
                              val fields: Map[String, RustField],
+                             val constants: Map[String, RustConst],
                              val pos: Position) extends RustFieldContainer
 
   @datatype class GenericParam(val paramId: String,
@@ -136,5 +143,6 @@ object RustContainers {
   @datatype class RustImpl(val genericParam: Option[GenericParam],
                            val name: String,
                            val methods: Map[String, RustFn],
+                           val constants: Map[String, RustConst],
                            val pos: Position) extends RustMethodContainer
 }

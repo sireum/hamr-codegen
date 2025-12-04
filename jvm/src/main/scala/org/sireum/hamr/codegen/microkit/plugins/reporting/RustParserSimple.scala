@@ -179,6 +179,27 @@ object RustParserSimple {
       }
     }
 
+    @pure def addConstant(c: RustContainers.RustConst): Unit = {
+      if (rustItems.isEmpty) {
+        rustItems = rustItems.push(c)
+      } else {
+        rustItems.peek.get match {
+          case r: RustExtern if !r.finalized =>
+            val (_, s) = rustItems.pop.get
+            rustItems = s.push(r(constants = r.constants + c.name ~> c))
+          case r: RustTrait if !r.finalized =>
+            val (_, s) = rustItems.pop.get
+            rustItems = s.push(r(constants = r.constants + c.name ~> c))
+          case r: RustImpl if !r.finalized =>
+            val (_, s) = rustItems.pop.get
+            rustItems = s.push(r(constants = r.constants + c.name ~> c))
+          case _ =>
+            // must be a top level function
+            rustItems = rustItems.push(c)
+        }
+      }
+    }
+
     @pure def popTokens(): ISZ[Token] = {
       var ret: ISZ[Token] = ISZ()
 
@@ -416,11 +437,32 @@ object RustParserSimple {
         (z + 1 < content.size && content(z) == '/' && (content(z + 1) == '/' || content(z + 1) == '*'))
     }
 
+    @pure def is(keyword: String) : B = {
+      return isH(keyword = keyword, advance = T)
+    }
+
+    @pure def isH(keyword: String, advance: B): B = {
+      if ((offset + keyword.size < content.size) && (offset == 0 || content(offset - 1).isWhitespace)) {
+        val cis = conversions.String.toCis(keyword)
+        for (i <- 0 until cis.size if cis(i) != content(offset + i)) {
+          return F
+        }
+        if (isEndOfKeyword(offset + cis.size)) {
+          if (advance) {
+            offset = offset + cis.size
+            col = col + cis.size
+          }
+          return T
+        }
+      }
+      return F
+    }
+
     @pure def parseContract(): (Option[VerusBlock], Option[VerusBlock]) = {
       var blocks: Stack[VerusBlock] = Stack.empty
       var optMarker: Option[Marker] = None()
 
-      // return T if if/else block was consumer, F otherwise
+      // return T if if/else block was consumed, F otherwise
       @pure def consumeIfElseBlock(): B = {
         consumeWhiteSpaceAndComments()
         if (offset + 2 < content.size && content(offset) == 'i' && content(offset + 1) == 'f' && content(offset + 2) == ' ' ) {
@@ -501,25 +543,17 @@ object RustParserSimple {
             blocks = stack.push(block(gumboClauses = block.gumboClauses :+ clause))
           case _ =>
         }
-        if (offset + 7 < content.size && (offset == 0 || content(offset - 1).isWhitespace) &&
-          content(offset) == 'r' && content(offset + 1) == 'e' &&content(offset + 2) == 'q' && content(offset + 3) == 'u' && content(offset + 4) == 'i' && content(offset + 5) == 'r' && content(offset + 6) == 'e' && content(offset + 7) == 's' &&
-          isEndOfKeyword(offset + 8)) {
+        if (is("requires")) {
           // requires
 
           blocks = blocks.push (VerusBlock(T, ISZ()))
 
-          col = col + 8
-          offset = offset + 8
         }
-        else if (offset + 7 < content.size && (offset == 0 || content(offset - 1).isWhitespace) &&
-          content(offset) == 'e' && content(offset + 1) == 'n' &&content(offset + 2) == 's' && content(offset + 3) == 'u' && content(offset + 4) == 'r' && content(offset + 5) == 'e' && content(offset + 6) == 's' &&
-          isEndOfKeyword(offset + 7)) {
+        else if (is("ensures")) {
           // ensures
 
           blocks = blocks.push (VerusBlock(F, ISZ()))
 
-          col = col + 7
-          offset = offset + 7
         } else if (content(offset) != '{') {
           increment()
         }
@@ -634,18 +668,12 @@ object RustParserSimple {
         else if (content(offset) == '\n') {
           increment()
         }
-        else if (offset + 3 < content.size && (offset == 0 || content(offset - 1).isWhitespace) &&
-          content(offset) == 'p' && content(offset + 1) == 'u' && content(offset + 2) == 'b' &&
-          isEndOfKeyword(offset + 3)) {
+        else if (is("pub")) {
           // pub
-          col = col + 3
-          offset = offset + 3
           consumeWhiteSpaceAndComments()
           if (processingStruct()) {
             // must be a field
-            if (offset + 5 < content.size && (offset == 0 || content(offset - 1).isWhitespace) &&
-              content(offset) == 'g' && content(offset + 1) == 'h' && content(offset + 2) == 'o' && content(offset + 3) == 's' &&
-              content(offset + 4) == 't' && isEndOfKeyword(offset + 5)) {
+            if (isH("ghost", F)) {
               // pub ghost <field-name>
               col = col + 5
               offset = offset + 5
@@ -698,55 +726,55 @@ object RustParserSimple {
               offset = beginOffset, len = offset - beginOffset - 1))
           }
         }
-        else if (offset + 5 < content.size && (offset == 0 || content(offset - 1).isWhitespace) &&
-          content(offset) == 'c' && content(offset + 1) == 'o' && content(offset + 2) == 'n' && content(offset + 3) == 's' && content(offset + 4) == 't' &&
-          isEndOfKeyword(offset + 5)) {
-          // const
-          col = col + 5
-          offset = offset + 5
-          tokenStack = tokenStack.push(const(
+        else if (is("const")) {
+          val candKeyword = const(
             beginLine = line, beginCol = beginCol,
             endLine = line, endCol = col - 1,
-            offset = beginOffset, len = offset - beginOffset - 1))
+            offset = beginOffset, len = offset - beginOffset - 1)
+
+          consumeWhiteSpaceAndComments()
+
+          if (isH("fn", F)) {
+            tokenStack = tokenStack.push(candKeyword)
+          }
+          else {
+            // must be a constant
+            val name = consumeName()
+
+            scanToChar(ISZ(';'))
+
+            val token = const(
+              beginLine = beginLine, beginCol = beginCol,
+              endLine = line, endCol = col,
+              offset = beginOffset, len = offset - beginOffset)
+
+            val poppedTokens = ops.ISZOps(popTokens())
+
+            addConstant(RustConst(
+              name = name,
+              visibility = if (poppedTokens.filter(p => p.isInstanceOf[pub]).nonEmpty) Visibility.Public else Visibility.Private,
+              pos = buildPosition(token)))
+          }
         }
-        else if (offset + 4 < content.size && (offset == 0 || content(offset - 1).isWhitespace) &&
-          content(offset) == 'o' && content(offset + 1) == 'p' && content(offset + 2) == 'e' && content(offset + 3) == 'n' &&
-          isEndOfKeyword(offset + 4)) {
-          // open
-          col = col + 4
-          offset = offset + 4
+        else if (is("open")) {
           tokenStack = tokenStack.push(open(
             beginLine = line, beginCol = beginCol,
             endLine = line, endCol = col - 1,
             offset = beginOffset, len = offset - beginOffset - 1))
         }
-        else if (offset + 4 < content.size && (offset == 0 || content(offset - 1).isWhitespace) &&
-          content(offset) == 's' && content(offset + 1) == 'p' && content(offset + 2) == 'e' && content(offset + 3) == 'c' &&
-          isEndOfKeyword(offset + 4)) {
-          // spec
-          col = col + 4
-          offset = offset + 4
+        else if (is("spec")) {
           tokenStack = tokenStack.push(spec(
             beginLine = line, beginCol = beginCol,
             endLine = line, endCol = col - 1,
             offset = beginOffset, len = offset - beginOffset - 1))
         }
-        else if (offset + 4 < content.size && (offset == 0 || content(offset - 1).isWhitespace) &&
-          content(offset) == 'e' && content(offset + 1) == 'x' && content(offset + 2) == 'e' && content(offset + 3) == 'x' &&
-          isEndOfKeyword(offset + 4)) {
-          // exec
-          col = col + 4
-          offset = offset + 4
+        else if (is("exec")) {
           tokenStack = tokenStack.push(exec(
             beginLine = line, beginCol = beginCol,
             endLine = line, endCol = col - 1,
             offset = beginOffset, len = offset - beginOffset - 1))
         }
-        else if (offset + 2 < content.size && (offset == 0 || content(offset - 1).isWhitespace) &&
-          content(offset) == 'f' && content(offset + 1) == 'n' && isEndOfKeyword(offset + 2)) {
-          // fn <name>
-          col = col + 2
-          offset = offset + 2
+        else if (is("fn")) {
           consumeWhiteSpaceAndComments()
           val name = consumeName()
 
@@ -796,12 +824,8 @@ object RustParserSimple {
 
           increment()
         }
-        else if (offset + 6 < content.size && (offset == 0 || content(offset - 1).isWhitespace) &&
-          content(offset) == 's' && content(offset + 1) == 't' && content(offset + 2) == 'r' && content(offset + 3) == 'u' &&
-          content(offset + 4) == 'c' && content(offset + 5) == 't' && isEndOfKeyword(offset + 6)) {
+        else if (is("struct")) {
           // struct <name>
-          col = col + 6
-          offset = offset + 6
           consumeWhiteSpaceAndComments()
           val name = consumeName()
           scanToChar(ISZ(';', '{'))
@@ -833,16 +857,12 @@ object RustParserSimple {
               token
             }
 
-          rustItems = rustItems.push(RustStruct(name = name, fields = Map.empty, pos = buildPosition(token)))
+          rustItems = rustItems.push(RustStruct(name = name, fields = Map.empty, constants = Map.empty, pos = buildPosition(token)))
 
           increment()
         }
-        else if (offset + 6 < content.size && (offset == 0 || content(offset - 1).isWhitespace) &&
-          content(offset) == 'e' && content(offset + 1) == 'x' && content(offset + 2) == 't' && content(offset + 3) == 'e' &&
-          content(offset + 4) == 'r' && content(offset + 5) == 'n' && isEndOfKeyword(offset + 6)) {
+        else if (is("extern")) {
           // extern
-          col = col + 6
-          offset = offset + 6
           consumeWhiteSpaceAndComments()
           val name = consumeName()
           scanToChar(ISZ('{'))
@@ -867,7 +887,7 @@ object RustParserSimple {
               token
             }
 
-          rustItems = rustItems.push(RustExtern(name = name, methods = Map.empty, pos = buildPosition(token)))
+          rustItems = rustItems.push(RustExtern(name = name, methods = Map.empty, constants = Map.empty, pos = buildPosition(token)))
 
           increment()
         }
@@ -916,16 +936,12 @@ object RustParserSimple {
 
           tokenStack = tokenStack.push(token)
 
-          rustItems = rustItems.push(RustImpl(genericParam = genericParam, name = name, methods = Map.empty, pos = buildPosition(token)))
+          rustItems = rustItems.push(RustImpl(genericParam = genericParam, name = name, methods = Map.empty, constants = Map.empty, pos = buildPosition(token)))
 
           increment()
         }
-        else if (offset + 5 < content.size && (offset == 0 || content(offset - 1).isWhitespace) &&
-          content(offset) == 't' && content(offset + 1) == 'r' && content(offset + 2) == 'a' && content(offset + 3) == 'i' && content(offset + 4) == 't' &&
-          isEndOfKeyword(offset + 5)) {
+        else if (is("trait")) {
           // trait <name>
-          col = col + 5
-          offset = offset + 5
           consumeWhiteSpaceAndComments()
           val name = consumeName()
           scanToChar(ISZ('{'))
@@ -940,7 +956,7 @@ object RustParserSimple {
 
           tokenStack = tokenStack.push(token)
 
-          rustItems = rustItems.push(RustTrait(name = name, methods = Map.empty, pos = buildPosition(token)))
+          rustItems = rustItems.push(RustTrait(name = name, methods = Map.empty, constants = Map.empty, pos = buildPosition(token)))
 
           increment()
         }
