@@ -111,21 +111,6 @@ object SlangExpUtil {
       }
     }
 
-    var optCastType: Option[SAST.Typed.Name] = None()
-    @pure def pushCast(t: SAST.Typed.Name): Unit = {
-      if (optCastType.isEmpty) {
-        optCastType = Some(t)
-      } else {
-        //assert(optCastType.get == t, s"Wanted to push $t but stack contained ${optCastType.get}")
-      }
-    }
-
-    @pure def popCastType(): SAST.Typed.Name = {
-      val v = optCastType.get
-      optCastType = None()
-      return v
-    }
-
     @pure def nestedRewriteExp(d: Exp, sep: Option[String]): ST = {
       val dd: Exp = d
       dd match {
@@ -218,7 +203,6 @@ object SlangExpUtil {
 
                 // unit type conversion (e.g. conversions.U8.toU16(v))
 
-
                 val toType: SAST.Typed.Name = getUnitConversionToType(exp).get
 
                 if (toType.ids == ISZ("org", "sireum", "Z")) {
@@ -228,8 +212,6 @@ object SlangExpUtil {
                   val aadlType = MicrokitTypeUtil.getAadlTypeFromSlangTypeH(toType, aadlTypes)
 
                   val np = tp.getTypeNameProvider(aadlType)
-
-                  pushCast(toType)
 
                   return st"((${args(0)}) as ${(np.qualifiedRustNameS, "::")})"
                 }
@@ -762,37 +744,7 @@ object SlangExpUtil {
       }
     }
 
-    val ret = nestedRewriteExp(rexp, None())
-
-    (inVerus, optCastType, rexp.typedOpt) match {
-      case (T, Some(t), Some(s: SAST.Typed.Name)) if t == s =>
-        popCastType()
-        /*
-         * e.g. Verus will type ((byte0) as u16) * 256u16 + ((byte1) as u16) as int rather than u16
-         *      when in spec mode.  In exec world, the outer cast is not needed
-         *
-         *    pub open spec fn two_bytes_to_u16(byte0: u8, byte1: u8) -> u16 {
-         *      (((byte0) as u16) * 256u16 + ((byte1) as u16)) as u16
-         *    }
-         */
-        val aadlType = MicrokitTypeUtil.getAadlTypeFromSlangTypeH(t, aadlTypes)
-        val np = tp.getTypeNameProvider(aadlType)
-
-        return st"($ret) as ${(np.qualifiedRustNameS, "::")}"
-
-      case _ =>
-        return ret
-    }
-
-    /*
-    if (inVerus && optCastType.nonEmpty && expectedReturnType.nonEmpty) {
-      val castType = popCastType()
-      val eType = expectedReturnType.get.
-        return st"($ret) as ${(popCastType(), "::")}"
-    } else {
-      return ret
-    }
-    */
+    return nestedRewriteExp(rexp, None())
   }
 
   @pure def isUnitConversionOperation(e: Exp.Invoke): B = {

@@ -237,7 +237,8 @@ object GumboRustUtil {
         val exp: ST = body.stmts(0) match {
           case r: Return =>
             assert (r.expOpt.nonEmpty, "Currently expecting GUMBO methods to return values")
-            SlangExpUtil.rewriteExp(
+
+            val retExp = SlangExpUtil.rewriteExp(
               rexp = SlangExpUtil.getRexp(r.expOpt.get, gclSymbolTable),
 
               owner = owner,
@@ -250,6 +251,29 @@ object GumboRustUtil {
               aadlTypes = aadlTypes,
               store = store,
               reporter = reporter)
+
+            // could also walk the expression and look for the use of arith operators (e.g. + - * ...)
+            val mayNeedCast: B = r.expOpt.get match {
+              case e: SAST.Exp.Binary => T // e.g. a + b
+              case e: SAST.Exp.If => T // e.g. if (T) a + b else b + c
+              case _ => F
+            }
+
+            if (inVerus && MicrokitTypeUtil.isNumericType(m.method.sig.returnType.typedOpt.get) && mayNeedCast) {
+              // For the GUMBO method
+              //  def add(a: Base_Types::Integer_32, b: Base_Types::Integer_32): Base_Types::Integer_32 := a + b;
+              // verus will evaluate a + b in mathematical integers (int), not in the machine type i32. Therefore,
+              // we need to cast the return value back to the declared return type
+
+              val rType = m.method.sig.returnType.typedOpt.get.asInstanceOf[SAST.Typed.Name]
+              val aadlType = MicrokitTypeUtil.getAadlTypeFromSlangTypeH(rType, aadlTypes)
+              val np = tp.getTypeNameProvider(aadlType)
+
+              st"($retExp) as ${(np.qualifiedRustNameS, "::")}"
+            } else {
+              retExp
+            }
+
           case x =>
             halt(s"Currently expecting GUMBO methods to only have return statements: ${x.prettyST.render}")
         }

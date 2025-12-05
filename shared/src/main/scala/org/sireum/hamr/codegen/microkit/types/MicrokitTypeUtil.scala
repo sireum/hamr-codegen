@@ -14,7 +14,7 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.brand
 import org.sireum.hamr.ir
 import org.sireum.hamr.ir.{GclMethod, GclStateVar}
 import org.sireum.lang.{ast => SAST}
-import org.sireum.lang.ast.Param
+import org.sireum.lang.ast.{Param, Typed}
 import org.sireum.message.{Position, Reporter}
 import org.sireum.hamr.codegen.microkit.{rust => RAST}
 
@@ -225,6 +225,34 @@ object MicrokitTypeUtil {
     }
   }
 
+  @pure def isNumericType(t: Typed): B = {
+    val ret: B = t match {
+      case tn: SAST.Typed.Name =>
+        tn.ids match {
+          case ISZ("Base_Types", "Integer") => T
+
+          case ISZ("Base_Types", "Integer_8") => T
+          case ISZ("Base_Types", "Integer_16") => T
+          case ISZ("Base_Types", "Integer_32") => T
+          case ISZ("Base_Types", "Integer_64") => T
+
+          case ISZ("Base_Types", "Unsigned_8") => T
+          case ISZ("Base_Types", "Unsigned_16") => T
+          case ISZ("Base_Types", "Unsigned_32") => T
+          case ISZ("Base_Types", "Unsigned_64") => T
+
+          case ISZ("Base_Types", "Float") => T
+
+          case ISZ("Base_Types", "Float_32") => T
+          case ISZ("Base_Types", "Float_64") => T
+
+          case _ => F
+        }
+      case _ => F
+    }
+    return ret
+  }
+
   @pure def getAadlTypeFromSlangTypeH(slangType: SAST.Typed.Name, aadlTypes: AadlTypes): AadlType = {
     return getAadlTypeFromSlangType(slangType.ids, aadlTypes)
   }
@@ -252,6 +280,8 @@ object MicrokitTypeUtil {
 
           case "F32" => return aadlTypes.typeMap.get("Base_Types::Float_32").get
           case "F64" => return aadlTypes.typeMap.get("Base_Types::Float_64").get
+
+          case "R" => return aadlTypes.typeMap.get("Base_Types::Float").get
 
           case x =>
             halt(s"Unexpected base type: $x")

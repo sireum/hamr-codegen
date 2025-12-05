@@ -215,10 +215,29 @@ object RustParserSimple {
           case o: open => pop()
           case s: spec => pop()
           case c: const => pop()
+          case e: exec => pop()
           case _ => return ret
         }
       }
       return ret
+    }
+
+    @pure def buildPositionT(tokens: ISZ[Token]): Position = {
+      var minT = tokens(0)
+      var maxT = tokens(0)
+      for (t <- tokens) {
+        if (t.offset < minT.offset) {
+          minT = t
+        }
+        if ((t.offset + t.len) > (maxT.offset + maxT.len)) {
+          maxT = t
+        }
+      }
+      return buildPosition(pub(
+        beginLine = minT.beginLine, beginCol = minT.beginCol,
+        endLine = maxT.endLine, endCol = maxT.endCol,
+        offset = minT.offset,
+        len = (maxT.offset + maxT.len) - minT.offset))
     }
 
     @pure def buildPosition(t: Token): Position = {
@@ -437,6 +456,16 @@ object RustParserSimple {
         (z + 1 < content.size && content(z) == '/' && (content(z + 1) == '/' || content(z + 1) == '*'))
     }
 
+    @pure def lookahead(keyword: String): B = {
+      val (oldLine, oldCol, oldOffset) = (line, col, offset)
+      consumeWhiteSpaceAndComments()
+      val ret = isH(keyword = keyword, advance = F)
+      line = oldLine
+      col = oldCol
+      offset = oldOffset
+      return ret
+    }
+
     @pure def is(keyword: String) : B = {
       return isH(keyword = keyword, advance = T)
     }
@@ -514,11 +543,11 @@ object RustParserSimple {
               // continue consuming characters until we see
               //   1) ',' contract clause separator, or,
               //   2) '/' beginning of a comment, or,
-              //   3) 'ensurses' the start of the ensures block, or,
+              //   3) 'ensures' the start of the ensures block, or,
               //   4) '{' the beginning of the method body
               content(offset) != ',' &&
               content(offset) != '/' &&
-              !(offset + 7 < content.size && content(offset) == 'e' && content(offset + 1) == 'n' && content(offset + 2) == 's' && content(offset + 3) == 'u' && content(offset + 4) == 'r' && content(offset + 5) == 'e' && content(offset + 6) == 's' && isEndOfKeyword(offset + 7)) &&
+              !lookahead("ensures") &&
               content(offset) != '{' ) {
               if (consumeIfElseBlock()) {
                 // rust/verus requires curly braces for if/else branches so need to consume
@@ -662,7 +691,7 @@ object RustParserSimple {
               rustItems = remainingRustItems.push(uitem(pos = buildPosition(ui)))
 
               increment()
-            case x => halt(s"Found unmatched $x after '}' at {$line,$offset}")
+            case x => halt(s"Found unmatched $x after '}' at {$line,$offset}: $f")
           }
         }
         else if (content(offset) == '\n') {
@@ -670,14 +699,20 @@ object RustParserSimple {
         }
         else if (is("pub")) {
           // pub
-          consumeWhiteSpaceAndComments()
+
           if (processingStruct()) {
             // must be a field
-            if (isH("ghost", F)) {
+
+            consumeWhiteSpaceAndComments()
+
+            if (lookahead("ghost")) {
               // pub ghost <field-name>
+
+              // consume 'ghost'
               col = col + 5
               offset = offset + 5
               consumeWhiteSpaceAndComments()
+
               val name = consumeName()
 
               scanToChar(ISZ(',', '\n'))
@@ -699,7 +734,6 @@ object RustParserSimple {
             } else {
               // pub <field-name>
               // record non-ghost struct field
-              consumeWhiteSpaceAndComments()
               val name = consumeName()
 
               scanToChar(ISZ(',', '\n'))
@@ -727,18 +761,19 @@ object RustParserSimple {
           }
         }
         else if (is("const")) {
-          val candKeyword = const(
-            beginLine = line, beginCol = beginCol,
-            endLine = line, endCol = col - 1,
-            offset = beginOffset, len = offset - beginOffset - 1)
 
-          consumeWhiteSpaceAndComments()
-
-          if (isH("fn", F)) {
-            tokenStack = tokenStack.push(candKeyword)
+          if (lookahead("fn")) {
+            // push 'const'
+            tokenStack = tokenStack.push(const(
+              beginLine = line, beginCol = beginCol,
+              endLine = line, endCol = col - 1,
+              offset = beginOffset, len = offset - beginOffset - 1))
           }
           else {
             // must be a constant
+
+            consumeWhiteSpaceAndComments()
+
             val name = consumeName()
 
             scanToChar(ISZ(';'))
@@ -753,7 +788,7 @@ object RustParserSimple {
             addConstant(RustConst(
               name = name,
               visibility = if (poppedTokens.filter(p => p.isInstanceOf[pub]).nonEmpty) Visibility.Public else Visibility.Private,
-              pos = buildPosition(token)))
+              pos = buildPositionT(poppedTokens :+ token)))
           }
         }
         else if (is("open")) {
@@ -817,10 +852,11 @@ object RustParserSimple {
             name = name,
             visibility = if (poppedTokens.filter(p => p.isInstanceOf[pub]).nonEmpty) Visibility.Public else Visibility.Private,
             isConst = poppedTokens.filter(p => p.isInstanceOf[const]).nonEmpty,
+            isOpen =  poppedTokens.filter(p => p.isInstanceOf[open]).nonEmpty,
             kind = kind,
             requires = contracts._1,
             ensures = contracts._2,
-            pos = buildPosition(token)))
+            pos = buildPositionT(poppedTokens :+ token)))
 
           increment()
         }
@@ -829,9 +865,6 @@ object RustParserSimple {
           consumeWhiteSpaceAndComments()
           val name = consumeName()
           scanToChar(ISZ(';', '{'))
-
-          val tokens = popTokens()
-          assert(ops.ISZOps(tokens).forall(c => c.isInstanceOf[pub]), tokens.string)
 
           val token: Token =
             if (content(offset) == ';') {
@@ -857,7 +890,10 @@ object RustParserSimple {
               token
             }
 
-          rustItems = rustItems.push(RustStruct(name = name, fields = Map.empty, constants = Map.empty, pos = buildPosition(token)))
+          val poppedTokens = popTokens()
+          assert(ops.ISZOps(poppedTokens).forall(c => c.isInstanceOf[pub]), poppedTokens.string)
+
+          rustItems = rustItems.push(RustStruct(name = name, fields = Map.empty, constants = Map.empty, pos = buildPositionT(poppedTokens :+ token)))
 
           increment()
         }
@@ -866,9 +902,6 @@ object RustParserSimple {
           consumeWhiteSpaceAndComments()
           val name = consumeName()
           scanToChar(ISZ('{'))
-
-          val tokens = popTokens()
-          assert(ops.ISZOps(tokens).forall(c => c.isInstanceOf[pub]), tokens.string)
 
           val token: Token = {
 
@@ -887,11 +920,14 @@ object RustParserSimple {
               token
             }
 
-          rustItems = rustItems.push(RustExtern(name = name, methods = Map.empty, constants = Map.empty, pos = buildPosition(token)))
+          val poppedTokens = popTokens()
+          assert(ops.ISZOps(poppedTokens).forall(c => c.isInstanceOf[pub]), poppedTokens.string)
+
+          rustItems = rustItems.push(RustExtern(name = name, methods = Map.empty, constants = Map.empty, pos = buildPositionT(poppedTokens :+ token)))
 
           increment()
         }
-        else if (offset + 4 < content.size && (offset == 0 || content(offset - 1).isWhitespace) &&
+        else if (offset + 6 < content.size && (offset == 0 || content(offset - 1).isWhitespace) &&
           content(offset) == 'v' && content(offset + 1) == 'e' && content(offset + 2) == 'r' && content(offset + 3) == 'u' && content(offset + 4) == 's' && content(offset + 5) == '!' &&
           (isEndOfKeyword(offset + 6) || content(offset + 6) == '{')) {
           // verus! {...}

@@ -81,6 +81,7 @@ object RustContainers {
   @datatype class RustFn(val name: String,
                          val visibility: Visibility.Type,
                          val isConst: B,
+                         val isOpen: B,
                          val kind: RustFnKind.Type,
                          val requires: Option[VerusBlock],
                          val ensures: Option[VerusBlock],
