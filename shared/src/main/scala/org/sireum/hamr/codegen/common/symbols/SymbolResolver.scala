@@ -686,7 +686,7 @@ object SymbolResolver {
                     case (Some(srcType), Some(dstType)) =>
                       // TODO: this sanity check is too strong in general, but matches the models currently
                       //       being processed.  Need to test with connectionInstances involving type extensions
-                      assert(srcType == dstType, s"Expecting both sides of connection ${name} to have the same type")
+                      assert(srcType == dstType, s"Expecting both sides of a connection to have the same type but found ${srcType.name} vs ${dstType.name} for connection $name")
                       srcType
                     case _ =>
                       // sanity check
