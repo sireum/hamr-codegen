@@ -474,7 +474,6 @@ object GumboRustPlugin {
                   gclSymbolTable = subclauseInfo.gclSymbolTable,
                   store = store,
                   reporter = reporter)
-                reporter.warn(p.feature.identifier.pos, MicrokitCodegen.toolName, s"TODO: Need to add type invariant for ${thread.identifier}'s ${p.identifier} ghost variable")
               }
 
             case g: GclGuarantee =>
@@ -496,7 +495,6 @@ object GumboRustPlugin {
                 gclSymbolTable = subclauseInfo.gclSymbolTable,
                 store = store,
                 reporter = reporter)
-              reporter.warn(p.feature.identifier.pos, MicrokitCodegen.toolName, s"TODO: Need to add type invariant for ${thread.identifier}'s ${p.identifier} ghost variable")
           }
         case _ =>
       }

@@ -1243,6 +1243,10 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                   }
                   symbols(0) match {
                     case AadlSymbolHolder(p: AadlPort) =>
+                      if (computeHandlerPortMap.contains(handler.port)) {
+                        reporter.error(handler.port.fullPosOpt, GclResolver.toolName,
+                          s"Only a single handler is allowed per port")
+                      }
                       computeHandlerPortMap = computeHandlerPortMap + handler.port ~> p
 
                       if (p.direction != Direction.In || p.isInstanceOf[AadlDataPort]) {
@@ -1263,7 +1267,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
             var handlerSpecIds: Set[String] = Set.empty
             for (assm <- handler.assumes) {
-              if (seenSpecIds.contains(assm.id)) {
+              if (seenSpecIds.contains(assm.id) || handlerSpecIds.contains(assm.id)) {
                 reporter.error(assm.posOpt, GclResolver.toolName, s"Duplicate spec name: ${assm.id}")
               }
               handlerSpecIds = handlerSpecIds + assm.id
@@ -1291,7 +1295,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             }
 
             for (guar <- handler.guarantees) {
-              if (seenSpecIds.contains(guar.id)) {
+              if (seenSpecIds.contains(guar.id) || handlerSpecIds.contains(guar.id)) {
                 reporter.error(guar.posOpt, GclResolver.toolName, s"Duplicate spec name: ${guar.id}")
               }
               handlerSpecIds = handlerSpecIds + guar.id

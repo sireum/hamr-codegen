@@ -50,6 +50,7 @@ object HamrProperties {
   val HAMR__BIT_CODEC_MAX_SIZE: String = "HAMR::Bit_Codec_Max_Size"
   val HAMR__BIT_CODEC_RAW_CONNECTIONS: String = "HAMR::Bit_Codec_Raw_Connections"
   val HAMR__MICROKIT_LANGUAGE: String = "HAMR::Microkit_Language"
+  val HAMR__IMPLEMENTATION_LANGUAGE: String = "HAMR::Implementation_Language"
 }
 
 object Hamr_Microkit_Properties {
