@@ -9,6 +9,8 @@ import org.sireum._
 import org.sireum.Json.Printer._
 import org.sireum.hamr.codegen.common.util.test.TestResource
 import org.sireum.hamr.codegen.common.util.test.TestMarker
+import org.sireum.hamr.codegen.common.util.test.TestPlaceholderMarker
+import org.sireum.hamr.codegen.common.util.test.TestBlockMarker
 import org.sireum.hamr.codegen.common.util.test.ITestResource
 import org.sireum.hamr.codegen.common.util.test.ETestResource
 import org.sireum.hamr.codegen.common.util.test.TestResult
@@ -25,10 +27,27 @@ object TestJSON {
     }
 
     @pure def printTestMarker(o: TestMarker): ST = {
+      o match {
+        case o: TestPlaceholderMarker => return printTestPlaceholderMarker(o)
+        case o: TestBlockMarker => return printTestBlockMarker(o)
+      }
+    }
+
+    @pure def printTestPlaceholderMarker(o: TestPlaceholderMarker): ST = {
       return printObject(ISZ(
-        ("type", st""""TestMarker""""),
-        ("beginMarker", printString(o.beginMarker)),
-        ("endMarker", printString(o.endMarker))
+        ("type", st""""TestPlaceholderMarker""""),
+        ("id", printString(o.id))
+      ))
+    }
+
+    @pure def printTestBlockMarker(o: TestBlockMarker): ST = {
+      return printObject(ISZ(
+        ("type", st""""TestBlockMarker""""),
+        ("id", printString(o.id)),
+        ("beginPrefix", printString(o.beginPrefix)),
+        ("optBeginSuffix", printOption(T, o.optBeginSuffix, printString _)),
+        ("endPrefix", printString(o.endPrefix)),
+        ("optEndSuffix", printOption(T, o.optEndSuffix, printString _))
       ))
     }
 
@@ -79,21 +98,54 @@ object TestJSON {
     }
 
     def parseTestMarker(): TestMarker = {
-      val r = parseTestMarkerT(F)
+      val t = parser.parseObjectTypes(ISZ("TestPlaceholderMarker", "TestBlockMarker"))
+      t.native match {
+        case "TestPlaceholderMarker" => val r = parseTestPlaceholderMarkerT(T); return r
+        case "TestBlockMarker" => val r = parseTestBlockMarkerT(T); return r
+        case _ => val r = parseTestBlockMarkerT(T); return r
+      }
+    }
+
+    def parseTestPlaceholderMarker(): TestPlaceholderMarker = {
+      val r = parseTestPlaceholderMarkerT(F)
       return r
     }
 
-    def parseTestMarkerT(typeParsed: B): TestMarker = {
+    def parseTestPlaceholderMarkerT(typeParsed: B): TestPlaceholderMarker = {
       if (!typeParsed) {
-        parser.parseObjectType("TestMarker")
+        parser.parseObjectType("TestPlaceholderMarker")
       }
-      parser.parseObjectKey("beginMarker")
-      val beginMarker = parser.parseString()
+      parser.parseObjectKey("id")
+      val id = parser.parseString()
       parser.parseObjectNext()
-      parser.parseObjectKey("endMarker")
-      val endMarker = parser.parseString()
+      return TestPlaceholderMarker(id)
+    }
+
+    def parseTestBlockMarker(): TestBlockMarker = {
+      val r = parseTestBlockMarkerT(F)
+      return r
+    }
+
+    def parseTestBlockMarkerT(typeParsed: B): TestBlockMarker = {
+      if (!typeParsed) {
+        parser.parseObjectType("TestBlockMarker")
+      }
+      parser.parseObjectKey("id")
+      val id = parser.parseString()
       parser.parseObjectNext()
-      return TestMarker(beginMarker, endMarker)
+      parser.parseObjectKey("beginPrefix")
+      val beginPrefix = parser.parseString()
+      parser.parseObjectNext()
+      parser.parseObjectKey("optBeginSuffix")
+      val optBeginSuffix = parser.parseOption(parser.parseString _)
+      parser.parseObjectNext()
+      parser.parseObjectKey("endPrefix")
+      val endPrefix = parser.parseString()
+      parser.parseObjectNext()
+      parser.parseObjectKey("optEndSuffix")
+      val optEndSuffix = parser.parseOption(parser.parseString _)
+      parser.parseObjectNext()
+      return TestBlockMarker(id, beginPrefix, optBeginSuffix, endPrefix, optEndSuffix)
     }
 
     def parseITestResource(): ITestResource = {
@@ -212,6 +264,42 @@ object TestJSON {
       return r
     }
     val r = to(s, fTestMarker _)
+    return r
+  }
+
+  def fromTestPlaceholderMarker(o: TestPlaceholderMarker, isCompact: B): String = {
+    val st = Printer.printTestPlaceholderMarker(o)
+    if (isCompact) {
+      return st.renderCompact
+    } else {
+      return st.render
+    }
+  }
+
+  def toTestPlaceholderMarker(s: String): Either[TestPlaceholderMarker, Json.ErrorMsg] = {
+    def fTestPlaceholderMarker(parser: Parser): TestPlaceholderMarker = {
+      val r = parser.parseTestPlaceholderMarker()
+      return r
+    }
+    val r = to(s, fTestPlaceholderMarker _)
+    return r
+  }
+
+  def fromTestBlockMarker(o: TestBlockMarker, isCompact: B): String = {
+    val st = Printer.printTestBlockMarker(o)
+    if (isCompact) {
+      return st.renderCompact
+    } else {
+      return st.render
+    }
+  }
+
+  def toTestBlockMarker(s: String): Either[TestBlockMarker, Json.ErrorMsg] = {
+    def fTestBlockMarker(parser: Parser): TestBlockMarker = {
+      val r = parser.parseTestBlockMarker()
+      return r
+    }
+    val r = to(s, fTestBlockMarker _)
     return r
   }
 

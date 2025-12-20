@@ -3,7 +3,7 @@ package org.sireum.hamr.codegen.microkit.plugins.gumbo
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil._
-import org.sireum.hamr.codegen.common.containers.{Marker, Resource}
+import org.sireum.hamr.codegen.common.containers.{BlockMarker, Marker, Resource}
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes}
 import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
@@ -102,11 +102,14 @@ object GumboRustPlugin {
       // wait until that phase is done.  The component plugin depends on the typing and
       // api plugins so we can also add datatype invariants and/or integration constraints
       // if needed
-      CRustComponentPlugin.hasCRustComponentContributions(store) &&
-      //
+      CRustComponentPlugin.hasCRustComponentContributions(store) /* &&
+
+      NOTE: gumbo placeholder markers are now emitted for any missing GUMBO contract artifact
+
       (GumboRustPlugin.getThreadsWithContracts(store).nonEmpty ||
-        GumboRustPlugin.getDatatypesWithContracts(store).nonEmpty ||
-        GumboRustPlugin.getGclLibraryAnnexes(symbolTable).nonEmpty)
+       GumboRustPlugin.getDatatypesWithContracts(store).nonEmpty ||
+       GumboRustPlugin.getGclLibraryAnnexes(symbolTable).nonEmpty)
+      */
 
 
   @strictpure def alreadyFinalized(store: Store): B = store.contains(s"FINALIZED_$name")
@@ -147,6 +150,7 @@ object GumboRustPlugin {
 
     var libraryAnnexes: Map[String, ISZ[RAST.Item]] = Map.empty
     for(gclLib <-  GumboRustPlugin.getGclLibraryAnnexes(symbolTable)) {
+      // add dependencies to gumbo library annexes
       assert(gclLib.name.size == 2 && gclLib.name(1) == "GUMBO__Library", gclLib.name.string)
       val name = gclLib.name(0)
       libraryAnnexes = libraryAnnexes + name ~> ISZ(
@@ -155,10 +159,10 @@ object GumboRustPlugin {
 
     val crateDeps: ISZ[ST] = for (k <- libraryAnnexes.keys) yield st"""$k = { path = "../$k" }"""
 
-    for (threadPath <- GumboRustPlugin.getThreadsWithContracts(localStore)) {
+    for (thread <- symbolTable.getThreads() if MicrokitUtil.isRusty(thread)) {
       var markers: ISZ[Marker] = ISZ()
-      val thread = symbolTable.componentMap.get(threadPath).get.asInstanceOf[AadlThread]
-      val subclauseInfo = GumboRustUtil.getGumboSubclause(threadPath, symbolTable)
+      val threadPath = thread.path
+      val subclauseInfo = GumboRustUtil.getGumboSubclauseOrDummy(threadPath, symbolTable)
       val componentContributions = CRustComponentPlugin.getCRustComponentContributions(localStore)
       val threadContributions = componentContributions.componentContributions.get(threadPath).get
       var structDef = threadContributions.appStructDef
@@ -232,10 +236,14 @@ object GumboRustPlugin {
             stateVars = stateVars :+ i._1
             optStateVarInits = optStateVarInits :+ i._2
           }
-          val m = Marker.createMarker("STATE VARS")
+          val m = Marker.createSlashMarker(GumboRustUtil.GumboMarkers.stateVar)
           markers = markers :+ m
           structDef = structDef(items = structDef.items :+ RAST.MarkerWrap(m, stateVars.asInstanceOf[ISZ[RAST.Item]], "\n"))
         }
+      } else {
+        val m = Marker.createSlashPlaceholderMarker(GumboRustUtil.GumboMarkers.stateVar)
+        markers = markers :+ m
+        structDef = structDef(items = structDef.items :+ RAST.MarkerPlaceholder(m))
       }
 
       if (subclauseInfo.annex.methods.nonEmpty) {
@@ -258,9 +266,13 @@ object GumboRustPlugin {
             reporter = reporter)
         }
 
-        val m = Marker.createMarker("GUMBO METHODS")
+        val m = Marker.createSlashMarker(GumboRustUtil.GumboMarkers.gumboMethods)
         markers = markers :+ m
         crateLevelEntries = crateLevelEntries :+ RAST.MarkerWrap(m, funs.asInstanceOf[ISZ[RAST.Item]], "\n\n")
+      } else {
+        val m = Marker.createSlashPlaceholderMarker(GumboRustUtil.GumboMarkers.gumboMethods)
+        markers = markers :+ m
+        crateLevelEntries = crateLevelEntries :+ RAST.MarkerPlaceholder(m)
       }
 
       if (subclauseInfo.annex.integration.nonEmpty) {
@@ -337,45 +349,67 @@ object GumboRustPlugin {
       for (i <- structImpl.items) {
         i match {
           case f: RAST.FnImpl =>
-            if (f.ident.string == "new" && optStateVarInits.nonEmpty) {
-              val b: Option[RAST.MethodBody] = f.body match {
-                case Some(RAST.MethodBody(ISZ(self: RAST.BodyItemSelf))) =>
-                  val m = Marker.createMarker("STATE VAR INIT")
-                  markers = markers :+ m
-                  val wrapper =
-                    st"""${m.beginMarker}
-                        |${(optStateVarInits, ",\n")}
-                        |${m.endMarker}"""
-                  Some(RAST.MethodBody(ISZ(self(items = self.items :+ wrapper))))
-                case Some(x) => halt("Not expecting new to contain anything other than Self {...}")
-                case _ => Some(RAST.MethodBody(ISZ(RAST.BodyItemSelf(optStateVarInits))))
+            if (f.ident.string == "new") {
+              if (optStateVarInits.nonEmpty) {
+                val b: Option[RAST.MethodBody] = f.body match {
+                  case Some(RAST.MethodBody(ISZ(self: RAST.BodyItemSelf))) =>
+                    val m = Marker.createSlashMarker(GumboRustUtil.GumboMarkers.stateVarInit)
+                    markers = markers :+ m
+                    val wrapper =
+                      st"""${m.beginMarker}
+                          |${(optStateVarInits, ",\n")}
+                          |${m.endMarker}"""
+                    Some(RAST.MethodBody(ISZ(self(items = self.items :+ wrapper))))
+                  case _ => halt("Not expecting new to contain anything other than Self {...}")
+                }
+                updatedImplItems = updatedImplItems :+ f(body = b)
+              } else{
+                val b: Option[RAST.MethodBody] = f.body match {
+                  case Some(RAST.MethodBody(ISZ(self: RAST.BodyItemSelf))) =>
+                    val m = Marker.createSlashPlaceholderMarker(GumboRustUtil.GumboMarkers.stateVarInit)
+                    markers = markers :+ m
+                    Some(RAST.MethodBody(ISZ(self(items = self.items :+ RAST.MarkerPlaceholder(m).prettyST))))
+                  case _ => halt("Not expecting new to contain anything other than Self {...}")
+                }
+                updatedImplItems = updatedImplItems :+ f(body = b)
               }
-              updatedImplItems = updatedImplItems :+ f(body = b)
             }
-            else if (f.ident.string == "initialize" && subclauseInfo.annex.initializes.nonEmpty) {
-              val init = handleInitialize(
-                fn = f,
-                thread = thread,
-                subclauseInfo = subclauseInfo,
-                types = types,
-                tp = CRustTypePlugin.getCRustTypeProvider(localStore).get,
-                symbolTable = symbolTable,
-                store = localStore,
-                reporter = reporter)
-              markers = markers :+ init._1
-              updatedImplItems = updatedImplItems :+ init._2
-            } else if (f.ident.string == "timeTriggered" && subclauseInfo.annex.compute.nonEmpty) {
-              val tt = handleCompute(
-                fn = f,
-                thread = thread,
-                subclauseInfo = subclauseInfo,
-                types = types,
-                tp = CRustTypePlugin.getCRustTypeProvider(localStore).get,
-                symbolTable = symbolTable,
-                store = localStore,
-                reporter = reporter)
-              markers = markers ++ tt._1
-              updatedImplItems = updatedImplItems :+ tt._2
+            else if (f.ident.string == "initialize") {
+              if (subclauseInfo.annex.initializes.nonEmpty) {
+                val init: (Marker, RAST.FnImpl) = handleInitialize(
+                  fn = f,
+                  thread = thread,
+                  subclauseInfo = subclauseInfo,
+                  types = types,
+                  tp = CRustTypePlugin.getCRustTypeProvider(localStore).get,
+                  symbolTable = symbolTable,
+                  store = localStore,
+                  reporter = reporter)
+                markers = markers :+ init._1
+                updatedImplItems = updatedImplItems :+ init._2
+              } else {
+                val init = handleInitializePlaceholder(f)
+                markers = markers :+ init._1
+                updatedImplItems = updatedImplItems :+ init._2
+              }
+            } else if (f.ident.string == "timeTriggered") {
+              if (subclauseInfo.annex.compute.nonEmpty) {
+                val tt: (ISZ[Marker], RAST.FnImpl) = handleCompute(
+                  fn = f,
+                  thread = thread,
+                  subclauseInfo = subclauseInfo,
+                  types = types,
+                  tp = CRustTypePlugin.getCRustTypeProvider(localStore).get,
+                  symbolTable = symbolTable,
+                  store = localStore,
+                  reporter = reporter)
+                markers = markers ++ tt._1
+                updatedImplItems = updatedImplItems :+ tt._2
+              } else {
+                val tt = handleComputePlaceholder(f)
+                markers = markers ++ tt._1
+                updatedImplItems = updatedImplItems :+ tt._2
+              }
             } else {
               updatedImplItems = updatedImplItems :+ i
             }
@@ -528,12 +562,21 @@ object GumboRustPlugin {
         reporter = reporter)
 
 
-    val ensuresMarker = Marker.createMarker("INITIALIZATION ENSURES")
+    val ensuresMarker = Marker.createSlashMarker(GumboRustUtil.GumboMarkers.initializationEnsures)
     return (ensuresMarker, fn(contract = Some(RAST.FnContract(
       optRequiresMarker = None(),
       requires = ISZ(),
       optEnsuresMarker = Some(ensuresMarker),
       ensures = ensures))))
+  }
+
+  @pure def handleInitializePlaceholder(fn: RAST.FnImpl): (Marker, RAST.FnImpl) = {
+    val m = Marker.createSlashPlaceholderMarker(GumboRustUtil.GumboMarkers.initializationEnsures)
+    return (m, fn(contract = Some(RAST.FnContract(
+      optRequiresMarker = None(),
+      requires = ISZ(),
+      optEnsuresMarker = Some(m),
+      ensures = ISZ()))))
   }
 
   @pure def handleCompute(fn: RAST.FnImpl,
@@ -599,22 +642,45 @@ object GumboRustPlugin {
     var optEnsuresMarker: Option[Marker] = None()
     var optRequiresMarker: Option[Marker] = None()
     var markers: ISZ[Marker] = ISZ()
+
     if (requires.nonEmpty) {
-      val m = Marker.createMarker("TIME TRIGGERED REQUIRES")
+      val m = Marker.createSlashMarker(GumboRustUtil.GumboMarkers.timeTriggeredRequires)
       markers = markers :+ m
       optRequiresMarker = Some(m)
+    } else {
+      val p = Marker.createSlashPlaceholderMarker(GumboRustUtil.GumboMarkers.timeTriggeredRequires)
+      markers = markers :+ p
+      optRequiresMarker = Some(p)
     }
+
     if (ensures.nonEmpty) {
-      val m = Marker.createMarker("TIME TRIGGERED ENSURES")
+      val m = Marker.createSlashMarker(GumboRustUtil.GumboMarkers.timeTriggeredEnsures)
       markers = markers :+ m
       optEnsuresMarker = Some(m)
+    } else {
+      val p = Marker.createSlashPlaceholderMarker(GumboRustUtil.GumboMarkers.timeTriggeredEnsures)
+      markers = markers :+ p
+      optEnsuresMarker = Some(p)
     }
+
     return (markers,
       fn(contract = Some(RAST.FnContract(
         optRequiresMarker = optRequiresMarker,
         requires = requires,
         optEnsuresMarker = optEnsuresMarker,
         ensures = ensures))))
+  }
+
+  @pure def handleComputePlaceholder(fn: RAST.FnImpl): (ISZ[Marker], RAST.FnImpl) = {
+    val requiresPlaceholder = Marker.createSlashPlaceholderMarker(GumboRustUtil.GumboMarkers.timeTriggeredRequires)
+    val ensuresPlaceholder = Marker.createSlashPlaceholderMarker(GumboRustUtil.GumboMarkers.timeTriggeredEnsures)
+    val markers: ISZ[Marker] = ISZ(requiresPlaceholder, ensuresPlaceholder)
+    return (markers,
+      fn(contract = Some(RAST.FnContract(
+        optRequiresMarker = Some(requiresPlaceholder),
+        requires = ISZ(),
+        optEnsuresMarker = Some(ensuresPlaceholder),
+        ensures = ISZ()))))
   }
 
   @pure override def finalizeMicrokit(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {

@@ -7,7 +7,7 @@ import org.sireum.hamr.codegen.arsit.gcl.GumboGen._
 import org.sireum.hamr.codegen.arsit.plugin.BehaviorEntryPointProviderPlugin._
 import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, Store}
 import org.sireum.hamr.codegen.common.StringUtil
-import org.sireum.hamr.codegen.common.containers.Marker
+import org.sireum.hamr.codegen.common.containers.{BlockMarker, Marker}
 import org.sireum.hamr.codegen.common.resolvers.GclResolver
 import org.sireum.hamr.codegen.common.resolvers.GclResolver.GUMBO__Library
 import org.sireum.hamr.codegen.common.symbols._
@@ -139,13 +139,13 @@ object GumboGen {
                                       val requiresContributions: ISZ[ST],
                                       val ensuresContributions: ISZ[ST])
 
-  val FunctionMarker: Marker = Marker("// BEGIN FUNCTIONS", "// END FUNCTIONS")
-  val StateVarMarker: Marker = Marker("// BEGIN STATE VARS", "// END STATE VARS")
+  val FunctionMarker: BlockMarker = Marker.createSlashMarker("FUNCTIONS")
+  val StateVarMarker: BlockMarker = Marker.createSlashMarker("STATE VARS")
 
-  val InitializesModifiesMarker: Marker = Marker("// BEGIN INITIALIZES MODIFIES", "// END INITIALIZES MODIFIES")
-  val InitializesEnsuresMarker: Marker = Marker("// BEGIN INITIALIZES ENSURES", "// END INITIALIZES ENSURES")
-  val InitializesRequiresMarker: Marker = Marker("// BEGIN INITIALIZES REQUIRES", "// END INITIALIZES REQUIRES")
-  val InitializesFlowsMarker: Marker = Marker("// BEGIN INITIALIZES FLOWS", "// END INITIALIZES FLOWS")
+  val InitializesModifiesMarker: BlockMarker = Marker.createSlashMarker("INITIALIZES MODIFIES")
+  val InitializesEnsuresMarker: BlockMarker = Marker.createSlashMarker("INITIALIZES ENSURES")
+  val InitializesRequiresMarker: BlockMarker = Marker.createSlashMarker("INITIALIZES REQUIRES")
+  val InitializesFlowsMarker: BlockMarker = Marker.createSlashMarker("INITIALIZES FLOWS")
 
   var imports: ISZ[String] = ISZ() // singleton global var
 
@@ -659,10 +659,8 @@ object GumboGen {
     var rensures: ISZ[ST] = ISZ()
     var rflows: ISZ[ST] = ISZ()
 
-    def genComputeMarkerCreator(id: String, typ: String): Marker = {
-      val m = Marker(
-        s"// BEGIN COMPUTE ${typ} ${id}",
-        s"// END COMPUTE ${typ} ${id}")
+    def genComputeMarkerCreator(id: String, typ: String): BlockMarker = {
+      val m = Marker.createSlashMarker(s"COMPUTE ${typ} ${id}")
 
       markers = markers + m
       return m

@@ -13,10 +13,23 @@ import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
 import org.sireum.hamr.codegen.microkit.{rust => RAST}
 import org.sireum.hamr.ir._
 import org.sireum.lang.ast.Stmt.Return
+import org.sireum.lang.tipe.TypeHierarchy
 import org.sireum.lang.{ast => SAST}
 import org.sireum.message.Reporter
 
 object GumboRustUtil {
+
+  object GumboMarkers {
+    val stateVar: String = "MARKER STATE VARS"
+    val stateVarInit: String = "MARKER STATE VAR INIT"
+
+    val initializationEnsures: String = "MARKER INITIALIZATION ENSURES"
+
+    val timeTriggeredRequires: String = "MARKER TIME TRIGGERED REQUIRES"
+    val timeTriggeredEnsures: String = "MARKER TIME TRIGGERED ENSURES"
+
+    val gumboMethods: String = "MARKER GUMBO METHODS"
+  }
 
   val RustImplicationMacros: ST = st"""macro_rules! implies {
                                       |  ($$lhs: expr, $$rhs: expr) => {
@@ -43,6 +56,27 @@ object GumboRustUtil {
     return getGumboSubclauseOpt(threadId, symbolTable).get
   }
 
+  @pure def getGumboSubclauseOrDummy(threadId: IdPath, symbolTable: SymbolTable): GclAnnexClauseInfo = {
+    getGumboSubclauseOpt(threadId, symbolTable) match {
+      case Some(c) => return c
+      case _ =>
+        return GclAnnexClauseInfo(
+          annex = GclSubclause(
+            state = ISZ(),
+            methods = ISZ(),
+            invariants = ISZ(),
+            initializes = None(),
+            integration = None(),
+            compute = None(),
+            attr = Attr(None())),
+          gclSymbolTable = GclSymbolTable(
+            rexprs = HashMap.empty,
+            slangTypeHierarchy = TypeHierarchy.empty,
+            apiReferences = ISZ(),
+            integrationMap = Map.empty,
+            computeHandlerPortMap = Map.empty))
+    }
+  }
   def processDescriptor(descriptor: Option[String], pad: String): Option[ST] = {
     def getPipeLoc(cis: ISZ[C]): Z = {
       var firstNonSpace: Z = 0

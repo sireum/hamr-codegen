@@ -8,6 +8,8 @@ package org.sireum.hamr.codegen.common.util.test
 import org.sireum._
 import org.sireum.hamr.codegen.common.util.test.TestResource
 import org.sireum.hamr.codegen.common.util.test.TestMarker
+import org.sireum.hamr.codegen.common.util.test.TestPlaceholderMarker
+import org.sireum.hamr.codegen.common.util.test.TestBlockMarker
 import org.sireum.hamr.codegen.common.util.test.ITestResource
 import org.sireum.hamr.codegen.common.util.test.ETestResource
 import org.sireum.hamr.codegen.common.util.test.TestResult
@@ -16,13 +18,15 @@ object TestMsgPack {
 
   object Constants {
 
-    val TestMarker: Z = -32
+    val TestPlaceholderMarker: Z = -32
 
-    val ITestResource: Z = -31
+    val TestBlockMarker: Z = -31
 
-    val ETestResource: Z = -30
+    val ITestResource: Z = -30
 
-    val TestResult: Z = -29
+    val ETestResource: Z = -29
+
+    val TestResult: Z = -28
 
   }
 
@@ -44,9 +48,24 @@ object TestMsgPack {
     }
 
     def writeTestMarker(o: TestMarker): Unit = {
-      writer.writeZ(Constants.TestMarker)
-      writer.writeString(o.beginMarker)
-      writer.writeString(o.endMarker)
+      o match {
+        case o: TestPlaceholderMarker => writeTestPlaceholderMarker(o)
+        case o: TestBlockMarker => writeTestBlockMarker(o)
+      }
+    }
+
+    def writeTestPlaceholderMarker(o: TestPlaceholderMarker): Unit = {
+      writer.writeZ(Constants.TestPlaceholderMarker)
+      writer.writeString(o.id)
+    }
+
+    def writeTestBlockMarker(o: TestBlockMarker): Unit = {
+      writer.writeZ(Constants.TestBlockMarker)
+      writer.writeString(o.id)
+      writer.writeString(o.beginPrefix)
+      writer.writeOption(o.optBeginSuffix, writer.writeString _)
+      writer.writeString(o.endPrefix)
+      writer.writeOption(o.optEndSuffix, writer.writeString _)
     }
 
     def writeITestResource(o: ITestResource): Unit = {
@@ -105,17 +124,46 @@ object TestMsgPack {
     }
 
     def readTestMarker(): TestMarker = {
-      val r = readTestMarkerT(F)
+      val i = reader.curr
+      val t = reader.readZ()
+      t match {
+        case Constants.TestPlaceholderMarker => val r = readTestPlaceholderMarkerT(T); return r
+        case Constants.TestBlockMarker => val r = readTestBlockMarkerT(T); return r
+        case _ =>
+          reader.error(i, s"$t is not a valid type of TestMarker.")
+          val r = readTestBlockMarkerT(T)
+          return r
+      }
+    }
+
+    def readTestPlaceholderMarker(): TestPlaceholderMarker = {
+      val r = readTestPlaceholderMarkerT(F)
       return r
     }
 
-    def readTestMarkerT(typeParsed: B): TestMarker = {
+    def readTestPlaceholderMarkerT(typeParsed: B): TestPlaceholderMarker = {
       if (!typeParsed) {
-        reader.expectZ(Constants.TestMarker)
+        reader.expectZ(Constants.TestPlaceholderMarker)
       }
-      val beginMarker = reader.readString()
-      val endMarker = reader.readString()
-      return TestMarker(beginMarker, endMarker)
+      val id = reader.readString()
+      return TestPlaceholderMarker(id)
+    }
+
+    def readTestBlockMarker(): TestBlockMarker = {
+      val r = readTestBlockMarkerT(F)
+      return r
+    }
+
+    def readTestBlockMarkerT(typeParsed: B): TestBlockMarker = {
+      if (!typeParsed) {
+        reader.expectZ(Constants.TestBlockMarker)
+      }
+      val id = reader.readString()
+      val beginPrefix = reader.readString()
+      val optBeginSuffix = reader.readOption(reader.readString _)
+      val endPrefix = reader.readString()
+      val optEndSuffix = reader.readOption(reader.readString _)
+      return TestBlockMarker(id, beginPrefix, optBeginSuffix, endPrefix, optEndSuffix)
     }
 
     def readITestResource(): ITestResource = {
@@ -203,6 +251,36 @@ object TestMsgPack {
       return r
     }
     val r = to(data, fTestMarker _)
+    return r
+  }
+
+  def fromTestPlaceholderMarker(o: TestPlaceholderMarker, pooling: B): ISZ[U8] = {
+    val w = Writer.Default(MessagePack.writer(pooling))
+    w.writeTestPlaceholderMarker(o)
+    return w.result
+  }
+
+  def toTestPlaceholderMarker(data: ISZ[U8]): Either[TestPlaceholderMarker, MessagePack.ErrorMsg] = {
+    def fTestPlaceholderMarker(reader: Reader): TestPlaceholderMarker = {
+      val r = reader.readTestPlaceholderMarker()
+      return r
+    }
+    val r = to(data, fTestPlaceholderMarker _)
+    return r
+  }
+
+  def fromTestBlockMarker(o: TestBlockMarker, pooling: B): ISZ[U8] = {
+    val w = Writer.Default(MessagePack.writer(pooling))
+    w.writeTestBlockMarker(o)
+    return w.result
+  }
+
+  def toTestBlockMarker(data: ISZ[U8]): Either[TestBlockMarker, MessagePack.ErrorMsg] = {
+    def fTestBlockMarker(reader: Reader): TestBlockMarker = {
+      val r = reader.readTestBlockMarker()
+      return r
+    }
+    val r = to(data, fTestBlockMarker _)
     return r
   }
 

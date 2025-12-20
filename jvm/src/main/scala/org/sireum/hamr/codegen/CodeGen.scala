@@ -523,14 +523,26 @@ object CodeGen {
                   reporter.info(None(), toolName, s"Made ${p} executable")
                 }
               } else if (p.exists && i.markers.nonEmpty) {
-                val newContent = render(i)
-                val oldSections = StringUtil.collectSections(p.read, toolName, i.markers, reporter)
-                val newSections = StringUtil.collectSections(newContent, toolName, i.markers, reporter)
 
-                val missingMarkers = i.markers.filter((m: Marker) => !ops.ISZOps(oldSections.keys).contains(m))
+                val existingContent = conversions.String.toCis(p.read)
+                val newContent = conversions.String.toCis(render(i))
+                val existingSections = StringUtil.collectSectionsR(Some(p.toUri), existingContent, toolName, i.markers, reporter)
+                val newSections = StringUtil.collectSectionsR(Some(p.toUri), newContent, toolName, i.markers, reporter)
+
+                /*
+                val existingContent = p.read
+                val newContent = render(i)
+                val oldSections = StringUtil.collectSections(existingContent, toolName, i.markers, reporter)
+                val newSections = StringUtil.collectSections(newContent, toolName, i.markers, reporter)
+                */
+
+                // note we allow the user to delete placeholder markers after they are generated
+                val missingMarkers = i.markers.filter((m: Marker) =>
+                  !m.isInstanceOf[PlaceholderMarker] && !ops.ISZOps(existingSections.keys).contains(m.id))
+
                 if (missingMarkers.nonEmpty) {
                   val fixme = p.up / s"${p.name}_fixme"
-                  fixme.writeOver(newContent)
+                  fixme.writeOver(conversions.String.fromCis(newContent))
                   val msg =
                     st"""Existing file did not contain the following markers. Copy the markers/content found in ${fixme.toUri}
                         |to the corresponding locations in ${p.toUri}
@@ -539,16 +551,31 @@ object CodeGen {
                   reporter.error(None(), toolName, msg.render)
                 } else {
                   if (i.invertMarkers) {
-                    val replacements: ISZ[(Z, Z, String)] = newSections.entries.map((newEntry: (Marker, (Z, Z, String))) =>
-                      ((newEntry._2._1, newEntry._2._2, oldSections.get(newEntry._1).get._3)))
-                    val content: String = StringUtil.replaceSections(newContent, replacements, reporter)
+                    val replacements: ISZ[(Z, Z, String)] = for (newEntry <- newSections.entries) yield
+                      ((newEntry._2.beginOffset, newEntry._2.endOffset, existingSections.get(newEntry._1).get.content))
+                    val content: String = StringUtil.replaceSectionsR(newContent, replacements, toolName, reporter)
                     p.writeOver(content)
                   } else {
-                    val replacements: ISZ[(Z, Z, String)] = oldSections.entries.map((oldEntry: (Marker, (Z, Z, String))) =>
-                      ((oldEntry._2._1, oldEntry._2._2, newSections.get(oldEntry._1).get._3)))
-                    val content: String = StringUtil.replaceSections(p.read, replacements, reporter)
+                    val replacements: ISZ[(Z, Z, String)] = for (oldEntry <- existingSections.entries) yield
+                      ((oldEntry._2.beginOffset, oldEntry._2.endOffset, newSections.get(oldEntry._1).get.content))
+                    val content: String = StringUtil.replaceSectionsR(existingContent, replacements, toolName, reporter)
                     p.writeOver(content)
                   }
+
+                  /*
+                  if (i.invertMarkers) {
+                    val replacements: ISZ[(Z, Z, String)] = for (newEntry <- newSections.entries) yield
+                      ((newEntry._2.beginOffset, newEntry._2.endOffset, oldSections.get(newEntry._1).get.content.get))
+                    val content: String = StringUtil.replaceSections(newContent, replacements, toolName, reporter)
+                    p.writeOver(content)
+                  } else {
+                    val replacements: ISZ[(Z, Z, String)] = for (oldEntry <- oldSections.entries) yield
+                      ((oldEntry._2.beginOffset, oldEntry._2.endOffset, newSections.get(oldEntry._1).get.content.get))
+                    val content: String = StringUtil.replaceSections(p.read, replacements, toolName, reporter)
+                    p.writeOver(content)
+                  }
+                  */
+
                   reporter.info(None(), toolName, s"Wrote and preserved existing content: ${p}")
                 }
 

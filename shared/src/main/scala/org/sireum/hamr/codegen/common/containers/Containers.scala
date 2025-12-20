@@ -50,15 +50,55 @@ object Resource {
 }
 
 object Marker {
-  val beginMarkerPrefix: String = "// BEGIN MARKER"
-  val endMarkerPrefix: String = "// END MARKER"
+  @strictpure def createSlashMarker(id: String): BlockMarker =
+    BlockMarker(
+      id = id,
+      beginPrefix = "// BEGIN",
+      optBeginSuffix = None(),
+      endPrefix = s"// END",
+      optEndSuffix = None())
 
-  @strictpure def createMarker(id: String): Marker =
-    Marker(s"$beginMarkerPrefix $id", s"$endMarkerPrefix $id")
+  @strictpure def createHashMarker(id: String): BlockMarker = BlockMarker(
+    id = id,
+    beginPrefix = "# BEGIN",
+    optBeginSuffix = None(),
+    endPrefix = "# END",
+    optEndSuffix = None())
+
+  @strictpure def createXmlMarker(id: String): BlockMarker = BlockMarker(
+    id = id,
+    beginPrefix = "<!-- BEGIN",
+    optBeginSuffix = Some("-->"),
+    endPrefix = "<!-- END",
+    optEndSuffix = Some("-->"))
+
+  @strictpure def createSlashPlaceholderMarker(s: String): PlaceholderMarker = PlaceholderMarker(s, "//", None())
 }
 
-@datatype class Marker(val beginMarker: String,
-                       val endMarker: String)
+@sig trait Marker {
+  @strictpure def id: String
+}
+
+@datatype class PlaceholderMarker(val id: String,
+
+                                  val commentPrefix: String, // e.g. '//', '#', '<!--'
+                                  val optCommentSuffix: Option[String]) extends Marker {
+
+  val marker: String = s"$commentPrefix PLACEHOLDER $id${if (optCommentSuffix.nonEmpty) s" ${optCommentSuffix.get}" else ""}"
+}
+
+@datatype class BlockMarker(val id: String,
+
+                            val beginPrefix: String,
+                            val optBeginSuffix: Option[String],
+
+                            val endPrefix: String,
+                            val optEndSuffix: Option[String]) extends Marker {
+
+  val beginMarker: String = s"$beginPrefix $id${if (optBeginSuffix.nonEmpty) s" ${optBeginSuffix.get}" else ""}"
+
+  val endMarker: String =  s"$endPrefix $id${if (optEndSuffix.nonEmpty) s" ${optEndSuffix.get}" else ""}"
+}
 
 @sig trait InternalResource extends FileResource {
   def dstPath: String

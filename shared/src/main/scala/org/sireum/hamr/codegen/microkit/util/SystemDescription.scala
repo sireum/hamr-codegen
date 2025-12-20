@@ -2,7 +2,7 @@
 package org.sireum.hamr.codegen.microkit.util
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.containers.Marker
+import org.sireum.hamr.codegen.common.containers.{BlockMarker, Marker}
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
 
@@ -11,9 +11,7 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
                                    val memoryRegions: ISZ[MemoryRegion],
                                    val channels: ISZ[Channel]) {
 
-  val contentMarker: Marker = Marker(
-    beginMarker = "<!-- BEGIN MSD CONTENT MARKER -->",
-    endMarker = "<!-- END MSD CONTENT MARKER -->")
+  val contentMarker: BlockMarker = Marker.createXmlMarker("MSD CONTENT MARKER")
 
   @pure def getMarkers: ISZ[Marker] = {
     return ISZ(contentMarker)
@@ -143,12 +141,10 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
                                   val programImage: String,
 
                                   val children: ISZ[MicrokitDomain]) extends MicrokitDomain {
-  val contentMarker: Marker = Marker(
-    beginMarker = s"<!-- BEGIN CONTENT MARKER $name -->",
-    endMarker = s"<!-- END CONTENT MARKER $name -->")
+  val contentMarker: BlockMarker = Marker.createXmlMarker(s"CONTENT MARKER $name")
 
   @pure override def getMarkers: ISZ[Marker] = {
-    return ISZ(contentMarker) ++ ((for (c <- children) yield c.getMarkers).flatMap((s: ISZ[Marker]) => s))
+    return ISZ(contentMarker.asInstanceOf[Marker]) ++ ((for (c <- children) yield c.getMarkers).flatMap((s: ISZ[Marker]) => s))
   }
 
   @pure def prettyST: ST = {

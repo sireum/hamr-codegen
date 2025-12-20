@@ -3,7 +3,7 @@
 package org.sireum.hamr.codegen.ros2
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.containers.Marker
+import org.sireum.hamr.codegen.common.containers.{BlockMarker, Marker}
 import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlDataPort, AadlEventDataPort, AadlPort, AadlProcess, AadlSystem, AadlThread, Dispatch_Protocol}
 import org.sireum.hamr.codegen.common.types.{AadlType, ArrayType, BaseType, EnumType, RecordType}
 import org.sireum.hamr.ir.Direction
@@ -292,9 +292,6 @@ object Generator {
     val top_level_package_nameT: String = genCppPackageName(modelName)
     val fileName: String = "CMakeLists.txt"
 
-    val startMarker: String = "# Additions within these tags will be preserved when re-running Codegen"
-    val endMarker: String = "# Additions within these tags will be preserved when re-running Codegen"
-
     // build entry point declarations
     var entry_point_decls: ISZ[ST] = IS()
     var entry_point_executables: ISZ[String] = IS()
@@ -308,6 +305,13 @@ object Generator {
     val packages: ISZ[String] = IS(s"${top_level_package_nameT}_interfaces")
     val pkgRequirements: ISZ[ST] = genCMakeListsPkgRequirements(packages)
 
+    val marker = BlockMarker(
+      id = "Additions within these tags will be preserved when re-running Codegen",
+      beginPrefix = "#",
+      optBeginSuffix = None(),
+      endPrefix = "#",
+      optEndSuffix = None())
+
     val setupFileBody =
       st"""cmake_minimum_required(VERSION 3.8)
           |project(${top_level_package_nameT})
@@ -320,9 +324,9 @@ object Generator {
           |find_package(rclcpp REQUIRED)
           |${(pkgRequirements, "\n")}
           |
-          |${startMarker}
+          |${marker.beginMarker}
           |
-          |${endMarker}
+          |${marker.endMarker}
           |
           |include_directories(include)
           |
@@ -338,7 +342,7 @@ object Generator {
 
     val filePath: ISZ[String] = IS("src", top_level_package_nameT, fileName)
 
-    return (filePath, setupFileBody, F, IS(Marker(startMarker, endMarker)))
+    return (filePath, setupFileBody, F, IS(marker))
   }
 
   //  Setup file for node source package
@@ -347,8 +351,13 @@ object Generator {
     val top_level_package_nameT: String = genCppPackageName(modelName)
     val fileName: String = "package.xml"
 
-    val startMarker: String = "<!-- Additions within these tags will be preserved when re-running Codegen -->"
-    val endMarker: String = "<!-- Additions within these tags will be preserved when re-running Codegen -->"
+    val marker = BlockMarker(
+      id = "Additions within these tags will be preserved when re-running Codegen",
+      beginPrefix = "<!--",
+      optBeginSuffix = Some("-->"),
+      endPrefix = "<!--",
+      optEndSuffix = Some("-->")
+    )
 
     val packages: ISZ[String] = IS(s"${top_level_package_nameT}_interfaces")
     val pkgDependencies: ISZ[ST] = genPackageFilePkgDependencies(packages)
@@ -368,9 +377,9 @@ object Generator {
           |    <depend>rclcpp</depend>
           |    ${(pkgDependencies, "\n")}
           |
-          |    ${startMarker}
+          |    ${marker.beginMarker}
           |
-          |    ${endMarker}
+          |    ${marker.endMarker}
           |
           |    <test_depend>ament_lint_auto</test_depend>
           |    <test_depend>ament_lint_common</test_depend>
@@ -383,7 +392,7 @@ object Generator {
 
     val filePath: ISZ[String] = IS("src", top_level_package_nameT, fileName)
 
-    return (filePath, setupFileBody, F, IS(Marker(startMarker, endMarker)))
+    return (filePath, setupFileBody, F, IS(marker))
   }
 
 
@@ -422,9 +431,13 @@ object Generator {
     val top_level_package_nameT: String = genCppPackageName(modelName)
     val fileName: String = "package.xml"
 
-    val startMarker: String = "<!-- Additions within these tags will be preserved when re-running Codegen -->"
-    val endMarker: String = "<!-- Additions within these tags will be preserved when re-running Codegen -->"
-
+    val marker = BlockMarker(
+      id = "Additions within these tags will be preserved when re-running Codegen",
+      beginPrefix = "<!--",
+      optBeginSuffix = Some("-->"),
+      endPrefix = "<!--",
+      optEndSuffix = Some("-->")
+    )
     val setupFileBody =
       st"""<?xml version="1.0"?>
           |<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
@@ -439,9 +452,9 @@ object Generator {
           |
           |    <exec_depend>${top_level_package_nameT}</exec_depend>
           |
-          |    ${startMarker}
+          |    ${marker.beginMarker}
           |
-          |    ${endMarker}
+          |    ${marker.endMarker}
           |
           |    <test_depend>ament_lint_auto</test_depend>
           |    <test_depend>ament_lint_common</test_depend>
@@ -454,7 +467,7 @@ object Generator {
 
     val filePath: ISZ[String] = IS("src", s"${top_level_package_nameT}_bringup", fileName)
 
-    return (filePath, setupFileBody, F, IS(Marker(startMarker, endMarker)))
+    return (filePath, setupFileBody, F, IS(marker))
   }
 
 
@@ -2406,9 +2419,6 @@ object Generator {
     val nodeName = genNodeName(component)
     val fileName = genCppNodeSourceHeaderName(nodeName)
 
-    val startMarker: String = "// Additions within these tags will be preserved when re-running Codegen"
-    val endMarker: String = "// Additions within these tags will be preserved when re-running Codegen"
-
     var subscriptionHandlers: ISZ[ST] = IS()
     if (isSporadic(component)) {
       for (p <- component.getPorts()) {
@@ -2456,20 +2466,27 @@ object Generator {
           """
     }
 
+    val marker = BlockMarker(
+      id = "Additions within these tags will be preserved when re-running Codegen",
+      beginPrefix = "//",
+      optBeginSuffix = None(),
+      endPrefix = "//",
+      optEndSuffix = None())
+
     fileBody =
       st"""${fileBody}
           |    //=================================================
           |    //  Include any additional declarations here
           |    //=================================================
-          |    ${startMarker}
+          |    ${marker.beginMarker}
           |
-          |    ${endMarker}
+          |    ${marker.endMarker}
           |};
           """
 
     val filePath: ISZ[String] = IS("src", packageName, "include", packageName, "user_headers", fileName)
 
-    return (filePath, fileBody, F, IS(Marker(startMarker, endMarker)))
+    return (filePath, fileBody, F, IS(marker))
   }
 
   def genCppUserNodeCppFile(packageName: String, component: AadlThread, datatypeMap: Map[AadlType, (String, ISZ[String])],

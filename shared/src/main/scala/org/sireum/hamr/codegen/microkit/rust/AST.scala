@@ -3,7 +3,7 @@ package org.sireum.hamr.codegen.microkit.rust
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, isThread}
-import org.sireum.hamr.codegen.common.containers.Marker
+import org.sireum.hamr.codegen.common.containers.{BlockMarker, Marker, PlaceholderMarker}
 import org.sireum.hamr.codegen.microkit.rust.Printers._
 
 object Printers {
@@ -189,7 +189,13 @@ object Printers {
   }
 }
 
-@datatype class MarkerWrap(val marker: Marker,
+@datatype class MarkerPlaceholder(val marker: PlaceholderMarker) extends Item {
+  @pure def prettyST: ST = {
+    return st"${marker.marker}"
+  }
+}
+
+@datatype class MarkerWrap(val marker: BlockMarker,
                            val items: ISZ[Item],
                            val sep: String) extends Item {
   @pure override def prettyST: ST = {
@@ -516,7 +522,31 @@ object Printers {
                            val ensures: ISZ[Expr]) extends Item {
 
   @pure override def prettyST: ST = {
-    val optRequires: Option[ST] =
+
+    val optRequires: Option[ST] = {
+      optRequiresMarker match {
+        case Some(b: BlockMarker) =>
+          assert(requires.nonEmpty, "There must be requires expressions when using a block marker")
+          Some(
+            st"""requires
+                |  ${b.beginMarker}
+                |  ${(for(r <- requires) yield r.prettyST, ",\n")},
+                |  ${b.endMarker}""")
+        case Some(p: PlaceholderMarker) =>
+          assert (requires.isEmpty, "Requires expressions are not allowed when using a placeholder marker")
+          Some(
+            st"""requires
+                |  ${p.marker}""")
+        case None() if requires.nonEmpty =>
+          // e.g. a requires clause on an api setter
+          Some(
+            st"""requires
+                |  ${(for(r <- requires) yield r.prettyST, ",\n")},""")
+        case _ =>
+          assert (optRequiresMarker.isEmpty, optRequiresMarker.string)
+          None()
+      }
+/*
       if (requires.isEmpty) None()
       else if (optRequiresMarker.isEmpty)
         Some(
@@ -527,8 +557,34 @@ object Printers {
             |  ${optRequiresMarker.get.beginMarker}
             |  ${(for(r <- requires) yield r.prettyST, ",\n")},
             |  ${optRequiresMarker.get.endMarker}""")
+ */
+    }
 
-    val optEnsures: Option[ST] =
+    val optEnsures: Option[ST] = {
+      optEnsuresMarker match {
+        case Some(b: BlockMarker) =>
+          assert(ensures.nonEmpty, "There must be ensures expressions when using a block marker")
+          Some(
+            st"""ensures
+                |  ${b.beginMarker}
+                |  ${(for (r <- ensures) yield r.prettyST, ",\n")},
+                |  ${b.endMarker}""")
+        case Some(p: PlaceholderMarker) =>
+          assert(ensures.isEmpty, "Ensure expressions are not allowed when using a placeholder marker")
+          Some(
+            st"""ensures
+                |  ${p.marker}"""
+          )
+        case None() if ensures.nonEmpty =>
+          // e.g. an ensures clause on an api getter
+          Some(
+            st"""ensures
+                |  ${(for(r <- ensures) yield r.prettyST, ",\n")},""")
+        case _ =>
+          assert(optEnsuresMarker.isEmpty, optEnsuresMarker.string)
+          None()
+      }
+      /*
       if (ensures.isEmpty) None()
       else if (optEnsuresMarker.isEmpty)
         Some(
@@ -540,6 +596,8 @@ object Printers {
             |  ${(for(r <- ensures) yield r.prettyST, ",\n")},
             |  ${optEnsuresMarker.get.endMarker}"""
       )
+      */
+    }
     return (
       st"""$optRequires
           |$optEnsures""")

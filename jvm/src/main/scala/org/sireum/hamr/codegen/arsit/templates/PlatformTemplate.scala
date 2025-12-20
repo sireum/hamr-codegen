@@ -3,12 +3,12 @@ package org.sireum.hamr.codegen.arsit.templates
 
 import org.sireum._
 import org.sireum.hamr.codegen.arsit.plugin.PlatformProviderPlugin
-import org.sireum.hamr.codegen.common.containers.Marker
+import org.sireum.hamr.codegen.common.containers.{BlockMarker, Marker}
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
 
 object PlatformTemplate {
-  val setupMarker: Marker = Marker.createMarker("PLATFORM SETUP")
-  val teardownMarker: Marker = Marker.createMarker("PLATFORM TEARDOWN")
+  val setupMarker: BlockMarker = Marker.createSlashMarker("MARKER PLATFORM SETUP")
+  val teardownMarker: BlockMarker = Marker.createSlashMarker("MARKER PLATFORM TEARDOWN")
 
   val markers: ISZ[Marker] = ISZ(setupMarker, teardownMarker)
 
