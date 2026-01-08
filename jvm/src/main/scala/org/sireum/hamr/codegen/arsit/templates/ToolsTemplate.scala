@@ -32,8 +32,9 @@ object ToolsTemplate {
 
   def toISString(rootDir: Os.Path, resources: ISZ[InternalResource]): ST = {
     val relResources: ISZ[String] = for(r <- resources) yield s"\"${PathUtil.convertWinPathSepToNix(rootDir.relativize(Os.path(r.dstPath)).value)}\""
+    val sorted = ops.ISZOps(relResources).sortWith((a,b) => a <= b)
     val r: ST =
-      st"""val files: ISZ[String] = ISZ(${(relResources, ",\n")})
+      st"""val files: ISZ[String] = ISZ(${(sorted, ",\n")})
           |
           |val toolargs: String = st"$${(files, " ")}".render"""
     return r

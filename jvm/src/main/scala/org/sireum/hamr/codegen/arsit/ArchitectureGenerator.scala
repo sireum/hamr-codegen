@@ -19,7 +19,8 @@ import org.sireum.hamr.codegen.common.types._
 import org.sireum.hamr.codegen.common.util.NameUtil.NameProvider
 import org.sireum.hamr.codegen.common.util.ResourceUtil
 import org.sireum.hamr.ir
-import org.sireum.hamr.ir.ConnectionInstance
+import org.sireum.hamr.ir.{ConnectionInstance, GclMethod}
+import org.sireum.message.{Position, Reporter}
 import org.sireum.ops.ISZOps
 
 @record class ArchitectureGenerator(val directories: ProjectDirectories,
@@ -43,7 +44,7 @@ import org.sireum.ops.ISZOps
     var localStore = store
     if (!types.rawConnections) {
       // TODO allow for customizations of base types
-      for (aadlType <- types.typeMap.values if !aadlType.isInstanceOf[BaseType]) {
+      for (aadlType <- getTouchedTypes(types, symbolTable, reporter) if !aadlType.isInstanceOf[BaseType]) {
         val defaultTemplate: IDatatypeTemplate = {
           if (aadlType.isInstanceOf[BaseType]) {
             halt(s"Support for customizing base type ${aadlType.name} hasn't been implemented yet")
@@ -150,6 +151,75 @@ import org.sireum.ops.ISZOps
         maxComponent = componentId,
         maxConnection = connections.size),
       localStore)
+  }
+
+  @pure def getTouchedTypes(aadlTypes: AadlTypes, symbolTable: SymbolTable, reporter: Reporter): ISZ[AadlType] = {
+    var ret: Set[AadlType] = Set.empty
+
+    def add(posOpt: Option[Position], aadlType: AadlType): Unit = {
+      aadlType match {
+        case t: ArrayType =>
+          add(posOpt, t.baseType)
+        case t: RecordType =>
+          for (f <- t.fields.values) {
+            add(posOpt, f)
+          }
+        case _ =>
+      }
+
+      ret = ret + aadlType
+    }
+
+    @pure def processType(typed: org.sireum.lang.ast.Typed.Name, posOpt: Option[Position]): Unit = {
+      val name = TypeUtil.getAadlTypeFromSlangType(typed.ids)
+      add(posOpt, aadlTypes.typeMap.get(name).get)
+    }
+
+    def processMethod(m: GclMethod): Unit = {
+      m.method.sig.returnType.typedOpt match {
+        case Some(t: org.sireum.lang.ast.Typed.Name) => processType(t, m.posOpt)
+        case _ =>
+      }
+      for (p <- m.method.sig.params) {
+        p.tipe.typedOpt match {
+          case Some(typed: org.sireum.lang.ast.Typed.Name) => processType(typed, p.id.attr.posOpt)
+          case _ =>
+        }
+      }
+    }
+
+    for (thread <- if (arsitOptions.devicesAsThreads) symbolTable.getThreadOrDevices() else symbolTable.getThreads();
+         port <- thread.getPorts()) {
+      port match {
+        case d: AadlFeatureData => add(port.feature.identifier.pos, d.aadlType)
+        case _ =>
+      }
+    }
+
+    for (annexes <- symbolTable.annexClauseInfos.values;
+         a <- annexes) {
+      a match {
+        case g: GclAnnexClauseInfo =>
+          for (s <- g.annex.state) {
+            add(s.posOpt, aadlTypes.typeMap.get(s.classifier).get)
+          }
+          for (m <- g.annex.methods) {
+            processMethod(m)
+          }
+      }
+    }
+
+    for (gclLib <- symbolTable.annexLibInfos) {
+      gclLib match {
+        case lib: GclAnnexLibInfo =>
+          for (m <- lib.annex.methods) {
+            processMethod(m)
+          }
+        case _ =>
+      }
+    }
+
+    return ret.elements
   }
 
   def generateInternal(): Unit = {
