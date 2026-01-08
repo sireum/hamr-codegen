@@ -339,7 +339,7 @@ object GumboXComputeContributions {
 
           val clause = gclSymbolTable.integrationMap.get(port).get
           val rewrittenExp = SlangExpUtil.rewriteExp(
-            rexp = SlangExpUtil.getRexp(clause.exp, gclSymbolTable),
+            rexp = clause.exp,
 
             owner = thread.classifier,
             optComponent = Some(thread),
@@ -436,7 +436,7 @@ object GumboXComputeContributions {
 
         for (guarantee <- initializes.guarantees) {
 
-          val gg = GumboXRustUtil.rewriteToExpX(SlangExpUtil.getRexp(guarantee.exp, gclSymbolTable), thread, types, stateVars,
+          val gg = GumboXRustUtil.rewriteToExpX(guarantee.exp, thread, types, stateVars,
             GclResolver.getSlangTypeToAadlType(store), crustTypeProvider)
           val rewrittenExp = SlangExpUtil.rewriteExp(
             rexp = gg.exp,
@@ -622,7 +622,7 @@ object GumboXComputeContributions {
 
         for (g <- compute.assumes) {
           val gg = GumboXRustUtil.rewriteToExpX(
-            SlangExpUtil.getRexp(g.exp, gclSymbolTable),
+            g.exp,
             thread,
             types,
             stateVars,
@@ -671,7 +671,7 @@ object GumboXComputeContributions {
         }
 
         for (g <- compute.guarantees) {
-          val gg = GumboXRustUtil.rewriteToExpX(SlangExpUtil.getRexp(g.exp, gclSymbolTable), thread, types, stateVars,
+          val gg = GumboXRustUtil.rewriteToExpX(g.exp, thread, types, stateVars,
             GclResolver.getSlangTypeToAadlType(store), crustTypeProvider)
           val rexp = SlangExpUtil.rewriteExp(
             rexp = gg.exp,
@@ -775,7 +775,7 @@ object GumboXComputeContributions {
             val rAssm: Option[ST] =
               ccase.assumes match {
                 case Some(assumes) =>
-                  val ggAssm = GumboXRustUtil.rewriteToExpX(SlangExpUtil.getRexp(assumes, gclSymbolTable), thread, types, stateVars,
+                  val ggAssm = GumboXRustUtil.rewriteToExpX(assumes, thread, types, stateVars,
                     GclResolver.getSlangTypeToAadlType(store), crustTypeProvider)
                   combinedAssumGuarParams = combinedAssumGuarParams ++ ggAssm.params.elements
                   Some(SlangExpUtil.rewriteExp(
@@ -794,7 +794,7 @@ object GumboXComputeContributions {
                 case _ => None()
               }
 
-            val ggGuar = GumboXRustUtil.rewriteToExpX(SlangExpUtil.getRexp(ccase.guarantees, gclSymbolTable), thread, types, stateVars,
+            val ggGuar = GumboXRustUtil.rewriteToExpX(ccase.guarantees, thread, types, stateVars,
               GclResolver.getSlangTypeToAadlType(store), crustTypeProvider)
             val rGuar = SlangExpUtil.rewriteExp(
               rexp = ggGuar.exp,

@@ -10,8 +10,7 @@ import org.sireum.message.Position
 @datatype class SymTableKey(val exp: AST.Exp,
                             val posOpt: Option[Position])
 
-@datatype class GclSymbolTable(val rexprs: HashMap[SymTableKey, AST.Exp], // tipe resolved exprs
-                               val slangTypeHierarchy: TypeHierarchy,
+@datatype class GclSymbolTable(val slangTypeHierarchy: TypeHierarchy,
 
                                val apiReferences: ISZ[AadlPort], // all ports referenced in exprs
                                val integrationMap: Map[AadlPort, GclSpec],

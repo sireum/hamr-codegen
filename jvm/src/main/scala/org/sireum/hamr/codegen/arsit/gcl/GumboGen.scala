@@ -317,8 +317,9 @@ object GumboGen {
     return SymTableKey(e, e.fullPosOpt)
   }
 
-  def getRExp(e: AST.Exp, aadlTypes: AadlTypes, gclSymbolTable: GclSymbolTable, basePackageName: String): AST.Exp = {
-    return GumboGen.InvokeRewriter(aadlTypes, basePackageName).rewriteInvokes(gclSymbolTable.rexprs.get(toKey(e)).get)
+  def getRExp(e: AST.Exp, aadlTypes: AadlTypes, basePackageName: String): AST.Exp = {
+    assert (e.typedOpt.nonEmpty, e.prettyST.render)
+    return GumboGen.InvokeRewriter(aadlTypes, basePackageName).rewriteInvokes(e)
   }
 
   def processInitializes(m: AadlThreadOrDevice, symbolTable: SymbolTable, aadlTypes: AadlTypes, basePackage: String, store: Store): Option[GclEntryPointInitialize] = {
@@ -332,7 +333,9 @@ object GumboGen {
       val gclSymbolTable = ais(0).gclSymbolTable
 
       if (sc.initializes.nonEmpty) {
-        val rModifies: ISZ[ST] = sc.initializes.get.modifies.map((m: AST.Exp) => st"${gclSymbolTable.rexprs.get(toKey(m)).get}")
+        assert (ops.ISZOps(sc.initializes.get.modifies).forall(m => m.typedOpt.nonEmpty))
+
+        val rModifies: ISZ[ST] = (for(m <- sc.initializes.get.modifies) yield m.prettyST)
 
         var modifies: ISZ[ST] = ISZ()
         var requires: ISZ[ST] = ISZ()
@@ -344,7 +347,7 @@ object GumboGen {
           imports = imports ++ GumboGenUtil.resolveLitInterpolateImports(m.exp, basePackage, GclResolver.getIndexingTypeFingerprints(store))
           st"""// guarantee ${m.id}
               |${processDescriptor(m.descriptor, "//   ")}
-              |${getRExp(m.exp, aadlTypes, gclSymbolTable, basePackage)}"""
+              |${getRExp(m.exp, aadlTypes, basePackage)}"""
         })
 
         val optModifies: Option[ST] =
@@ -409,14 +412,15 @@ object GumboGen {
           var initFlows: ISZ[ST] = ISZ()
 
           for (f <- sc.initializes.get.flows) {
-            val froms: ISZ[AST.Exp] = for (e <- f.from) yield gclSymbolTable.rexprs.get(toKey(e)).get
-            val tos: ISZ[AST.Exp] = for (e <- f.to) yield gclSymbolTable.rexprs.get(toKey(e)).get
+            assert (ops.ISZOps(f.from).forall(e => e.typedOpt.nonEmpty))
+            assert (ops.ISZOps(f.to).forall(e => e.typedOpt.nonEmpty))
+
             initFlows = initFlows :+
               st"""// infoflow ${f.id}
                   |${GumboGen.processDescriptor(f.descriptor, "//   ")}
                   |Flow("${f.id}",
-                  |  From(${(froms, ", ")}),
-                  |  To(${(tos, ", ")})
+                  |  From(${(f.from, ", ")}),
+                  |  To(${(f.to, ", ")})
                   |)"""
           }
 
@@ -631,11 +635,13 @@ object GumboGen {
   var imports: ISZ[String] = ISZ()
 
   def getRExp(e: AST.Exp): AST.Exp = {
-    return GumboGen.InvokeRewriter(aadlTypes, basePackageName).rewriteInvokes(gclSymbolTable.rexprs.get(toKey(e)).get)
+    assert (e.typedOpt.nonEmpty, e.prettyST.render)
+    return GumboGen.InvokeRewriter(aadlTypes, basePackageName).rewriteInvokes(e)
   }
 
   def getR2Exp(e: AST.Exp.Ref): AST.Exp = {
-    return GumboGen.InvokeRewriter(aadlTypes, basePackageName).rewriteInvokes(gclSymbolTable.rexprs.get(toKey(e.asExp)).get)
+    assert (e.typedOpt.nonEmpty, e.asExp.prettyST.render)
+    return GumboGen.InvokeRewriter(aadlTypes, basePackageName).rewriteInvokes(e.asExp)
   }
 
   def fetchHandler(port: AadlPort, handlers: ISZ[GclHandle]): Option[GclHandle] = {
@@ -666,7 +672,8 @@ object GumboGen {
       return m
     }
 
-    val generalModifies: Set[String] = Set(compute.modifies.map((e: AST.Exp) => s"${gclSymbolTable.rexprs.get(toKey(e)).get}"))
+    assert (ops.ISZOps(compute.modifies).forall(e => e.typedOpt.nonEmpty))
+    val generalModifies: Set[String] = Set(for (m <- compute.modifies) yield m.prettyST.render)
 
     var generalHolder: ISZ[GclHolder] = ISZ()
 
@@ -677,20 +684,20 @@ object GumboGen {
     generalHolder = generalHolder ++ addBuiltInOutgoingEventPortRequires(context)
 
     for (assumee <- compute.assumes) {
-      val rspec = gclSymbolTable.rexprs.get(toKey(assumee.exp)).get
-      imports = imports ++ GumboGenUtil.resolveLitInterpolateImports(rspec, basePackageName, GclResolver.getIndexingTypeFingerprints(store))
+      assert (assumee.exp.typedOpt.nonEmpty)
+      imports = imports ++ GumboGenUtil.resolveLitInterpolateImports(assumee.exp, basePackageName, GclResolver.getIndexingTypeFingerprints(store))
 
       val descriptor = GumboGen.processDescriptor(assumee.descriptor, "//   ")
-      val rassume = GumboGen.StateVarInRewriter().wrapStateVarsInInput(rspec)
+      val rassume = GumboGen.StateVarInRewriter().wrapStateVarsInInput(assumee.exp)
       generalHolder = generalHolder :+ GclRequiresHolder(assumee.id, descriptor, st"$rassume")
     }
 
     for (guarantee <- compute.guarantees) {
-      val rspec = gclSymbolTable.rexprs.get(toKey(guarantee.exp)).get
-      imports = imports ++ GumboGenUtil.resolveLitInterpolateImports(rspec, basePackageName, GclResolver.getIndexingTypeFingerprints(store))
+      assert (guarantee.exp.typedOpt.nonEmpty)
+      imports = imports ++ GumboGenUtil.resolveLitInterpolateImports(guarantee.exp, basePackageName, GclResolver.getIndexingTypeFingerprints(store))
 
       val descriptor = GumboGen.processDescriptor(guarantee.descriptor, "//   ")
-      generalHolder = generalHolder :+ GclEnsuresHolder(guarantee.id, descriptor, st"$rspec")
+      generalHolder = generalHolder :+ GclEnsuresHolder(guarantee.id, descriptor, guarantee.exp.prettyST)
     }
 
     if (compute.cases.nonEmpty) {
@@ -700,35 +707,35 @@ object GumboGen {
         val rrassume: Option[ST] =
           generalCase.assumes match {
             case Some(assumes) =>
-              val rexp = gclSymbolTable.rexprs.get(toKey(assumes)).get
-              val rrassume = GumboGen.StateVarInRewriter().wrapStateVarsInInput(rexp)
+              assert (assumes.typedOpt.nonEmpty)
+              val rrassume = GumboGen.StateVarInRewriter().wrapStateVarsInInput(assumes)
               imports = imports ++ GumboGenUtil.resolveLitInterpolateImports(rrassume, basePackageName, GclResolver.getIndexingTypeFingerprints(store))
               Some(rrassume.prettyST)
             case _ => None()
           }
 
-        val rguarantee = gclSymbolTable.rexprs.get(toKey(generalCase.guarantees)).get
-        imports = imports ++ GumboGenUtil.resolveLitInterpolateImports(rguarantee, basePackageName, GclResolver.getIndexingTypeFingerprints(store))
+        assert (generalCase.guarantees.typedOpt.nonEmpty)
+        imports = imports ++ GumboGenUtil.resolveLitInterpolateImports(generalCase.guarantees, basePackageName, GclResolver.getIndexingTypeFingerprints(store))
 
         generalHolder = generalHolder :+ GclCaseHolder(
           caseId = generalCase.id,
           descriptor = GumboGen.processDescriptor(generalCase.descriptor, "//   "),
           requires = rrassume,
-          ensures = rguarantee.prettyST)
+          ensures = generalCase.guarantees.prettyST)
       }
     }
 
     var generalFlows: ISZ[ST] = ISZ()
 
     for (f <- compute.flows) {
-      val froms: ISZ[AST.Exp] = for (e <- f.from) yield gclSymbolTable.rexprs.get(toKey(e)).get
-      val tos: ISZ[AST.Exp] = for (e <- f.to) yield gclSymbolTable.rexprs.get(toKey(e)).get
+      assert (ops.ISZOps(f.from).forall(e => e.typedOpt.nonEmpty))
+      assert (ops.ISZOps(f.to).forall(e => e.typedOpt.nonEmpty))
       generalFlows = generalFlows :+
         st"""// infoflow ${f.id}
             |${GumboGen.processDescriptor(f.descriptor, "//   ")}
             |Flow("${f.id}",
-            |  From(${(froms, ", ")}),
-            |  To(${(tos, ", ")})
+            |  From(${(f.from, ", ")}),
+            |  To(${(f.to, ", ")})
             |)"""
     }
 
@@ -756,7 +763,8 @@ object GumboGen {
           case Some(handler) => {
             if (generalModifies.nonEmpty || handler.modifies.nonEmpty) {
               val modMarker = genComputeMarkerCreator(eventPort.identifier, "MODIFIES")
-              val handlerModifies = generalModifies ++ handler.modifies.map((m: AST.Exp) => s"${gclSymbolTable.rexprs.get(toKey(m)).get}")
+              assert (ops.ISZOps(handler.modifies).forall(e => e.typedOpt.nonEmpty))
+              val handlerModifies = generalModifies ++ (for(m <- handler.modifies) yield m.prettyST.render)
 
               rmodifies = rmodifies :+
                 st"""${modMarker.beginMarker}
@@ -769,8 +777,8 @@ object GumboGen {
               val handlerRequiresST: ISZ[ST] =
                 handlerRequires.map((m: GclRequiresHolder) => m.toSTMin) ++
                   handler.assumes.map((g: GclAssume) => {
-                    val rexp = gclSymbolTable.rexprs.get(toKey(g.exp)).get
-                    val rassume = GumboGen.StateVarInRewriter().wrapStateVarsInInput(rexp)
+                    assert (g.exp.typedOpt.nonEmpty)
+                    val rassume = GumboGen.StateVarInRewriter().wrapStateVarsInInput(g.exp)
                     imports = imports ++ GumboGenUtil.resolveLitInterpolateImports(rassume, basePackageName, GclResolver.getIndexingTypeFingerprints(store))
                     st"""// assumes ${g.id}
                         |${GumboGen.processDescriptor(g.descriptor, "//   ")}
@@ -789,11 +797,11 @@ object GumboGen {
 
               val handlerEnsuresST: ISZ[ST] = generalElems ++ _cases ++
                 handler.guarantees.map((g: GclGuarantee) => {
-                  val rexp = gclSymbolTable.rexprs.get(toKey(g.exp)).get
-                  imports = imports ++ GumboGenUtil.resolveLitInterpolateImports(rexp, basePackageName, GclResolver.getIndexingTypeFingerprints(store))
+                  assert (g.exp.typedOpt.nonEmpty)
+                  imports = imports ++ GumboGenUtil.resolveLitInterpolateImports(g.exp, basePackageName, GclResolver.getIndexingTypeFingerprints(store))
                   st"""// guarantees ${g.id}
                       |${GumboGen.processDescriptor(g.descriptor, "//   ")}
-                      |${rexp}"""
+                      |${g.exp}"""
                 })
 
               val marker = genComputeMarkerCreator(eventPort.identifier, "ENSURES")

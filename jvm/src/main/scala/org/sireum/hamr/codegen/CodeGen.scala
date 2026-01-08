@@ -529,13 +529,6 @@ object CodeGen {
                 val existingSections = StringUtil.collectSectionsR(Some(p.toUri), existingContent, toolName, i.markers, reporter)
                 val newSections = StringUtil.collectSectionsR(Some(p.toUri), newContent, toolName, i.markers, reporter)
 
-                /*
-                val existingContent = p.read
-                val newContent = render(i)
-                val oldSections = StringUtil.collectSections(existingContent, toolName, i.markers, reporter)
-                val newSections = StringUtil.collectSections(newContent, toolName, i.markers, reporter)
-                */
-
                 // note we allow the user to delete placeholder markers after they are generated
                 val missingMarkers = i.markers.filter((m: Marker) =>
                   !m.isInstanceOf[PlaceholderMarker] && !ops.ISZOps(existingSections.keys).contains(m.id))
@@ -547,7 +540,7 @@ object CodeGen {
                     st"""Existing file did not contain the following markers. Copy the markers/content found in ${fixme.toUri}
                         |to the corresponding locations in ${p.toUri}
                         |
-                        |  ${(missingMarkers, "\n")}"""
+                        |  ${(missingMarkers, "\n\n")}"""
                   reporter.error(None(), toolName, msg.render)
                 } else {
                   if (i.invertMarkers) {
@@ -561,20 +554,6 @@ object CodeGen {
                     val content: String = StringUtil.replaceSectionsR(existingContent, replacements, toolName, reporter)
                     p.writeOver(content)
                   }
-
-                  /*
-                  if (i.invertMarkers) {
-                    val replacements: ISZ[(Z, Z, String)] = for (newEntry <- newSections.entries) yield
-                      ((newEntry._2.beginOffset, newEntry._2.endOffset, oldSections.get(newEntry._1).get.content.get))
-                    val content: String = StringUtil.replaceSections(newContent, replacements, toolName, reporter)
-                    p.writeOver(content)
-                  } else {
-                    val replacements: ISZ[(Z, Z, String)] = for (oldEntry <- oldSections.entries) yield
-                      ((oldEntry._2.beginOffset, oldEntry._2.endOffset, newSections.get(oldEntry._1).get.content.get))
-                    val content: String = StringUtil.replaceSections(p.read, replacements, toolName, reporter)
-                    p.writeOver(content)
-                  }
-                  */
 
                   reporter.info(None(), toolName, s"Wrote and preserved existing content: ${p}")
                 }

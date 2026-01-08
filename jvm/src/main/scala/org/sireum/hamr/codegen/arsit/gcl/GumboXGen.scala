@@ -526,7 +526,8 @@ object GumboXGen {
           var topLevelGuaranteesCombined: ISZ[ST] = ISZ()
 
           for (assumee <- gclCompute.assumes) {
-            val rspec = gclSymbolTable.rexprs.get(toKey(assumee.exp)).get
+            assert (assumee.exp.typedOpt.nonEmpty)
+            val rspec = assumee.exp
             localGumboStore = localGumboStore(imports = localGumboStore.imports ++ GumboGenUtil.resolveLitInterpolateImports(rspec, basePackageName, GclResolver.getIndexingTypeFingerprints(store)))
             val descriptor = GumboXGen.processDescriptor(assumee.descriptor, "*   ")
             val gg = GumboXGenUtil.rewriteToExpX(rspec, component, componentNames, aadlTypes, stateVars)
@@ -553,11 +554,11 @@ object GumboXGen {
           }
 
           for (guarantee <- gclCompute.guarantees) {
-            val rspec = gclSymbolTable.rexprs.get(toKey(guarantee.exp)).get
-            localGumboStore = localGumboStore(imports = localGumboStore.imports ++ GumboGenUtil.resolveLitInterpolateImports(rspec, basePackageName, GclResolver.getIndexingTypeFingerprints(store)))
+            assert (guarantee.exp.typedOpt.nonEmpty)
+            localGumboStore = localGumboStore(imports = localGumboStore.imports ++ GumboGenUtil.resolveLitInterpolateImports(guarantee.exp, basePackageName, GclResolver.getIndexingTypeFingerprints(store)))
             val descriptor = GumboXGen.processDescriptor(guarantee.descriptor, "*   ")
 
-            val gg = GumboXGenUtil.rewriteToExpX(rspec, component, componentNames, aadlTypes, stateVars)
+            val gg = GumboXGenUtil.rewriteToExpX(guarantee.exp, component, componentNames, aadlTypes, stateVars)
             val methodName = st"compute_spec_${guarantee.id}_guarantee"
 
             CEP_T_Guar_Params = CEP_T_Guar_Params ++ gg.params.elements
@@ -629,8 +630,8 @@ object GumboXGen {
             val ggAssm: Option[GGExpParamHolder] =
               generalCase.assumes match {
                 case Some(assumee) =>
-                  val rexp = gclSymbolTable.rexprs.get(toKey(assumee)).get
-                  val rrassume = GumboGen.StateVarInRewriter().wrapStateVarsInInput(rexp)
+                  assert (assumee.typedOpt.nonEmpty)
+                  val rrassume = GumboGen.StateVarInRewriter().wrapStateVarsInInput(assumee)
                   localGumboStore = localGumboStore(imports = localGumboStore.imports ++ GumboGenUtil.resolveLitInterpolateImports(rrassume, basePackageName, GclResolver.getIndexingTypeFingerprints(store)))
 
                   val gg = GumboXGenUtil.rewriteToExpX(rrassume, component, componentNames, aadlTypes, stateVars)
@@ -639,10 +640,10 @@ object GumboXGen {
                 case _ => None()
               }
 
-            val rguarantee = gclSymbolTable.rexprs.get(toKey(generalCase.guarantees)).get
-            localGumboStore = localGumboStore(imports = localGumboStore.imports ++ GumboGenUtil.resolveLitInterpolateImports(rguarantee, basePackageName, GclResolver.getIndexingTypeFingerprints(store)))
+            assert (generalCase.guarantees.typedOpt.nonEmpty)
+            localGumboStore = localGumboStore(imports = localGumboStore.imports ++ GumboGenUtil.resolveLitInterpolateImports(generalCase.guarantees, basePackageName, GclResolver.getIndexingTypeFingerprints(store)))
 
-            val ggGuar = GumboXGenUtil.rewriteToExpX(rguarantee, component, componentNames, aadlTypes, stateVars)
+            val ggGuar = GumboXGenUtil.rewriteToExpX(generalCase.guarantees, component, componentNames, aadlTypes, stateVars)
             val methodName = st"compute_case_${generalCase.id}"
 
             combinedAssmGuarParam = combinedAssmGuarParam ++ ggGuar.params.elements
@@ -693,9 +694,9 @@ object GumboXGen {
           for (handler <- gclCompute.handlers) {
             val handlerId = handler.port.string
 
-            val hexp = gclSymbolTable.rexprs.get(toKey(handler.port)).get
+            assert (handler.port.typedOpt.nonEmpty)
             val aadlPort = component.getPorts().filter(p => p.identifier == handlerId)
-            val (aadlPortType, _) = GumboXGenUtil.getAadlType(hexp.typedOpt.get.asInstanceOf[AST.Typed.Name], aadlTypes)
+            val (aadlPortType, _) = GumboXGenUtil.getAadlType(handler.port.typedOpt.get.asInstanceOf[AST.Typed.Name], aadlTypes)
             assert(aadlPort.size == 1)
             val aadlPortParam = GGPortParam(
               port = aadlPort(0),
@@ -708,10 +709,10 @@ object GumboXGen {
             var handlers_Guar_Params: Set[GGParam] = Set.empty[GGParam] + aadlPortParam
 
             for (guarantee <- handler.guarantees) {
-              val rhguar = gclSymbolTable.rexprs.get(toKey(guarantee.exp)).get
-              localGumboStore = localGumboStore(imports = localGumboStore.imports ++ GumboGenUtil.resolveLitInterpolateImports(rhguar, basePackageName, GclResolver.getIndexingTypeFingerprints(store)))
+              assert (guarantee.exp.typedOpt.nonEmpty)
+              localGumboStore = localGumboStore(imports = localGumboStore.imports ++ GumboGenUtil.resolveLitInterpolateImports(guarantee.exp, basePackageName, GclResolver.getIndexingTypeFingerprints(store)))
 
-              val gg = GumboXGenUtil.rewriteToExpX(rhguar, component, componentNames, aadlTypes, stateVars)
+              val gg = GumboXGenUtil.rewriteToExpX(guarantee.exp, component, componentNames, aadlTypes, stateVars)
               val methodName = st"compute_handle_${handlerId}_${guarantee.id}_guarantee"
 
               handlers_Guar_Params = handlers_Guar_Params ++ gg.params.elements
@@ -1087,7 +1088,8 @@ object GumboXGen {
   }
 
   def getRExp(e: AST.Exp, basePackageName: String, aadlTypes: AadlTypes, gclSymbolTable: GclSymbolTable): AST.Exp = {
-    return GumboGen.InvokeRewriter(aadlTypes, basePackageName).rewriteInvokes(gclSymbolTable.rexprs.get(toKey(e)).get)
+    assert (e.typedOpt.nonEmpty, e.prettyST.render)
+    return GumboGen.InvokeRewriter(aadlTypes, basePackageName).rewriteInvokes(e)
   }
 
   def finalise(component: AadlThreadOrDevice, componentNames: NameProvider, projectDirectories: ProjectDirectories, gumboStore: GumboXPluginStore): ObjectContributions = {
@@ -1865,7 +1867,8 @@ object GumboXGen {
     return emptyObjectContributions(resources = resources)
   }
 
-  def getR2Exp(e: AST.Exp.Ref, basePackageName: String, aadlTypes: AadlTypes, gclSymbolTable: GclSymbolTable): AST.Exp = {
-    return GumboGen.InvokeRewriter(aadlTypes, basePackageName).rewriteInvokes(gclSymbolTable.rexprs.get(toKey(e.asExp)).get)
+  def getR2Exp(e: AST.Exp.Ref, basePackageName: String, aadlTypes: AadlTypes): AST.Exp = {
+    assert (e.asExp.typedOpt.nonEmpty)
+    return GumboGen.InvokeRewriter(aadlTypes, basePackageName).rewriteInvokes(e.asExp)
   }
 }

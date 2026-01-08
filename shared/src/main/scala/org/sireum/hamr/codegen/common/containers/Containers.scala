@@ -84,6 +84,10 @@ object Marker {
                                   val commentPrefix: String, // e.g. '//', '#', '<!--'
                                   val optCommentSuffix: Option[String]) extends Marker {
 
+  override def string: String = {
+    return marker
+  }
+
   val marker: String = s"$commentPrefix PLACEHOLDER $id${if (optCommentSuffix.nonEmpty) s" ${optCommentSuffix.get}" else ""}"
 }
 
@@ -94,6 +98,11 @@ object Marker {
 
                             val endPrefix: String,
                             val optEndSuffix: Option[String]) extends Marker {
+  override def string: String = {
+    return (
+      st"""$beginMarker
+          |$endMarker""".render)
+  }
 
   val beginMarker: String = s"$beginPrefix $id${if (optBeginSuffix.nonEmpty) s" ${optBeginSuffix.get}" else ""}"
 

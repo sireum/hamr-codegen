@@ -11,7 +11,7 @@ import org.sireum.hamr.codegen.common.util.{GclUtil, NameUtil}
 import org.sireum.hamr.ir._
 import org.sireum.lang.ast.MethodContract.Simple
 import org.sireum.lang.ast.{Exp, Purity, ResolvedAttr, ResolvedInfo, TypeParam}
-import org.sireum.lang.symbol.Resolver.{NameMap, QName, TypeMap, typeName, typeParamMap}
+import org.sireum.lang.symbol.Resolver.{NameMap, QName, TypeMap, resolverKind, typeName, typeParamMap}
 import org.sireum.lang.symbol.{Info, Resolver, Scope, TypeInfo}
 import org.sireum.lang.tipe.{TypeChecker, TypeHierarchy}
 import org.sireum.lang.{ast => AST}
@@ -617,7 +617,6 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
 @record class GclResolver() extends AnnexVisitor {
 
-  var rexprs: HashMap[SymTableKey, AST.Exp] = HashMap.empty
   var apiReferences: Set[AadlPort] = Set.empty
   var computeHandlerPortMap: Map[AST.Exp, AadlPort] = Map.empty
   var integrationMap: Map[AadlPort, GclSpec] = Map.empty
@@ -636,7 +635,6 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
   var slangTypeToAadlType: Map[AST.Typed, TypeIdPath] = Map.empty
 
   def reset: B = {
-    rexprs = HashMap.empty
     apiReferences = Set.empty
     computeHandlerPortMap = Map.empty
     integrationMap = Map.empty
@@ -762,7 +760,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                      scope: Scope,
                      symbolTable: SymbolTable,
                      aadlTypes: AadlTypes,
-                     reporter: Reporter): AST.Stmt.Method = {
+                     reporter: Reporter): Option[GclMethod] = {
 
     val fqn = context :+ gclMethod.method.sig.id.value
 
@@ -772,7 +770,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           gclMethod.method(sig = resolvedMethod.ast.sig, attr = resolvedMethod.ast.attr)
         case _ =>
           reporter.error(gclMethod.posOpt, toolName, st"Could not resolve method '${(fqn, "::")}'".render)
-          return gclMethod.method
+          return None()
       }
 
     val (ok, methodScope) = TypeChecker.methodScope(typeHierarchy, context, scope, rMethod.sig, reporter)
@@ -790,7 +788,6 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           stateVars = ISZ(), specFuns = specMethods,
           scope = methodScope, typeHierarchy = typeHierarchy,
           symbolTable = symbolTable, aadlTypes = aadlTypes, reporter = reporter)
-        rexprs = rexprs + toKey(e) ~> ret
         return ret
       }
 
@@ -822,7 +819,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             stateVars = ISZ(), specFuns = specMethods,
             scope = methodScope, typeHierarchy = typeHierarchy,
             symbolTable = symbolTable, aadlTypes = aadlTypes, reporter = reporter)
-          rexprs = rexprs + toKey(exp) ~> rexp
+
           Some(body(stmts=ISZ(ret(expOpt=Some(rexp)))))
         case _ =>
           reporter.error(gclMethod.method.posOpt, GclResolver.toolName, "Unexpected: method does not have a body")
@@ -839,10 +836,30 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       else rMethod
 
       val tc = TypeChecker(typeHierarchy, fqn, F, TypeChecker.ModeContext.Spec, F)
-      return tc.checkMethod(scope, rMethod(bodyOpt = body, mcontract = mc), reporter)
+      val resolvedMethod: AST.Stmt.Method = tc.checkMethod(scope, rMethod(bodyOpt = body, mcontract = mc), reporter)
+
+      // update the GclMethod, except keep the original param and return type typing
+      // since tipe will replace type aliases with their actual type
+      // (e.g. changes Base_Types.Boolean to B).
+      val resolvedGclMethod = gclMethod(method = resolvedMethod(
+        sig = resolvedMethod.sig(
+          params = gclMethod.method.sig.params,
+          returnType = gclMethod.method.sig.returnType)))
+
+      // update the global name map with the resolved method info
+      val methodQualifiedName = context :+ resolvedMethod.sig.id.value
+      assert (globalNameMap.contains(methodQualifiedName), s"Global name map did not contain $methodQualifiedName")
+      replaceName(methodQualifiedName, Info.Method(
+        owner = context,
+        isInObject = T,
+        scope = scope,
+        hasBody = resolvedMethod.bodyOpt.nonEmpty,
+        ast = resolvedMethod))
+
+      return Some(resolvedGclMethod)
     } else {
       assert(reporter.hasError)
-      return rMethod
+      return None()
     }
   }
 
@@ -852,39 +869,41 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                     aadlTypes: AadlTypes,
                     typeHierarchy: TypeHierarchy,
                     scope: Scope,
-                    reporter: Reporter): Option[GclSymbolTable] = {
+                    reporter: Reporter): Option[(GclLib, GclSymbolTable)] = {
+
+    var resolvedGclMethods: ISZ[GclMethod] = ISZ()
 
     for (gclMethod <- gclLib.methods) {
-      val rMethod = visitGclMethod(context, None(), gclMethod, Map.empty, typeHierarchy, scope, symbolTable, aadlTypes, reporter)
-      val methodQualifiedName = context :+ gclMethod.method.sig.id.value
-      replaceName(methodQualifiedName, Info.Method(
-        owner = context,
-        isInObject = T,
-        scope = scope,
-        hasBody = rMethod.bodyOpt.nonEmpty,
-        ast = rMethod))
+      visitGclMethod(context, None(), gclMethod, Map.empty, typeHierarchy, scope, symbolTable, aadlTypes, reporter) match {
+        case Some(resolvedGclMethod) =>
+          resolvedGclMethods = resolvedGclMethods :+ resolvedGclMethod
+        case _ =>
+      }
     }
 
-    val gclSymTable = GclSymbolTable(
-      rexprs = rexprs,
-      slangTypeHierarchy = typeHierarchy(
-        nameMap = globalNameMap,
-        typeMap = globalTypeMap),
-      apiReferences = ISZ(),
-      integrationMap = Map.empty,
-      computeHandlerPortMap = Map.empty)
-
-    return Some(gclSymTable)
+    if (reporter.hasError) {
+      return None()
+    } else {
+      return Some((
+        gclLib(methods = resolvedGclMethods),
+        GclSymbolTable(
+          slangTypeHierarchy = typeHierarchy(
+            nameMap = globalNameMap,
+            typeMap = globalTypeMap),
+          apiReferences = ISZ(),
+          integrationMap = Map.empty,
+          computeHandlerPortMap = Map.empty)))
+    }
   }
 
-  def processGclAnnex(component: AadlComponent,
-                      annex: GclSubclause,
-                      libInfos: ISZ[GclAnnexLibInfo],
-                      symbolTable: SymbolTable,
-                      aadlTypes: AadlTypes,
-                      typeHierarchy: TypeHierarchy,
-                      scope: Scope.Local,
-                      reporter: Reporter): Option[GclSymbolTable] = {
+  def processGclSubclause(component: AadlComponent,
+                          subclause: GclSubclause,
+                          libInfos: ISZ[GclAnnexLibInfo],
+                          symbolTable: SymbolTable,
+                          aadlTypes: AadlTypes,
+                          typeHierarchy: TypeHierarchy,
+                          scope: Scope.Local,
+                          reporter: Reporter): Option[(GclSubclause, GclSymbolTable)] = {
 
     val componentPos = component.component.identifier.pos
 
@@ -895,11 +914,32 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       libMethods = libMethods ++ (for (m <- lib.annex.methods) yield (lib.name :+ m.method.sig.id.value) ~> m)
     }
 
-    def visitGclSubclause(s: GclSubclause): Unit = {
+    def visitInvariant(i: GclInvariant): Option[GclInvariant] = {
+      visitSlangExp(exp = i.exp, context = context, scope = scope, mode = TypeChecker.ModeContext.Spec, typeHierarchy = typeHierarchy, reporter = reporter) match {
+        case Some((rexp, roptType)) =>
+          roptType match {
+            case Some(AST.Typed.Name(ISZ("org", "sireum", "B"), _)) =>
+              val (rexp2, _, _) = GclResolver.collectSymbols(rexp, RewriteMode.Normal, component, F, indexingTypeFingerprints,
+                ISZ(), libMethods, symbolTable, reporter)
+              val resolvedExp: AST.Exp =
+                if (rexp2.isEmpty) rexp
+                else rexp2.get
+
+              return Some(i(exp = resolvedExp))
+
+            case Some(x) => reporter.error(i.exp.fullPosOpt, GclResolver.toolName, s"Expecting B but found ${x}")
+            case _ => assert(reporter.hasError, "Invariant expression is untyped so Tipe should have reported errors already")
+          }
+        case _ => reporter.error(i.exp.fullPosOpt, GclResolver.toolName, "Unexpected: type checking returned none")
+      }
+      return None()
+    }
+
+    def visitGclSubclause(s: GclSubclause): Option[GclSubclause] = {
       var seenInvariantIds: Set[String] = Set.empty
 
       if (reporter.hasError) {
-        return
+        return None()
       }
 
       val threadMethods: Map[ISZ[String], GclMethod] = Map.empty[ISZ[String], GclMethod] ++ (for (m <- s.methods) yield (context :+ m.method.sig.id.value) ~> m)
@@ -907,22 +947,33 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       // hmm, lost imports with AIR translation so assume all glc lib annexes have been imported
       val gclMethods = threadMethods ++ libMethods.entries
 
+      var resolvedGclMethods: ISZ[GclMethod] = ISZ()
       for (gclMethod <- s.methods) {
-        visitGclMethod(context, Some(component), gclMethod, gclMethods, typeHierarchy, scope, symbolTable, aadlTypes, reporter)
+        visitGclMethod(context, Some(component), gclMethod, gclMethods, typeHierarchy, scope, symbolTable, aadlTypes, reporter) match {
+          case Some(resolvedGclMethod)=>
+            resolvedGclMethods = resolvedGclMethods :+ resolvedGclMethod
+          case _ =>
+        }
       }
 
+      var resolvedInvariants: ISZ[GclInvariant] = ISZ()
       for (i <- s.invariants) {
         if (seenInvariantIds.contains(i.id)) {
           reporter.error(i.exp.fullPosOpt, GclResolver.toolName, s"Duplicate invariant id: ${i.id}")
         }
         seenInvariantIds = seenInvariantIds + i.id
-        visitInvariant(i)
+        visitInvariant(i) match {
+          case Some(ri) => resolvedInvariants = resolvedInvariants :+ ri
+          case _ =>
+        }
       }
 
+      var resolvedIntegration: Option[GclIntegration] = None()
       if (s.integration.nonEmpty) {
         var seenSpecNames: Set[String] = Set.empty
         val gclIntegration = s.integration.get
 
+        var resolvedGclSpecs: ISZ[GclSpec] = ISZ()
         for (glcIntegSpec <- gclIntegration.specs) {
 
           if (seenSpecNames.contains(glcIntegSpec.id)) {
@@ -949,7 +1000,6 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               case MSome(et2) => et2
               case _ => expTipe
             }
-            rexprs = rexprs + toKey(glcIntegSpec.exp) ~> resolvedExpr
             apiReferences = apiReferences ++ apiRefs
 
             if (!reporter.hasError) {
@@ -976,13 +1026,14 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 // to tipe for integration constraint checking
                 glcIntegSpec match {
                   case a: GclAssume =>
-                    integrationMap = integrationMap + sym ~> a(exp = resolvedExpr)
+                    val resolvedAssume = a(exp = resolvedExpr)
+                    integrationMap = integrationMap + sym ~> resolvedAssume
+                    resolvedGclSpecs = resolvedGclSpecs :+ resolvedAssume
                   case g: GclGuarantee =>
-                    integrationMap = integrationMap + sym ~> g(exp = resolvedExpr)
+                    val resolvedGurarantee = g(exp = resolvedExpr)
+                    integrationMap = integrationMap + sym ~> resolvedGurarantee
+                    resolvedGclSpecs = resolvedGclSpecs :+ resolvedGurarantee
                 }
-                rexprs = rexprs - toKey(glcIntegSpec.exp) ~> resolvedExpr // remove the old entry
-
-                rexprs = rexprs + toKey(resolvedExpr) ~> resolvedExpr
 
                 sym.direction match {
                   case Direction.Out =>
@@ -1000,10 +1051,11 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             }
           }
         }
+        resolvedIntegration = Some(s.integration.get(specs = resolvedGclSpecs))
       }
 
 
-      def checkFlow(exp: AST.Exp, isFrom: B, posOpt: Option[Position]): Unit = {
+      def checkFlow(exp: AST.Exp, isFrom: B, posOpt: Option[Position]): Option[Exp] = {
         exp match {
           case e: Exp.Ident =>
             visitSlangExp(exp = e, context = context, mode = TypeChecker.ModeContext.Spec, scope = scope, typeHierarchy = typeHierarchy, reporter = reporter) match {
@@ -1032,12 +1084,11 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                         reporter.error(e.fullPosOpt, GclResolver.toolName, s"From/To flow clauses can only contain ports and state vars")
                       }
                   }
-                  if (rexp2.isEmpty) {
-                    rexprs = rexprs + toKey(e) ~> rexp
+                  val resolvedExp: AST.Exp = rexp2 match {
+                    case MSome(r) => r
+                    case _ => rexp
                   }
-                  else {
-                    rexprs = rexprs + toKey(e) ~> rexp2.get
-                  }
+                  return Some(resolvedExp)
                 }
               case _ =>
                 reporter.error(e.fullPosOpt, GclResolver.toolName, s"Unable to resolve $e")
@@ -1045,9 +1096,11 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           case _ =>
             reporter.error(posOpt, GclResolver.toolName, s"Expecting from/to expressions to be Idents, found ${exp}")
         }
+        return None()
       }
 
-      def processModifiesClause(lmodifies: ISZ[Exp]): Unit = {
+      def processModifiesClause(lmodifies: ISZ[Exp]): ISZ[Exp] = {
+        var resolvedExpressions: ISZ[Exp] = ISZ()
         for (modifies <- lmodifies) {
           modifies match {
             case e: Exp.Ident =>
@@ -1055,6 +1108,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 case Some((rexp, roptType)) =>
                   val (rexp2, symbols, apiRefs) = GclResolver.collectSymbols(rexp, RewriteMode.Normal, component, F, indexingTypeFingerprints,
                     s.state, gclMethods, symbolTable, reporter)
+
                   apiReferences = apiReferences ++ apiRefs
 
                   if (!reporter.hasError) {
@@ -1066,12 +1120,13 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                           // modifies clause should just be "api" rather than "portName"
                           val apiIdent: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = AST.Attr(posOpt = e.fullPosOpt)),
                             attr = AST.ResolvedAttr(posOpt = e.fullPosOpt, resOpt = None(), typedOpt = None()))
-                          rexprs = rexprs + toKey(e) ~> apiIdent
+
                         case GclSymbolHolder(GclStateVar(_, _)) =>
-                          rexp2 match {
-                            case MSome(re2) => rexprs = rexprs + toKey(e) ~> re2
-                            case _ => rexprs = rexprs + toKey(e) ~> rexp
+                          val resolvedExpression: AST.Exp = rexp2 match {
+                            case MSome(re2) => re2
+                            case _ => rexp
                           }
+                          resolvedExpressions = resolvedExpressions :+ resolvedExpression
                         case x =>
                           reporter.error(modifies.fullPosOpt, GclResolver.toolName, s"Modifies expressions must be the simple name of an outgoing port or a state variable, found ${x}.")
                       }
@@ -1083,12 +1138,15 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               reporter.error(modifies.fullPosOpt, GclResolver.toolName, s"Modifies expressions must be the simple name of an outgoing port or a state variable, found ${modifies}")
           }
         }
+        return resolvedExpressions
       }
 
+      var resolvedInitializes: Option[GclInitialize] = None()
       if (s.initializes.nonEmpty) {
 
-        processModifiesClause(s.initializes.get.modifies)
+        val resolvedModifiesClause = processModifiesClause(s.initializes.get.modifies)
 
+        var resolvedGuarantees: ISZ[GclGuarantee] = ISZ()
         var seenGuaranteeIds: Set[String] = Set.empty
         for (guarantees <- s.initializes.get.guarantees) {
           if (seenGuaranteeIds.contains(guarantees.id)) {
@@ -1105,13 +1163,14 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             s.state, gclMethods, symbolTable, reporter)
           apiReferences = apiReferences ++ apiRefs
 
-          if (rexp2.isEmpty) {
-            rexprs = rexprs + toKey(guarantees.exp) ~> rexp
-          } else {
-            rexprs = rexprs + toKey(guarantees.exp) ~> rexp2.get
+          val resolvedExp: AST.Exp = rexp2 match {
+            case MSome(r) => r
+            case _ => rexp
           }
+          resolvedGuarantees = resolvedGuarantees :+ guarantees(exp = resolvedExp)
         }
 
+        var resolvedFlows: ISZ[InfoFlowClause] = ISZ()
         for (flow <- s.initializes.get.flows) {
           if (flow.from.nonEmpty) {
             reporter.error(flow.posOpt, GclResolver.toolName, s"Initialize from clauses must be empty")
@@ -1119,17 +1178,28 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           if (flow.to.isEmpty) {
             reporter.error(flow.posOpt, GclResolver.toolName, s"Initialize to clauses cannot be empty")
           }
+          var resolvedToExprs: ISZ[Exp] = ISZ()
           for (toExp <- flow.to) {
-            checkFlow(toExp, F, flow.posOpt)
+            checkFlow(toExp, F, flow.posOpt) match {
+              case Some(rtoExp) => resolvedToExprs = resolvedToExprs :+ rtoExp
+              case _ =>
+            }
           }
+          resolvedFlows = resolvedFlows :+ flow(to = resolvedToExprs)
         }
+        resolvedInitializes = Some(s.initializes.get(
+          modifies = resolvedModifiesClause,
+          guarantees = resolvedGuarantees,
+          flows = resolvedFlows))
       }
 
+      var resolvedCompute: Option[GclCompute] = None()
       s.compute match {
-        case Some(GclCompute(modifies, assumes, guarantees, cases, handlers, flows)) => {
+        case Some(gclCompute @ GclCompute(modifies, assumes, guarantees, cases, handlers, flows)) => {
 
-          processModifiesClause(modifies)
+          val resolvedModifies = processModifiesClause(modifies)
 
+          var resolvedAssume: ISZ[GclAssume] = ISZ()
           var seenSpecIds: Set[String] = Set.empty
           for (assumee <- assumes) {
             if (seenSpecIds.contains(assumee.id)) {
@@ -1154,13 +1224,15 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                   case _ =>
                 }
               }
-
-              rexprs = rexprs + (
-                if (rexp2.isEmpty) toKey(assumee.exp) ~> rexp
-                else toKey(assumee.exp) ~> rexp2.get)
+              val resolvedExp: AST.Exp = rexp2 match {
+                case MSome(r) => r
+                case _ => rexp
+              }
+              resolvedAssume = resolvedAssume :+ assumee(exp = resolvedExp)
             }
           }
 
+          var resolvedGuarantee: ISZ[GclGuarantee] = ISZ()
           for (guarantee <- guarantees) {
             if (seenSpecIds.contains(guarantee.id)) {
               reporter.error(guarantee.posOpt, GclResolver.toolName, s"Duplicate spec name: ${guarantee.id}")
@@ -1176,17 +1248,21 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               s.state, gclMethods, symbolTable, reporter)
             apiReferences = apiReferences ++ apiRefs
 
-            rexprs = rexprs + (
-              if (rexp2.isEmpty) toKey(guarantee.exp) ~> rexp
-              else toKey(guarantee.exp) ~> rexp2.get)
+            val resolvedExpr: AST.Exp = rexp2 match {
+              case MSome(r) => r
+              case _ => rexp
+            }
+            resolvedGuarantee = resolvedGuarantee :+ guarantee(exp = resolvedExpr)
           }
 
+          var resolvedCases: ISZ[GclCaseStatement] = ISZ()
           for (caase <- cases) {
             if (seenSpecIds.contains(caase.id)) {
               reporter.error(caase.posOpt, GclResolver.toolName, s"Duplicate spec name: ${caase.id}")
             }
             seenSpecIds = seenSpecIds + caase.id
 
+            var resolvedCaseAssumes: Option[AST.Exp] = None()
             caase.assumes match {
               case Some(assumes2) =>
                 val rexp = typeCheckBoolExp(exp = assumes2, context = context, mode = TypeChecker.ModeContext.Spec, component = Some(component),
@@ -1205,13 +1281,15 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                     case _ =>
                   }
                 }
-                if (rexp2.isEmpty) {
-                  rexprs = rexprs + (toKey(assumes2) ~> rexp)
-                } else {
-                  rexprs = rexprs + (toKey(assumes2) ~> rexp2.get)
+                val resolvedExp: AST.Exp = rexp2 match {
+                  case MSome(r) => r
+                  case _ => rexp
                 }
+                resolvedCaseAssumes = Some(resolvedExp)
               case _ =>
             }
+
+            var resolvedCaseGuarantee: AST.Exp = caase.guarantees
 
             {
               val rexp = typeCheckBoolExp(exp = caase.guarantees, context = context, mode = TypeChecker.ModeContext.Spec, component = Some(component),
@@ -1223,16 +1301,22 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 s.state, gclMethods, symbolTable, reporter)
               apiReferences = apiReferences ++ apiRefs
 
-              if (rexp2.isEmpty) {
-                rexprs = rexprs + (toKey(caase.guarantees) ~> rexp)
-              } else {
-                rexprs = rexprs + (toKey(caase.guarantees) ~> rexp2.get)
+              val resolvedExp: AST.Exp = rexp2 match {
+                case MSome(r) => r
+                case _ => rexp
               }
+              resolvedCaseGuarantee = resolvedExp
             }
+
+            resolvedCases = resolvedCases :+ caase(
+              assumes = resolvedCaseAssumes,
+              guarantees = resolvedCaseGuarantee)
           }
 
+          var resolvedHandlers: ISZ[GclHandle] = ISZ()
           for (handler <- handlers) {
 
+            var resolvedHandlerPort = handler.port
             visitSlangExp(exp = handler.port, context = context, mode = TypeChecker.ModeContext.Spec, scope = scope, typeHierarchy = typeHierarchy, reporter = reporter) match {
               case Some((rexp, roptType)) =>
                 val (hexp, symbols, _) = GclResolver.collectSymbols(rexp, RewriteMode.Normal, component, F, indexingTypeFingerprints,
@@ -1253,18 +1337,20 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                         reporter.error(handler.port.fullPosOpt, GclResolver.toolName, s"Compute handlers can only be applied to incoming event or event data ports")
                       }
 
-                      hexp match {
-                        case MSome(hexpresolved) => rexprs = rexprs + toKey(handler.port) ~> hexpresolved
-                        case _ => rexprs = rexprs + toKey(handler.port) ~> rexp
+                      val resolvedExp: AST.Exp = hexp match {
+                        case MSome(r) => r
+                        case _ => rexp
                       }
+                      resolvedHandlerPort = resolvedExp
                     case x => reporter.error(handler.port.fullPosOpt, GclResolver.toolName, s"Handler should resolve to an AADL port but received $x")
                   }
                 }
               case _ => reporter.error(handler.posOpt, GclResolver.toolName, s"Unable to resolve ${handler.port}")
             }
 
-            processModifiesClause(handler.modifies)
+            val resolvedHandlerModifiesClause = processModifiesClause(handler.modifies)
 
+            var resolvedHandlerAssumes: ISZ[GclAssume] = ISZ()
             var handlerSpecIds: Set[String] = Set.empty
             for (assm <- handler.assumes) {
               if (seenSpecIds.contains(assm.id) || handlerSpecIds.contains(assm.id)) {
@@ -1289,11 +1375,14 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 }
               }
 
-              rexprs = rexprs + (
-                if (rexp2.isEmpty) toKey(assm.exp) ~> rexp
-                else toKey(assm.exp) ~> rexp2.get)
+              val resolvedExp: AST.Exp = rexp2 match {
+                case MSome(r) => r
+                case _ => rexp
+              }
+              resolvedHandlerAssumes = resolvedHandlerAssumes :+ assm(exp = resolvedExp)
             }
 
+            var resolvedHandlerGuarantees: ISZ[GclGuarantee] = ISZ()
             for (guar <- handler.guarantees) {
               if (seenSpecIds.contains(guar.id) || handlerSpecIds.contains(guar.id)) {
                 reporter.error(guar.posOpt, GclResolver.toolName, s"Duplicate spec name: ${guar.id}")
@@ -1310,17 +1399,21 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 s.state, gclMethods, symbolTable, reporter)
               apiReferences = apiReferences ++ apiRefs
 
-              rexprs = rexprs + (
-                if (rexp2.isEmpty) toKey(guar.exp) ~> rexp
-                else toKey(guar.exp) ~> rexp2.get)
+              val resolvedExp: AST.Exp = rexp2 match {
+                case MSome(r) => r
+                case _ => rexp
+              }
+              resolvedHandlerGuarantees = resolvedHandlerGuarantees :+ guar(exp = resolvedExp)
             }
 
+            var resolvedHandlerCases: ISZ[GclCaseStatement] = ISZ()
             for (caase <- handler.cases) {
               if (seenSpecIds.contains(caase.id)) {
                 reporter.error(caase.posOpt, GclResolver.toolName, s"Duplicate spec name: ${caase.id}")
               }
               seenSpecIds = seenSpecIds + caase.id
 
+              var resolvedHandlerCaseAssumes: Option[AST.Exp] = None()
               caase.assumes match {
                 case Some(assumes2) =>
                   val rexp = typeCheckBoolExp(exp = assumes2, context = context, mode = TypeChecker.ModeContext.Spec, component = Some(component),
@@ -1339,11 +1432,15 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                       case _ =>
                     }
                   }
-                  rexprs = rexprs + (
-                    if (rexp2.isEmpty) toKey(assumes2) ~> rexp
-                    else toKey(assumes2) ~> rexp2.get)
+                  val resolvedExp: AST.Exp = rexp2 match {
+                    case MSome(r) => r
+                    case _ => rexp
+                  }
+                  resolvedHandlerCaseAssumes = Some(resolvedExp)
                 case _ =>
               }
+
+              var resolvedHandlerCaseGuarantees = caase.guarantees
 
               {
                 val rexp = typeCheckBoolExp(exp = caase.guarantees, context = context, mode = TypeChecker.ModeContext.Spec, component = Some(component),
@@ -1355,10 +1452,17 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                   s.state, gclMethods, symbolTable, reporter)
                 apiReferences = apiReferences ++ apiRefs
 
-                rexprs = rexprs + (
-                  if (rexp2.isEmpty) toKey(caase.guarantees) ~> rexp
-                  else toKey(caase.guarantees) ~> rexp2.get)
+                val resolvedExp: AST.Exp = rexp2 match {
+                  case MSome(r) => r
+                  case _ => rexp
+                }
+                resolvedHandlerCaseGuarantees = resolvedExp
               }
+
+              resolvedHandlerCases = resolvedHandlerCases :+ caase(
+                assumes = resolvedHandlerCaseAssumes,
+                guarantees = resolvedHandlerCaseGuarantees
+              )
             }
 
             component match {
@@ -1369,55 +1473,72 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               case _ =>
                 reporter.error(handler.port.fullPosOpt, GclResolver.toolName, s"Unexpected: Compute handlers can only be used with dispatchable components")
             }
+
+            resolvedHandlers = resolvedHandlers :+ handler(
+              port = resolvedHandlerPort,
+              modifies = resolvedHandlerModifiesClause,
+              assumes = resolvedHandlerAssumes,
+              guarantees = resolvedHandlerGuarantees,
+              cases = resolvedHandlerCases)
           }
 
+          var resolvedFlows: ISZ[InfoFlowClause] = ISZ()
           for (flow <- flows) {
             if (flow.from.isEmpty && flow.to.isEmpty) {
               reporter.error(flow.posOpt, GclResolver.toolName, s"At least one of the from/to clauses must be non-empty")
             }
+            var resolvedFromExps: ISZ[Exp] = ISZ()
             for (fromExp <- flow.from) {
-              checkFlow(fromExp, T, flow.posOpt)
+              checkFlow(fromExp, T, flow.posOpt) match {
+                case Some(ff) => resolvedFromExps = resolvedFromExps :+ ff
+                case _ =>
+              }
             }
+            var resolvedToExps: ISZ[Exp] = ISZ()
             for (toExp <- flow.to) {
-              checkFlow(toExp, F, flow.posOpt)
+              checkFlow(toExp, F, flow.posOpt) match {
+                case Some(tf) => resolvedToExps = resolvedToExps :+ tf
+                case _ =>
+              }
             }
+            resolvedFlows = resolvedFlows :+ flow(from = resolvedFromExps, to = resolvedToExps)
           }
+
+
+          resolvedCompute = Some(gclCompute(
+            modifies = resolvedModifies,
+            assumes = resolvedAssume,
+            guarantees = resolvedGuarantee,
+            cases = resolvedCases,
+            handlers = resolvedHandlers,
+            flows = resolvedFlows))
         }
         case Some(x) => reporter.error(componentPos, toolName, s"Expecting GclCompute but received ${x}")
         case _ =>
       }
+
+      return Some(s(
+        methods = resolvedGclMethods,
+        invariants = resolvedInvariants,
+        initializes = resolvedInitializes,
+        integration = resolvedIntegration,
+        compute = resolvedCompute))
+
     }
 
-    def visitInvariant(i: GclInvariant): Unit = {
-      visitSlangExp(exp = i.exp, context = context, scope = scope, mode = TypeChecker.ModeContext.Spec, typeHierarchy = typeHierarchy, reporter = reporter) match {
-        case Some((rexp, roptType)) =>
-          roptType match {
-            case Some(AST.Typed.Name(ISZ("org", "sireum", "B"), _)) =>
-              val (rexp2, _, _) = GclResolver.collectSymbols(rexp, RewriteMode.Normal, component, F, indexingTypeFingerprints,
-                ISZ(), libMethods, symbolTable, reporter)
-              if (rexp2.isEmpty) {
-                rexprs = rexprs + (toKey(i.exp) ~> rexp)
-              } else {
-                rexprs = rexprs + (toKey(i.exp) ~> rexp2.get)
-              }
-            case Some(x) => reporter.error(i.exp.fullPosOpt, GclResolver.toolName, s"Expecting B but found ${x}")
-            case _ =>
-              assert(reporter.hasError, "Invariant expression is untyped so Tipe should have reported errors already")
-          }
-        case _ => reporter.error(i.exp.fullPosOpt, GclResolver.toolName, "Unexpected: type checking returned none")
-      }
+    visitGclSubclause(subclause) match {
+      case Some(resolvedGclSubclause) =>
+        return Some((
+          resolvedGclSubclause,
+          GclSymbolTable(
+            slangTypeHierarchy = typeHierarchy(
+              nameMap = globalNameMap,
+              typeMap = globalTypeMap),
+            apiReferences = apiReferences.elements,
+            integrationMap = integrationMap,
+            computeHandlerPortMap = computeHandlerPortMap)))
+      case _ => return None()
     }
-
-    visitGclSubclause(annex)
-
-    return Some(GclSymbolTable(
-      rexprs = rexprs,
-      slangTypeHierarchy = typeHierarchy(
-        nameMap = globalNameMap,
-        typeMap = globalTypeMap),
-      apiReferences = apiReferences.elements,
-      integrationMap = integrationMap,
-      computeHandlerPortMap = computeHandlerPortMap))
   }
 
   def scope(packageName: IdPath, imports: ISZ[AST.Stmt.Import], enclosingName: IdPath): Scope.Global = {
@@ -1577,7 +1698,10 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           var elements: Map[String, AST.ResolvedInfo] = Map.empty
           var ordinal: Z = 0
           for (value <- e.values) {
-            val ri: ResolvedInfo.EnumElement = ResolvedInfo.EnumElement(qualifiedTypeName, value, ordinal)
+            val ri: ResolvedInfo.EnumElement = ResolvedInfo.EnumElement(
+              owner = qualifiedName,
+              name = value,
+              ordinal = ordinal)
             ordinal = ordinal + 1
             elements = elements + (value ~> ri)
           }
@@ -2810,9 +2934,11 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             poset = Poset.empty,
             aliases = HashSMap.empty)
 
-          val gclSymbolTable: GclSymbolTable =
-            processGclAnnex(component, gclSubclause, gclLibs, symbolTable, aadlTypes, typeHierarchy, scope, reporter).get
-          Some(GclAnnexClauseInfo(gclSubclause, gclSymbolTable))
+          processGclSubclause(component, gclSubclause, gclLibs, symbolTable, aadlTypes, typeHierarchy, scope, reporter) match {
+            case Some((resolvedGclSubclause, gclSymbolTable)) =>
+              Some(GclAnnexClauseInfo(resolvedGclSubclause, gclSymbolTable))
+            case _ => None()
+          }
         case _ => None()
       }
 
@@ -2830,20 +2956,13 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       buildTypeMap(gclLibs, aadlTypes, symbolTable, reporter)
 
       for (gclLib <- gclLibs) {
+        val qualifiedName = gclLib.containingPackage.name :+ GUMBO__Library
         if (processedLibs.contains(gclLib)) {
-          ret = ret :+ processedLibs.get(gclLib).get
+          halt(s"Why is gcl library annex being processed again: $qualifiedName")
         } else {
-          val qualifiedName = gclLib.containingPackage.name :+ GUMBO__Library
           globalNameMap.get(qualifiedName) match {
             case Some(o: Info.Object) =>
-              /*
-              val global = Scope.Global(
-                packageName = qualifiedName,
-                imports = globalImports(symbolTable),
-                enclosingName = o.name
-              )
-              */
-              //val localScope = Scope.Local.create(HashMap.empty, global)
+
               val localScope = Scope.Local.create(HashMap.empty, o.scope)
 
               val typeHierarchy: TypeHierarchy = TypeHierarchy(
@@ -2852,15 +2971,29 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 poset = Poset.empty,
                 aliases = HashSMap.empty)
 
-              val gclSymTable: Option[GclSymbolTable] = processGclLib(qualifiedName, gclLib, symbolTable, aadlTypes, typeHierarchy, localScope, reporter)
-              val gali = GclAnnexLibInfo(
-                annex = gclLib,
-                name = qualifiedName,
-                gclSymbolTable = gclSymTable.get)
+              processGclLib(qualifiedName, gclLib, symbolTable, aadlTypes, typeHierarchy, localScope, reporter) match {
+                case Some((resolvedGclLib, gclSymbolTable)) =>
+                  val gali = GclAnnexLibInfo(
+                    annex = resolvedGclLib,
+                    name = qualifiedName,
+                    gclSymbolTable = gclSymbolTable)
 
-              processedLibs = processedLibs + (gclLib ~> gali)
+                  processedLibs = processedLibs + (gclLib ~> gali)
 
-              ret = ret :+ gali
+                  ret = ret :+ gali
+                case _ =>
+                  // TODO: this probably can be deleted
+                  processedLibs = processedLibs + (gclLib ~> GclAnnexLibInfo(
+                    annex = gclLib,
+                    name = qualifiedName,
+                    gclSymbolTable = GclSymbolTable(
+                      slangTypeHierarchy = typeHierarchy,
+                      apiReferences = ISZ(),
+                      integrationMap = Map.empty,
+                      computeHandlerPortMap = Map.empty
+                    )
+                  ))
+              }
 
             case _ =>
               reporter.error(None(), toolName, st"Could not resolve GCL Library: ${(qualifiedName, "::")}".render)

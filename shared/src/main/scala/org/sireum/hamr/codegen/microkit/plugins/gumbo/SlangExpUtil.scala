@@ -35,10 +35,6 @@ object SlangExpUtil {
 
   @strictpure def toKey(e: SAST.Exp): SymTableKey = SymTableKey(e, e.fullPosOpt)
 
-  @pure def getRexp(exp: SAST.Exp, gclSymbolTable: GclSymbolTable): SAST.Exp = {
-    return gclSymbolTable.rexprs.get(toKey(exp)).get
-  }
-
   @pure def rewriteExp(rexp: Exp,
 
                        owner: IdPath,

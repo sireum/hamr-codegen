@@ -70,7 +70,6 @@ object GumboRustUtil {
             compute = None(),
             attr = Attr(None())),
           gclSymbolTable = GclSymbolTable(
-            rexprs = HashMap.empty,
             slangTypeHierarchy = TypeHierarchy.empty,
             apiReferences = ISZ(),
             integrationMap = Map.empty,
@@ -144,9 +143,10 @@ object GumboRustUtil {
         case g: GclGuarantee => "guarantee"
         case _ => halt(s"Infeasible: $spec")
       }
+
     val verusExp =
       SlangExpUtil.rewriteExpH(
-        rexp = SlangExpUtil.getRexp(spec.exp, gclSymbolTable),
+        rexp = spec.exp,
 
         owner = component.classifier,
         optComponent = Some(component),
@@ -176,7 +176,7 @@ object GumboRustUtil {
     val requires: Option[ST] =
       if (c.assumes.nonEmpty)
         Some(SlangExpUtil.rewriteExpH(
-          rexp = SlangExpUtil.getRexp(c.assumes.get, gclSymbolTable),
+          rexp = c.assumes.get,
 
           owner = component.classifier,
           optComponent = Some(component),
@@ -192,7 +192,7 @@ object GumboRustUtil {
       else None()
     val ensures =
       SlangExpUtil.rewriteExpH(
-        rexp = SlangExpUtil.getRexp(c.guarantees, gclSymbolTable),
+        rexp = c.guarantees,
 
         owner = component.classifier,
         optComponent = Some(component),
@@ -272,8 +272,9 @@ object GumboRustUtil {
           case r: Return =>
             assert (r.expOpt.nonEmpty, "Currently expecting GUMBO methods to return values")
 
+            assert (r.expOpt.get.typedOpt.nonEmpty)
             val retExp = SlangExpUtil.rewriteExp(
-              rexp = SlangExpUtil.getRexp(r.expOpt.get, gclSymbolTable),
+              rexp = r.expOpt.get,
 
               owner = owner,
               optComponent = optComponent,

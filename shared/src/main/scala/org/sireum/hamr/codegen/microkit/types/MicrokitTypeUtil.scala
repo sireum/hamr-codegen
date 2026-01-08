@@ -379,7 +379,7 @@ object MicrokitTypeUtil {
       add(s.posOpt, aadlTypes.typeMap.get(s.classifier).get)
     }
     def processType(typed: org.sireum.lang.ast.Typed.Name, posOpt: Option[Position]): Unit = {
-      val name = st"${(typed.ids, "::")}".render
+      val name = TypeUtil.getAadlTypeFromSlangType(typed.ids)
       add(posOpt, aadlTypes.typeMap.get(name).get)
     }
 
