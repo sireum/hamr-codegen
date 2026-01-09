@@ -19,20 +19,14 @@ import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes}
 import org.sireum.hamr.codegen.common.util.ResourceUtil
 import org.sireum.hamr.ir._
 
-@record class StubGenerator(dirs: ProjectDirectories,
-                            rootSystem: AadlSystem,
-                            arsitOptions: ArsitOptions,
-                            symbolTable: SymbolTable,
-                            aadlTypes: AadlTypes,
-                            previousPhase: Result) {
+@record class StubGenerator {
 
-  val basePackage: String = arsitOptions.packageName
   var seenComponents: HashSet[String] = HashSet.empty
   var resources: ISZ[Resource] = ISZ()
 
-  def generate(plugins: ISZ[Plugin], store: Store): (Result, Store) = {
+  def generate(rootSystem: AadlSystem, dirs: ProjectDirectories, plugins: ISZ[Plugin], arsitOptions: ArsitOptions, aadlTypes: AadlTypes, symbolTable: SymbolTable, store: Store, previousPhase: Result): (Result, Store) = {
 
-    val localStore = gen(rootSystem, plugins, store)
+    val localStore = gen(rootSystem, arsitOptions.packageName, dirs, plugins, arsitOptions, aadlTypes, symbolTable, store)
 
     return (ArsitResult(
       resources = previousPhase.resources() ++ resources,
@@ -42,37 +36,37 @@ import org.sireum.hamr.ir._
     ), localStore)
   }
 
-  def gen(m: AadlComponent, plugins: ISZ[Plugin], store: Store): Store = {
+  def gen(m: AadlComponent, basePackage: String, dirs: ProjectDirectories, plugins: ISZ[Plugin], arsitOptions: ArsitOptions, aadlTypes: AadlTypes, symbolTable: SymbolTable, store: Store): Store = {
     var localStore = store
     m match {
-      case s: AadlSystem => localStore = genContainer(s, plugins, localStore)
-      case s: AadlProcess => localStore = genContainer(s, plugins, localStore)
+      case s: AadlSystem => localStore = genContainer(s, basePackage, dirs, plugins, arsitOptions, aadlTypes, symbolTable, localStore)
+      case s: AadlProcess => localStore = genContainer(s, basePackage, dirs, plugins, arsitOptions, aadlTypes, symbolTable, localStore)
 
-      case s: AadlThreadGroup => localStore = genThreadGroup(s, plugins, localStore)
+      case s: AadlThreadGroup => localStore = genThreadGroup(s, basePackage, dirs, plugins, arsitOptions, aadlTypes, symbolTable, localStore)
 
       case _ =>
         for (_c <- m.subComponents) {
-          localStore = gen(_c, plugins, localStore)
+          localStore = gen(_c, basePackage, dirs, plugins, arsitOptions, aadlTypes, symbolTable, localStore)
         }
     }
     return localStore
   }
 
-  def genContainer(m: AadlComponent, plugins: ISZ[Plugin], store: Store): Store = {
+  def genContainer(m: AadlComponent, basePackage: String, dirs: ProjectDirectories, plugins: ISZ[Plugin], arsitOptions: ArsitOptions, aadlTypes: AadlTypes, symbolTable: SymbolTable, store: Store): Store = {
     assert(m.isInstanceOf[AadlSystem] || m.isInstanceOf[AadlProcess])
     var localStore = store
     for (c <- m.subComponents) {
       c match {
-        case s: AadlSystem => localStore = genContainer(s, plugins, localStore)
-        case s: AadlProcess => localStore = genContainer(s, plugins, localStore)
+        case s: AadlSystem => localStore = genContainer(s, basePackage, dirs, plugins, arsitOptions, aadlTypes, symbolTable, localStore)
+        case s: AadlProcess => localStore = genContainer(s, basePackage, dirs, plugins, arsitOptions, aadlTypes, symbolTable, localStore)
 
-        case s: AadlThreadGroup => localStore = genThreadGroup(s, plugins, localStore)
+        case s: AadlThreadGroup => localStore = genThreadGroup(s, basePackage, dirs, plugins, arsitOptions, aadlTypes, symbolTable, localStore)
 
-        case s: AadlThread => localStore = genThread(s, plugins, localStore)
+        case s: AadlThread => localStore = genThread(s, basePackage, dirs, plugins, arsitOptions, aadlTypes, symbolTable, localStore)
 
         case s: AadlDevice =>
           if (arsitOptions.devicesAsThreads) {
-            localStore = genThread(s, plugins, localStore)
+            localStore = genThread(s, basePackage, dirs, plugins, arsitOptions, aadlTypes, symbolTable, localStore)
           }
 
         case s: AadlSubprogram => // ignore
@@ -84,11 +78,11 @@ import org.sireum.hamr.ir._
     return localStore
   }
 
-  def genThreadGroup(m: AadlThreadGroup, plugins: ISZ[Plugin], store: Store): Store = {
+  def genThreadGroup(m: AadlThreadGroup, basePackage: String, dirs: ProjectDirectories, plugins: ISZ[Plugin], arsitOptions: ArsitOptions, aadlTypes: AadlTypes, symbolTable: SymbolTable, store: Store): Store = {
     var localStore = store
     for (c <- m.subComponents) {
       c match {
-        case s: AadlThread => localStore = genThread(s, plugins, store)
+        case s: AadlThread => localStore = genThread(s, basePackage, dirs, plugins, arsitOptions, aadlTypes, symbolTable, localStore)
 
         case x => halt(s"Unexpected Thread Group subcomponent: ${x}")
       }
@@ -96,7 +90,7 @@ import org.sireum.hamr.ir._
     return localStore
   }
 
-  def genThread(m: AadlThreadOrDevice, plugins: ISZ[Plugin], store: Store): Store = {
+  def genThread(m: AadlThreadOrDevice, basePackage: String, dirs: ProjectDirectories, plugins: ISZ[Plugin], arsitOptions: ArsitOptions, aadlTypes: AadlTypes, symbolTable: SymbolTable, store: Store): Store = {
 
     assert(!m.isInstanceOf[AadlDevice] || arsitOptions.devicesAsThreads)
 
@@ -217,7 +211,7 @@ import org.sireum.hamr.ir._
         }
       }
 
-      genSubprograms(m) match {
+      genSubprograms(m, basePackage, dirs, aadlTypes) match {
         case Some(x) =>
           blocks = blocks :+ x
           halt("Need to revisit subprograms")
@@ -240,7 +234,7 @@ import org.sireum.hamr.ir._
     return localStore
   }
 
-  def genSubprograms(s: AadlComponent): Option[ST] = {
+  def genSubprograms(s: AadlComponent, basePackage: String, dirs: ProjectDirectories, aadlTypes: AadlTypes): Option[ST] = {
     val m = s.component
     val subprograms: ISZ[(ST, ST)] = m.subComponents.filter(p => p.category == ComponentCategory.Subprogram).map(p => {
       // only expecting in or out parameters

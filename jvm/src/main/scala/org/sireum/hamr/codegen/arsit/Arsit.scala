@@ -58,15 +58,16 @@ object Arsit {
       fileResources = fileResources ++ t._1
     }
 
-    val archPhase = ArchitectureGenerator(projectDirectories, symbolTable.rootSystem, arsitOptions, symbolTable, aadlTypes).generate(plugins, localStore)
+    val archPhase = ArchitectureGenerator().generate(symbolTable.rootSystem, projectDirectories, plugins, arsitOptions, aadlTypes, symbolTable, localStore)
     localStore = archPhase._2
 
-    val stubPhase = StubGenerator(projectDirectories, symbolTable.rootSystem, arsitOptions, symbolTable, aadlTypes, archPhase._1).generate(plugins, localStore)
+    val stubPhase = StubGenerator().generate(symbolTable.rootSystem, projectDirectories, plugins, arsitOptions, aadlTypes, symbolTable, localStore, archPhase._1)
     localStore = stubPhase._2
 
-    val nixPhase = nix.NixGenDispatch.generate(projectDirectories, symbolTable.rootSystem, arsitOptions, symbolTable, aadlTypes, stubPhase._1)
+    val nixPhase = nix.NixGenDispatch.generate(projectDirectories, symbolTable.rootSystem, arsitOptions, aadlTypes, symbolTable, localStore, stubPhase._1)
+    localStore = nixPhase._2
 
-    fileResources = fileResources ++ nixPhase.resources
+    fileResources = fileResources ++ nixPhase._1.resources
 
     var plaformContributions: ISZ[(String, PlatformProviderPlugin.PlatformContributions)] = ISZ()
     for (p <- plugins if p.isInstanceOf[PlatformProviderPlugin] && p.asInstanceOf[PlatformProviderPlugin].canHandlePlatformProviderPlugin(arsitOptions, symbolTable, aadlTypes)) {
@@ -83,9 +84,9 @@ object Arsit {
       invertMarkers = F,
       overwrite = F)
 
-    val maxPortId: Z = nixPhase.maxPort + ArsitConfigurationPlugin.getAdditionalPortIds(ExperimentalOptions.addPortIds(arsitOptions.experimentalOptions), plugins, ReporterUtil.reporter)
-    val maxComponentId: Z = nixPhase.maxComponent + ArsitConfigurationPlugin.getAdditionalComponentIds(ExperimentalOptions.addComponentIds(arsitOptions.experimentalOptions), plugins, ReporterUtil.reporter)
-    val maxConnectionId: Z = nixPhase.maxConnection + ArsitConfigurationPlugin.getAdditionalConnectionIds(ExperimentalOptions.addConnectionIds(arsitOptions.experimentalOptions), plugins, ReporterUtil.reporter)
+    val maxPortId: Z = nixPhase._1.maxPort + ArsitConfigurationPlugin.getAdditionalPortIds(ExperimentalOptions.addPortIds(arsitOptions.experimentalOptions), plugins, ReporterUtil.reporter)
+    val maxComponentId: Z = nixPhase._1.maxComponent + ArsitConfigurationPlugin.getAdditionalComponentIds(ExperimentalOptions.addComponentIds(arsitOptions.experimentalOptions), plugins, ReporterUtil.reporter)
+    val maxConnectionId: Z = nixPhase._1.maxConnection + ArsitConfigurationPlugin.getAdditionalConnectionIds(ExperimentalOptions.addConnectionIds(arsitOptions.experimentalOptions), plugins, ReporterUtil.reporter)
 
 
     fileResources = fileResources ++ createBuildArtifacts(
@@ -127,7 +128,6 @@ object Arsit {
       fileResources = fileResources :+ ResourceUtil.createExeCrlfResource(Util.pathAppend(projectDirectories.slangBinDir, ISZ("slangcheck.cmd")), slangCheckCmd, T)
       fileResources = fileResources :+ slangCheckConfig
     }
-
 
     return (ArsitResult(
       fileResources,

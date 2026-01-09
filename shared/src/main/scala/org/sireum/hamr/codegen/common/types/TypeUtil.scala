@@ -9,6 +9,7 @@ import org.sireum.hamr.codegen.common.properties.{HamrProperties, OsatePropertie
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.ir
 import org.sireum.lang.{ast => AST}
+import org.sireum.CircularQueue.Policy
 
 object TypeUtil {
 
@@ -301,5 +302,52 @@ object TypeUtil {
     val noneSig = getTypeFingerprint("None", noneType)
 
     return (optionSig, someSig, noneSig)
+  }
+
+  @pure def orderTypeDependencies(aadlTypes: ISZ[AadlType]): ISZ[String] = {
+
+    def getRep(t: AadlType): AadlType = {
+      for(e <- aadlTypes if t.name == e.name) {
+        return e
+      }
+      halt(s"Infeasible: $t")
+    }
+
+    var poset = Poset.empty[AadlType]
+    for (t <- aadlTypes) {
+      t match {
+        case t: EnumType => poset = poset.addNode(t)
+        case t: BaseType => poset = poset.addNode(t)
+        case t: BitType => poset = poset.addNode(t)
+        case t: ArrayType =>
+          val parent = getRep(t.baseType)
+          poset = poset.addNode(t)
+          poset = poset.addParents(t, ISZ(parent))
+        case t: RecordType =>
+          val parents: ISZ[AadlType] = for (f <- t.fields.values) yield getRep(f)
+          poset = poset.addNode(t)
+          poset = poset.addParents(t, parents)
+        case t: TODOType =>
+          poset = poset.addNode(t)
+      }
+    }
+    var inDegrees: Map[AadlType, Z] = Map.empty[AadlType, Z] ++ (for (e <- poset.nodes.keys) yield (e ~> poset.parentsOf(e).size))
+    val queue = CircularQueue.create(max = aadlTypes.size, default = aadlTypes(0), scrub = F, policy = Policy.NoDrop)
+    for (root <- poset.rootNodes) {
+      queue.enqueue(root)
+    }
+    var ordered: ISZ[String] = ISZ()
+    while (queue.nonEmpty) {
+      val node = queue.dequeue()
+      ordered = ordered :+ node.name
+      for (child <- poset.childrenOf(node).elements) {
+        val update = inDegrees.get(child).get - 1
+        inDegrees = inDegrees + child ~> (update)
+        if (update == 0) {
+          queue.enqueue(child)
+        }
+      }
+    }
+    return ordered
   }
 }

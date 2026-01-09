@@ -8,6 +8,7 @@ import org.sireum.hamr.codegen.arsit._
 import org.sireum.hamr.codegen.arsit.templates.SeL4NixTemplate
 import org.sireum.hamr.codegen.arsit.util.ReporterUtil.reporter
 import org.sireum.hamr.codegen.arsit.util.{ArsitOptions, ArsitPlatform}
+import org.sireum.hamr.codegen.common.CommonUtil.Store
 import org.sireum.hamr.codegen.common._
 import org.sireum.hamr.codegen.common.containers.Resource
 import org.sireum.hamr.codegen.common.symbols._
@@ -36,24 +37,29 @@ object NixGen {
     return ret
   }
 
-  def genTypeTouches(types: AadlTypes): ISZ[ST] = {
+  def genTypeTouches(aadlTypes: AadlTypes, store: Store): ISZ[ST] = {
     var a: ISZ[ST] = ISZ()
 
+    val types: ISZ[AadlType] =
+      if (aadlTypes.rawConnections) aadlTypes.typeMap.values
+      else (for (t <-  ArchitectureGenerator.getTouchedTypes(store).orderedDependencies) yield aadlTypes.typeMap.get(t).get)
+
     var seen: Set[String] = Set.empty
-    for (typ <- types.typeMap.values if !seen.contains(typ.name)) {
-      seen = seen + typ.name
-      a = a :+ SeL4NixTemplate.touchType(typ.nameProvider.qualifiedPayloadName, Some(typ.nameProvider.example()))
+    for (aadlType <- types if !seen.contains(aadlType.name)) {
+      seen = seen + aadlType.name
+      a = a :+ SeL4NixTemplate.touchType(aadlType.nameProvider.qualifiedPayloadName, Some(aadlType.nameProvider.example()))
     }
     a = a :+ SeL4NixTemplate.touchType("art.Empty", None())
+
     return a
   }
 
-  def genApiTouches(types: AadlTypes, basePackage: String, threadOrDevices: ISZ[AadlThreadOrDevice]): ISZ[ST] = {
+  def genApiTouches(aadlTypes: AadlTypes, basePackage: String, threadOrDevices: ISZ[AadlThreadOrDevice]): ISZ[ST] = {
     val sts: ISZ[ST] = threadOrDevices.map(threadOrDevice => {
       val component = threadOrDevice.component
 
       val names = nameProvider(component, basePackage)
-      val ports: ISZ[Port] = Util.getPorts(threadOrDevice, types, basePackage, z"0")
+      val ports: ISZ[Port] = Util.getPorts(threadOrDevice, aadlTypes, basePackage, z"0")
 
       st"""{
           |  ${(SeL4NixTemplate.apiTouches(names, ports), "\n")}
@@ -64,25 +70,13 @@ object NixGen {
 }
 
 @msig trait NixGen {
-  def dirs: ProjectDirectories
+  def generate(root: AadlSystem, dirs: ProjectDirectories, arsitOptions: ArsitOptions, aadlTypes: AadlTypes, symbolTable: SymbolTable, store: Store, previousPhase: Result): (ArsitResult, Store)
 
-  def root: AadlSystem
-
-  def arsitOptions: ArsitOptions
-
-  def symbolTable: SymbolTable
-
-  def types: AadlTypes
-
-  def previousPhase: Result
-
-  def generate(): ArsitResult
-
-  def genExtensionEntries(basePackage: String, components: ISZ[AadlThreadOrDevice]): (ISZ[ST], ISZ[ST]) = {
+  def genExtensionEntries(basePackage: String, components: ISZ[AadlThreadOrDevice], aadlTypes: AadlTypes, symbolTable: SymbolTable): (ISZ[ST], ISZ[ST]) = {
     var extHEntries: ISZ[ST] = ISZ()
     var extCEntries: ISZ[ST] = ISZ()
 
-    if (types.rawConnections) {
+    if (aadlTypes.rawConnections) {
       // add numBit and numBytes global vars for each type passing between components
 
       val maxBitSize: Z = TypeUtil.getMaxBitsSize(symbolTable) match {
@@ -96,7 +90,7 @@ object NixGen {
 
       for (threadOrDevice <- components) {
         val names = nameProvider(threadOrDevice.component, basePackage)
-        val ports: ISZ[Port] = Util.getPorts(threadOrDevice, types, basePackage, z"0")
+        val ports: ISZ[Port] = Util.getPorts(threadOrDevice, aadlTypes, basePackage, z"0")
 
         for (p <- ports.filter(p => CommonUtil.isDataPort(p.feature))) {
           val originatingType: AadlType = p._portType match {
@@ -137,7 +131,7 @@ object NixGen {
     return (extHEntries, extCEntries)
   }
 
-  def genExtensionFiles(threadOrDevice: AadlThreadOrDevice, names: NameProvider, ports: ISZ[Port]): (ISZ[Os.Path], ISZ[Resource]) = {
+  def genExtensionFiles(threadOrDevice: AadlThreadOrDevice, names: NameProvider, ports: ISZ[Port], dirs: ProjectDirectories, arsitOptions: ArsitOptions, aadlTypes: AadlTypes, symbolTable: SymbolTable): (ISZ[Os.Path], ISZ[Resource]) = {
 
     val rootExtDir = Os.path(dirs.cExt_c_Dir)
 
@@ -165,7 +159,7 @@ object NixGen {
 
         val params: ISZ[ST] = ISZ()
 
-        val (initMethodSig, initMethodImpl, initAdapterMethod) = genStubInitializeMethod(names, ports, apiImplFile.name, userImplFile.name)
+        val (initMethodSig, initMethodImpl, initAdapterMethod) = genStubInitializeMethod(names, ports, apiImplFile.name, userImplFile.name, aadlTypes)
         val (finalizeMethodSig, finalizeMethodImpl, finalizeAdapterMethod) = genStubFinaliseMethod(names, apiImplFile.name, userImplFile.name)
 
         entrypointAdapters = entrypointAdapters :+ initAdapterMethod
@@ -201,7 +195,7 @@ object NixGen {
             tindex = tindex + 1
 
             val entry: ST = {
-              if (types.rawConnections) {
+              if (aadlTypes.rawConnections) {
                 val originatingTypeNames: TypeNameProvider = p._portType match {
                   case BitType(_, _, _, Some(o)) => o.nameProvider
                   case _ => halt(s"Unexpected: Could not find originating type for ${p._portType}")
@@ -344,7 +338,7 @@ object NixGen {
                 name = handlerMethodName,
                 line = 0)
 
-              if (types.rawConnections && isEventData) {
+              if (aadlTypes.rawConnections && isEventData) {
                 val rawHandlerMethodName = s"${handlerName}_raw"
                 val numBits = "numBits"
                 val byteArray = "byteArray"
@@ -513,7 +507,7 @@ object NixGen {
                 name = cApiMethodName,
                 line = 0)
 
-              if (types.rawConnections && CommonUtil.isDataPort(p.feature)) {
+              if (aadlTypes.rawConnections && CommonUtil.isDataPort(p.feature)) {
                 // provide alt byte array version
 
                 val altParams = ISZ(
@@ -561,7 +555,7 @@ object NixGen {
                 name = cApiMethodName,
                 line = 0)
 
-              if (types.rawConnections && CommonUtil.isDataPort(p.feature)) {
+              if (aadlTypes.rawConnections && CommonUtil.isDataPort(p.feature)) {
                 // provide alt byte array version
 
                 val altParams = ISZ(
@@ -645,7 +639,7 @@ object NixGen {
     return (extensionFiles, resources)
   }
 
-  def genStubInitializeMethod(names: NameProvider, ports: ISZ[Port], apiFileUri: String, userFileUri: String): (ST, ST, ST) = {
+  def genStubInitializeMethod(names: NameProvider, ports: ISZ[Port], apiFileUri: String, userFileUri: String, aadlTypes: AadlTypes): (ST, ST, ST) = {
     val params: ISZ[ST] = ISZ()
     val apiMethodName = s"${names.cComponentType}_initialise"
     val userMethodName = s"${apiMethodName}_"
@@ -660,7 +654,7 @@ object NixGen {
         val result = s"t${resultCount}"
         resultCount = resultCount + 1
         val decl: ST =
-          if (types.rawConnections) {
+          if (aadlTypes.rawConnections) {
             val originatingTypeNames: TypeNameProvider = p._portType match {
               case BitType(_, _, _, Some(o)) => o.nameProvider
               case _ => halt(s"Unexpected: Could not find originating type for ${p._portType}")
@@ -775,8 +769,8 @@ object NixGen {
     return (finaliseMethodSig, ret, adapterMethod)
   }
 
-  def genBitArraySequenceSizes(): Option[(Z, String)] = {
-    if (types.rawConnections) {
+  def genBitArraySequenceSizes(aadlTypes: AadlTypes, symbolTable: SymbolTable): Option[(Z, String)] = {
+    if (aadlTypes.rawConnections) {
       return TypeUtil.getMaxBitsSize(symbolTable)
     } else {
       return None()
@@ -789,27 +783,28 @@ object NixGenDispatch {
   def generate(dirs: ProjectDirectories,
                root: AadlSystem,
                arsitOptions: ArsitOptions,
-               symbolTable: SymbolTable,
                types: AadlTypes,
-               previousPhase: Result): ArsitResult = {
+               symbolTable: SymbolTable,
+               store: Store,
+               previousPhase: Result): (ArsitResult, Store) = {
 
-    val ret: ArsitResult = arsitOptions.platform match {
+    val ret: (ArsitResult, Store) = arsitOptions.platform match {
       case ArsitPlatform.Linux =>
-        ArtNixGen(dirs, root, arsitOptions, symbolTable, types, previousPhase).generate()
+        ArtNixGen().generate(root, dirs, arsitOptions, types, symbolTable, store, previousPhase)
       case ArsitPlatform.Cygwin =>
-        ArtNixGen(dirs, root, arsitOptions, symbolTable, types, previousPhase).generate()
+        ArtNixGen().generate(root, dirs, arsitOptions, types, symbolTable, store, previousPhase)
       case ArsitPlatform.MacOS =>
-        ArtNixGen(dirs, root, arsitOptions, symbolTable, types, previousPhase).generate()
+        ArtNixGen().generate(root, dirs, arsitOptions, types, symbolTable, store, previousPhase)
       case ArsitPlatform.SeL4 =>
-        SeL4NixGen(dirs, root, arsitOptions, symbolTable, types, previousPhase).generate()
+        SeL4NixGen().generate(root, dirs, arsitOptions, types, symbolTable, store, previousPhase)
       case _ =>
-        ArsitResult(
+        (ArsitResult(
           resources = previousPhase.resources,
           maxPort = previousPhase.maxPort,
           maxComponent = previousPhase.maxComponent,
           maxConnection = previousPhase.maxConnection
-        )
+        ), store)
     }
-    return ret
+    return (ret._1, ret._2)
   }
 }

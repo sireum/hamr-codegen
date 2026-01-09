@@ -621,9 +621,6 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
   var computeHandlerPortMap: Map[AST.Exp, AadlPort] = Map.empty
   var integrationMap: Map[AadlPort, GclSpec] = Map.empty
 
-  var processedAnnexes: Map[Annex, Option[AnnexClauseInfo]] = Map.empty
-  var processedLibs: Map[GclLib, AnnexLibInfo] = Map.empty
-
   var globalTypeMap: TypeMap = HashSMap.empty
   var globalNameMap: NameMap = HashSMap.empty
   var resolvedMethods: HashSMap[ISZ[String], Info.Method] = HashSMap.empty
@@ -638,8 +635,6 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
     apiReferences = Set.empty
     computeHandlerPortMap = Map.empty
     integrationMap = Map.empty
-    processedAnnexes = Map.empty
-    processedLibs = Map.empty
     globalTypeMap = HashSMap.empty[QName, TypeInfo] ++ GclResolver.libraryReporter.typeMap.entries
     globalNameMap = HashSMap.empty[QName, Info] ++ GclResolver.libraryReporter.nameMap.entries
     resolvedMethods = HashSMap.empty
@@ -2872,80 +2867,63 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
   }
 
   def offer(component: AadlComponent, annex: Annex, annexLibs: ISZ[AnnexLibInfo], symbolTable: SymbolTable, aadlTypes: AadlTypes, store: Store, reporter: Reporter): (Option[AnnexClauseInfo], Store) = {
-    if (processedAnnexes.contains(annex)) {
-      return (processedAnnexes.get(annex).get, store)
-    } else {
-      val result: Option[AnnexClauseInfo] = annex.clause match {
-        case gclSubclause: GclSubclause =>
-          val gclLibs: ISZ[GclAnnexLibInfo] = annexLibs.filter((a: AnnexLibInfo) => a.isInstanceOf[GclAnnexLibInfo]).map((a: AnnexLibInfo) => a.asInstanceOf[GclAnnexLibInfo])
-          buildTypeMap(gclLibs.map((g: GclAnnexLibInfo) => g.annex), aadlTypes, symbolTable, reporter)
+    val result: Option[AnnexClauseInfo] = annex.clause match {
+      case gclSubclause: GclSubclause =>
+        val gclLibs: ISZ[GclAnnexLibInfo] = annexLibs.filter((a: AnnexLibInfo) => a.isInstanceOf[GclAnnexLibInfo]).map((a: AnnexLibInfo) => a.asInstanceOf[GclAnnexLibInfo])
+        buildTypeMap(gclLibs.map((g: GclAnnexLibInfo) => g.annex), aadlTypes, symbolTable, reporter)
 
-          val qualifiedName: IdPath = component.classifier
-          if (reporter.hasError) {
+        val qualifiedName: IdPath = component.classifier
+        if (reporter.hasError) {
+          return (None(), store)
+        }
+
+        val scope: Scope.Local = component match {
+          case ad: AadlData =>
+            globalTypeMap.get(qualifiedName) match {
+              case Some(o) =>
+                o match {
+                  case info: TypeInfo.Adt =>
+                    val typeParams = Resolver.typeParamMap(info.ast.typeParams, reporter)
+                    var scope = Scope.Local.create(typeParams.map, info.scope)
+                    scope = scope(localThisOpt = Some(info.tpe))
+                    scope
+                  case x =>
+                    reporter.error(None(), toolName, s"Expecting ${qualifiedName} to resolve to an ADT but found ${x}")
+                    return (None(), store)
+                }
+              case _ =>
+                reporter.error(None(), toolName, s"Could not resolve type info for GCl Subclause: ${qualifiedName}")
+                return (None(), store)
+            }
+          case ac: AadlThread =>
+            globalNameMap.get(qualifiedName) match {
+              case Some(o: Info.Object) => Scope.Local.create(HashMap.empty, o.scope)
+              case _ =>
+                reporter.error(None(), toolName, s"Could not resolve name for GCL Subclause: ${qualifiedName}")
+                return (None(), store)
+            }
+          case c =>
+            reporter.error(c.component.identifier.pos, toolName, s"GUMBO subclause contracts can only be attached to threads and data components")
             return (None(), store)
-          }
+        }
 
-          val scope: Scope.Local = component match {
-            case ad: AadlData =>
-              globalTypeMap.get(qualifiedName) match {
-                case Some(o) =>
-                  o match {
-                    case info: TypeInfo.Adt =>
-                      val typeParams = Resolver.typeParamMap(info.ast.typeParams, reporter)
-                      var scope = Scope.Local.create(typeParams.map, info.scope)
-                      scope = scope(localThisOpt = Some(info.tpe))
-                      scope
-                    case x =>
-                      reporter.error(None(), toolName, s"Expecting ${qualifiedName} to resolve to an ADT but found ${x}")
-                      return (None(), store)
-                  }
-                case _ =>
-                  reporter.error(None(), toolName, s"Could not resolve type info for GCl Subclause: ${qualifiedName}")
-                  return (None(), store)
-              }
-            case ac: AadlThread =>
-              globalNameMap.get(qualifiedName) match {
-                case Some(o: Info.Object) =>
-                  val packageName = ops.ISZOps(o.name).dropRight(1)
+        val typeHierarchy: TypeHierarchy = TypeHierarchy(
+          nameMap = globalNameMap,
+          typeMap = globalTypeMap,
+          poset = Poset.empty,
+          aliases = HashSMap.empty)
 
-                  /*
-                  val global = Scope.Global(
-                    packageName = packageName,
-                    imports = globalImports(symbolTable),
-                    enclosingName = o.name
-                  )
-                  */
-
-                  //Scope.Local.create(HashMap.empty, global)
-                  Scope.Local.create(HashMap.empty, o.scope)
-
-                case _ =>
-                  reporter.error(None(), toolName, s"Could not resolve name for GCL Subclause: ${qualifiedName}")
-                  return (None(), store)
-              }
-            case c =>
-              reporter.error(c.component.identifier.pos, toolName, s"GUMBO subclause contracts can only be attached to threads and data components")
-              return (None(), store)
-          }
-
-          val typeHierarchy: TypeHierarchy = TypeHierarchy(
-            nameMap = globalNameMap,
-            typeMap = globalTypeMap,
-            poset = Poset.empty,
-            aliases = HashSMap.empty)
-
-          processGclSubclause(component, gclSubclause, gclLibs, symbolTable, aadlTypes, typeHierarchy, scope, reporter) match {
-            case Some((resolvedGclSubclause, gclSymbolTable)) =>
-              Some(GclAnnexClauseInfo(resolvedGclSubclause, gclSymbolTable))
-            case _ => None()
-          }
-        case _ => None()
-      }
-
-      val s1 = GclResolver.putIndexingTypeFingerprints(indexingTypeFingerprints, store)
-      val s2 = GclResolver.putSlangTypeToAadlType(slangTypeToAadlType, s1)
-      return (result, s2)
+        processGclSubclause(component, gclSubclause, gclLibs, symbolTable, aadlTypes, typeHierarchy, scope, reporter) match {
+          case Some((resolvedGclSubclause, gclSymbolTable)) =>
+            Some(GclAnnexClauseInfo(resolvedGclSubclause, gclSymbolTable))
+          case _ => None()
+        }
+      case _ => None()
     }
+
+    val s1 = GclResolver.putIndexingTypeFingerprints(indexingTypeFingerprints, store)
+    val s2 = GclResolver.putSlangTypeToAadlType(slangTypeToAadlType, s1)
+    return (result, s2)
   }
 
   def offerLibraries(annexLibs: ISZ[AnnexLib], symbolTable: SymbolTable, aadlTypes: AadlTypes, store:Store, reporter: Reporter): (ISZ[AnnexLibInfo], Store) = {
@@ -2957,47 +2935,30 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
       for (gclLib <- gclLibs) {
         val qualifiedName = gclLib.containingPackage.name :+ GUMBO__Library
-        if (processedLibs.contains(gclLib)) {
-          halt(s"Why is gcl library annex being processed again: $qualifiedName")
-        } else {
-          globalNameMap.get(qualifiedName) match {
-            case Some(o: Info.Object) =>
+        globalNameMap.get(qualifiedName) match {
+          case Some(o: Info.Object) =>
 
-              val localScope = Scope.Local.create(HashMap.empty, o.scope)
+            val localScope = Scope.Local.create(HashMap.empty, o.scope)
 
-              val typeHierarchy: TypeHierarchy = TypeHierarchy(
-                nameMap = globalNameMap,
-                typeMap = globalTypeMap,
-                poset = Poset.empty,
-                aliases = HashSMap.empty)
+            val typeHierarchy: TypeHierarchy = TypeHierarchy(
+              nameMap = globalNameMap,
+              typeMap = globalTypeMap,
+              poset = Poset.empty,
+              aliases = HashSMap.empty)
 
-              processGclLib(qualifiedName, gclLib, symbolTable, aadlTypes, typeHierarchy, localScope, reporter) match {
-                case Some((resolvedGclLib, gclSymbolTable)) =>
-                  val gali = GclAnnexLibInfo(
-                    annex = resolvedGclLib,
-                    name = qualifiedName,
-                    gclSymbolTable = gclSymbolTable)
+            processGclLib(qualifiedName, gclLib, symbolTable, aadlTypes, typeHierarchy, localScope, reporter) match {
+              case Some((resolvedGclLib, gclSymbolTable)) =>
+                val gali = GclAnnexLibInfo(
+                  annex = resolvedGclLib,
+                  name = qualifiedName,
+                  gclSymbolTable = gclSymbolTable)
 
-                  processedLibs = processedLibs + (gclLib ~> gali)
+                ret = ret :+ gali
+              case _ =>
+            }
 
-                  ret = ret :+ gali
-                case _ =>
-                  // TODO: this probably can be deleted
-                  processedLibs = processedLibs + (gclLib ~> GclAnnexLibInfo(
-                    annex = gclLib,
-                    name = qualifiedName,
-                    gclSymbolTable = GclSymbolTable(
-                      slangTypeHierarchy = typeHierarchy,
-                      apiReferences = ISZ(),
-                      integrationMap = Map.empty,
-                      computeHandlerPortMap = Map.empty
-                    )
-                  ))
-              }
-
-            case _ =>
-              reporter.error(None(), toolName, st"Could not resolve GCL Library: ${(qualifiedName, "::")}".render)
-          }
+          case _ =>
+            reporter.error(None(), toolName, st"Could not resolve GCL Library: ${(qualifiedName, "::")}".render)
         }
       }
     }

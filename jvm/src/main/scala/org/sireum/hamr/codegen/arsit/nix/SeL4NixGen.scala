@@ -7,7 +7,8 @@ import org.sireum.hamr.codegen.arsit.Util.nameProvider
 import org.sireum.hamr.codegen.arsit._
 import org.sireum.hamr.codegen.arsit.templates.{ArchitectureTemplate, CMakeTemplate, SeL4NixTemplate, TranspilerTemplate}
 import org.sireum.hamr.codegen.arsit.util.{ArsitOptions, ArsitPlatform}
-import org.sireum.hamr.codegen.common.containers.{FileResource, Resource, SireumSlangTranspilersCOption}
+import org.sireum.hamr.codegen.common.CommonUtil.Store
+import org.sireum.hamr.codegen.common.containers.{Resource, SireumSlangTranspilersCOption}
 import org.sireum.hamr.codegen.common.properties.PropertyUtil
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.templates.StackFrameTemplate
@@ -16,15 +17,7 @@ import org.sireum.hamr.codegen.common.util.NameUtil.NameProvider
 import org.sireum.hamr.codegen.common.util.ResourceUtil
 import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
 
-@record class SeL4NixGen(val dirs: ProjectDirectories,
-                         val root: AadlSystem,
-                         val arsitOptions: ArsitOptions,
-                         val symbolTable: SymbolTable,
-                         val types: AadlTypes,
-                         val previousPhase: Result
-                        ) extends NixGen {
-
-  val basePackage: String = arsitOptions.packageName
+@record class SeL4NixGen extends NixGen {
 
   var resources: ISZ[Resource] = ISZ()
 
@@ -32,18 +25,20 @@ import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
 
   val defaultMaxStackSizeInBytes: Z = z"16" * z"1024" * z"1024"
 
-  val useArm: B = ops.ISZOps(symbolTable.getProcesses()).exists(p => p.toVirtualMachine(symbolTable))
+  @pure def useArm(symbolTable: SymbolTable): B = {
+    return ops.ISZOps(symbolTable.getProcesses()).exists(p => p.toVirtualMachine(symbolTable))
+  }
 
-  def generate(): ArsitResult = {
+  def generate(root: AadlSystem, dirs: ProjectDirectories, arsitOptions: ArsitOptions, aadlTypes: AadlTypes, symbolTable: SymbolTable, store: Store, previousPhase: Result): (ArsitResult, Store) = {
     assert(arsitOptions.platform == ArsitPlatform.SeL4)
 
-    gen()
+    gen(arsitOptions.packageName, dirs, arsitOptions, aadlTypes, symbolTable, store)
 
-    return ArsitResult(
+    return (ArsitResult(
       resources = previousPhase.resources() ++ resources ++ transpilerOptions.asInstanceOf[ISZ[Resource]],
       maxPort = previousPhase.maxPort,
       maxComponent = previousPhase.maxComponent,
-      maxConnection = previousPhase.maxConnection)
+      maxConnection = previousPhase.maxConnection), store)
   }
 
   def addExeResource(outDir: String, path: ISZ[String], content: ST, overwrite: B): Unit = {
@@ -54,7 +49,7 @@ import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
     resources = resources :+ ResourceUtil.createResource(Util.pathAppend(outDir, path), content, overwrite)
   }
 
-  def gen(): Unit = {
+  def gen(basePackage: String, dirs: ProjectDirectories, arsitOptions: ArsitOptions, aadlTypes: AadlTypes, symbolTable: SymbolTable, store: Store): Unit = {
 
     val extC = Os.path(dirs.cExt_c_Dir) / NixGen.EXT_C
     val extH = Os.path(dirs.cExt_c_Dir) / NixGen.EXT_H
@@ -68,13 +63,13 @@ import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
 
     var transpilerScripts: Map[String, (ST, SireumSlangTranspilersCOption)] = Map.empty
 
-    val typeTouches = NixGen.genTypeTouches(types)
+    val typeTouches = NixGen.genTypeTouches(aadlTypes, store)
 
     for (component <- components) {
 
       val names = nameProvider(component.component, basePackage)
 
-      val ports: ISZ[Port] = Util.getPorts(component, types, basePackage, z"0")
+      val ports: ISZ[Port] = Util.getPorts(component, aadlTypes, basePackage, z"0")
 
       val instanceSingletonName: String = names.componentSingletonType
 
@@ -160,10 +155,10 @@ import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
 
       val cOutputDir: Os.Path = dirs.cOutputPlatformDir / instanceSingletonName
 
-      val (paths, extResources) = genExtensionFiles(component, names, ports)
+      val (paths, extResources) = genExtensionFiles(component, names, ports, dirs, arsitOptions, aadlTypes, symbolTable)
       resources = resources ++ extResources
 
-      val transpilerExtensions: ISZ[Os.Path] = (extC +: (extH +: paths)) ++ genSel4Adapters(names)
+      val transpilerExtensions: ISZ[Os.Path] = (extC +: (extH +: paths)) ++ genSel4Adapters(names, dirs)
 
       val stackSizeInBytes: Z = PropertyUtil.getStackSizeInBytes(component.component) match {
         case Some(size) => size
@@ -186,14 +181,19 @@ import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
         numComponentOutPorts = ports.filter(p => CommonUtil.isOutPort(p.feature)).size,
         cOutputDir = cOutputDir,
         cExtensions = transpilerExtensions,
-        cmakeIncludes = ISZ(plusSettingsFilename)
+        cmakeIncludes = ISZ(plusSettingsFilename),
+
+        dirs = dirs,
+        arsitOptions = arsitOptions,
+        aadlTypes = aadlTypes,
+        symbolTable = symbolTable
       )
 
       transpilerScripts = transpilerScripts + (instanceSingletonName ~> trans)
     }
 
     {
-      val (_ext_h_entries, _ext_c_entries) = genExtensionEntries(basePackage, components)
+      val (_ext_h_entries, _ext_c_entries) = genExtensionEntries(basePackage, components, aadlTypes, symbolTable)
       ext_h_entries = ext_h_entries ++ _ext_h_entries
       ext_c_entries = ext_c_entries ++ _ext_c_entries
 
@@ -218,7 +218,7 @@ import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
       )
 
       var customSequenceSizes: ISZ[String] = ISZ()
-      if (types.rawConnections) {
+      if (aadlTypes.rawConnections) {
         // TODO is this necessary?
         val maxBitSize: Z = TypeUtil.getMaxBitsSize(symbolTable) match {
           case Some((z, _)) => z
@@ -258,7 +258,11 @@ import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
         extensions = ISZ(),
         excludes = ISZ(),
 
-        cmakeIncludes = ISZ(plusSettingsFilename))
+        cmakeIncludes = ISZ(plusSettingsFilename),
+
+        dirs = dirs,
+        arsitOptions = arsitOptions
+      )
 
       transpilerScripts = transpilerScripts + (id ~> transForSlangTypeLibrary)
 
@@ -402,7 +406,10 @@ import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
                         extensions: ISZ[Os.Path],
                         excludes: ISZ[String],
 
-                        cmakeIncludes: ISZ[String]): (ST, SireumSlangTranspilersCOption) = {
+                        cmakeIncludes: ISZ[String],
+
+                        dirs: ProjectDirectories,
+                        arsitOptions: ArsitOptions): (ST, SireumSlangTranspilersCOption) = {
     val packageName = s"${basePackage}/${instanceName}"
     val fqAppName = s"${basePackage}.${instanceName}.${appName}"
 
@@ -448,7 +455,12 @@ import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
                     numComponentOutPorts: Z,
                     cOutputDir: Os.Path,
                     cExtensions: ISZ[Os.Path],
-                    cmakeIncludes: ISZ[String]): (ST, SireumSlangTranspilersCOption) = {
+                    cmakeIncludes: ISZ[String],
+
+                    dirs: ProjectDirectories,
+                    arsitOptions: ArsitOptions,
+                    aadlTypes: AadlTypes,
+                    symbolTable: SymbolTable): (ST, SireumSlangTranspilersCOption) = {
 
     val components = symbolTable.airComponentMap.entries.filter(p =>
       CommonUtil.isThread(p._2) || (CommonUtil.isDevice(p._2) && arsitOptions.devicesAsThreads))
@@ -477,7 +489,7 @@ import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
       s"IS[Z,art.Art.PortId]=$maxPortSeqSize"
     )
 
-    genBitArraySequenceSizes() match {
+    genBitArraySequenceSizes(aadlTypes, symbolTable) match {
       case Some((z, _)) => customSequenceSizes = customSequenceSizes :+ s"IS[Z,B]=$z"
       case _ =>
     }
@@ -504,10 +516,13 @@ import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
       extensions = cExtensions,
       excludes = excludes,
 
-      cmakeIncludes = cmakeIncludes)
+      cmakeIncludes = cmakeIncludes,
+
+      dirs = dirs,
+      arsitOptions = arsitOptions)
   }
 
-  def genSel4Adapters(names: NameProvider): ISZ[Os.Path] = {
+  def genSel4Adapters(names: NameProvider, dirs: ProjectDirectories): ISZ[Os.Path] = {
 
     val root = Os.path(dirs.sel4EtcDir)
 

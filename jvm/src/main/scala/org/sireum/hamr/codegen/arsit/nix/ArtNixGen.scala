@@ -9,7 +9,8 @@ import org.sireum.hamr.codegen.arsit.templates.{ArtNixTemplate, SchedulerTemplat
 import org.sireum.hamr.codegen.arsit.util.ReporterUtil.reporter
 import org.sireum.hamr.codegen.arsit.util.{ArsitOptions, IpcMechanism}
 import org.sireum.hamr.codegen.common.CommonUtil
-import org.sireum.hamr.codegen.common.containers.{FileResource, Resource, SireumSlangTranspilersCOption}
+import org.sireum.hamr.codegen.common.CommonUtil.Store
+import org.sireum.hamr.codegen.common.containers.{Resource, SireumSlangTranspilersCOption}
 import org.sireum.hamr.codegen.common.properties.PropertyUtil
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.templates.TemplateUtil
@@ -17,15 +18,7 @@ import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.ResourceUtil
 import org.sireum.hamr.ir.Direction
 
-@record class ArtNixGen(val dirs: ProjectDirectories,
-                        val root: AadlSystem,
-                        val arsitOptions: ArsitOptions,
-                        val symbolTable: SymbolTable,
-                        val types: AadlTypes,
-                        val previousPhase: Result
-                       ) extends NixGen {
-
-  val basePackage: String = arsitOptions.packageName
+@record class ArtNixGen() extends NixGen {
 
   var resources: ISZ[Resource] = ISZ()
 
@@ -35,7 +28,7 @@ import org.sireum.hamr.ir.Direction
   var numConnections: Z = 0
   var maxStackSize: Z = -1
 
-  var portId: Z = previousPhase.maxPort
+  var portId: Z = -1
 
   def getPortId(): Z = {
     val r = portId
@@ -43,16 +36,18 @@ import org.sireum.hamr.ir.Direction
     return r
   }
 
-  def generate(): ArsitResult = {
+  def generate(root: AadlSystem, dirs: ProjectDirectories, arsitOptions: ArsitOptions, aadlTypes: AadlTypes, symbolTable: SymbolTable, store: Store, previousPhase: Result): (ArsitResult, Store) = {
     assert(Util.isNix(arsitOptions.platform))
 
-    gen()
+    portId = previousPhase.maxPort
 
-    return ArsitResult(
+    gen(arsitOptions.packageName, previousPhase.maxComponent, dirs, arsitOptions, aadlTypes, symbolTable, store)
+
+    return (ArsitResult(
       resources = previousPhase.resources() ++ resources ++ transpilerOptions.asInstanceOf[ISZ[Resource]],
       maxPort = portId,
       maxComponent = previousPhase.maxComponent,
-      maxConnection = previousPhase.maxConnection)
+      maxConnection = previousPhase.maxConnection), store)
   }
 
   def addExeResource(outDir: String, path: ISZ[String], content: ST, overwrite: B): Unit = {
@@ -63,7 +58,7 @@ import org.sireum.hamr.ir.Direction
     resources = resources :+ ResourceUtil.createResource(Util.pathAppend(outDir, path), content, overwrite)
   }
 
-  def gen(): Unit = {
+  def gen(basePackage: String, previousPhaseMaxComponent: Z, dirs: ProjectDirectories, arsitOptions: ArsitOptions, aadlTypes: AadlTypes, symbolTable: SymbolTable, store: Store): Unit = {
 
     var platformPorts: ISZ[ST] = ISZ()
     var mainSends: ISZ[ST] = ISZ()
@@ -80,7 +75,7 @@ import org.sireum.hamr.ir.Direction
       val component = threadOrDevice.component
 
       val names = nameProvider(component, basePackage)
-      val ports: ISZ[Port] = Util.getPorts(threadOrDevice, types, basePackage, z"0")
+      val ports: ISZ[Port] = Util.getPorts(threadOrDevice, aadlTypes, basePackage, z"0")
 
       val dispatchProtocol: Dispatch_Protocol.Type = threadOrDevice.dispatchProtocol
 
@@ -119,7 +114,7 @@ import org.sireum.hamr.ir.Direction
           if (dispatchTriggers.isEmpty) T
           else dispatchTriggers.get.filter(triggerName => triggerName == portName).nonEmpty
 
-        val port = Util.getPort(p, p.feature, component, types, basePackage, isTrigger, z"-1000")
+        val port = Util.getPort(p, p.feature, component, aadlTypes, basePackage, isTrigger, z"-1000")
 
         val portIdName: String = s"${port.name}PortId"
         val portOptName: String = s"${port.name}Opt"
@@ -154,7 +149,7 @@ import org.sireum.hamr.ir.Direction
         F) // don't overwrite since user may add contents to this file
 
       val apiTouches = SeL4NixTemplate.apiTouches(names, ports)
-      val touchMethod = SeL4NixTemplate.genTouchMethod(NixGen.genTypeTouches(types), apiTouches, ISZ())
+      val touchMethod = SeL4NixTemplate.genTouchMethod(NixGen.genTypeTouches(aadlTypes, store), apiTouches, ISZ())
 
       val stApp = ArtNixTemplate.app(
         packageName = basePackage,
@@ -164,7 +159,7 @@ import org.sireum.hamr.ir.Direction
         bridge = bridgeInstanceVarName,
         component = threadOrDevice,
         isPeriodic = isPeriodic,
-        types = types,
+        types = aadlTypes,
         touchMethod = touchMethod,
         basePackage = basePackage
       )
@@ -173,18 +168,18 @@ import org.sireum.hamr.ir.Direction
 
       // don't care about paths since the root directory containing the 'ext-c'
       // dir will be passed to the transpiler rather than the individual resources
-      val (paths, extResources) = genExtensionFiles(threadOrDevice, names, ports)
+      val (paths, extResources) = genExtensionFiles(threadOrDevice, names, ports, dirs, arsitOptions, aadlTypes, symbolTable)
 
       resources = resources ++ extResources
     }
 
-    val (_ext_h_entries, _ext_c_entries) = genExtensionEntries(basePackage, components)
+    val (_ext_h_entries, _ext_c_entries) = genExtensionEntries(basePackage, components, aadlTypes, symbolTable)
     ext_h_entries = ext_h_entries ++ _ext_h_entries
     ext_c_entries = ext_c_entries ++ _ext_c_entries
 
     val archBridgeInstanceNames: ISZ[String] = components.map((c: AadlThreadOrDevice) =>
       nameProvider(c.component, basePackage).cArchInstanceName)
-    resources = resources ++ genSchedulerFiles(basePackage, archBridgeInstanceNames)
+    resources = resources ++ genSchedulerFiles(basePackage, archBridgeInstanceNames, dirs)
 
     {
       val extC = Os.path(dirs.cExt_c_Dir) / NixGen.EXT_C
@@ -290,7 +285,7 @@ import org.sireum.hamr.ir.Direction
     val buildApps: B = T
 
     val numPorts: Z = portId
-    val numComponents: Z = previousPhase.maxComponent
+    val numComponents: Z = previousPhaseMaxComponent
 
     val (t, s, z, hasSporadic) = ArtNixGen.V().v(symbolTable.rootSystem)
 
@@ -301,7 +296,7 @@ import org.sireum.hamr.ir.Direction
       (s"IS[Z,art.UPort]=$z", s"Needed for ${t.identifier}'s ${s} ports")
     )
 
-    genBitArraySequenceSizes() match {
+    genBitArraySequenceSizes(aadlTypes, symbolTable) match {
       case Some((zs, typeName)) => customSequenceSizes = customSequenceSizes :+ ((s"IS[Z,B]=$zs", s"Needed for the max bit size specified in the model -- see $typeName"))
       case _ =>
     }
@@ -388,7 +383,7 @@ import org.sireum.hamr.ir.Direction
     resources = resources :+ ResourceUtil.createExeCrlfResource(Util.pathAppend(dirs.slangBinDir, ISZ("transpile.cmd")), slashTranspileScript, T)
   }
 
-  def genSchedulerFiles(packageName: String, archBridgeInstanceNames: ISZ[String]): ISZ[Resource] = {
+  def genSchedulerFiles(packageName: String, archBridgeInstanceNames: ISZ[String], dirs: ProjectDirectories): ISZ[Resource] = {
     val roundRobinFile = "round_robin.c"
     val staticSchedulerFile = "static_scheduler.c"
     val ret: ISZ[Resource] =
