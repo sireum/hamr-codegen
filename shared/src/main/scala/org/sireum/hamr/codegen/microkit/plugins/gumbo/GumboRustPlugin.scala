@@ -170,7 +170,7 @@ object GumboRustPlugin {
       var crateLevelEntries = threadContributions.crateLevelEntries
       val crateDependencies = threadContributions.crateDependencies ++ crateDeps
 
-      var optStateVarInits: ISZ[ST] = ISZ()
+      var optStateVarInits: ISZ[RAST.Item] = ISZ()
       if (subclauseInfo.annex.state.nonEmpty) {
         val typeProvider = CRustTypePlugin.getCRustTypeProvider(localStore).get
 
@@ -234,11 +234,11 @@ object GumboRustPlugin {
           for (sv <- subclauseInfo.annex.state) {
             val i = GumboRustUtil.processStateVariable(sv, types, typeProvider)
             stateVars = stateVars :+ i._1
-            optStateVarInits = optStateVarInits :+ i._2
+            optStateVarInits = optStateVarInits :+ RAST.ItemST(i._2)
           }
           val m = Marker.createSlashMarker(GumboRustUtil.GumboMarkers.stateVar)
           markers = markers :+ m
-          structDef = structDef(items = structDef.items :+ RAST.MarkerWrap(m, stateVars.asInstanceOf[ISZ[RAST.Item]], "\n"))
+          structDef = structDef(items = structDef.items :+ RAST.MarkerWrap(m, stateVars.asInstanceOf[ISZ[RAST.Item]], ",\n", Some(",")))
         }
       } else {
         val m = Marker.createSlashPlaceholderMarker(GumboRustUtil.GumboMarkers.stateVar)
@@ -268,7 +268,7 @@ object GumboRustPlugin {
 
         val m = Marker.createSlashMarker(GumboRustUtil.GumboMarkers.gumboMethods)
         markers = markers :+ m
-        crateLevelEntries = crateLevelEntries :+ RAST.MarkerWrap(m, funs.asInstanceOf[ISZ[RAST.Item]], "\n\n")
+        crateLevelEntries = crateLevelEntries :+ RAST.MarkerWrap(m, funs.asInstanceOf[ISZ[RAST.Item]], "\n\n", None())
       } else {
         val m = Marker.createSlashPlaceholderMarker(GumboRustUtil.GumboMarkers.gumboMethods)
         markers = markers :+ m
@@ -355,11 +355,8 @@ object GumboRustPlugin {
                   case Some(RAST.MethodBody(ISZ(self: RAST.BodyItemSelf))) =>
                     val m = Marker.createSlashMarker(GumboRustUtil.GumboMarkers.stateVarInit)
                     markers = markers :+ m
-                    val wrapper =
-                      st"""${m.beginMarker}
-                          |${(optStateVarInits, ",\n")}
-                          |${m.endMarker}"""
-                    Some(RAST.MethodBody(ISZ(self(items = self.items :+ wrapper))))
+                    val wrapper = RAST.MarkerWrap(m, optStateVarInits, ",\n", Some(","))
+                    Some(RAST.MethodBody(ISZ(self(items = self.items :+ wrapper.prettyST))))
                   case _ => halt("Not expecting new to contain anything other than Self {...}")
                 }
                 updatedImplItems = updatedImplItems :+ f(body = b)

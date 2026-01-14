@@ -197,11 +197,17 @@ object Printers {
 
 @datatype class MarkerWrap(val marker: BlockMarker,
                            val items: ISZ[Item],
-                           val sep: String) extends Item {
+                           val sep: String,
+                           val optLastItemSep: Option[String]) extends Item {
   @pure override def prettyST: ST = {
+    val stItemsOpt: Option[ST] = {
+      if (items.isEmpty) None()
+      else Some(st"${(for(i <- items) yield i.prettyST, sep)}${if (optLastItemSep.nonEmpty) optLastItemSep.get else ""}")
+    }
+
     return (
     st"""${marker.beginMarker}
-        |${(for(i <- items) yield i.prettyST, sep)}
+        |$stItemsOpt
         |${marker.endMarker}""")
   }
 }

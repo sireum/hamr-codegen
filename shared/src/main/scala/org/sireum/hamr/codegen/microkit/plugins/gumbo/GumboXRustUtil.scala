@@ -41,6 +41,25 @@ object GumboXRustUtil {
 
     var params: Set[GGParam] = Set.empty
 
+    override def pre_langastExpInvoke(o: Exp.Invoke): ir.MTransformer.PreResult[Exp] = {
+      o match {
+        case Exp.Invoke(Some(Exp.Ident(SAST.Id("api"))), ident, targs, args) =>
+          val typed = o.ident.attr.typedOpt.get.asInstanceOf[SAST.Typed.Name]
+          val (typ, _) = getAadlType(typed, aadlTypes, slangTypesToAadlTypes)
+          val ports = context.getPorts().filter(p => p.identifier == ident.id.value)
+          assert(ports.size == 1)
+          val param = GGPortParam(
+            port = ports(0),
+            aadlType = typ.classifier,
+            typeNameProvider = crustTypeProvider.getTypeNameProvider(typ))
+          params = params + param
+          return ir.MTransformer.PreResult(F,
+            MSome(o(receiverOpt = None(), ident = o.ident(id = o.ident.id(value = param.name)))))
+
+        case _ => return ir.MTransformer.PreResult(T, MNone[SAST.Exp]())
+      }
+    }
+
     override def pre_langastExpSelect(o: Exp.Select): ir.MTransformer.PreResult[Exp] = {
       o match {
         case Exp.Select(Some(Exp.Ident(SAST.Id("api"))), id, attr) =>
@@ -125,6 +144,8 @@ object GumboXRustUtil {
                     aadlType = typ.classifier,
                     typeNameProvider = crustTypeProvider.getTypeNameProvider(typ))
               }
+            case Some(SAST.ResolvedInfo.BuiltIn(SAST.ResolvedInfo.BuiltIn.Kind.Apply)) =>
+              // eg. In(sv)#(0)
             case x =>
               halt(s"Ident $o resolved to $x")
           }

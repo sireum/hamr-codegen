@@ -294,7 +294,16 @@ object SlangExpUtil {
                         assert(receiverOpt.nonEmpty, "What is being applied?")
                         nestedRewriteExp(receiverOpt.get, None())
                       } else {
-                        convertSlangMethodsToRust(receiverOpt = exp.receiverOpt, id = exp.ident.id, attr = exp.attr, separator = ".")
+                        exp.ident.attr.resOpt match {
+                          case Some(v: SAST.ResolvedInfo.Var)
+                            if inVerus && receiverOpt.isEmpty &&
+                              context != Context.library_function && context != Context.subclause_function =>
+                            // state var
+                            st"self.${exp.ident.id.value}"
+                          case _ =>
+                            convertSlangMethodsToRust(receiverOpt = exp.receiverOpt, id = exp.ident.id, attr = exp.attr, separator = ".")
+                        }
+
                       }
                     if (exp.ident.id.value == "IS") {
                       // array construction

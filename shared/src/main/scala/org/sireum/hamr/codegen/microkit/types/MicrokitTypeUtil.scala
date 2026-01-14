@@ -100,10 +100,10 @@ object MicrokitTypeUtil {
       case at: ArrayType =>
         assert (at.dimensions.size == 1, "Need to handle multi-dim arrays")
         val np = cRustTypeProvider.getTypeNameProvider(at)
-        val dim0 = CRustTypePlugin.getArrayDimName(np, 0)
-        val baseTypeDefault = getCRustTypeDefaultValue(at.baseType, cRustTypeProvider)
-        val dimConst = st"${(ops.ISZOps(np.qualifiedRustNameS).dropRight(1), "::")}"
-        return st"[$baseTypeDefault; $dimConst::$dim0]"
+        val baseTypeDefault = getCRustTypeDefaultVerusValue(at.baseType, cRustTypeProvider)
+        val values: ISZ[ST] = for(i <- 0 until at.dimensions(0)) yield baseTypeDefault
+        return st"[${(values, ",")}]"
+
       case e: EnumType =>
       val np = cRustTypeProvider.getTypeNameProvider(e)
         return st"${np.qualifiedRustName}::${e.values(0)}"

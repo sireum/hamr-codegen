@@ -187,7 +187,7 @@ object GclResolverUtil {
       o.receiverOpt match {
         case Some(i: Exp.Invoke) =>
           assert(i.receiverOpt.isEmpty, "Need to handle non-empty receivers")
-          assert(i.args.isEmpty, "Need to rewrite invoke args for apply")
+          //assert(i.args.isEmpty, "Need to rewrite invoke args for apply")
           val identv = i.ident.id.value
           scope.resolveName(typeHierarchy.nameMap, ISZ(identv)) match {
             case Some(info: Info.Method) =>
@@ -197,11 +197,25 @@ object GclResolverUtil {
                 case Some(a: ArrayType) =>
                   arrayType = Some(a)
                   isFunctionCall = T
-                case _ => halt("Unexpected")
+                case x => halt(s"Unexpected: ${x}")
               }
-            case _ => halt("Unexpected")
+            case x =>
+              reporter.error(o.posOpt, GclResolver.toolName, s"Could not resolve '$identv'")
           }
-        case _ => halt("Unexpected")
+        case Some(Exp.Input(AST.Exp.Ident(id))) =>
+          // only state vars can be wrapped in In
+          stateVars.filter(p => p.id == id.value) match {
+            case ISZ(sv)=>
+              aadlTypes.typeMap.get(sv.classifier) match {
+                case Some(a: ArrayType) =>
+                  arrayType = Some(a)
+                case x =>
+                  halt(x.string)
+              }
+            case x =>
+              halt(x.string)
+          }
+        case x => halt(s"Unexpected: $x")
       }
     }
     else {
@@ -220,17 +234,34 @@ object GclResolverUtil {
           receiverOpt = irMTransformer.transformOption(o.receiverOpt, transform_langastExp _)
           currType match {
             case Some(r: RecordType) =>
-              r.fields.get(o.ident.id.value).get match {
-                case a: ArrayType =>
-                  arrayType = Some(a)
+              r.fields.get(o.ident.id.value) match {
+                case Some(field) =>
+                  field match {
+                    case a: ArrayType =>
+                      arrayType = Some(a)
+                    case _ =>
+                  }
                 case _ =>
+                  reporter.error(o.posOpt, GclResolver.toolName, s"'${o.ident.id.value}' is not a field of ${r.name}")
               }
+
             case x =>
               ident = transform_langastExpIdent(o.ident)
-              popType match {
-                case a: ArrayType =>
-                  arrayType = Some(a)
+              if (ops.StringOps(o.posOpt.string).contains("238")) {
+                assume(T)
+              }
+              scope.resolveName(typeHierarchy.nameMap, ISZ(o.ident.id.value)) match {
+                case Some(info: Info.Method) =>
+                  // this is a gumbo method.  It may return an array but we wouldn't want to
+                  // wrap its arguments with the return type's fingerprint
                 case _ =>
+                  if (currType.nonEmpty) {
+                    popType match {
+                      case a: ArrayType =>
+                        arrayType = Some(a)
+                      case _ =>
+                    }
+                  }
               }
           }
           currType = None()
@@ -320,9 +351,14 @@ object GclResolverUtil {
 
         return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(invoke))
       case Some(r: RecordType) =>
-        val fieldType = r.fields.get(o.id.value).get
-        currType = None()
-        pushType(fieldType)
+        r.fields.get(o.id.value) match {
+          case Some(field) =>
+            val fieldType = r.fields.get(o.id.value).get
+            currType = None()
+            pushType(fieldType)
+          case _ =>
+            reporter.error(o.posOpt, GclResolver.toolName, s"'${o.id.value}' is a not a field of ${r.name}")
+        }
         return org.sireum.hamr.ir.MTransformer.PreResult(F, MNone())
       case _ =>
         //halt(
@@ -430,7 +466,8 @@ object GclResolverUtil {
       case Some(e) =>
         return irMTransformer.PreResult(F, MNone())
       case _ =>
-        halt(s"Could not resolve ${o.id.value}${if(o.posOpt.nonEmpty) s" at ${o.posOpt.get}" else ""}")
+        reporter.error(o.posOpt, GclResolver.toolName, s"Could not resolve ${o.id.value}")
+        return irMTransformer.PreResult(F, MNone())
     }
   }
 }

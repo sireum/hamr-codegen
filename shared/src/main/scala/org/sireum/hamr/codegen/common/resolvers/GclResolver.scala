@@ -191,6 +191,8 @@ object GclResolver {
             case e: AST.ResolvedInfo.Var => e.owner :+ e.id
             case e: AST.ResolvedInfo.Method => e.owner :+ e.id
             case e: AST.ResolvedInfo.Object => e.name
+            case AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.Apply) =>
+              return None()
             case x =>
               reporter.error(o.fullPosOpt, GclResolver.toolName, s"Wasn't expecting $x while resolving Ident")
               ISZ()
@@ -212,12 +214,35 @@ object GclResolver {
           //      RxIn(0)
           post_langastExpIdent(o.ident) match {
             case MSome(s@Exp.Select(receiverOpt, id@AST.Id("get"), _)) =>
+              // 'port' must be an event data port
               // port(..) --> api.port.get(..)
               return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(
                 o(receiverOpt = receiverOpt, ident = Exp.Ident(id, emptyRAttr))))
 
+            case MSome(e : Exp.Select) =>
+              // e.g. could be a call to a gumbo function or an array indexing
+              // expression on a data port
+              // myArrayInt32(i) --> api.myArrayInt32(i)
+
+              return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(
+                o(receiverOpt = e.receiverOpt, ident = Exp.Ident(e.id, e.attr))))
+
+            case MSome(e : Exp.Input) =>
+              o match {
+                case i @ AST.Exp.Invoke(None(), ident, targs, args) =>
+                  return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(
+                    AST.Exp.Invoke(
+                      receiverOpt = Some(e),
+                      ident = AST.Exp.Ident(AST.Id("apply", emptyAttr), emptyRAttr),
+                      targs = targs,
+                      args = args,
+                      attr = AST.ResolvedAttr(posOpt = o.posOpt, resOpt = o.attr.resOpt, typedOpt = o.attr.typedOpt))))
+                case x =>
+                  halt(s"Not expecting ${x} for rewritten state var: ${e}")
+              }
+
             case MSome(e) =>
-              halt(s"Unexpected: ${e}")
+              halt(s"Unexpected: ${e} -- ${o}")
 
             case _ => return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
           }
@@ -457,15 +482,14 @@ object GclResolver {
           case rim: ResolvedInfo.Method if (rim.mode == AST.MethodMode.Constructor) =>
             // datatype constructor, no rewrites needed
             return MNone()
+          case rim: ResolvedInfo.Method if rim.mode == AST.MethodMode.Select && rim.owner == ISZ("org", "sireum") && rim.id == "IS" =>
+            // array indexing so no rewrites needed
+            return MNone()
           case _ =>
             o.receiverOpt match {
-              case s@Some(AST.Exp.Select(_, rid, _)) =>
-                if (rid.value != GUMBO__Library) {
-                  // can now be an array indexing exp
-
-                  //reporter.error(o.fullPosOpt, toolName, s"Expecting the method ${rid.value} to be in a synthetic package called ${GUMBO__Library}")
-                }
+              case s @ Some(_) =>
                 s
+
               case _ if indexingTypeFingerprints.contains(o.ident.id.value) =>
                 // rewritten indexing into an array
                 return MNone()
@@ -515,7 +539,7 @@ object GclResolver {
               reporter.error(o.fullPosOpt, toolName, s"Only state vars can be used in In expressions")
           }
         case _ =>
-          reporter.error(o.fullPosOpt, toolName, s"Currently only allowing the simple name of state vars to be used in In expressions")
+          reporter.error(o.fullPosOpt, toolName, s"Currently only allowing the simple name of state vars to be used in In expressions: $o")
       }
 
       return MNone()
@@ -712,13 +736,19 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                    reporter: Reporter): Exp = {
     val _exp: AST.Exp = {
       if (modelContainsBoundArrays) {
-        val r = ArrayIndexRewriter(component, params, stateVars, specFuns, scope, typeHierarchy, symbolTable, aadlTypes).transform_langastExp(exp)
+        val rewriter = ArrayIndexRewriter(component, params, stateVars, specFuns, scope, typeHierarchy, symbolTable, aadlTypes)
+        val r = rewriter.transform_langastExp(exp)
+        reporter.reports(rewriter.reporter.messages)
         if (r.nonEmpty) r.get
         else exp
       }
       else {
         exp
       }
+    }
+
+    if (reporter.hasError) {
+      return exp
     }
 
     val rexp: AST.Exp = visitSlangExp(_exp, context, mode, scope, typeHierarchy, reporter) match {
@@ -2664,7 +2694,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         }
 
         val paramResInfoOpt = Some[AST.ResolvedInfo](
-          AST.ResolvedInfo.Var(isInObject = F, isSpec = F, isVal = F, owner = adtQualifiedName, id = paramId))
+          AST.ResolvedInfo.Var(isInObject = F, isSpec = F, isVal = T, owner = adtQualifiedName, id = paramId))
 
         val typedOpt: Option[AST.Typed] = resolveTypeH(paramType, None()).attr.typedOpt
 
@@ -2681,7 +2711,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           scope = adtScope,
           ast = AST.Stmt.Var(
             isSpec = F,
-            isVal = F,
+            isVal = T,
             id = AST.Id(value = paramId, attr = AST.Attr(None())),
             tipeOpt = Some(varTypeName),
             initOpt = None(),
