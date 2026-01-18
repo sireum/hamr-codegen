@@ -55,11 +55,13 @@ jobs:
       - name: Install ROS2 Jazzy
         run: |
           #apt update -y && apt install -y sudo
-          sudo apt update -y && sudo DEBIAN_FRONTEND=noninteractive apt install -y software-properties-common curl
-          sudo apt update -y python3-ament-package python3-ament-cmake
+          sudo apt update -y
+          sudo DEBIAN_FRONTEND=noninteractive apt install -y software-properties-common curl
+          sudo apt install -y python3-ament-package python3-ament-cmake
           sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
           echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
-          sudo apt update -y && sudo DEBIAN_FRONTEND=noninteractive apt install -y build-essential python3-colcon-common-extensions ros-jazzy-ros-base
+          sudo apt update -y
+          sudo DEBIAN_FRONTEND=noninteractive apt install -y build-essential python3-colcon-common-extensions ros-jazzy-ros-base
       - name: Test
         env:
           # add verbose flag if workflow is restarted with "enable debug logging" checked or if requested
