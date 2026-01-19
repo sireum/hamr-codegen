@@ -141,14 +141,14 @@ object SlangExpUtil {
               }
             case Some(s: SAST.Typed.Enum) => "::"
             case Some(m: SAST.Typed.Method) =>
-              if (m.owner == ISZ("org", "sireum", "IS")) {
-                if (m.name == "size") {
+              m.owner match {
+                case IS("org", "sireum", "IS") =>
+                  assert (m.name == "size", s"Not expecting '${m.name}' being applied to an org.sireum.IS")
                   "."
-                } else {
-                  halt(s"TODO: ${m.name}")
-                }
-              } else {
-                halt(s"TODO: ${m.owner}")
+                case IS("org", "sireum", "Option") =>
+                  assert (m.name == "get" || m.name == "isEmpty" || m.name == "nonEmpty", m.name)
+                  "."
+                case x => halt(x.string)
               }
             case Some(o: SAST.Typed.Object) =>
               o.owner match {
@@ -446,6 +446,7 @@ object SlangExpUtil {
 
 
     @pure def convertSlangMethodsToRust(receiverOpt: Option[SAST.Exp], id: SAST.Id, attr: SAST.ResolvedAttr, separator: String): ST = {
+      // TOOD: should be using the resolved attr info of the expression rather than string matching
       id.value match {
         case "get" =>
           return st"${receiverOptST(receiverOpt, separator)}unwrap()"

@@ -159,26 +159,6 @@ object GclResolver {
       }
     }
 
-    def getPortAttr(p: AadlPort): ResolvedAttr = {
-      val aadlType: AadlType =
-        if (p.isInstanceOf[AadlEventPort]) TypeUtil.EmptyType
-        else p.asInstanceOf[AadlFeatureData].aadlType
-
-      val ids: TypeIdPath = aadlType match {
-        case e: EnumType => aadlType.nameProvider.classifier :+ "Type"
-        case _ => aadlType.nameProvider.classifier
-      }
-
-      val typedName = AST.Typed.Name(ids = ids, args = ISZ())
-
-      var typedOpt: Option[AST.Typed] = Some(typedName)
-      if (p.isInstanceOf[AadlFeatureEvent]) {
-        typedOpt = Some(AST.Typed.Name(ids = AST.Typed.optionName, args = ISZ(typedName)))
-      }
-
-      return ResolvedAttr(posOpt = None(), resOpt = None(), typedOpt = typedOpt)
-    }
-
     def processIdent(o: Exp.Ident): Option[SymbolHolder] = {
       o.attr.resOpt match {
         case Some(e: AST.ResolvedInfo.Enum) => // ignore
@@ -256,7 +236,7 @@ object GclResolver {
             val onlyIdent: Exp.Ident = o.args(0) match {
               case Exp.Select(Some(t: Exp.This), id, _) =>
                 // strip 'this' off that's added by tipe
-                Exp.Ident(id, o.attr)
+                halt("should be infeasible now")
               case i: Exp.Ident => i
               case _ =>
                 reporter.error(o.fullPosOpt, toolName, "Invalid MustSend expression. First argument must (currently) be the simple name of an outgoing event port")
@@ -277,14 +257,35 @@ object GclResolver {
                 apiReferences = apiReferences + p
 
                 if (o.args.size == 1) { // MustSend(portIdent)
+                  // api
+                  val api: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = emptyAttr), attr = emptyRAttr)
+
                   // api.portid
-                  val apiIdent: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = emptyAttr), attr = emptyRAttr)
-                  val apiSelect = Exp.Select(receiverOpt = Some(apiIdent), id = onlyIdent.id, targs = ISZ(), attr = getPortAttr(p))
+                  val api_portid: Exp = {
+                    val tn = AST.Typed.Name(ids = ISZ("org", "sireum", "Option"), args = ISZ(onlyIdent.typedOpt.get))
+
+                    val ra = AST.ResolvedAttr(posOpt = o.posOpt, resOpt = onlyIdent.resOpt, typedOpt = Some(tn))
+
+                    Exp.Select(receiverOpt = Some(api), id = onlyIdent.id, targs = ISZ(), attr = ra)
+                  }
 
                   // api.portid.nonEmpty
-                  val nonEmpty = Exp.Select(receiverOpt = Some(apiSelect), id = AST.Id("nonEmpty", emptyAttr), targs = o.targs, attr = o.attr)
+                  val api_portid_nonEmpty: Exp = {
+                    val nonEmptyRI = AST.ResolvedInfo.Method(
+                      isInObject = F, mode = AST.MethodMode.Method, typeParams = ISZ(),
+                      owner = ISZ("org", "sireum", "Option"), id = "nonEmpty",
+                      paramNames = ISZ(), reads = IS(), writes = ISZ(),
+                      tpeOpt = Some(AST.Typed.Fun(purity = AST.Purity.StrictPure, isByName = T, args = ISZ(), ret = AST.Typed.bOpt.get)))
 
-                  return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(nonEmpty))
+                    val nonEmptyTyped = AST.Typed.Method(isInObject = nonEmptyRI.isInObject, mode = nonEmptyRI.mode, typeParams = nonEmptyRI.typeParams,
+                      owner = nonEmptyRI.owner, name = nonEmptyRI.id, paramNames = nonEmptyRI.paramNames, tpe = nonEmptyRI.tpeOpt.get)
+
+                    val nonEmptyRa = AST.ResolvedAttr(posOpt = o.posOpt, resOpt = Some(nonEmptyRI), typedOpt = Some(nonEmptyTyped))
+
+                    Exp.Select(receiverOpt = Some(api_portid), id = AST.Id("nonEmpty", emptyAttr), targs = o.targs, attr = nonEmptyRa)
+                  }
+
+                  return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(api_portid_nonEmpty))
 
                 } else if (o.args.size == 2) { // MustSend(portIdent, expectedValue)
 
@@ -307,21 +308,55 @@ object GclResolver {
                     case _ => // expected value can be any legal Ident
                   }
 
+                  // api
+                  val api: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = emptyAttr), attr = emptyRAttr)
+
                   // api.portid
-                  val apiIdent: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = emptyAttr), attr = emptyRAttr)
-                  val apiSelect = Exp.Select(receiverOpt = Some(apiIdent), id = onlyIdent.id, targs = ISZ(), attr = getPortAttr(p))
+                  val api_portid: Exp = {
+                    val tn = AST.Typed.Name(ids = ISZ("org", "sireum", "Option"), args = ISZ(onlyIdent.typedOpt.get))
+
+                    val ra = AST.ResolvedAttr(posOpt = o.posOpt, resOpt = onlyIdent.resOpt, typedOpt = Some(tn))
+
+                    Exp.Select(receiverOpt = Some(api), id = onlyIdent.id, targs = ISZ(), attr = ra)
+                  }
 
                   // api.portid.get
-                  val getSelect = Exp.Select(receiverOpt = Some(apiSelect), id = AST.Id("get", emptyAttr), targs = o.targs, attr = o.attr)
+                  val api_portid_get: Exp = {
+                    val getRI = AST.ResolvedInfo.Method(
+                      isInObject = F, mode = AST.MethodMode.Method, typeParams = ISZ(),
+                      owner = ISZ("org", "sireum", "Option"), id = "get",
+                      paramNames = ISZ(), reads = IS(), writes = ISZ(),
+                      tpeOpt = Some(AST.Typed.Fun(purity = AST.Purity.StrictPure, isByName = T, args = ISZ(), ret = onlyIdent.attr.typedOpt.get)))
+
+                    val getTyped = AST.Typed.Method(isInObject = getRI.isInObject, mode = getRI.mode, typeParams = getRI.typeParams,
+                      owner = getRI.owner, name = getRI.id, paramNames = getRI.paramNames, tpe = getRI.tpeOpt.get)
+
+                    val getRa = AST.ResolvedAttr(posOpt = o.posOpt, resOpt = Some(getRI), typedOpt = Some(getTyped))
+
+                    Exp.Select(receiverOpt = Some(api_portid), id = AST.Id("get", emptyAttr), targs = o.targs, attr = getRa)
+                  }
 
                   // api.portid.get == expectedValue
-                  val be = Exp.Binary(getSelect, "==", expectedValue, o.attr, o.attr.posOpt)
+                  val be = Exp.Binary(api_portid_get, "==", expectedValue, o.attr, o.attr.posOpt)
 
                   // api.portid.nonempty
-                  val nonEmptySel: Exp = Exp.Select(receiverOpt = Some(apiSelect), id = AST.Id("nonEmpty", emptyAttr), targs = o.targs, attr = o.attr)
+                  val api_portid_nonempty: Exp = {
+                    val nonEmptyRI = AST.ResolvedInfo.Method(
+                      isInObject = F, mode = AST.MethodMode.Method, typeParams = ISZ(),
+                      owner = ISZ("org", "sireum", "Option"), id = "nonEmpty",
+                      paramNames = ISZ(), reads = IS(), writes = ISZ(),
+                      tpeOpt = Some(AST.Typed.Fun(purity = AST.Purity.StrictPure, isByName = T, args = ISZ(), ret = AST.Typed.bOpt.get)))
+
+                    val nonEmptyTyped = AST.Typed.Method(isInObject = nonEmptyRI.isInObject, mode = nonEmptyRI.mode, typeParams = nonEmptyRI.typeParams,
+                      owner = nonEmptyRI.owner, name = nonEmptyRI.id, paramNames = nonEmptyRI.paramNames, tpe = nonEmptyRI.tpeOpt.get)
+
+                    val nonEmptyRa = AST.ResolvedAttr(posOpt = o.posOpt, resOpt = Some(nonEmptyRI), typedOpt = Some(nonEmptyTyped))
+
+                    Exp.Select(receiverOpt = Some(api_portid), id = AST.Id("nonEmpty", emptyAttr), targs = o.targs, attr = nonEmptyRa)
+                  }
 
                   // (api.portid.nonEmpty && (api.portid.get == expectedValue)
-                  val rexp = Exp.Binary(nonEmptySel, "&&", be, o.attr, o.attr.posOpt)
+                  val rexp = Exp.Binary(api_portid_nonempty, "&&", be, o.attr, o.attr.posOpt)
 
                   return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(rexp))
 
@@ -341,7 +376,7 @@ object GclResolver {
               val onlyIdent: Exp.Ident = o.args(0) match {
                 case Exp.Select(Some(t: Exp.This), id, _) =>
                   // strip 'this' off that's added by tipe
-                  Exp.Ident(id, o.attr)
+                  halt("this shouldn't hold anymore")
                 case i: Exp.Ident => i
                 case _ =>
                   reporter.error(o.fullPosOpt, toolName, "Invalid NoSend expression. Argument must (currently) be the simple name of an outgoing event port")
@@ -355,14 +390,35 @@ object GclResolver {
                   symbols = symbols + ash
                   apiReferences = apiReferences + p
 
+                  // api
+                  val api: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = emptyAttr), attr = emptyRAttr)
+
                   // api.portid
-                  val apiIdent: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = emptyAttr), attr = emptyRAttr)
-                  val apiSelect = Exp.Select(receiverOpt = Some(apiIdent), id = onlyIdent.id, targs = ISZ(), attr = getPortAttr(p))
+                  val api_portid: Exp = {
+                    val tn = AST.Typed.Name(ids = ISZ("org", "sireum", "Option"), args = ISZ(onlyIdent.typedOpt.get))
+
+                    val ra = AST.ResolvedAttr(posOpt = o.posOpt, resOpt = onlyIdent.resOpt, typedOpt = Some(tn))
+
+                    Exp.Select(receiverOpt = Some(api), id = onlyIdent.id, targs = ISZ(), attr = ra)
+                  }
 
                   // api.portid.isEmpty
-                  val isEmpty = Exp.Select(receiverOpt = Some(apiSelect), id = AST.Id("isEmpty", emptyAttr), targs = o.targs, attr = o.attr)
+                  val api_portid_isEmpty: Exp = {
+                    val isEmptyRI = AST.ResolvedInfo.Method(
+                      isInObject = F, mode = AST.MethodMode.Method, typeParams = ISZ(),
+                      owner = ISZ("org", "sireum", "Option"), id = "isEmpty",
+                      paramNames = ISZ(), reads = IS(), writes = ISZ(),
+                      tpeOpt = Some(AST.Typed.Fun(purity = AST.Purity.StrictPure, isByName = T, args = ISZ(), ret = AST.Typed.bOpt.get)))
 
-                  return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(isEmpty))
+                    val isEmptyTyped = AST.Typed.Method(isInObject = isEmptyRI.isInObject, mode = isEmptyRI.mode, typeParams = isEmptyRI.typeParams,
+                      owner = isEmptyRI.owner, name = isEmptyRI.id, paramNames = isEmptyRI.paramNames, tpe = isEmptyRI.tpeOpt.get)
+
+                    val isEmptyRa = AST.ResolvedAttr(posOpt = o.posOpt, resOpt = Some(isEmptyRI), typedOpt = Some(isEmptyTyped))
+
+                    Exp.Select(receiverOpt = Some(api_portid), id = AST.Id("isEmpty", emptyAttr), targs = o.targs, attr = isEmptyRa)
+                  }
+
+                  return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(api_portid_isEmpty))
                 case _ =>
                   reporter.error(o.fullPosOpt, toolName, "Invalid NoSend expression. Can only be applied to outgoing event ports")
                   return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
@@ -378,7 +434,7 @@ object GclResolver {
               val onlyIdent: Exp.Ident = o.args(0) match {
                 case Exp.Select(Some(t: Exp.This), id, _) =>
                   // strip 'this' off that's added by tipe
-                  Exp.Ident(id, o.attr)
+                  halt("This shouldn't hold anymore")
                 case i: Exp.Ident => i
                 case _ =>
                   reporter.error(o.fullPosOpt, toolName, "Invalid HasEvent expression. Argument must (currently) be the simple name of an incoming event port")
@@ -392,14 +448,35 @@ object GclResolver {
                   symbols = symbols + ash
                   apiReferences = apiReferences + p
 
+                  // api
+                  val api: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = emptyAttr), attr = emptyRAttr)
+
                   // api.portid
-                  val apiIdent: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = emptyAttr), attr = emptyRAttr)
-                  val apiSelect = Exp.Select(receiverOpt = Some(apiIdent), id = onlyIdent.id, targs = ISZ(), attr = getPortAttr(p))
+                  val api_portid: Exp = {
+                    val tn = AST.Typed.Name(ids = ISZ("org", "sireum", "Option"), args = ISZ(onlyIdent.typedOpt.get))
+
+                    val ra = AST.ResolvedAttr(posOpt = o.posOpt, resOpt = onlyIdent.resOpt, typedOpt = Some(tn))
+
+                    Exp.Select(receiverOpt = Some(api), id = onlyIdent.id, targs = ISZ(), attr = ra)
+                  }
 
                   // api.portid.nonEmpty
-                  val isEmpty = Exp.Select(receiverOpt = Some(apiSelect), id = AST.Id("nonEmpty", emptyAttr), targs = o.targs, attr = o.attr)
+                  val api_portid_nonEmpty: Exp = {
+                    val nonEmptyRI = AST.ResolvedInfo.Method(
+                      isInObject = F, mode = AST.MethodMode.Method, typeParams = ISZ(),
+                      owner = ISZ("org", "sireum", "Option"), id = "nonEmpty",
+                      paramNames = ISZ(), reads = IS(), writes = ISZ(),
+                      tpeOpt = Some(AST.Typed.Fun(purity = AST.Purity.StrictPure, isByName = T, args = ISZ(), ret = AST.Typed.bOpt.get)))
 
-                  return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(isEmpty))
+                    val nonEmptyTyped = AST.Typed.Method(isInObject = nonEmptyRI.isInObject, mode = nonEmptyRI.mode, typeParams = nonEmptyRI.typeParams,
+                      owner = nonEmptyRI.owner, name = nonEmptyRI.id, paramNames = nonEmptyRI.paramNames, tpe = nonEmptyRI.tpeOpt.get)
+
+                    val nonEmptyRa = AST.ResolvedAttr(posOpt = o.posOpt, resOpt = Some(nonEmptyRI), typedOpt = Some(nonEmptyTyped))
+
+                    Exp.Select(receiverOpt = Some(api_portid), id = AST.Id("nonEmpty", emptyAttr), targs = o.targs, attr = nonEmptyRa)
+                  }
+
+                  return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(api_portid_nonEmpty))
                 case _ =>
                   reporter.error(o.fullPosOpt, toolName, "Invalid HasEvent expression. Can only be applied to incoming event ports")
                   return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
@@ -422,7 +499,7 @@ object GclResolver {
 
     override def pre_langastExpSelect(o: Exp.Select): org.sireum.hamr.ir.MTransformer.PreResult[Exp] = {
       o.receiverOpt match {
-        case Some(i: Exp.This) =>
+        case Some(i_receiverOpt: Exp.This) =>
           lookup(o.id.value, ISZ(), o.resOpt, o.fullPosOpt) match {
             case Some(s) => symbols = symbols + s
             case _ =>
@@ -431,8 +508,8 @@ object GclResolver {
           val ident = Exp.Ident(o.id, o.attr)
           return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(ident))
 
-        case Some(i@Exp.Ident(featureId)) if (rewriteApiCalls) =>
-          processIdent(i) match {
+        case Some(i_receiverOpt @ Exp.Ident(i_receiverOpt_id)) if (rewriteApiCalls) =>
+          processIdent(i_receiverOpt) match {
             case Some(s) =>
               symbols = symbols + s
 
@@ -443,20 +520,54 @@ object GclResolver {
                   val emptyAttr = AST.Attr(posOpt = o.fullPosOpt)
                   val emptyRAttr = AST.ResolvedAttr(posOpt = o.fullPosOpt, resOpt = None(), typedOpt = None())
 
-                  // api.portid
-                  val apiIdent: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = emptyAttr), attr = emptyRAttr)
-                  val apiSelect = Exp.Select(receiverOpt = Some(apiIdent), id = featureId, targs = ISZ(), attr = getPortAttr(p))
-
                   val sel: Exp =
                     if (p.isInstanceOf[AadlEventDataPort]) {
+
+                      // api
+                      val api: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = emptyAttr), attr = emptyRAttr)
+
+                      // api.portid
+                      val api_portid: Exp = {
+                        val tn = AST.Typed.Name(ids = ISZ("org", "sireum", "Option"), args = ISZ(i_receiverOpt.typedOpt.get))
+
+                        val ra = AST.ResolvedAttr(posOpt = o.posOpt, resOpt = i_receiverOpt.resOpt, typedOpt = Some(tn))
+
+                        Exp.Select(receiverOpt = Some(api), id = i_receiverOpt_id, targs = ISZ(), attr = ra)
+                      }
+
                       // api.portid.get
-                      val getSelect = Exp.Select(receiverOpt = Some(apiSelect), id = AST.Id("get", emptyAttr), targs = o.targs, attr = o.attr)
+                      val api_portid_get: AST.Exp = {
+                        val getRI = AST.ResolvedInfo.Method(
+                          isInObject = F, mode = AST.MethodMode.Method, typeParams = ISZ(),
+                          owner = ISZ("org", "sireum", "Option"), id = "get",
+                          paramNames = ISZ(), reads = IS(), writes = ISZ(),
+                          tpeOpt = Some(AST.Typed.Fun(purity = AST.Purity.StrictPure, isByName = T, args = ISZ(), ret = i_receiverOpt.attr.typedOpt.get)))
+
+                        val getTyped = AST.Typed.Method(isInObject = getRI.isInObject, mode = getRI.mode, typeParams = getRI.typeParams,
+                          owner = getRI.owner, name = getRI.id, paramNames = getRI.paramNames, tpe = getRI.tpeOpt.get)
+
+                        val getRa = AST.ResolvedAttr(posOpt = o.posOpt, resOpt = Some(getRI), typedOpt = Some(getTyped))
+
+                        Exp.Select(receiverOpt = Some(api_portid), id = AST.Id("get", emptyAttr), targs = o.targs, attr = getRa)
+                      }
 
                       // api.portid.get.fieldName
-                      Exp.Select(receiverOpt = Some(getSelect), id = o.id, targs = o.targs, attr = o.attr)
+                      Exp.Select(receiverOpt = Some(api_portid_get), id = o.id, targs = o.targs, attr = o.attr)
                     } else {
+                      // DataPort
+
+                      // api
+                      val api: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = emptyAttr), attr = emptyRAttr)
+
+                      // api.portid
+                      val api_portid = Exp.Select(
+                        receiverOpt = Some(api),
+                        id = i_receiverOpt_id,
+                        attr = i_receiverOpt.attr,
+                        targs = o.targs)
+
                       // api.portid.fieldName
-                      Exp.Select(receiverOpt = Some(apiSelect), id = o.id, targs = o.targs, attr = o.attr)
+                      Exp.Select(receiverOpt = Some(api_portid), id = o.id, targs = o.targs, attr = o.attr)
                     }
 
                   // don't visit sub children
@@ -558,22 +669,43 @@ object GclResolver {
               val emptyAttr = AST.Attr(posOpt = o.fullPosOpt)
               val emptyRAttr = AST.ResolvedAttr(posOpt = o.fullPosOpt, resOpt = None(), typedOpt = None())
 
-              // api.portId
-              val apiIdent: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = emptyAttr), attr = emptyRAttr)
-              val apiSelect = Exp.Select(receiverOpt = Some(apiIdent), id = o.id, targs = ISZ(), attr = getPortAttr(p))
+              // api
+              val api: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = emptyAttr), attr = emptyRAttr)
 
-              val sel: Exp =
+              // api.portId
+              val api_portId: Exp = {
+                val tn = AST.Typed.Name(ids = ISZ("org", "sireum", "Option"), args = ISZ(o.typedOpt.get))
+
+                val ra = AST.ResolvedAttr(posOpt = o.posOpt, resOpt = o.resOpt, typedOpt = Some(tn))
+
+                Exp.Select(receiverOpt = Some(api), id = o.id, targs = ISZ(), attr = ra)
+              }
+
+              val api_portId_get: Exp = {
                 if (addGetToApiCalls && p.isInstanceOf[AadlEventDataPort]) {
                   // api.portId.get
-                  Exp.Select(receiverOpt = Some(apiSelect), id = AST.Id("get", emptyAttr), targs = o.targs, attr = o.attr)
-                } else {
-                  apiSelect
-                }
+                  val getRI = AST.ResolvedInfo.Method(
+                    isInObject = F, mode = AST.MethodMode.Method, typeParams = ISZ(),
+                    owner = ISZ("org", "sireum", "Option"), id = "get",
+                    paramNames = ISZ(), reads = IS(), writes = ISZ(),
+                    tpeOpt = Some(AST.Typed.Fun(purity = AST.Purity.StrictPure, isByName = T, args = ISZ(), ret = o.attr.typedOpt.get)))
 
-              return MSome(sel)
+                  val getTyped = AST.Typed.Method(isInObject = getRI.isInObject, mode = getRI.mode, typeParams = getRI.typeParams,
+                    owner = getRI.owner, name = getRI.id, paramNames = getRI.paramNames, tpe = getRI.tpeOpt.get)
+
+                  val getRa = AST.ResolvedAttr(posOpt = o.posOpt, resOpt = Some(getRI), typedOpt = Some(getTyped))
+
+                  Exp.Select(receiverOpt = Some(api_portId), id = AST.Id("get", emptyAttr), targs = o.targs, attr = getRa)
+                } else {
+                  api_portId
+                }
+              }
+
+              return MSome(api_portId_get)
 
             case GclSymbolHolder(_: GclStateVar) if isContextGeneralAssumeClause =>
               // In(s)
+              assert(o.typedOpt.nonEmpty, o.string)
               return MSome(Exp.Input(o, AST.Attr(o.fullPosOpt)))
             case _ =>
           }

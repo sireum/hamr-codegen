@@ -157,7 +157,7 @@ object GumboGen {
     imports = imports ++ gen.imports
   }
 
-  @record class StateVarInRewriter() extends org.sireum.hamr.ir.MTransformer {
+  @record class StateVarInRewriter(val vars: ISZ[GclStateVar]) extends org.sireum.hamr.ir.MTransformer {
 
     def wrapStateVarsInInput(o: AST.Exp): AST.Exp = {
       val ret: AST.Exp = transform_langastExp(o) match {
@@ -165,6 +165,13 @@ object GumboGen {
         case _ => o
       }
       return ret
+    }
+
+    def findStateVar(name: String): Option[GclStateVar] = {
+      for (i <- 0 until vars.size if vars(i).name == name) {
+        return Some((vars(i)))
+      }
+      return None()
     }
 
     override def pre_langastExpInput(o: AST.Exp.Input): org.sireum.hamr.ir.MTransformer.PreResult[AST.Exp] = {
@@ -175,9 +182,13 @@ object GumboGen {
     override def pre_langastExpIdent(o: AST.Exp.Ident): org.sireum.hamr.ir.MTransformer.PreResult[AST.Exp] = {
       o.attr.resOpt match {
         case Some(v: AST.ResolvedInfo.Var) =>
-          // the only vars the gumbo clause can refer to are state vars so
-          // checking whether o is refering to a state var isn't needed
-          return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(AST.Exp.Input(o, AST.Attr(None()))))
+          findStateVar(v.id) match {
+            case Some(sv) =>
+              return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(AST.Exp.Input(o, AST.Attr(None()))))
+            case _=>
+              return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
+          }
+
         case _ =>
           return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
       }
@@ -187,6 +198,13 @@ object GumboGen {
   @record class InvokeRewriter(val aadlTypes: AadlTypes, val basePackageName: String) extends org.sireum.hamr.ir.MTransformer {
     val emptyAttr: AST.Attr = AST.Attr(None())
     val emptyRAttr: AST.ResolvedAttr = AST.ResolvedAttr(None(), None(), None())
+
+    def isArray(t: AST.Typed): B = {
+      t match  {
+        case t: AST.Typed.Name if t.ids == ISZ("org", "sireum", "IS") => return T
+        case _ => return F
+      }
+    }
 
     def rewriteInvokes(o: AST.Exp): AST.Exp = {
       val ret: AST.Exp = transform_langastExp(o) match {
@@ -242,7 +260,8 @@ object GumboGen {
           } else {
             val path: IdPath = aadlTypes.typeMap.get(componentName) match {
               case Some(t) => t.nameProvider.qualifiedReferencedTypeNameI
-              case _ => halt(s"Couldn't find an AADL data component corresponding to '${componentName}''")
+              case _ =>
+                halt(s"Couldn't find an AADL data component corresponding to '${componentName}' from expression ${o} at ${o.posOpt}")
             }
 
             val receiver = GumboGenUtil.convertToSelect(ops.ISZOps(path).dropRight(1))
@@ -262,16 +281,49 @@ object GumboGen {
     }
 
     @pure override def post_langastExpSelect(o: AST.Exp.Select): MOption[AST.Exp] = {
+      val typ: Option[AST.Typed] = o.receiverOpt match {
+        case Some(m: AST.Exp.Ref) =>
+          m.typedOpt match {
+            case Some(n: AST.Typed.Name) if n.ids == ISZ("org", "sireum", "Option") =>
+              assert (n.args.size == 1)
+              if (isArray(n.args(0))) {
+                return MSome(AST.Exp.Select(
+                  receiverOpt = Some(o),
+                  id = AST.Id("value", emptyAttr), targs = ISZ(), attr = emptyRAttr))
+              } else {
+                return MNone()
+              }
+            case Some(n: AST.Typed.Name) => Some(n)
+            case _ => None()
+          }
+        case Some(e) => e.typedOpt
+        case _ => None()
+      }
 
-      if (o.id.value == "size") {
-        assert (o.receiverOpt.nonEmpty && o.receiverOpt.get.typedOpt.get.asInstanceOf[AST.Typed.Name].ids == ISZ("org", "sireum", "IS"))
-        return MSome(AST.Exp.Select(
-          receiverOpt = Some(AST.Exp.Select(
-            receiverOpt = o.receiverOpt, id = AST.Id("value", emptyAttr), targs = ISZ(), attr = emptyRAttr)),
-          id = o.id, targs = ISZ(), attr = emptyRAttr))
+      typ match {
+        case Some(t) if isArray(t) =>
+          return MSome(AST.Exp.Select(
+            receiverOpt = Some(AST.Exp.Select(
+              receiverOpt = o.receiverOpt, id = AST.Id("value", emptyAttr), targs = ISZ(), attr = emptyRAttr)),
+            id = o.id, targs = ISZ(), attr = emptyRAttr))
+        case _ =>
       }
       return MNone()
     }
+  }
+
+
+  def rewriteToLogika(e0: AST.Exp, rewriteStateVars: B, stateVars: ISZ[GclStateVar], aadlTypes: AadlTypes, basePackageName: String): AST.Exp = {
+    assert (e0.typedOpt.nonEmpty, e0.prettyST.render)
+    val e1: AST.Exp =
+      if (rewriteStateVars) GumboGen.StateVarInRewriter(stateVars).wrapStateVarsInInput(e0)
+      else e0
+
+    return GumboGen.InvokeRewriter(aadlTypes, basePackageName).rewriteInvokes(e1)
+  }
+
+  def rewriteToLogikaH(e: AST.Exp.Ref, rewriteStateVars: B, stateVars: ISZ[GclStateVar], aadlTypes: AadlTypes, basePackageName: String): AST.Exp = {
+    return rewriteToLogika(e.asExp, rewriteStateVars, stateVars, aadlTypes, basePackageName)
   }
 
   @pure def getGclAnnexInfos(componentPath: IdPath, symbolTable: SymbolTable): ISZ[GclAnnexClauseInfo] = {
@@ -312,16 +364,6 @@ object GumboGen {
           |""", filename)
   }
 
-  @pure def toKey(e: AST.Exp): SymTableKey = {
-    //assert (e.fullPosOpt.nonEmpty, e.string)
-    return SymTableKey(e, e.fullPosOpt)
-  }
-
-  def getRExp(e: AST.Exp, aadlTypes: AadlTypes, basePackageName: String): AST.Exp = {
-    assert (e.typedOpt.nonEmpty, e.prettyST.render)
-    return GumboGen.InvokeRewriter(aadlTypes, basePackageName).rewriteInvokes(e)
-  }
-
   def processInitializes(m: AadlThreadOrDevice, symbolTable: SymbolTable, aadlTypes: AadlTypes, basePackage: String, store: Store): Option[GclEntryPointInitialize] = {
     resetImports()
 
@@ -330,7 +372,6 @@ object GumboGen {
 
     if (ais.nonEmpty) {
       val sc = ais(0).annex
-      val gclSymbolTable = ais(0).gclSymbolTable
 
       if (sc.initializes.nonEmpty) {
         assert (ops.ISZOps(sc.initializes.get.modifies).forall(m => m.typedOpt.nonEmpty))
@@ -345,9 +386,10 @@ object GumboGen {
 
         val inits: ISZ[ST] = sc.initializes.get.guarantees.map((m: GclGuarantee) => {
           imports = imports ++ GumboGenUtil.resolveLitInterpolateImports(m.exp, basePackage, GclResolver.getIndexingTypeFingerprints(store))
+          val rexp = rewriteToLogika(m.exp, F, sc.state, aadlTypes, basePackage)
           st"""// guarantee ${m.id}
               |${processDescriptor(m.descriptor, "//   ")}
-              |${getRExp(m.exp, aadlTypes, basePackage)}"""
+              |$rexp"""
         })
 
         val optModifies: Option[ST] =
@@ -634,16 +676,6 @@ object GumboGen {
                        basePackageName: String) {
   var imports: ISZ[String] = ISZ()
 
-  def getRExp(e: AST.Exp): AST.Exp = {
-    assert (e.typedOpt.nonEmpty, e.prettyST.render)
-    return GumboGen.InvokeRewriter(aadlTypes, basePackageName).rewriteInvokes(e)
-  }
-
-  def getR2Exp(e: AST.Exp.Ref): AST.Exp = {
-    assert (e.typedOpt.nonEmpty, e.asExp.prettyST.render)
-    return GumboGen.InvokeRewriter(aadlTypes, basePackageName).rewriteInvokes(e.asExp)
-  }
-
   def fetchHandler(port: AadlPort, handlers: ISZ[GclHandle]): Option[GclHandle] = {
     var ret: Option[GclHandle] = None()
     for (h <- handlers if ret.isEmpty) {
@@ -655,7 +687,7 @@ object GumboGen {
     return ret
   }
 
-  def processCompute(compute: GclCompute, optInEvent: Option[AadlPort], context: AadlThreadOrDevice, store: Store): (ContractBlock, ISZ[Marker]) = {
+  def processCompute(compute: GclCompute, optInEvent: Option[AadlPort], context: AadlThreadOrDevice, stateVars: ISZ[GclStateVar], store: Store): (ContractBlock, ISZ[Marker]) = {
     resetImports()
 
     var markers: Set[Marker] = Set.empty
@@ -685,19 +717,23 @@ object GumboGen {
 
     for (assumee <- compute.assumes) {
       assert (assumee.exp.typedOpt.nonEmpty)
-      imports = imports ++ GumboGenUtil.resolveLitInterpolateImports(assumee.exp, basePackageName, GclResolver.getIndexingTypeFingerprints(store))
+
+      val rassume2 = GumboGen.rewriteToLogika(assumee.exp, T, stateVars, aadlTypes, basePackageName)
+
+      imports = imports ++ GumboGenUtil.resolveLitInterpolateImports(rassume2, basePackageName, GclResolver.getIndexingTypeFingerprints(store))
 
       val descriptor = GumboGen.processDescriptor(assumee.descriptor, "//   ")
-      val rassume = GumboGen.StateVarInRewriter().wrapStateVarsInInput(assumee.exp)
-      generalHolder = generalHolder :+ GclRequiresHolder(assumee.id, descriptor, st"$rassume")
+      generalHolder = generalHolder :+ GclRequiresHolder(assumee.id, descriptor, rassume2.prettyST)
     }
 
     for (guarantee <- compute.guarantees) {
       assert (guarantee.exp.typedOpt.nonEmpty)
-      imports = imports ++ GumboGenUtil.resolveLitInterpolateImports(guarantee.exp, basePackageName, GclResolver.getIndexingTypeFingerprints(store))
+
+      val rguarantee = GumboGen.rewriteToLogika(guarantee.exp, F, stateVars, aadlTypes, basePackageName)
+      imports = imports ++ GumboGenUtil.resolveLitInterpolateImports(rguarantee, basePackageName, GclResolver.getIndexingTypeFingerprints(store))
 
       val descriptor = GumboGen.processDescriptor(guarantee.descriptor, "//   ")
-      generalHolder = generalHolder :+ GclEnsuresHolder(guarantee.id, descriptor, guarantee.exp.prettyST)
+      generalHolder = generalHolder :+ GclEnsuresHolder(guarantee.id, descriptor, rguarantee.prettyST)
     }
 
     if (compute.cases.nonEmpty) {
@@ -708,7 +744,7 @@ object GumboGen {
           generalCase.assumes match {
             case Some(assumes) =>
               assert (assumes.typedOpt.nonEmpty)
-              val rrassume = GumboGen.StateVarInRewriter().wrapStateVarsInInput(assumes)
+              val rrassume = GumboGen.StateVarInRewriter(stateVars).wrapStateVarsInInput(assumes)
               imports = imports ++ GumboGenUtil.resolveLitInterpolateImports(rrassume, basePackageName, GclResolver.getIndexingTypeFingerprints(store))
               Some(rrassume.prettyST)
             case _ => None()
@@ -778,7 +814,7 @@ object GumboGen {
                 handlerRequires.map((m: GclRequiresHolder) => m.toSTMin) ++
                   handler.assumes.map((g: GclAssume) => {
                     assert (g.exp.typedOpt.nonEmpty)
-                    val rassume = GumboGen.StateVarInRewriter().wrapStateVarsInInput(g.exp)
+                    val rassume = GumboGen.rewriteToLogika(g.exp, T, stateVars, aadlTypes, basePackageName)
                     imports = imports ++ GumboGenUtil.resolveLitInterpolateImports(rassume, basePackageName, GclResolver.getIndexingTypeFingerprints(store))
                     st"""// assumes ${g.id}
                         |${GumboGen.processDescriptor(g.descriptor, "//   ")}
@@ -798,10 +834,11 @@ object GumboGen {
               val handlerEnsuresST: ISZ[ST] = generalElems ++ _cases ++
                 handler.guarantees.map((g: GclGuarantee) => {
                   assert (g.exp.typedOpt.nonEmpty)
+                  val rexp = GumboGen.rewriteToLogika(g.exp, F, stateVars, aadlTypes, basePackageName)
                   imports = imports ++ GumboGenUtil.resolveLitInterpolateImports(g.exp, basePackageName, GclResolver.getIndexingTypeFingerprints(store))
                   st"""// guarantees ${g.id}
                       |${GumboGen.processDescriptor(g.descriptor, "//   ")}
-                      |${g.exp}"""
+                      |$rexp"""
                 })
 
               val marker = genComputeMarkerCreator(eventPort.identifier, "ENSURES")
@@ -931,7 +968,8 @@ object GumboGen {
     })
 
     val rexp: AST.Exp = gclMethod.method.bodyOpt match {
-      case Some(AST.Body(ISZ(AST.Stmt.Return(Some(exp))))) => getRExp(exp)
+      case Some(AST.Body(ISZ(AST.Stmt.Return(Some(exp))))) =>
+        GumboGen.rewriteToLogika(exp, F, ISZ(), aadlTypes, basePackageName)
       case _ => halt("Unexpected: should be a return statement containing a single expression")
     }
 
@@ -954,27 +992,34 @@ object GumboGen {
 
         val readsOpt: Option[ST] =
           if (scontract.reads.isEmpty) None()
-          else Some(st"Reads(${(scontract.reads.map((i: AST.Exp.Ref) => getR2Exp(i)), ",")}),")
+          else Some(st"Reads(${(scontract.reads.map((i: AST.Exp.Ref) => GumboGen.rewriteToLogikaH(i, F, ISZ(), aadlTypes, basePackageName)), ",")}),")
 
-        val requiresOpt: Option[ST] =
+        val requiresOpt: Option[ST] = {
           if (scontract.requires.isEmpty) None()
-          else Some(st"Requires(${(scontract.requires.map((e: AST.Exp) => {
-            val r = getRExp(e)
-            imports = GumboGen.imports ++ GumboGenUtil.resolveLitInterpolateImports(r, basePackageName, GclResolver.getIndexingTypeFingerprints(store))
-            r
-          }), ",")}),")
+          else Some(st"Requires(${
+            (scontract.requires.map((e: AST.Exp) => {
+              val r = GumboGen.rewriteToLogika(e, F, ISZ(), aadlTypes, basePackageName)
+              imports = GumboGen.imports ++ GumboGenUtil.resolveLitInterpolateImports(r, basePackageName, GclResolver.getIndexingTypeFingerprints(store))
+              r
+            }), ",")
+          }),")
+        }
 
-        val modifiesOpt: Option[ST] =
+        val modifiesOpt: Option[ST] = {
           if (scontract.modifies.isEmpty) None()
-          else Some(st"Modifies(${(scontract.modifies.map((i: AST.Exp.Ref) => getR2Exp(i)), ",")}),")
+          else Some(st"Modifies(${(scontract.modifies.map((i: AST.Exp.Ref) => GumboGen.rewriteToLogikaH(i, F, ISZ(), aadlTypes, basePackageName)), ",")}),")
+        }
 
-        val ensuresOpt: Option[ST] =
+        val ensuresOpt: Option[ST] = {
           if (scontract.ensures.isEmpty) None()
-          else Some(st"Ensures(${(scontract.ensures.map((e: AST.Exp) => {
-            val r = getRExp(e)
-            imports = GumboGen.imports ++ GumboGenUtil.resolveLitInterpolateImports(r, basePackageName, GclResolver.getIndexingTypeFingerprints(store))
-            r
-          }), ",")})")
+          else Some(st"Ensures(${
+            (scontract.ensures.map((e: AST.Exp) => {
+              val r = GumboGen.rewriteToLogika(e, F, ISZ(), aadlTypes, basePackageName)
+              imports = GumboGen.imports ++ GumboGenUtil.resolveLitInterpolateImports(r, basePackageName, GclResolver.getIndexingTypeFingerprints(store))
+              r
+            }), ",")
+          })")
+        }
 
         Some(
           st"""Contract(
@@ -1030,9 +1075,10 @@ object GumboGen {
       imports = imports ++ GumboGenUtil.resolveLitInterpolateImports(i.exp, basePackageName, GclResolver.getIndexingTypeFingerprints(store))
 
       // will be placed in data type def so use resolved exp
+      val rexp = GumboGen.rewriteToLogika(i.exp, F, ISZ(), aadlTypes, basePackageName) // data type invariants can't have state vars
       ret = ret :+
         st"""@spec def ${methodName} = Invariant(
-            |  ${getRExp(i.exp)}
+            |  $rexp
             |)"""
     }
     return ret
@@ -1090,12 +1136,12 @@ object GumboGen {
               assumeOrGuar = "guarantee"
           }
 
-          // will be placed in api so don't use resolved expr
+          val rexp = GumboGen.rewriteToLogika(spec.exp, F, ISZ(), aadlTypes, basePackageName) // integration constrains can't refer to state vars
           objectContributions = objectContributions :+
             st"""// $assumeOrGuar ${spec.id}
                 |${GumboGen.processDescriptor(spec.descriptor, "//   ")}
                 |@strictpure def $portInvariantMethodName(${port.identifier}: ${dataTypeNames.qualifiedReferencedTypeName}): B =
-                |  ${getRExp(spec.exp)}"""
+                |  $rexp"""
 
           val body: ST =
             if (isEvent) st"${port.identifier}.isEmpty || ${portInvariantMethodName}(${port.identifier}.get)"

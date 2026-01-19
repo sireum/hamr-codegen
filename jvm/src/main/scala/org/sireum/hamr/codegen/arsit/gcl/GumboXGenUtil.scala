@@ -2,14 +2,15 @@
 package org.sireum.hamr.codegen.arsit.gcl
 
 import org.sireum._
+import org.sireum.hamr.codegen.common.CommonUtil.{Store, TypeIdPath}
 import org.sireum.hamr.codegen.common.resolvers.GclResolver
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.types._
 import org.sireum.hamr.codegen.common.util.NameUtil.NameProvider
 import org.sireum.hamr.ir
-import org.sireum.hamr.ir.{Direction, GclStateVar, GclSubclause}
-import org.sireum.lang.ast.Typed
+import org.sireum.hamr.ir.{Direction, GclStateVar, GclSubclause, MTransformer}
+import org.sireum.lang.ast.{Exp, Typed}
 import org.sireum.lang.symbol.Resolver
 import org.sireum.lang.{ast => AST}
 import org.sireum.message.Reporter
@@ -589,15 +590,31 @@ object GumboXGenUtil {
     }
   }
 
-  def rewriteToExpX(exp: AST.Exp, context: AadlThreadOrDevice,
-                    componentNames: NameProvider, aadlTypes: AadlTypes,
-                    stateVars: ISZ[GclStateVar]): GGExpParamHolder = {
-    val e = EE(context, componentNames, aadlTypes, stateVars)
-    val ret: GGExpParamHolder = e.transform_langastExp(exp) match {
-      case MSome(x) => GGExpParamHolder(e.params, x)
-      case _ => GGExpParamHolder(e.params, exp)
+  def rewriteToExpX(exp: AST.Exp,
+                    rewriteInExprs: B,
+                    context: AadlThreadOrDevice,
+                    componentNames: NameProvider,
+                    aadlTypes: AadlTypes,
+                    stateVars: ISZ[GclStateVar],
+                    basePackageName: String,
+                    store: Store): GGExpParamHolder = {
+    val e1: Exp =
+      if (rewriteInExprs) GumboGen.StateVarInRewriter(stateVars).wrapStateVarsInInput(exp)
+      else exp
+
+    val ee = EE(context, componentNames, aadlTypes, stateVars, GclResolver.getSlangTypeToAadlType(store))
+
+    val ret1: GGExpParamHolder = ee.transform_langastExp(e1) match {
+      case MSome(e2) => GGExpParamHolder(ee.params, e2)
+      case _ => GGExpParamHolder(ee.params, e1)
     }
-    return ret
+
+    val ret2: GGExpParamHolder = GumboGen.InvokeRewriter(aadlTypes, basePackageName).transform_langastExp(ret1.exp) match {
+      case MSome(e3) => ret1(exp = e3)
+      case _ => ret1
+    }
+
+    return ret2
   }
 
   def paramsToComment(params: ISZ[GGParam]): ISZ[ST] = {
@@ -872,49 +889,96 @@ object GumboXGenUtil {
   @record class EE(context: AadlThreadOrDevice,
                    componentNames: NameProvider,
                    aadlTypes: AadlTypes,
-                   stateVars: ISZ[GclStateVar]) extends ir.MTransformer {
+                   stateVars: ISZ[GclStateVar],
+                   slangTypeToAadlTypeMap: Map[AST.Typed, TypeIdPath] ) extends ir.MTransformer {
 
     var params: Set[GGParam] = Set.empty
 
-    override def pre_langastExpSelect(o: AST.Exp.Select): ir.MTransformer.PreResult[AST.Exp] = {
+    def findStateVar(name: String, vars: ISZ[GclStateVar]): Option[(Z, GclStateVar)] = {
+      for (i <- 0 until vars.size if vars(i).name == name) {
+        return Some((i, vars(i)))
+      }
+      return None()
+    }
+
+    def rewriteApiExp(o: Option[Exp], id: AST.Id, ratter: AST.ResolvedAttr): Option[GGPortParam] = {
       o match {
-        case AST.Exp.Select(Some(AST.Exp.Ident(AST.Id("api"))), id, attr) =>
-          val typed = o.attr.typedOpt.get.asInstanceOf[AST.Typed.Name]
-          val (typ, _) = getAadlType(typed, aadlTypes)
+        case Some(AST.Exp.Ident(AST.Id("api"))) =>
+          val t = ratter.typedOpt.get.asInstanceOf[AST.Typed.Name]
+          val typed: AST.Typed = {
+            t.ids match {
+              case ISZ("org", "sireum", "Option") =>
+                t.args match {
+                  case ISZ(tt: AST.Typed.Name) => tt // get the type of the event data port
+                  case _ => halt(s"Not expecting $t")
+                }
+              case _ => t // get the type of the data port
+            }
+          }
+
+          val aadlType: AadlType = {
+            slangTypeToAadlTypeMap.get(typed) match {
+              case Some(ttyped) =>
+                val aadlType: TypeIdPath =
+                  if (ttyped(ttyped.lastIndex) == "Type") ops.ISZOps(ttyped).dropRight(1)
+                  else ttyped
+
+                val aadlTypeName = st"${(aadlType, "::")}".render
+                aadlTypes.typeMap.get(aadlTypeName).get
+              case _ =>
+                typed match {
+                  case e @ AST.Typed.Name(ISZ("art", "Empty"), _) =>
+                    TypeUtil.EmptyType
+                  case x =>
+                    halt(s"Unexpected type: $x")
+                }
+            }
+          }
+
           val ports = context.getPorts().filter(p => p.identifier == id.value)
           assert(ports.size == 1)
+
           val param = GGPortParam(
             port = ports(0),
             componentNames = componentNames,
-            aadlType = typ)
+            aadlType = aadlType)
+
           params = params + param
-          return ir.MTransformer.PreResult(F,
-            MSome(AST.Exp.Ident(id = AST.Id(value = param.name, attr = AST.Attr(None())), attr = o.attr)))
+
+          return Some(param)
+        case _ =>
+          return None()
+      }
+    }
+
+    override def pre_langastExpInvoke(o: Exp.Invoke): MTransformer.PreResult[AST.Exp] = {
+      rewriteApiExp(o.receiverOpt, o.ident.id, o.ident.attr) match {
+        case Some(ggParam) =>
+          return ir.MTransformer.PreResult(T, MSome(
+            o(receiverOpt = None(), ident = o.ident(id = o.ident.id(value = ggParam.name)))))
         case _ =>
           return ir.MTransformer.PreResult(T, MNone[AST.Exp]())
       }
     }
 
-    def findStateVar(name: String, vars: ISZ[GclStateVar]): (Z, GclStateVar) = {
-      for (i <- 0 until vars.size if vars(i).name == name) {
-        return (i, vars(i))
+    override def pre_langastExpSelect(o: AST.Exp.Select): ir.MTransformer.PreResult[AST.Exp] = {
+
+      rewriteApiExp(o.receiverOpt, o.id, o.attr) match {
+        case Some(ggParam) =>
+          return ir.MTransformer.PreResult(F,
+            MSome(AST.Exp.Ident(id = AST.Id(value = ggParam.name, attr = AST.Attr(None())), attr = o.attr)))
+        case _ =>
+          return ir.MTransformer.PreResult(T, MNone[AST.Exp]())
       }
-      halt(s"Infeasible: didn't find state var ${name}")
     }
 
     override def pre_langastExpInput(o: AST.Exp.Input): ir.MTransformer.PreResult[AST.Exp] = {
-      val ret: AST.Exp.Ident = o.exp match {
+      o.exp match {
         case i: AST.Exp.Ident =>
           val name = s"In_${i.id.value}"
 
-          val typed: AST.Typed.Name = i.attr.typedOpt match {
-            case Some(atn: AST.Typed.Name) => atn
-            case x => halt(s"Infeasible: ${i.id.value} had the following for its typed opt ${x}")
-          }
-
-          val (typ, _) = getAadlType(typed, aadlTypes)
-
-          val (index, stateVar) = findStateVar(i.id.value, stateVars)
+          val (index, stateVar) = findStateVar(i.id.value, stateVars).get // ony state vars can be wrapped in In
+          val typ = aadlTypes.typeMap.get(stateVar.classifier).get
 
           params = params +
             GGStateVarParam(
@@ -923,19 +987,18 @@ object GumboXGenUtil {
               isPreState = T,
               aadlType = typ,
               componentNames = componentNames)
-          AST.Exp.Ident(id = AST.Id(value = name, attr = o.attr), attr = i.attr)
-        case _ => halt(s"Unexpected ${o.exp}")
+
+          return ir.MTransformer.PreResult(F, MSome(AST.Exp.Ident(id = AST.Id(value = name, attr = o.attr), attr = i.attr)))
+
+        case _ =>
+          halt(s"Unexpected ${o.exp}: Only state vars can be wrapped in In")
       }
-      return ir.MTransformer.PreResult(F, MSome(ret))
     }
 
     override def pre_langastExpIdent(o: AST.Exp.Ident): ir.MTransformer.PreResult[AST.Exp] = {
-      o.attr.typedOpt match {
-        case Some(typed: AST.Typed.Name) =>
-          val (typ, _) = getAadlType(typed, aadlTypes)
-
-          val (index, stateVar) = findStateVar(o.id.value, stateVars)
-
+      findStateVar(o.id.value, stateVars) match {
+        case Some((index, stateVar)) =>
+          val typ = aadlTypes.typeMap.get(stateVar.classifier).get // only state vars can be wrapped in In
           params = params +
             GGStateVarParam(
               stateVar = stateVar,
