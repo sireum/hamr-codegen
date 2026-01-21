@@ -15,17 +15,17 @@ jobs:
 
   ci:
     runs-on: ubuntu-24.04
-    container:
-      image: ubuntu:24.04
+    #container:
+    #  image: ubuntu:24.04
     strategy:
       fail-fast: false
       matrix:
         testSuffix: ${{ fromJSON('["Ros2Tests"]') }}
     name: '${{ matrix.testSuffix }}'
     steps:
-      - name: Install Git
-        run: |
-          apt-get update -y && apt-get install -y git wget curl zip unzip
+      #- name: Install Git
+      #  run: |
+      #    apt-get update -y && apt-get install -y git wget curl zip unzip
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -59,7 +59,7 @@ jobs:
           key: ${{ runner.os }}-${{ hashFiles('jvm/src/main/resources/phantom_versions.properties') }}-osate
       - name: Install ROS2 Jazzy
         run: |
-          apt-get update -y && apt-get install -y sudo # uncomment this line if testing locally via a docker container
+          #apt-get update -y && apt-get install -y sudo # uncomment this line if testing locally via a docker container
           sudo DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get install software-properties-common -y
           sudo add-apt-repository -y universe
           sudo apt-get update && sudo apt-get install curl -y
