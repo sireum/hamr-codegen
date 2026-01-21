@@ -23,6 +23,9 @@ jobs:
         testSuffix: ${{ fromJSON('["Ros2Tests"]') }}
     name: '${{ matrix.testSuffix }}'
     steps:
+      - name: Install Git
+        run: |
+          apt-get update -y && apt-get install -y git
       - name: Checkout
         uses: actions/checkout@v4
         with:
