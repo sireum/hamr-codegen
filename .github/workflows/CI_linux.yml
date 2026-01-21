@@ -25,7 +25,7 @@ jobs:
     steps:
       - name: Install Git
         run: |
-          apt-get update -y && apt-get install -y git
+          apt-get update -y && apt-get install -y git wget curl zip unzip
       - name: Checkout
         uses: actions/checkout@v4
         with:
