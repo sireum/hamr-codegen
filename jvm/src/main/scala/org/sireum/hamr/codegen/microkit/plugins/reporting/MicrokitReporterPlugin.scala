@@ -17,8 +17,13 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil
 import org.sireum.hamr.ir.{Aadl, Direction, GclAssume, GclGuarantee, GclSubclause}
 import org.sireum.message.{Level, Position, Reporter}
 
-@datatype class MicrokitReporterPlugin() extends Plugin {
+object MicrokitReporterPlugin {
   val name: String = "MicrokitReporterPlugin"
+}
+
+@datatype class MicrokitReporterPlugin() extends Plugin {
+
+  val name: String = MicrokitReporterPlugin.name
 
   val KEY_MICROKIT_REPORTER_PLUGIN: String = "KEY_MICROKIT_REPORTER_PLUGIN"
 
@@ -28,7 +33,7 @@ import org.sireum.message.{Level, Position, Reporter}
     return (
       !reporter.hasError &&
       !hasFinalized(store) &&
-      options.platform == HamrCli.CodegenHamrPlatform.Microkit &&
+        options.platform == HamrCli.CodegenHamrPlatform.Microkit &&
       symbolTable.nonEmpty)
   }
 
@@ -39,7 +44,6 @@ import org.sireum.message.{Level, Position, Reporter}
                                     store: Store,
                                     options: HamrCli.CodegenOption,
                                     reporter: Reporter): Store = {
-    val st = symbolTable.get
     var localStore = store + KEY_MICROKIT_REPORTER_PLUGIN ~> CommonUtil.BoolValue(T)
 
     val sel4OutputDir: Os.Path =
@@ -55,7 +59,7 @@ import org.sireum.message.{Level, Position, Reporter}
     assert(sel4OutputDir.exists, s"seL4 output directory does not exist: ${sel4OutputDir.value}")
 
     {
-      var toolReport: ToolReport = CodegenReporting.getCodegenReport(CodegenReporting.KEY_TOOL_REPORT, store).get.asInstanceOf[ToolReport]
+      var toolReport: ToolReport = CodegenReporting.getCodegenReport(CodegenReporting.KEY_TOOL_REPORT, localStore).get.asInstanceOf[ToolReport]
 
       val cstatus: Status.Type =
         if (reporter.hasError) Status.Failure
@@ -126,7 +130,7 @@ import org.sireum.message.{Level, Position, Reporter}
 
     var componentReports: HashSMap[IdPathR, ComponentReport] = HashSMap.empty
 
-    for (t <- st.getThreads()) {
+    for (t <- symbolTable.get.getThreads()) {
 
       var ports: HashSMap[IdPathR, PortReport] = HashSMap.empty
 
@@ -304,7 +308,7 @@ import org.sireum.message.{Level, Position, Reporter}
         if (ops.ISZOps(t.annexes()).exists(p => p.clause.isInstanceOf[GclSubclause])) {
           // process gumbo artifacts
 
-          val subclauseInfo = GumboRustUtil.getGumboSubclause(t.path, st)
+          val subclauseInfo = GumboRustUtil.getGumboSubclause(t.path, symbolTable.get)
 
           var stateReport = HashSMap.empty[String, Position]
           var gumboMethodsReport = HashSMap.empty[String, Position]
@@ -437,20 +441,20 @@ import org.sireum.message.{Level, Position, Reporter}
 
     } // end for loop processing threads
 
-    val report = MicrokitReport(componentReports)
+    val microkitReport = MicrokitReport(componentReports)
 
-    val isAadl = ops.StringOps(st.rootSystem.component.identifier.pos.get.uriOpt.get).endsWith(".aadl")
+    val isAadl = ops.StringOps(symbolTable.get.rootSystem.component.identifier.pos.get.uriOpt.get).endsWith(".aadl")
 
     if (isAadl) {
       val readmeContent = genReadme(
-        report,
+        microkitReport,
         workspaceRoot,
         sel4OutputDir,
         model,
         aadlTypes,
-        st,
+        symbolTable.get,
         codegenResults,
-        store,
+        localStore,
         options,
         reporter)
 
@@ -461,7 +465,7 @@ import org.sireum.message.{Level, Position, Reporter}
       println("TODO: generate codegen readme for SysMLv2 models")
     }
 
-    localStore = CodegenReporting.addCodegenReport(name, report, localStore)
+    localStore = CodegenReporting.addCodegenReport(name, microkitReport, localStore)
 
     val codegenReports = CodegenReports(CodegenReporting.getCodegenReports(localStore).get)
     val json = JSON.fromCodegenReports(codegenReports, F)

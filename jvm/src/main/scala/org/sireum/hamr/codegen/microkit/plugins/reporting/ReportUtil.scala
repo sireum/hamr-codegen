@@ -3,12 +3,11 @@ package org.sireum.hamr.codegen.microkit.plugins.reporting
 
 import org.sireum._
 import org.sireum.message.{FlatPos, Position, Reporter}
-import org.sireum.U32._
 import org.sireum.hamr.codegen.common.StringUtil
 import org.sireum.hamr.codegen.common.symbols.{AadlThread, GclAnnexClauseInfo}
 import org.sireum.hamr.codegen.microkit.plugins.reporting.MSDContainers.system
 import org.sireum.hamr.codegen.microkit.reporting._
-import org.sireum.hamr.ir.{Direction, GclNamedElement}
+import org.sireum.hamr.ir.{Direction, GclMethod }
 
 object ReportUtil {
 
@@ -52,7 +51,7 @@ object ReportUtil {
           // probably from sysml
           Os.Path.fromUri(nameo.s)
         } else {
-          // probably from osate
+          // probably from osate so drop the aadl project prefix
           // e.g. /isolette-artifacts-sel4/aadl/packages/Regulate.aadl
           assert(nameo.startsWith("/"), nameo.s)
           val sub = nameo.substring(nameo.indexOfFrom('/', 1) + 1, nameo.size)
@@ -241,7 +240,7 @@ object ReportUtil {
         var s = st"""<table>
                     |<tr><th colspan=4>GUMBO Methods</th></tr>"""
         for (m <- gumboReport.methodsReport.entries) {
-          val modelCand = gumboOpt.get.annex.methods.filter(p => p.method.sig.id.value == m._1)
+          val modelCand: ISZ[GclMethod] = gumboOpt.get.annex.methods.filter(p => p.method.sig.id.value == m._1)
           assert (modelCand.size == 1, m.string)
           val modelPos = buildPosA(modelCand(0).posOpt.get, workspaceDir, rootDir)
 
