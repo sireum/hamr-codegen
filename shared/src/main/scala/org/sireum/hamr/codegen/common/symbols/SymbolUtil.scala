@@ -54,9 +54,15 @@ object SymbolUtil {
       }
       connInst2Conn = connInst2Conn + (ci.name.name ~> conns)
     }
-    val ret = AadlMaps(w.airComponentMap, w.airFeatureMap, airClassifierMap,
-      w.connections, w.connectionsMap,
-      w.connectionInstances, w.connectionInstancesMap, w.altConnectionInstancesMap,
+    val ret = AadlMaps(
+      w.airComponentMap,
+      w.airFeatureMap,
+      airClassifierMap,
+      w.connections,
+      w.connectionsMap,
+      w.connectionInstances,
+      w.connectionInstancesMap,
+      w.altConnectionInstancesMap,
       connInst2Conn)
 
     ret.validate()

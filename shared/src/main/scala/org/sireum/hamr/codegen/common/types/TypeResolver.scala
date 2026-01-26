@@ -20,9 +20,19 @@ object TypeResolver {
 
     var typeMap: Map[String, AadlType] = Map.empty
 
+    var requires2ndPasss = F
     for (v <- model.dataComponents) {
-      typeMap = typeMap + (v.classifier.get.name ~>
-        processType(v, basePackage, maxStringSize, unboundedZRBitWidth, typeMap, rawConnections, reporter))
+      val r = processType(v, basePackage, maxStringSize, unboundedZRBitWidth, typeMap, rawConnections, reporter)
+      typeMap = typeMap + (v.classifier.get.name ~> r._1)
+      requires2ndPasss = requires2ndPasss | r._2
+    }
+
+    if (requires2ndPasss) {
+      for (v <- model.dataComponents) {
+        val r = processType(v, basePackage, maxStringSize, unboundedZRBitWidth, typeMap, rawConnections, reporter)
+        assert (!r._2, s"Unexpected: ${r._1.name} is requiring a 3rd pass")
+        typeMap = typeMap + (v.classifier.get.name ~> r._1)
+      }
     }
 
     return AadlTypes(rawConnections, typeMap)
@@ -34,8 +44,8 @@ object TypeResolver {
                   unboundedZRBitWidth: Z,
                   typeMap: Map[String, AadlType],
                   rawProtocol: B,
-                  reporter: Reporter): AadlType = {
-
+                  reporter: Reporter): (AadlType, B) = {
+    var requires2ndPass: B = F
     def base(): AadlType = {
       val cname = ops.StringOps(ops.StringOps(c.classifier.get.name).replaceAllLiterally("::", ":")).split(c => c == ':')
 
@@ -80,9 +90,17 @@ object TypeResolver {
               reporter.error(pos, CommonUtil.toolName, s"Must specify exactly one base type for ${cname} via ${OsateProperties.DATA_MODEL__BASE_TYPE}$but")
             }
             TypeUtil.EmptyType
-          case onlyOne =>
-            if(typeMap.contains(onlyOne(0))) typeMap.get(onlyOne(0)).get
-            else TypeUtil.EmptyType
+          case singleDimension =>
+            if(typeMap.contains(singleDimension(0))) {
+              typeMap.get(singleDimension(0)).get
+            }
+            else {
+              // the base type is expressed as a string rather than as a nested component (e.g. fields of
+              // a struct).  The base type might not have been visited yet (i.e. not in the type map) so this
+              // pass will use the empty type which should get replaced with the actual type on the 2nd pass
+              requires2ndPass = T
+              TypeUtil.EmptyType
+            }
         }
 
         val dimensions: ISZ[Z] = TypeUtil.getArrayDimensions(c)
@@ -122,7 +140,8 @@ object TypeResolver {
 
         for (sc <- c.subComponents) {
           val fieldName = CommonUtil.getLastName(sc.identifier)
-          fields = fields + (fieldName ~> processType(sc, basePackage, maxStringSize, unboundedZRBitWidth, typeMap, rawProtocol, reporter))
+          fields = fields + (fieldName ~>
+            processType(sc, basePackage, maxStringSize, unboundedZRBitWidth, typeMap, rawProtocol, reporter)._1)
         }
 
         val nameProvider = AadlTypeNameProvider(basePackage, classifier, ISZ(), TypeKind.Record)
@@ -143,9 +162,9 @@ object TypeResolver {
         enumValues = _base.nameProvider.enumValues,
         kind = TypeKind.Bit
       )
-      return BitType(TypeUtil.SlangEmbeddedBitTypeName, np, _base.container, _base.bitSize, Some(_base))
+      return (BitType(TypeUtil.SlangEmbeddedBitTypeName, np, _base.container, _base.bitSize, Some(_base)), F)
     } else {
-      return _base
+      return (_base, requires2ndPass)
     }
   }
 }

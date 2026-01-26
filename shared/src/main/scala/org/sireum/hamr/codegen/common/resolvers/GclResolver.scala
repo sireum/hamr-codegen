@@ -5,7 +5,6 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, MapValue, Store, TypeIdPath, isInFeature}
 import org.sireum.hamr.codegen.common.symbols._
-import org.sireum.hamr.codegen.common.types.TypeUtil.EmptyType
 import org.sireum.hamr.codegen.common.types._
 import org.sireum.hamr.codegen.common.util.{GclUtil, NameUtil}
 import org.sireum.hamr.ir._
@@ -756,7 +755,7 @@ object GclResolver {
       case Some(t) => return t
       case _ =>
         reporter.error(posOpt, toolName, s"$s did not resolve to an AADL type")
-        return EmptyType
+        return TypeUtil.EmptyType
     }
   }
 
@@ -1905,7 +1904,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
           return buildAdtTypeInfo(aadlData)
 
-        case a: ArrayType =>
+        case a: ArrayType => {
           if (a.dimensions.size > 1) {
             reporter.error(None(), GclResolver.toolName, s"Only single dimension arrays are supported.  ${a.name} has ${a.dimensions.size}")
           }
@@ -2174,6 +2173,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           }
 
           return ta
+        } // end ArrayType
 
         case b: BaseType =>
           val simpleName = b.simpleName
@@ -2268,8 +2268,10 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
           return typeInfoAdt
 
-        case b: BitType => return TODO_TYPE(b)
-        case x => return TODO_TYPE(x)
+        case b: BitType =>
+          return TODO_TYPE(b)
+        case x =>
+          return TODO_TYPE(x)
       }
     }
 
@@ -2510,7 +2512,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         val fieldId: String = field.identifier
         val fieldAadlType: AadlType = field match {
           case afd: AadlFeatureData => afd.aadlType
-          case _ => TypeUtil.EmptyType
+          case _ =>
+            TypeUtil.EmptyType
         }
 
         val qualifiedFieldName = threadsName :+ fieldId
@@ -2811,7 +2814,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         val paramId: String = param.identifier
         val paramType: AadlType = param match {
           case afd: AadlFeatureData => afd.aadlType
-          case _ => TypeUtil.EmptyType
+          case _ =>
+            TypeUtil.EmptyType
         }
 
         constructorParamVars = constructorParamVars :+ paramId

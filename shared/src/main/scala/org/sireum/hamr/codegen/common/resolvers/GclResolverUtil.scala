@@ -3,7 +3,7 @@ package org.sireum.hamr.codegen.common.resolvers
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlDataPort, AadlEventDataPort, SymbolTable}
-import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, ArrayType, BaseType, EnumType, RecordType, TypeResolver, TypeUtil}
+import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, ArrayType, BaseType, EnumType, RecordType, TypeUtil}
 import org.sireum.hamr.ir.{GclMethod, GclStateVar, MTransformer, MTransformer => irMTransformer}
 import org.sireum.message.Reporter
 import org.sireum.lang.{ast => AST}
