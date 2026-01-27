@@ -246,15 +246,13 @@ object GclResolverUtil {
               }
 
             case x =>
-              ident = transform_langastExpIdent(o.ident)
-              if (ops.StringOps(o.posOpt.string).contains("238")) {
-                assume(T)
-              }
-              scope.resolveName(typeHierarchy.nameMap, ISZ(o.ident.id.value)) match {
+              val n = receiver :+ o.ident.id.value
+              scope.resolveName(typeHierarchy.nameMap, n) match {
                 case Some(info: Info.Method) =>
                   // this is a gumbo method.  It may return an array but we wouldn't want to
                   // wrap its arguments with the return type's fingerprint
                 case _ =>
+                  ident = transform_langastExpIdent(o.ident)
                   if (currType.nonEmpty) {
                     popType match {
                       case a: ArrayType =>
@@ -466,7 +464,6 @@ object GclResolverUtil {
       case Some(e) =>
         return irMTransformer.PreResult(F, MNone())
       case _ =>
-        reporter.error(o.posOpt, GclResolver.toolName, s"Could not resolve ${o.id.value}")
         return irMTransformer.PreResult(F, MNone())
     }
   }
