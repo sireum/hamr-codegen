@@ -37,9 +37,9 @@ object RustUtil {
   @pure def verusCargoDependencies(store: Store): ST = {
     val versions = MicrokitUtil.getMicrokitVersions(store)
     return (
-      st"""vstd = { git = "https://github.com/verus-lang/verus.git", default-features=false, tag="${versions.get("vstd").get}" }
-          |verus_builtin = { git = "https://github.com/verus-lang/verus.git", tag="${versions.get("verus_builtin").get}" }
-          |verus_builtin_macros = { git = "https://github.com/verus-lang/verus.git", tag="${versions.get("verus_builtin_macros").get}" }""")
+      st"""vstd = { version = "${versions.get("vstd").get}", default-features=false }
+          |verus_builtin = { version = "${versions.get("verus_builtin").get}" }
+          |verus_builtin_macros = { version = "${versions.get("verus_builtin_macros").get}" }""")
   }
 
   val commonCargoTomlEntries: ST =
