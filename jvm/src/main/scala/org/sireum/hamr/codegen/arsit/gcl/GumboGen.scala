@@ -286,7 +286,21 @@ object GumboGen {
           m.typedOpt match {
             case Some(n: AST.Typed.Name) if n.ids == ISZ("org", "sireum", "Option") =>
               assert (n.args.size == 1)
-              if (isArray(n.args(0))) {
+              val isOptionOp: B = o.id.value match {
+                case "isEmpty" => T
+                case "nonEmpty" => T
+                case "map" => T
+                case "flatMap" => T
+                case "forAll" => T
+                case "exists" => T
+                case "getOrElse" => T
+                case "getOrElseEager" => T
+                case "get" => T
+                case "toIS" => T
+                case "foreach" => T
+                case _ => F
+              }
+              if (isArray(n.args(0)) && !isOptionOp) {
                 return MSome(AST.Exp.Select(
                   receiverOpt = Some(o),
                   id = AST.Id("value", emptyAttr), targs = ISZ(), attr = emptyRAttr))
