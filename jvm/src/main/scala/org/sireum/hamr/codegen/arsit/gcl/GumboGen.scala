@@ -202,6 +202,7 @@ object GumboGen {
     def isArray(t: AST.Typed): B = {
       t match  {
         case t: AST.Typed.Name if t.ids == ISZ("org", "sireum", "IS") => return T
+        case t: AST.Typed.Method => return isArray(t.tpe.ret)
         case _ => return F
       }
     }
@@ -282,34 +283,6 @@ object GumboGen {
 
     @pure override def post_langastExpSelect(o: AST.Exp.Select): MOption[AST.Exp] = {
       val typ: Option[AST.Typed] = o.receiverOpt match {
-        case Some(m: AST.Exp.Ref) =>
-          m.typedOpt match {
-            case Some(n: AST.Typed.Name) if n.ids == ISZ("org", "sireum", "Option") =>
-              assert (n.args.size == 1)
-              val isOptionOp: B = o.id.value match {
-                case "isEmpty" => T
-                case "nonEmpty" => T
-                case "map" => T
-                case "flatMap" => T
-                case "forAll" => T
-                case "exists" => T
-                case "getOrElse" => T
-                case "getOrElseEager" => T
-                case "get" => T
-                case "toIS" => T
-                case "foreach" => T
-                case _ => F
-              }
-              if (isArray(n.args(0)) && !isOptionOp) {
-                return MSome(AST.Exp.Select(
-                  receiverOpt = Some(o),
-                  id = AST.Id("value", emptyAttr), targs = ISZ(), attr = emptyRAttr))
-              } else {
-                return MNone()
-              }
-            case Some(n: AST.Typed.Name) => Some(n)
-            case _ => None()
-          }
         case Some(e) => e.typedOpt
         case _ => None()
       }
