@@ -391,11 +391,11 @@ object MicrokitTypeUtil {
     }
 
     def processMethod(m: GclMethod): Unit = {
-      m.method.sig.returnType.typedOpt match {
+      m.sig.returnType.typedOpt match {
         case Some(t: org.sireum.lang.ast.Typed.Name) => processType(t, m.posOpt)
         case _ =>
       }
-      for (p <- m.method.sig.params) {
+      for (p <- m.sig.params) {
         processParam(p)
       }
     }

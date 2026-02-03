@@ -10,7 +10,7 @@ import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.HamrCli.CodegenHamrPlatform
 import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.plugins.apis.CRustApiPlugin
-import org.sireum.hamr.codegen.microkit.plugins.component.CRustComponentStoreUtil
+import org.sireum.hamr.codegen.microkit.plugins.component.{CRustComponentPlugin, CRustComponentStoreUtil}
 import org.sireum.hamr.codegen.microkit.plugins.gumbo.GumboXRustUtil._
 import org.sireum.hamr.codegen.microkit.plugins.gumbo.SlangExpUtil.Context
 import org.sireum.hamr.codegen.microkit.plugins.testing.CRustTestingPlugin
@@ -19,7 +19,7 @@ import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, Microki
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil
 import org.sireum.hamr.codegen.microkit.{rust => RAST}
-import org.sireum.hamr.ir.{Aadl, GclAssume, GclGuarantee, GclSubclause}
+import org.sireum.hamr.ir.{Aadl, GclAssume, GclBodyMethod, GclGuarantee, GclSpecMethod, GclSubclause}
 import org.sireum.message.Reporter
 
 object GumboXRustPlugin {
@@ -124,13 +124,21 @@ object GumboXComputeContributions {
     val datatypeInvariants = GumboRustPlugin.getGumboRustContributions(localStore).get.datatypeInvariants
     var items: Map[ThreadIdPath, GumboXComponentContributions] = Map.empty
 
-    var libraryAnnexes: Map[String, ISZ[RAST.Item]] = GumboRustPlugin.getGumboRustContributions(localStore).get.libraryAnnexes
+    var libraryAnnexes: Map[String, GumboRustPlugin.LibraryAnnex] = GumboRustPlugin.getGumboRustContributions(localStore).get.getLibraryAnnexes
+
     for(gclLib <- GumboRustPlugin.getGclLibraryAnnexes(symbolTable)) {
       assert(gclLib.name.size == 2 && gclLib.name(1) == "GUMBO__Library", gclLib.name.string)
       val name = gclLib.name(0)
-      val verusFunctions = libraryAnnexes.get(name).get
-      libraryAnnexes = libraryAnnexes + name ~>
-        (handleGclLibrary(gclLib, symbolTable, types, store, reporter) ++ verusFunctions)
+
+      val (rustItems, verusDeveloperItems): (ISZ[RAST.Item], ISZ[RAST.Item]) =
+        handleGclLibrary(gclLib, symbolTable, types, store, reporter)
+
+      val libAnnex: GumboRustPlugin.LibraryAnnex = libraryAnnexes.get(name).get
+
+      libraryAnnexes = libraryAnnexes + name ~> libAnnex(
+        rustItems = libAnnex.rustItems ++ rustItems,
+        verusDeveloperItems = libAnnex.verusDeveloperItems ++ verusDeveloperItems
+      )
     }
 
     for (thread <- symbolTable.getThreads() if MicrokitUtil.isRusty(thread)) {
@@ -147,7 +155,7 @@ object GumboXComputeContributions {
 
         val computeContributions = processCompute(thread, datatypeInvariants, integrationConstraints, subclauseInfoOpt, crustTypeProvider, types, localStore, reporter)
 
-        val gumboMethods = processGumboSubclauseMethods(thread, subclauseInfoOpt, crustTypeProvider, types, localStore, reporter)
+        val (verusMethods, developerUifMethods) = processGumboSubclauseMethods(thread, subclauseInfoOpt, crustTypeProvider, types, localStore, reporter)
 
         val (cb_api_Entries, test_api_Entries, gumboTestModEntries) = buildGumboxTestMethods(thread, initializeContributions, computeContributions, subclauseInfoOpt, crustTypeProvider, types, localStore, reporter)
 
@@ -174,8 +182,21 @@ object GumboXComputeContributions {
           integrationConstraints = integrationConstraints,
           initializeContributions = initializeContributions,
           computeContributions = computeContributions,
-          gumboMethods = gumboMethods,
+          gumboMethods = verusMethods,
           cb_apis = cb_api_Entries)
+
+
+        if (developerUifMethods.nonEmpty) {
+          val componentContributions = CRustComponentPlugin.getCRustComponentContributions(localStore)
+          var threadContributions = componentContributions.componentContributions.get(thread.path).get
+          threadContributions = threadContributions(crateLevelEntries = threadContributions.crateLevelEntries ++ developerUifMethods.asInstanceOf[ISZ[RAST.Item]])
+
+          localStore = CRustComponentPlugin.putComponentContributions(
+            componentContributions.replaceComponentContributions(
+              componentContributions.componentContributions + thread.path ~>
+                threadContributions),
+            localStore)
+        }
       }
     }
 
@@ -188,21 +209,53 @@ object GumboXComputeContributions {
     return (GumboXRustPlugin.putGumboXContributions(DefaultGumboXContributions(items), localStore), resources)
   }
 
-  @pure def handleGclLibrary(gclLib: GclAnnexLibInfo, symbolTable: SymbolTable, types: AadlTypes, store: Store, reporter: Reporter): ISZ[RAST.Item] = {
+  @pure def handleGclLibrary(gclLib: GclAnnexLibInfo,
+                             symbolTable: SymbolTable,
+                             types: AadlTypes,
+                             store: Store,
+                             reporter: Reporter): (ISZ[RAST.Item], ISZ[RAST.Item]) = {
     val GclAnnexLibInfo(annex, name, gclSymbolTable) = gclLib
-    return (for(m <- annex.methods) yield GumboRustUtil.processGumboMethod(
-      m = m,
+    var verusFuns: ISZ[RAST.Item] = ISZ()
+    var developerSpecFuns: ISZ[RAST.Item] = ISZ()
 
-      owner = gclLib.name,
-      optComponent = None(),
-      isLibraryMethod = T,
+    for(m <- annex.methods) {
+      m match {
+        case g: GclSpecMethod =>
+          val (verusFun, developerFun) = GumboRustUtil.processGumboSpecMethod(
+            m = g,
 
-      inVerus = F,
-      aadlTypes = types,
-      tp = CRustTypePlugin.getCRustTypeProvider(store).get,
-      gclSymbolTable = gclSymbolTable,
-      store = store,
-      reporter = reporter))
+            owner = gclLib.name,
+            optComponent = None(),
+            isLibraryMethod = T,
+
+            inVerus = F,
+            aadlTypes = types,
+            tp = CRustTypePlugin.getCRustTypeProvider(store).get,
+            gclSymbolTable = gclSymbolTable,
+            store = store,
+            reporter = reporter
+          )
+          verusFuns = verusFuns :+ verusFun
+          developerSpecFuns = developerSpecFuns :+ developerFun
+
+        case g: GclBodyMethod =>
+          verusFuns = verusFuns :+ GumboRustUtil.processGumboBodyMethod(
+            m = g,
+
+            owner = gclLib.name,
+            optComponent = None(),
+            isLibraryMethod = T,
+
+            inVerus = F,
+            aadlTypes = types,
+            tp = CRustTypePlugin.getCRustTypeProvider(store).get,
+            gclSymbolTable = gclSymbolTable,
+            store = store,
+            reporter = reporter)
+      }
+    }
+
+    return (verusFuns, developerSpecFuns)
   }
 
   @pure def updatePuttersWithStateVars(testingApis: ISZ[RAST.Item], computeContributions: GumboXComputeContributions): ISZ[RAST.Item] = {
@@ -295,31 +348,53 @@ object GumboXComputeContributions {
   }
 
   @pure def processGumboSubclauseMethods(thread: AadlThread,
-                                        subclauseInfoOpt: Option[GclAnnexClauseInfo],
-                                        crustTypeProvider: CRustTypeProvider,
-                                        types: AadlTypes,
-                                        store: Store,
-                                        reporter: Reporter): ISZ[RAST.Fn] = {
+                                         subclauseInfoOpt: Option[GclAnnexClauseInfo],
+                                         crustTypeProvider: CRustTypeProvider,
+                                         types: AadlTypes,
+                                         store: Store,
+                                         reporter: Reporter): (ISZ[RAST.Fn], ISZ[RAST.Fn]) = {
     subclauseInfoOpt match {
       case Some(c) =>
-        var ret: ISZ[RAST.Fn] = ISZ()
+        var verusFuns: ISZ[RAST.Fn] = ISZ()
+        var developerUifFuns: ISZ[RAST.Fn] = ISZ()
         for (m <- c.annex.methods) {
-          ret = ret :+ GumboRustUtil.processGumboMethod(
-            m = m,
+          m match {
+            case g: GclSpecMethod =>
+              val (verusFunction, developerUifFun) = GumboRustUtil.processGumboSpecMethod(
+                m = g,
 
-            owner = thread.classifier,
-            optComponent = Some(thread),
-            isLibraryMethod = F,
+                owner = thread.classifier,
+                optComponent = Some(thread),
+                isLibraryMethod = F,
 
-            inVerus = F,
-            aadlTypes = types,
-            tp = crustTypeProvider,
-            gclSymbolTable = c.gclSymbolTable,
-            store = store,
-            reporter = reporter)
+                inVerus = F,
+                aadlTypes = types,
+                tp = crustTypeProvider,
+                gclSymbolTable = c.gclSymbolTable,
+                store = store,
+                reporter = reporter)
+
+              verusFuns = verusFuns :+ verusFunction
+              developerUifFuns = developerUifFuns :+ developerUifFun
+
+            case g: GclBodyMethod =>
+              verusFuns = verusFuns :+ GumboRustUtil.processGumboBodyMethod(
+                m = g,
+
+                owner = thread.classifier,
+                optComponent = Some(thread),
+                isLibraryMethod = F,
+
+                inVerus = F,
+                aadlTypes = types,
+                tp = crustTypeProvider,
+                gclSymbolTable = c.gclSymbolTable,
+                store = store,
+                reporter = reporter)
+          }
         }
-        return ret
-      case _ => return ISZ()
+        return (verusFuns, developerUifFuns)
+      case _ => return (ISZ(), ISZ())
     }
   }
 

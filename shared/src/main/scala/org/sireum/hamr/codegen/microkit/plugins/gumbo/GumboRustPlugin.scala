@@ -36,20 +36,24 @@ object GumboRustPlugin {
   @strictpure def getGclLibraryAnnexes(symbolTable: SymbolTable): ISZ[GclAnnexLibInfo] =
     symbolTable.annexLibInfos.filter(p => p.isInstanceOf[GclAnnexLibInfo]).asInstanceOf[ISZ[GclAnnexLibInfo]]
 
+
+  @datatype class LibraryAnnex(val rustItems: ISZ[RAST.Item],
+
+                               val verusItems: ISZ[RAST.Item],
+                               val verusDeveloperItems: ISZ[RAST.Item])
 }
 
 @sig trait GumboRustContributions extends StoreValue {
   @pure def datatypeInvariants: Map[DataIdPath, ISZ[RAST.Fn]]
 
-  @pure def libraryAnnexes: Map[String, ISZ[RAST.Item]]
-
-  @pure def setLibraryAnnexes(m: Map[String, ISZ[RAST.Item]]): GumboRustContributions
+  @pure def getLibraryAnnexes: Map[String, GumboRustPlugin.LibraryAnnex]
+  @pure def setLibraryAnnexes(m: Map[String, GumboRustPlugin.LibraryAnnex]): GumboRustContributions
 }
 
 @datatype class DefaultGumboRustContributions(val datatypeInvariants: Map[DataIdPath, ISZ[RAST.Fn]],
-                                              val libraryAnnexes: Map[String, ISZ[RAST.Item]]) extends GumboRustContributions {
+                                              val libraryAnnexes: Map[String, GumboRustPlugin.LibraryAnnex]) extends GumboRustContributions {
 
-  @strictpure override def setLibraryAnnexes(m: Map[String, ISZ[Item]]): GumboRustContributions = DefaultGumboRustContributions(datatypeInvariants, m)
+  @strictpure override def setLibraryAnnexes(m: Map[String, GumboRustPlugin.LibraryAnnex]): GumboRustContributions = DefaultGumboRustContributions(datatypeInvariants, m)
 }
 
 @sig trait GumboRustPlugin extends MicrokitInitPlugin with MicrokitPlugin with MicrokitFinalizePlugin {
@@ -116,7 +120,7 @@ object GumboRustPlugin {
 
   @pure override def canFinalizeMicrokit(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): B = {
     val hasLibraryAnnexes: B = GumboRustPlugin.getGumboRustContributions(store) match {
-      case Some(c) => c.libraryAnnexes.nonEmpty
+      case Some(c) => c.getLibraryAnnexes.nonEmpty
       case _ => F
     }
 
@@ -148,13 +152,20 @@ object GumboRustPlugin {
 
     var makefileVerusItems: ISZ[ST] = ISZ()
 
-    var libraryAnnexes: Map[String, ISZ[RAST.Item]] = Map.empty
+    var libraryAnnexes: Map[String, GumboRustPlugin.LibraryAnnex] = Map.empty
     for(gclLib <-  GumboRustPlugin.getGclLibraryAnnexes(symbolTable)) {
       // add dependencies to gumbo library annexes
       assert(gclLib.name.size == 2 && gclLib.name(1) == "GUMBO__Library", gclLib.name.string)
       val name = gclLib.name(0)
-      libraryAnnexes = libraryAnnexes + name ~> ISZ(
-        RAST.MacCall(macName = "verus", items = handleGclLibrary(gclLib, symbolTable, types, store, reporter)))
+
+      val (verusLibFuns, developerVerusUifs): (ISZ[RAST.Item], ISZ[RAST.Item]) = handleGclLibrary(gclLib, symbolTable, types, store, reporter)
+
+
+      libraryAnnexes = libraryAnnexes + name ~> GumboRustPlugin.LibraryAnnex(
+        rustItems = ISZ(),
+
+        verusItems = verusLibFuns,
+        verusDeveloperItems = developerVerusUifs)
     }
 
     val crateDeps: ISZ[ST] = for (k <- libraryAnnexes.keys) yield st"""$k = { path = "../$k" }"""
@@ -248,27 +259,54 @@ object GumboRustPlugin {
 
       if (subclauseInfo.annex.methods.nonEmpty) {
 
-        var funs: ISZ[RAST.Fn] = ISZ()
+        var verusFuns: ISZ[RAST.Item] = ISZ()
+        var developerUifFuns: ISZ[RAST.Item] = ISZ()
         for (m <- subclauseInfo.annex.methods) {
-          funs = funs :+ GumboRustUtil.processGumboMethod(
-            m = m,
+          m match {
+            case g: GclSpecMethod =>
+              val (gumboFunction, developerFunction) = GumboRustUtil.processGumboSpecMethod(
+                m = g,
 
-            owner = thread.classifier,
-            optComponent = Some(thread),
-            isLibraryMethod = F,
+                owner = thread.classifier,
+                optComponent = Some(thread),
+                isLibraryMethod = F,
 
-            inVerus = T,
+                inVerus = T,
 
-            aadlTypes = types,
-            tp = CRustTypePlugin.getCRustTypeProvider(localStore).get,
-            gclSymbolTable = subclauseInfo.gclSymbolTable,
-            store = localStore,
-            reporter = reporter)
+                aadlTypes = types,
+                tp = CRustTypePlugin.getCRustTypeProvider(localStore).get,
+                gclSymbolTable = subclauseInfo.gclSymbolTable,
+                store = localStore,
+                reporter = reporter
+              )
+
+              verusFuns = verusFuns :+ gumboFunction
+              developerUifFuns = developerUifFuns :+ developerFunction
+
+            case g: GclBodyMethod =>
+              verusFuns = verusFuns :+ GumboRustUtil.processGumboBodyMethod(
+                m = g,
+
+                owner = thread.classifier,
+                optComponent = Some(thread),
+                isLibraryMethod = F,
+
+                inVerus = T,
+
+                aadlTypes = types,
+                tp = CRustTypePlugin.getCRustTypeProvider(localStore).get,
+                gclSymbolTable = subclauseInfo.gclSymbolTable,
+                store = localStore,
+                reporter = reporter)
+          }
         }
 
         val m = Marker.createSlashMarker(GumboRustUtil.GumboMarkers.gumboMethods)
         markers = markers :+ m
-        crateLevelEntries = crateLevelEntries :+ RAST.MarkerWrap(m, funs.asInstanceOf[ISZ[RAST.Item]], "\n\n", None())
+        crateLevelEntries = crateLevelEntries :+ RAST.MarkerWrap(m, verusFuns, "\n\n", None())
+
+        crateLevelEntries = crateLevelEntries ++ developerUifFuns
+
       } else {
         val m = Marker.createSlashPlaceholderMarker(GumboRustUtil.GumboMarkers.gumboMethods)
         markers = markers :+ m
@@ -445,24 +483,57 @@ object GumboRustPlugin {
     localStore = MakefileUtil.addMakefileTargets(ISZ("system.mk"), ISZ(MakefileTarget(name = "verus", allowMultiple = F, dependencies = ISZ(), body = makefileVerusItems)), localStore)
     localStore = MakefileUtil.addMakefileTargets(ISZ("Makefile"), ISZ(MakefileTarget(name = "verus", allowMultiple = F, dependencies = ISZ(st"$${TOP_BUILD_DIR}/Makefile"), body = ISZ(st"$${MAKE} -C $${TOP_BUILD_DIR} verus"))), localStore)
 
-    return (GumboRustPlugin.putGumboRustContributions(DefaultGumboRustContributions(datatypeInvariants, libraryAnnexes), localStore), ISZ())
+    return (GumboRustPlugin.putGumboRustContributions(
+      DefaultGumboRustContributions(datatypeInvariants, libraryAnnexes), localStore), ISZ())
   }
 
-  @pure def handleGclLibrary(gclLib: GclAnnexLibInfo, symbolTable: SymbolTable, types: AadlTypes, store: Store, reporter: Reporter): ISZ[RAST.Item] = {
+  @pure def handleGclLibrary(gclLib: GclAnnexLibInfo,
+                             symbolTable: SymbolTable,
+                             types: AadlTypes,
+                             store: Store,
+                             reporter: Reporter): (ISZ[RAST.Item], ISZ[RAST.Item]) = {
     val GclAnnexLibInfo(annex, name, gclSymbolTable) = gclLib
-    return (for(m <- annex.methods) yield GumboRustUtil.processGumboMethod(
-      m = m,
+    var gumboFuns: ISZ[RAST.Fn] = ISZ()
+    var developerUifFuns: ISZ[RAST.Fn] = ISZ()
 
-      owner = gclLib.name,
-      optComponent = None(),
-      isLibraryMethod = T,
+    for(m <- annex.methods) {
+      m match {
+        case g: GclSpecMethod =>
+          val (libFun, developerLibFun) = GumboRustUtil.processGumboSpecMethod(
+            m = g,
 
-      inVerus = T,
-      aadlTypes = types,
-      tp = CRustTypePlugin.getCRustTypeProvider(store).get,
-      gclSymbolTable = gclSymbolTable,
-      store = store,
-      reporter = reporter))
+            owner = gclLib.name,
+            optComponent = None(),
+            isLibraryMethod = T,
+
+            inVerus = T,
+            aadlTypes = types,
+            tp = CRustTypePlugin.getCRustTypeProvider(store).get,
+            gclSymbolTable = gclSymbolTable,
+            store = store,
+            reporter = reporter)
+
+          gumboFuns = gumboFuns :+ libFun
+          developerUifFuns = developerUifFuns :+ developerLibFun
+
+        case g: GclBodyMethod =>
+          gumboFuns = gumboFuns :+ GumboRustUtil.processGumboBodyMethod(
+            m = g,
+
+            owner = gclLib.name,
+            optComponent = None(),
+            isLibraryMethod = T,
+
+            inVerus = T,
+            aadlTypes = types,
+            tp = CRustTypePlugin.getCRustTypeProvider(store).get,
+            gclSymbolTable = gclSymbolTable,
+            store = store,
+            reporter = reporter)
+      }
+    }
+
+    return (gumboFuns.asInstanceOf[ISZ[RAST.Item]], developerUifFuns.asInstanceOf[ISZ[RAST.Item]])
   }
 
   @pure def handleIntegrationConstraints(thread: AadlThread,
@@ -685,32 +756,61 @@ object GumboRustPlugin {
       case Some(c) =>
         // write out any gumbo library annex crates
 
-        assert (c.libraryAnnexes.nonEmpty)
+        assert (c.getLibraryAnnexes.nonEmpty)
         var localStore = store
         var resources: ISZ[Resource] = ISZ()
 
-        for (e <- c.libraryAnnexes.entries) {
+        for (e <- c.getLibraryAnnexes.entries) {
 
           val rootDir = s"${options.sel4OutputDir.get}/crates/${e._1}"
 
           { // crates/<aadl-package-name>/src/lib.rs
+            var markers: ISZ[Marker] = ISZ()
+
             val path = s"$rootDir/src/lib.rs"
+
+            val rustMarker = Marker.createSlashMarker(GumboRustUtil.GumboMarkers.gumboLibRust)
+            markers = markers :+ rustMarker
+
+            val rustSection = RAST.MarkerWrap(
+              marker = rustMarker,
+              items = e._2.rustItems,
+              sep = "\n\n",
+              optLastItemSep = None())
+
+            val verusMarker = Marker.createSlashMarker(GumboRustUtil.GumboMarkers.gumboLibVerus)
+            markers = markers :+ verusMarker
+
+            val verusSection: ISZ[RAST.Item] = ISZ[RAST.Item] (
+              RAST.MarkerWrap(
+                marker = verusMarker,
+                items = e._2.verusItems,
+                sep = "\n\n",
+                optLastItemSep = None())) ++ e._2.verusDeveloperItems
+
+            val verusMacro = RAST.MacCall(
+              macName = "verus",
+              items = verusSection)
 
             val content =
               st"""#![cfg_attr(not(test), no_std)]
                   |
                   |${RustUtil.defaultCrateLevelAttributes}
                   |
-                  |${MicrokitUtil.doNotEdit}
+                  |${MicrokitUtil.safeToEdit}
                   |
                   |use data::*;
                   |use vstd::prelude::*;
                   |
                   |${GumboRustUtil.RustImplicationMacros}
                   |
-                  |${(for (i <- e._2) yield i.prettyST, "\n\n")}"""
+                  |${rustSection.prettyST}
+                  |
+                  |${verusMacro.prettyST}
+                  |"""
 
-            resources = resources :+ ResourceUtil.createResource(path, content, T)
+            resources = resources :+ ResourceUtil.createResourceWithMarkers(
+              path = path, content = content, markers = markers, invertMarkers = F, overwrite = F)
           }
 
           { // crates/<aadl-package-name>/Cargo.toml

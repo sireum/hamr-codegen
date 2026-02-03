@@ -3,9 +3,10 @@ package org.sireum.hamr.codegen.microkit.plugins.gumbo
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, Store}
-import org.sireum.hamr.codegen.common.StringUtil
-import org.sireum.hamr.codegen.common.symbols.{AadlComponent, GclAnnexClauseInfo, GclSymbolTable, SymbolTable}
+import org.sireum.hamr.codegen.common.{STUtil, StringUtil}
+import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlThread, GclAnnexClauseInfo, GclSymbolTable, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlTypes
+import org.sireum.hamr.codegen.microkit.plugins.component.CRustComponentPlugin
 import org.sireum.hamr.codegen.microkit.plugins.gumbo.SlangExpUtil.Context
 import org.sireum.hamr.codegen.microkit.plugins.types.{CRustTypeNameProvider, CRustTypeProvider}
 import org.sireum.hamr.codegen.microkit.rust.FnVerusHeader
@@ -29,6 +30,9 @@ object GumboRustUtil {
     val timeTriggeredEnsures: String = "MARKER TIME TRIGGERED ENSURES"
 
     val gumboMethods: String = "MARKER GUMBO METHODS"
+
+    val gumboLibVerus: String = "MARKER GUMBO VERUS MARKER"
+    val gumboLibRust: String = "MARKER GUMBO RUST MARKER"
   }
 
   val RustImplicationMacros: ST = st"""macro_rules! implies {
@@ -231,19 +235,19 @@ object GumboRustUtil {
     )
   }
 
-  def processGumboMethod(m: GclMethod,
+  def processGumboBodyMethod(m: GclBodyMethod,
 
-                         owner: IdPath,
-                         optComponent: Option[AadlComponent],
-                         isLibraryMethod: B,
+                             owner: IdPath,
+                             optComponent: Option[AadlComponent],
+                             isLibraryMethod: B,
 
-                         inVerus: B,
+                             inVerus: B,
 
-                         aadlTypes: AadlTypes,
-                         tp: CRustTypeProvider,
-                         gclSymbolTable: GclSymbolTable,
-                         store: Store,
-                         reporter: Reporter): RAST.Fn = {
+                             aadlTypes: AadlTypes,
+                             tp: CRustTypeProvider,
+                             gclSymbolTable: GclSymbolTable,
+                             store: Store,
+                             reporter: Reporter): RAST.Fn = {
 
     def r(t: SAST.Type.Named): CRustTypeNameProvider = {
       val retType: ISZ[String] = for(id <- t.name.ids) yield id.value
@@ -252,7 +256,7 @@ object GumboRustUtil {
     }
 
     var inputs: ISZ[RAST.Param] = ISZ()
-    for(p <- m.method.sig.params) {
+    for(p <- m.sig.params) {
       inputs = inputs :+ RAST.ParamImpl(
         ident = RAST.IdentString(p.id.value),
         kind = RAST.TyPath(ISZ(r(p.tipe.asInstanceOf[SAST.Type.Named]).qualifiedRustNameS), None()))
@@ -265,14 +269,14 @@ object GumboRustUtil {
         halt("TODO: need to handle method contracts for RUST/Verus")
       }
 
-    val optBody: Option[RAST.MethodBody] = m.method.bodyOpt match {
+    val bodyOpt: Option[RAST.MethodBody] = m.method.bodyOpt match {
       case Some(body) =>
-        assert (body.stmts.size == 1, s"Currently expecting GUMBO methods to have a single statement")
+        assert(body.stmts.size == 1, s"Currently expecting GUMBO methods to have a single statement")
         val exp: ST = body.stmts(0) match {
           case r: Return =>
-            assert (r.expOpt.nonEmpty, "Currently expecting GUMBO methods to return values")
+            assert(r.expOpt.nonEmpty, "Currently expecting GUMBO methods to return values")
 
-            assert (r.expOpt.get.typedOpt.nonEmpty)
+            assert(r.expOpt.get.typedOpt.nonEmpty)
             val retExp = SlangExpUtil.rewriteExp(
               rexp = r.expOpt.get,
 
@@ -294,13 +298,13 @@ object GumboRustUtil {
               case _ => F
             }
 
-            if (inVerus && MicrokitTypeUtil.isNumericType(m.method.sig.returnType.typedOpt.get) && mayNeedCast) {
+            if (inVerus && MicrokitTypeUtil.isNumericType(m.sig.returnType.typedOpt.get) && mayNeedCast) {
               // For the GUMBO method
               //  def add(a: Base_Types::Integer_32, b: Base_Types::Integer_32): Base_Types::Integer_32 := a + b;
               // verus will evaluate a + b in mathematical integers (int), not in the machine type i32. Therefore,
               // we need to cast the return value back to the declared return type
 
-              val rType = m.method.sig.returnType.typedOpt.get.asInstanceOf[SAST.Typed.Name]
+              val rType = m.sig.returnType.typedOpt.get.asInstanceOf[SAST.Typed.Name]
               val aadlType = MicrokitTypeUtil.getAadlTypeFromSlangTypeH(rType, aadlTypes)
               val np = tp.getTypeNameProvider(aadlType)
 
@@ -312,14 +316,15 @@ object GumboRustUtil {
           case x =>
             halt(s"Currently expecting GUMBO methods to only have return statements: ${x.prettyST.render}")
         }
-
         Some(RAST.MethodBody(ISZ(RAST.BodyItemST(exp))))
+
       case _ => None()
     }
 
-    val id: String = s"${m.method.sig.id.value}${if (isLibraryMethod && inVerus) "_spec" else ""}"
+    val id: String = s"${m.sig.id.value}${if (isLibraryMethod && inVerus) "_spec" else ""}"
 
-    return RAST.FnImpl(
+    val fn =
+      RAST.FnImpl(
       comments = ISZ(),
       attributes = ISZ(),
       visibility = RAST.Visibility.Public,
@@ -327,14 +332,143 @@ object GumboRustUtil {
         ident = RAST.IdentString(id),
         fnDecl = RAST.FnDecl(
           inputs = inputs,
-          outputs = RAST.FnRetTyImpl(RAST.TyPath(ISZ(r(m.method.sig.returnType.asInstanceOf[SAST.Type.Named]).qualifiedRustNameS), None()))
+          outputs = RAST.FnRetTyImpl(RAST.TyPath(ISZ(r(m.sig.returnType.asInstanceOf[SAST.Type.Named]).qualifiedRustNameS), None()))
         ),
         verusHeader =
-          if (inVerus) Some(FnVerusHeader(isOpen = T, isSpec = T))
+          if (inVerus) Some(FnVerusHeader(isOpen = T, kind = RAST.VerusFnKind.spec))
           else None(),
         fnHeader = RAST.FnHeader(F), generics = None()),
       contract = contractOpt,
-      body = optBody,
+      body = bodyOpt,
       meta = ISZ())
+
+    return fn
+  }
+
+  def processGumboSpecMethod(m: GclSpecMethod,
+                             owner: ISZ[String],
+                             optComponent: Option[AadlThread],
+                             isLibraryMethod: B,
+                             inVerus: B,
+                             aadlTypes: AadlTypes,
+                             tp: CRustTypeProvider,
+                             gclSymbolTable: GclSymbolTable,
+                             store: Store, reporter: Reporter): (RAST.Fn, RAST.Fn) = {
+    def r(t: SAST.Type.Named): CRustTypeNameProvider = {
+      val retType: ISZ[String] = for(id <- t.name.ids) yield id.value
+      val retAadlType = tp.getRepresentativeType(aadlTypes.getTypeByPath(retType))
+      return tp.getTypeNameProvider(retAadlType)
+    }
+
+    var inputs: ISZ[RAST.Param] = ISZ()
+    for(p <- m.sig.params) {
+      inputs = inputs :+ RAST.ParamImpl(
+        ident = RAST.IdentString(p.id.value),
+        kind = RAST.TyPath(ISZ(r(p.tipe.asInstanceOf[SAST.Type.Named]).qualifiedRustNameS), None()))
+    }
+
+    val context: String = if (inVerus) "Verus" else "GUMBOX"
+    val context_lc: String = if (inVerus) "verus" else "gumbox"
+
+    val verusFunctionName = s"${m.sig.id.value}__developer_verus"
+
+    val developerFunctionName = s"${m.sig.id.value}__developer_$context_lc"
+
+    val fqDeveloperFunctionName: String = {
+      if (inVerus) {
+        developerFunctionName
+      } else if (isLibraryMethod) {
+        developerFunctionName
+      } else {
+        val appModuleName = CRustComponentPlugin.appModuleName(optComponent.get)
+        s"crate::component::$appModuleName::$developerFunctionName"
+      }
+    }
+
+    val developerArgs: ISZ[ST] = for(i <- inputs) yield i.ident.prettyST
+
+    val bodyOpt: Option[RAST.MethodBody] = Some(
+      RAST.MethodBody(items = ISZ(RAST.BodyItemST(st"$fqDeveloperFunctionName(${(developerArgs, ", ")})"))))
+
+    val verusId: String = s"${m.sig.id.value}${if (isLibraryMethod && inVerus) "_spec" else ""}"
+
+    val retType = RAST.TyPath(ISZ(r(m.sig.returnType.asInstanceOf[SAST.Type.Named]).qualifiedRustNameS), None())
+
+    val verusSig = RAST.FnSig(
+      ident = RAST.IdentString(verusId),
+      fnDecl = RAST.FnDecl(
+        inputs = inputs,
+        outputs = RAST.FnRetTyImpl(retType)
+      ),
+      verusHeader =
+        if (inVerus) Some(FnVerusHeader(isOpen = T, kind = RAST.VerusFnKind.spec))
+        else None(),
+      fnHeader = RAST.FnHeader(F), generics = None())
+
+
+    val developerVerusHeader: RAST.FnVerusHeader =
+      if (inVerus) RAST.FnVerusHeader(isOpen = T, kind = RAST.VerusFnKind.spec)
+      else RAST.FnVerusHeader(isOpen = F, kind = RAST.VerusFnKind.exec)
+
+    val developerFnDecl = verusSig.fnDecl(outputs = RAST.FnNamedRetTyImpl(id = "res", ty = retType))
+    val developerSig =
+      verusSig(
+        ident = RAST.IdentString(developerFunctionName),
+        fnDecl = developerFnDecl,
+        verusHeader = Some(developerVerusHeader))
+
+    val comments: ISZ[RAST.Comment] = ISZ(RAST.CommentRustDoc(STUtil.splitST(
+      st"""$context wrapper for the GUMBO spec function `test` that delegates to the developer-supplied $context
+          |specification function that must have the following signature:
+          |
+          |  pub ${developerSig.prettyST} { ... }
+          |
+          |The semantics of the GUMBO spec function are entirely defined by the developer-supplied implementation.""")))
+
+    val developerContract: Option[RAST.FnContract] = {
+      if (!inVerus)
+        Some(RAST.FnContract(
+          optRequiresMarker = None(),
+          requires = ISZ(),
+          optEnsuresMarker = None(),
+          ensures = ISZ(RAST.ExprST(st"res == ${verusFunctionName}(${(developerArgs, ", ")})"))))
+      else None()
+    }
+
+    val verusFn =
+      RAST.FnImpl(
+        comments = comments,
+        attributes = ISZ(),
+        visibility = RAST.Visibility.Public,
+        sig = verusSig,
+        contract = None(),
+        body = bodyOpt,
+        meta = ISZ())
+
+    val developerComments: ISZ[RAST.Comment] = ISZ(RAST.CommentRustDoc(STUtil.splitST(
+      st"""Developer-supplied $context realization of the GUMBO spec function `test`.
+          |
+          |This function may be freely refined${if (inVerus) " as long as it remains a pure Verus `spec fn`" else ""}.""")))
+
+    val bodyComment = RAST.CommentNonDoc(STUtil.splitST(st"""This default implementation returns `true`, which is safe but weak:
+                          |* In `assume` contexts, returning `false` may allow $context to prove `false`.
+                          |* To obtain meaningful guarantees, developers should strengthen this
+                          |  specification to reflect the intended semantics of the GUMBO spec function."""))
+
+    val developerBody = Some(RAST.MethodBody(items = ISZ(RAST.BodyItemST(
+      st"""${bodyComment.prettyST}
+          |true"""))))
+
+    val developerFn =
+      RAST.FnImpl(
+        comments = developerComments,
+        attributes = ISZ(),
+        visibility = RAST.Visibility.Public,
+        sig = developerSig,
+        contract = developerContract,
+        body = developerBody,
+        meta = ISZ())
+
+    return (verusFn, developerFn)
   }
 }

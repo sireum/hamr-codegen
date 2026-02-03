@@ -240,7 +240,7 @@ object ReportUtil {
         var s = st"""<table>
                     |<tr><th colspan=4>GUMBO Methods</th></tr>"""
         for (m <- gumboReport.methodsReport.entries) {
-          val modelCand: ISZ[GclMethod] = gumboOpt.get.annex.methods.filter(p => p.method.sig.id.value == m._1)
+          val modelCand: ISZ[GclMethod] = gumboOpt.get.annex.methods.filter(p => p.sig.id.value == m._1)
           assert (modelCand.size == 1, m.string)
           val modelPos = buildPosA(modelCand(0).posOpt.get, workspaceDir, rootDir)
 

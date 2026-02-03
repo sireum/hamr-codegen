@@ -778,7 +778,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
   var globalTypeMap: TypeMap = HashSMap.empty
   var globalNameMap: NameMap = HashSMap.empty
-  var resolvedMethods: HashSMap[ISZ[String], Info.Method] = HashSMap.empty
+  var resolvedBodyMethods: HashSMap[ISZ[String], Info.Method] = HashSMap.empty
   var builtTypeInfo: B = F
   var modelContainsBoundArrays: B = F
 
@@ -792,7 +792,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
     integrationMap = Map.empty
     globalTypeMap = HashSMap.empty[QName, TypeInfo] ++ GclResolver.libraryReporter.typeMap.entries
     globalNameMap = HashSMap.empty[QName, Info] ++ GclResolver.libraryReporter.nameMap.entries
-    resolvedMethods = HashSMap.empty
+    resolvedBodyMethods = HashSMap.empty
     builtTypeInfo = F
     modelContainsBoundArrays = F
     arrayIndexInterpolateImports = ISZ()
@@ -918,104 +918,111 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                      aadlTypes: AadlTypes,
                      reporter: Reporter): Option[GclMethod] = {
 
-    val fqn = context :+ gclMethod.method.sig.id.value
+    val fqn = context :+ gclMethod.sig.id.value
 
-    var rMethod: AST.Stmt.Method =
-      resolvedMethods.get(fqn) match {
-        case Some(resolvedMethod) =>
-          gclMethod.method(sig = resolvedMethod.ast.sig, attr = resolvedMethod.ast.attr)
-        case _ =>
-          reporter.error(gclMethod.posOpt, toolName, st"Could not resolve method '${(fqn, "::")}'".render)
+    gclMethod match {
+      case g: GclSpecMethod =>
+        return Some(g)
+      case g: GclBodyMethod => {
+
+        var rMethod: AST.Stmt.Method =
+          resolvedBodyMethods.get(fqn) match {
+            case Some(resolvedMethod) =>
+              g.method(sig = resolvedMethod.ast.sig, attr = resolvedMethod.ast.attr)
+            case _ =>
+              reporter.error(gclMethod.posOpt, toolName, st"Could not resolve method '${(fqn, "::")}'".render)
+              return None()
+          }
+
+        val (ok, methodScope) = TypeChecker.methodScope(typeHierarchy, context, scope, rMethod.sig, reporter)
+        if (ok) {
+
+          // need to rewrite any array accesses for bound arrays (e.g. array(0) -> array(I(0))
+
+          @pure def tce(e: Exp, mode: TypeChecker.ModeContext.Type): Exp = {
+            val ret = typeCheckBoolExp(
+              exp = e,
+              context = context,
+              mode = mode,
+              component = component,
+              params = rMethod.sig.params,
+              stateVars = ISZ(), specFuns = specMethods,
+              scope = methodScope, typeHierarchy = typeHierarchy,
+              symbolTable = symbolTable, aadlTypes = aadlTypes, reporter = reporter)
+            return ret
+          }
+
+          var mc = g.method.mcontract.asInstanceOf[Simple]
+
+          val readsClause = mc.readsClause(refs = for (r <- mc.reads) yield tce(r.asExp, TypeChecker.ModeContext.Spec).asInstanceOf[Exp.Ident])
+          val requiresClause = mc.requiresClause(claims = for (r <- mc.requires) yield tce(r, TypeChecker.ModeContext.Spec))
+          val modifiesClause = mc.modifiesClause(refs = for (m <- mc.modifies) yield tce(m.asExp, TypeChecker.ModeContext.Spec).asInstanceOf[AST.Exp.Ident])
+          val ensuresClause = mc.ensuresClause(claims = for (e <- mc.ensures) yield tce(e, TypeChecker.ModeContext.SpecPost))
+
+          mc = mc(
+            readsClause = readsClause,
+            requiresClause = requiresClause,
+            modifiesClause = modifiesClause,
+            ensuresClause = ensuresClause)
+
+          val body: Option[AST.Body] = (g.method.bodyOpt) match {
+            case Some(body@AST.Body(ISZ(ret @ AST.Stmt.Return(Some(exp))))) =>
+              val retType: ISZ[String] = for (id <- g.method.sig.returnType.asInstanceOf[AST.Type.Named].name.ids) yield id.value
+              val retAadlType = aadlTypes.getTypeByPath(retType)
+              val retSlangTypeName = GclResolverUtil.getSlangName(retAadlType, reporter)
+
+              val rexp = typeCheckExp(exp = exp,
+                expectedType = GclResolver.getActualSlangTypedName(retSlangTypeName, typeHierarchy),
+                context = context,
+                mode = TypeChecker.ModeContext.Spec,
+                component = component,
+                params = rMethod.sig.params,
+                stateVars = ISZ(), specFuns = specMethods,
+                scope = methodScope, typeHierarchy = typeHierarchy,
+                symbolTable = symbolTable, aadlTypes = aadlTypes, reporter = reporter)
+
+              Some(body(stmts=ISZ(ret(expOpt=Some(rexp)))))
+            case _ =>
+              reporter.error(g.method.posOpt, GclResolver.toolName, "Unexpected: method does not have a body")
+              None()
+          }
+
+          rMethod = rMethod(bodyOpt = body, mcontract = mc)
+
+          // now do a full tipe check one the method using the rewritten expressions (will recheck the expressions)
+
+          rMethod = if (rMethod.hasContract) TypeChecker.checkMethodContractSequent(
+            // don't use methodScope here
+            F, typeHierarchy, ISZ(rMethod.sig.id.value), scope, F, rMethod, reporter)
+          else rMethod
+
+          val tc = TypeChecker(typeHierarchy, fqn, F, TypeChecker.ModeContext.Spec, F)
+          val resolvedMethod: AST.Stmt.Method = tc.checkMethod(scope, rMethod(bodyOpt = body, mcontract = mc), reporter)
+
+          // update the GclMethod, except keep the original param and return type typing
+          // since tipe will replace type aliases with their actual type
+          // (e.g. changes Base_Types.Boolean to B).
+          val resolvedGclMethod = g(method = resolvedMethod(
+            sig = resolvedMethod.sig(
+              params = g.method.sig.params,
+              returnType = g.method.sig.returnType)))
+
+          // update the global name map with the resolved method info
+          val methodQualifiedName = context :+ resolvedMethod.sig.id.value
+          assert (globalNameMap.contains(methodQualifiedName), s"Global name map did not contain $methodQualifiedName")
+          replaceName(methodQualifiedName, Info.Method(
+            owner = context,
+            isInObject = T,
+            scope = scope,
+            hasBody = resolvedMethod.bodyOpt.nonEmpty,
+            ast = resolvedMethod))
+
+          return Some(resolvedGclMethod)
+        } else {
+          assert(reporter.hasError)
           return None()
+        }
       }
-
-    val (ok, methodScope) = TypeChecker.methodScope(typeHierarchy, context, scope, rMethod.sig, reporter)
-    if (ok) {
-
-      // need to rewrite any array accesses for bound arrays (e.g. array(0) -> array(I(0))
-
-      @pure def tce(e: Exp, mode: TypeChecker.ModeContext.Type): Exp = {
-        val ret = typeCheckBoolExp(
-          exp = e,
-          context = context,
-          mode = mode,
-          component = component,
-          params = rMethod.sig.params,
-          stateVars = ISZ(), specFuns = specMethods,
-          scope = methodScope, typeHierarchy = typeHierarchy,
-          symbolTable = symbolTable, aadlTypes = aadlTypes, reporter = reporter)
-        return ret
-      }
-
-      var mc = gclMethod.method.mcontract.asInstanceOf[Simple]
-
-      val readsClause = mc.readsClause(refs = for (r <- mc.reads) yield tce(r.asExp, TypeChecker.ModeContext.Spec).asInstanceOf[Exp.Ident])
-      val requiresClause = mc.requiresClause(claims = for (r <- mc.requires) yield tce(r, TypeChecker.ModeContext.Spec))
-      val modifiesClause = mc.modifiesClause(refs = for (m <- mc.modifies) yield tce(m.asExp, TypeChecker.ModeContext.Spec).asInstanceOf[AST.Exp.Ident])
-      val ensuresClause = mc.ensuresClause(claims = for (e <- mc.ensures) yield tce(e, TypeChecker.ModeContext.SpecPost))
-
-      mc = mc(
-        readsClause = readsClause,
-        requiresClause = requiresClause,
-        modifiesClause = modifiesClause,
-        ensuresClause = ensuresClause)
-
-      val body: Option[AST.Body] = (gclMethod.method.bodyOpt) match {
-        case Some(body@AST.Body(ISZ(ret @ AST.Stmt.Return(Some(exp))))) =>
-          val retType: ISZ[String] = for (id <- gclMethod.method.sig.returnType.asInstanceOf[AST.Type.Named].name.ids) yield id.value
-          val retAadlType = aadlTypes.getTypeByPath(retType)
-          val retSlangTypeName = GclResolverUtil.getSlangName(retAadlType, reporter)
-
-          val rexp = typeCheckExp(exp = exp,
-            expectedType = GclResolver.getActualSlangTypedName(retSlangTypeName, typeHierarchy),
-            context = context,
-            mode = TypeChecker.ModeContext.Code,
-            component = component,
-            params = rMethod.sig.params,
-            stateVars = ISZ(), specFuns = specMethods,
-            scope = methodScope, typeHierarchy = typeHierarchy,
-            symbolTable = symbolTable, aadlTypes = aadlTypes, reporter = reporter)
-
-          Some(body(stmts=ISZ(ret(expOpt=Some(rexp)))))
-        case _ =>
-          reporter.error(gclMethod.method.posOpt, GclResolver.toolName, "Unexpected: method does not have a body")
-          None()
-      }
-
-      rMethod = rMethod(bodyOpt = body, mcontract = mc)
-
-      // now do a full tipe check one the method using the rewritten expressions (will recheck the expressions)
-
-      rMethod = if (rMethod.hasContract) TypeChecker.checkMethodContractSequent(
-        // don't use methodScope here
-        F, typeHierarchy, ISZ(rMethod.sig.id.value), scope, F, rMethod, reporter)
-      else rMethod
-
-      val tc = TypeChecker(typeHierarchy, fqn, F, TypeChecker.ModeContext.Spec, F)
-      val resolvedMethod: AST.Stmt.Method = tc.checkMethod(scope, rMethod(bodyOpt = body, mcontract = mc), reporter)
-
-      // update the GclMethod, except keep the original param and return type typing
-      // since tipe will replace type aliases with their actual type
-      // (e.g. changes Base_Types.Boolean to B).
-      val resolvedGclMethod = gclMethod(method = resolvedMethod(
-        sig = resolvedMethod.sig(
-          params = gclMethod.method.sig.params,
-          returnType = gclMethod.method.sig.returnType)))
-
-      // update the global name map with the resolved method info
-      val methodQualifiedName = context :+ resolvedMethod.sig.id.value
-      assert (globalNameMap.contains(methodQualifiedName), s"Global name map did not contain $methodQualifiedName")
-      replaceName(methodQualifiedName, Info.Method(
-        owner = context,
-        isInObject = T,
-        scope = scope,
-        hasBody = resolvedMethod.bodyOpt.nonEmpty,
-        ast = resolvedMethod))
-
-      return Some(resolvedGclMethod)
-    } else {
-      assert(reporter.hasError)
-      return None()
     }
   }
 
@@ -1067,7 +1074,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
     var libMethods: Map[ISZ[String], GclMethod] = Map.empty
     for (lib <- libInfos) {
-      libMethods = libMethods ++ (for (m <- lib.annex.methods) yield (lib.name :+ m.method.sig.id.value) ~> m)
+      libMethods = libMethods ++ (for (m <- lib.annex.methods) yield (lib.name :+ m.sig.id.value) ~> m)
     }
 
     def visitInvariant(i: GclInvariant): Option[GclInvariant] = {
@@ -1098,7 +1105,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         return None()
       }
 
-      val threadMethods: Map[ISZ[String], GclMethod] = Map.empty[ISZ[String], GclMethod] ++ (for (m <- s.methods) yield (context :+ m.method.sig.id.value) ~> m)
+      val threadMethods: Map[ISZ[String], GclMethod] = Map.empty[ISZ[String], GclMethod] ++ (for (m <- s.methods) yield (context :+ m.sig.id.value) ~> m)
 
       // hmm, lost imports with AIR translation so assume all glc lib annexes have been imported
       val gclMethods = threadMethods ++ libMethods.entries
@@ -2304,12 +2311,18 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       val adtScope = scope(packageName, globalImports(packageName), adtQualifiedName)
 
       for (gclMethod <- g.methods) {
-        val fqMethodName = (adtQualifiedName :+ gclMethod.method.sig.id.value)
+        val fqMethodName = (adtQualifiedName :+ gclMethod.sig.id.value)
 
         if (!globalNameMap.contains(fqMethodName)) {
-          val infoMethod = buildInfoMethod(gclMethod, adtQualifiedName, adtScope)
-          resolvedMethods = resolvedMethods + (fqMethodName ~> infoMethod)
-          declareName(gclMethod.method.sig.id.value, fqMethodName, infoMethod, None(), reporter)
+          buildInfoMethod(gclMethod, adtQualifiedName, adtScope) match {
+            case i: Info.Method =>
+              resolvedBodyMethods = resolvedBodyMethods + (fqMethodName ~> i)
+              declareName(gclMethod.sig.id.value, fqMethodName, i, None(), reporter)
+            case i: Info.SpecMethod =>
+              declareName(gclMethod.sig.id.value, fqMethodName, i, None(), reporter)
+            case x =>
+              halt(s"Infeasible: $x")
+          }
         }
       }
 
@@ -2348,34 +2361,33 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       return objectInfo
     }
 
-    def buildInfoMethod(gclMethod: GclMethod, adtQualifiedName: ISZ[String], adtScope: Scope): Info.Method = {
-      val m = gclMethod.method
+    def buildInfoMethod(gclMethod: GclMethod, adtQualifiedName: ISZ[String], adtScope: Scope): Info = {
 
-      val methodName = m.sig.id.value
+      val methodName = gclMethod.sig.id.value
 
       val qualifiedMethodName = adtQualifiedName :+ methodName
 
-      val resolvedParams: ISZ[AST.Param] = for (p <- m.sig.params) yield
+      val resolvedParams: ISZ[AST.Param] = for (p <- gclMethod.sig.params) yield
         p(tipe = resolveType(p.tipe, p.id.attr.posOpt))
 
-      val resolvedReturnType = resolveType(m.sig.returnType, m.sig.id.attr.posOpt)
+      val resolvedReturnType = resolveType(gclMethod.sig.returnType, gclMethod.sig.id.attr.posOpt)
 
       val resolvedReturnTyped: AST.Typed = resolvedReturnType.attr.typedOpt.get
 
-      val resolvedTypeParams = m.sig.typeParams
+      val resolvedTypeParams = gclMethod.sig.typeParams
       assert(resolvedTypeParams.isEmpty, "Not handling type params yet")
 
       val resolvedMsig = AST.MethodSig(
-        purity = m.sig.purity,
+        purity = gclMethod.sig.purity,
         annotations = ISZ(),
-        id = m.sig.id,
-        typeParams = m.sig.typeParams,
+        id = gclMethod.sig.id,
+        typeParams = gclMethod.sig.typeParams,
         hasParams = resolvedParams.nonEmpty,
         params = resolvedParams,
         returnType = resolvedReturnType)
 
       val resolvedTypedFun = AST.Typed.Fun(
-        purity = m.sig.purity,
+        purity = gclMethod.sig.purity,
         isByName = F,
         args = resolvedParams.map((p: AST.Param) => p.tipe.asInstanceOf[AST.Type.Named].attr.typedOpt.get),
         ret = resolvedReturnTyped)
@@ -2400,19 +2412,6 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         paramNames = resolvedParams.map((p: AST.Param) => p.id.value),
         tpe = resolvedTypedFun)
 
-      val resolvedAttr = AST.ResolvedAttr(
-        posOpt = m.attr.posOpt,
-        resOpt = Some(resolvedInfoMethod),
-        typedOpt = Some(resolvedTypedMethod))
-
-      val resolvedAstMethod = AST.Stmt.Method(
-        typeChecked = m.typeChecked,
-        purity = m.purity,
-        modifiers = m.modifiers,
-        sig = resolvedMsig,
-        mcontract = m.mcontract,
-        bodyOpt = m.bodyOpt,
-        attr = resolvedAttr)
 
       val scopeNameMap: HashMap[String, Info] = {
         val entries: ISZ[(String, Info)] = resolvedParams.map((p: AST.Param) => {
@@ -2448,15 +2447,53 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         outerOpt = Some(adtScope)
       )
 
-      val infoMethod = Info.Method(
-        owner = adtQualifiedName,
-        isInObject = T,
-        scope = methodScope,
-        hasBody = T,
-        ast = resolvedAstMethod
-      )
+      gclMethod match {
+        case g: GclSpecMethod =>
 
-      return infoMethod
+          val resolvedAttr = AST.ResolvedAttr(
+            posOpt = g.method.attr.posOpt,
+            resOpt = Some(resolvedInfoMethod),
+            typedOpt = Some(resolvedTypedMethod))
+
+          val resolvedAstMethod = AST.Stmt.SpecMethod(
+            sig = resolvedMsig,
+            attr = resolvedAttr)
+
+          val infoSpecMethod = Info.SpecMethod(
+            owner = adtQualifiedName,
+            isInObject = T,
+            scope = methodScope,
+            ast = resolvedAstMethod)
+
+          return infoSpecMethod
+
+        case g: GclBodyMethod => {
+
+          val resolvedAttr = AST.ResolvedAttr(
+            posOpt = g.method.attr.posOpt,
+            resOpt = Some(resolvedInfoMethod),
+            typedOpt = Some(resolvedTypedMethod))
+
+          val resolvedAstMethod = AST.Stmt.Method(
+            typeChecked = g.method.typeChecked,
+            purity = g.method.purity,
+            modifiers = g.method.modifiers,
+            sig = resolvedMsig,
+            mcontract = g.method.mcontract,
+            bodyOpt = g.method.bodyOpt,
+            attr = resolvedAttr)
+
+          val infoMethod = Info.Method(
+            owner = adtQualifiedName,
+            isInObject = T,
+            scope = methodScope,
+            hasBody = T,
+            ast = resolvedAstMethod
+          )
+
+          return infoMethod
+        }
+      }
     }
 
     def buildInfoObject(a: AadlThread): Info.Object = {
@@ -2544,7 +2581,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         declareName(fieldId, qualifiedFieldName, infoVar, field.feature.identifier.pos, reporter)
       }
 
-      val methods: HashSMap[String, Info.Method] = {
+      val methods: HashSMap[String, Info] = {
 
         val TYPE_VAR__STATE_VAR = "TYPE_VAR__STATE_VAR"
 
@@ -2676,7 +2713,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           )
         )
 
-        var _methods: HashSMap[String, Info.Method] = HashSMap.empty
+        var _methods: HashSMap[String, Info] = HashSMap.empty
         val sigs = ISZ[(String, ISZ[AST.TypeParam], ISZ[AST.Param], AST.Type.Named)](
           (uif__HasEvent, ISZ(genericType), ISZ[AST.Param](genericPortParam), boolType),
           (uif__MaySend, ISZ(), ISZ[AST.Param](portParam), boolType),
@@ -2694,15 +2731,20 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             isInObject = T)
         }
 
-        val specDefs: ISZ[(String, Info.Method)] = gclAnnexes.flatMap((g: GclSubclause) =>
+        val specDefs: ISZ[(String, Info)] = gclAnnexes.flatMap((g: GclSubclause) =>
           g.methods.map((gclMethod: GclMethod) => {
 
-            val infoMethod = buildInfoMethod(gclMethod, threadsName, threadsScope)
+            val fqMethodName = threadsName :+ gclMethod.sig.id.value
 
-            val fqMethodName = threadsName :+ gclMethod.method.sig.id.value
-            resolvedMethods = resolvedMethods + (fqMethodName ~> infoMethod)
-
-            (gclMethod.method.sig.id.value, infoMethod)
+            buildInfoMethod(gclMethod, threadsName, threadsScope) match {
+              case i: Info.Method =>
+                resolvedBodyMethods = resolvedBodyMethods + (fqMethodName ~> i)
+                (gclMethod.sig.id.value, i)
+              case i: Info.SpecMethod =>
+                (gclMethod.sig.id.value, i)
+              case x =>
+                halt(s"Infeasible: $x")
+            }
           }))
 
         _methods ++ specDefs

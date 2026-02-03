@@ -333,10 +333,23 @@ object Printers {
 
 @datatype class FnHeader(val constness: B)
 
+@enum object VerusFnKind {
+  "spec"
+  "exec"
+  "proof"
+}
+
 @datatype class FnVerusHeader(val isOpen: B,
-                              val isSpec: B) {
+                              val kind: VerusFnKind.Type) {
+
   @pure def prettyST: ST = {
-    return st"${if (isOpen) "open " else ""}${if(isSpec) "spec " else "proof " }"
+    val k: String = kind match {
+      case VerusFnKind.spec => "spec "
+      case VerusFnKind.exec => "exec "
+      case VerusFnKind.proof => "proof "
+    }
+
+    return st"${if (isOpen) "open " else ""}$k"
   }
 }
 
@@ -348,6 +361,10 @@ object Printers {
                           val kind: Ty) extends Param {
   @pure def prettyST: ST = {
     return st"${ident.prettyST}: ${kind.prettyST}"
+  }
+
+  override def string: String = {
+    return prettyST.render
   }
 }
 
@@ -368,6 +385,12 @@ object Printers {
 @datatype class FnRetTyImpl(ty: Ty) extends FnRetTy {
   @pure override def prettyST: ST = {
     return st" -> ${ty.prettyST}"
+  }
+}
+@datatype class FnNamedRetTyImpl(val id: String,
+                                 val ty: Ty) extends FnRetTy {
+  @pure override def prettyST: ST = {
+    return st" -> ($id: ${ty.prettyST})"
   }
 }
 @datatype class FnDecl(val inputs: ISZ[Param],

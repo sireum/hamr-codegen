@@ -415,7 +415,7 @@ object GclResolverUtil {
         // is it a gumbo method invocation
         specFuncs.get(component.classifier :+ o.id.value) match {
           case Some(m) =>
-            m.method.sig.returnType match {
+            m.sig.returnType match {
               case t: AST.Type.Named =>
                 val name = st"${(for (i <- t.name.ids) yield i.value, "::")}".render
                 aadlTypes.typeMap.get(name) match {

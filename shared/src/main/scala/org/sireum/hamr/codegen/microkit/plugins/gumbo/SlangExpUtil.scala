@@ -300,7 +300,11 @@ object SlangExpUtil {
                               context != Context.library_function && context != Context.subclause_function =>
                             // state var
                             st"self.${exp.ident.id.value}"
-                          case _ =>
+                          case Some(v: SAST.ResolvedInfo.LocalVar)
+                            if context == Context.library_function || context == Context.subclause_function =>
+                            // param
+                            st"${exp.ident.id.value}"
+                          case x =>
                             convertSlangMethodsToRust(receiverOpt = exp.receiverOpt, id = exp.ident.id, attr = exp.attr, separator = ".")
                         }
 

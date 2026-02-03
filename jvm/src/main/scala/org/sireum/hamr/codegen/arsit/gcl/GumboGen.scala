@@ -929,10 +929,10 @@ object GumboGen {
   }
 
   def processGclMethod(gclMethod: GclMethod, store: Store): ST = {
-    val methodName = gclMethod.method.sig.id.value
+    val methodName = gclMethod.sig.id.value
 
     val returnType: String = {
-      val retTypeName: String = gclMethod.method.sig.returnType match {
+      val retTypeName: String = gclMethod.sig.returnType match {
         case atn: AST.Type.Named =>
           val key = st"${(atn.name.ids.map((i: AST.Id) => i.value), "::")}".render
           val aadlType = aadlTypes.typeMap.get(key).get.nameProvider
@@ -942,7 +942,7 @@ object GumboGen {
       retTypeName
     }
 
-    val params: ISZ[String] = gclMethod.method.sig.params.map((p: AST.Param) => {
+    val params: ISZ[String] = gclMethod.sig.params.map((p: AST.Param) => {
       val paramTypeName: ISZ[String] = p.tipe match {
         case atn: AST.Type.Named =>
           atn.name.ids.map((i: AST.Id) => i.value)
@@ -954,7 +954,7 @@ object GumboGen {
       s"${p.id.value}: ${aadlType.qualifiedReferencedTypeName}"
     })
 
-    val rexp: AST.Exp = gclMethod.method.bodyOpt match {
+    val rexp: AST.Exp = gclMethod.asInstanceOf[GclBodyMethod].method.bodyOpt match {
       case Some(AST.Body(ISZ(AST.Stmt.Return(Some(exp))))) =>
         GumboGen.rewriteToLogika(exp, F, ISZ(), aadlTypes, basePackageName)
       case _ => halt("Unexpected: should be a return statement containing a single expression")
@@ -963,7 +963,7 @@ object GumboGen {
     imports = imports ++ GumboGenUtil.resolveLitInterpolateImports(rexp, basePackageName, GclResolver.getIndexingTypeFingerprints(store))
 
     var isPure = F
-    val purity: String = gclMethod.method.purity match {
+    val purity: String = gclMethod.sig.purity match {
       case AST.Purity.Pure =>
         isPure = T
         "pure"
@@ -974,8 +974,8 @@ object GumboGen {
     }
 
     val body: ST = if (isPure) {
-      val contractOpt: Option[ST] = if (gclMethod.method.mcontract.nonEmpty) {
-        val scontract: Simple = gclMethod.method.mcontract.asInstanceOf[Simple]
+      val contractOpt: Option[ST] = if (gclMethod.asInstanceOf[GclBodyMethod].method.mcontract.nonEmpty) {
+        val scontract: Simple = gclMethod.asInstanceOf[GclBodyMethod].method.mcontract.asInstanceOf[Simple]
 
         val readsOpt: Option[ST] =
           if (scontract.reads.isEmpty) None()

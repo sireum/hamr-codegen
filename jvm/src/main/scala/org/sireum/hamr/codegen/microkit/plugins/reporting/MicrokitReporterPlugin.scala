@@ -361,7 +361,7 @@ object MicrokitReporterPlugin {
           }
 
           for (m <- subclauseInfo.annex.methods) {
-            val id = m.method.sig.id.value
+            val id = m.sig.id.value
             componentCrateFunctions.get(id) match {
               case Some(_)=>
                 gumboMethodsReport = gumboMethodsReport + id ~> componentCrateFunctions.get(id).get.pos
