@@ -123,9 +123,9 @@ object CRustTestingPlugin {
 
         val testApiBody: ST =
           if (p.isEvent) {
-            st"*extern_api::$varName.lock().unwrap() = value"
+            st"*extern_api::$varName.lock().unwrap_or_else(|e| e.into_inner()) = value"
           } else {
-            st"*extern_api::$varName.lock().unwrap() = Some(value)"
+            st"*extern_api::$varName.lock().unwrap_or_else(|e| e.into_inner()) = Some(value)"
           }
 
         ret = ret :+ RAST.FnImpl(
@@ -148,9 +148,9 @@ object CRustTestingPlugin {
 
         val (testApiBody, retType): (ST, RAST.Ty) = {
           if (p.isEvent) {
-            (st"return extern_api::$varName.lock().unwrap().clone()", RAST.TyPath(items = ISZ(ISZ("Option"), portTypeNameProvider.qualifiedRustNameS), aadlType = Some(portType.classifier)))
+            (st"return extern_api::$varName.lock().unwrap_or_else(|e| e.into_inner()).clone()", RAST.TyPath(items = ISZ(ISZ("Option"), portTypeNameProvider.qualifiedRustNameS), aadlType = Some(portType.classifier)))
           } else {
-            (st"""return extern_api::$varName.lock().unwrap().expect("Not expecting None")""", RAST.TyPath(items = ISZ(portTypeNameProvider.qualifiedRustNameS), aadlType = Some(portType.classifier)))
+            (st"""return extern_api::$varName.lock().unwrap_or_else(|e| e.into_inner()).expect("Not expecting None")""", RAST.TyPath(items = ISZ(portTypeNameProvider.qualifiedRustNameS), aadlType = Some(portType.classifier)))
           }
         }
 

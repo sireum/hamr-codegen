@@ -364,7 +364,7 @@ object CRustApiUtil {
       val externApiBody: ST =
         if (p.isEvent) {
           st"""unsafe {
-              |  match *$varName.lock().unwrap() {
+              |  match *$varName.lock().unwrap_or_else(|e| e.into_inner()) {
               |    Some(v) => {
               |      *value = v;
               |      return true;
@@ -374,8 +374,9 @@ object CRustApiUtil {
               |}"""
         } else {
           st"""unsafe {
-              |  *value = $varName.lock().unwrap().expect("Not expecting None");
-              |  return true;
+              |  let guard = $varName.lock().unwrap_or_else(|e| e.into_inner());
+              |  *value = guard.expect("Not expecting None");
+              |  true
               |}"""
         }
 
@@ -428,7 +429,7 @@ object CRustApiUtil {
         comments = ISZ(), visibility = RAST.Visibility.Public, contract = None(), meta = ISZ(),
         body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
           st"""unsafe {
-              |  *$varName.lock().unwrap() = Some(*value);
+              |  *$varName.lock().unwrap_or_else(|e| e.into_inner()) = Some(*value);
               |  return true;
               |}""")))))
 

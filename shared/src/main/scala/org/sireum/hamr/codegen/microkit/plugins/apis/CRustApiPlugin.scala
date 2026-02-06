@@ -162,7 +162,7 @@ object ComponentApiContributions {
       val bridgeDir = CRustApiPlugin.apiDirectory(thread, options)
 
       val reset_test_globals: ISZ[ST] = for(v <- c._2.externApiTestMockVariables) yield
-        st"*${v.asInstanceOf[RAST.ItemStatic].ident.string}.lock().unwrap() = None;"
+        st"*${v.asInstanceOf[RAST.ItemStatic].ident.string}.lock().unwrap_or_else(|e| e.into_inner()) = None;"
 
       { // extern_c_api.rs
         val content =
