@@ -284,12 +284,13 @@ object GclResolverUtil {
             args = args :+ e.getOrElse(arg)
           } else {
             // need to wrap indices in call to the indexing type's Z->I helper method
+            val arg_ = e.getOrElse(arg)
             args = args :+ Exp.Invoke(
               receiverOpt = None(),
-              ident = Exp.Ident(AST.Id(indexingTypeFingerprint, emptyAttr), emptyRAttr),
+              ident = Exp.Ident(AST.Id(indexingTypeFingerprint, emptyAttr), emptyRAttr(posOpt = arg_.posOpt)),
               targs = ISZ(),
               args = ISZ(e.getOrElse(arg)),
-              attr = emptyRAttr)
+              attr = emptyRAttr(posOpt = arg_.posOpt))
           }
         }
 
@@ -297,7 +298,7 @@ object GclResolverUtil {
           if (constructingArray)
             o(
               receiverOpt = None(),
-              ident = AST.Exp.Ident(AST.Id("IS", emptyAttr), emptyRAttr),
+              ident = AST.Exp.Ident(AST.Id("IS", emptyAttr(posOpt = o.posOpt)), emptyRAttr(posOpt = o.posOpt)),
               args = args,
               targs = typeAlias.typeArgs)
           else if (isFunctionCall)
