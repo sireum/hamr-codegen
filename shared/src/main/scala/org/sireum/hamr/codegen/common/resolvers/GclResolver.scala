@@ -12,7 +12,7 @@ import org.sireum.lang.ast.MethodContract.Simple
 import org.sireum.lang.ast.{Exp, Purity, ResolvedAttr, ResolvedInfo, TypeParam}
 import org.sireum.lang.symbol.Resolver.{NameMap, QName, TypeMap, resolverKind, typeName, typeParamMap}
 import org.sireum.lang.symbol.{Info, Resolver, Scope, TypeInfo}
-import org.sireum.lang.tipe.{TypeChecker, TypeHierarchy}
+import org.sireum.lang.tipe.{TypeChecker, TypeHierarchy, TypeOutliner}
 import org.sireum.lang.{ast => AST}
 import org.sireum.message.{Position, Reporter, ReporterImpl}
 
@@ -1721,7 +1721,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
     }
   }
 
-  def buildTypeMap(gclLibs: ISZ[GclLib], aadlTypes: AadlTypes, symbolTable: SymbolTable, reporter: Reporter): Unit = {
+  def buildTypeMap(gclLibs: ISZ[GclLib], aadlTypes: AadlTypes, symbolTable: SymbolTable, posOptT: Option[Position], reporter: Reporter): Unit = {
 
     def globalImports(packageName: ISZ[String]): ISZ[AST.Stmt.Import] = {
 
@@ -1764,24 +1764,24 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
     }
     builtTypeInfo = T
 
-    def resolveType(value: AST.Type, posOpt: Option[Position]): AST.Type.Named = {
-      val pos: Option[Position] = if (value.posOpt.nonEmpty) value.posOpt else posOpt
+    def resolveType(value: AST.Type, posOptP: Option[Position]): AST.Type.Named = {
+      val posOpt: Option[Position] = if (value.posOpt.nonEmpty) value.posOpt else posOptP
       value match {
         case atn: AST.Type.Named =>
           val typeIds: ISZ[String] = for (id <- atn.name.ids) yield id.value
           val aadlName = TypeUtil.getAadlTypeFromSlangType(typeIds)
 
-          return resolveTypeH(getAadlType(aadlName, aadlTypes, pos, reporter), pos)
+          return resolveTypeH(getAadlType(aadlName, aadlTypes, posOpt, reporter), posOpt)
 
         case x =>
           reporter.error(value.posOpt, GclResolver.toolName, s"Wasn't expecting $x")
-          return AST.Type.Named(name = AST.Name(ids = ISZ(), attr = AST.Attr(pos)), typeArgs = ISZ(), attr = AST.TypedAttr(pos, None()))
+          return AST.Type.Named(name = AST.Name(ids = ISZ(), attr = AST.Attr(posOpt)), typeArgs = ISZ(), attr = AST.TypedAttr(posOpt, None()))
       }
     }
 
-    def resolveTypeH(aadlType: AadlType, posOpt: Option[Position]): AST.Type.Named = {
-      val typeInfo = buildTypeInfo(aadlType)
-      val pos: Option[Position] = if (typeInfo.posOpt.nonEmpty) typeInfo.posOpt else posOpt
+    def resolveTypeH(aadlType: AadlType, posOptP: Option[Position]): AST.Type.Named = {
+      val posOpt: Option[Position] = if (aadlType.container.nonEmpty) aadlType.container.get.identifier.pos else posOptP
+      val typeInfo = buildTypeInfo(aadlType, posOpt)
 
       val (typeName, typedName): (ISZ[String], AST.Typed) = typeInfo match {
         case ta: TypeInfo.TypeAlias =>
@@ -1795,14 +1795,14 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           (te.name, AST.Typed.Name(te.name, ISZ()))
 
         case x =>
-          reporter.error(pos, GclResolver.toolName, s"Wasn't expecting a $x")
+          reporter.error(posOpt, GclResolver.toolName, s"Wasn't expecting a $x")
           (ISZ(), AST.Typed.Name(ISZ(), ISZ()))
       }
 
       return AST.Type.Named(
-        name = AST.Name(for (t <- typeName) yield AST.Id(t, AST.Attr(pos)), AST.Attr(pos)),
+        name = AST.Name(for (t <- typeName) yield AST.Id(t, AST.Attr(posOpt)), AST.Attr(posOpt)),
         typeArgs = ISZ(),
-        attr = AST.TypedAttr(posOpt = pos, typedOpt = Some(typedName))
+        attr = AST.TypedAttr(posOpt = posOpt, typedOpt = Some(typedName))
       )
     }
 
@@ -1842,7 +1842,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         ast = adtAst)
     }
 
-    def buildTypeInfo(aadlType: AadlType): TypeInfo = {
+    def buildTypeInfo(aadlType: AadlType, posOptP: Option[Position]): TypeInfo = {
+      val posOpt: Option[Position] = if (aadlType.container.nonEmpty) aadlType.container.get.identifier.pos else posOptP
 
       val qualifiedName = aadlType.classifier
 
@@ -1856,9 +1857,9 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         return globalTypeMap.get(qualifiedTypeName).get
       }
 
-      val posOpt = aadlType.container.get.identifier.pos
-
       val attr = AST.Attr(posOpt)
+      val rattr = AST.ResolvedAttr(posOpt = posOpt, resOpt = None(), typedOpt = None())
+      val tattr = AST.TypedAttr(posOpt = posOpt, typedOpt = None())
 
       aadlType match {
         case e: EnumType =>
@@ -1993,140 +1994,185 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             val indexTypeFingerprint = TypeUtil.getIndexingTypeFingerprintMethodName(indexingType.ids)
             indexingTypeFingerprints = indexingTypeFingerprints + indexTypeFingerprint ~> indexingType.ids
 
-            val fingerMethodAST =
+            val paramId = "z"
+            val rangeSimpleTypeName = "I"
+            val fqnRangeTypeName = packageName :+ simpleName :+ "I"
+
+            assert (packageName.size == 1)
+            val selectRangeType = AST.Exp.Select(
+              receiverOpt = Some(AST.Exp.Select(
+                receiverOpt = Some(AST.Exp.Ident(AST.Id(packageName(0), attr), rattr)),
+                id = AST.Id(simpleName, attr), targs = ISZ(), attr = rattr)),
+              id = AST.Id("I", attr), targs = ISZ(), attr = rattr)
+
+            val idsRangeType: ISZ[AST.Id] = for(n <- fqnRangeTypeName) yield AST.Id(n, attr)
+
+            /* Contract(
+             *   Requires(I.Min.toZ <= i && i <= I.Max.toZ),
+             *   Ensures(Res[I].toZ == i)
+             *)
+             */
+            val contract = AST.MethodContract.Simple(
+              readsClause = AST.MethodContract.Accesses.empty,
+              requiresClause = AST.MethodContract.Claims(
+                claims = ISZ(AST.Exp.Binary(
+                  // I.Min.toZ <= z
+                  left = AST.Exp.Binary(
+                    left = AST.Exp.Select(
+                      receiverOpt = Some(AST.Exp.Select(
+                        receiverOpt = Some(AST.Exp.Ident(id = AST.Id(rangeSimpleTypeName, attr), attr = rattr)),
+                        id = AST.Id("Min", attr), targs = ISZ(), attr = rattr)),
+                      id = AST.Id("toZ", attr), targs = ISZ(), attr = rattr),
+                    op = AST.Exp.BinaryOp.Le,
+                    right = AST.Exp.Ident(id = AST.Id(paramId, attr), attr = rattr),
+                    attr = rattr, opPosOpt = posOpt),
+                  op = AST.Exp.BinaryOp.CondAnd,
+                  // z <= I.Max.toZ
+                  right = AST.Exp.Binary(
+                    left = AST.Exp.Ident(AST.Id(paramId, attr), rattr),
+                    op = AST.Exp.BinaryOp.Le,
+                    right = AST.Exp.Select(
+                      receiverOpt = Some(AST.Exp.Select(
+                        receiverOpt = Some(AST.Exp.Ident(id = AST.Id(rangeSimpleTypeName, attr), attr = rattr)),
+                        id = AST.Id("Max", attr), targs = ISZ(), attr = rattr)),
+                      id = AST.Id("toZ", attr), targs = ISZ(), attr = rattr),
+                    attr = rattr, opPosOpt = posOpt),
+                  attr = rattr, opPosOpt = posOpt)),
+                attr = attr),
+              modifiesClause = AST.MethodContract.Accesses.empty,
+              ensuresClause = AST.MethodContract.Claims(
+                // Res[I].toZ == z
+                claims = ISZ(AST.Exp.Binary(
+                  left = AST.Exp.Select(
+                    receiverOpt = Some(
+                      AST.Exp.Result(tipeOpt = Some(AST.Type.Named(name = AST.Name(ISZ(AST.Id(rangeSimpleTypeName, attr)), attr), typeArgs = ISZ(), attr = tattr)), attr = tattr)),
+                    id = AST.Id("toZ", attr),
+                    targs = ISZ(), attr = rattr),
+                  op = AST.Exp.BinaryOp.Eq,
+                  right = AST.Exp.Ident(AST.Id(paramId, attr), rattr),
+                  attr = rattr, opPosOpt = posOpt)),
+                attr = attr
+              ),
+              infoFlowsClause = AST.MethodContract.InfoFlows.empty,
+              attr = attr)
+
+            val fingerMethodAST_unresolved =
               AST.Stmt.Method(
                 typeChecked = F,
-                purity = Purity.StrictPure,
-                modifiers = ISZ("@strictpure"),
+                purity = Purity.Pure,
+                modifiers = ISZ("@pure"),
                 sig = AST.MethodSig(
-                  purity = Purity.StrictPure,
+                  purity = Purity.Pure,
                   annotations = ISZ(),
                   id = AST.Id(indexTypeFingerprint, attr),
                   typeParams = ISZ(),
                   hasParams = T,
                   params = ISZ(AST.Param(
                     isHidden = F,
-                    id = AST.Id("i", attr),
+                    id = AST.Id(paramId, attr),
                     tipe = AST.Type.Named(
                       name = AST.Name(ISZ(AST.Id("Z", attr)), attr),
                       typeArgs = ISZ(),
-                      attr = AST.TypedAttr(typedOpt = Some(AST.Typed.Name(ISZ("org", "sireum", "Z"), ISZ())), posOpt = posOpt)))),
+                      attr = tattr
+                    ))),
                   returnType = AST.Type.Named(
-                    name = AST.Name(ISZ(AST.Id("I", attr)), attr),
+                    name = AST.Name(idsRangeType, attr),
                     typeArgs = ISZ(),
-                    attr = AST.TypedAttr(typedOpt = Some(AST.Typed.Name(ids = qualifiedName :+ "I", args = ISZ())), posOpt = posOpt))),
-                mcontract = AST.MethodContract.Simple.empty,
+                    attr = tattr(typedOpt = Some(AST.Typed.Name(ids = fqnRangeTypeName, args = ISZ()))))
+                ),
+                mcontract = contract,
                 bodyOpt = Some(AST.Body(
                   stmts = ISZ(
                     // val _r_: I = I.fromZ(i)
                     AST.Stmt.Var(isSpec = F, isVal = T, id = AST.Id("_r_", attr),
                       tipeOpt = Some(AST.Type.Named(
-                        name = AST.Name(ISZ(AST.Id("I", attr)), attr), typeArgs = ISZ(),
-                        attr = AST.TypedAttr(typedOpt = Some(AST.Typed.Name(qualifiedName :+ "I", ISZ())), posOpt = posOpt))),
+                        name = AST.Name(idsRangeType, attr), typeArgs = ISZ(),
+                        attr = tattr
+                      )),
 
                       // ... = I.fromZ(i)
                       initOpt = Some(AST.Stmt.Expr(
                         exp = AST.Exp.Invoke(
-                          receiverOpt = Some(AST.Exp.Ident(AST.Id("I", attr), AST.ResolvedAttr(
-                            posOpt = posOpt,
-                            resOpt = Some(AST.ResolvedInfo.Object(qualifiedName :+ "I")),
-                            typedOpt = Some(AST.Typed.Object(owner = qualifiedName, id = "I"))))),
+                          receiverOpt = Some(selectRangeType),
                           ident = AST.Exp.Ident(
                             id = AST.Id("fromZ", attr),
-                            attr = AST.ResolvedAttr(posOpt = posOpt,
-                              resOpt = Some(AST.ResolvedInfo.Method(isInObject = T, mode = AST.MethodMode.Method, typeParams = ISZ(),
-                                owner = qualifiedName :+ "I", id = "fromZ", paramNames = ISZ("n"),
-                                tpeOpt = Some(AST.Typed.Fun(
-                                  purity = AST.Purity.Pure, isByName = F,
-                                  args = ISZ(AST.Typed.Name(ISZ("org", "sireum", "Z"), ISZ())),
-                                  ret = AST.Typed.Name(qualifiedName :+ "I", ISZ()))),
-                                reads = ISZ(), writes = ISZ())),
-                              typedOpt = Some(AST.Typed.Method(
-                                isInObject = T, mode = AST.MethodMode.Ext, typeParams = ISZ(),
-                                owner = qualifiedName :+ "I", name = "fromZ", paramNames = ISZ("n"),
-                                tpe = AST.Typed.Fun(purity = AST.Purity.Pure, isByName = F,
-                                  args = ISZ(AST.Typed.Name(ISZ("org", "sireum", "Z"), ISZ())),
-                                  ret = AST.Typed.Name(qualifiedName :+ "I", ISZ())))))),
+                            attr = rattr
+                          ),
                           targs = ISZ(),
                           args = ISZ(
-                            AST.Exp.Ident(AST.Id("i", attr), AST.ResolvedAttr(
-                              posOpt = posOpt,
-                              resOpt = Some(AST.ResolvedInfo.LocalVar(context = qualifiedName :+ indexTypeFingerprint, scope = AST.ResolvedInfo.LocalVar.Scope.Current,
-                                isSpec = F, isVal = T, id = "i")),
-                              typedOpt = Some(AST.Typed.Name(ISZ("org", "sireum", "Z"), ISZ()))
-                            ))),
-                          attr = AST.ResolvedAttr(
-                            posOpt = posOpt,
-                            resOpt = Some(AST.ResolvedInfo.Method(
-                              isInObject = T, mode = AST.MethodMode.Ext, typeParams = ISZ(),
-                              owner = qualifiedName :+ "I", id = "fromZ", paramNames = ISZ("n"),
-                              tpeOpt = Some(AST.Typed.Fun(
-                                purity = AST.Purity.Pure, isByName = F, args = ISZ(AST.Typed.Name(ISZ("org", "sireum", "Z"), ISZ())),
-                                ret = AST.Typed.Name(qualifiedName :+ "I", ISZ()))),
-                              reads = ISZ(), writes = ISZ())),
-                            typedOpt = Some(AST.Typed.Name(qualifiedName :+ "I", ISZ())))),
-                        attr = AST.TypedAttr(posOpt = posOpt, typedOpt = Some(AST.Typed.Name(qualifiedName :+ "I", ISZ())))
+                            AST.Exp.Ident(AST.Id(paramId, attr), rattr
+                            )),
+                          attr = rattr
+                        ),
+                        attr = tattr
                       )),
-                      attr = AST.ResolvedAttr(posOpt = posOpt,
-                        resOpt = Some(AST.ResolvedInfo.LocalVar(context = qualifiedName :+ indexTypeFingerprint, scope = AST.ResolvedInfo.LocalVar.Scope.Current,
-                          isSpec = F, isVal = T, id = "_r_")),
-                        typedOpt = Some(AST.Typed.Name(qualifiedName :+ "I", ISZ())))),
+                      attr = rattr
+                    ),
 
                     // return _r_
                     AST.Stmt.Return(
                       expOpt = Some(AST.Exp.Ident(AST.Id("_r_", attr),
-                        AST.ResolvedAttr(posOpt = posOpt,
-                          resOpt = Some(ResolvedInfo.LocalVar(
-                            context = qualifiedName :+ indexTypeFingerprint, scope = AST.ResolvedInfo.LocalVar.Scope.Current,
-                            isSpec = F, isVal = T, id = "_r")),
-                          typedOpt = Some(AST.Typed.Name(qualifiedName :+ "I", ISZ()))))),
-                      attr = AST.TypedAttr(posOpt = posOpt, typedOpt = Some(
-                        AST.Typed.Name(qualifiedName :+ "I", ISZ()))))
+                        rattr
+                      )),
+                      attr = tattr
+                    )
                   ),
-                  undecls = ISZ(
-                    AST.ResolvedInfo.LocalVar(
-                      id = "i", context = qualifiedName :+ indexTypeFingerprint, scope = AST.ResolvedInfo.LocalVar.Scope.Current, isSpec = F, isVal = T),
-                    AST.ResolvedInfo.LocalVar(
-                      id = "_r", context = qualifiedName :+ indexTypeFingerprint, scope = AST.ResolvedInfo.LocalVar.Scope.Current, isSpec = F, isVal = T)))),
-                attr = AST.ResolvedAttr(posOpt = posOpt,
-                  resOpt = Some(AST.ResolvedInfo.Method(
-                    isInObject = T, mode = AST.MethodMode.Method, typeParams = ISZ(),
-                    owner = qualifiedName,
-                    id = indexTypeFingerprint,
-                    paramNames = ISZ("i"),
-                    tpeOpt = Some(AST.Typed.Fun(
-                      purity = Purity.StrictPure, isByName = F,
-                      args = ISZ(AST.Typed.Name(ISZ("org", "sireum", "Z"), ISZ())),
-                      ret = AST.Typed.Name(qualifiedName :+ "I", ISZ()))),
-                    reads = ISZ(),
-                    writes = ISZ())),
-                  typedOpt = Some(AST.Typed.Method(isInObject = T, mode = AST.MethodMode.Method, typeParams = ISZ(),
-                    owner = qualifiedName,
-                    name = indexTypeFingerprint,
-                    paramNames = ISZ("i"),
-                    tpe = AST.Typed.Fun(purity = Purity.StrictPure, isByName = F,
-                      args = ISZ(AST.Typed.Name(ISZ("org", "sireum", "Z"), ISZ())),
-                      ret = AST.Typed.Name(qualifiedName :+ "I", ISZ()))))
-                ))
-
-            val fingerMethodObj = Info.Method(
-              owner = qualifiedName,
-              isInObject = T,
-              scope = adtScope,
-              hasBody = T,
-              ast = fingerMethodAST)
-
-            declareName(indexTypeFingerprint, qualifiedName :+ indexTypeFingerprint, fingerMethodObj, posOpt, reporter)
+                  undecls = ISZ()
+                )),
+                attr = rattr
+              )
 
             val indexingTypeTypeInfo = TypeInfo.SubZ(
               owner = packageName :+ simpleName,
               ast = // @range(min=x max=x, index=T) class I
                 AST.Stmt.SubZ(
-                  id = AST.Id("I", attr),
+                  id = AST.Id(rangeSimpleTypeName, attr),
                   min = 0, max = a.dimensions(0) - 1, isIndex = T,
                   isSigned = F, isBitVector = F, isWrapped = F, hasMin = T, hasMax = T, bitWidth = 0, index = 0, attr = attr))
 
-            globalTypeMap = globalTypeMap + ((packageName :+ simpleName :+ "I") ~> indexingTypeTypeInfo)
+            globalTypeMap = globalTypeMap + ((fqnRangeTypeName) ~> indexingTypeTypeInfo)
+
+            // also add the indexing type to the name map
+            val indexingTypeObjectInfo = Info.Object(
+              owner = indexingTypeTypeInfo.owner,
+              isSynthetic = F,
+              scope = adtScope,
+              outlined = F,
+              contractOutlined = F,
+              typeChecked = F,
+              ast = AST.Stmt.Object(isApp = F, extNameOpt = None(), id = AST.Id(rangeSimpleTypeName, attr), stmts = ISZ(), attr = attr),
+              typedOpt = Some(AST.Typed.Object(owner = packageName :+ simpleName, id = rangeSimpleTypeName)),
+              resOpt = Some(AST.ResolvedInfo.Object(name = fqnRangeTypeName)),
+              constructorRes = AST.ResolvedInfo.Method(
+                isInObject = F,
+                mode = AST.MethodMode.ObjectConstructor,
+                typeParams = ISZ(),
+                owner = packageName,
+                id = simpleName,
+                paramNames = ISZ(),
+                tpeOpt = None(), // this is null in the debugger
+                reads = ISZ(),
+                writes = ISZ()))
+
+            declareName("na", fqnRangeTypeName, indexingTypeObjectInfo, posOpt, reporter)
+
+            val fingerMethodObj_unresolved = Info.Method(
+              owner = qualifiedName,
+              isInObject = T,
+              scope = adtScope,
+              hasBody = T,
+              ast = fingerMethodAST_unresolved(
+                attr = fingerMethodAST_unresolved.attr(resOpt = Some(
+                  AST.ResolvedInfo.Method(
+                    isInObject = T, mode = AST.MethodMode.Method,
+                    typeParams = fingerMethodAST_unresolved.sig.typeParams.map(tp => tp.id.value),
+                    owner = qualifiedName,
+                    id = fingerMethodAST_unresolved.sig.id.value,
+                    paramNames = fingerMethodAST_unresolved.sig.params.map(p => p.id.value),
+                    tpeOpt = None(), reads = ISZ(), writes = ISZ())))
+              ))
+
+            declareName(indexTypeFingerprint, qualifiedName :+ indexTypeFingerprint, fingerMethodObj_unresolved, posOpt, reporter)
 
             val obj = Info.Object(
               owner = packageName,
@@ -2151,7 +2197,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                   //   val _r_: I = I.fromZ(i)
                   //   return _r_
                   // }
-                  fingerMethodAST
+                  fingerMethodAST_unresolved
                 ),
                 attr = attr
               ),
@@ -2169,6 +2215,56 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 writes = ISZ()))
 
             declareName(simpleName, qualifiedName, obj, posOpt, reporter)
+
+
+            {
+              val localScope = Scope.Local.create(HashMap.empty, adtScope)
+              val fqn: QName = qualifiedName :+ fingerMethodAST_unresolved.sig.id.value
+              val th = TypeHierarchy(nameMap = globalNameMap, typeMap = globalTypeMap, poset = Poset.empty, aliases = HashSMap.empty)
+
+              val tmembers = TypeInfo.Members(
+                specVars = HashSMap.empty,
+                vars = HashSMap.empty,
+                specMethods = HashSMap.empty,
+                methods = HashSMap.empty[String, Info.Method] + (fingerMethodAST_unresolved.sig.id.value ~> fingerMethodObj_unresolved),
+                invariants = HashSMap.empty,
+                refinements = HashSMap.empty)
+
+              val to = TypeOutliner(th)
+              val fingerMethodObj_outlined = to.outlineMembers(tmembers, adtScope, reporter).methods.values(0)
+
+              val tc = TypeChecker(th, fqn, F, TypeChecker.ModeContext.Code, F)
+
+              val methodScope = localScope
+              val fingerMethodAST_resolved: AST.Stmt.Method = {
+                val q1 = tc.checkMethod(methodScope, fingerMethodObj_outlined.ast, reporter)
+
+                TypeChecker.checkMethodContractSequent(
+                  strictAliasing = F, th = th, context = fqn, scope = adtScope,
+                  isMutableContext = F, stmt = q1, reporter = reporter)
+              }
+
+              if (reporter.hasError) {
+                reporter.printMessages()
+              } else {
+
+                {
+                  val fingerMethodObj_resolved = fingerMethodObj_outlined(ast = fingerMethodAST_resolved)
+
+                  replaceName(qualifiedName :+ indexTypeFingerprint, fingerMethodObj_resolved)
+                }
+
+                {
+                  val objStms: ISZ[AST.Stmt] = obj.ast.stmts
+                  assert (objStms.size == 3 && objStms(2) == fingerMethodAST_unresolved)
+
+                  val objResolve = obj(ast = obj.ast(stmts = ops.ISZOps(objStms).slice(0, 1) :+ fingerMethodAST_resolved))
+
+                  replaceName(qualifiedName, objResolve)
+                }
+              }
+            }
+
 
             // import the subz fingerprint method
             val fname: ISZ[AST.Id] = for (n <- qualifiedName :+ indexTypeFingerprint) yield AST.Id(n, attr)
@@ -2908,7 +3004,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         )
 
         { // build adt param
-          val paramResolvedType: TypeInfo = buildTypeInfo(paramType)
+          val paramResolvedType: TypeInfo = buildTypeInfo(paramType, param.feature.identifier.pos)
 
           val tipeName: AST.Name = AST.Name(
             ids = paramResolvedType.name.map((m: String) => AST.Id(m, AST.Attr(None()))),
@@ -3065,7 +3161,11 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
     { // build type info aadl types
       for (aadlType <- aadlTypes.typeMap.values) {
-        buildTypeInfo(aadlType)
+        val posOpt: Option[Position] =
+          if(aadlType.container.nonEmpty) aadlType.container.get.identifier.pos
+          else posOptT
+
+        buildTypeInfo(aadlType, posOpt)
       }
     }
 
@@ -3088,7 +3188,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
     val result: Option[AnnexClauseInfo] = annex.clause match {
       case gclSubclause: GclSubclause =>
         val gclLibs: ISZ[GclAnnexLibInfo] = annexLibs.filter((a: AnnexLibInfo) => a.isInstanceOf[GclAnnexLibInfo]).map((a: AnnexLibInfo) => a.asInstanceOf[GclAnnexLibInfo])
-        buildTypeMap(gclLibs.map((g: GclAnnexLibInfo) => g.annex), aadlTypes, symbolTable, reporter)
+        buildTypeMap(gclLibs.map((g: GclAnnexLibInfo) => g.annex), aadlTypes, symbolTable, component.component.identifier.pos, reporter)
 
         val qualifiedName: IdPath = component.classifier
         if (reporter.hasError) {
@@ -3149,7 +3249,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
     val gclLibs: ISZ[GclLib] = annexLibs.filter((al: AnnexLib) => al.isInstanceOf[GclLib]).map((al: AnnexLib) => al.asInstanceOf[GclLib])
 
     if (gclLibs.nonEmpty) {
-      buildTypeMap(gclLibs, aadlTypes, symbolTable, reporter)
+      buildTypeMap(gclLibs, aadlTypes, symbolTable, gclLibs(0).posOpt, reporter)
 
       for (gclLib <- gclLibs) {
         val qualifiedName = gclLib.containingPackage.name :+ GUMBO__Library

@@ -634,7 +634,11 @@ object Printers {
 }
 
 @sig trait Expr {
-  def prettyST: ST
+  @pure def prettyST: ST
+
+  override def string: String = {
+    return prettyST.render
+  }
 }
 
 @datatype class ExprST (val expr: ST) extends Expr {

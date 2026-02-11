@@ -561,26 +561,32 @@ object GumboRustPlugin {
               // assume integration clauses can only be applied to incoming ports.  The api therefore
               // ensures that the getter's return value will satisfy the assume clause.
 
+              val subs = Map.empty[String, String] + p.identifier ~>
+                s"${CRustApiPlugin.apiResultName}${if (isEvent) ".unwrap()" else ""}"
+
+              val rspec: RAST.Expr = GumboRustUtil.processGumboSpecH(
+                spec = a,
+                component = thread,
+                context = Context.integration_constraint,
+                substitutions = subs,
+                isAssumeRequires = F,
+                types = types,
+                tp = tp,
+                gclSymbolTable = subclauseInfo.gclSymbolTable,
+                store = store,
+                reporter = reporter)
+
               if (isEvent) {
-                halt("Need to handle event ports")
+                ensures = ensures + p.identifier ~> RAST.ExprST(
+                  st"""(res.is_none() ||
+                      |  ${rspec.prettyST})""")
               } else {
-                val subs = Map.empty[String, String] + p.identifier ~> s"${CRustApiPlugin.apiResultName}"
-                ensures = ensures + p.identifier ~> GumboRustUtil.processGumboSpecH(
-                  spec = a,
-                  component = thread,
-                  context = Context.integration_constraint,
-                  substitutions = subs,
-                  isAssumeRequires = F,
-                  types = types,
-                  tp = tp,
-                  gclSymbolTable = subclauseInfo.gclSymbolTable,
-                  store = store,
-                  reporter = reporter)
+                ensures = ensures + p.identifier ~> rspec
               }
 
             case g: GclGuarantee =>
-            // guarantee integration clauses can only be applied to outgoing ports.  They become
-            // requirements on the param value passed to the api -- the param's name will always be 'value'
+              // guarantee integration clauses can only be applied to outgoing ports.  They become
+              // requirements on the param value passed to the api -- the param's name will always be 'value'
 
               val subs = Map.empty[String, String] + p.identifier ~> s"${CRustApiPlugin.apiParameterName}"
               requires = requires + p.identifier ~> GumboRustUtil.processGumboSpecH(

@@ -432,7 +432,12 @@ object GumboXComputeContributions {
 
           val (i_name, i_assum_guard_name) = GumboXRustUtil.createIntegrationMethodName(port)
           clause match {
+
             case i: GclAssume =>
+              val param = RAST.ParamImpl(
+                ident = RAST.IdentString(port.identifier),
+                kind = RAST.TyPath(ISZ(typeNameProvider.qualifiedRustNameS), Some(aadlType.classifier)))
+
               val I_Assum = RAST.FnImpl(
                 comments = ISZ(RAST.CommentST(
                   st"""/** I-Assm: Integration constraint on ${thread.identifier}'s incoming $portDescription port ${port.identifier}
@@ -443,9 +448,7 @@ object GumboXComputeContributions {
                 sig = RAST.FnSig(
                   ident = RAST.IdentString(i_name),
                   fnDecl = RAST.FnDecl(
-                    inputs = ISZ(RAST.ParamImpl(
-                      ident = RAST.IdentString(port.identifier),
-                      kind = RAST.TyPath(ISZ(typeNameProvider.qualifiedRustNameS), Some(aadlType.classifier)))),
+                    inputs = ISZ(param),
                     outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
                   verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
                 attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(),
@@ -455,10 +458,30 @@ object GumboXComputeContributions {
               if (port.isInstanceOf[AadlDataPort]) {
                 ret = ret + port.path ~> ISZ(I_Assum)
               } else {
-                halt("Need to handle event ports")
+
+                val I_Assum_Guar = I_Assum(
+                  sig = I_Assum.sig (
+                    ident = RAST.IdentString(i_assum_guard_name),
+                    fnDecl = I_Assum.sig.fnDecl(
+                      inputs = ISZ(param(kind = RAST.TyPath(ISZ(ISZ("Option"), typeNameProvider.qualifiedRustNameS), Some(aadlType.classifier))))
+                    )
+                  ),
+                  body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
+                    st"""implies!(
+                        |  ${port.identifier}.is_some(),
+                        |  $i_name(${port.identifier}.unwrap())
+                        |)"""
+                  ))))
+                )
+
+                ret = ret + port.path ~> ISZ(I_Assum, I_Assum_Guar)
               }
             case i: GclGuarantee =>
-              val I_Assum = RAST.FnImpl(
+              val param = RAST.ParamImpl(
+                ident = RAST.IdentString(port.identifier),
+                kind = RAST.TyPath(ISZ(typeNameProvider.qualifiedRustNameS), Some(aadlType.classifier)))
+
+              val I_Guar = RAST.FnImpl(
                 comments = ISZ(RAST.CommentST(
                   st"""/** I-Guar: Integration constraint on ${thread.identifier}'s outgoing $portDescription port ${port.identifier}
                       |  *
@@ -468,9 +491,7 @@ object GumboXComputeContributions {
                 sig = RAST.FnSig(
                   ident = RAST.IdentString(i_name),
                   fnDecl = RAST.FnDecl(
-                    inputs = ISZ(RAST.ParamImpl(
-                      ident = RAST.IdentString(port.identifier),
-                      kind = RAST.TyPath(ISZ(typeNameProvider.qualifiedRustNameS), Some(aadlType.classifier)))),
+                    inputs = ISZ(param),
                     outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
                   verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
                 attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(),
@@ -478,9 +499,25 @@ object GumboXComputeContributions {
                 meta = ISZ(RAST.MetaOrigin(port.path)))
 
               if (port.isInstanceOf[AadlDataPort]) {
-                ret = ret + port.path ~> ISZ(I_Assum)
+                ret = ret + port.path ~> ISZ(I_Guar)
               } else {
-                halt("Need to handle event ports")
+
+                val I_Guar_Guard = I_Guar(
+                  sig = I_Guar.sig(
+                    ident = RAST.IdentString(i_assum_guard_name),
+                    fnDecl = I_Guar.sig.fnDecl(
+                      inputs = ISZ(param(kind = RAST.TyPath(
+                        ISZ(ISZ("Option"), typeNameProvider.qualifiedRustNameS), Some(aadlType.classifier))))
+                    )
+                  ),
+                  body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
+                    st"""implies!(
+                        |  ${port.identifier}.is_some(),
+                        |  $i_name(${port.identifier}.unwrap())
+                        |)"""))))
+                )
+
+                ret = ret + port.path ~> ISZ(I_Guar, I_Guar_Guard)
               }
             case _ => halt("Infeasible")
           }
@@ -955,14 +992,16 @@ object GumboXComputeContributions {
       var I_Assm_Guar_Params: Set[GGParam] = Set.empty
       var I_Assm_Guar: ISZ[ST] = ISZ()
       for (entry <- integrationConstraints.entries) {
+        assert (entry._2.size <= 2, entry._2.size.string)
         val port = thread.getPortByPath(entry._1).get
         if (GumboXRustUtil.isInPort(port)) {
-          for (fn <- entry._2) {
-            val aadlType = MicrokitTypeUtil.getPortType(port)
-            val param = GGPortParam(port, aadlType.classifier, crustTypeProvider.getTypeNameProvider(aadlType))
-            I_Assm_Guar_Params = I_Assm_Guar_Params + param
-            I_Assm_Guar = I_Assm_Guar :+ st"${fn.ident.prettyST}(${param.name})"
-          }
+          val aadlType = MicrokitTypeUtil.getPortType(port)
+          val param = GGPortParam(port, aadlType.classifier, crustTypeProvider.getTypeNameProvider(aadlType))
+          I_Assm_Guar_Params = I_Assm_Guar_Params + param
+
+          // only make a call to the final method (if it's an event port then this shoul be the guard method)
+          val fn = entry._2(entry._2.lastIndex)
+          I_Assm_Guar = I_Assm_Guar :+ st"${fn.ident.prettyST}(${param.name})"
         }
       }
 
@@ -1040,16 +1079,16 @@ object GumboXComputeContributions {
       var I_Guar_Guard: ISZ[ST] = ISZ()
       for (entry <- integrationConstraints.entries) {
         val port = thread.getPortByPath(entry._1).get
-        val isOptional = !port.isInstanceOf[AadlDataPort]
-        if (isOptional) {
-          halt("Need to handle event ports")
-        }
-        val aadlType = MicrokitTypeUtil.getPortType(port)
-        val param = GGPortParam(port, aadlType.classifier, crustTypeProvider.getTypeNameProvider(aadlType))
-        I_Guar_Guard_Params = I_Guar_Guard_Params + param
+        assert (entry._2.size <= 2, entry._2.size.string)
+        if (GumboXRustUtil.isOutPort(port)) {
+          val aadlType = MicrokitTypeUtil.getPortType(port)
+          val param = GGPortParam(port, aadlType.classifier, crustTypeProvider.getTypeNameProvider(aadlType))
+          I_Guar_Guard_Params = I_Guar_Guard_Params + param
 
-        val fn = entry._2(entry._2.lastIndex)
-        I_Guar_Guard = I_Guar_Guard :+ st"${fn.ident.prettyST}(${param.name})"
+          // only make a call to the final method (if it's an event port then this should be the guard method)
+          val fn = entry._2(entry._2.lastIndex)
+          I_Guar_Guard = I_Guar_Guard :+ st"${fn.ident.prettyST}(${param.name})"
+        }
       }
 
       var D_Inv_Guards: ISZ[ST] = ISZ()

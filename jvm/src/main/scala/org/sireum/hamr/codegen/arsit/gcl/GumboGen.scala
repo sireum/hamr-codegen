@@ -929,6 +929,12 @@ object GumboGen {
   }
 
   def processGclMethod(gclMethod: GclMethod, store: Store): ST = {
+    gclMethod match {
+      case g: GclSpecMethod =>
+        return st"Need to handle spec methods"
+      case _ =>
+    }
+
     val methodName = gclMethod.sig.id.value
 
     val returnType: String = {

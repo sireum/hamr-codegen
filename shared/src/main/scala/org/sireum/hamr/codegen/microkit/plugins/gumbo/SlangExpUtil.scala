@@ -298,8 +298,13 @@ object SlangExpUtil {
                           case Some(v: SAST.ResolvedInfo.Var)
                             if inVerus && receiverOpt.isEmpty &&
                               context != Context.library_function && context != Context.subclause_function =>
-                            // state var
-                            st"self.${exp.ident.id.value}"
+                            // state var or port being used in GUMBOX context
+
+                            substitutions.get(exp.ident.id.value) match {
+                              case Some(s) => st"${s}"
+                              case _ =>
+                                st"self.${exp.ident.id.value}"
+                            }
                           case Some(v: SAST.ResolvedInfo.LocalVar)
                             if context == Context.library_function || context == Context.subclause_function =>
                             // param

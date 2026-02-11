@@ -228,7 +228,10 @@ object GclResolverUtil {
         case Some(t: ArrayType) =>
           arrayType = Some(t)
           constructingArray = T
-        case Some(x) => halt(s"Unexpected: ${x.name}")
+        case Some(r: RecordType) =>
+
+        case Some(x) =>
+          halt("Unexpected")
         case _ =>
           currType = None()
           receiverOpt = irMTransformer.transformOption(o.receiverOpt, transform_langastExp _)
