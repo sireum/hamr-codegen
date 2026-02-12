@@ -178,11 +178,21 @@ def symLinkSireumJar(): Unit = {
 
 def regenReportArtifacts(): Unit = {
   val sharedRoot = home / "shared" / "src" / "main" / "scala" / "org" / "sireum" / "hamr" / "codegen"
-  val reportContainers: ISZ[Os.Path] = ISZ(
-    sharedRoot / "common" / "reporting" / "CodegenReport.scala",
-    sharedRoot / "microkit" / "reporting" / "MicrokitReport.scala"
-  )
-  proc"$sireum tool sergen -p org.sireum.hamr.codegen.common.reporting ${st"${(reportContainers, " ")}".render}".at(sharedRoot / "common" / "reporting").console.runCheck()
+
+  { // codege reporting
+    val reportContainers: ISZ[Os.Path] = ISZ(
+      sharedRoot / "common" / "reporting" / "CodegenReport.scala",
+      sharedRoot / "microkit" / "reporting" / "MicrokitReport.scala"
+    )
+    proc"$sireum tool sergen -p org.sireum.hamr.codegen.common.reporting ${st"${(reportContainers, " ")}".render}".at(sharedRoot / "common" / "reporting").console.runCheck()
+  }
+
+  { // integration constraints
+    val reportContainers: ISZ[Os.Path] = ISZ(
+      sharedRoot / "common" / "reporting" / "IntegrationConstraintReporting.scala"
+    )
+    proc"$sireum tool sergen -n IntegrationConstraintJSON -p org.sireum.hamr.codegen.common.reporting ${st"${(reportContainers, " ")}".render}".at(sharedRoot / "common" / "reporting").console.runCheck()
+  }
 }
 
 def regenClis(): Unit = {

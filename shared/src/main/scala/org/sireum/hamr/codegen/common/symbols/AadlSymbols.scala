@@ -8,6 +8,7 @@ import org.sireum.hamr.codegen.common.types.AadlType
 import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
 import org.sireum.hamr.ir
 import org.sireum.hamr.ir._
+import org.sireum.message.Position
 
 @sig trait AadlSymbol
 
@@ -433,6 +434,10 @@ import org.sireum.hamr.ir._
 @sig trait AadlPort extends AadlDirectedFeature {
   @pure def isEvent: B
   @pure def isData: B
+
+  @pure def posOpt: Option[Position] = {
+    return feature.identifier.pos
+  }
 }
 
 @sig trait AadlFeatureEvent extends AadlDirectedFeature {
