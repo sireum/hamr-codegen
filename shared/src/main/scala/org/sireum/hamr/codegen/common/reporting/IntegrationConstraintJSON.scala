@@ -26,9 +26,9 @@ object IntegrationConstraintJSON {
       ))
     }
 
-    @pure def printIntegrationConstraintReportingGclIntegerationConstraint(o: IntegrationConstraintReporting.GclIntegerationConstraint): ST = {
+    @pure def printIntegrationConstraintReportingGclIntegrationConstraint(o: IntegrationConstraintReporting.GclIntegrationConstraint): ST = {
       return printObject(ISZ(
-        ("type", st""""IntegrationConstraintReporting.GclIntegerationConstraint""""),
+        ("type", st""""IntegrationConstraintReporting.GclIntegrationConstraint""""),
         ("id", printString(o.id)),
         ("descriptor", printOption(T, o.descriptor, printString _)),
         ("position", printPosition(o.position))
@@ -40,10 +40,10 @@ object IntegrationConstraintJSON {
         ("type", st""""IntegrationConstraintReporting.IntegrationConstraint""""),
         ("srcPort", printString(o.srcPort)),
         ("srcPortPos", printPosition(o.srcPortPos)),
-        ("srcPortIntegrationConstraint", printOption(F, o.srcPortIntegrationConstraint, printIntegrationConstraintReportingGclIntegerationConstraint _)),
+        ("srcPortIntegrationConstraint", printOption(F, o.srcPortIntegrationConstraint, printIntegrationConstraintReportingGclIntegrationConstraint _)),
         ("dstPort", printString(o.dstPort)),
         ("dstPortPos", printPosition(o.dstPortPos)),
-        ("dstPortIntegrationConstraint", printIntegrationConstraintReportingGclIntegerationConstraint(o.dstPortIntegrationConstraint)),
+        ("dstPortIntegrationConstraint", printIntegrationConstraintReportingGclIntegrationConstraint(o.dstPortIntegrationConstraint)),
         ("connectionMidPoint", printPosition(o.connectionMidPoint)),
         ("claim", printString(o.claim)),
         ("smt2QueryResult", printIntegrationConstraintReportingSmt2QueryResultType(o.smt2QueryResult)),
@@ -82,14 +82,14 @@ object IntegrationConstraintJSON {
       }
     }
 
-    def parseIntegrationConstraintReportingGclIntegerationConstraint(): IntegrationConstraintReporting.GclIntegerationConstraint = {
-      val r = parseIntegrationConstraintReportingGclIntegerationConstraintT(F)
+    def parseIntegrationConstraintReportingGclIntegrationConstraint(): IntegrationConstraintReporting.GclIntegrationConstraint = {
+      val r = parseIntegrationConstraintReportingGclIntegrationConstraintT(F)
       return r
     }
 
-    def parseIntegrationConstraintReportingGclIntegerationConstraintT(typeParsed: B): IntegrationConstraintReporting.GclIntegerationConstraint = {
+    def parseIntegrationConstraintReportingGclIntegrationConstraintT(typeParsed: B): IntegrationConstraintReporting.GclIntegrationConstraint = {
       if (!typeParsed) {
-        parser.parseObjectType("IntegrationConstraintReporting.GclIntegerationConstraint")
+        parser.parseObjectType("IntegrationConstraintReporting.GclIntegrationConstraint")
       }
       parser.parseObjectKey("id")
       val id = parser.parseString()
@@ -100,7 +100,7 @@ object IntegrationConstraintJSON {
       parser.parseObjectKey("position")
       val position = parser.parsePosition()
       parser.parseObjectNext()
-      return IntegrationConstraintReporting.GclIntegerationConstraint(id, descriptor, position)
+      return IntegrationConstraintReporting.GclIntegrationConstraint(id, descriptor, position)
     }
 
     def parseIntegrationConstraintReportingIntegrationConstraint(): IntegrationConstraintReporting.IntegrationConstraint = {
@@ -119,7 +119,7 @@ object IntegrationConstraintJSON {
       val srcPortPos = parser.parsePosition()
       parser.parseObjectNext()
       parser.parseObjectKey("srcPortIntegrationConstraint")
-      val srcPortIntegrationConstraint = parser.parseOption(parseIntegrationConstraintReportingGclIntegerationConstraint _)
+      val srcPortIntegrationConstraint = parser.parseOption(parseIntegrationConstraintReportingGclIntegrationConstraint _)
       parser.parseObjectNext()
       parser.parseObjectKey("dstPort")
       val dstPort = parser.parseString()
@@ -128,7 +128,7 @@ object IntegrationConstraintJSON {
       val dstPortPos = parser.parsePosition()
       parser.parseObjectNext()
       parser.parseObjectKey("dstPortIntegrationConstraint")
-      val dstPortIntegrationConstraint = parseIntegrationConstraintReportingGclIntegerationConstraint()
+      val dstPortIntegrationConstraint = parseIntegrationConstraintReportingGclIntegrationConstraint()
       parser.parseObjectNext()
       parser.parseObjectKey("connectionMidPoint")
       val connectionMidPoint = parser.parsePosition()
@@ -165,8 +165,8 @@ object IntegrationConstraintJSON {
     }
   }
 
-  def fromIntegrationConstraintReportingGclIntegerationConstraint(o: IntegrationConstraintReporting.GclIntegerationConstraint, isCompact: B): String = {
-    val st = Printer.printIntegrationConstraintReportingGclIntegerationConstraint(o)
+  def fromIntegrationConstraintReportingGclIntegrationConstraint(o: IntegrationConstraintReporting.GclIntegrationConstraint, isCompact: B): String = {
+    val st = Printer.printIntegrationConstraintReportingGclIntegrationConstraint(o)
     if (isCompact) {
       return st.renderCompact
     } else {
@@ -174,12 +174,12 @@ object IntegrationConstraintJSON {
     }
   }
 
-  def toIntegrationConstraintReportingGclIntegerationConstraint(s: String): Either[IntegrationConstraintReporting.GclIntegerationConstraint, Json.ErrorMsg] = {
-    def fIntegrationConstraintReportingGclIntegerationConstraint(parser: Parser): IntegrationConstraintReporting.GclIntegerationConstraint = {
-      val r = parser.parseIntegrationConstraintReportingGclIntegerationConstraint()
+  def toIntegrationConstraintReportingGclIntegrationConstraint(s: String): Either[IntegrationConstraintReporting.GclIntegrationConstraint, Json.ErrorMsg] = {
+    def fIntegrationConstraintReportingGclIntegrationConstraint(parser: Parser): IntegrationConstraintReporting.GclIntegrationConstraint = {
+      val r = parser.parseIntegrationConstraintReportingGclIntegrationConstraint()
       return r
     }
-    val r = to(s, fIntegrationConstraintReportingGclIntegerationConstraint _)
+    val r = to(s, fIntegrationConstraintReportingGclIntegrationConstraint _)
     return r
   }
 

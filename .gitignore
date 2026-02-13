@@ -9,6 +9,7 @@ bin/prelude.ps1
 bin/sireum
 bin/sireum.bat
 bin/sireum.jar
+bin/sireum-mcp.bat
 bin/slang-run.*
 bin/.sireum-win.jar
 bin/linux

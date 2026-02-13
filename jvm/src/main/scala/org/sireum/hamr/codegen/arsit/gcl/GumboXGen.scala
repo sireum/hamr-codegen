@@ -245,17 +245,17 @@ object GumboXGen {
                    projectDirectories: ProjectDirectories,
                    gumboStore: GumboXPluginStore, store: Store, reporter: Reporter): GumboXPluginStore = {
 
-    var gstore = processIntegerationConstraints(component, componentNames, gclSubclauseInfo, basePackageName, symbolTable, aadlTypes, projectDirectories, gumboStore, store, reporter)
+    var gstore = processIntegrationConstraints(component, componentNames, gclSubclauseInfo, basePackageName, symbolTable, aadlTypes, projectDirectories, gumboStore, store, reporter)
 
     gstore = processInitializeEntrypoint(component, componentNames, gclSubclauseInfo, basePackageName, symbolTable, aadlTypes, projectDirectories, gstore, store, reporter)
 
     return processComputeEntrypoints(component, componentNames, gclSubclauseInfo, basePackageName, symbolTable, aadlTypes, projectDirectories, gstore, store, reporter)
   }
 
-  def processIntegerationConstraints(component: AadlThreadOrDevice, componentNames: NameProvider,
-                                     gclSubclauseInfo: Option[(GclSubclause, GclSymbolTable)],
-                                     basePackageName: String, symbolTable: SymbolTable, aadlTypes: AadlTypes, directories: ProjectDirectories,
-                                     gumboStore: GumboXPluginStore, store: Store, reporter: Reporter): GumboXPluginStore = {
+  def processIntegrationConstraints(component: AadlThreadOrDevice, componentNames: NameProvider,
+                                    gclSubclauseInfo: Option[(GclSubclause, GclSymbolTable)],
+                                    basePackageName: String, symbolTable: SymbolTable, aadlTypes: AadlTypes, directories: ProjectDirectories,
+                                    gumboStore: GumboXPluginStore, store: Store, reporter: Reporter): GumboXPluginStore = {
     var localGumboStore = resetImports(gumboStore)
 
     gclSubclauseInfo match {

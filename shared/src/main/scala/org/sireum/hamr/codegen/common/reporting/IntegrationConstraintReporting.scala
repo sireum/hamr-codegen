@@ -13,17 +13,17 @@ object IntegrationConstraintReporting {
     "Error"
   }
 
-  @datatype class GclIntegerationConstraint(val id: String,
-                                            val descriptor: Option[String],
-                                            val position: Position)
+  @datatype class GclIntegrationConstraint(val id: String,
+                                           val descriptor: Option[String],
+                                           val position: Position)
 
   @datatype class IntegrationConstraint(val srcPort: String,
                                         val srcPortPos: Position,
-                                        val srcPortIntegrationConstraint: Option[GclIntegerationConstraint],
+                                        val srcPortIntegrationConstraint: Option[GclIntegrationConstraint],
 
                                         val dstPort: String,
                                         val dstPortPos: Position,
-                                        val dstPortIntegrationConstraint: GclIntegerationConstraint,
+                                        val dstPortIntegrationConstraint: GclIntegrationConstraint,
 
                                         val connectionMidPoint: Position,
 
