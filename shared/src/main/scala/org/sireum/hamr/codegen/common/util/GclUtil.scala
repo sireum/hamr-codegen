@@ -166,7 +166,7 @@ object GclUtil {
   def rewriteBinary(exps: ISZ[AST.Exp], reporter: Reporter): AST.Exp = {
     ureporter = Reporter.create
 
-    val e = ParseTree.rewriteBinary[BinaryBuilder, AST.Exp, AST.Exp](
+    val e = ParseTree.rewriteBinaryOld[BinaryBuilder, AST.Exp, AST.Exp](
       builder = BinaryBuilder(),
       bp = BinaryExpPrecedenceOps(),
       trees = exps,
