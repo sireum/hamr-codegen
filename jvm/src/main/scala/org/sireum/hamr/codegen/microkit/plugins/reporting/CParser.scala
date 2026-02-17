@@ -5,7 +5,7 @@ package org.sireum.hamr.codegen.microkit.plugins.reporting
 import org.sireum._
 import org.sireum.hamr.codegen.common.StringUtil
 import org.sireum.hamr.codegen.microkit.plugins.reporting.CContainers._
-import org.sireum.message.{FlatPos, Position}
+import org.sireum.message.{FlatPos, Position, Reporter}
 
 object CParser {
 
@@ -18,7 +18,7 @@ object CParser {
     "ProcessingMethods"
   }
 
-  @pure def parse(f: Os.Path, rootDir: Os.Path): CFile = {
+  @pure def parse(f: Os.Path, rootDir: Os.Path, reporter: Reporter): CFile = {
 
     val content = conversions.String.toCis(f.read)
 
@@ -33,9 +33,6 @@ object CParser {
 
     @pure def buildPosition(beginLine: Z, beginCol: Z, beginOffset: Z,
                             endLine: Z, endCol: Z, endOffset: Z): Position = {
-      assert(beginLine >= 0)
-      assert(beginCol >= 0)
-
       return FlatPos(
         uriOpt = Some(rootDir.relativize(f).value),
         beginLine32 = conversions.Z.toU32(beginLine),
@@ -50,6 +47,26 @@ object CParser {
     var col: Z = 1
     var offset: Z = 0
 
+    @pure def illFormedC(c: C): Unit = {
+      illFormed(content(offset) == c, s"Expected '$c' but found ${content(offset)}")
+    }
+
+    @pure def illFormed(cond: B, msg: String): Unit = {
+      if (!cond) {
+        val pos = FlatPos(
+          uriOpt = Some(rootDir.relativize(f).value),
+          beginLine32 = conversions.Z.toU32(line),
+          beginColumn32 = conversions.Z.toU32(col),
+          endLine32 = conversions.Z.toU32(line),
+          endColumn32 = conversions.Z.toU32(col + 1),
+          offset32 = conversions.Z.toU32(offset),
+          length32 = conversions.Z.toU32(1))
+
+        reporter.error(posOpt = Some(pos), kind = "RustSimpleParser", message = msg)
+
+        halt("")
+      }
+    }
 
     @pure def consumeWhiteSpaceAndComments(): Unit = {
       while (offset < content.size) {
@@ -112,14 +129,14 @@ object CParser {
     }
 
     @pure def balanceBrace(): Unit = {
-      assert (content(offset) == '{')
+      illFormedC ('{')
 
       var s: Stack[C] = Stack.empty
       while (offset < content.size) {
         if (content(offset) == '{') {
           s = s.push('{')
         } else if (content(offset) == '}') {
-          assert (s.peek.nonEmpty && s.peek.get == '{')
+          illFormed (s.peek.nonEmpty && s.peek.get == '{', s"Expected '{'")
           s = s.pop.get._2
           if (s.isEmpty) {
             return
@@ -180,7 +197,7 @@ object CParser {
               val sharedMemTyp = consumeName()
               val sharedMemIdentifier = consumeName()
 
-              assert (content(offset) == ';')
+              illFormedC (';')
 
               cItems = cItems.push(CField(identifier = sharedMemIdentifier, typ = sharedMemTyp, isVolatile = T,
                 pos = buildPosition(beginLine = beginLine, beginCol = beginCol, beginOffset = beginOffset,
@@ -232,7 +249,7 @@ object CParser {
               val methodName = consumeName()
               consumeWhiteSpaceAndComments()
 
-              assert (content(offset) == '(')
+              illFormedC ('(')
 
               scanToChar(ISZ('{'))
 
@@ -256,7 +273,7 @@ object CParser {
               val methodName = consumeName()
               consumeWhiteSpaceAndComments()
 
-              assert (content(offset) == '(')
+              illFormedC ('(')
 
               scanToChar(ISZ('{'))
 

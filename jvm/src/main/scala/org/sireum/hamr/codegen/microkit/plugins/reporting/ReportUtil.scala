@@ -441,7 +441,3 @@ object ReportUtil {
     }
   }
 }
-
-@ext("MSDParser_Ext") object MSDParser {
-  @pure def parse(xml: Os.Path, rootDir: Os.Path, reporter: Reporter): Option[system] = $
-}

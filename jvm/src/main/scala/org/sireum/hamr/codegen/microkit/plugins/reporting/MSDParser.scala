@@ -10,7 +10,7 @@ import org.sireum.hamr.codegen.microkit.plugins.reporting.MSDContainers._
 import java.io.{FileReader, Reader}
 import javax.xml.parsers.SAXParserFactory
 
-object MSDParser_Ext {
+object MSDParser {
 
   case class NodeSpan(
                        label: String,
@@ -24,8 +24,14 @@ object MSDParser_Ext {
                        children: collection.mutable.ListBuffer[NodeSpan] = collection.mutable.ListBuffer()
                      )
 
-  def parse(xmlFile: Os.Path, rootDir: Os.Path, reporter: Reporter): SOption[system] = {
+  def illFormed(cond: Boolean, msg: String, posOpt: org.sireum.Option[Position], reporter: Reporter): Unit = {
+    if (!cond) {
+      reporter.error(posOpt = posOpt, kind = "MSDParser", message = msg)
+      throw new Error("")
+    }
+  }
 
+  def parse(xmlFile: Os.Path, rootDir: Os.Path, reporter: Reporter): SOption[system] = {
     class CountingReader(underlying: Reader) extends Reader {
       var line: Int = 1
       var col: Int = 1
@@ -127,7 +133,7 @@ object MSDParser_Ext {
     import scala.language.reflectiveCalls
     handler.root match {
       case Some(root) =>
-        assert(root.label == "system")
+        illFormed(root.label == "system", "Expected root label to be 'system'", org.sireum.Some(buildPosition(root, xmlFile, rootDir)), reporter)
 
         var domainSchedule: SOption[domain_schedule] = SNone()
         var protectionDomains: ISZ[protection_domain] = ISZ()
@@ -136,9 +142,9 @@ object MSDParser_Ext {
         for (c <- root.children) {
           c.label match {
             //case "domain_schedule" => domainSchedule = SSome(parseDomainSchedule(c, xmlFile, rootDir))
-            case "protection_domain" => protectionDomains = protectionDomains :+ parseProtectionDomain(c, xmlFile, rootDir)
+            case "protection_domain" => protectionDomains = protectionDomains :+ parseProtectionDomain(c, xmlFile, rootDir, reporter)
             case "memory_region" => memoryRegions = memoryRegions :+ parseMemoryRegion(c, xmlFile, rootDir)
-            case "channel" => channels = channels :+ parseChannel(c, xmlFile, rootDir)
+            case "channel" => channels = channels :+ parseChannel(c, xmlFile, rootDir, reporter)
             case "xi:include" =>
               c.attrs.get("href") match {
                 case Some(p) =>
@@ -166,8 +172,9 @@ object MSDParser_Ext {
     return SNone()
   }
 
-  private def parseChannel(c: NodeSpan, xmlFile: Os.Path, rootDir: Os.Path): channel = {
-    assert(c.children.size == 2)
+  private def parseChannel(c: NodeSpan, xmlFile: Os.Path, rootDir: Os.Path, reporter: Reporter): channel = {
+    illFormed(c.children.size == 2, s"Expected 2 children but found ${c.children.size}",
+      org.sireum.Some(buildPosition(c, xmlFile, rootDir)), reporter)
 
     val end1 = {
       val e = c.children.head
@@ -185,17 +192,7 @@ object MSDParser_Ext {
     return memory_region(name = c.attrs("name"), size = c.attrs("size"), pos = buildPosition(c, xmlFile, rootDir))
   }
 
-  /*
-  private def parseDomainSchedule(c: NodeSpan, xmlFile: Os.Path, rootDir: Os.Path): domain_schedule = {
-    var entries: ISZ[ScheduleEntry] = ISZ()
-    for (c <- c.children) {
-      entries = entries :+ ScheduleEntry(name = c.attrs("name"), length = c.attrs("length"), pos = buildPosition(c, xmlFile, rootDir))
-    }
-    return domain_schedule(entries = entries, pos = buildPosition(c, xmlFile, rootDir))
-  }
-  */
-
-  private def parseProtectionDomain(pd: NodeSpan, f: Os.Path, rootDir: Os.Path): protection_domain = {
+  private def parseProtectionDomain(pd: NodeSpan, xmlFile: Os.Path, rootDir: Os.Path, reporter: Reporter): protection_domain = {
     val name = pd.attrs("name")
     val kind: DomainKind.Type = {
       if (name == "pacer") DomainKind.Pacer
@@ -210,18 +207,21 @@ object MSDParser_Ext {
 
     var program_image: SOption[SString] = SNone()
     var maps: ISZ[map] = ISZ()
-    var protection_domains: ISZ[protection_domain] = ISZ()
     var irqs: ISZ[irq] = ISZ()
+    var setvars: ISZ[setvar] = ISZ()
+    var protection_domains: ISZ[protection_domain] = ISZ()
     var virtual_machines: ISZ[virtual_machine] = ISZ()
 
     for (c <- pd.children) {
       c.label match {
         case "program_image" => program_image = SSome(c.attrs("path"))
-        case "map" => maps = maps :+ parseMap(c, f, rootDir)
-        case "protection_domain" => protection_domains = protection_domains :+ parseProtectionDomain(c, f, rootDir)
-        case "irq" => irqs = irqs :+ parseIrq(c, f, rootDir)
-        case "virtual_machine" => virtual_machines = virtual_machines :+ parseVirtualMachine(c, f, rootDir)
-        case x => throw new RuntimeException(s"Unexpected: $x")
+        case "map" => maps = maps :+ parseMap(c, xmlFile, rootDir)
+        case "irq" => irqs = irqs :+ parseIrq(c, xmlFile, rootDir)
+        case "setvar" => setvars = setvars :+ parseSetvar(c, xmlFile, rootDir)
+        case "protection_domain" => protection_domains = protection_domains :+ parseProtectionDomain(c, xmlFile, rootDir, reporter)
+        case "virtual_machine" => virtual_machines = virtual_machines :+ parseVirtualMachine(c, xmlFile, rootDir)
+        case x =>
+          illFormed(false, s"Unexpected: $x", org.sireum.Some(buildPosition(c, xmlFile, rootDir)), reporter)
       }
     }
 
@@ -235,7 +235,14 @@ object MSDParser_Ext {
       protection_domains = protection_domains,
       irqs = irqs,
       virtual_machines = virtual_machines,
-      pos = buildPosition(pd, f, rootDir))
+      pos = buildPosition(pd, xmlFile, rootDir))
+  }
+
+  private def parseSetvar(c: NodeSpan, f: Os.Path, rootDir: Os.Path): setvar = {
+    val symbol = c.attrs("symbol")
+    val region_paddr = c.attrs("region_paddr")
+
+    return setvar(symbol = symbol, region_paddr = region_paddr, pos = buildPosition(c, f, rootDir))
   }
 
 

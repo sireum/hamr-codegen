@@ -61,6 +61,10 @@ object MSDContainers {
                                   val maps: ISZ[map],
                                   val pos: Position) extends ProtectionDomainItem
 
+  @datatype class setvar(val symbol: String,
+                         val region_paddr: String,
+                         val pos: Position) extends ProtectionDomainItem
+
   @datatype class program_image(val path: String,
                                 val pos: Position) extends ProtectionDomainItem
 

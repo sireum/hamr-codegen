@@ -4,9 +4,9 @@ package org.sireum.hamr.codegen.microkit.plugins.reporting
 import org.sireum._
 import org.sireum.hamr.codegen.common.StringUtil
 import org.sireum.hamr.codegen.microkit.plugins.reporting.RustContainers._
-import org.sireum.message.{FlatPos, Position}
+import org.sireum.message.{FlatPos, Position, Reporter}
 
-object RustParserSimple {
+object RustParser {
 
   @sig trait Token {
     @pure def beginLine: Z
@@ -131,7 +131,7 @@ object RustParserSimple {
 
   @datatype class LeftCurlyBrace(val startingOffset: Z) extends Brace
 
-  @pure def parse(f: Os.Path, rootDir: Os.Path, userModifable: B): RustFile = {
+  @pure def parse(f: Os.Path, rootDir: Os.Path, userModifable: B, reporter: Reporter): RustFile = {
 
     val content = conversions.String.toCis(f.read)
 
@@ -149,12 +149,14 @@ object RustParserSimple {
         case _ => return F
       }
     }
-    @pure def addField(field: RustField): Unit = {
+
+    @pure def addField(field: RustField, illFormed: (B, String) => Unit): Unit = {
       rustItems.pop match {
         case Some((i: RustStruct, stack)) =>
           val ui = i(fields = i.fields + field.name ~> field)
           rustItems = stack.push(ui)
-        case x => halt(s"Expecting an impl for field ${field.name} but found $x")
+        case x =>
+          illFormed(F, s"Expecting an impl for field ${field.name} but found $x")
       }
     }
 
@@ -241,8 +243,6 @@ object RustParserSimple {
     }
 
     @pure def buildPosition(t: Token): Position = {
-      assert(t.beginLine >= 0)
-      assert(t.beginCol >= 0)
 
       return FlatPos(
         uriOpt = Some(rootDir.relativize(f).value),
@@ -257,6 +257,28 @@ object RustParserSimple {
     var line: Z = 1
     var col: Z = 1
     var offset: Z = 0
+
+
+    @pure def illFormedC(c: C): Unit = {
+      illFormed(content(offset) == c, s"Expected '$c' but found ${content(offset)}")
+    }
+
+    @pure def illFormed(cond: B, msg: String): Unit = {
+      if (!cond) {
+        val pos = FlatPos(
+          uriOpt = Some(rootDir.relativize(f).value),
+          beginLine32 = conversions.Z.toU32(line),
+          beginColumn32 = conversions.Z.toU32(col),
+          endLine32 = conversions.Z.toU32(line),
+          endColumn32 = conversions.Z.toU32(col + 1),
+          offset32 = conversions.Z.toU32(offset),
+          length32 = conversions.Z.toU32(1))
+
+        reporter.error(posOpt = Some(pos), kind = "RustSimpleParser", message = msg)
+
+        halt("")
+      }
+    }
 
     @pure def consumeWhiteSpaceAndComments(): Unit = {
       consumeWhiteSpaceAndCommentsH(T)
@@ -390,17 +412,19 @@ object RustParserSimple {
     }
 
     @pure def consumeGeneric(): GenericParam = {
-      assert(content(offset) == '<')
+      illFormedC('<')
       increment()
       consumeWhiteSpaceAndComments()
       val genParam = consumeName()
       consumeWhiteSpaceAndComments()
-      assert(content(offset) == ':')
+
+      illFormedC(':')
       increment()
       consumeWhiteSpaceAndComments()
       val traitName = consumeName()
       consumeWhiteSpaceAndComments()
-      assert(content(offset) == '>')
+
+      illFormedC('>')
       increment()
       return GenericParam(genParam, traitName)
     }
@@ -429,7 +453,7 @@ object RustParserSimple {
     }
 
     @pure def balanceBrace(): Unit = {
-      assert (content(offset) == '{' || content(offset) == '(')
+      illFormed(content(offset) == '{' || content(offset) == '(', s"Expected '{' or '(' but found '${content(offset)}''")
       val openBrace = content(offset)
       val closeBrace: C = if (openBrace == '{') '}' else ')'
 
@@ -438,7 +462,7 @@ object RustParserSimple {
         if (content(offset) == openBrace) {
           s = s.push(openBrace)
         } else if (content(offset) == closeBrace) {
-          assert (s.peek.nonEmpty && s.peek.get == openBrace, s"$s --- $closeBrace at ${f.name} ($line, $col)")
+          illFormed(s.peek.nonEmpty && s.peek.get == openBrace, s"$s --- $closeBrace at ${f.name} ($line, $col)")
           s = s.pop.get._2
           if (s.isEmpty) {
             return
@@ -495,28 +519,31 @@ object RustParserSimple {
       @pure def consumeIfElseBlock(): B = {
         consumeWhiteSpaceAndComments()
         if (offset + 2 < content.size && content(offset) == 'i' && content(offset + 1) == 'f' && content(offset + 2) == ' ' ) {
-          assert (content(offset + 3) == '(', s"Expected opening brace of then block but found ${content(offset + 3)}")
+          illFormed(content(offset + 3) == '(', s"Expected opening brace of then block but found ${content(offset + 3)}")
           offset = offset + 3
           col = col + 3
           balanceBrace()
-          assert (content(offset) == ')')
+
+          illFormedC (')')
+
           increment()
           consumeWhiteSpaceAndComments()
 
-          assert(content(offset) == '{')
+          illFormedC('{')
+
           balanceBrace()
-          assert (content(offset) == '}')
+          illFormedC ('}')
           increment()
           consumeWhiteSpaceAndComments()
 
-          assert (content(offset) == 'e' && content(offset + 1) == 'l' && content(offset + 2) == 's' && content(offset + 3) == 'e' && content(offset + 4) == ' ', s"Expected 'else ' at ($line, $col)")
+          illFormed (content(offset) == 'e' && content(offset + 1) == 'l' && content(offset + 2) == 's' && content(offset + 3) == 'e' && content(offset + 4) == ' ', s"Expected 'else ' at ($line, $col)")
           offset = offset + 5
           col = col + 5
           consumeWhiteSpaceAndComments()
 
-          assert (content(offset) == '{', s"Expected opening brace of else block but found ${content(offset)}")
+          illFormedC ('{')
           balanceBrace()
-          assert (content(offset) == '}')
+          illFormedC ('}')
           increment()
           consumeWhiteSpaceAndComments()
           return T
@@ -528,10 +555,10 @@ object RustParserSimple {
         consumeWhiteSpaceAndCommentsH(F) match {
           case ((Some(marker), None())) =>
             if (optMarker.isEmpty) {
-              assert (marker.isBegin, s"Did not find the begin marker for ${marker.id}")
+              illFormed (marker.isBegin, s"Did not find the begin marker for ${marker.id}")
               optMarker = Some(marker)
             } else {
-              assert (!marker.isBegin, s"Was expecting to find end marker for ${optMarker.get.id}, but found ${marker.id} instead")
+              illFormed (!marker.isBegin, s"Was expecting to find end marker for ${optMarker.get.id}, but found ${marker.id} instead")
               optMarker = None()
             }
           case ((None(), Some(gumboId))) if !userModifable || optMarker.nonEmpty =>
@@ -562,9 +589,6 @@ object RustParserSimple {
               }
             }
 
-            if (blocks.isEmpty) {
-              assume(T)
-            }
             val (block, stack) = blocks.pop.get
             val clause = GumboClause(id = gumboId.id, pos = buildPosition(pub(
               beginLine = gumboId.pos.beginLine, beginCol = gumboId.pos.beginColumn,
@@ -592,10 +616,10 @@ object RustParserSimple {
       var b: Option[VerusBlock] = None()
       for (e <- blocks.elements) {
         if (e.isRequiresBlock) {
-          assert (a.isEmpty)
+          illFormed (a.isEmpty, "Only expecting a single requires block")
           a = Some(e)
         } else {
-          assert(b.isEmpty)
+          illFormed(b.isEmpty, "Only expecting a single ensures block")
           b = Some(e)
         }
       }
@@ -619,18 +643,18 @@ object RustParserSimple {
         else if (content(offset) == '}') {
           val (brace, stack) = braceStack.pop.get
           braceStack = stack
-          assert(brace.isInstanceOf[LeftCurlyBrace], s"Not expecting $brace")
+          illFormed(brace.isInstanceOf[LeftCurlyBrace], s"Not expecting $brace")
 
           val (token, remainingTokens) = tokenStack.pop.get
           tokenStack = remainingTokens
 
           token match {
             case t: verusMacro =>
-              assert(t.leftCurlyBraceOffset == brace.startingOffset, s"${t.leftCurlyBraceOffset} vs ${brace.startingOffset}")
-              assert(tokenStack.isEmpty)
+              illFormed(t.leftCurlyBraceOffset == brace.startingOffset, s"${t.leftCurlyBraceOffset} vs ${brace.startingOffset}")
+              illFormed(tokenStack.isEmpty, s"Expected token stack to be empty but found ${f.value}")
               increment()
             case t: rtrait =>
-              assert(t.leftCurlyBraceOffset == brace.startingOffset, s"${t.leftCurlyBraceOffset} vs ${brace.startingOffset}")
+              illFormed(t.leftCurlyBraceOffset == brace.startingOffset, s"${t.leftCurlyBraceOffset} vs ${brace.startingOffset}")
 
               val us = t(
                 endLine = line,
@@ -644,7 +668,10 @@ object RustParserSimple {
 
               increment()
             case t: struct =>
-              assert(t.leftCurlyBraceOffset == brace.startingOffset, s"${t.leftCurlyBraceOffset} vs ${brace.startingOffset}")
+              illFormed(t.leftCurlyBraceOffset == brace.startingOffset, s"${t.leftCurlyBraceOffset} vs ${brace.startingOffset}")
+
+              val poppedTokens = popTokens()
+              illFormed(ops.ISZOps(poppedTokens).forall(c => c.isInstanceOf[pub]), s"Wasn't expecting the following tokens: ${poppedTokens.string}")
 
               val us = t(
                 endLine = line,
@@ -658,10 +685,10 @@ object RustParserSimple {
 
               increment()
             case t: impl =>
-              assert(t.leftCurlyBraceOffset == brace.startingOffset, s"${t.leftCurlyBraceOffset} vs ${brace.startingOffset}")
-              assert (t.endLine == 0)
-              assert (t.endCol == 0)
-              assert (t.len == 0)
+              illFormed(t.leftCurlyBraceOffset == brace.startingOffset, s"${t.leftCurlyBraceOffset} vs ${brace.startingOffset}")
+              illFormed (t.endLine == 0, s"Who set the endLine already? ${t.endLine}")
+              illFormed (t.endCol == 0, s"Who set the endCol already? ${t.endCol}")
+              illFormed (t.len == 0, s"Who set the len already? ${t.len}")
 
               val ui = t(
                 endLine = line,
@@ -675,10 +702,10 @@ object RustParserSimple {
 
               increment()
             case t: extern =>
-              assert(t.leftCurlyBraceOffset == brace.startingOffset, s"${t.leftCurlyBraceOffset} vs ${brace.startingOffset}")
-              assert (t.endLine == 0)
-              assert (t.endCol == 0)
-              assert (t.len == 0)
+              illFormed(t.leftCurlyBraceOffset == brace.startingOffset, s"${t.leftCurlyBraceOffset} vs ${brace.startingOffset}")
+              illFormed (t.endLine == 0, s"Who set the endLine already? ${t.endLine}")
+              illFormed (t.endCol == 0, s"Who set the endCol already? ${t.endCol}")
+              illFormed (t.len == 0, s"Who set the len already? ${t.len}")
 
               val ui = t(
                 endLine = line,
@@ -691,7 +718,8 @@ object RustParserSimple {
               rustItems = remainingRustItems.push(uitem(pos = buildPosition(ui)))
 
               increment()
-            case x => halt(s"Found unmatched $x after '}' at {$line,$offset}: $f")
+            case x =>
+              illFormed(F, s"Found unmatched $x after '}' at {$line,$offset}: $f")
           }
         }
         else if (content(offset) == '\n') {
@@ -729,7 +757,7 @@ object RustParserSimple {
                 isGhost = T,
                 pos = buildPosition(field))
 
-              addField(rustField)
+              addField(rustField, illFormed _)
 
             } else {
               // pub <field-name>
@@ -750,7 +778,7 @@ object RustParserSimple {
                 isGhost = F,
                 pos = buildPosition(field))
 
-              addField(rustField)
+              addField(rustField, illFormed _)
             }
           } else {
             // pub
@@ -826,7 +854,7 @@ object RustParserSimple {
               offset = oldOffest
               val r = parseContract()
 
-              assert (content(offset) == '{')
+              illFormedC ('{')
 
               balanceBrace()
 
@@ -864,6 +892,7 @@ object RustParserSimple {
           // struct <name>
           consumeWhiteSpaceAndComments()
           val name = consumeName()
+
           scanToChar(ISZ(';', '{'))
 
           val token: Token =
@@ -875,7 +904,7 @@ object RustParserSimple {
                 leftCurlyBraceOffset = offset,
                 name = name)
             } else {
-              assert (content(offset) == '{' )
+              illFormedC ('{')
 
               braceStack = braceStack.push(LeftCurlyBrace(offset))
 
@@ -891,7 +920,7 @@ object RustParserSimple {
             }
 
           val poppedTokens = popTokens()
-          assert(ops.ISZOps(poppedTokens).forall(c => c.isInstanceOf[pub]), poppedTokens.string)
+          illFormed(ops.ISZOps(poppedTokens).forall(c => c.isInstanceOf[pub]), poppedTokens.string)
 
           rustItems = rustItems.push(RustStruct(name = name, fields = Map.empty, constants = Map.empty, pos = buildPositionT(poppedTokens :+ token)))
 
@@ -905,7 +934,7 @@ object RustParserSimple {
 
           val token: Token = {
 
-            assert (content(offset) == '{' )
+            illFormedC('{' )
 
             braceStack = braceStack.push(LeftCurlyBrace(offset))
 
@@ -921,7 +950,7 @@ object RustParserSimple {
             }
 
           val poppedTokens = popTokens()
-          assert(ops.ISZOps(poppedTokens).forall(c => c.isInstanceOf[pub]), poppedTokens.string)
+          illFormed(ops.ISZOps(poppedTokens).forall(c => c.isInstanceOf[pub]), s"Didn't expect the following tokens: ${poppedTokens.string}")
 
           rustItems = rustItems.push(RustExtern(name = name, methods = Map.empty, constants = Map.empty, pos = buildPositionT(poppedTokens :+ token)))
 

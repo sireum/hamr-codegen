@@ -12,6 +12,9 @@ import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.{CodeGenResults, HamrCli}
 import org.sireum.hamr.codegen.microkit.plugins.component.CRustComponentPlugin
 import org.sireum.hamr.codegen.microkit.plugins.gumbo.GumboRustUtil
+import org.sireum.hamr.codegen.microkit.plugins.reporting.CContainers.CFile
+import org.sireum.hamr.codegen.microkit.plugins.reporting.MSDContainers.system
+import org.sireum.hamr.codegen.microkit.plugins.reporting.RustContainers.RustFile
 import org.sireum.hamr.codegen.microkit.reporting._
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil
 import org.sireum.hamr.ir.{Aadl, Direction, GclAssume, GclGuarantee, GclSubclause}
@@ -107,7 +110,7 @@ object MicrokitReporterPlugin {
     val systemDescription = sel4OutputDir / "microkit.system"
     assert(systemDescription.exists, systemDescription.value)
 
-    val msdOpt = MSDParser.parse(systemDescription, sel4OutputDir, reporter)
+    val msdOpt = Parsers.parseMSD(systemDescription, sel4OutputDir, reporter)
 
     if (msdOpt.isEmpty) {
       println(s"Was not able to parse $systemDescription. No report generated")
@@ -120,7 +123,12 @@ object MicrokitReporterPlugin {
       options.workspaceRootDir match {
         case Some(wdir) =>
           val d = Os.path(wdir)
-          assert(d.exists, d.value)
+
+          if (!d.exists || !d.isDir) {
+            println(s"Model workspace is not a valid directory: $d")
+            return localStore
+          }
+
           d
         case _ =>
           println("Model workspace option was not provided. Cannot generate Microkit codegen report")
@@ -152,7 +160,11 @@ object MicrokitReporterPlugin {
       val cBridgeFile = cComponentDir / s"$threadid.c"
       assert (cBridgeFile.exists, cBridgeFile.value)
 
-      val cFile = CParser.parse(cBridgeFile, sel4OutputDir)
+      val cFile = Parsers.parseC(cBridgeFile, sel4OutputDir, reporter)
+
+      if (reporter.hasError) {
+        return localStore
+      }
 
       @pure def addPort(p: AadlPort): Unit = {
         val (kind, payload, queueSize): (PortKind.Type, Option[String], Z) = p match {
@@ -219,7 +231,7 @@ object MicrokitReporterPlugin {
 
         val externApiFile = rustBridgeDir / "extern_c_api.rs"
         assert(externApiFile.exists, externApiFile.value)
-        val parsedExternApiFile = RustParserSimple.parse(externApiFile, sel4OutputDir, F)
+        val parsedExternApiFile = Parsers.parseRust(externApiFile, sel4OutputDir, F, reporter)
 
         val rustTestDir = sel4OutputDir / "crates" / threadid / "src" / "test"
         val rustTestUtilDir = rustTestDir / "util"
@@ -229,11 +241,11 @@ object MicrokitReporterPlugin {
 
         val rustComponentApiFile = rustBridgeDir / s"${threadid}_api.rs"
         assert(rustComponentApiFile.exists, rustComponentApiFile.value)
-        val parsedRustComponentApiFile = RustParserSimple.parse(rustComponentApiFile, sel4OutputDir, F)
+        val parsedRustComponentApiFile = Parsers.parseRust(rustComponentApiFile, sel4OutputDir, F, reporter)
 
         val rustComponentAppFile = rustComponentDir / s"${threadid}_app.rs"
         assert(rustComponentAppFile.exists, rustComponentAppFile.value)
-        val parsedRustComponentAppFile = RustParserSimple.parse(rustComponentAppFile, sel4OutputDir, T)
+        val parsedRustComponentAppFile = Parsers.parseRust(rustComponentAppFile, sel4OutputDir, T, reporter)
 
         val componentAppStruct = parsedRustComponentAppFile.structs.get(threadid).get
         val componentAppImpl = parsedRustComponentAppFile.getImpl(threadid).get
@@ -241,11 +253,14 @@ object MicrokitReporterPlugin {
 
         val gumboxFile = rustBridgeDir / s"${threadid}_GUMBOX.rs"
         val parsedGumboXFile: Option[RustContainers.RustFile] =
-          if (gumboxFile.exists) Some(RustParserSimple.parse(gumboxFile, sel4OutputDir, F))
+          if (gumboxFile.exists) Some(Parsers.parseRust(gumboxFile, sel4OutputDir, F, reporter))
           else None()
 
         var developerApiReport: HashSMap[String, Position] = HashSMap.empty
 
+        if (reporter.hasError) {
+          return localStore
+        }
 
         val getApiImpl = parsedRustComponentApiFile.getImplH(
           Some(RustContainers.GenericParam("API", s"${threadid}_Get_Api")), s"${threadid}_Application_Api")
@@ -621,3 +636,13 @@ object MicrokitReporterPlugin {
     return readmeContent
   }
 }
+
+@ext object Parsers {
+  @pure def parseC(f: Os.Path, rootDir: Os.Path, reporter: Reporter): CFile = $
+
+  @pure def parseMSD(xml: Os.Path, rootDir: Os.Path, reporter: Reporter): Option[system] = $
+
+  @pure def parseRust(f: Os.Path, rootDir: Os.Path, userModifable: B, reporter: Reporter): RustFile = $
+}
+
+

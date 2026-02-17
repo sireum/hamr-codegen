@@ -188,11 +188,17 @@ object CodeGen {
         reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
       }
 
-      return finalizePlugins(
+      val ret = finalizePlugins(
         model = model, options = modOptions,
         aadlTypes = Some(aadlTypes), symbolTable = Some(symbolTable),
         plugins = plugins, codegenResults = results._1,
         currentStore = localStore, reporter = reporter)
+
+      if (!modOptions.parseableMessages) {
+        reporterIndex = printMessages(reporter.messages, modOptions.verbose, reporterIndex, ISZ())
+      }
+
+      return ret
     }
 
     if (!reporter.hasError && runArsit) {

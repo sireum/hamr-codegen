@@ -46,7 +46,10 @@ import org.sireum.{B, strictpure}
       options.workspaceRootDir match {
         case Some(wdir) =>
           val d = Os.path(wdir)
-          assert(d.exists, d.value)
+          if (!d.exists || !d.isDir) {
+            println(s"Model workspace is not a valid directory: $d")
+            return localStore
+          }
           d
         case _ =>
           println("Model workspace option was not provided. Cannot generate attestation artifacts")
