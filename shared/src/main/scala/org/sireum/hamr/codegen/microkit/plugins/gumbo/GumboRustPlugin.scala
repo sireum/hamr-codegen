@@ -829,6 +829,7 @@ object GumboRustPlugin {
                               |
                               |[dependencies]
                               |data = { path="../data" }
+                              |
                               |${RustUtil.verusCargoDependencies(store)}
                               |
                               |${RustUtil.commonCargoTomlEntries}

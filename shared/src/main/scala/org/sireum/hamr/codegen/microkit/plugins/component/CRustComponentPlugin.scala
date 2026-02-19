@@ -466,11 +466,14 @@ object ComponentContributions {}
               |
               |[dependencies]
               |data = { path = "../data" }
-              |linux-raw-sys = { version = "${versions.get("linux-raw-sys").get}", default-features = false }
+              |linux-raw-sys = { version = "=${versions.get("linux-raw-sys").get}", default-features = false }
               |log = "${versions.get("log").get}"
-              |${RustUtil.sel4CargoDependencies(localStore)}
-              |${RustUtil.verusCargoDependencies(localStore)}
               |$optDeps
+              |
+              |${RustUtil.sel4CargoDependencies(localStore)}
+              |
+              |${RustUtil.verusCargoDependencies(localStore)}
+              |
               |
               |[dev-dependencies]
               |lazy_static = "${versions.get("lazy_static").get}"

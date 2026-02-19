@@ -37,9 +37,15 @@ object RustUtil {
   @pure def verusCargoDependencies(store: Store): ST = {
     val versions = MicrokitUtil.getMicrokitVersions(store)
     return (
-      st"""vstd = { version = "${versions.get("vstd").get}", default-features=false }
-          |verus_builtin = { version = "${versions.get("verus_builtin").get}" }
-          |verus_builtin_macros = { version = "${versions.get("verus_builtin_macros").get}" }""")
+      st"""# -----------------------------------------------------------------------------
+          |# Verus crate dependencies
+          |#
+          |# It is recommended to use the Verus release:
+          |# https://github.com/verus-lang/verus/releases/tag/release/${versions.get("verus-release").get}
+          |# -----------------------------------------------------------------------------
+          |vstd = { version = "=${versions.get("vstd").get}", default-features=false }
+          |verus_builtin = { version = "=${versions.get("verus_builtin").get}" }
+          |verus_builtin_macros = { version = "=${versions.get("verus_builtin_macros").get}" }""")
   }
 
   val commonCargoTomlEntries: ST =
@@ -58,7 +64,10 @@ object RustUtil {
       case _ => None()
     }
     return (
-      st"""sel4 = { git = "https://github.com/seL4/rust-sel4", features = ["single-threaded"], optional = true$sel4Opt}
+      st"""# -----------------------------------------------------------------------------
+          |# seL4 Rust crate dependencies
+          |# -----------------------------------------------------------------------------
+          |sel4 = { git = "https://github.com/seL4/rust-sel4", features = ["single-threaded"], optional = true$sel4Opt}
           |sel4-logging = { git = "https://github.com/seL4/rust-sel4", optional = true$sel4LoggingOpt}""")
   }
 }
