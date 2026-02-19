@@ -490,7 +490,7 @@ object SlangExpUtil {
                     st"${receiverOptST(receiverOpt = receiverOpt, sep = separator)}"
                   }
                 case _ =>
-                  halt(rexp.string)
+                  st"${receiverOptST(receiverOpt = receiverOpt, sep = separator)}"
               }
             case _ =>
               st"${receiverOptST(receiverOpt = receiverOpt, sep = separator)}"
