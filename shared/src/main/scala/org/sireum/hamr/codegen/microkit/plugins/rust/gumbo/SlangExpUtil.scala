@@ -1,5 +1,5 @@
 // #Sireum
-package org.sireum.hamr.codegen.microkit.plugins.gumbo
+package org.sireum.hamr.codegen.microkit.plugins.rust.gumbo
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, Store, TypeIdPath}
@@ -8,8 +8,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver
 import org.sireum.hamr.codegen.common.symbols.{AadlComponent, GclSymbolTable, SymTableKey}
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen
-import org.sireum.hamr.codegen.microkit.plugins.component.CRustComponentPlugin
-import org.sireum.hamr.codegen.microkit.plugins.types.CRustTypeProvider
+import org.sireum.hamr.codegen.microkit.plugins.rust.component.CRustComponentPlugin
+import org.sireum.hamr.codegen.microkit.plugins.rust.types.CRustTypeProvider
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
 import org.sireum.lang.ast.{Exp, Id}
 import org.sireum.lang.{ast => SAST}

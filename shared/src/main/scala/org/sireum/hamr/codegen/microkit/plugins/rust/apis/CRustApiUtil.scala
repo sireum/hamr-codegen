@@ -1,10 +1,10 @@
 // #Sireum
-package org.sireum.hamr.codegen.microkit.plugins.apis
+package org.sireum.hamr.codegen.microkit.plugins.rust.apis
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.types.AadlType
-import org.sireum.hamr.codegen.microkit.plugins.types.{CRustTypeNameProvider, CRustTypeProvider}
+import org.sireum.hamr.codegen.microkit.plugins.rust.types.{CRustTypeNameProvider, CRustTypeProvider}
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
 import org.sireum.hamr.codegen.microkit.{rust => RAST}
 import org.sireum.hamr.ir.Direction

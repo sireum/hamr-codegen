@@ -1,11 +1,11 @@
 // #Sireum
-package org.sireum.hamr.codegen.microkit.plugins.gumbo
+package org.sireum.hamr.codegen.microkit.plugins.rust.gumbo
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{Store, TypeIdPath}
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes}
-import org.sireum.hamr.codegen.microkit.plugins.types.{CRustTypeNameProvider, CRustTypeProvider}
+import org.sireum.hamr.codegen.microkit.plugins.rust.types.{CRustTypeNameProvider, CRustTypeProvider}
 import org.sireum.hamr.codegen.microkit.rust.Param
 import org.sireum.hamr.codegen.microkit.{rust => RAST}
 import org.sireum.hamr.ir

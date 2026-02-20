@@ -1,9 +1,9 @@
 // #Sireum
-package org.sireum.hamr.codegen.microkit.plugins.component
+package org.sireum.hamr.codegen.microkit.plugins.rust.component
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, Store}
-import org.sireum.hamr.codegen.microkit.plugins.apis.CRustApiPlugin
+import org.sireum.hamr.codegen.microkit.plugins.rust.apis.CRustApiPlugin
 import org.sireum.hamr.codegen.microkit.{rust => RAST}
 
 object CRustComponentStoreUtil {

@@ -1,5 +1,5 @@
 // #Sireum
-package org.sireum.hamr.codegen.microkit.plugins.component
+package org.sireum.hamr.codegen.microkit.plugins.rust.component
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{BoolValue, IdPath, Store, StoreValue}
@@ -7,8 +7,8 @@ import org.sireum.hamr.codegen.common.containers.{Marker, Resource}
 import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
-import org.sireum.hamr.codegen.microkit.plugins.apis.CRustApiPlugin
-import org.sireum.hamr.codegen.microkit.plugins.types.CRustTypePlugin
+import org.sireum.hamr.codegen.microkit.plugins.rust.apis.CRustApiPlugin
+import org.sireum.hamr.codegen.microkit.plugins.rust.types.CRustTypePlugin
 import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, MicrokitPlugin}
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.TAB
 import org.sireum.hamr.codegen.microkit.util.{MakefileTarget, MakefileUtil, MicrokitUtil, RustUtil}

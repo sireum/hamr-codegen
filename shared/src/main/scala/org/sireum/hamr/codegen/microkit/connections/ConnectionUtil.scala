@@ -4,7 +4,8 @@ package org.sireum.hamr.codegen.microkit.connections
 import org.sireum._
 import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlEventPort, AadlFeatureEvent, AadlPort, AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlType
-import org.sireum.hamr.codegen.microkit.plugins.types.{CRustTypeProvider, CTypeProvider}
+import org.sireum.hamr.codegen.microkit.plugins.c.types.CTypeProvider
+import org.sireum.hamr.codegen.microkit.plugins.rust.types.CRustTypeProvider
 import org.sireum.hamr.codegen.microkit.types.{MicrokitTypeUtil, QueueTemplate}
 import org.sireum.hamr.codegen.microkit.util._
 import org.sireum.hamr.ir.{ConnectionInstance, Name}

@@ -1,5 +1,5 @@
 // #Sireum
-package org.sireum.hamr.codegen.microkit.plugins.gumbo
+package org.sireum.hamr.codegen.microkit.plugins.rust.gumbo
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil._
@@ -9,12 +9,12 @@ import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlThread, GclAnne
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.HamrCli.CodegenHamrPlatform
 import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
-import org.sireum.hamr.codegen.microkit.plugins.apis.CRustApiPlugin
-import org.sireum.hamr.codegen.microkit.plugins.component.{CRustComponentPlugin, CRustComponentStoreUtil}
-import org.sireum.hamr.codegen.microkit.plugins.gumbo.GumboXRustUtil._
-import org.sireum.hamr.codegen.microkit.plugins.gumbo.SlangExpUtil.Context
-import org.sireum.hamr.codegen.microkit.plugins.testing.CRustTestingPlugin
-import org.sireum.hamr.codegen.microkit.plugins.types.{CRustTypePlugin, CRustTypeProvider}
+import GumboXRustUtil._
+import SlangExpUtil.Context
+import org.sireum.hamr.codegen.microkit.plugins.rust.apis.CRustApiPlugin
+import org.sireum.hamr.codegen.microkit.plugins.rust.component.{CRustComponentPlugin, CRustComponentStoreUtil}
+import org.sireum.hamr.codegen.microkit.plugins.rust.testing.CRustTestingPlugin
+import org.sireum.hamr.codegen.microkit.plugins.rust.types.{CRustTypePlugin, CRustTypeProvider}
 import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, MicrokitPlugin}
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil

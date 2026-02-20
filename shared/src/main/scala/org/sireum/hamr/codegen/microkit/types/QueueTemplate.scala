@@ -6,7 +6,8 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.StringUtil
 import org.sireum.hamr.codegen.common.symbols.AadlPort
 import org.sireum.hamr.codegen.common.types.{AadlType, ArrayType}
-import org.sireum.hamr.codegen.microkit.plugins.types.{CRustTypeNameProvider, CTypeNameProvider, CTypePlugin}
+import org.sireum.hamr.codegen.microkit.plugins.c.types.{CTypeNameProvider, CTypePlugin}
+import org.sireum.hamr.codegen.microkit.plugins.rust.types.CRustTypeNameProvider
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.brand
 import org.sireum.hamr.codegen.microkit.{rust => RAST}
 import org.sireum.hamr.ir.Direction

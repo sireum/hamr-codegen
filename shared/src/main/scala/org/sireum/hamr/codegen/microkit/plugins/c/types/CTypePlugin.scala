@@ -1,6 +1,6 @@
 // #Sireum
 
-package org.sireum.hamr.codegen.microkit.plugins.types
+package org.sireum.hamr.codegen.microkit.plugins.c.types
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{Store, StoreValue}
@@ -10,6 +10,7 @@ import org.sireum.hamr.codegen.common.symbols.SymbolTable
 import org.sireum.hamr.codegen.common.types._
 import org.sireum.hamr.codegen.common.util.HamrCli.CodegenHamrPlatform
 import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
+import org.sireum.hamr.codegen.microkit.plugins.MicrokitTypePlugin
 import org.sireum.hamr.codegen.microkit.plugins.linters.MicrokitLinterPlugin
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil

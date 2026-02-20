@@ -1,14 +1,14 @@
 // #Sireum
-package org.sireum.hamr.codegen.microkit.plugins.gumbo
+package org.sireum.hamr.codegen.microkit.plugins.rust.gumbo
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, Store}
 import org.sireum.hamr.codegen.common.{STUtil, StringUtil}
 import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlThread, GclAnnexClauseInfo, GclSymbolTable, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlTypes
-import org.sireum.hamr.codegen.microkit.plugins.component.CRustComponentPlugin
-import org.sireum.hamr.codegen.microkit.plugins.gumbo.SlangExpUtil.Context
-import org.sireum.hamr.codegen.microkit.plugins.types.{CRustTypeNameProvider, CRustTypeProvider}
+import SlangExpUtil.Context
+import org.sireum.hamr.codegen.microkit.plugins.rust.component.CRustComponentPlugin
+import org.sireum.hamr.codegen.microkit.plugins.rust.types.{CRustTypeNameProvider, CRustTypeProvider}
 import org.sireum.hamr.codegen.microkit.rust.FnVerusHeader
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
 import org.sireum.hamr.codegen.microkit.{rust => RAST}

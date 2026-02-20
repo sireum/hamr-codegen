@@ -8,7 +8,8 @@ import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, 
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypeNameProvider, AadlTypes, ArraySizeKind, ArrayType, BaseType, BitType, EnumType, RecordType, SlangType, TypeKind, TypeUtil}
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen
 import org.sireum.hamr.codegen.microkit.connections._
-import org.sireum.hamr.codegen.microkit.plugins.types.{CRustTypePlugin, CRustTypeProvider, CTypeProvider}
+import org.sireum.hamr.codegen.microkit.plugins.c.types.CTypeProvider
+import org.sireum.hamr.codegen.microkit.plugins.rust.types.{CRustTypePlugin, CRustTypeProvider}
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.brand
 import org.sireum.hamr.ir
@@ -65,18 +66,6 @@ object MicrokitTypeUtil {
        |typedef _Atomic uintmax_t ${eventCounterTypename};
        |"""
 
-  val rustCargoContent: ST = st"""${MicrokitUtil.safeToEditMakefile}
-                                 |
-                                 |[package]
-                                 |name = "types"
-                                 |version = "0.1.0"
-                                 |edition = "2021"
-                                 |
-                                 |[dependencies]
-                                 |cty = "0.2.2"
-                                 |
-                                 |[lib]
-                                 |path = "src/sb_types.rs""""
 
   @pure def getCRustTypeDefaultValue(a: AadlType, cRustTypeProvider: CRustTypeProvider): String = {
     cRustTypeProvider.getRepresentativeType(a) match {

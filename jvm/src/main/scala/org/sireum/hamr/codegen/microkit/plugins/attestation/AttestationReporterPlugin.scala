@@ -11,8 +11,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver
 import org.sireum.hamr.codegen.common.symbols.{GclAnnexLibInfo, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.{CodeGenResults, HamrCli}
-import org.sireum.hamr.codegen.microkit.plugins.gumbo.GumboRustUtil
 import org.sireum.hamr.codegen.microkit.plugins.reporting.{MicrokitReporterPlugin, ReportUtil}
+import org.sireum.hamr.codegen.microkit.plugins.rust.gumbo.GumboRustUtil
 import org.sireum.hamr.codegen.microkit.reporting.MicrokitReport
 import org.sireum.hamr.ir
 import org.sireum.hamr.ir.GclMethod

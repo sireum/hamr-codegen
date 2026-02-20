@@ -10,11 +10,11 @@ import org.sireum.hamr.codegen.common.reporting.{CodegenReporting, CodegenReport
 import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlEventPort, AadlPort, AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.{CodeGenResults, HamrCli}
-import org.sireum.hamr.codegen.microkit.plugins.component.CRustComponentPlugin
-import org.sireum.hamr.codegen.microkit.plugins.gumbo.GumboRustUtil
 import org.sireum.hamr.codegen.microkit.plugins.reporting.CContainers.CFile
 import org.sireum.hamr.codegen.microkit.plugins.reporting.MSDContainers.system
 import org.sireum.hamr.codegen.microkit.plugins.reporting.RustContainers.RustFile
+import org.sireum.hamr.codegen.microkit.plugins.rust.component.CRustComponentPlugin
+import org.sireum.hamr.codegen.microkit.plugins.rust.gumbo.GumboRustUtil
 import org.sireum.hamr.codegen.microkit.reporting._
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil
 import org.sireum.hamr.ir.{Aadl, Direction, GclAssume, GclGuarantee, GclSubclause}
