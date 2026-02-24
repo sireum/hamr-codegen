@@ -31,6 +31,8 @@ import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
 
   @strictpure def monImplFilename: String = s"${resourceSuffix}_MON.c"
 
+  @strictpure def monImplUserFilename: String = s"${resourceSuffix}_MON_user.c"
+
   @strictpure def vmArchive: String = s"${resourceSuffix}.a"
 
   @pure def getElfNames: ISZ[String] = {

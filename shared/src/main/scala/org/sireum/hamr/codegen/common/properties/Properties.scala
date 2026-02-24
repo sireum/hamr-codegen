@@ -54,8 +54,15 @@ object HamrProperties {
 }
 
 object Hamr_Microkit_Properties {
+  @enum object SchedulingType {
+    "Domain_Scheduling"
+    "MCS"
+  }
+
   val HAMR_MICROKIT__SMC: String = "HAMR_Microkit::SMC"
   val HAMR_MICROKIT__PASSIVE: String = "HAMR_Microkit::Passive"
+
+  val HAMR_MICROKIT__SCHEDULING: String = "HAMR_Microkit::Scheduling"
 
   @pure def getBoolValue(properties: ISZ[Property], key: String): Option[B] = {
     PropertyUtil.getDiscreetPropertyValue(properties, key) match {
