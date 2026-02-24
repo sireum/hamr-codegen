@@ -107,8 +107,12 @@ object MicrokitReporterPlugin {
       return localStore
     }
 
-    val systemDescription = sel4OutputDir / "microkit.system"
-    assert(systemDescription.exists, systemDescription.value)
+    val systemDescription: Os.Path = sel4OutputDir / "microkit.system"
+    if (!systemDescription.exists) {
+      reporter.warn(None(), name, s"Couldn't find MSD: $systemDescription")
+      return localStore
+    }
+
 
     val msdOpt = Parsers.parseMSD(systemDescription, sel4OutputDir, reporter)
 

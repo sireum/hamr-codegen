@@ -29,6 +29,10 @@ object CConnectionProviderPlugin {
     return (for(s <- getCConnectionStore(store); tc <- s.typeApiContributions) yield tc.objectName)
   }
 
+  @pure def getTypeSimpleObjectNames(store: Store): ISZ[String] = {
+    return (for(s <- getCConnectionStore(store); tc <- s.typeApiContributions) yield tc.objectSimpleName)
+  }
+
   @pure def getMakeFileEntries(store: Store): ISZ[ST] = {
     return (for(s <- getCConnectionStore(store); tc <- s.typeApiContributions) yield tc.buildEntry)
   }

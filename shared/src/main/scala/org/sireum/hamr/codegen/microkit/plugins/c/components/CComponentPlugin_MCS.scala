@@ -41,7 +41,7 @@ import org.sireum.message.Reporter
 
     var resources = ISZ[Resource]()
 
-    var usedBudget: Z = 0
+    var usedBudgetInMilli: Z = 0
 
 
     var makefileContainers: ISZ[MakefileContainer] = ISZ()
@@ -66,7 +66,7 @@ import org.sireum.message.Reporter
     }
 
     def processThread(t: AadlThread,
-                      connectionStore: ISZ[ConnectionStore]): Z = {
+                      connectionStore: ISZ[ConnectionStore]): Unit = {
 
       val isVM = t.toVirtualMachine(symbolTable)
       val isRustic = MicrokitUtil.isRusty(t)
@@ -106,7 +106,8 @@ import org.sireum.message.Reporter
         hasHeader = T,
         isVM = isVM,
         isRustic = isRustic,
-        hasUserContent = !isVM)
+        hasUserContent = !isVM,
+        hasMonitorCompanion = T)
       makefileContainers = makefileContainers :+ mk
 
       val computeExecutionTimeinMilli: Z = t.getComputeExecutionTime() match {
@@ -116,8 +117,10 @@ import org.sireum.message.Reporter
         case _ => defaultComputeExecutionTime
       }
 
+      usedBudgetInMilli = usedBudgetInMilli + computeExecutionTimeinMilli
+
       xmlSchedulingDomains = xmlSchedulingDomains :+
-        SchedulingDomain(id = schedulingDomain, length = computeExecutionTimeinMilli * 1000000)
+        SchedulingDomain(id = schedulingDomain, length = computeExecutionTimeinMilli * 1_000_000)
 
       var childMemMaps: ISZ[MemoryMap] = ISZ()
       var childIrqs: ISZ[IRQ] = ISZ()
@@ -216,15 +219,20 @@ import org.sireum.message.Reporter
         case _ => None()
       }
 
+      var varAddrMap: Map[String, MemoryMap] = Map.empty
       for (r <- sharedMemoryRegions) {
         r match {
           case p: PortSharedMemoryRegion =>
-            childMemMaps = childMemMaps :+ MemoryMap(
+            val m = MemoryMap(
               memoryRegion = p.name,
               vaddrInKiBytes = nextMemAddressInKiBytes,
               perms = p.perms,
               varAddr = Some(p.varAddr),
               cached = None())
+
+            childMemMaps = childMemMaps :+ m
+            varAddrMap = varAddrMap + p.varAddr ~> m
+
             nextMemAddressInKiBytes = nextMemAddressInKiBytes + p.sizeInKiBytes
           case _ => halt("")
         }
@@ -284,17 +292,19 @@ import org.sireum.message.Reporter
       val cMonitorSource =
         st"""#include <microkit.h>
             |#include <sddf/util/printf.h>
+            |#define printf sddf_dprintf
             |
             |${MicrokitUtil.doNotEdit}
             |
-            |#define SCHEDULER_CH $pacerChannelId
+            |#define SCHEDULER_CH 0
             |
-            |#define USER_PD $monChannelId
+            |#define USER_PD 1
             |
             |void partition_init();
             |void partition_startup();
             |
             |void init(void) {
+            |  printf("%s | INIT!\n", microkit_name);
             |  partition_init();
             |}
             |
@@ -305,7 +315,7 @@ import org.sireum.message.Reporter
             |      microkit_notify(USER_PD);
             |      break;
             |    case USER_PD:
-            |      // THIS HSOULD ONLY BE FOR THE USER PD TO SIGNAL ITS FINISHED INIT
+            |      // THIS SHOULD ONLY BE FOR THE USER PD TO SIGNAL ITS FINISHED INIT
             |      microkit_notify(SCHEDULER_CH);
             |  }
             |}
@@ -322,12 +332,13 @@ import org.sireum.message.Reporter
             |}
             |
             |void partition_startup() {
-            |  // Place all initialisation code here. Such as port creation etc.
+            |  // This function is called at the start of every partition timeslice.
+            |  // For now this can handle any port management needed Place all initialisation code here. Such as port creation etc.
             |}
           """
 
       val cMonitorUserPath = s"${options.sel4OutputDir.get}/${mk.relativePathSrcDir}/${mk.monImplUserFilename}"
-      resources = resources :+ ResourceUtil.createResource(cMonitorUserPath, cMonitorUserSource, T)
+      resources = resources :+ ResourceUtil.createResource(cMonitorUserPath, cMonitorUserSource, F)
 
       ///////////////////////////////////////////////////////////////////////////////////////////////////
       // C Bridge
@@ -370,7 +381,15 @@ import org.sireum.message.Reporter
       var vaddrEntries: ISZ[ST] = ISZ()
       for (v <- cCodeContributions.cBridge_GlobalVarContributions) {
         if (!v.isInstanceOf[VMRamVaddr]) {
-          vaddrEntries = vaddrEntries :+ v.pretty
+
+          val simpleVarName = ops.StringOps(v.varName).replaceAllLiterally("*", "")
+
+          val init: Option[String] = varAddrMap.get(simpleVarName) match {
+            case Some(memMap) =>
+              Some(s" = (${v.typ} *) ${MicrokitUtil.KiBytesToHexH(memMap.vaddrInKiBytes, F)}")
+            case _ => None()
+          }
+          vaddrEntries = vaddrEntries :+ st"${v.pretty}$init;"
         }
       }
 
@@ -390,6 +409,8 @@ import org.sireum.message.Reporter
             |${(cCodeContributions.cBridge_PortApiMethods, "\n\n")}
             |
             |void init(void) {
+            |  printf("%s | INIT!\n", microkit_name);
+            |
             |  ${(cCodeContributions.cBridge_InitContributions, "\n\n")}
             |
             |  microkit_notify(PORT_FROM_MON);
@@ -444,7 +465,17 @@ import org.sireum.message.Reporter
       val cApiContent =
         st"""#pragma once
             |
-            |$utilIncludes
+            |#if __has_include("util.h")
+            |#include <util.h>
+            |#include <printf.h>
+            |#elif __has_include("libvmm/util.util.h")
+            |#include <libvmm/util/util.h>
+            |#include <libvmm/util/printf.h>
+            |#elif __has_include("sddf/util/printf.h")
+            |#include <sddf/util/printf.h>
+            |#define printf sddf_dprintf
+            |#endif
+            |
             |#include <stdint.h>
             |#include <microkit.h>
             |#include <${MicrokitTypeUtil.cAllTypesFilename}>
@@ -457,7 +488,6 @@ import org.sireum.message.Reporter
       val cApiPath = s"${options.sel4OutputDir.get}/${mk.relativePathIncludeDir}/${mk.cHeaderFilename}"
       resources = resources :+ ResourceUtil.createResource(cApiPath, cApiContent, T)
 
-      return computeExecutionTimeinMilli
     } // end processThread
 
 
@@ -467,16 +497,9 @@ import org.sireum.message.Reporter
     val connectionStore = CConnectionProviderPlugin.getCConnectionStore(localStore)
 
     for (t <- symbolTable.getThreads()) {
-      usedBudget = usedBudget + processThread(t, connectionStore)
+      processThread(t, connectionStore)
     }
 
-    /*
-    addPacerComponent()
-
-    val pacerSlot = SchedulingDomain(id = pacerSchedulingDomain, length = pacerComputeExecutionTime)
-    val currentScheduleSize = xmlSchedulingDomains.size
-    usedBudget = usedBudget + (currentScheduleSize * pacerComputeExecutionTime)
-    */
     val boundProcessors = symbolTable.getAllActualBoundProcessors()
     assert (boundProcessors.size == 1, "Linter should have ensured there is exactly one bound processor")
 
@@ -486,16 +509,18 @@ import org.sireum.message.Reporter
       case _ => halt("Infeasible: linter should have ensured bound processor has frame period")
     }
 
-    if (usedBudget > framePeriod) {
-      reporter.error(None(), toolName, s"Frame period ${framePeriod} is too small for the used budget ${usedBudget}")
+    if (usedBudgetInMilli > framePeriod) {
+      reporter.error(None(), toolName, s"Frame period ${framePeriod} is too small for the used budget ${usedBudgetInMilli}")
       return (localStore, resources)
     }
 
-    var xmlScheds: ISZ[SchedulingDomain] =ops.ISZOps(xmlSchedulingDomains).sortWith((a, b) => a.id < b.id)
+    var xmlScheds: ISZ[SchedulingDomain] = ops.ISZOps(xmlSchedulingDomains).sortWith((a, b) => a.id < b.id)
 
-    if (framePeriod - usedBudget > 0) {
-      // switch to domain 0 to use up the rest of the budget
-      xmlScheds = xmlScheds :+ SchedulingDomain(id = 0, length = framePeriod - usedBudget)
+    if (xmlScheds.nonEmpty && framePeriod - usedBudgetInMilli > 0) {
+      var lst = xmlScheds(xmlScheds.lastIndex)
+      val remainderInNano = (framePeriod - usedBudgetInMilli) * 1_000_000
+      lst = lst(length = lst.length + remainderInNano)
+      xmlScheds = ops.ISZOps(xmlScheds).dropRight(1) :+ lst
     }
 
     for (e <- connectionStore;
@@ -506,7 +531,6 @@ import org.sireum.message.Reporter
     localStore = StoreUtil.addChannels(xmlChannels, localStore)
     localStore = StoreUtil.addMemoryRegions(xmlMemoryRegions, localStore)
     localStore = StoreUtil.addProtectionDomains(xmlProtectionDomains, localStore)
-    //localStore = StoreUtil.addSchedulingDomains(xmlSchedulingDomains, localStore)
     localStore = StoreUtil.addSchedulingDomains(xmlScheds, localStore)
     localStore = StoreUtil.addMakefileContainers(makefileContainers, localStore)
 

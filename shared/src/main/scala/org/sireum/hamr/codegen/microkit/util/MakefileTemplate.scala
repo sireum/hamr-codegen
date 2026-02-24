@@ -90,11 +90,11 @@ object MakefileTemplate {
     return content
   }
 
-  @pure def systemMakefile(elfFiles: ISZ[String],
-                           typeObjectNames: ISZ[String],
-                           buildEntries: ISZ[ST],
-                           elfEntries: ISZ[ST],
-                           miscTargets: ISZ[MakefileTarget]): ST = {
+  @pure def systemMakefileDomainScheduler(elfFiles: ISZ[String],
+                                          typeObjectNames: ISZ[String],
+                                          buildEntries: ISZ[ST],
+                                          elfEntries: ISZ[ST],
+                                          miscTargets: ISZ[MakefileTarget]): ST = {
 
     val uniqueBuildEntries: ISZ[String] = (Set.empty[String] ++ (for(be <- buildEntries) yield be.render)).elements
 
@@ -168,6 +168,133 @@ object MakefileTemplate {
           |${TAB}rm -f *.o
           |
           |$miscTargetsOpt
+          |"""
+    return content
+  }
+
+
+  @pure def systemMakefileMCS(elfFiles: ISZ[String],
+                              includePaths: ISZ[String],
+                              sourcePaths: ISZ[String],
+                              typeObjectNames: ISZ[String],
+                              buildEntries: ISZ[ST],
+                              elfEntries: ISZ[ST],
+                              miscTargets: ISZ[MakefileTarget]): ST = {
+
+    val content =
+      st"""${MicrokitUtil.doNotEditMakefile}
+          |
+          |ifeq ($$(strip $$(LIONSOS)),)
+          |$$(error LIONSOS must be specified)
+          |endif
+          |override LIONSOS:=$$(abspath $${LIONSOS})
+          |
+          |TOOLCHAIN := clang
+          |CC := clang
+          |LD := ld.lld
+          |RANLIB := llvm-ranlib
+          |AR := llvm-ar
+          |OBJCOPY := llvm-objcopy
+          |MICROKIT_TOOL ?= $$(MICROKIT_SDK)/bin/microkit
+          |DTC := dtc
+          |PYTHON ?= python3
+          |SDDF := $$(LIONSOS)/dep/sddf
+          |
+          |SYSTEM_FILE := arinc_scheduling.system
+          |IMAGE_FILE := loader.img
+          |REPORT_FILE := report.txt
+          |
+          |SUPPORTED_BOARDS := qemu_virt_aarch64
+          |
+          |include $${SDDF}/tools/make/board/common.mk
+          |
+          |METAPROGRAM := $$(TOP_DIR)/meta.py
+          |
+          |SDFGEN_HELPER := $$(TOP_DIR)/sdfgen_helper.py
+          |
+          |# Macros needed by sdfgen helper to calculate config struct sizes
+          |SDFGEN_UNKOWN_MACROS := MAX_PARTITIONS=61
+          |
+          |# Headers containing config structs and dependencies
+          |SCHEDULER_CONFIG_HEADERS := $$(TOP_DIR)/scheduler/include/user_config.h
+          |
+          |SDDF_CUSTOM_LIBC := 1
+          |
+          |LDFLAGS := -L$$(BOARD_DIR)/lib -L$$(SDDF)/lib
+          |LIBS := -lmicrokit -Tmicrokit.ld libsddf_util_debug.a
+          |
+          |SDDF_MAKEFILES := $${SDDF}/util/util.mk \
+          |${TAB}$${SDDF}/drivers/timer/$${TIMER_DRIV_DIR}/timer_driver.mk \
+          |${TAB}$${SDDF}/drivers/serial/$${UART_DRIV_DIR}/serial_driver.mk \
+          |${TAB}$${SDDF}/serial/components/serial_components.mk
+          |
+          |include $${SDDF_MAKEFILES}
+          |
+          |
+          |CFLAGS += \
+          |${TAB}-I$$(LIONSOS)/include \
+          |${TAB}-I$$(SDDF)/include \
+          |${TAB}-I$$(SDDF)/include/microkit \
+          |${TAB}-I$$(TOP_DIR)/scheduler/include \
+          |${TAB}-I$$(TOP_DIR)/types/include \
+          |${TAB}${(includePaths, " ")}
+          |
+          |
+          |UTIL_OBJS :=
+          |
+          |TYPE_OBJS := ${(typeObjectNames, " ")}
+          |
+          |
+          |all: cache.o
+          |CHECK_FLAGS_BOARD_MD5:=.board_cflags-$$(shell echo -- $${CFLAGS} $${BOARD} $${MICROKIT_CONFIG}| shasum | sed 's/ *-//')
+          |
+          |$${CHECK_FLAGS_BOARD_MD5}:
+          |${TAB}-rm -f .board_cflags-*
+          |${TAB}touch $$@
+          |
+          |
+          |vpath %.c $$(SDDF) \
+          |${TAB}$$(TOP_DIR)/scheduler/src \
+          |${TAB}$$(TOP_DIR)/types/src \
+          |${TAB}${(sourcePaths, " ")}
+          |
+          |
+          |IMAGES := timer_driver.elf scheduler.elf \
+          |${TAB}${(elfFiles, " ")}
+          |
+          |$${IMAGES}: libsddf_util_debug.a
+          |
+          |
+          |%.o: %.c $${SDDF}/include
+          |${TAB}$${CC} $${CFLAGS} -c -o $$@ $$<
+          |
+          |
+          |${(elfEntries, "\n\n")}
+          |
+          |
+          |
+          |$$(SYSTEM_FILE): $$(METAPROGRAM) $$(IMAGES) $$(DTB)
+          |${TAB}$$(PYTHON) $$(SDFGEN_HELPER) --macros "$$(SDFGEN_UNKOWN_MACROS)" --configs "$$(SCHEDULER_CONFIG_HEADERS)" --output $$(TOP_BUILD_DIR)/config_structs.py
+          |${TAB}$$(PYTHON) $$(METAPROGRAM) --sddf $$(SDDF) --board $$(MICROKIT_BOARD) --dtb $$(DTB) --output . --sdf $$(SYSTEM_FILE) --objcopy $$(OBJCOPY)
+          |${TAB}$$(OBJCOPY) --update-section .device_resources=timer_driver_device_resources.data timer_driver.elf
+          |${TAB}$$(OBJCOPY) --update-section .timer_client_config=timer_client_scheduler.data scheduler.elf
+          |
+          |$$(IMAGE_FILE) $$(REPORT_FILE): $$(IMAGES) $$(SYSTEM_FILE)
+          |${TAB}$$(MICROKIT_TOOL) $$(SYSTEM_FILE) --search-path $$(TOP_BUILD_DIR) --board $$(MICROKIT_BOARD) --config $$(MICROKIT_CONFIG) -o $$(IMAGE_FILE) -r $$(REPORT_FILE)
+          |
+          |
+          |FORCE:
+          |
+          |qemu: $$(IMAGE_FILE)
+          |${TAB}$$(QEMU) -nographic $$(QEMU_ARCH_ARGS)
+          |
+          |clean::
+          |${TAB}$${RM} -f *.elf .depend* $$
+          |${TAB}find . -name \*.[do] |xargs --no-run-if-empty rm
+          |
+          |clobber:: clean
+          |${TAB}rm -f *.a
+          |${TAB}rm -f $${IMAGE_FILE} $${REPORT_FILE}
           |"""
     return content
   }

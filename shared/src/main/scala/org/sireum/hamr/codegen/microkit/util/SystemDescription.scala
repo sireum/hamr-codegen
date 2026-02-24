@@ -306,11 +306,14 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
                            val perms: ISZ[Perm.Type],
                            val varAddr: Option[String],
                            val cached: Option[B]) {
-  @pure def prettyST: ST = {
-    val stPerms = st"""${(for (p <- perms) yield (
+  @pure def permsPettyPrint: ST = {
+    return (st"""${(for (p <- perms) yield (
       if (p == Perm.READ) "r"
       else if (p == Perm.WRITE) "w"
-      else "x"), "")}"""
+      else "x"), "")}""")
+  }
+  @pure def prettyST: ST = {
+    val stPerms = permsPettyPrint
     val setVarAddr: Option[String] =
       if (varAddr.nonEmpty) Some(s"setvar_vaddr=\"${varAddr.get}\"")
       else None()

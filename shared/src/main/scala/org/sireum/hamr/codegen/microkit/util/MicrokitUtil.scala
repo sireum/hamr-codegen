@@ -77,10 +77,14 @@ object MicrokitUtil {
   }
 
   @pure def KiBytesToHex(offset: Z): String = {
+    return KiBytesToHexH(offset, T)
+  }
+
+  @pure def KiBytesToHexH(offset: Z, separateUnits: B): String = {
     val aligned: Z =
       if (offset == 0) 4
       else offset + ((MemAlignmentInKiBytes - (offset % MemAlignmentInKiBytes)) % MemAlignmentInKiBytes)
-    return hexFormat(toHex(aligned * 1024))
+    return hexFormat(toHex(aligned * 1024), separateUnits)
   }
 
   @pure def toHex(z: Z): String = {
@@ -96,11 +100,11 @@ object MicrokitUtil {
     return hex
   }
 
-  @pure def hexFormat(z: String): String = {
+  @pure def hexFormat(z: String, separateUnits: B): String = {
     val s = conversions.String.toCis(z)
     var ret: ISZ[C] = ISZ(s(s.lastIndex))
     for (i <- 1 until s.size) {
-      if (i % 3 == 0) {
+      if (separateUnits && i % 3 == 0) {
         ret = '_' +: ret
       }
       ret = s(s.size - 1 - i) +: ret

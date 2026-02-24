@@ -9,7 +9,8 @@ import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
                                   val hasHeader: B,
                                   val isVM: B,
                                   val isRustic: B,
-                                  val hasUserContent: B) {
+                                  val hasUserContent: B,
+                                  val hasMonitorCompanion: B) {
 
   @strictpure def cHeaderFilename: String = s"$resourceSuffix.h"
 
@@ -24,6 +25,8 @@ import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
   @strictpure def userObjName: String = s"${resourceSuffix}_user.o"
 
   @strictpure def monObjName: String = s"${resourceSuffix}_MON.o"
+
+  @strictpure def userMonObjName: String = s"${resourceSuffix}_MON_user.o"
 
   @strictpure def elfName: String = s"$resourceSuffix.elf"
 
@@ -130,8 +133,12 @@ import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
               |${TAB}$$(LD) $$(LDFLAGS) $$^ $$(LIBS) -o $$@"""
         }
 
+      val monCompanion: Option[String] =
+        if (hasMonitorCompanion) Some(s"$userMonObjName ")
+        else None()
+
       val ret =
-        st"""$monElfName: $monObjName
+        st"""$monElfName: $monCompanion$monObjName
             |${TAB}$$(LD) $$(LDFLAGS) $$^ $$(LIBS) -o $$@
             |
             |$elfEntry"""

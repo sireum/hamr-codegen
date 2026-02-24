@@ -87,7 +87,8 @@ import org.sireum.message.Reporter
         hasHeader = F,
         isVM = F,
         isRustic = F,
-        hasUserContent = F)
+        hasUserContent = F,
+        hasMonitorCompanion = F)
       makefileContainers = makefileContainers :+ mk
 
       val content =
@@ -149,7 +150,8 @@ import org.sireum.message.Reporter
         hasHeader = T,
         isVM = isVM,
         isRustic = isRustic,
-        hasUserContent = !isVM)
+        hasUserContent = !isVM,
+        hasMonitorCompanion = F)
       makefileContainers = makefileContainers :+ mk
 
       val computeExecutionTime: Z = t.getComputeExecutionTime() match {
@@ -393,7 +395,7 @@ import org.sireum.message.Reporter
       var vaddrEntries: ISZ[ST] = ISZ()
       for (v <- cCodeContributions.cBridge_GlobalVarContributions) {
         if (!v.isInstanceOf[VMRamVaddr]) {
-          vaddrEntries = vaddrEntries :+ v.pretty
+          vaddrEntries = vaddrEntries :+ st"${v.pretty};"
         }
       }
 

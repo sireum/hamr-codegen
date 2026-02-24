@@ -37,8 +37,12 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.TAB
 
   def simpleFilename: String
 
+  @pure def objectSimpleName: String = {
+    return s"$simpleFilename.o"
+  }
+
   @pure def objectName: String = {
-    return s"$$(TOP_DIR)/build/$simpleFilename.o"
+    return s"$$(TOP_DIR)/build/$objectSimpleName"
   }
 
   @pure def headerFilename: String = {
@@ -71,7 +75,7 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.TAB
   def varName: String
 
   def pretty: ST = {
-    return st"$typ $varName;"
+    return st"$typ $varName"
   }
 }
 

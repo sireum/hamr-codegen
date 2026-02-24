@@ -2,13 +2,15 @@
 package org.sireum.hamr.codegen.microkit
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.containers.{Marker, Resource}
+import org.sireum.hamr.codegen.common.containers.Resource
 import org.sireum.hamr.codegen.common.CommonUtil.{BoolValue, Store}
 import org.sireum.hamr.codegen.common.plugin.Plugin
+import org.sireum.hamr.codegen.common.properties.Hamr_Microkit_Properties
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.HamrCli.CodegenOption
 import org.sireum.hamr.codegen.common.util.{CodeGenResults, ResourceUtil}
+import org.sireum.hamr.codegen.microkit.plugins.c.components.CComponentPlugin
 import org.sireum.hamr.codegen.microkit.plugins.c.connections.CConnectionProviderPlugin
 import org.sireum.hamr.codegen.microkit.plugins.{MicrokitInitPlugin, MicrokitLintPlugin, MicrokitPlugin, PluginUtil, StoreUtil}
 import org.sireum.hamr.codegen.microkit.util._
@@ -103,20 +105,36 @@ object MicrokitCodegen {
         (for (mk <- makefileContainers) yield mk.buildEntry)
 
     var elfFiles: ISZ[String] = ISZ()
-    var oFiles: ISZ[String] = ISZ()
     for (mk <- makefileContainers) {
       elfFiles = elfFiles ++ mk.getElfNames
-      oFiles = oFiles ++ mk.getObjNames
     }
 
     val elfEntries: ISZ[ST] = for (mk <- makefileContainers) yield mk.elfEntry
 
-    val systemmkContents = MakefileTemplate.systemMakefile(
-      elfFiles = elfFiles,
-      typeObjectNames = CConnectionProviderPlugin.getTypeObjectNames(localStore),
-      buildEntries = buildEntries,
-      elfEntries = elfEntries,
-      miscTargets = MakefileUtil.getMakefileTargets(ISZ("system.mk"), localStore))
+    val isMCS = CComponentPlugin.getSchedulingType(symbolTable.rootSystem) == Hamr_Microkit_Properties.SchedulingType.MCS
+
+    val systemmkContents =
+      if (isMCS) {
+        val includesPaths: ISZ[String] = for (mk <- makefileContainers) yield s"-I$$(TOP_DIR)/${mk.relativePathIncludeDir}"
+
+        val sourcePaths: ISZ[String] = for (mk <- makefileContainers) yield s"$$(TOP_DIR)/${mk.relativePathSrcDir}"
+
+        MakefileTemplate.systemMakefileMCS(
+          includePaths = includesPaths,
+          sourcePaths = sourcePaths,
+          elfFiles = elfFiles,
+          typeObjectNames = CConnectionProviderPlugin.getTypeSimpleObjectNames(localStore),
+          buildEntries = buildEntries,
+          elfEntries = elfEntries,
+          miscTargets = MakefileUtil.getMakefileTargets(ISZ("system.mk"), localStore))
+      } else {
+        MakefileTemplate.systemMakefileDomainScheduler(
+          elfFiles = elfFiles,
+          typeObjectNames = CConnectionProviderPlugin.getTypeObjectNames(localStore),
+          buildEntries = buildEntries,
+          elfEntries = elfEntries,
+          miscTargets = MakefileUtil.getMakefileTargets(ISZ("system.mk"), localStore))
+      }
 
     val systemmkPath = s"${options.sel4OutputDir.get}/${MicrokitCodegen.systemMakeFilename}"
     resources = resources :+ ResourceUtil.createResource(systemmkPath, systemmkContents, T)
