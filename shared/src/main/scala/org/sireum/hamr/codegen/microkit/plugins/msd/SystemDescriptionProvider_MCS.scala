@@ -3,15 +3,15 @@ package org.sireum.hamr.codegen.microkit.plugins.msd
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{BoolValue, Store}
-import org.sireum.hamr.codegen.common.containers.Resource
+import org.sireum.hamr.codegen.common.containers.{Marker, Resource}
 import org.sireum.hamr.codegen.common.properties.Hamr_Microkit_Properties
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.plugins.StoreUtil
 import org.sireum.hamr.codegen.microkit.plugins.c.components.CComponentPlugin
-import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
-import org.sireum.hamr.codegen.microkit.util.MemoryMap
+import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.{KiBytesToHex, safeToEditMakefile}
+import org.sireum.hamr.codegen.microkit.util.{MemoryMap, ProtectionDomain}
 import org.sireum.hamr.ir.Aadl
 import org.sireum.message.Reporter
 
@@ -37,15 +37,21 @@ object SystemDescriptionProvider_MCS {
     val protectionDomains = StoreUtil.getProtectionDomains(localStore)
     val schedulingDomains = StoreUtil.getSchedulingDomains(localStore)
     val memoryRegions = StoreUtil.getMemoryRegions(localStore)
-    val channesl = StoreUtil.getChannels(localStore)
+
+    // TODO: need to refacotr channels for MCS
+    val channels = StoreUtil.getChannels(localStore)
 
 
     var partitionProtectionDomainsMons: ISZ[ST] = ISZ()
     var partitionProtectionDomainsUser: ISZ[ST] = ISZ()
 
+    var channelsST: ISZ[ST] = ISZ()
+    var monChannels: ISZ[ST] = ISZ()
+
     var initpds: ISZ[String] = ISZ()
     var userpds: ISZ[String] = ISZ()
 
+    var monDomains: ISZ[ProtectionDomain] = ISZ()
     var memMaps: Map[String, ISZ[(MemoryMap, String)]] = Map.empty
     for (pd <- protectionDomains) {
       assert(pd.children.isEmpty, "Not expecting children protection domains for MCS")
@@ -56,23 +62,32 @@ object SystemDescriptionProvider_MCS {
       }
 
       if (ops.StringOps(pd.name).endsWith("_MON")) {
+        monDomains = monDomains :+ pd
         initpds = initpds :+ pd.name
         partitionProtectionDomainsMons = partitionProtectionDomainsMons :+
-          st"""${pd.name} = ProtectionDomain("${pd.name}", "${pd.programImage}", priority=150, passive=True)"""
+          st"""${pd.name} = ProtectionDomain("${pd.name}", "${pd.programImage}", priority=150, passive=True)
+              |scheduler.add_child_pd(${pd.name})"""
+
+        val monChannel = s"channel_${pd.name}"
+        monChannels = monChannels :+ st"channel_${pd.name} = ${pd.schedulingDomain.get}"
+        channelsST = channelsST :+ st"""sdf.add_channel(Channel(scheduler, ${pd.name}, a_id=$monChannel, b_id=0))"""
       } else {
         userpds = userpds :+ pd.name
         partitionProtectionDomainsUser = partitionProtectionDomainsUser :+
-          st"""${pd.name} = ProtectionDomain("${pd.name}", "${pd.programImage}", priority=140, passive=True)"""
+          st"""${pd.name} = ProtectionDomain("${pd.name}", "${pd.programImage}", priority=140, passive=True)
+              |scheduler.add_child_pd(${pd.name})"""
+
+        channelsST = channelsST :+ st"""sdf.add_channel(Channel(${pd.name}_MON, ${pd.name}, a_id=1, b_id=0))"""
       }
     }
 
-    var timeSlices: ISZ[Z] = ISZ()
-    var channels: ISZ[Z] = ISZ()
-    for (i <- 0 until schedulingDomains.size) {
-      channels = channels :+ i
-      timeSlices = timeSlices :+ schedulingDomains(i).length
+    var schedulePairs: ISZ[ST] = ISZ()
+    var schedule: ISZ[ST] = ISZ()
+    for (sd <- ops.ISZOps(schedulingDomains).sortWith((a,b) => a.id <= b.id)) {
+      val channelName: String = if (sd.id == 0) "0" else s"channel_${sd.componentName}"
+      schedulePairs = schedulePairs :+ st"ts_${sd.componentName} = ($channelName, ${sd.length})"
+      schedule = schedule :+ st"ts_${sd.componentName}"
     }
-
 
     var memoryRegionsST: ISZ[ST]= ISZ()
     var mapsSt: ISZ[ST]= ISZ()
@@ -89,7 +104,10 @@ object SystemDescriptionProvider_MCS {
       }
     }
 
-    val metaContent =
+    val marker = Marker.createHashMarker("META MARKER")
+
+    val tq = "\"\"\""
+    val metaContent : ST =
       st"""# Copyright 2025, UNSW
           |# SPDX-License-Identifier: BSD-2-Clause
           |import argparse
@@ -99,6 +117,8 @@ object SystemDescriptionProvider_MCS {
           |from typing import List, Tuple, Optional
           |from sdfgen import SystemDescription, Sddf, DeviceTree, LionsOs
           |from importlib.metadata import version
+          |
+          |${safeToEditMakefile}
           |
           |assert version('sdfgen').split(".")[1] == "27", "Unexpected sdfgen version"
           |
@@ -132,6 +152,12 @@ object SystemDescriptionProvider_MCS {
           |    ),
           |]
           |
+          |def schedule(*entries):
+          |    $tq
+          |    entries: sequence of (channel, timeslice_ns)
+          |    $tq
+          |    part_ch, part_timeslices = zip(*entries)
+          |    return UserSchedule(list(part_timeslices), list(part_ch))
           |
           |def generate(sdf_path: str, output_dir: str, dtb: DeviceTree):
           |    timer_node = dtb.node(board.timer)
@@ -142,59 +168,14 @@ object SystemDescriptionProvider_MCS {
           |
           |    scheduler = ProtectionDomain("scheduler", "scheduler.elf", priority=200)
           |
+          |    ${marker.beginMarker}
+          |
           |    #######################################
           |    # PARTITION PROTECTION DOMAINS
           |    #######################################
           |    ${(partitionProtectionDomainsMons, "\n")}
           |
           |    ${(partitionProtectionDomainsUser, "\n")}
-          |
-          |    partition_initial_pds = [
-          |      ${(initpds, ",\n")}
-          |    ]
-          |
-          |    partition_user_pds = [
-          |      ${(userpds, ",\n")}
-          |    ]
-          |
-          |    pds = [
-          |      timer_driver,
-          |      scheduler
-          |    ]
-          |
-          |    for pd in pds:
-          |      sdf.add_pd(pd)
-          |
-          |    for pd in partition_initial_pds:
-          |      scheduler.add_child_pd(pd)
-          |
-          |
-          |    #######################################
-          |    # TIME SLICES
-          |    #######################################
-          |
-          |    # These timeslices are in nanoseconds
-          |    part_timeslices = [${(timeSlices, ", ")}]
-          |
-          |    part_ch = [${(channels, ", ")}]
-          |
-          |    user_schedule = UserSchedule(part_timeslices, part_ch)
-          |
-          |    # @kwinter: For now make these all children of the scheduler.
-          |    # Once microkit supports handing TCBs to different PD's we will
-          |    # make these user pds children of the initial pds
-          |    for pd in partition_user_pds:
-          |        scheduler.add_child_pd(pd)
-          |
-          |    # These channels will start at 0 from the schedulers point of view
-          |    for pd in partition_initial_pds:
-          |        pd_channel = Channel(scheduler, pd)
-          |        sdf.add_channel(pd_channel)
-          |
-          |    for pd_init, pd_user in zip(partition_initial_pds, partition_user_pds):
-          |        partition_channel = Channel(pd_init, pd_user)
-          |        sdf.add_channel(partition_channel)
-          |
           |
           |    #######################################
           |    # MEMORY REGIONS
@@ -203,6 +184,26 @@ object SystemDescriptionProvider_MCS {
           |
           |    ${(mapsSt, "\n")}
           |
+          |    #######################################
+          |    # CHANNELS
+          |    #######################################
+          |    ${(monChannels, "\n")}
+          |
+          |    ${(channelsST, "\n")}
+          |
+          |    #######################################
+          |    # SCHEDULE
+          |    #######################################
+          |    ${(schedulePairs, "\n")}
+          |
+          |    user_schedule = schedule(
+          |      ${(schedule, ",\n")}
+          |    )
+          |
+          |    ${marker.endMarker}
+          |
+          |    sdf.add_pd(timer_driver)
+          |    sdf.add_pd(scheduler)
           |    timer_system.add_client(scheduler)
           |
           |    assert timer_system.connect()
@@ -249,7 +250,7 @@ object SystemDescriptionProvider_MCS {
           |"""
 
     val sdScheduleXmlPath = s"${options.sel4OutputDir.get}/${SystemDescriptionProvider_MCS.metaPy}"
-    resources = resources :+ ResourceUtil.createResource(sdScheduleXmlPath, metaContent, T)
+    resources = resources :+ ResourceUtil.createResource(sdScheduleXmlPath, metaContent, F)
 
     @pure def emitStaticSdFResources(): Unit = {
       val sdfgen_helperPath = s"${options.sel4OutputDir.get}/sdfgen_helper.py"
@@ -721,88 +722,109 @@ object StaticContent {
                          |            out.write(")\n\n")
                          |"""
 
-  val scheduler_c: ST = st"""#include <stdint.h>
-                      |#include <stdbool.h>
-                      |
-                      |#include <microkit.h>
-                      |#include <sel4/sel4.h>
-                      |#include <os/sddf.h>
-                      |#include <sddf/timer/client.h>
-                      |#include <sddf/timer/config.h>
-                      |#include <sddf/util/printf.h>
-                      |
-                      |#include <scheduler_config.h>
-                      |#include <user_config.h>
-                      |
-                      |/* Number of nanoseconds in a second */
-                      |#define NS_IN_S  1000000000ULL
-                      |
-                      |__attribute__((__section__(".timer_client_config"))) timer_client_config_t config;
-                      |__attribute__((__section__(".user_schedule"))) user_schedule_t user_schedule;
-                      |
-                      |uint32_t current_timeslice;
-                      |
-                      |// Bitstring for partition ready status. 0 = not ready, 1 = ready.
-                      |uint64_t part_ready;
-                      |uint64_t part_ready_check;
-                      |
-                      |bool scheduler_running;
-                      |
-                      |void next_partition() {
-                      |    current_timeslice++;
-                      |
-                      |    // Wrap the schedule back around to the beginning if we are at the end
-                      |    if (current_timeslice == user_schedule.num_timeslices) {
-                      |        current_timeslice = 0;
-                      |    }
-                      |    microkit_notify(current_timeslice);
-                      |    // Set a timeout for the length of this partition's timeslice
-                      |    sddf_timer_set_timeout(config.driver_id, user_schedule.timeslices[current_timeslice]);
-                      |}
-                      |
-                      |void notified(microkit_channel ch)
-                      |{
-                      |    if (ch == config.driver_id) {
-                      |        if (scheduler_running == false) {
-                      |            microkit_notify(current_timeslice);
-                      |            sddf_timer_set_timeout(config.driver_id, user_schedule.timeslices[current_timeslice]);
-                      |            scheduler_running = true;
-                      |        } else {
-                      |            next_partition();
-                      |        }
-                      |    } else if (ch < user_schedule.num_timeslices) {
-                      |        // This should be where all our partition channels are
-                      |        if ((part_ready & (1 << ch)) == 0) {
-                      |            sddf_dprintf("SCHEDULER | Marking partition %d as ready\n", ch);
-                      |            part_ready |= (1 << ch);
-                      |            // Check if all partitions are now initialised
-                      |            if (part_ready == part_ready_check) {
-                      |                // Now we return to our programmed schedule
-                      |                sddf_dprintf("SCHEDULER | All partitions ready, beginning schedule\n");
-                      |                // Timeout to let the last spd to become passive
-                      |                sddf_timer_set_timeout(config.driver_id, NS_IN_S);
-                      |            }
-                      |        }
-                      |    } else {
-                      |        sddf_dprintf("SCHEDULER |received unknown notification on channel: %d\n", ch);
-                      |    }
-                      |}
-                      |
-                      |void init(void)
-                      |{
-                      |    current_timeslice = 0;
-                      |
-                      |    scheduler_running = false;
-                      |
-                      |    // Construct the partition ready check value
-                      |    for (int i = 0; i < user_schedule.num_timeslices; i++) {
-                      |        // Construct the ready check based on the channels to the partitions
-                      |        // initial task.
-                      |        part_ready_check |= (1 << user_schedule.timeslice_ch[i]);
-                      |    }
-                      |}
-                      |
-                      |"""
+  val scheduler_c: ST =
+    st"""#include <stdint.h>
+        |#include <stdbool.h>
+        |
+        |#include <microkit.h>
+        |#include <sel4/sel4.h>
+        |#include <os/sddf.h>
+        |#include <sddf/timer/client.h>
+        |#include <sddf/timer/config.h>
+        |#include <sddf/util/printf.h>
+        |
+        |#include <scheduler_config.h>
+        |#include <user_config.h>
+        |
+        |/* Number of nanoseconds in a second */
+        |#define NS_IN_S  1000000000ULL
+        |
+        |__attribute__((__section__(".timer_client_config"))) timer_client_config_t config;
+        |__attribute__((__section__(".user_schedule"))) user_schedule_t user_schedule;
+        |
+        |uint32_t current_timeslice;
+        |
+        |// Bitstring for partition ready status. 0 = not ready, 1 = ready.
+        |uint64_t part_ready;
+        |uint64_t part_ready_check;
+        |
+        |bool scheduler_running;
+        |
+        |bool validChannel(microkit_channel ch) {
+        |    for(int i = 0; i < user_schedule.num_timeslices; i++) {
+        |        if (user_schedule.timeslice_ch[i] == ch) {
+        |            return true;
+        |        }
+        |    }
+        |    return false;
+        |}
+        |
+        |void notify() {
+        |    microkit_channel ch = user_schedule.timeslice_ch[current_timeslice];
+        |    if (ch != 0) { // channel 0 is used to pad out a schedule
+        |        microkit_notify(ch);
+        |    }
+        |    // Set a timeout for the length of this partition's timeslice
+        |    sddf_timer_set_timeout(config.driver_id, user_schedule.timeslices[current_timeslice]);
+        |}
+        |
+        |void next_partition() {
+        |    current_timeslice++;
+        |
+        |    // Wrap the schedule back around to the beginning if we are at the end
+        |    if (current_timeslice == user_schedule.num_timeslices) {
+        |        current_timeslice = 0;
+        |    }
+        |    notify();
+        |}
+        |
+        |void notified(microkit_channel ch)
+        |{
+        |    if (ch == config.driver_id) {
+        |        if (scheduler_running == false) {
+        |            notify();
+        |            scheduler_running = true;
+        |        } else {
+        |            next_partition();
+        |        }
+        |    //} else if (ch < user_schedule.num_timeslices) {
+        |    } else if (validChannel(ch)) {
+        |        // This should be where all our partition channels are
+        |        if ((part_ready & (1 << ch)) == 0) {
+        |            sddf_dprintf("SCHEDULER | Marking partition %d as ready\n", ch);
+        |            part_ready |= (1 << ch);
+        |            // Check if all partitions are now initialised
+        |            if (part_ready == part_ready_check) {
+        |
+        |                part_ready |= (1 << 0);  // ch 0 is always 'ready'
+        |
+        |                // Now we return to our programmed schedule
+        |                sddf_dprintf("SCHEDULER | All partitions ready, beginning schedule\n");
+        |                // Timeout to let the last spd to become passive
+        |                sddf_timer_set_timeout(config.driver_id, NS_IN_S);
+        |            }
+        |        }
+        |    } else {
+        |        sddf_dprintf("SCHEDULER |received unknown notification on channel: %d\n", ch);
+        |    }
+        |}
+        |
+        |void init(void)
+        |{
+        |    current_timeslice = 0;
+        |
+        |    scheduler_running = false;
+        |
+        |    part_ready |= (1 << 0); // ch 0 is always 'ready'
+        |
+        |    // Construct the partition ready check value
+        |    for (int i = 0; i < user_schedule.num_timeslices; i++) {
+        |        // Construct the ready check based on the channels to the partitions
+        |        // initial task.
+        |        part_ready_check |= (1 << user_schedule.timeslice_ch[i]);
+        |    }
+        |}
+        |"""
 
   val user_config_h: ST = st"""#pragma once
                               |

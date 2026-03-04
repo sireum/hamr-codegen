@@ -162,7 +162,7 @@ import org.sireum.message.Reporter
       }
 
       xmlSchedulingDomains = xmlSchedulingDomains :+
-        SchedulingDomain(id = schedulingDomain, length = computeExecutionTime)
+        SchedulingDomain(id = schedulingDomain, componentName = threadMonId.render, length = computeExecutionTime)
 
       var childMemMaps: ISZ[MemoryMap] = ISZ()
       var childIrqs: ISZ[IRQ] = ISZ()
@@ -495,7 +495,7 @@ import org.sireum.message.Reporter
 
     addPacerComponent()
 
-    val pacerSlot = SchedulingDomain(id = pacerSchedulingDomain, length = pacerComputeExecutionTime)
+    val pacerSlot = SchedulingDomain(id = pacerSchedulingDomain, componentName = "pacer", length = pacerComputeExecutionTime)
     val currentScheduleSize = xmlSchedulingDomains.size
     usedBudget = usedBudget + (currentScheduleSize * pacerComputeExecutionTime)
 
@@ -520,7 +520,7 @@ import org.sireum.message.Reporter
 
     if (framePeriod - usedBudget > 0) {
       // switch to domain 0 to use up the rest of the budget
-      xmlScheds = xmlScheds :+ SchedulingDomain(id = 0, length = framePeriod - usedBudget)
+      xmlScheds = xmlScheds :+ SchedulingDomain(id = 0, componentName = "NA", length = framePeriod - usedBudget)
     }
 
     for (e <- connectionStore;

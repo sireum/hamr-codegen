@@ -113,7 +113,7 @@ object MicrokitCodegen {
 
     val isMCS = CComponentPlugin.getSchedulingType(symbolTable.rootSystem) == Hamr_Microkit_Properties.SchedulingType.MCS
 
-    val systemmkContents =
+    val systemmkContents: ST =
       if (isMCS) {
         val includesPaths: ISZ[String] = for (mk <- makefileContainers) yield s"-I$$(TOP_DIR)/${mk.relativePathIncludeDir}"
 

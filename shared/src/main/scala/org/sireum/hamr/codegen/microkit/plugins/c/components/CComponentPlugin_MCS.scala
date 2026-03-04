@@ -120,7 +120,7 @@ import org.sireum.message.Reporter
       usedBudgetInMilli = usedBudgetInMilli + computeExecutionTimeinMilli
 
       xmlSchedulingDomains = xmlSchedulingDomains :+
-        SchedulingDomain(id = schedulingDomain, length = computeExecutionTimeinMilli * 1_000_000)
+        SchedulingDomain(id = schedulingDomain, componentName = threadMonId.render, length = computeExecutionTimeinMilli * 1_000_000)
 
       var childMemMaps: ISZ[MemoryMap] = ISZ()
       var childIrqs: ISZ[IRQ] = ISZ()
@@ -517,10 +517,8 @@ import org.sireum.message.Reporter
     var xmlScheds: ISZ[SchedulingDomain] = ops.ISZOps(xmlSchedulingDomains).sortWith((a, b) => a.id < b.id)
 
     if (xmlScheds.nonEmpty && framePeriod - usedBudgetInMilli > 0) {
-      var lst = xmlScheds(xmlScheds.lastIndex)
       val remainderInNano = (framePeriod - usedBudgetInMilli) * 1_000_000
-      lst = lst(length = lst.length + remainderInNano)
-      xmlScheds = ops.ISZOps(xmlScheds).dropRight(1) :+ lst
+      xmlScheds = xmlScheds :+ SchedulingDomain(id = 0, componentName = "pad", length = remainderInNano)
     }
 
     for (e <- connectionStore;
