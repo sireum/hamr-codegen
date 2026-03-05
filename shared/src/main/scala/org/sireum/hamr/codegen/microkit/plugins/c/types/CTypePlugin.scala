@@ -80,7 +80,8 @@ object CTypePlugin {
     val typeNameProvider = (Map.empty[String, CTypeNameProvider] ++
       (for (aadlTypeName <- touchedTypes.orderedDependencies) yield
         aadlTypeName ~> getTypeNameProvider(types.typeMap.get(aadlTypeName).get, touchedTypes.substitutionTypeMap, reporter))) +
-      MicrokitTypeUtil.eventPortTypeName ~> getTypeNameProvider(MicrokitTypeUtil.eventPortType, touchedTypes.substitutionTypeMap, reporter)
+      MicrokitTypeUtil.eventPortTypeName ~> getTypeNameProvider(MicrokitTypeUtil.eventPortType, touchedTypes.substitutionTypeMap, reporter) +
+      MicrokitTypeUtil.eventPortType.name ~> getTypeNameProvider(MicrokitTypeUtil.eventPortType, touchedTypes.substitutionTypeMap, reporter)
 
     val defs: ISZ[ST] = for (aadlTypeName <- touchedTypes.orderedDependencies if !TypeUtil.isNormalBaseTypeS(aadlTypeName)) yield
       getTypeDefinition(types.typeMap.get(aadlTypeName).get, typeNameProvider, touchedTypes.substitutionTypeMap, reporter)

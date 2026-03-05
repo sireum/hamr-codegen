@@ -180,6 +180,10 @@ object MakefileTemplate {
                               buildEntries: ISZ[ST],
                               elfEntries: ISZ[ST],
                               miscTargets: ISZ[MakefileTarget]): ST = {
+    val buildEntriesOpt: Option[ST] =
+      if(buildEntries.isEmpty) None()
+      else Some(st"""${(buildEntries, "\n\n")}
+                    |""")
 
     val content =
       st"""${MicrokitUtil.doNotEditMakefile}
@@ -265,6 +269,7 @@ object MakefileTemplate {
           |$${IMAGES}: libsddf_util_debug.a
           |
           |
+          |$buildEntriesOpt
           |%.o: %.c $${SDDF}/include
           |${TAB}$${CC} $${CFLAGS} -c -o $$@ $$<
           |

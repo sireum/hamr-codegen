@@ -112,6 +112,16 @@ object MicrokitUtil {
     return s"0x${conversions.String.fromCis(ret)}"
   }
 
+  val microkit_util_imports: ST = st"""#if __has_include("util.h")
+                                      |#include <util.h>
+                                      |#elif __has_include("libvmm/util.util.h")
+                                      |#include <libvmm/util/util.h>
+                                      |#elif __has_include("sddf/util/util.h")
+                                      |#include <sddf/util/printf.h>
+                                      |#include <sddf/util/util.h>
+                                      |#define printf sddf_dprintf
+                                      |#endif"""
+
   val printfc: ST =
     st"""///////////////////////////////////////////////////////////////////////////////
         |// \author (c) Marco Paland (info@paland.com)

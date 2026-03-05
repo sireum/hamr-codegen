@@ -39,11 +39,11 @@ object MicrokitTypeUtil {
     BaseType(
       classifier = ISZ("Base_Types::Unsigned_8"),
       nameProvider =
-      AadlTypeNameProvider(
-        basePackageName = "",
-        classifier = ISZ("Base_Types::Unsigned_8"),
-        enumValues = ISZ(),
-        kind = TypeKind.Base),
+        AadlTypeNameProvider(
+          basePackageName = "",
+          classifier = ISZ("Base_Types::Unsigned_8"),
+          enumValues = ISZ(),
+          kind = TypeKind.Base),
       container = None(),
       bitSize = Some(8),
       slangType = SlangType.U8)
@@ -57,14 +57,14 @@ object MicrokitTypeUtil {
   val eventCounterTypename: String = brand("event_counter_t")
 
   val cEventCounterContent: ST =
-   st"""#pragma once
-       |
-       |#include <stdint.h>
-       |
-       |${MicrokitUtil.doNotEdit}
-       |
-       |typedef _Atomic uintmax_t ${eventCounterTypename};
-       |"""
+    st"""#pragma once
+        |
+        |#include <stdint.h>
+        |
+        |${MicrokitUtil.doNotEdit}
+        |
+        |typedef _Atomic uintmax_t ${eventCounterTypename};
+        |"""
 
 
   @pure def getCRustTypeDefaultValue(a: AadlType, cRustTypeProvider: CRustTypeProvider): String = {
@@ -72,7 +72,7 @@ object MicrokitTypeUtil {
       case b: BaseType => return MicrokitTypeUtil.getRustPrimitiveDefaultValue(a.name)
       case _ if a.name == "Base_Types::String" => return "[0; Base_Types::Base_Types_String_DIM_0]"
       case at: ArrayType =>
-        assert (at.dimensions.size == 1, "Need to handle multi-dim arrays")
+        assert(at.dimensions.size == 1, "Need to handle multi-dim arrays")
         val np = cRustTypeProvider.getTypeNameProvider(at)
         val dim0 = CRustTypePlugin.getArrayDimName(np, 0)
         val baseTypeDefault = getCRustTypeDefaultValue(at.baseType, cRustTypeProvider)
@@ -87,14 +87,14 @@ object MicrokitTypeUtil {
       case b: BaseType => return st"${MicrokitTypeUtil.getRustPrimitiveDefaultValue(a.name)}"
       case _ if a.name == "Base_Types::String" => return st"[0; Base_Types::String::Base_Types_String_DIM_0]"
       case at: ArrayType =>
-        assert (at.dimensions.size == 1, "Need to handle multi-dim arrays")
+        assert(at.dimensions.size == 1, "Need to handle multi-dim arrays")
         val np = cRustTypeProvider.getTypeNameProvider(at)
         val baseTypeDefault = getCRustTypeDefaultVerusValue(at.baseType, cRustTypeProvider)
-        val values: ISZ[ST] = for(i <- 0 until at.dimensions(0)) yield baseTypeDefault
+        val values: ISZ[ST] = for (i <- 0 until at.dimensions(0)) yield baseTypeDefault
         return st"[${(values, ",")}]"
 
       case e: EnumType =>
-      val np = cRustTypeProvider.getTypeNameProvider(e)
+        val np = cRustTypeProvider.getTypeNameProvider(e)
         return st"${np.qualifiedRustName}::${e.values(0)}"
       case r: RecordType =>
         val fields: ISZ[ST] = for (f <- r.fields.entries) yield st"${f._1}: ${getCRustTypeDefaultVerusValue(f._2, cRustTypeProvider)}"
@@ -294,7 +294,9 @@ object MicrokitTypeUtil {
     var ret: Set[AadlType] = Set.empty
 
     var maxStringDim: Z = 0
+    var strings: ISZ[BaseType] = ISZ()
     var maxString: Option[BaseType] = None()
+
     def add(posOpt: Option[Position], aadlType: AadlType): Unit = {
       aadlType.name match {
         case "Base_Types::Float" =>
@@ -302,6 +304,7 @@ object MicrokitTypeUtil {
         case "Base_Types::Integer" =>
           reporter.error(posOpt, MicrokitCodegen.toolName, "Unbounded Integer is not supported for Microkit")
         case "Base_Types::String" =>
+          strings = strings :+ aadlType.asInstanceOf[BaseType]
           TypeUtil.getArrayDimensions(aadlType.container.get) match {
             case ISZ() =>
             case ISZ(dim) =>
@@ -313,7 +316,7 @@ object MicrokitTypeUtil {
               reporter.error(posOpt, MicrokitCodegen.toolName, s"Only a single dimension is allowed for Strings")
           }
         // don't add to ret as strings are treated as arrays by introducing an ArrayType
-        case _ =>
+        case _ => {
           aadlType match {
             case t: ArrayType =>
               t.kind match {
@@ -353,10 +356,11 @@ object MicrokitTypeUtil {
             case _ =>
           }
           ret = ret + aadlType
+        }
       }
     }
 
-    for(thread <- symbolTable.getThreads()) {
+    for (thread <- symbolTable.getThreads()) {
       for (port <- thread.getPorts()) {
         port match {
           case d: AadlFeatureData => add(port.feature.identifier.pos, d.aadlType)
@@ -364,9 +368,11 @@ object MicrokitTypeUtil {
         }
       }
     }
+
     def processState(s: GclStateVar): Unit = {
       add(s.posOpt, aadlTypes.typeMap.get(s.classifier).get)
     }
+
     def processType(typed: org.sireum.lang.ast.Typed.Name, posOpt: Option[Position]): Unit = {
       val name = TypeUtil.getAadlTypeFromSlangType(typed.ids)
       add(posOpt, aadlTypes.typeMap.get(name).get)
@@ -411,31 +417,35 @@ object MicrokitTypeUtil {
     }
 
     var subs: Map[String, AadlType] = Map.empty
-    maxString match {
-      case Some(b)=>
-        // +1 for the null character
-        val size: Z = 1 + (if (maxStringDim == 0) 100 else maxStringDim)
-        var container = b.container.get
-        container = container(properties = ir.Property(
-          name = ir.Name(ISZ("Data_Model::Dimension"), None()),
-          propertyValues = ISZ(ir.UnitProp((size).string, None())),
-          appliesTo = ISZ()) +: container.properties.filter(p => p.name.name != ISZ("Data_Model::Dimension")))
-        val arrayString = ArrayType(
-          classifier = ISZ("Base_Types", "String"),
-          nameProvider = b.nameProvider,
-          container = Some(container),
-          bitSize = Some(size * 8),
-          dimensions = ISZ(size),
-          kind = ArraySizeKind.Fixed,
-          baseType = BaseType(
-            classifier = ISZ("Base_Types", "Character"),
-            nameProvider = b.nameProvider,
-            container = None(),
-            bitSize = Some(8),
-            slangType = SlangType.C))
-        ret = ret + arrayString
-        subs = subs + "Base_Types::String" ~> arrayString
-      case _ =>
+
+    if (strings.nonEmpty) {
+      val max: BaseType = maxString match {
+        case Some(b) => b
+        case _ => strings(0)
+      }
+
+      // +1 for the null character
+      val size: Z = 1 + (if (maxStringDim == 0) 100 else maxStringDim)
+      var container = max.container.get
+      container = container(properties = ir.Property(
+        name = ir.Name(ISZ("Data_Model::Dimension"), None()),
+        propertyValues = ISZ(ir.UnitProp((size).string, None())),
+        appliesTo = ISZ()) +: container.properties.filter(p => p.name.name != ISZ("Data_Model::Dimension")))
+      val arrayString = ArrayType(
+        classifier = ISZ("Base_Types", "String"),
+        nameProvider = max.nameProvider,
+        container = Some(container),
+        bitSize = Some(size * 8),
+        dimensions = ISZ(size),
+        kind = ArraySizeKind.Fixed,
+        baseType = BaseType(
+          classifier = ISZ("Base_Types", "Character"),
+          nameProvider = max.nameProvider,
+          container = None(),
+          bitSize = Some(8),
+          slangType = SlangType.C))
+      ret = ret + arrayString
+      subs = subs + "Base_Types::String" ~> arrayString
     }
 
     if (ret.isEmpty) {
@@ -446,7 +456,7 @@ object MicrokitTypeUtil {
         for(e <- ret.elements if t.name == e.name) {
           return e
         }
-        halt(s"Infeasible: $t")
+        halt(s"Infeasible: ${t.name}")
       }
 
       var poset = Poset.empty[AadlType]

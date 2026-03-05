@@ -100,10 +100,6 @@ object MicrokitCodegen {
 
     val makefileContainers = StoreUtil.getMakefileContainers(localStore)
 
-    val buildEntries: ISZ[ST] =
-      CConnectionProviderPlugin.getMakeFileEntries(localStore) ++
-        (for (mk <- makefileContainers) yield mk.buildEntry)
-
     var elfFiles: ISZ[String] = ISZ()
     for (mk <- makefileContainers) {
       elfFiles = elfFiles ++ mk.getElfNames
@@ -119,15 +115,25 @@ object MicrokitCodegen {
 
         val sourcePaths: ISZ[String] = for (mk <- makefileContainers) yield s"$$(TOP_DIR)/${mk.relativePathSrcDir}"
 
+        var rustBuildEntries: ISZ[ST] = ISZ()
+        for (mk <- makefileContainers if (mk.isRustic && mk.hasUserContent)) {
+          rustBuildEntries = rustBuildEntries :+ mk.rustBuildEntry
+        }
+
         MakefileTemplate.systemMakefileMCS(
           includePaths = includesPaths,
           sourcePaths = sourcePaths,
           elfFiles = elfFiles,
           typeObjectNames = CConnectionProviderPlugin.getTypeSimpleObjectNames(localStore),
-          buildEntries = buildEntries,
+          buildEntries = rustBuildEntries,
           elfEntries = elfEntries,
           miscTargets = MakefileUtil.getMakefileTargets(ISZ("system.mk"), localStore))
       } else {
+
+        val buildEntries: ISZ[ST] =
+          CConnectionProviderPlugin.getMakeFileEntries(localStore) ++
+            (for (mk <- makefileContainers) yield mk.buildEntry)
+
         MakefileTemplate.systemMakefileDomainScheduler(
           elfFiles = elfFiles,
           typeObjectNames = CConnectionProviderPlugin.getTypeObjectNames(localStore),

@@ -72,16 +72,22 @@ import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
     return ret
   }
 
+  val TAB: String = "\t"
+
+  @pure def rustBuildEntry: ST = {
+    assert (hasUserContent && isRustic)
+    return st"""# user code
+        |$userRusticName:
+        |${TAB}make -C $${CRATES_DIR}/$resourceSuffix $$(RUST_MAKE_TARGET)"""
+  }
+
   @pure def buildEntry: ST = {
-    val TAB: String = "\t"
-    // FIXME spilt output into include and src directories
+      // FIXME spilt output into include and src directories
     val header: Option[String] = if (hasHeader) Some(s" -I$$(TOP_DIR)/$relativePathIncludeDir") else None()
       if (hasUserContent) {
         val userEntry: ST =
           if (isRustic) {
-            st"""# user code
-                 |$userRusticName:
-                 |${TAB}make -C $${CRATES_DIR}/$resourceSuffix $$(RUST_MAKE_TARGET)"""
+            rustBuildEntry
           } else {
             st"""# user code
                  |$userObjName: $$(TOP_DIR)/$relativePathSrcDir/$cUserImplFilename Makefile

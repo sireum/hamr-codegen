@@ -4,13 +4,10 @@ package org.sireum.hamr.codegen.microkit.types
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.StringUtil
-import org.sireum.hamr.codegen.common.symbols.AadlPort
 import org.sireum.hamr.codegen.common.types.{AadlType, ArrayType}
 import org.sireum.hamr.codegen.microkit.plugins.c.types.{CTypeNameProvider, CTypePlugin}
-import org.sireum.hamr.codegen.microkit.plugins.rust.types.CRustTypeNameProvider
+import org.sireum.hamr.codegen.microkit.util.MicrokitUtil
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.brand
-import org.sireum.hamr.codegen.microkit.{rust => RAST}
-import org.sireum.hamr.ir.Direction
 
 object QueueTemplate {
 
@@ -319,7 +316,7 @@ object QueueTemplate {
   def getClientSporadicDefaultImplContributions(portName: String): ST = {
     return (
       st"""void handle_$portName(void) {
-          |  printf("%s: handel_$portName invoked\n", microkit_name);
+          |  printf("%s: handle_$portName invoked\n", microkit_name);
           |}""")
   }
 
@@ -369,11 +366,7 @@ object QueueTemplate {
           |#include <stddef.h>
           |#include <stdint.h>
           |
-          |#if __has_include("util.h")
-          |#include <util.h>
-          |#elif __has_include("libvmm/util.util.h")
-          |#include <libvmm/util/util.h>
-          |#endif
+          |${MicrokitUtil.microkit_util_imports}
           |
           |// Queue size must be an integer factor of the size for ${MicrokitTypeUtil.eventCounterTypename} (an unsigned
           |// integer type). Since we are using standard C unsigned integers for the
