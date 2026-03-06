@@ -35,6 +35,8 @@ object MicrokitTypeUtil {
 
   val eventPortTypeName: String = "AADL_EVENT_PORT_TYPE"
 
+  val eventPortRustValue: String = "0u8"
+
   val eventPortType: AadlType = {
     BaseType(
       classifier = ISZ("Base_Types::Unsigned_8"),

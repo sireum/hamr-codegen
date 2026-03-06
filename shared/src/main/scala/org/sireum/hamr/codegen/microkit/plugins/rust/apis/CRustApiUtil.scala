@@ -73,7 +73,7 @@ object CRustApiUtil {
     val ghostName = getGhostName(port)
     val fieldType: ISZ[ISZ[String]] =
       port match {
-        case i:AadlEventPort => ISZ(typeNameProvider.qualifiedRustNameS)
+        case i:AadlEventPort => ISZ(ISZ("Option"), typeNameProvider.qualifiedRustNameS)
         case i:AadlDataPort => ISZ(typeNameProvider.qualifiedRustNameS)
         case i:AadlEventDataPort => ISZ(ISZ("Option"), typeNameProvider.qualifiedRustNameS)
       }
@@ -106,11 +106,12 @@ object CRustApiUtil {
   }
 
   @pure def getUnsafePutWrapper(srcPort: AadlPort, aadlType: AadlType, crustTypeProvider: CRustTypeProvider): RAST.Fn = {
+    val isEventPort = srcPort.isInstanceOf[AadlEventPort]
     val externMethodName = s"put_${srcPort.identifier}"
     val unsafeMethodName = s"unsafe_$externMethodName"
     val tn = crustTypeProvider.getTypeNameProvider(aadlType)
     val inputs: ISZ[RAST.Param] =
-      if (srcPort.isInstanceOf[AadlEventPort]) ISZ()
+      if (isEventPort) ISZ()
       else ISZ(
         RAST.ParamImpl(
           ident = RAST.IdentString("value"),
@@ -119,9 +120,11 @@ object CRustApiUtil {
             mutty = RAST.MutTy(
               ty = RAST.TyPath(ISZ(tn.qualifiedRustNameS), Some(aadlType.classifier)),
               mutbl = RAST.Mutability.Not))))
+
+    val arg: String = if (isEventPort) "" else s"value as *const ${tn.qualifiedRustName} as *mut ${tn.qualifiedRustName}"
     val body: ST =
       st"""unsafe {
-          |  return $externMethodName(value as *const ${tn.qualifiedRustName} as *mut ${tn.qualifiedRustName});
+          |  return $externMethodName($arg);
           |}"""
     return RAST.FnImpl(
       visibility = RAST.Visibility.Public,
@@ -183,13 +186,14 @@ object CRustApiUtil {
   }
 
   @pure def getApiContract(srcPort: AadlPort, srcThread: AadlThread): ISZ[RAST.Expr] = {
+    val isEventPort = srcPort.isInstanceOf[AadlEventPort]
     var r: ISZ[RAST.Expr] = ISZ()
     for (otherPort <- srcThread.getPorts()) {
       if (srcPort.path == otherPort.path) {
         if (srcPort.direction == Direction.Out) {
           srcPort match {
             case i: AadlEventPort =>
-              r = r :+ RAST.ExprST(st"self.${srcPort.identifier} == ${CRustApiPlugin.apiParameterName}")
+              r = r :+ RAST.ExprST(st"self.${srcPort.identifier} == Some(${MicrokitTypeUtil.eventPortRustValue})")
             case i: AadlDataPort =>
               r = r :+ RAST.ExprST(st"self.${srcPort.identifier} == ${CRustApiPlugin.apiParameterName}")
             case i: AadlEventDataPort =>
@@ -197,7 +201,7 @@ object CRustApiUtil {
           }
         } else {
           r = r :+ RAST.ExprST(st"old(self).${otherPort.identifier} == self.${otherPort.identifier}")
-          r = r :+ RAST.ExprST(st"${CRustApiPlugin.apiResultName} == self.${srcPort.identifier}")
+          r = r :+ RAST.ExprST(st"${CRustApiPlugin.apiResultName} == self.${srcPort.identifier}${if(isEventPort) ".is_some()" else ""}")
         }
       } else {
         r = r :+ RAST.ExprST(st"old(self).${otherPort.identifier} == self.${otherPort.identifier}")
@@ -207,6 +211,8 @@ object CRustApiUtil {
   }
 
   @pure def getApiDefaultPutter(srcThread: AadlThread, srcPort: AadlPort, aadlType: AadlType, crustTypeProvider: CRustTypeProvider): RAST.Item = {
+    val isEventPort = srcPort.isInstanceOf[AadlEventPort]
+
     val methodName = s"put_${srcPort.identifier}"
     val unverifiedMethodName = s"unverified_$methodName"
     val ghostName = getGhostName(srcPort)
@@ -214,17 +220,21 @@ object CRustApiUtil {
     val ensures = getApiContract(srcPort, srcThread)
     val bodyGhost: RAST.BodyItem =
       srcPort match {
-        case i: AadlEventPort => RAST.BodyItemST(st"self.${ghostName} = Some(${CRustApiPlugin.apiParameterName});")
+        case i: AadlEventPort => RAST.BodyItemST(st"self.${ghostName} = Some(${MicrokitTypeUtil.eventPortRustValue});")
         case i: AadlDataPort => RAST.BodyItemST(st"self.${ghostName} = ${CRustApiPlugin.apiParameterName};")
         case i: AadlEventDataPort => RAST.BodyItemST(st"self.${ghostName} = Some(${CRustApiPlugin.apiParameterName});")
       }
+
+    var inputs: ISZ[RAST.Param] = ISZ(RAST.ParamFixMe(st"&mut self"))
+    if (!isEventPort) {
+      inputs = inputs :+ RAST.ParamImpl(ident = RAST.IdentString(CRustApiPlugin.apiParameterName), kind = RAST.TyPath(ISZ(portTypeNP.qualifiedRustNameS), Some(aadlType.classifier)))
+    }
+    val arg: String = if(isEventPort) "" else CRustApiPlugin.apiParameterName
     return RAST.FnImpl(
       sig = RAST.FnSig(
         ident = RAST.IdentString(methodName),
         fnDecl = RAST.FnDecl(
-          inputs = ISZ(
-            RAST.ParamFixMe(st"&mut self"),
-            RAST.ParamImpl(ident = RAST.IdentString(CRustApiPlugin.apiParameterName), kind = RAST.TyPath(ISZ(portTypeNP.qualifiedRustNameS), Some(aadlType.classifier)))),
+          inputs = inputs,
           outputs = RAST.FnRetTyDefault()),
         verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
       contract = Some(RAST.FnContract(
@@ -235,7 +245,7 @@ object CRustApiUtil {
       comments = ISZ(), attributes = ISZ(), visibility = RAST.Visibility.Public, meta = ISZ(),
       body = Some(RAST.MethodBody(
         ISZ(
-          RAST.BodyItemST(st"self.api.${unverifiedMethodName}(${CRustApiPlugin.apiParameterName});"),
+          RAST.BodyItemST(st"self.api.${unverifiedMethodName}($arg);"),
           bodyGhost))))
   }
 
@@ -250,7 +260,7 @@ object CRustApiUtil {
         case i: AadlDataPort => RAST.FnRetTyImpl(RAST.TyTuple(ISZ(
           RAST.TyFixMe(st"${CRustApiPlugin.apiResultName} : ${portTypeNP.qualifiedRustName}"))))
         case i: AadlEventPort => RAST.FnRetTyImpl(RAST.TyTuple(ISZ(
-          RAST.TyFixMe(st"${CRustApiPlugin.apiResultName} : ${portTypeNP.qualifiedRustName}"))))
+          RAST.TyFixMe(st"${CRustApiPlugin.apiResultName} : bool"))))
         case i: AadlEventDataPort => RAST.FnRetTyImpl(RAST.TyTuple(ISZ(
           RAST.TyFixMe(st"${CRustApiPlugin.apiResultName} : Option<${portTypeNP.qualifiedRustName}>"))))
       }
@@ -277,13 +287,12 @@ object CRustApiUtil {
     val unsafeMethodName = s"unsafe_put_${port.identifier}"
     val isEventPort = port.isInstanceOf[AadlEventPort]
     val portTypeNP = crustTypeProvider.getTypeNameProvider(aadlType)
-    val args: ISZ[RAST.Param] =
-      if (isEventPort) ISZ()
-      else ISZ(
-        RAST.ParamFixMe(st"&mut self"),
-        RAST.ParamImpl(
-          ident = RAST.IdentString(CRustApiPlugin.apiParameterName),
-          kind = RAST.TyPath(ISZ(portTypeNP.qualifiedRustNameS), Some(aadlType.classifier))))
+    var args: ISZ[RAST.Param] = ISZ(RAST.ParamFixMe(st"&mut self"))
+    if (!isEventPort) {
+      args = args :+ RAST.ParamImpl(
+        ident = RAST.IdentString(CRustApiPlugin.apiParameterName),
+        kind = RAST.TyPath(ISZ(portTypeNP.qualifiedRustNameS), Some(aadlType.classifier)))
+    }
     val body: RAST.BodyItem =
       if (isEventPort) RAST.BodyItemST(st"extern_api::$unsafeMethodName();")
       else RAST.BodyItemST(st"extern_api::$unsafeMethodName(&${CRustApiPlugin.apiParameterName});")
@@ -302,28 +311,20 @@ object CRustApiUtil {
     val unsafeMethodName = s"unsafe_get_${port.identifier}"
     val isEventPort = port.isInstanceOf[AadlEventPort]
     val portTypeNP = crustTypeProvider.getTypeNameProvider(aadlType)
+    val ty: RAST.TyPath =
+      if (port.isEvent) RAST.TyPath(ISZ(ISZ("Ghost"), ISZ("Option"), portTypeNP.qualifiedRustNameS), Some(aadlType.classifier))
+      else  RAST.TyPath(ISZ(ISZ("Ghost"), portTypeNP.qualifiedRustNameS), Some(aadlType.classifier))
     val args: ISZ[RAST.Param] =
-      port match {
-        case i: AadlEventPort => ISZ()
-        case i: AadlDataPort => ISZ(
+        ISZ(
           RAST.ParamFixMe(st"&mut self"),
           RAST.ParamImpl(
             ident = RAST.IdentString(CRustApiPlugin.apiParameterName),
             kind = RAST.TyRef(
               lifetime = None(),
               mutty = RAST.MutTy(
-                ty = RAST.TyPath(ISZ(ISZ("Ghost"), portTypeNP.qualifiedRustNameS), Some(aadlType.classifier)),
+                ty = ty,
                 mutbl = RAST.Mutability.Not))))
-        case i: AadlEventDataPort => ISZ(
-          RAST.ParamFixMe(st"&mut self"),
-          RAST.ParamImpl(
-            ident = RAST.IdentString(CRustApiPlugin.apiParameterName),
-            kind = RAST.TyRef(
-              lifetime = None(),
-              mutty = RAST.MutTy(
-                ty = RAST.TyPath(ISZ(ISZ("Ghost"), ISZ("Option"), portTypeNP.qualifiedRustNameS), Some(aadlType.classifier)),
-                mutbl = RAST.Mutability.Not))))
-      }
+
     val retType: RAST.FnRetTy =
       port match {
         case i: AadlEventPort => RAST.FnRetTyImpl(
@@ -334,9 +335,10 @@ object CRustApiUtil {
           RAST.TyTuple(ISZ(RAST.TyFixMe(st"${CRustApiPlugin.apiResultName} : Option<${portTypeNP.qualifiedRustName}>"))))
       }
 
-    val body: RAST.BodyItem =
-      if (isEventPort) RAST.BodyItemST(st"extern_api::$unsafeMethodName();")
-      else RAST.BodyItemST(st"return extern_api::$unsafeMethodName();")
+    val ensures =
+      st"${CRustApiPlugin.apiResultName} == ${CRustApiPlugin.apiParameterName}@${if (isEventPort) ".is_some()" else ""}"
+
+    val body: RAST.BodyItem = RAST.BodyItemST(st"return extern_api::$unsafeMethodName();")
     return RAST.FnImpl(
       attributes = ISZ(RAST.AttributeST(F, st"verifier::external_body")),
       sig = RAST.FnSig(
@@ -350,7 +352,7 @@ object CRustApiUtil {
         optRequiresMarker = None(),
         requires = ISZ(),
         optEnsuresMarker = None(),
-        ensures = ISZ(RAST.ExprST(st"${CRustApiPlugin.apiResultName} == ${CRustApiPlugin.apiParameterName}@")))),
+        ensures = ISZ(RAST.ExprST(ensures)))),
       comments = ISZ(), visibility = RAST.Visibility.Private, meta = ISZ(),
       body = Some(RAST.MethodBody(ISZ(body))))
   }
@@ -359,14 +361,16 @@ object CRustApiUtil {
   @pure def getCrustTestingArtifacts(p: AadlPort,
                                      aadlType: ISZ[String],
                                      portTypeNameProvider: CRustTypeNameProvider): (RAST.Item, RAST.Item) = {
+    val isEventPort = p.isInstanceOf[AadlEventPort]
     if (p.direction == Direction.In) {
       val varName = s"IN_${p.identifier}"
+      val optAssign: Option[String] = if (isEventPort) None() else Some("*value = v;")
       val externApiBody: ST =
         if (p.isEvent) {
           st"""unsafe {
               |  match *$varName.lock().unwrap_or_else(|e| e.into_inner()) {
               |    Some(v) => {
-              |      *value = v;
+              |      ${optAssign}
               |      return true;
               |    },
               |    None => return false,
@@ -387,17 +391,21 @@ object CRustApiUtil {
         mutability = RAST.Mutability.Not,
         expr = RAST.ExprST(st"Mutex::new(None);"))
 
+      val inputs: ISZ[RAST.Param] =
+        if (isEventPort) ISZ()
+        else  ISZ(RAST.ParamImpl(
+          ident = RAST.IdentString("value"),
+          kind = RAST.TyPtr(mutty =
+            RAST.MutTy(
+              ty = RAST.TyPath(ISZ(portTypeNameProvider.qualifiedRustNameS), Some(aadlType)),
+              mutbl = RAST.Mutability.Mut))))
+
       val externApiMethod = RAST.FnImpl(
         attributes = ISZ(RAST.AttributeST(F, st"cfg(test)")),
         sig = RAST.FnSig(
           ident = RAST.IdentString(s"get_${p.identifier}"),
           fnDecl = RAST.FnDecl(
-            inputs = ISZ(RAST.ParamImpl(
-              ident = RAST.IdentString("value"),
-              kind = RAST.TyPtr(mutty =
-                RAST.MutTy(
-                  ty = RAST.TyPath(ISZ(portTypeNameProvider.qualifiedRustNameS), Some(aadlType)),
-                  mutbl = RAST.Mutability.Mut)))),
+            inputs = inputs,
             outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
           verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
         comments = ISZ(), visibility = RAST.Visibility.Public, contract = None(), meta = ISZ(),
@@ -413,23 +421,28 @@ object CRustApiUtil {
         ty = RAST.TyPath(ISZ(ISZ("Mutex"), ISZ("Option"), portTypeNameProvider.qualifiedRustNameS), Some(aadlType)),
         mutability = RAST.Mutability.Not,
         expr = RAST.ExprST(st"Mutex::new(None);"))
+      val inputs: ISZ[RAST.Param] =
+        if (isEventPort) ISZ()
+        else
+          ISZ(RAST.ParamImpl(
+          ident = RAST.IdentString("value"),
+          kind = RAST.TyPtr(mutty =
+            RAST.MutTy(
+              ty = RAST.TyPath(ISZ(portTypeNameProvider.qualifiedRustNameS), Some(aadlType)),
+              mutbl = RAST.Mutability.Mut))))
+      val value: String = if (isEventPort) MicrokitTypeUtil.eventPortRustValue else "*value"
       val externApiMethod = RAST.FnImpl(
         attributes = ISZ(RAST.AttributeST(F, st"cfg(test)")),
         sig = RAST.FnSig(
           ident = RAST.IdentString(s"put_${p.identifier}"),
           fnDecl = RAST.FnDecl(
-            inputs = ISZ(RAST.ParamImpl(
-              ident = RAST.IdentString("value"),
-              kind = RAST.TyPtr(mutty =
-                RAST.MutTy(
-                  ty = RAST.TyPath(ISZ(portTypeNameProvider.qualifiedRustNameS), Some(aadlType)),
-                  mutbl = RAST.Mutability.Mut)))),
+            inputs = inputs,
             outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
           verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
         comments = ISZ(), visibility = RAST.Visibility.Public, contract = None(), meta = ISZ(),
         body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
           st"""unsafe {
-              |  *$varName.lock().unwrap_or_else(|e| e.into_inner()) = Some(*value);
+              |  *$varName.lock().unwrap_or_else(|e| e.into_inner()) = Some($value);
               |  return true;
               |}""")))))
 

@@ -2,11 +2,13 @@
 package org.sireum.hamr.codegen.microkit.plugins.rust.gumbo
 
 import org.sireum._
+import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.CommonUtil.{Store, TypeIdPath}
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes}
 import org.sireum.hamr.codegen.microkit.plugins.rust.types.{CRustTypeNameProvider, CRustTypeProvider}
 import org.sireum.hamr.codegen.microkit.rust.Param
+import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
 import org.sireum.hamr.codegen.microkit.{rust => RAST}
 import org.sireum.hamr.ir
 import org.sireum.hamr.ir.{Direction, GclStateVar, GclSubclause}
@@ -48,10 +50,12 @@ object GumboXRustUtil {
           val (typ, _) = getAadlType(typed, aadlTypes, slangTypesToAadlTypes)
           val ports = context.getPorts().filter(p => p.identifier == ident.id.value)
           assert(ports.size == 1)
-          val param = GGPortParam(
-            port = ports(0),
-            aadlType = typ.classifier,
-            typeNameProvider = crustTypeProvider.getTypeNameProvider(typ))
+          //val param = GGPortParam(
+          //  port = ports(0),
+          //  aadlType = typ.classifier,
+          //  typeNameProvider = crustTypeProvider.getTypeNameProvider(typ))
+          val param = portToParam(ports(0), crustTypeProvider)
+          //println(param)
           params = params + param
           return ir.MTransformer.PreResult(F,
             MSome(o(receiverOpt = None(), ident = o.ident(id = o.ident.id(value = param.name)))))
@@ -64,13 +68,23 @@ object GumboXRustUtil {
       o match {
         case Exp.Select(Some(Exp.Ident(SAST.Id("api"))), id, attr) =>
           val typed = o.attr.typedOpt.get.asInstanceOf[SAST.Typed.Name]
-          val (typ, _) = getAadlType(typed, aadlTypes, slangTypesToAadlTypes)
-          val ports = context.getPorts().filter(p => p.identifier == id.value)
+          val ports: ISZ[AadlPort] = context.getPorts().filter(p => p.identifier == id.value)
           assert(ports.size == 1)
+          /*
+          val typ: AadlType = {
+            if (ports(0).isInstanceOf[AadlEventPort]) {
+              MicrokitTypeUtil.eventPortType
+            } else {
+              getAadlType(typed, aadlTypes, slangTypesToAadlTypes)._1
+            }
+          }
+
           val param = GGPortParam(
             port = ports(0),
             aadlType = typ.classifier,
             typeNameProvider = crustTypeProvider.getTypeNameProvider(typ))
+           */
+          val param = portToParam(ports(0), crustTypeProvider)
           params = params + param
           return ir.MTransformer.PreResult(F,
             MSome(Exp.Ident(id = SAST.Id(value = param.name, attr = SAST.Attr(None())), attr = o.attr)))
@@ -283,7 +297,7 @@ object GumboXRustUtil {
 
   @datatype class GGPortParam(val port: AadlPort,
                               val aadlType: TypeIdPath,
-                              val typeNameProvider: CRustTypeNameProvider) extends GGParam {
+                              @hidden val typeNameProvider: CRustTypeNameProvider) extends GGParam {
     val name: String = s"api_${port.identifier}"
 
     val originName: String = port.identifier
@@ -298,6 +312,7 @@ object GumboXRustUtil {
 
     val isData: B = port.isInstanceOf[AadlFeatureData]
     val isEvent: B = port.isInstanceOf[AadlFeatureEvent]
+    val isPureEvent: B = port.isInstanceOf[AadlEventPort]
 
     val kind: SymbolKind.Type =
       if (isIn) {
@@ -327,7 +342,7 @@ object GumboXRustUtil {
                                   val id: Z,
                                   val isPreState: B,
                                   val aadlType: TypeIdPath,
-                                  val typeNameProvider: CRustTypeNameProvider) extends GGParam {
+                                  @hidden val typeNameProvider: CRustTypeNameProvider) extends GGParam {
     val name: String = s"${if (isPreState) "In_" else ""}${stateVar.name}"
 
     val originName: String = stateVar.name
@@ -365,20 +380,20 @@ object GumboXRustUtil {
     return portsToParams(ports, typeProvider)
   }
 
-  @pure def portsToParams(ports: ISZ[AadlPort], typeProvider: CRustTypeProvider): ISZ[GGParam] = {
-    var ret: ISZ[GGParam] = ISZ()
-    for (p <- ports) {
-      p match {
-        case i: AadlEventPort =>
-          halt("Need to handle event ports")
-        case i: AadlEventDataPort =>
-          ret = ret :+ GGPortParam(p, i.aadlType.classifier, typeProvider.getTypeNameProvider(i.aadlType))
-        case i: AadlDataPort =>
-          ret = ret :+ GGPortParam(p, i.aadlType.classifier, typeProvider.getTypeNameProvider(i.aadlType))
-        case _ => halt("Infeasible")
-      }
+  @pure def portToParam(p: AadlPort, typeProvider: CRustTypeProvider): GGParam = {
+    p match {
+      case i: AadlEventPort =>
+        return GGPortParam(p, ISZ(MicrokitTypeUtil.eventPortTypeName), typeProvider.getTypeNameProvider(MicrokitTypeUtil.eventPortType))
+      case i: AadlEventDataPort =>
+        return GGPortParam(p, i.aadlType.classifier, typeProvider.getTypeNameProvider(i.aadlType))
+      case i: AadlDataPort =>
+        return GGPortParam(p, i.aadlType.classifier, typeProvider.getTypeNameProvider(i.aadlType))
+      case _ => halt("Infeasible")
     }
-    return ret
+  }
+
+  @pure def portsToParams(ports: ISZ[AadlPort], typeProvider: CRustTypeProvider): ISZ[GGParam] = {
+    return for (p <- ports) yield portToParam(p, typeProvider)
   }
 
   def stateVarsToParams(gclSubclauseInfo: Option[GclAnnexClauseInfo],

@@ -115,7 +115,8 @@ object CRustTypePlugin {
     val typeNameProvider = (Map.empty[String, CRustTypeNameProvider] ++
       (for (aadlTypeName <- touchedTypes.orderedDependencies) yield
         aadlTypeName ~> getTypeNameProvider(types.typeMap.get(aadlTypeName).get, touchedTypes.substitutionTypeMap, reporter))) +
-      MicrokitTypeUtil.eventPortTypeName ~> getTypeNameProvider(MicrokitTypeUtil.eventPortType, touchedTypes.substitutionTypeMap, reporter)
+      MicrokitTypeUtil.eventPortTypeName ~> getTypeNameProvider(MicrokitTypeUtil.eventPortType, touchedTypes.substitutionTypeMap, reporter) +
+      MicrokitTypeUtil.eventPortType.name ~> getTypeNameProvider(MicrokitTypeUtil.eventPortType, touchedTypes.substitutionTypeMap, reporter)
 
     val rustItems = HashSMap.empty[String, ISZ[RAST.Item]] ++ (
       for (aadlTypeName <- touchedTypes.orderedDependencies if !TypeUtil.isBaseTypeS(aadlTypeName) || TypeUtil.isBaseTypesStringS(aadlTypeName)) yield
@@ -200,6 +201,10 @@ object CRustTypePlugin {
       }
 
       { // src/lib.rs
+        val includes: ST =
+          if (modIncludes.keys.isEmpty) st"use vstd::prelude::*;" // verus 2026.01.23 crashes if verus is not 'use'd somewhere
+          else st"${(for (k <- modIncludes.keys) yield st"pub mod ${(k, "::")};", "\n")}"
+
         val dataMod =
           st"""#![cfg_attr(not(test), no_std)]
               |
@@ -207,7 +212,7 @@ object CRustTypePlugin {
               |
               |${MicrokitUtil.doNotEdit}
               |
-              |${(for (k <- modIncludes.keys) yield st"pub mod ${(k, "::")};", "\n")}
+              |$includes
               |
               |include!("sb_event_counter.rs");
               |include!("sb_microkit_types.rs");
@@ -308,18 +313,23 @@ object CRustTypePlugin {
     var implBody: Option[ST] = None()
     substituteType match {
       case rt: RecordType =>
-        val fields: ISZ[RAST.StructField] = for (f <- rt.fields.entries) yield
-          RAST.StructField(
+        var containsFloats: B = F
+        var fields: ISZ[RAST.StructField] = ISZ()
+        for (f <- rt.fields.entries) {
+          containsFloats = containsFloats | ops.StringOps(f._2.name).startsWith("Base_Types::Float")
+
+          fields = fields :+ RAST.StructField(
             visibility = Visibility.Public,
             isGhost = F,
             ident = RAST.IdentString(f._1),
             fieldType = addType(f._2))
+        }
         inVerusItems = inVerusItems :+
           RAST.StructDef(
             comments = ISZ(),
             attributes = ISZ(
               RAST.AttributeST(F, st"repr(C)"),
-              RAST.AttributeST(F, st"derive(Debug, Clone, Copy, PartialEq, Eq)")),
+              RAST.AttributeST(F, st"derive(Debug, Clone, Copy, PartialEq${if (containsFloats) "" else ", Eq"})")),
             visibility = Visibility.Public,
             ident = RAST.IdentString(getTypeSimpleName(rt)),
             items = fields.asInstanceOf[ISZ[RAST.Item]])
