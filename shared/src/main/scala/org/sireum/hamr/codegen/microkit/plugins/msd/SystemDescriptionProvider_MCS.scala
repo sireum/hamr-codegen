@@ -250,7 +250,7 @@ object SystemDescriptionProvider_MCS {
           |"""
 
     val sdScheduleXmlPath = s"${options.sel4OutputDir.get}/${SystemDescriptionProvider_MCS.metaPy}"
-    resources = resources :+ ResourceUtil.createResourceWithMarkers(sdScheduleXmlPath, metaContent, ISZ(marker), F, T)
+    resources = resources :+ ResourceUtil.createResourceWithMarkers(sdScheduleXmlPath, metaContent, ISZ(marker), F, F)
 
     @pure def emitStaticSdFResources(): Unit = {
       val sdfgen_helperPath = s"${options.sel4OutputDir.get}/sdfgen_helper.py"
