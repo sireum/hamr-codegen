@@ -74,7 +74,7 @@ import org.sireum.message.Reporter
     var modifies: ISZ[ST] = ISZ()
     var ensures: ISZ[ST] = ISZ()
     var flows: ISZ[ST] = ISZ()
-    var gumboTables: ISZ[ST] = ISZ() //SIERRA
+    var optBody: Option[ST] = None() //SIERRA
     var resources: ISZ[Resource] = ISZ()
 
     if (!localGumboStore.handledAnnexLibraries) {
@@ -115,14 +115,14 @@ import org.sireum.message.Reporter
             modifies = modifies ++ r.modifies
             ensures = ensures ++ r.ensures
             flows = flows ++ r.flows
-            gumboTables = gumboTables ++ r.gumboTables
+            //gumboTables = gumboTables ++ r.gumboTables //SIERRA (note might not need this line, tables appear only in compute).
             markers = markers ++ r.markers
             imports = imports ++ r.imports
 
           case EntryPoints.compute if annex.compute.nonEmpty =>
             GumboGen(gclSymbolTable, symbolTable, aadlTypes, componentNames.basePackage).processCompute(
               annex.compute.get, optInEventPort, component, store) match {
-              case (n: NonCaseContractBlock, mmarkers) =>
+              case (n: NonCaseContractBlock, mmarkers,optBodym) =>
                 markers = markers ++ mmarkers
                 reads = reads ++ n.contractReads
                 requires = requires ++ n.contractRequires
@@ -130,6 +130,7 @@ import org.sireum.message.Reporter
                 ensures = ensures ++ n.contractEnsures
                 flows = flows ++ n.contractFlows
                 imports = imports ++ n.imports
+                optBody = optBodym //SIERRA (note, needed for compute section imp. code gen)
 
               case _ => halt("Not handling Contract cases yet")
             }
@@ -137,7 +138,7 @@ import org.sireum.message.Reporter
         }
 
         if (imports.nonEmpty || reads.nonEmpty || requires.nonEmpty || modifies.nonEmpty || ensures.nonEmpty || flows.nonEmpty) {
-          optSubclauseContractBlock = Some(NonCaseContractBlock(imports, reads, requires, modifies, ensures, flows))
+          optSubclauseContractBlock = Some(NonCaseContractBlock(imports, reads, requires, modifies, ensures, flows))// SIERRA: AJB Do I need it here, I imagine I do.
         }
 
       case _ =>
@@ -157,7 +158,7 @@ import org.sireum.message.Reporter
 
         tags = ISZ(),
         preObjectBlocks = ISZ(),
-        optBody = None(),
+        optBody = optBody,
 
         postObjectBlocks = ISZ()),
       store + GumboXPluginStore.key ~> localGumboStore)

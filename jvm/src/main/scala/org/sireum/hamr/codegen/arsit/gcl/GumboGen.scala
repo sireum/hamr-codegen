@@ -25,7 +25,6 @@ object GumboGen {
   @datatype class GclEntryPointInitialize(val imports: ISZ[String],
                                           val markers: ISZ[Marker],
                                           val contract: ST,
-
                                           val modifies: ISZ[ST],
                                           val requires: ISZ[ST],
                                           val ensures: ISZ[ST],
@@ -783,9 +782,9 @@ object GumboGen {
     var ret: ISZ[GclEnsuresHolder] = ISZ()
     var x: Z = 0
     var y: Z = 0
-    for(rr <- resultRows){
-      for(r <- rr.results){
-        val re = gclSymbolTable.rexprs.get(toKey(r)).get
+    for(rr <- resultRows){// for each result row
+      for(r <- rr.results){// for each result in that row
+        val re = gclSymbolTable.rexprs.get(toKey(r)).get // get the right side of the case
         val c: ISZ[AST.Exp] = cases(i)
         var ensures: ST = st""
         for(a <- 0 until c.length){
@@ -891,7 +890,119 @@ object GumboGen {
    */
   }
 
-  def processCompute(compute: GclCompute, optInEvent: Option[AadlPort], context: AadlThreadOrDevice, store: Store): (ContractBlock, ISZ[Marker]) = {
+  def gumboTableGetImplementationCodeNormal(
+                                             id: String,
+                                             verticalPredicates: ISZ[AST.Exp],
+                                             horizontalPredicates: ISZ[AST.Exp],
+                                             resultRows: ISZ[GclResultRow]
+                                           ): ST = {
+    var ret: ST = st""
+    var i: Z = 0
+    var j: Z = 0
+
+    for(vp <- verticalPredicates){
+      j = 0
+      val verticalBExp = gclSymbolTable.rexprs.get(toKey(vp)).get
+      ret = st"${ret}if(${verticalBExp}){\n   "
+      for(hp <- horizontalPredicates){
+        val horizontalBExp = gclSymbolTable.rexprs.get(toKey(hp)).get
+        val resultExp = gclSymbolTable.rexprs.get(toKey(resultRows(i).results(j))).get
+        ret =
+          st"${ret}if(${horizontalBExp}){\n      ${resultExp};\n   }\n"
+        j = j + 1
+      }
+      ret = st"${ret}}\n"
+      i = i + 1
+    }
+    return ret
+  }
+
+  def gumboTableGetImplementationCodeCase(
+                                             id: String,
+                                             verticalBlankRows: ISZ[GclBlankRow],
+                                             horizontalPredicates: ISZ[AST.Exp],
+                                             resultRows: ISZ[GclResultRow],
+                                             caseEval: AST.Exp
+                                           ): ST = {
+    var ret: ST = st""
+    var i: Z = 0 //row
+    var j: Z = 0 //column
+    var lastCaseValue: AST.Exp = verticalBlankRows(0).results(0) //placeholder value
+    var lastCaseValueExp = lastCaseValue //placeholder value
+    val caseEvalExp: AST.Exp = gclSymbolTable.rexprs.get(toKey(caseEval)).get
+    var lastCaseST: ST = st""
+    var isFirst: B = T // is it the first case?
+
+    for(vp <- verticalBlankRows){// for each row
+      j = 0 // go back to the first column
+      if(vp.results.length > 1){ // If this is a row that has a new case value.
+        if(isFirst){ // if this is the first case...
+          isFirst = F // then the second time it will not be.
+        }
+        else{// if this is not the first case...
+          ret = st"${ret}}\n" // then close the last case's if statement.
+        }
+        lastCaseValue = vp.results(0) // update to the new case.
+        lastCaseValueExp = gclSymbolTable.rexprs.get(toKey(lastCaseValue)).get // update exp to the new case.
+        ret = st"${ret}if(${caseEvalExp} == ${lastCaseValueExp}){\n" // begin case if statement.
+      }
+      val verticalBExp: AST.Exp = gclSymbolTable.rexprs.get(toKey(vp.results(vp.results.length-1))).get // retrieve current vertical B exp.
+      ret = st"${ret}if(${verticalBExp}){\n" // begin vertical if statement.
+      for(hp <- horizontalPredicates){ // for each column...
+        val horizontalBExp: AST.Exp = gclSymbolTable.rexprs.get(toKey(hp)).get // retrieve current horizontal B exp.
+        val resultExp: AST.Exp = gclSymbolTable.rexprs.get(toKey(resultRows(i).results(j))).get // retrieve current result exp.
+        ret =
+          st"${ret}   if(${horizontalBExp}){\n      ${resultExp};\n   }\n" // begin horizontal if statement, place result, close horizontal if statement.
+        j = j + 1 // move to next column.
+      }
+      i = i + 1 // move to next row.
+      ret = st"${ret}}\n" // close the vertical if statement.
+    }
+    ret = st"${ret}}\n" // close final case if statement.
+    return ret
+  }
+
+  def gumboTableGetImplementationCodeNested(
+                                           id: String,
+                                           verticalBlankRows: ISZ[GclBlankRow],
+                                           horizontalPredicates: ISZ[AST.Exp],
+                                           resultRows: ISZ[GclResultRow]
+                                           ): ST = {
+    var lastRowLength: Z = verticalBlankRows(0).results.length
+    var isFirst: B = T
+    var ret: ST = st""
+    var i: Z = 0
+    var j: Z = 0
+    for (vpr <- verticalBlankRows){
+      j = 0
+      if(isFirst){
+        isFirst = F
+      }
+      else{
+        for(c <- 1 until vpr.results.length){
+          ret = st"${ret}}\n"
+        }
+      }
+      for (vp <- vpr.results){
+        val verticalBExp = gclSymbolTable.rexprs.get(toKey(vp)).get
+        ret = st"${ret}if(${verticalBExp}){\n   "
+      }
+      for (hp <- horizontalPredicates){
+        val horizontalBExp = gclSymbolTable.rexprs.get(toKey(hp)).get
+        val resultExp = gclSymbolTable.rexprs.get(toKey(resultRows(i).results(j))).get
+        ret =
+          st"${ret}if(${horizontalBExp}){\n      ${resultExp};\n   }\n"
+        j = j + 1
+      }
+      i = i + 1
+    }
+    for(c <- 1 until verticalBlankRows(verticalBlankRows.length-1).results.length){
+      ret = st"${ret}}\n"
+    }
+    return ret
+  }
+
+  def processCompute(compute: GclCompute, optInEvent: Option[AadlPort], context: AadlThreadOrDevice, store: Store): (ContractBlock, ISZ[Marker], Option[ST]) = {
     resetImports()
 
     var markers: Set[Marker] = Set.empty
@@ -900,7 +1011,7 @@ object GumboGen {
     var rmodifies: ISZ[ST] = ISZ()
     var rensures: ISZ[ST] = ISZ()
     var rflows: ISZ[ST] = ISZ()
-    var rgumboTables: ISZ[ST] = ISZ()
+    var roptBody: Option[ST] = None() //Sierra Note to store string templates related to gumbo tables in compute block.
 
     def genComputeMarkerCreator(id: String, typ: String): Marker = {
       val m = Marker(
@@ -1336,14 +1447,45 @@ object GumboGen {
       if (generalFlows.nonEmpty) {
         val marker = genComputeMarkerCreator(context.identifier, "FLOW")
 
-        rflows = rflows :+
+        rflows = rflows :+// NOTE SIERRA DELETE LATER LINE ${(generalFlows, ",\n")} shows collapse ISZ to single val. // The lines above and below show marker use (we will want this)
           st"""${marker.beginMarker}
               |${(generalFlows, ",\n")}
               |${marker.endMarker}"""
       }
     } // end periodic branch
 
-    return (NonCaseContractBlock(imports, rreads, rrequires, rmodifies, rensures, rflows), markers.elements)
+    if(compute.gumboTables.nonEmpty){
+      var bodyContributions: ISZ[ST] = ISZ()
+      for(table <- compute.gumboTables){
+        if(table.normal.nonEmpty){
+          val normal = table.normal.get
+          bodyContributions = bodyContributions :+
+            gumboTableGetImplementationCodeNormal(normal.id,normal.verticalPredicates,normal.horizontalPredicates,normal.resultRows)
+        }
+        else if (table.cases.nonEmpty){
+          val cases = table.cases.get
+          bodyContributions = bodyContributions :+
+            gumboTableGetImplementationCodeCase(cases.id,cases.verticalPredicateRows,cases.horizontalPredicates,cases.resultRows,cases.caseEval)
+        }
+        else if (table.nested.nonEmpty){
+          val nested = table.nested.get
+          bodyContributions = bodyContributions :+
+            gumboTableGetImplementationCodeNested(nested.id,nested.verticalPredicateRows,nested.horizontalPredicates,nested.resultRows)
+        }
+      }
+      roptBody = Some(st"${(bodyContributions, "\n")}")
+    }
+    if (roptBody.nonEmpty){
+      val marker = Marker("// BEGIN BODY","// END BODY")
+      markers = markers + marker
+      roptBody = Some(
+        st"""${marker.beginMarker}
+             |${roptBody.get}
+             |${marker.endMarker}"""
+      )
+    }
+    // SIERRA Note to Self, Delete:: This return is what ends up getting generated where we want (the body)... I believe
+    return (NonCaseContractBlock(imports, rreads, rrequires, rmodifies, rensures, rflows), markers.elements, roptBody)
   }
 
   def processGclMethod(gclMethod: GclMethod, store: Store): ST = {

@@ -102,6 +102,10 @@ object GumboXGen {
     return createComponentGumboXObjectName(componentNames) :+ s"compute_CEP_T_Case"
   }
 
+  @pure def getCompute_CEP_T_GumboTables_MethodName(componentNames: NameProvider): ISZ[String] = {
+    return createComponentGumboXObjectName(componentNames) :+ s"compute_CEP_T_GumboTables"
+  }
+
   @pure def getCompute_CEP_Pre_MethodName(componentNames: NameProvider): ISZ[String] = {
     return createComponentGumboXObjectName(componentNames) :+ s"compute_CEP_Pre"
   }
@@ -504,6 +508,8 @@ object GumboXGen {
 
     var CEP_T_Handlers: ISZ[ContractHolder] = ISZ()
 
+    var CEP_T_GumboTables: Option[ContractHolder] = None()
+
     var CEP_Pre_Params: Set[GGParam] = Set.empty[GGParam] ++
       GumboXGenUtil.inPortsToParams(component, componentNames) ++
       GumboXGenUtil.stateVarsToParams(componentNames, gclSubclauseInfo, T, aadlTypes)
@@ -578,6 +584,171 @@ object GumboXGen {
                   |  ${gg.exp}"""
 
             topLevelGuarantees = topLevelGuarantees :+ method
+          }
+
+          if(gclCompute.gumboTables.nonEmpty){
+            var CEP_T_GumboTable_Params: Set[GGParam] = Set.empty
+            var gumboTableMethods: ISZ[ST] = ISZ()
+            var gumboTableCallsCombined: ISZ[ST] = ISZ()
+            var seenNormal = F
+
+            for (table <- gclCompute.gumboTables){
+              if(table.normal.nonEmpty){//normal table
+                seenNormal = T
+                val nt = table.normal.get
+                for (y <- 0 until nt.verticalPredicates.length){
+                  val resrow: GclResultRow = nt.resultRows(y)
+                  val v = nt.verticalPredicates(y)
+                  for (x <- 0 until nt.horizontalPredicates.length){
+
+                    var combinedParams: Set[GGParam] = Set.empty
+                    val r = resrow.results(x)
+                    val h = nt.horizontalPredicates(x)
+
+                    val rv = gclSymbolTable.rexprs.get(toKey(v)).get // get rewrites
+                    val rh = gclSymbolTable.rexprs.get(toKey(h)).get
+
+                    val rr = gclSymbolTable.rexprs.get(toKey(r)).get
+
+                    val rrv = GumboGen.StateVarInRewriter().wrapStateVarsInInput(rv) // wrap input if needed
+                    val rrh = GumboGen.StateVarInRewriter().wrapStateVarsInInput(rh)
+
+                    localGumboStore = localGumboStore(imports = localGumboStore.imports ++ GumboGenUtil.resolveLitInterpolateImports(rrv, basePackageName, GclResolver.getIndexingTypeFingerprints(store)))
+                    localGumboStore = localGumboStore(imports = localGumboStore.imports ++ GumboGenUtil.resolveLitInterpolateImports(rrh, basePackageName, GclResolver.getIndexingTypeFingerprints(store)))
+
+                    localGumboStore = localGumboStore(imports = localGumboStore.imports ++ GumboGenUtil.resolveLitInterpolateImports(rr, basePackageName, GclResolver.getIndexingTypeFingerprints(store)))
+
+                    val vx = GumboXGenUtil.rewriteToExpX(rrv, component, componentNames, aadlTypes, stateVars) // rewrite to GX version
+                    val hx = GumboXGenUtil.rewriteToExpX(rrh, component, componentNames, aadlTypes, stateVars) // rewrite to GX version
+
+                    val rx = GumboXGenUtil.rewriteToExpX(rr, component, componentNames, aadlTypes, stateVars)
+
+                    val methodName = st"normal_table_${nt.id}__${x}_${y}"
+
+                    combinedParams = combinedParams ++ vx.params.elements
+                    combinedParams = combinedParams ++ hx.params.elements
+                    combinedParams = combinedParams ++ rx.params.elements
+
+                    CEP_T_GumboTable_Params = CEP_T_GumboTable_Params ++ combinedParams.elements
+
+                    val sortedParams = GumboXGenUtil.sortParam(combinedParams.elements)
+
+                    gumboTableCallsCombined = gumboTableCallsCombined :+ st"$methodName(${(for (p <- sortedParams) yield p.name, ", ")})"
+
+                    val pred: ST =
+                    st"""((${vx.exp.prettyST}) & (${hx.exp.prettyST})) ___>:
+                        |  (${rx.exp.prettyST})"""
+
+                    val descriptor = methodName
+                    val method = st"""/** guarantee ${nt.id}
+                                     |  ${descriptor}
+                                     |  ${(paramsToComment(sortedParams), "\n")}
+                                     |  */
+                                     |@strictpure def $methodName(
+                                     |    ${(for (p <- sortedParams) yield p.getParamDef, ",\n")}): B =
+                                     |  $pred"""
+                    gumboTableMethods = gumboTableMethods :+ method
+                  }
+                }
+              }
+              else if (table.cases.nonEmpty){
+                seenNormal = T
+
+                val ct = table.cases.get
+
+                val ce = ct.caseEval
+                val rce = gclSymbolTable.rexprs.get(toKey(ce)).get
+                val rrce = GumboGen.StateVarInRewriter().wrapStateVarsInInput(rce)
+                localGumboStore = localGumboStore(imports = localGumboStore.imports ++ GumboGenUtil.resolveLitInterpolateImports(rrce, basePackageName, GclResolver.getIndexingTypeFingerprints(store)))
+                val cex = GumboXGenUtil.rewriteToExpX(rrce, component, componentNames, aadlTypes, stateVars)
+
+                var cc = ct.verticalPredicateRows(0).results(0)
+
+                for (y <- 0 until ct.verticalPredicateRows.length){
+                  val resrow: GclResultRow = ct.resultRows(y)
+                  val vr = ct.verticalPredicateRows(y)
+                  var v: Exp = vr.results(0)
+                  if(vr.results.length > 1){
+                    cc = vr.results(0)
+                    v = vr.results(1)
+                  }
+                  for (x <- 0 until ct.horizontalPredicates.length){
+                    val h = ct.horizontalPredicates(x)
+                    val r = resrow.results(x)
+
+                    var combinedParams: Set[GGParam] = Set.empty
+
+                    val rv = gclSymbolTable.rexprs.get(toKey(v)).get // get rewrites
+                    val rh = gclSymbolTable.rexprs.get(toKey(h)).get
+                    val rcc = gclSymbolTable.rexprs.get(toKey(cc)).get
+
+                    val rr = gclSymbolTable.rexprs.get(toKey(r)).get
+
+                    val rrv = GumboGen.StateVarInRewriter().wrapStateVarsInInput(rv) // wrap input if needed
+                    val rrh = GumboGen.StateVarInRewriter().wrapStateVarsInInput(rh)
+                    val rrcc = GumboGen.StateVarInRewriter().wrapStateVarsInInput(rcc)
+
+                    localGumboStore = localGumboStore(imports = localGumboStore.imports ++ GumboGenUtil.resolveLitInterpolateImports(rrv, basePackageName, GclResolver.getIndexingTypeFingerprints(store)))
+                    localGumboStore = localGumboStore(imports = localGumboStore.imports ++ GumboGenUtil.resolveLitInterpolateImports(rrh, basePackageName, GclResolver.getIndexingTypeFingerprints(store)))
+                    localGumboStore = localGumboStore(imports = localGumboStore.imports ++ GumboGenUtil.resolveLitInterpolateImports(rrcc, basePackageName, GclResolver.getIndexingTypeFingerprints(store)))
+
+                    localGumboStore = localGumboStore(imports = localGumboStore.imports ++ GumboGenUtil.resolveLitInterpolateImports(rr, basePackageName, GclResolver.getIndexingTypeFingerprints(store)))
+
+                    val vx = GumboXGenUtil.rewriteToExpX(rrv, component, componentNames, aadlTypes, stateVars) // rewrite to GX version
+                    val hx = GumboXGenUtil.rewriteToExpX(rrh, component, componentNames, aadlTypes, stateVars) // rewrite to GX version
+                    val ccx = GumboXGenUtil.rewriteToExpX(rrcc, component, componentNames, aadlTypes, stateVars)
+
+                    val rx = GumboXGenUtil.rewriteToExpX(rr, component, componentNames, aadlTypes, stateVars)
+
+                    val methodName = st"case_table_${ct.id}__${x}_${y}"
+
+                    combinedParams = combinedParams ++ vx.params.elements
+                    combinedParams = combinedParams ++ hx.params.elements
+                    combinedParams = combinedParams ++ ccx.params.elements
+                    combinedParams = combinedParams ++ rx.params.elements
+                    combinedParams = combinedParams ++ cex.params.elements
+
+                    CEP_T_GumboTable_Params = CEP_T_GumboTable_Params ++ combinedParams.elements
+
+                    val sortedParams = GumboXGenUtil.sortParam(combinedParams.elements)
+
+                    gumboTableCallsCombined = gumboTableCallsCombined :+ st"$methodName(${(for (p <- sortedParams) yield p.name, ", ")})"
+
+                    val pred: ST =
+                      st"""(((${cex.exp.prettyST}) == (${ccx.exp.prettyST})) & (${vx.exp.prettyST}) & (${hx.exp.prettyST})) ___>:
+                          |  (${rx.exp.prettyST})"""
+
+                    val descriptor = methodName
+                    val method = st"""/** guarantee ${ct.id}
+                                     |  ${descriptor}
+                                     |  ${(paramsToComment(sortedParams), "\n")}
+                                     |  */
+                                     |@strictpure def $methodName(
+                                     |    ${(for (p <- sortedParams) yield p.getParamDef, ",\n")}): B =
+                                     |  $pred"""
+                    gumboTableMethods = gumboTableMethods :+ method
+                  }
+                }
+              }
+            }
+            if(seenNormal){
+              val sortedCEP_T_GumboTable_Params = GumboXGenUtil.sortParam(CEP_T_GumboTable_Params.elements)
+              val CEP_T_GumboTable_MethodName = GumboXGen.getCompute_CEP_T_GumboTables_MethodName(componentNames)
+              val simpleName = ops.ISZOps(CEP_T_GumboTable_MethodName).last
+              val content =
+                st"""${(gumboTableMethods, "\n\n")}
+                    |
+                    |/** CEP-T-Case: Top-Level case contracts for ${component.identifier}'s compute entrypoint
+                    |  *
+                    |  ${(paramsToComment(sortedCEP_T_GumboTable_Params), "\n")}
+                    |  */
+                    |@strictpure def ${simpleName} (
+                    |    ${(for (p <- sortedCEP_T_GumboTable_Params) yield p.getParamDef, ",\n")}): B =
+                    |  ${(gumboTableCallsCombined, " &\n")}"""
+              CEP_T_GumboTables = Some(
+                ContractHolder(CEP_T_GumboTable_MethodName, sortedCEP_T_GumboTable_Params, localGumboStore.imports, content)
+              )
+            }
           }
 
           if (topLevelAssumes.nonEmpty) {
@@ -891,7 +1062,7 @@ object GumboXGen {
         D_Inv_Guards = D_Inv_Guards :+ st"${(nameToUse, ".")}(${sortedParam.name})"
       }
 
-      if (I_Guar_Guard.nonEmpty || CEP_T_Guar.nonEmpty || CEP_T_Case.nonEmpty || D_Inv_Guards.nonEmpty) {
+      if (I_Guar_Guard.nonEmpty || CEP_T_Guar.nonEmpty || CEP_T_Case.nonEmpty || D_Inv_Guards.nonEmpty || CEP_T_GumboTables.nonEmpty) {
         // CREATE CEP-Post
 
         //var CEP_Post_Params: Set[GGParam] = I_Guar_Guard_Params
@@ -914,6 +1085,16 @@ object GumboXGen {
             CEP_Post_Params = CEP_Post_Params ++ cep_T_Case_content.params
             val sortedParams = sortParam(cep_T_Case_content.params)
             Some(st"${ops.ISZOps(cep_T_Case_content.methodName).last} (${(for (p <- sortedParams) yield p.name, ", ")})")
+          case _ => None()
+        }
+
+        //create call to the top level handler contracts
+        val CEP_T_GumboTables_call: Option[ST] = CEP_T_GumboTables match {
+          case Some(cep_T_GumboTables_content) =>
+            CEP_Post_blocks = CEP_Post_blocks :+ cep_T_GumboTables_content.content
+            CEP_Post_Params = CEP_Post_Params ++ cep_T_GumboTables_content.params
+            val sortedParams = sortParam(cep_T_GumboTables_content.params)
+            Some(st"${ops.ISZOps(cep_T_GumboTables_content.methodName).last} (${(for (p <- sortedParams) yield p.name,", ")})")
           case _ => None()
         }
 
@@ -960,6 +1141,9 @@ object GumboXGen {
         }
         if (CEP_T_Handler_calls.nonEmpty) {
           segments = segments :+ opt(CEP_T_Handler_calls, s"CEP-T-Handlers: handler clauses of ${component.identifier}'s compute entrypoint")
+        }
+        if (CEP_T_GumboTables_call.nonEmpty){
+          segments = segments :+ opt(ISZ(CEP_T_GumboTables_call.get),s"CEP-T-GumboTables: gumbo table clauses of ${component.identifier}'s compute entrypoint")
         }
 
         val cep_post =
