@@ -26,7 +26,7 @@ import org.sireum.message.Reporter
 
   val pacerSchedulingDomain: Z = 1
 
-  val pacerComputeExecutionTime: Z = 10
+  val pacerComputeExecutionTime: Z = 30
 
   val defaultComputeExecutionTime: Z = 50
 
