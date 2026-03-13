@@ -13,7 +13,7 @@ import org.sireum.hamr.codegen.microkit.plugins.rust.types.{CRustTypePlugin, CRu
 import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, MicrokitPlugin}
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil
-import org.sireum.hamr.codegen.microkit.{rust => RAST}
+import org.sireum.hamr.codegen.microkit.{MicrokitCodegen, rust => RAST}
 import org.sireum.hamr.ir.{Aadl, Direction}
 import org.sireum.message.Reporter
 
@@ -74,7 +74,7 @@ object CRustTestingPlugin {
 
       val crustTypeProvider = CRustTypePlugin.getCRustTypeProvider(localStore).get
 
-      val testEntries = genTestEntries(thread, crustTypeProvider)
+      val testEntries = genTestEntries(thread, crustTypeProvider, reporter)
 
       val testApiEntries =
         genTestApiConcreteInputsEntries(thread, crustTypeProvider) ++
@@ -465,9 +465,13 @@ object CRustTestingPlugin {
     return ret
   }
 
-  @pure def genTestEntries(thread: AadlThread, cRustTypeProvider: CRustTypeProvider): ISZ[RAST.Item] = {
+  @pure def genTestEntries(thread: AadlThread, cRustTypeProvider: CRustTypeProvider, reporter: Reporter): ISZ[RAST.Item] = {
     val threadId = MicrokitUtil.getComponentIdPath(thread)
-    assert(thread.isPeriodic(), s"Not yet handling sporadic threads: ${threadId}")
+
+    if (thread.isSporadic()) {
+      reporter.error(thread.posOpt, MicrokitCodegen.toolName, "Sporadic Rust threads are not currently supported")
+      return ISZ()
+    }
 
     val inDataPortInits: Option[ST] = {
       var ret = ISZ[ST]()

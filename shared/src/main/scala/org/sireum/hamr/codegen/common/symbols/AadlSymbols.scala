@@ -61,6 +61,10 @@ import org.sireum.message.Position
   @pure def classifier: ISZ[String] = {
     return ops.StringOps(ops.StringOps(classifierAsString).replaceAllLiterally("::", "^")).split(c => c == '^')
   }
+
+  @pure def posOpt: Option[Position] = {
+    return component.identifier.pos
+  }
 }
 
 @datatype class AadlSystem(val component: ir.Component,

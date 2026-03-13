@@ -38,14 +38,11 @@ object MicrokitPlugins {
     // test-ers
     DefaultCRustTestingPlugin(),
 
-    // gumbo-ers
-    DefaultGumboRustPlugin(),
-    DefaultGumboXPlugin(),
-
     MicrokitReporterPlugin(),
     AttestationPlugin(),
     AttestationReporterPlugin()
   ) ++
     CComponentPlugin.CComponentPlugins ++
-    SystemDescriptionProviderPlugin.systemDescriptionProviderPlugins
+    SystemDescriptionProviderPlugin.systemDescriptionProviderPlugins ++
+    GumboPlugins.gumboPlugins
 }
