@@ -3,6 +3,7 @@ package org.sireum.hamr.codegen.microkit.plugins
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.plugin.Plugin
+import org.sireum.hamr.codegen.microkit.plugins.linters.DefaultMicrokitGumboLinter
 import org.sireum.hamr.codegen.microkit.plugins.rust.gumbo._
 
 object GumboPlugins {

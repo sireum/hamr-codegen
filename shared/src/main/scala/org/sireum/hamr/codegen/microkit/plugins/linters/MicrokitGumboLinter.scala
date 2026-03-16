@@ -1,5 +1,5 @@
 // #Sireum
-package org.sireum.hamr.codegen.microkit.plugins.rust.gumbo
+package org.sireum.hamr.codegen.microkit.plugins.linters
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.Store
@@ -7,6 +7,7 @@ import org.sireum.hamr.codegen.common.symbols.{AadlFeatureEvent, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.HamrCli
 import org.sireum.hamr.codegen.microkit.plugins.MicrokitLintPlugin
+import org.sireum.hamr.codegen.microkit.plugins.rust.gumbo.GumboRustUtil
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil
 import org.sireum.hamr.ir.Aadl
 import org.sireum.message.Reporter
