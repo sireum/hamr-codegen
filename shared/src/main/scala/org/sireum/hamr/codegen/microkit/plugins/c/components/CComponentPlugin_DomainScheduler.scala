@@ -14,7 +14,7 @@ import org.sireum.hamr.codegen.microkit.connections.{ConnectionStore, VMRamVaddr
 import org.sireum.hamr.codegen.microkit.plugins.StoreUtil
 import org.sireum.hamr.codegen.microkit.plugins.c.connections.CConnectionProviderPlugin
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
-import org.sireum.hamr.codegen.microkit.util.{Channel, IRQ, MakefileContainer, MemoryMap, MemoryRegion, MicrokitDomain, MicrokitUtil, Perm, PortSharedMemoryRegion, ProtectionDomain, SchedulingDomain, VirtualMachine, VirtualMachineMemoryRegion, VirtualMemoryRegionType}
+import org.sireum.hamr.codegen.microkit.util.{Channel, IRQ, MakefileContainer, MakefileUtil, MakefileTarget, MemoryMap, MemoryRegion, MicrokitDomain, MicrokitUtil, Perm, PortSharedMemoryRegion, ProtectionDomain, SchedulingDomain, VirtualMachine, VirtualMachineMemoryRegion, VirtualMemoryRegionType}
 import org.sireum.hamr.codegen.microkit.vm.{VmMakefileTemplate, VmUser, VmUtil}
 import org.sireum.hamr.ir.Aadl
 import org.sireum.message.Reporter
@@ -44,6 +44,7 @@ import org.sireum.message.Reporter
 
 
     var makefileContainers: ISZ[MakefileContainer] = ISZ()
+    var makefileCleanEntries: ISZ[ST] = ISZ()
 
     var xmlSchedulingDomains: ISZ[SchedulingDomain] = ISZ()
     var xmlProtectionDomains: ISZ[ProtectionDomain] = ISZ()
@@ -242,11 +243,21 @@ import org.sireum.message.Reporter
             ))
         )
 
+        makefileCleanEntries = makefileCleanEntries :+ st"rm -rf $${TOP_DIR}/${mk.relativePath}/build"
+
         val boardPath = s"${options.sel4OutputDir.get}/${mk.relativePathVmBoardDir}/qemu_virt_aarch64"
 
         val vmmMake = VmMakefileTemplate.Makefile(threadId)
         resources = resources :+ ResourceUtil.createResource(s"${boardPath}/Makefile", vmmMake, T)
 
+        val vmmLinuxDts = VmMakefileTemplate.linux_dts
+        resources = resources :+ ResourceUtil.createResource(s"${boardPath}/linux.dts", vmmLinuxDts, T)
+
+        val vmmOverlayDts = VmMakefileTemplate.overlay_dts
+        resources = resources :+ ResourceUtil.createResource(s"${boardPath}/overlay.dts", vmmOverlayDts, T)
+
+        val vmmSimpleSystem = VmMakefileTemplate.simple_system
+        resources = resources :+ ResourceUtil.createResource(s"${boardPath}/simple.system", vmmSimpleSystem, T)
 
         val vmm_config = VmUtil.vmm_config(
           guestDtbVaddrInHex = "0x4f000000",
@@ -254,6 +265,14 @@ import org.sireum.message.Reporter
           maxIrqs = 1
         )
         resources = resources :+ ResourceUtil.createResource(s"${options.sel4OutputDir.get}/${mk.relativePathIncludeDir}/${threadId}_user.h", vmm_config, T)
+      } // end isVM
+
+      if (makefileCleanEntries.nonEmpty) {
+        localStore = MakefileUtil.addMakefileTargets(
+          ISZ("system.mk"),
+          ISZ(MakefileTarget(name="clean", allowMultiple = T, dependencies = ISZ(), body = makefileCleanEntries)),
+          localStore
+        )
       }
 
       val childStackSizeInKiBytes: Option[Z] = t.stackSizeInBytes() match {
@@ -441,7 +460,7 @@ import org.sireum.message.Reporter
         if (isVM) {
           val cand = cCodeContributions.cBridge_GlobalVarContributions.filter(f => f.isInstanceOf[VMRamVaddr])
           assert(cand.size == 1, s"didn't find a guest ram vaddr for ${t.identifier}: ${cand.size}")
-          VmUser.vmUserCode(threadId, cand(0).pretty)
+          VmUser.vmUserCode(threadId, cand(0))
         } else {
           st"""#include "$cHeaderFileName"
               |

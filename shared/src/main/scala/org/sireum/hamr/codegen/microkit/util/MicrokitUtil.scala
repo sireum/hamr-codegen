@@ -114,7 +114,7 @@ object MicrokitUtil {
 
   val microkit_util_imports: ST = st"""#if __has_include("util.h")
                                       |#include <util.h>
-                                      |#elif __has_include("libvmm/util.util.h")
+                                      |#elif __has_include("libvmm/util/util.h")
                                       |#include <libvmm/util/util.h>
                                       |#elif __has_include("sddf/util/util.h")
                                       |#include <sddf/util/printf.h>

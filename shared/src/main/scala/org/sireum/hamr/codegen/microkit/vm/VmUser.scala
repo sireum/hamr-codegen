@@ -3,12 +3,12 @@
 package org.sireum.hamr.codegen.microkit.vm
 
 import org.sireum._
+import org.sireum.hamr.codegen.microkit.connections.GlobalVarContribution
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil
 
 object VmUser {
   def vmUserCode(componentPath: String,
-                 guestRamVaddr: ST
-                ): ST = {
+                 guestRamVaddr: GlobalVarContribution): ST = {
     val content: ST =
       st"""
           |
@@ -34,7 +34,7 @@ object VmUser {
           |extern char _guest_initrd_image_end[];
           |
           |// Microkit will set this variable to the start of the guest RAM memory region.
-          |$guestRamVaddr;
+          |${guestRamVaddr.pretty};
           |
           |static int get_dev_irq_by_ch(microkit_channel ch);
           |static int get_dev_ch_by_irq(int irq, microkit_channel *ch);
@@ -52,7 +52,7 @@ object VmUser {
           |
           |  // https://github.com/au-ts/libvmm/blob/a996382581b9dbb7f067b25f312e87264c7b8ace/include/libvmm/arch/aarch64/linux.h#L37
           |  // https://github.com/au-ts/libvmm/blob/a996382581b9dbb7f067b25f312e87264c7b8ace/src/arch/aarch64/linux.c#L11
-          |  uintptr_t kernel_pc = linux_setup_images(top_impl_Instance_consumer_p_p_consumer_VM_Guest_RAM_vaddr,
+          |  uintptr_t kernel_pc = linux_setup_images(${guestRamVaddr.varName},
           |                                          (uintptr_t) _guest_kernel_image,
           |                                          kernel_size,
           |                                          (uintptr_t) _guest_dtb_image,

@@ -439,7 +439,7 @@ import org.sireum.message.Reporter
         if (isVM) {
           val cand = cCodeContributions.cBridge_GlobalVarContributions.filter(f => f.isInstanceOf[VMRamVaddr])
           assert(cand.size == 1, s"didn't find a guest ram vaddr for ${t.identifier}: ${cand.size}")
-          VmUser.vmUserCode(threadId, cand(0).pretty)
+          VmUser.vmUserCode(threadId, cand(0))
         } else {
           st"""#include "$cHeaderFileName"
               |
