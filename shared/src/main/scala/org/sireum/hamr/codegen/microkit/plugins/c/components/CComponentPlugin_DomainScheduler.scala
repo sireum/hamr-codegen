@@ -251,13 +251,13 @@ import org.sireum.message.Reporter
         resources = resources :+ ResourceUtil.createResource(s"${boardPath}/Makefile", vmmMake, F) // allow the user to customize vmm makefile
 
         val vmmLinuxDts = VmMakefileTemplate.linux_dts
-        resources = resources :+ ResourceUtil.createResource(s"${boardPath}/linux.dts", vmmLinuxDts, T)
+        resources = resources :+ ResourceUtil.createResource(s"${boardPath}/linux.dts", vmmLinuxDts, F)
 
         val vmmOverlayDts = VmMakefileTemplate.overlay_dts
-        resources = resources :+ ResourceUtil.createResource(s"${boardPath}/overlay.dts", vmmOverlayDts, T)
+        resources = resources :+ ResourceUtil.createResource(s"${boardPath}/overlay.dts", vmmOverlayDts, F)
 
         val vmmSimpleSystem = VmMakefileTemplate.simple_system
-        resources = resources :+ ResourceUtil.createResource(s"${boardPath}/simple.system", vmmSimpleSystem, T)
+        resources = resources :+ ResourceUtil.createResource(s"${boardPath}/simple.system", vmmSimpleSystem, F)
 
         val vmm_config = VmUtil.vmm_config(
           guestDtbVaddrInHex = "0x4f000000",
