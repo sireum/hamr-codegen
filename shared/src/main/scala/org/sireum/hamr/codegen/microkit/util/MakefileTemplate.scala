@@ -93,7 +93,7 @@ object MakefileTemplate {
   @pure def systemMakefileDomainScheduler(elfFiles: ISZ[String],
                                           typeObjectNames: ISZ[String],
                                           buildEntries: ISZ[ST],
-                                          elfEntries: ISZ[ST],
+                                          elfEntries: ISZ[String],
                                           miscTargets: ISZ[MakefileTarget]): ST = {
 
     val uniqueBuildEntries: ISZ[String] = (Set.empty[String] ++ (for(be <- buildEntries) yield be.render)).elements
@@ -178,7 +178,7 @@ object MakefileTemplate {
                               sourcePaths: ISZ[String],
                               typeObjectNames: ISZ[String],
                               buildEntries: ISZ[ST],
-                              elfEntries: ISZ[ST],
+                              elfEntries: ISZ[String],
                               miscTargets: ISZ[MakefileTarget]): ST = {
     val buildEntriesOpt: Option[ST] =
       if(buildEntries.isEmpty) None()

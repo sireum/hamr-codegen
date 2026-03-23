@@ -100,14 +100,16 @@ object MicrokitCodegen {
 
     val makefileContainers = StoreUtil.getMakefileContainers(localStore)
 
-    var elfFiles: ISZ[String] = ISZ()
+    var elfFiles: Set[String] = Set.empty[String]
     for (mk <- makefileContainers) {
       elfFiles = elfFiles ++ mk.getElfNames
     }
 
-    val elfEntries: ISZ[ST] = for (mk <- makefileContainers) yield mk.elfEntry
+    val elfEntries: Set[String] = Set.empty[String] ++ (for (mk <- makefileContainers) yield mk.elfEntry.render)
 
     val isMCS = CComponentPlugin.getSchedulingType(symbolTable.rootSystem) == Hamr_Microkit_Properties.SchedulingType.MCS
+
+    val typeObjectNames = Set.empty[String] ++ CConnectionProviderPlugin.getTypeObjectNames(localStore)
 
     val systemmkContents: ST =
       if (isMCS) {
@@ -123,10 +125,10 @@ object MicrokitCodegen {
         MakefileTemplate.systemMakefileMCS(
           includePaths = includesPaths,
           sourcePaths = sourcePaths,
-          elfFiles = elfFiles,
-          typeObjectNames = CConnectionProviderPlugin.getTypeSimpleObjectNames(localStore),
+          elfFiles = elfFiles.elements,
+          typeObjectNames = typeObjectNames.elements,
           buildEntries = rustBuildEntries,
-          elfEntries = elfEntries,
+          elfEntries = elfEntries.elements,
           miscTargets = MakefileUtil.getMakefileTargets(ISZ("system.mk"), localStore))
       } else {
 
@@ -135,10 +137,10 @@ object MicrokitCodegen {
             (for (mk <- makefileContainers) yield mk.buildEntry)
 
         MakefileTemplate.systemMakefileDomainScheduler(
-          elfFiles = elfFiles,
-          typeObjectNames = CConnectionProviderPlugin.getTypeObjectNames(localStore),
+          elfFiles = elfFiles.elements,
+          typeObjectNames = typeObjectNames.elements,
           buildEntries = buildEntries,
-          elfEntries = elfEntries,
+          elfEntries = elfEntries.elements,
           miscTargets = MakefileUtil.getMakefileTargets(ISZ("system.mk"), localStore))
       }
 

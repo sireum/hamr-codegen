@@ -155,7 +155,7 @@ import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
             |${TAB}$$(LD) $$(LDFLAGS) $$^ $$(LIBS) -o $$@
             |
             |$elfName: $$(${MicrokitTypeUtil.make_TYPE_OBJS}) $vmArchive
-            |${TAB}$$(LD) $$(LDFLAGS)  --start-group -lmicrokit -Tmicrokit.ld $$(TYPE_OBJS) $vmArchive --end-group -o $$@"""
+            |${TAB}$$(LD) $$(LDFLAGS) $$^ --start-group -lmicrokit -Tmicrokit.ld $vmArchive --end-group -o $$@"""
       return ret
     }
     else {

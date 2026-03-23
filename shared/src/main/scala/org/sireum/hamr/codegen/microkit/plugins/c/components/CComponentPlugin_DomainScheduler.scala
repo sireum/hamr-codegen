@@ -248,7 +248,7 @@ import org.sireum.message.Reporter
         val boardPath = s"${options.sel4OutputDir.get}/${mk.relativePathVmBoardDir}/qemu_virt_aarch64"
 
         val vmmMake = VmMakefileTemplate.Makefile(threadId)
-        resources = resources :+ ResourceUtil.createResource(s"${boardPath}/Makefile", vmmMake, T)
+        resources = resources :+ ResourceUtil.createResource(s"${boardPath}/Makefile", vmmMake, F) // allow the user to customize vmm makefile
 
         val vmmLinuxDts = VmMakefileTemplate.linux_dts
         resources = resources :+ ResourceUtil.createResource(s"${boardPath}/linux.dts", vmmLinuxDts, T)
