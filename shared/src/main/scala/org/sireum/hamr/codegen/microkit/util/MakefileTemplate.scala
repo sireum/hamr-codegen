@@ -71,7 +71,10 @@ object MakefileTemplate {
           |${TAB}${TAB}exit 1; \
           |${TAB}fi
           |
-          |qemu $${IMAGE_FILE} $${REPORT_FILE}: check_microkit $$(IMAGE_FILE) $${TOP_BUILD_DIR}/Makefile FORCE
+          |$${IMAGE_FILE}: check_microkit $$(IMAGE_FILE) $${TOP_BUILD_DIR}/Makefile FORCE
+          |${TAB}$${MAKE} -C $${TOP_BUILD_DIR} $$(notdir $$@)
+          |
+          |qemu $${REPORT_FILE}: $$(IMAGE_FILE)
           |${TAB}$${MAKE} -C $${TOP_BUILD_DIR} $$(notdir $$@)
           |
           |clean:: $${TOP_BUILD_DIR}/Makefile
@@ -156,7 +159,7 @@ object MakefileTemplate {
           |${TAB}$$(MICROKIT_TOOL) $$(SYSTEM_FILE).merged --search-path $$(TOP_BUILD_DIR) --board $$(MICROKIT_BOARD) --config $$(MICROKIT_CONFIG) -o $$(IMAGE_FILE) -r $$(REPORT_FILE)
           |
           |
-          |qemu: $$(IMAGE_FILE)
+          |qemu:
           |${TAB}$$(QEMU) -machine virt,virtualization=on \
           |${TAB}${TAB}${TAB}-cpu cortex-a53 \
           |${TAB}${TAB}${TAB}-serial mon:stdio \
@@ -290,7 +293,7 @@ object MakefileTemplate {
           |
           |FORCE:
           |
-          |qemu: $$(IMAGE_FILE)
+          |qemu:
           |${TAB}$$(QEMU) -nographic $$(QEMU_ARCH_ARGS)
           |
           |clean::
