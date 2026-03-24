@@ -71,7 +71,7 @@ object MakefileTemplate {
           |${TAB}${TAB}exit 1; \
           |${TAB}fi
           |
-          |$${IMAGE_FILE}: check_microkit $$(IMAGE_FILE) $${TOP_BUILD_DIR}/Makefile FORCE
+          |$${IMAGE_FILE}: check_microkit $${TOP_BUILD_DIR}/Makefile FORCE
           |${TAB}$${MAKE} -C $${TOP_BUILD_DIR} $$(notdir $$@)
           |
           |qemu $${REPORT_FILE}: $$(IMAGE_FILE)
