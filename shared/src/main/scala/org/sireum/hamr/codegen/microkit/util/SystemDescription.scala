@@ -99,13 +99,19 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
 
   def getDotMemConnections: ISZ[ST]
 
-  def getMarkers: ISZ[Marker]
+  @pure def getMarkers: ISZ[Marker]
 }
 
 @datatype class VirtualMachine(val name: String,
                                val vcpuId: String,
                                val schedulingDomain: Option[Z],
                                val memMaps: ISZ[MemoryMap]) extends MicrokitDomain {
+
+  val contentMarker: BlockMarker = Marker.createXmlMarker(s"CONTENT MARKER vmm__${name}")
+
+  @pure override def getMarkers: ISZ[Marker] = {
+    return ISZ(contentMarker)
+  }
 
   @pure override def prettyST: ST = {
     val stMaps: Option[ST] =
@@ -114,6 +120,9 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
     return (st"""<virtual_machine name="$name">
                 |  <vcpu id="$vcpuId" />
                 |  $stMaps
+                |
+                |  ${contentMarker.beginMarker}
+                |  ${contentMarker.endMarker}
                 |</virtual_machine>""")
   }
 
@@ -123,10 +132,6 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
 
   @pure override def getDotMemConnections: ISZ[ST] = {
     return ISZ(st"getDotMemConnections: TODO")
-  }
-
-  @pure override def getMarkers: ISZ[Marker] = {
-    return ISZ()
   }
 }
 
@@ -142,6 +147,7 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
                                   val programImage: String,
 
                                   val children: ISZ[MicrokitDomain]) extends MicrokitDomain {
+
   val contentMarker: BlockMarker = Marker.createXmlMarker(s"CONTENT MARKER $name")
 
   @pure override def getMarkers: ISZ[Marker] = {
