@@ -291,6 +291,7 @@ object GclResolverUtil {
             args = args :+ Exp.Invoke(
               receiverOpt = None(),
               ident = Exp.Ident(AST.Id(indexingTypeFingerprint, emptyAttr), emptyRAttr(posOpt = arg_.posOpt)),
+              rTypes = ISZ(),
               targs = ISZ(),
               args = ISZ(e.getOrElse(arg)),
               attr = emptyRAttr(posOpt = arg_.posOpt))
@@ -345,6 +346,7 @@ object GclResolverUtil {
               id = AST.Id(fromType(fromType.lastIndex), o.id.attr), targs = ISZ(), attr = o.attr)
           ),
           ident = Exp.Ident(id = o.id, attr = o.attr),
+          rTypes = ISZ(),
           targs = ISZ(),
           args = ISZ(receiver.getOrElse(o.receiverOpt).get),
           attr = o.attr)

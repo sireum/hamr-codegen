@@ -208,11 +208,12 @@ object GclResolver {
 
             case MSome(e : Exp.Input) =>
               o match {
-                case i @ AST.Exp.Invoke(None(), ident, targs, args) =>
+                case i @ AST.Exp.Invoke(None(), ident, _, targs, args) =>
                   return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(
                     AST.Exp.Invoke(
                       receiverOpt = Some(e),
                       ident = AST.Exp.Ident(AST.Id("apply", emptyAttr), emptyRAttr),
+                      rTypes = ISZ(),
                       targs = targs,
                       args = args,
                       attr = AST.ResolvedAttr(posOpt = o.posOpt, resOpt = o.attr.resOpt, typedOpt = o.attr.typedOpt))))
@@ -261,7 +262,7 @@ object GclResolver {
 
                   // api.portid
                   val api_portid: Exp = {
-                    val tn = AST.Typed.Name(ids = ISZ("org", "sireum", "Option"), args = ISZ(onlyIdent.typedOpt.get))
+                    val tn = AST.Typed.Name(ids = ISZ("org", "sireum", "Option"), rTypeOpt = AST.Typed.noRType, args = ISZ(onlyIdent.typedOpt.get))
 
                     val ra = AST.ResolvedAttr(posOpt = o.posOpt, resOpt = onlyIdent.resOpt, typedOpt = Some(tn))
 
@@ -312,7 +313,7 @@ object GclResolver {
 
                   // api.portid
                   val api_portid: Exp = {
-                    val tn = AST.Typed.Name(ids = ISZ("org", "sireum", "Option"), args = ISZ(onlyIdent.typedOpt.get))
+                    val tn = AST.Typed.Name(ids = ISZ("org", "sireum", "Option"), rTypeOpt = AST.Typed.noRType, args = ISZ(onlyIdent.typedOpt.get))
 
                     val ra = AST.ResolvedAttr(posOpt = o.posOpt, resOpt = onlyIdent.resOpt, typedOpt = Some(tn))
 
@@ -394,7 +395,7 @@ object GclResolver {
 
                   // api.portid
                   val api_portid: Exp = {
-                    val tn = AST.Typed.Name(ids = ISZ("org", "sireum", "Option"), args = ISZ(onlyIdent.typedOpt.get))
+                    val tn = AST.Typed.Name(ids = ISZ("org", "sireum", "Option"), rTypeOpt = AST.Typed.noRType, args = ISZ(onlyIdent.typedOpt.get))
 
                     val ra = AST.ResolvedAttr(posOpt = o.posOpt, resOpt = onlyIdent.resOpt, typedOpt = Some(tn))
 
@@ -452,7 +453,7 @@ object GclResolver {
 
                   // api.portid
                   val api_portid: Exp = {
-                    val tn = AST.Typed.Name(ids = ISZ("org", "sireum", "Option"), args = ISZ(onlyIdent.typedOpt.get))
+                    val tn = AST.Typed.Name(ids = ISZ("org", "sireum", "Option"), rTypeOpt = AST.Typed.noRType, args = ISZ(onlyIdent.typedOpt.get))
 
                     val ra = AST.ResolvedAttr(posOpt = o.posOpt, resOpt = onlyIdent.resOpt, typedOpt = Some(tn))
 
@@ -527,7 +528,7 @@ object GclResolver {
 
                       // api.portid
                       val api_portid: Exp = {
-                        val tn = AST.Typed.Name(ids = ISZ("org", "sireum", "Option"), args = ISZ(i_receiverOpt.typedOpt.get))
+                        val tn = AST.Typed.Name(ids = ISZ("org", "sireum", "Option"), rTypeOpt = AST.Typed.noRType, args = ISZ(i_receiverOpt.typedOpt.get))
 
                         val ra = AST.ResolvedAttr(posOpt = o.posOpt, resOpt = i_receiverOpt.resOpt, typedOpt = Some(tn))
 
@@ -673,7 +674,7 @@ object GclResolver {
 
               // api.portId
               val api_portId: Exp = {
-                val tn = AST.Typed.Name(ids = ISZ("org", "sireum", "Option"), args = ISZ(o.typedOpt.get))
+                val tn = AST.Typed.Name(ids = ISZ("org", "sireum", "Option"), rTypeOpt = AST.Typed.noRType, args = ISZ(o.typedOpt.get))
 
                 val ra = AST.ResolvedAttr(posOpt = o.posOpt, resOpt = o.resOpt, typedOpt = Some(tn))
 
@@ -763,7 +764,7 @@ object GclResolver {
     typeHierarchy.typeMap.get(typeName) match {
       case Some(ta: TypeInfo.TypeAlias) =>
         return ta.ast.tipe.typedOpt.get.asInstanceOf[AST.Typed.Name]
-      case _ => return AST.Typed.Name(ids = typeName, args = ISZ())
+      case _ => return AST.Typed.Name(ids = typeName, rTypeOpt = AST.Typed.noRType, args = ISZ())
     }
   }
 }
@@ -847,7 +848,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                        reporter: Reporter): Exp = {
     return typeCheckExp(
       exp,
-      AST.Typed.Name(ids = ISZ("org", "sireum", "B"), args = ISZ()),
+      AST.Typed.Name(ids = ISZ("org", "sireum", "B"), rTypeOpt = AST.Typed.noRType, args = ISZ()),
       context,
       mode, component, params, stateVars, specFuns, symbolTable, aadlTypes, scope, typeHierarchy, reporter)
   }
@@ -966,7 +967,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             ensuresClause = ensuresClause)
 
           val body: Option[AST.Body] = (g.method.bodyOpt) match {
-            case Some(body@AST.Body(ISZ(ret @ AST.Stmt.Return(Some(exp))))) =>
+            case Some(body@AST.Body(ISZ(ret @ AST.Stmt.Return(Some(exp), _)))) =>
               val retType: ISZ[String] = for (id <- g.method.sig.returnType.asInstanceOf[AST.Type.Named].name.ids) yield id.value
               val retAadlType = aadlTypes.getTypeByPath(retType)
               val retSlangTypeName = GclResolverUtil.getSlangName(retAadlType, reporter)
@@ -1081,7 +1082,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       visitSlangExp(exp = i.exp, context = context, scope = scope, mode = TypeChecker.ModeContext.Spec, typeHierarchy = typeHierarchy, reporter = reporter) match {
         case Some((rexp, roptType)) =>
           roptType match {
-            case Some(AST.Typed.Name(ISZ("org", "sireum", "B"), _)) =>
+            case Some(AST.Typed.Name(ISZ("org", "sireum", "B"), _, _)) =>
               val (rexp2, _, _) = GclResolver.collectSymbols(rexp, RewriteMode.Normal, component, F, indexingTypeFingerprints,
                 ISZ(), libMethods, symbolTable, reporter)
               val resolvedExp: AST.Exp =
@@ -1732,7 +1733,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           AST.Stmt.Import.Importer(
             name = AST.Name(
               ids = (for(n <- l.containingPackage.name) yield AST.Id(n, emptyAttr)) :+ AST.Id("GUMBO__Library", emptyAttr), attr = emptyAttr),
-            selectorOpt = Some(AST.Stmt.Import.WildcardSelector()))
+            selectorOpt = Some(AST.Stmt.Import.WildcardSelector(ISZ())))
       }
 
       assert (libImport.size <= 1, libImport.size.string)
@@ -1744,13 +1745,13 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             name = AST.Name(
               ids = ISZ[AST.Id](AST.Id("org", emptyAttr), AST.Id("sireum", emptyAttr), AST.Id(m, emptyAttr)),
               attr = emptyAttr),
-            selectorOpt = Some(AST.Stmt.Import.WildcardSelector())
+            selectorOpt = Some(AST.Stmt.Import.WildcardSelector(ISZ()))
           )
         ) :+ AST.Stmt.Import.Importer(
           name = AST.Name(
             ids = ISZ[AST.Id](AST.Id("org", emptyAttr), AST.Id("sireum", emptyAttr)),
             attr = emptyAttr),
-          selectorOpt = Some(AST.Stmt.Import.WildcardSelector())
+          selectorOpt = Some(AST.Stmt.Import.WildcardSelector(ISZ()))
         )
       }
 
@@ -1775,7 +1776,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
         case x =>
           reporter.error(value.posOpt, GclResolver.toolName, s"Wasn't expecting $x")
-          return AST.Type.Named(name = AST.Name(ids = ISZ(), attr = AST.Attr(posOpt)), typeArgs = ISZ(), attr = AST.TypedAttr(posOpt, None()))
+          return AST.Type.Named(name = AST.Name(ids = ISZ(), attr = AST.Attr(posOpt)), rTypeOpt = None(), typeArgs = ISZ(), attr = AST.TypedAttr(posOpt, None()))
       }
     }
 
@@ -1789,18 +1790,19 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           (ta.name, ta.ast.tipe.asInstanceOf[AST.Type.Named].attr.typedOpt.get.asInstanceOf[AST.Typed.Name])
 
         case tadt: TypeInfo.Adt =>
-          (tadt.tpe.ids, AST.Typed.Name(tadt.tpe.ids, ISZ()))
+          (tadt.tpe.ids, AST.Typed.Name(tadt.tpe.ids, AST.Typed.noRType, ISZ()))
 
         case te: TypeInfo.Enum =>
-          (te.name, AST.Typed.Name(te.name, ISZ()))
+          (te.name, AST.Typed.Name(te.name, AST.Typed.noRType, ISZ()))
 
         case x =>
           reporter.error(posOpt, GclResolver.toolName, s"Wasn't expecting a $x")
-          (ISZ(), AST.Typed.Name(ISZ(), ISZ()))
+          (ISZ(), AST.Typed.Name(ISZ(), AST.Typed.noRType, ISZ()))
       }
 
       return AST.Type.Named(
         name = AST.Name(for (t <- typeName) yield AST.Id(t, AST.Attr(posOpt)), AST.Attr(posOpt)),
+        rTypeOpt = None(),
         typeArgs = ISZ(),
         attr = AST.TypedAttr(posOpt = posOpt, typedOpt = Some(typedName))
       )
@@ -1818,6 +1820,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           params = ISZ(),
           parents = ISZ(),
           stmts = ISZ(),
+          annotations = ISZ(),
           attr = AST.Attr(posOpt))
 
       return TypeInfo.Adt(
@@ -1825,7 +1828,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         outlined = F,
         contractOutlined = F,
         typeChecked = F,
-        tpe = AST.Typed.Name(ISZ(s"TODO_${t.name}"), ISZ()),
+        tpe = AST.Typed.Name(ISZ(s"TODO_${t.name}"), AST.Typed.noRType, ISZ()),
         constructorTypeOpt = None(),
         constructorResOpt = None(),
         extractorTypeMap = Map.empty,
@@ -1881,7 +1884,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           globalTypeMap = globalTypeMap + (qualifiedTypeName ~> enumx)
 
           if (!globalNameMap.contains(qualifiedName)) {
-            val elementTypedOpt = AST.Typed.Name(ids = qualifiedTypeName, args = ISZ())
+            val elementTypedOpt = AST.Typed.Name(ids = qualifiedTypeName, rTypeOpt = AST.Typed.noRType, args = ISZ())
 
             for (elem <- enumx.elements.entries) {
               val ee = elem._2.asInstanceOf[AST.ResolvedInfo.EnumElement]
@@ -1939,9 +1942,9 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
           val (seqName, indexingType): (String, AST.Typed.Name) =
             if (a.dimensions.isEmpty)
-              ("ISZ", AST.Typed.Name(ids = ISZ("org", "sireum", "Z"), args = ISZ()))
+              ("ISZ", AST.Typed.Name(ids = ISZ("org", "sireum", "Z"), rTypeOpt = AST.Typed.noRType, args = ISZ()))
             else
-              ("IS", AST.Typed.Name(ids = qualifiedName :+ "I", args = ISZ()))
+              ("IS", AST.Typed.Name(ids = qualifiedName :+ "I", rTypeOpt = AST.Typed.noRType, args = ISZ()))
 
           // type ta = IS[IndexingType, baseType]
           val ta = TypeInfo.TypeAlias(
@@ -1955,33 +1958,37 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               tipe = AST.Type.Named(
                 // IS
                 name = AST.Name(ids = ISZ(AST.Id(seqName, attr)), attr = attr),
+                rTypeOpt = None(),
                 // [IndexingType, baseType]
                 typeArgs = ISZ(
                   // IndexingType
                   AST.Type.Named(
                     name = AST.Name(ids = for (id <- indexingType.ids) yield AST.Id(id, attr), attr = attr),
+                    rTypeOpt = None(),
                     typeArgs = ISZ(),
                     attr = AST.TypedAttr(
                       posOpt = posOpt,
-                      typedOpt = Some(AST.Typed.Name(ids = indexingType.ids, args = ISZ())))),
+                      typedOpt = Some(AST.Typed.Name(ids = indexingType.ids, rTypeOpt = AST.Typed.noRType, args = ISZ())))),
                   // baseType
                   AST.Type.Named(
                     name = AST.Name(ids = for (b <- baseTypeFQN) yield AST.Id(b, attr), attr = attr),
+                    rTypeOpt = None(),
                     typeArgs = ISZ(),
                     attr = AST.TypedAttr(
                       posOpt = posOpt,
-                      typedOpt = Some(AST.Typed.Name(ids = baseTypeFQN, args = ISZ()))))),
+                      typedOpt = Some(AST.Typed.Name(ids = baseTypeFQN, rTypeOpt = AST.Typed.noRType, args = ISZ()))))),
                 attr = AST.TypedAttr(
                   posOpt = posOpt,
                   typedOpt = Some(AST.Typed.Name(
                     ids = ISZ("org", "sireum", "IS"),
+                    rTypeOpt = AST.Typed.noRType,
                     args = ISZ(
                       indexingType,
-                      AST.Typed.Name(ids = baseTypeFQN, args = ISZ())
+                      AST.Typed.Name(ids = baseTypeFQN, rTypeOpt = AST.Typed.noRType, args = ISZ())
                     ))))),
               attr = attr))
 
-          slangTypeToAadlType = slangTypeToAadlType + AST.Typed.Name(ids = qualifiedTypeName, args = ISZ()) ~> qualifiedTypeName
+          slangTypeToAadlType = slangTypeToAadlType + AST.Typed.Name(ids = qualifiedTypeName, rTypeOpt = AST.Typed.noRType, args = ISZ()) ~> qualifiedTypeName
           slangTypeToAadlType = slangTypeToAadlType + ta.tpe ~> qualifiedTypeName
           globalTypeMap = globalTypeMap + (qualifiedTypeName ~> ta)
 
@@ -2045,7 +2052,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 claims = ISZ(AST.Exp.Binary(
                   left = AST.Exp.Select(
                     receiverOpt = Some(
-                      AST.Exp.Result(tipeOpt = Some(AST.Type.Named(name = AST.Name(ISZ(AST.Id(rangeSimpleTypeName, attr)), attr), typeArgs = ISZ(), attr = tattr)), attr = tattr)),
+                      AST.Exp.Result(tipeOpt = Some(AST.Type.Named(name = AST.Name(ISZ(AST.Id(rangeSimpleTypeName, attr)), attr), rTypeOpt = None(), typeArgs = ISZ(), attr = tattr)), attr = tattr)),
                     id = AST.Id("toZ", attr),
                     targs = ISZ(), attr = rattr),
                   op = AST.Exp.BinaryOp.Eq,
@@ -2065,6 +2072,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                   purity = Purity.Pure,
                   annotations = ISZ(),
                   id = AST.Id(indexTypeFingerprint, attr),
+                  rTypeParams = ISZ(),
                   typeParams = ISZ(),
                   hasParams = T,
                   params = ISZ(AST.Param(
@@ -2072,13 +2080,15 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                     id = AST.Id(paramId, attr),
                     tipe = AST.Type.Named(
                       name = AST.Name(ISZ(AST.Id("Z", attr)), attr),
+                      rTypeOpt = None(),
                       typeArgs = ISZ(),
                       attr = tattr
                     ))),
                   returnType = AST.Type.Named(
                     name = AST.Name(idsRangeType, attr),
+                    rTypeOpt = None(),
                     typeArgs = ISZ(),
-                    attr = tattr(typedOpt = Some(AST.Typed.Name(ids = fqnRangeTypeName, args = ISZ()))))
+                    attr = tattr(typedOpt = Some(AST.Typed.Name(ids = fqnRangeTypeName, rTypeOpt = AST.Typed.noRType, args = ISZ()))))
                 ),
                 mcontract = contract,
                 bodyOpt = Some(AST.Body(
@@ -2086,7 +2096,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                     // val _r_: I = I.fromZ(i)
                     AST.Stmt.Var(isSpec = F, isVal = T, id = AST.Id("_r_", attr),
                       tipeOpt = Some(AST.Type.Named(
-                        name = AST.Name(idsRangeType, attr), typeArgs = ISZ(),
+                        name = AST.Name(idsRangeType, attr), rTypeOpt = None(), typeArgs = ISZ(),
                         attr = tattr
                       )),
 
@@ -2098,14 +2108,17 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                             id = AST.Id("fromZ", attr),
                             attr = rattr
                           ),
+                          rTypes = ISZ(),
                           targs = ISZ(),
                           args = ISZ(
                             AST.Exp.Ident(AST.Id(paramId, attr), rattr
                             )),
                           attr = rattr
                         ),
+                        annotations = ISZ(),
                         attr = tattr
                       )),
+                      annotations = ISZ(),
                       attr = rattr
                     ),
 
@@ -2114,6 +2127,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                       expOpt = Some(AST.Exp.Ident(AST.Id("_r_", attr),
                         rattr
                       )),
+                      annotations = ISZ(),
                       attr = tattr
                     )
                   ),
@@ -2140,7 +2154,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               outlined = F,
               contractOutlined = F,
               typeChecked = F,
-              ast = AST.Stmt.Object(isApp = F, extNameOpt = None(), id = AST.Id(rangeSimpleTypeName, attr), stmts = ISZ(), attr = attr),
+              ast = AST.Stmt.Object(isApp = F, extNameOpt = None(), id = AST.Id(rangeSimpleTypeName, attr), stmts = ISZ(), annotations = ISZ(), attr = attr),
               typedOpt = Some(AST.Typed.Object(owner = packageName :+ simpleName, id = rangeSimpleTypeName)),
               resOpt = Some(AST.ResolvedInfo.Object(name = fqnRangeTypeName)),
               constructorRes = AST.ResolvedInfo.Method(
@@ -2199,6 +2213,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                   // }
                   fingerMethodAST_unresolved
                 ),
+                annotations = ISZ(),
                 attr = attr
               ),
               typedOpt = Some(AST.Typed.Object(owner = packageName, id = simpleName)),
@@ -2301,11 +2316,13 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 ids = ISZ(AST.Id(simpleSireumName, attr)),
                 attr = attr
               ),
+              rTypeOpt = None(),
               typeArgs = ISZ(),
               attr = AST.TypedAttr(
                 posOpt = posOpt,
                 typedOpt = Some(AST.Typed.Name(
                   ids = slangName,
+                  rTypeOpt = AST.Typed.noRType,
                   args = ISZ()
                 ))
               )
@@ -2324,7 +2341,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             scope = scope,
             ast = ast)
 
-          slangTypeToAadlType = slangTypeToAadlType + AST.Typed.Name(ids = b.classifier, args = ISZ()) ~> qualifiedTypeName
+          slangTypeToAadlType = slangTypeToAadlType + AST.Typed.Name(ids = b.classifier, rTypeOpt = AST.Typed.noRType, args = ISZ()) ~> qualifiedTypeName
           slangTypeToAadlType = slangTypeToAadlType + ta.tpe ~> qualifiedTypeName
 
           globalTypeMap = globalTypeMap + (qualifiedTypeName ~> ta)
@@ -2347,13 +2364,14 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               params = ISZ(),
               parents = ISZ(),
               stmts = ISZ(),
+              annotations = ISZ(),
               attr = attr)
           val typeInfoAdt = TypeInfo.Adt(
             owner = ISZ("art"),
             outlined = F,
             contractOutlined = F,
             typeChecked = F,
-            tpe = AST.Typed.Name(ISZ("art", "Empty"), ISZ()),
+            tpe = AST.Typed.Name(ISZ("art", "Empty"), AST.Typed.noRType, ISZ()),
             constructorTypeOpt = None(),
             constructorResOpt = None(),
             extractorTypeMap = Map.empty,
@@ -2436,6 +2454,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           extNameOpt = None(),
           id = AST.Id(value = GUMBO__Library, attr = AST.Attr(g.attr.posOpt)),
           stmts = ISZ(),
+          annotations = ISZ(),
           attr = AST.Attr(g.attr.posOpt)
         ),
         typedOpt = Some(AST.Typed.Object(owner = packageName, id = GUMBO__Library)),
@@ -2481,6 +2500,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         purity = gclMethod.sig.purity,
         annotations = ISZ(),
         id = gclMethod.sig.id,
+        rTypeParams = ISZ(),
         typeParams = gclMethod.sig.typeParams,
         hasParams = resolvedParams.nonEmpty,
         params = resolvedParams,
@@ -2677,6 +2697,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             id = AST.Id(value = fieldId, attr = AST.Attr(fieldPosOpt)),
             tipeOpt = Some(fieldType),
             initOpt = None(),
+            annotations = ISZ(),
             attr = ResolvedAttr(posOpt = field.feature.identifier.pos, resOpt = fieldResInfoOpt,
               typedOpt = Some(fieldType.attr.typedOpt.get))
           )
@@ -2696,6 +2717,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               purity = AST.Purity.Pure,
               annotations = ISZ(),
               id = AST.Id(methodName, AST.Attr(None())),
+              rTypeParams = ISZ(),
               typeParams = typeParams,
               hasParams = params.nonEmpty,
               params = params,
@@ -2711,9 +2733,9 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 if (ids == ISZ(TYPE_VAR__STATE_VAR))
                   AST.Typed.TypeVar(id = TYPE_VAR__STATE_VAR, kind = AST.Typed.VarKind.Immutable)
                 else
-                  AST.Typed.Name(ids = ids, args = ISZ())
+                  AST.Typed.Name(ids = ids, rTypeOpt = AST.Typed.noRType, args = ISZ())
               }),
-              ret = AST.Typed.Name(ids = returnType.name.ids.map((m: AST.Id) => m.value), args = ISZ())
+              ret = AST.Typed.Name(ids = returnType.name.ids.map((m: AST.Id) => m.value), rTypeOpt = AST.Typed.noRType, args = ISZ())
             )
 
             val rInfoMethod = AST.ResolvedInfo.Method(
@@ -2769,19 +2791,21 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
         val expType = AST.Type.Named(
           name = toName(ISZ("org", "sireum", "lang", "ast", "Exp")),
+          rTypeOpt = None(),
           typeArgs = ISZ(),
           attr = AST.TypedAttr(
             posOpt = None(),
-            typedOpt = Some(AST.Typed.Name(ids = ISZ("org", "sireum", "lang", "ast", "Exp"), args = ISZ()))
+            typedOpt = Some(AST.Typed.Name(ids = ISZ("org", "sireum", "lang", "ast", "Exp"), rTypeOpt = AST.Typed.noRType, args = ISZ()))
           )
         )
 
         val boolType = AST.Type.Named(
           name = toName(ISZ("org", "sireum", "B")),
+          rTypeOpt = None(),
           typeArgs = ISZ(),
           attr = AST.TypedAttr(
             posOpt = None(),
-            typedOpt = Some(AST.Typed.Name(ids = ISZ("org", "sireum", "B"), args = ISZ()))
+            typedOpt = Some(AST.Typed.Name(ids = ISZ("org", "sireum", "B"), rTypeOpt = AST.Typed.noRType, args = ISZ()))
           ))
 
         val portParam = AST.Param(
@@ -2797,6 +2821,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           id = AST.Id("port", AST.Attr(None())),
           tipe = AST.Type.Named(
             name = toName(ISZ(TYPE_VAR__STATE_VAR)),
+            rTypeOpt = None(),
             typeArgs = ISZ(),
             attr = AST.TypedAttr(
               posOpt = None(),
@@ -2809,6 +2834,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           id = AST.Id("value", AST.Attr(None())),
           tipe = AST.Type.Named(
             name = toName(ISZ(TYPE_VAR__STATE_VAR)),
+            rTypeOpt = None(),
             typeArgs = ISZ(),
             attr = AST.TypedAttr(
               posOpt = None(),
@@ -2875,6 +2901,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           extNameOpt = None(),
           id = threadsId,
           stmts = ISZ(), // TODO add fields and methods?
+          annotations = ISZ(),
           attr = AST.Attr(component.identifier.pos)),
         typedOpt = Some(AST.Typed.Object(currentName, threadsSimpleName)),
         resOpt = Some(AST.ResolvedInfo.Object(threadsName)),
@@ -2985,6 +3012,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         val varTypeId = AST.Id(value = paramType.name, attr = AST.Attr(None()))
         val varTypeName = AST.Type.Named(
           name = AST.Name(ids = ISZ(varTypeId), attr = AST.Attr(None())),
+          rTypeOpt = None(),
           typeArgs = ISZ(),
           attr = AST.TypedAttr(posOpt = None(), typedOpt = None())
         )
@@ -2999,6 +3027,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             id = AST.Id(value = paramId, attr = AST.Attr(None())),
             tipeOpt = Some(varTypeName),
             initOpt = None(),
+            annotations = ISZ(),
             attr = ResolvedAttr(posOpt = param.feature.identifier.pos, resOpt = paramResInfoOpt, typedOpt = typedOpt)
           )
         )
@@ -3014,6 +3043,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             posOpt = None(),
             typedOpt = Some(AST.Typed.Name(
               ids = paramResolvedType.name,
+              rTypeOpt = AST.Typed.noRType,
               args = ISZ()
             )))
 
@@ -3023,6 +3053,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             id = AST.Id(value = paramId, attr = AST.Attr(None())),
             tipe = AST.Type.Named(
               name = tipeName,
+              rTypeOpt = None(),
               typeArgs = ISZ(),
               attr = typedAttr
             )
@@ -3041,7 +3072,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             val aadlType = aadlTypes.typeMap.get(sc.component.classifier.get.name).get
             resolveTypeH(aadlType, None()).attr.typedOpt.get
           }),
-          ret = AST.Typed.Name(ids = adtQualifiedName, args = ISZ())
+          ret = AST.Typed.Name(ids = adtQualifiedName, rTypeOpt = AST.Typed.noRType, args = ISZ())
         )
         val constructorTypeOpt: Option[AST.Typed] = Some(
           AST.Typed.Method(
@@ -3081,7 +3112,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       val tpe: AST.Typed.Name = {
         val ids: ISZ[String] = adtQualifiedName
         val args: ISZ[AST.Typed] = ISZ()
-        AST.Typed.Name(ids, args)
+        AST.Typed.Name(ids, AST.Typed.noRType, args)
       }
 
       val adtAst: AST.Stmt.Adt =
@@ -3094,6 +3125,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           params = adtParams,
           parents = ISZ(),
           stmts = ISZ(),
+          annotations = ISZ(),
           attr = AST.Attr(None()))
 
       val typeInfoAdt = TypeInfo.Adt(
@@ -3145,6 +3177,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             extNameOpt = None(),
             id = AST.Id(value = simpleName, attr = AST.Attr(None())),
             stmts = ISZ(),
+            annotations = ISZ(),
             attr = AST.Attr(posOpt = None())
           ),
           typedOpt = Some(

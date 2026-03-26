@@ -106,7 +106,7 @@ object TypeUtil {
   }
 
   @pure def getIndexingTypeFingerprintMethodName(ids: TypeIdPath): String = {
-    val typed = AST.Typed.Name(ids = ids, args = ISZ())
+    val typed = AST.Typed.Name(ids = ids, rTypeOpt = AST.Typed.noRType, args = ISZ())
     val fingerprint = AST.Util.stableTypeSig(typed, 3).render
     val first = ops.StringOps(fingerprint).first
     if ('0' <= first && first <= '9') {

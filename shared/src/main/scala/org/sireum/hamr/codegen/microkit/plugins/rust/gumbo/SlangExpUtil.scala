@@ -189,7 +189,7 @@ object SlangExpUtil {
             case Some(indexingType) =>
               // bounded array index. The Z literals are wrapped in calls to the indexing type's fingerprint method
               // for Slang.  For Rust, use the raw Z literal to index into the array
-              assert (exp.args.size == 1 && exp.args(0).typedOpt.get == SAST.Typed.Name(ISZ("org", "sireum", "Z"), ISZ()))
+              assert (exp.args.size == 1 && exp.args(0).typedOpt.get == SAST.Typed.Name(ISZ("org", "sireum", "Z"), SAST.Typed.noRType, ISZ()))
               return nestedRewriteExp(exp.args(0), None())
             case _ =>
               val args: ISZ[ST] = for(arg <- exp.args) yield nestedRewriteExp(arg, None())

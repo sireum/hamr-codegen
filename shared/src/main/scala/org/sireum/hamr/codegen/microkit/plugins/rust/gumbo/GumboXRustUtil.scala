@@ -19,7 +19,7 @@ object GumboXRustUtil {
 
   def getAadlType(typ: SAST.Typed.Name, aadlTypes: AadlTypes, slangTypesToAadlTypes: Map[SAST.Typed, TypeIdPath]): (AadlType, B) = {
     typ match {
-      case SAST.Typed.Name(SAST.Typed.optionName, ISZ(i: SAST.Typed.Name)) =>
+      case SAST.Typed.Name(SAST.Typed.optionName, _, ISZ(i: SAST.Typed.Name)) =>
         val idPath = slangTypesToAadlTypes.get(i).get
         return (aadlTypes.getTypeByPath(idPath), T)
         //i.ids
@@ -45,7 +45,7 @@ object GumboXRustUtil {
 
     override def pre_langastExpInvoke(o: Exp.Invoke): ir.MTransformer.PreResult[Exp] = {
       o match {
-        case Exp.Invoke(Some(Exp.Ident(SAST.Id("api"))), ident, targs, args) =>
+        case Exp.Invoke(Some(Exp.Ident(SAST.Id("api"))), ident, _, targs, args) =>
           val typed = o.ident.attr.typedOpt.get.asInstanceOf[SAST.Typed.Name]
           val (typ, _) = getAadlType(typed, aadlTypes, slangTypesToAadlTypes)
           val ports = context.getPorts().filter(p => p.identifier == ident.id.value)

@@ -927,7 +927,7 @@ object GumboXGenUtil {
                 aadlTypes.typeMap.get(aadlTypeName).get
               case _ =>
                 typed match {
-                  case e @ AST.Typed.Name(ISZ("art", "Empty"), _) =>
+                  case e @ AST.Typed.Name(ISZ("art", "Empty"), _, _) =>
                     TypeUtil.EmptyType
                   case x =>
                     halt(s"Unexpected type: $x")
@@ -1033,7 +1033,7 @@ object GumboXGenUtil {
   def getAadlType(typ: AST.Typed.Name, aadlTypes: AadlTypes): (AadlType, B) = {
     var isOptional: B = F
     val ids: ISZ[String] = typ match {
-      case AST.Typed.Name(AST.Typed.optionName, ISZ(i: AST.Typed.Name)) =>
+      case AST.Typed.Name(AST.Typed.optionName, _, ISZ(i: AST.Typed.Name)) =>
         isOptional = T
         i.ids
       case _ => typ.ids

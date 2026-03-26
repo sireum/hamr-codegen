@@ -223,7 +223,7 @@ object GumboGen {
           val splitSlangTypeName = aadlType.nameProvider.qualifiedReferencedTypeNameI
 
           val name = AST.Name(ids = splitSlangTypeName.map((a: String) => AST.Id(value = a, attr = emptyAttr)), attr = emptyAttr)
-          val slangTypedName = AST.Type.Named(name = name, typeArgs = ISZ(), attr = o.attr)
+          val slangTypedName = AST.Type.Named(name = name, rTypeOpt = None(), typeArgs = ISZ(), attr = o.attr)
 
           return MSome(o(tipeOpt = Some(slangTypedName)))
         case _ => return MNone()
@@ -250,6 +250,7 @@ object GumboGen {
                   return MSome(AST.Exp.Invoke(
                     receiverOpt = arrayReceiverOpt,
                     ident = AST.Exp.Ident(AST.Id(arrayTypeName, emptyAttr), emptyRAttr),
+                    rTypes = ISZ(),
                     targs = ISZ(),
                     args = ISZ(o),
                     attr = emptyRAttr))
@@ -961,7 +962,7 @@ object GumboGen {
     })
 
     val rexp: AST.Exp = gclMethod.asInstanceOf[GclBodyMethod].method.bodyOpt match {
-      case Some(AST.Body(ISZ(AST.Stmt.Return(Some(exp))))) =>
+      case Some(AST.Body(ISZ(AST.Stmt.Return(Some(exp), _)))) =>
         GumboGen.rewriteToLogika(exp, F, ISZ(), aadlTypes, basePackageName)
       case _ => halt("Unexpected: should be a return statement containing a single expression")
     }
