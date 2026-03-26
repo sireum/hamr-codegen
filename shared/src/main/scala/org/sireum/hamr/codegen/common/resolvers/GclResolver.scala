@@ -275,7 +275,8 @@ object GclResolver {
                       isInObject = F, mode = AST.MethodMode.Method, typeParams = ISZ(),
                       owner = ISZ("org", "sireum", "Option"), id = "nonEmpty",
                       paramNames = ISZ(), reads = IS(), writes = ISZ(),
-                      tpeOpt = Some(AST.Typed.Fun(purity = AST.Purity.StrictPure, isByName = T, args = ISZ(), ret = AST.Typed.bOpt.get)))
+                      tpeOpt = Some(AST.Typed.Fun(purity = AST.Purity.StrictPure, isByName = T, args = ISZ(), ret = AST.Typed.bOpt.get)),
+                      defPosOpt = None())
 
                     val nonEmptyTyped = AST.Typed.Method(isInObject = nonEmptyRI.isInObject, mode = nonEmptyRI.mode, typeParams = nonEmptyRI.typeParams,
                       owner = nonEmptyRI.owner, name = nonEmptyRI.id, paramNames = nonEmptyRI.paramNames, tpe = nonEmptyRI.tpeOpt.get)
@@ -326,7 +327,8 @@ object GclResolver {
                       isInObject = F, mode = AST.MethodMode.Method, typeParams = ISZ(),
                       owner = ISZ("org", "sireum", "Option"), id = "get",
                       paramNames = ISZ(), reads = IS(), writes = ISZ(),
-                      tpeOpt = Some(AST.Typed.Fun(purity = AST.Purity.StrictPure, isByName = T, args = ISZ(), ret = onlyIdent.attr.typedOpt.get)))
+                      tpeOpt = Some(AST.Typed.Fun(purity = AST.Purity.StrictPure, isByName = T, args = ISZ(), ret = onlyIdent.attr.typedOpt.get)),
+                      defPosOpt = None())
 
                     val getTyped = AST.Typed.Method(isInObject = getRI.isInObject, mode = getRI.mode, typeParams = getRI.typeParams,
                       owner = getRI.owner, name = getRI.id, paramNames = getRI.paramNames, tpe = getRI.tpeOpt.get)
@@ -345,7 +347,8 @@ object GclResolver {
                       isInObject = F, mode = AST.MethodMode.Method, typeParams = ISZ(),
                       owner = ISZ("org", "sireum", "Option"), id = "nonEmpty",
                       paramNames = ISZ(), reads = IS(), writes = ISZ(),
-                      tpeOpt = Some(AST.Typed.Fun(purity = AST.Purity.StrictPure, isByName = T, args = ISZ(), ret = AST.Typed.bOpt.get)))
+                      tpeOpt = Some(AST.Typed.Fun(purity = AST.Purity.StrictPure, isByName = T, args = ISZ(), ret = AST.Typed.bOpt.get)),
+                      defPosOpt = None())
 
                     val nonEmptyTyped = AST.Typed.Method(isInObject = nonEmptyRI.isInObject, mode = nonEmptyRI.mode, typeParams = nonEmptyRI.typeParams,
                       owner = nonEmptyRI.owner, name = nonEmptyRI.id, paramNames = nonEmptyRI.paramNames, tpe = nonEmptyRI.tpeOpt.get)
@@ -408,7 +411,8 @@ object GclResolver {
                       isInObject = F, mode = AST.MethodMode.Method, typeParams = ISZ(),
                       owner = ISZ("org", "sireum", "Option"), id = "isEmpty",
                       paramNames = ISZ(), reads = IS(), writes = ISZ(),
-                      tpeOpt = Some(AST.Typed.Fun(purity = AST.Purity.StrictPure, isByName = T, args = ISZ(), ret = AST.Typed.bOpt.get)))
+                      tpeOpt = Some(AST.Typed.Fun(purity = AST.Purity.StrictPure, isByName = T, args = ISZ(), ret = AST.Typed.bOpt.get)),
+                      defPosOpt = None())
 
                     val isEmptyTyped = AST.Typed.Method(isInObject = isEmptyRI.isInObject, mode = isEmptyRI.mode, typeParams = isEmptyRI.typeParams,
                       owner = isEmptyRI.owner, name = isEmptyRI.id, paramNames = isEmptyRI.paramNames, tpe = isEmptyRI.tpeOpt.get)
@@ -466,7 +470,8 @@ object GclResolver {
                       isInObject = F, mode = AST.MethodMode.Method, typeParams = ISZ(),
                       owner = ISZ("org", "sireum", "Option"), id = "nonEmpty",
                       paramNames = ISZ(), reads = IS(), writes = ISZ(),
-                      tpeOpt = Some(AST.Typed.Fun(purity = AST.Purity.StrictPure, isByName = T, args = ISZ(), ret = AST.Typed.bOpt.get)))
+                      tpeOpt = Some(AST.Typed.Fun(purity = AST.Purity.StrictPure, isByName = T, args = ISZ(), ret = AST.Typed.bOpt.get)),
+                      defPosOpt = None())
 
                     val nonEmptyTyped = AST.Typed.Method(isInObject = nonEmptyRI.isInObject, mode = nonEmptyRI.mode, typeParams = nonEmptyRI.typeParams,
                       owner = nonEmptyRI.owner, name = nonEmptyRI.id, paramNames = nonEmptyRI.paramNames, tpe = nonEmptyRI.tpeOpt.get)
@@ -541,7 +546,8 @@ object GclResolver {
                           isInObject = F, mode = AST.MethodMode.Method, typeParams = ISZ(),
                           owner = ISZ("org", "sireum", "Option"), id = "get",
                           paramNames = ISZ(), reads = IS(), writes = ISZ(),
-                          tpeOpt = Some(AST.Typed.Fun(purity = AST.Purity.StrictPure, isByName = T, args = ISZ(), ret = i_receiverOpt.attr.typedOpt.get)))
+                          tpeOpt = Some(AST.Typed.Fun(purity = AST.Purity.StrictPure, isByName = T, args = ISZ(), ret = i_receiverOpt.attr.typedOpt.get)),
+                          defPosOpt = None())
 
                         val getTyped = AST.Typed.Method(isInObject = getRI.isInObject, mode = getRI.mode, typeParams = getRI.typeParams,
                           owner = getRI.owner, name = getRI.id, paramNames = getRI.paramNames, tpe = getRI.tpeOpt.get)
@@ -688,7 +694,8 @@ object GclResolver {
                     isInObject = F, mode = AST.MethodMode.Method, typeParams = ISZ(),
                     owner = ISZ("org", "sireum", "Option"), id = "get",
                     paramNames = ISZ(), reads = IS(), writes = ISZ(),
-                    tpeOpt = Some(AST.Typed.Fun(purity = AST.Purity.StrictPure, isByName = T, args = ISZ(), ret = o.attr.typedOpt.get)))
+                    tpeOpt = Some(AST.Typed.Fun(purity = AST.Purity.StrictPure, isByName = T, args = ISZ(), ret = o.attr.typedOpt.get)),
+                    defPosOpt = None())
 
                   val getTyped = AST.Typed.Method(isInObject = getRI.isInObject, mode = getRI.mode, typeParams = getRI.typeParams,
                     owner = getRI.owner, name = getRI.id, paramNames = getRI.paramNames, tpe = getRI.tpeOpt.get)
@@ -1873,7 +1880,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             val ri: ResolvedInfo.EnumElement = ResolvedInfo.EnumElement(
               owner = qualifiedName,
               name = value,
-              ordinal = ordinal)
+              ordinal = ordinal,
+              defPosOpt = None())
             ordinal = ordinal + 1
             elements = elements + (value ~> ri)
           }
@@ -1892,7 +1900,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 owner = ee.owner,
                 id = ee.name,
                 typedOpt = Some(elementTypedOpt),
-                resOpt = Some(AST.ResolvedInfo.EnumElement(owner = qualifiedName, name = ee.name, ordinal = ee.ordinal)),
+                resOpt = Some(AST.ResolvedInfo.EnumElement(owner = qualifiedName, name = ee.name, ordinal = ee.ordinal, defPosOpt = None())),
                 posOpt = posOpt),
                 posOpt, reporter)
             }
@@ -1902,7 +1910,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 name = qualifiedName,
                 elements = enumx.elements,
                 typedOpt = Some(AST.Typed.Enum(name = qualifiedName)),
-                resOpt = Some(AST.ResolvedInfo.Enum(name = qualifiedName)),
+                resOpt = Some(AST.ResolvedInfo.Enum(name = qualifiedName, defPosOpt = None())),
                 elementTypedOpt = Some(elementTypedOpt),
                 posOpt = posOpt),
               posOpt, reporter)
@@ -2156,7 +2164,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               typeChecked = F,
               ast = AST.Stmt.Object(isApp = F, extNameOpt = None(), id = AST.Id(rangeSimpleTypeName, attr), stmts = ISZ(), annotations = ISZ(), attr = attr),
               typedOpt = Some(AST.Typed.Object(owner = packageName :+ simpleName, id = rangeSimpleTypeName)),
-              resOpt = Some(AST.ResolvedInfo.Object(name = fqnRangeTypeName)),
+              resOpt = Some(AST.ResolvedInfo.Object(name = fqnRangeTypeName, defPosOpt = None())),
               constructorRes = AST.ResolvedInfo.Method(
                 isInObject = F,
                 mode = AST.MethodMode.ObjectConstructor,
@@ -2166,7 +2174,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 paramNames = ISZ(),
                 tpeOpt = None(), // this is null in the debugger
                 reads = ISZ(),
-                writes = ISZ()))
+                writes = ISZ(),
+                defPosOpt = None()))
 
             declareName("na", fqnRangeTypeName, indexingTypeObjectInfo, posOpt, reporter)
 
@@ -2183,7 +2192,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                     owner = qualifiedName,
                     id = fingerMethodAST_unresolved.sig.id.value,
                     paramNames = fingerMethodAST_unresolved.sig.params.map(p => p.id.value),
-                    tpeOpt = None(), reads = ISZ(), writes = ISZ())))
+                    tpeOpt = None(), reads = ISZ(), writes = ISZ(), defPosOpt = None())))
               ))
 
             declareName(indexTypeFingerprint, qualifiedName :+ indexTypeFingerprint, fingerMethodObj_unresolved, posOpt, reporter)
@@ -2217,7 +2226,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 attr = attr
               ),
               typedOpt = Some(AST.Typed.Object(owner = packageName, id = simpleName)),
-              resOpt = Some(AST.ResolvedInfo.Object(name = qualifiedName)),
+              resOpt = Some(AST.ResolvedInfo.Object(name = qualifiedName, defPosOpt = None())),
               constructorRes = AST.ResolvedInfo.Method(
                 isInObject = F,
                 mode = AST.MethodMode.ObjectConstructor,
@@ -2227,7 +2236,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 paramNames = ISZ(),
                 tpeOpt = None(), // this is null in the debugger
                 reads = ISZ(),
-                writes = ISZ()))
+                writes = ISZ(),
+                defPosOpt = None()))
 
             declareName(simpleName, qualifiedName, obj, posOpt, reporter)
 
@@ -2405,7 +2415,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         declareName(packageName(packageName.lastIndex), packageName, Info.Package(
           name = packageName,
           typedOpt = Some(AST.Typed.Package(name = packageName)),
-          resOpt = Some(ResolvedInfo.Package(name = packageName))
+          resOpt = Some(ResolvedInfo.Package(name = packageName, defPosOpt = None()))
         ), posOpt, reporter)
       }
 
@@ -2458,7 +2468,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           attr = AST.Attr(g.attr.posOpt)
         ),
         typedOpt = Some(AST.Typed.Object(owner = packageName, id = GUMBO__Library)),
-        resOpt = Some(AST.ResolvedInfo.Object(name = adtQualifiedName)),
+        resOpt = Some(AST.ResolvedInfo.Object(name = adtQualifiedName, defPosOpt = None())),
         constructorRes = AST.ResolvedInfo.Method(
           isInObject = T,
           mode = AST.MethodMode.ObjectConstructor,
@@ -2468,7 +2478,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           paramNames = ISZ(),
           tpeOpt = None(),
           reads = ISZ(),
-          writes = ISZ()
+          writes = ISZ(),
+          defPosOpt = None()
         )
       )
 
@@ -2521,7 +2532,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         paramNames = resolvedParams.map((p: AST.Param) => p.id.value),
         tpeOpt = Some(resolvedTypedFun),
         reads = ISZ(),
-        writes = ISZ())
+        writes = ISZ(),
+        defPosOpt = posOpt)
 
       val resolvedTypedMethod = AST.Typed.Method(
         isInObject = T,
@@ -2549,7 +2561,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               scope = ResolvedInfo.LocalVar.Scope.Current,
               isSpec = F,
               isVal = T,
-              id = p.id.value)
+              id = p.id.value,
+              defPosOpt = posOpt)
             )
           )
           (p.id.value, lv)
@@ -2678,7 +2691,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         val qualifiedFieldName = threadsName :+ fieldId
 
         val fieldResInfoOpt = Some[AST.ResolvedInfo](
-          AST.ResolvedInfo.Var(isInObject = T, isSpec = F, isVal = F, owner = threadsName, id = fieldId))
+          AST.ResolvedInfo.Var(isInObject = T, isSpec = F, isVal = F, owner = threadsName, id = fieldId, defPosOpt = None()))
 
         val fieldPosOpt = field.feature.identifier.pos
 
@@ -2747,7 +2760,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               paramNames = params.map((m: AST.Param) => m.id.value),
               tpeOpt = Some(typedFun),
               reads = ISZ(),
-              writes = ISZ()
+              writes = ISZ(),
+              defPosOpt = None()
             )
 
             val typedMethod = AST.Typed.Method(
@@ -2904,8 +2918,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           annotations = ISZ(),
           attr = AST.Attr(component.identifier.pos)),
         typedOpt = Some(AST.Typed.Object(currentName, threadsSimpleName)),
-        resOpt = Some(AST.ResolvedInfo.Object(threadsName)),
-        constructorRes = AST.ResolvedInfo.Method(F, AST.MethodMode.ObjectConstructor, ISZ(), threadsName, threadsSimpleName, ISZ(), None(), ISZ(), ISZ())
+        resOpt = Some(AST.ResolvedInfo.Object(threadsName, None())),
+        constructorRes = AST.ResolvedInfo.Method(F, AST.MethodMode.ObjectConstructor, ISZ(), threadsName, threadsSimpleName, ISZ(), None(), ISZ(), ISZ(), None())
       )
 
       declareName(
@@ -3005,7 +3019,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         }
 
         val paramResInfoOpt = Some[AST.ResolvedInfo](
-          AST.ResolvedInfo.Var(isInObject = F, isSpec = F, isVal = T, owner = adtQualifiedName, id = paramId))
+          AST.ResolvedInfo.Var(isInObject = F, isSpec = F, isVal = T, owner = adtQualifiedName, id = paramId, defPosOpt = None()))
 
         val typedOpt: Option[AST.Typed] = resolveTypeH(paramType, None()).attr.typedOpt
 
@@ -3094,7 +3108,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             paramNames = a.subComponents.map((s: AadlComponent) => s.identifier),
             tpeOpt = Some(tpeFun),
             reads = ISZ(),
-            writes = ISZ())
+            writes = ISZ(),
+            defPosOpt = None())
         )
         (constructorTypeOpt, constructorResOpt)
       }
@@ -3162,7 +3177,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         paramNames = ISZ(),
         tpeOpt = None(),
         reads = ISZ(),
-        writes = ISZ()
+        writes = ISZ(),
+        defPosOpt = None()
       )
       declareName(adtQualifiedName(adtQualifiedName.lastIndex), adtQualifiedName,
         Info.Object(
@@ -3184,7 +3200,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             AST.Typed.Object(owner = packageName, id = simpleName)
           ),
           resOpt = Some(
-            AST.ResolvedInfo.Object(name = adtQualifiedName)
+            AST.ResolvedInfo.Object(name = adtQualifiedName, defPosOpt = None())
           ),
           constructorRes = constructorRes), None(), reporter)
 
