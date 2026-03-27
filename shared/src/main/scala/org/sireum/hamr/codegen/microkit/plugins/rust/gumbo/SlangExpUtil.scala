@@ -136,7 +136,8 @@ object SlangExpUtil {
           val sepS: String = exp.typedOpt match {
             case Some(s: SAST.Typed.Name) =>
               exp.resOpt match {
-                case Some(e: SAST.ResolvedInfo.EnumElement) => "::"
+                case Some(e: SAST.ResolvedInfo.EnumElement) =>
+                  return st"${(e.owner, "::")}::${e.name}"
                 case _ => "."
               }
             case Some(s: SAST.Typed.Enum) => "::"
