@@ -418,6 +418,10 @@ object MicrokitTypeUtil {
       }
     }
 
+    if (reporter.hasError) {
+      return (ISZ(), Map.empty)
+    }
+
     var subs: Map[String, AadlType] = Map.empty
 
     if (strings.nonEmpty) {
