@@ -84,7 +84,7 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
 @datatype class SchedulingDomain (val id: Z,
                                   val componentName: String,
                                   val length: Z) {
-  @strictpure def prettyST: ST = st"""<domain name="domain_$id" length="$length" />"""
+  @strictpure def prettyST: ST = st"""<domain name="domain_$id" length="$length" /> <!-- $componentName -->"""
 }
 
 @sig trait MicrokitDomain {

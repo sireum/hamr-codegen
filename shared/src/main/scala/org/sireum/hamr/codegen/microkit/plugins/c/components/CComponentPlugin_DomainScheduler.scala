@@ -542,7 +542,7 @@ import org.sireum.message.Reporter
 
     if (framePeriod - usedBudget > 0) {
       // switch to domain 0 to use up the rest of the budget
-      xmlScheds = xmlScheds :+ SchedulingDomain(id = 0, componentName = "NA", length = framePeriod - usedBudget)
+      xmlScheds = xmlScheds :+ SchedulingDomain(id = 0, componentName = "padding", length = framePeriod - usedBudget)
     }
 
     for (e <- connectionStore;
