@@ -232,17 +232,29 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
 @sig trait MemoryRegion {
   def name: String
   def sizeInKiBytes: Z
+  def pageSizeInKiBytes: Option[Z]
   def physicalAddressInKiBytes: Option[Z]
 
   @pure def prettyST: ST = {
-    val physAddr: Option[ST] =
-      if (physicalAddressInKiBytes.nonEmpty) Some(
-        st"""
-            |               phys_addr="${KiBytesToHex(physicalAddressInKiBytes.get)}"""")
+    val optPageSize: Option[ST] =
+      if (pageSizeInKiBytes.nonEmpty) Some(st"""               page_size="${KiBytesToHex(pageSizeInKiBytes.get)}"""")
       else None()
+
+    val optPhysAddr: Option[ST] =
+      if (physicalAddressInKiBytes.nonEmpty) Some(st"""               phys_addr="${KiBytesToHex(physicalAddressInKiBytes.get)}"""")
+      else None()
+
+    val optEntries: Option[ST] =
+      if (optPhysAddr.nonEmpty || optPageSize.nonEmpty)
+        Some(
+          st"""
+              |$optPageSize
+              |$optPhysAddr""")
+      else None()
+
     return (
       st"""<memory_region name="$name"
-          |               size="${KiBytesToHex(sizeInKiBytes)}"$physAddr />""")
+          |               size="${KiBytesToHex(sizeInKiBytes)}"$optEntries />""")
   }
 
   @pure def toDot: ST = {
@@ -255,6 +267,7 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
                                        val varAddr: String,
                                        val perms: ISZ[Perm.Type],
                                        val sizeInKiBytes: Z,
+                                       val pageSizeInKiBytes: Option[Z],
                                        val physicalAddressInKiBytes: Option[Z]) extends MemoryRegion {
 
   def name: String = {
@@ -269,8 +282,9 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
 }
 
 @datatype class VirtualMachineMemoryRegion(val typ: VirtualMemoryRegionType.Type,
-                                            val threadPath: ISZ[String],
+                                           val threadPath: ISZ[String],
                                            val sizeInKiBytes: Z,
+                                           val pageSizeInKiBytes: Option[Z],
                                            val physicalAddressInKiBytes: Option[Z]) extends MemoryRegion {
   def name: String = {
     val suffix: String = typ match {

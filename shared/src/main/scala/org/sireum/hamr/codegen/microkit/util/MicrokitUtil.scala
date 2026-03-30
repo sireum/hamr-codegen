@@ -16,12 +16,9 @@ object MicrokitUtil {
 
   val make_UTIL_OBJS: String = "UTIL_OBJS"
 
-  val defaultPageSizeInKiBytes: Z = 4
+  val defaultMemoryRegionSizeInKiBytes: Z = 4
 
   val MemAlignmentInKiBytes: Z = 4
-
-  // 0x10_000_000
-  val defaultVmRamSizeInKiBytes: Z = bytesToKiBytes(268435456)
 
   val KEY_MICROKIT_VERSIONS: String = "KEY_MICROKIT_VERSISION"
 

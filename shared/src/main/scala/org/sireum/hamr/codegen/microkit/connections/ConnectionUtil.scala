@@ -31,13 +31,13 @@ object ConnectionUtil {
 
     val cTypeNameProvider = cTypeProvider.getTypeNameProvider(aadlType)
 
-    val pageSize: Z =
+    val memRegionsSize: Z =
       aadlType.bitSize match {
         case Some(bits) =>
           val p = MicrokitUtil.bytesToKiBytes(MicrokitUtil.bitsToBytes(bits))
-          if (p < MicrokitUtil.defaultPageSizeInKiBytes) MicrokitUtil.defaultPageSizeInKiBytes
+          if (p < MicrokitUtil.defaultMemoryRegionSizeInKiBytes) MicrokitUtil.defaultMemoryRegionSizeInKiBytes
           else p
-        case _ => MicrokitUtil.defaultPageSizeInKiBytes
+        case _ => MicrokitUtil.defaultMemoryRegionSizeInKiBytes
       }
 
     val cTypeName = cTypeNameProvider.mangledName
@@ -97,7 +97,8 @@ object ConnectionUtil {
           queueSize = dstQueueSize,
           varAddr = sharedVarName,
           perms = ISZ(Perm.READ),
-          sizeInKiBytes = pageSize,
+          sizeInKiBytes = memRegionsSize,
+          pageSizeInKiBytes = None(),
           physicalAddressInKiBytes = None())
       ),
 
@@ -139,13 +140,13 @@ object ConnectionUtil {
 
       val cTypeName = cTypeProvider.getTypeNameProvider(receiverContribution.aadlType).mangledName
 
-      val pageSize: Z =
+      val memRegionSize: Z =
         receiverContribution.aadlType.bitSize match {
           case Some(bits) =>
             val p = MicrokitUtil.bytesToKiBytes(MicrokitUtil.bitsToBytes(bits))
-            if (p < MicrokitUtil.defaultPageSizeInKiBytes) MicrokitUtil.defaultPageSizeInKiBytes
+            if (p < MicrokitUtil.defaultMemoryRegionSizeInKiBytes) MicrokitUtil.defaultMemoryRegionSizeInKiBytes
             else p
-          case _ => MicrokitUtil.defaultPageSizeInKiBytes
+          case _ => MicrokitUtil.defaultMemoryRegionSizeInKiBytes
         }
 
       val sharedMemVarName = QueueTemplate.getClientEnqueueSharedVarName(srcPort.identifier, receiverContribution.queueSize)
@@ -168,7 +169,8 @@ object ConnectionUtil {
           queueSize = receiverContribution.queueSize,
           varAddr = varName,
           perms = ISZ(Perm.READ, Perm.WRITE),
-          sizeInKiBytes = pageSize,
+          sizeInKiBytes = memRegionSize,
+          pageSizeInKiBytes = None(),
           physicalAddressInKiBytes = None()
         )
     }
@@ -176,13 +178,13 @@ object ConnectionUtil {
     if (receiverContributions.isEmpty) {
       val cTypeName = cTypeProvider.getTypeNameProvider(senderPortType).mangledName
 
-      val pageSize: Z =
+      val memRegionSize: Z =
         senderPortType.bitSize match {
           case Some(bits) =>
             val p = MicrokitUtil.bytesToKiBytes(MicrokitUtil.bitsToBytes(bits))
-            if (p < MicrokitUtil.defaultPageSizeInKiBytes) MicrokitUtil.defaultPageSizeInKiBytes
+            if (p < MicrokitUtil.defaultMemoryRegionSizeInKiBytes) MicrokitUtil.defaultMemoryRegionSizeInKiBytes
             else p
-          case _ => MicrokitUtil.defaultPageSizeInKiBytes
+          case _ => MicrokitUtil.defaultMemoryRegionSizeInKiBytes
         }
 
       val queueSize = 1
@@ -207,7 +209,8 @@ object ConnectionUtil {
           queueSize = queueSize,
           varAddr = varName,
           perms = ISZ(Perm.READ, Perm.WRITE),
-          sizeInKiBytes = pageSize,
+          sizeInKiBytes = memRegionSize,
+          pageSizeInKiBytes = None(),
           physicalAddressInKiBytes = None()
         )
     }

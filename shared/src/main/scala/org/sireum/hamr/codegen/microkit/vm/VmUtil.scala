@@ -3,8 +3,17 @@ package org.sireum.hamr.codegen.microkit.vm
 
 import org.sireum._
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil
+import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.bytesToKiBytes
 
 object VmUtil {
+
+  // 0x10_000_000
+  val defaultVmRamSizeInKiBytes: Z = bytesToKiBytes(26_8435_456)
+
+  // 0x200_0000
+  val defaultVmPageSizeInKiBytes: Z = bytesToKiBytes(2_097_152)
+
+  val defaultVmPhysicalAddress: Z = bytesToKiBytes(1_073_741_824)
 
   @pure def vmm_c(guestRamVaddr: String,
                   initMethodName: String,

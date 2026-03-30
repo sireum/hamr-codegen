@@ -175,8 +175,9 @@ import org.sireum.message.Reporter
         val guestRam = VirtualMachineMemoryRegion(
           typ = VirtualMemoryRegionType.RAM,
           threadPath = t.path,
-          sizeInKiBytes = MicrokitUtil.defaultVmRamSizeInKiBytes,
-          physicalAddressInKiBytes = None()
+          sizeInKiBytes = VmUtil.defaultVmRamSizeInKiBytes,
+          pageSizeInKiBytes = Some(VmUtil.defaultVmPageSizeInKiBytes),
+          physicalAddressInKiBytes = Some(VmUtil.defaultVmPhysicalAddress)
         )
 
         val hostVaddr = VMRamVaddr("uintptr_t", guestRam.vmmVaddrName)
@@ -199,6 +200,7 @@ import org.sireum.message.Reporter
           typ = VirtualMemoryRegionType.GIC,
           threadPath = t.path,
           sizeInKiBytes = 4, // 0x1000
+          pageSizeInKiBytes = None(),
           physicalAddressInKiBytes = Some(131328) // 0x8040000
         )
         xmlMemoryRegions = xmlMemoryRegions :+ gicRegion
@@ -207,6 +209,7 @@ import org.sireum.message.Reporter
           typ = VirtualMemoryRegionType.SERIAL,
           threadPath = t.path,
           sizeInKiBytes = 4, // 0x1000
+          pageSizeInKiBytes = None(),
           physicalAddressInKiBytes = Some(147456) // 0x9_000_000
         )
         xmlMemoryRegions = xmlMemoryRegions :+ serialRegion
