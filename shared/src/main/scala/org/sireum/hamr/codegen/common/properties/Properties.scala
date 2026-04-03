@@ -53,6 +53,15 @@ object HamrProperties {
   val HAMR__IMPLEMENTATION_LANGUAGE: String = "HAMR::Implementation_Language"
 }
 
+object Hamr_Ros_Properties {
+  @enum object NodeKind {
+    "microRos"
+    "ros2"
+  }
+
+  val HAMR_ROS__RosNodeKind: String = "HAMR_ROS::RosNodeKind"
+}
+
 object Hamr_Microkit_Properties {
   @enum object SchedulingType {
     "Domain_Scheduling"

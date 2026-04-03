@@ -454,51 +454,6 @@ object MicrokitTypeUtil {
       subs = subs + "Base_Types::String" ~> arrayString
     }
 
-    if (ret.isEmpty) {
-      return (ISZ(), subs)
-    } else {
-
-      def getRep(t: AadlType): AadlType = {
-        for(e <- ret.elements if t.name == e.name) {
-          return e
-        }
-        halt(s"Infeasible: ${t.name}")
-      }
-
-      var poset = Poset.empty[AadlType]
-      for (t <- ret.elements) {
-        t match {
-          case t: EnumType => poset = poset.addNode(t)
-          case t: BaseType => poset = poset.addNode(t)
-          case t: BitType => poset = poset.addNode(t)
-          case t: ArrayType =>
-            val parent = getRep(t.baseType)
-            poset = poset.addNode(t)
-            poset = poset.addParents(t, ISZ(parent))
-          case t: RecordType =>
-            val parents: ISZ[AadlType] = for (f <- t.fields.values) yield getRep(f)
-            poset = poset.addNode(t)
-            poset = poset.addParents(t, parents)
-        }
-      }
-      var inDegrees: Map[AadlType, Z] = Map.empty[AadlType, Z] ++ (for (e <- poset.nodes.keys) yield (e ~> poset.parentsOf(e).size))
-      val queue = CircularQueue.create(max = ret.elements.size, default = ret.elements(0), scrub = F, policy = Policy.NoDrop)
-      for (root <- poset.rootNodes) {
-        queue.enqueue(root)
-      }
-      var ordered: ISZ[String] = ISZ()
-      while (queue.nonEmpty) {
-        val node = queue.dequeue()
-        ordered = ordered :+ node.name
-        for (child <- poset.childrenOf(node).elements) {
-          val update = inDegrees.get(child).get - 1
-          inDegrees = inDegrees + child ~> (update)
-          if (update == 0) {
-            queue.enqueue(child)
-          }
-        }
-      }
-      return (ordered, subs)
-    }
+    return (TypeUtil.orderTypeDependencies(ret.elements), subs)
   }
 }

@@ -41,7 +41,7 @@ object Ros2Codegen {
 
     mapConnections(symbolTable.rootSystem, symbolTable, options.invertTopicBinding, reporter)
 
-    mapDatatypes(aadlTypes, reporter)
+    mapDatatypes(aadlTypes, symbolTable, reporter)
 
     var files: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
 
@@ -168,9 +168,10 @@ object Ros2Codegen {
     return T
   }
 
-  def mapDatatypes(aadlTypes: AadlTypes, reporter: Reporter): Unit = {
-    for (t <- aadlTypes.typeMap.entries) {
-      resolveDatatype(t._2, reporter)
+  def mapDatatypes(aadlTypes: AadlTypes, symbolTable: SymbolTable, reporter: Reporter): Unit = {
+    val touchedTypes = RosUtil.getTouchedTypes(aadlTypes, symbolTable, reporter)
+    for (t <- touchedTypes) {
+      resolveDatatype(t, reporter)
     }
   }
 

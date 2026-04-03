@@ -305,7 +305,10 @@ object TypeUtil {
   }
 
   @pure def orderTypeDependencies(aadlTypes: ISZ[AadlType]): ISZ[String] = {
-
+    if (aadlTypes.isEmpty){
+      return ISZ()
+    }
+    
     def getRep(t: AadlType): AadlType = {
       for(e <- aadlTypes if t.name == e.name) {
         return e
