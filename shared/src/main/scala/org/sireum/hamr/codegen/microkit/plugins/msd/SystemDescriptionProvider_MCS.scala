@@ -8,10 +8,9 @@ import org.sireum.hamr.codegen.common.properties.Hamr_Microkit_Properties
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
-import org.sireum.hamr.codegen.microkit.plugins.StoreUtil
 import org.sireum.hamr.codegen.microkit.plugins.c.components.CComponentPlugin
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.{KiBytesToHex, safeToEditMakefile}
-import org.sireum.hamr.codegen.microkit.util.{MemoryMap, ProtectionDomain}
+import org.sireum.hamr.codegen.microkit.util.{MemoryMap, ProtectionDomain, SystemDescription}
 import org.sireum.hamr.ir.Aadl
 import org.sireum.message.Reporter
 
@@ -34,223 +33,227 @@ object SystemDescriptionProvider_MCS {
     var localStore = store + name ~> BoolValue(T)
     var resources = ISZ[Resource]()
 
-    val protectionDomains = StoreUtil.getProtectionDomains(localStore)
-    val schedulingDomains = StoreUtil.getSchedulingDomains(localStore)
-    val memoryRegions = StoreUtil.getMemoryRegions(localStore)
+    val msds: Map[String, SystemDescription] = SystemDescriptionProviderPlugin.getMSDs(localStore)
+    for (msd <- msds.values) {
+      val protectionDomains = msd.protectionDomains
+      val schedulingDomains = msd.schedulingDomains
+      val memoryRegions = msd.memoryRegions
 
-    // TODO: need to refacotr channels for MCS
-    val channels = StoreUtil.getChannels(localStore)
+      // TODO: need to refactor channels for MCS
+      val channels = msd.channels
 
 
-    var partitionProtectionDomainsMons: ISZ[ST] = ISZ()
-    var partitionProtectionDomainsUser: ISZ[ST] = ISZ()
+      var partitionProtectionDomainsMons: ISZ[ST] = ISZ()
+      var partitionProtectionDomainsUser: ISZ[ST] = ISZ()
 
-    var channelsST: ISZ[ST] = ISZ()
-    var monChannels: ISZ[ST] = ISZ()
+      var channelsST: ISZ[ST] = ISZ()
+      var monChannels: ISZ[ST] = ISZ()
 
-    var initpds: ISZ[String] = ISZ()
-    var userpds: ISZ[String] = ISZ()
+      var initpds: ISZ[String] = ISZ()
+      var userpds: ISZ[String] = ISZ()
 
-    var monDomains: ISZ[ProtectionDomain] = ISZ()
-    var memMaps: Map[String, ISZ[(MemoryMap, String)]] = Map.empty
-    for (pd <- protectionDomains) {
-      assert(pd.children.isEmpty, "Not expecting children protection domains for MCS")
+      var monDomains: ISZ[ProtectionDomain] = ISZ()
+      var memMaps: Map[String, ISZ[(MemoryMap, String)]] = Map.empty
+      for (pd <- protectionDomains) {
+        assert(pd.children.isEmpty, "Not expecting children protection domains for MCS")
 
-      for (map <- pd.memMaps) {
-        val existing = memMaps.getOrElse(map.memoryRegion, ISZ())
-        memMaps = memMaps + map.memoryRegion ~> (existing :+ (map, pd.name))
+        for (map <- pd.memMaps) {
+          val existing = memMaps.getOrElse(map.memoryRegion, ISZ())
+          memMaps = memMaps + map.memoryRegion ~> (existing :+ (map, pd.name))
+        }
+
+        if (ops.StringOps(pd.name).endsWith("_MON")) {
+          monDomains = monDomains :+ pd
+          initpds = initpds :+ pd.name
+          partitionProtectionDomainsMons = partitionProtectionDomainsMons :+
+            st"""${pd.name} = ProtectionDomain("${pd.name}", "${pd.programImage}", priority=150, passive=True)
+                |scheduler.add_child_pd(${pd.name})"""
+
+          val monChannel = s"channel_${pd.name}"
+          monChannels = monChannels :+ st"channel_${pd.name} = ${pd.schedulingDomain.get}"
+          channelsST = channelsST :+ st"""sdf.add_channel(Channel(scheduler, ${pd.name}, a_id=$monChannel, b_id=0))"""
+        } else {
+          userpds = userpds :+ pd.name
+          partitionProtectionDomainsUser = partitionProtectionDomainsUser :+
+            st"""${pd.name} = ProtectionDomain("${pd.name}", "${pd.programImage}", priority=140, passive=True)
+                |scheduler.add_child_pd(${pd.name})"""
+
+          channelsST = channelsST :+ st"""sdf.add_channel(Channel(${pd.name}_MON, ${pd.name}, a_id=1, b_id=0))"""
+        }
       }
 
-      if (ops.StringOps(pd.name).endsWith("_MON")) {
-        monDomains = monDomains :+ pd
-        initpds = initpds :+ pd.name
-        partitionProtectionDomainsMons = partitionProtectionDomainsMons :+
-          st"""${pd.name} = ProtectionDomain("${pd.name}", "${pd.programImage}", priority=150, passive=True)
-              |scheduler.add_child_pd(${pd.name})"""
-
-        val monChannel = s"channel_${pd.name}"
-        monChannels = monChannels :+ st"channel_${pd.name} = ${pd.schedulingDomain.get}"
-        channelsST = channelsST :+ st"""sdf.add_channel(Channel(scheduler, ${pd.name}, a_id=$monChannel, b_id=0))"""
-      } else {
-        userpds = userpds :+ pd.name
-        partitionProtectionDomainsUser = partitionProtectionDomainsUser :+
-          st"""${pd.name} = ProtectionDomain("${pd.name}", "${pd.programImage}", priority=140, passive=True)
-              |scheduler.add_child_pd(${pd.name})"""
-
-        channelsST = channelsST :+ st"""sdf.add_channel(Channel(${pd.name}_MON, ${pd.name}, a_id=1, b_id=0))"""
+      var schedulePairs: ISZ[ST] = ISZ()
+      var schedule: ISZ[ST] = ISZ()
+      for (sd <- ops.ISZOps(schedulingDomains).sortWith((a,b) => a.id <= b.id)) {
+        val channelName: String = if (sd.id == 0) "0" else s"channel_${sd.componentName}"
+        schedulePairs = schedulePairs :+ st"ts_${sd.componentName} = ($channelName, ${sd.length})"
+        schedule = schedule :+ st"ts_${sd.componentName}"
       }
-    }
 
-    var schedulePairs: ISZ[ST] = ISZ()
-    var schedule: ISZ[ST] = ISZ()
-    for (sd <- ops.ISZOps(schedulingDomains).sortWith((a,b) => a.id <= b.id)) {
-      val channelName: String = if (sd.id == 0) "0" else s"channel_${sd.componentName}"
-      schedulePairs = schedulePairs :+ st"ts_${sd.componentName} = ($channelName, ${sd.length})"
-      schedule = schedule :+ st"ts_${sd.componentName}"
-    }
+      var memoryRegionsST: ISZ[ST]= ISZ()
+      var mapsSt: ISZ[ST]= ISZ()
+      for (m <- memoryRegions) {
 
-    var memoryRegionsST: ISZ[ST]= ISZ()
-    var mapsSt: ISZ[ST]= ISZ()
-    for (m <- memoryRegions) {
+        memoryRegionsST = memoryRegionsST :+
+          st"""${m.name} = MemoryRegion(sdf, "${m.name}", ${KiBytesToHex(m.sizeInKiBytes)})
+              |sdf.add_mr(${m.name})"""
 
-      memoryRegionsST = memoryRegionsST :+
-        st"""${m.name} = MemoryRegion(sdf, "${m.name}", ${KiBytesToHex(m.sizeInKiBytes)})
-            |sdf.add_mr(${m.name})"""
-
-      val maps = memMaps.get(m.name).get
-      for (map <- maps) {
-        val addr = KiBytesToHex(map._1.vaddrInKiBytes)
-        mapsSt = mapsSt :+ st"""${map._2}.add_map(Map(${m.name}, $addr, perms="${map._1.permsPettyPrint}"))"""
+        val maps = memMaps.get(m.name).get
+        for (map <- maps) {
+          val addr = KiBytesToHex(map._1.vaddrInKiBytes)
+          mapsSt = mapsSt :+ st"""${map._2}.add_map(Map(${m.name}, $addr, perms="${map._1.permsPettyPrint}"))"""
+        }
       }
+
+      val marker = Marker.createHashMarker("META MARKER")
+
+      val tq = "\"\"\""
+      val metaContent : ST =
+        st"""# Copyright 2025, UNSW
+            |# SPDX-License-Identifier: BSD-2-Clause
+            |import argparse
+            |import struct
+            |from random import randint
+            |from dataclasses import dataclass
+            |from typing import List, Tuple, Optional
+            |from sdfgen import SystemDescription, Sddf, DeviceTree, LionsOs
+            |from importlib.metadata import version
+            |
+            |${safeToEditMakefile}
+            |
+            |assert version('sdfgen').split(".")[1] == "27", "Unexpected sdfgen version"
+            |
+            |from sdfgen_helper import *
+            |
+            |ProtectionDomain = SystemDescription.ProtectionDomain
+            |MemoryRegion = SystemDescription.MemoryRegion
+            |Map = SystemDescription.Map
+            |Channel = SystemDescription.Channel
+            |
+            |@dataclass
+            |class Board:
+            |    name: str
+            |    arch: SystemDescription.Arch
+            |    paddr_top: int
+            |    serial: str
+            |    timer: str
+            |    ethernet: str
+            |    i2c: Optional[str]
+            |
+            |
+            |BOARDS: List[Board] = [
+            |    Board(
+            |        name="qemu_virt_aarch64",
+            |        arch=SystemDescription.Arch.AARCH64,
+            |        paddr_top=0x6_0000_000,
+            |        serial="pl011@9000000",
+            |        timer="timer",
+            |        ethernet="virtio_mmio@a003e00",
+            |        i2c=None,
+            |    ),
+            |]
+            |
+            |def schedule(*entries):
+            |    $tq
+            |    entries: sequence of (channel, timeslice_ns)
+            |    $tq
+            |    part_ch, part_timeslices = zip(*entries)
+            |    return UserSchedule(list(part_timeslices), list(part_ch))
+            |
+            |def generate(sdf_path: str, output_dir: str, dtb: DeviceTree):
+            |    timer_node = dtb.node(board.timer)
+            |    assert timer_node is not None
+            |
+            |    timer_driver = ProtectionDomain("timer_driver", "timer_driver.elf", priority=201)
+            |    timer_system = Sddf.Timer(sdf, timer_node, timer_driver)
+            |
+            |    scheduler = ProtectionDomain("scheduler", "scheduler.elf", priority=200)
+            |
+            |    ${marker.beginMarker}
+            |
+            |    #######################################
+            |    # PARTITION PROTECTION DOMAINS
+            |    #######################################
+            |    ${(partitionProtectionDomainsMons, "\n")}
+            |
+            |    ${(partitionProtectionDomainsUser, "\n")}
+            |
+            |    #######################################
+            |    # MEMORY REGIONS
+            |    #######################################
+            |    ${(memoryRegionsST, "\n")}
+            |
+            |    ${(mapsSt, "\n")}
+            |
+            |    #######################################
+            |    # CHANNELS
+            |    #######################################
+            |    ${(monChannels, "\n")}
+            |
+            |    ${(channelsST, "\n")}
+            |
+            |    #######################################
+            |    # SCHEDULE
+            |    #######################################
+            |    ${(schedulePairs, "\n")}
+            |
+            |    user_schedule = schedule(
+            |      ${(schedule, ",\n")}
+            |    )
+            |
+            |    ${marker.endMarker}
+            |
+            |    sdf.add_pd(timer_driver)
+            |    sdf.add_pd(scheduler)
+            |    timer_system.add_client(scheduler)
+            |
+            |    assert timer_system.connect()
+            |    assert timer_system.serialise_config(output_dir)
+            |
+            |    data_path = output_dir + "/schedule_config.data"
+            |    with open(data_path, "wb+") as f:
+            |        f.write(user_schedule.serialise())
+            |    update_elf_section(obj_copy, scheduler.program_image,
+            |                       user_schedule.section_name,
+            |                       data_path)
+            |
+            |    with open(f"{output_dir}/{sdf_path}", "w+") as f:
+            |        f.write(sdf.render())
+            |
+            |
+            |if __name__ == '__main__':
+            |    parser = argparse.ArgumentParser()
+            |    parser.add_argument("--dtb", required=True)
+            |    parser.add_argument("--sddf", required=True)
+            |    parser.add_argument("--board", required=True, choices=[b.name for b in BOARDS])
+            |    parser.add_argument("--output", required=True)
+            |    parser.add_argument("--sdf", required=True)
+            |    parser.add_argument("--objcopy", required=True)
+            |
+            |    args = parser.parse_args()
+            |
+            |    # Import the config structs module from the build directory
+            |    sys.path.append(args.output)
+            |    from config_structs import *
+            |
+            |    board = next(filter(lambda b: b.name == args.board, BOARDS))
+            |
+            |    sdf = SystemDescription(board.arch, board.paddr_top)
+            |    sddf = Sddf(args.sddf)
+            |
+            |    global obj_copy
+            |    obj_copy = args.objcopy
+            |
+            |    with open(args.dtb, "rb") as f:
+            |        dtb = DeviceTree(f.read())
+            |
+            |    generate(args.sdf, args.output, dtb)
+            |"""
+
+      val sdScheduleXmlPath = s"${options.sel4OutputDir.get}/${SystemDescriptionProvider_MCS.metaPy}"
+      resources = resources :+ ResourceUtil.createResourceWithMarkers(sdScheduleXmlPath, metaContent, ISZ(marker), F, F)
     }
 
-    val marker = Marker.createHashMarker("META MARKER")
-
-    val tq = "\"\"\""
-    val metaContent : ST =
-      st"""# Copyright 2025, UNSW
-          |# SPDX-License-Identifier: BSD-2-Clause
-          |import argparse
-          |import struct
-          |from random import randint
-          |from dataclasses import dataclass
-          |from typing import List, Tuple, Optional
-          |from sdfgen import SystemDescription, Sddf, DeviceTree, LionsOs
-          |from importlib.metadata import version
-          |
-          |${safeToEditMakefile}
-          |
-          |assert version('sdfgen').split(".")[1] == "27", "Unexpected sdfgen version"
-          |
-          |from sdfgen_helper import *
-          |
-          |ProtectionDomain = SystemDescription.ProtectionDomain
-          |MemoryRegion = SystemDescription.MemoryRegion
-          |Map = SystemDescription.Map
-          |Channel = SystemDescription.Channel
-          |
-          |@dataclass
-          |class Board:
-          |    name: str
-          |    arch: SystemDescription.Arch
-          |    paddr_top: int
-          |    serial: str
-          |    timer: str
-          |    ethernet: str
-          |    i2c: Optional[str]
-          |
-          |
-          |BOARDS: List[Board] = [
-          |    Board(
-          |        name="qemu_virt_aarch64",
-          |        arch=SystemDescription.Arch.AARCH64,
-          |        paddr_top=0x6_0000_000,
-          |        serial="pl011@9000000",
-          |        timer="timer",
-          |        ethernet="virtio_mmio@a003e00",
-          |        i2c=None,
-          |    ),
-          |]
-          |
-          |def schedule(*entries):
-          |    $tq
-          |    entries: sequence of (channel, timeslice_ns)
-          |    $tq
-          |    part_ch, part_timeslices = zip(*entries)
-          |    return UserSchedule(list(part_timeslices), list(part_ch))
-          |
-          |def generate(sdf_path: str, output_dir: str, dtb: DeviceTree):
-          |    timer_node = dtb.node(board.timer)
-          |    assert timer_node is not None
-          |
-          |    timer_driver = ProtectionDomain("timer_driver", "timer_driver.elf", priority=201)
-          |    timer_system = Sddf.Timer(sdf, timer_node, timer_driver)
-          |
-          |    scheduler = ProtectionDomain("scheduler", "scheduler.elf", priority=200)
-          |
-          |    ${marker.beginMarker}
-          |
-          |    #######################################
-          |    # PARTITION PROTECTION DOMAINS
-          |    #######################################
-          |    ${(partitionProtectionDomainsMons, "\n")}
-          |
-          |    ${(partitionProtectionDomainsUser, "\n")}
-          |
-          |    #######################################
-          |    # MEMORY REGIONS
-          |    #######################################
-          |    ${(memoryRegionsST, "\n")}
-          |
-          |    ${(mapsSt, "\n")}
-          |
-          |    #######################################
-          |    # CHANNELS
-          |    #######################################
-          |    ${(monChannels, "\n")}
-          |
-          |    ${(channelsST, "\n")}
-          |
-          |    #######################################
-          |    # SCHEDULE
-          |    #######################################
-          |    ${(schedulePairs, "\n")}
-          |
-          |    user_schedule = schedule(
-          |      ${(schedule, ",\n")}
-          |    )
-          |
-          |    ${marker.endMarker}
-          |
-          |    sdf.add_pd(timer_driver)
-          |    sdf.add_pd(scheduler)
-          |    timer_system.add_client(scheduler)
-          |
-          |    assert timer_system.connect()
-          |    assert timer_system.serialise_config(output_dir)
-          |
-          |    data_path = output_dir + "/schedule_config.data"
-          |    with open(data_path, "wb+") as f:
-          |        f.write(user_schedule.serialise())
-          |    update_elf_section(obj_copy, scheduler.program_image,
-          |                       user_schedule.section_name,
-          |                       data_path)
-          |
-          |    with open(f"{output_dir}/{sdf_path}", "w+") as f:
-          |        f.write(sdf.render())
-          |
-          |
-          |if __name__ == '__main__':
-          |    parser = argparse.ArgumentParser()
-          |    parser.add_argument("--dtb", required=True)
-          |    parser.add_argument("--sddf", required=True)
-          |    parser.add_argument("--board", required=True, choices=[b.name for b in BOARDS])
-          |    parser.add_argument("--output", required=True)
-          |    parser.add_argument("--sdf", required=True)
-          |    parser.add_argument("--objcopy", required=True)
-          |
-          |    args = parser.parse_args()
-          |
-          |    # Import the config structs module from the build directory
-          |    sys.path.append(args.output)
-          |    from config_structs import *
-          |
-          |    board = next(filter(lambda b: b.name == args.board, BOARDS))
-          |
-          |    sdf = SystemDescription(board.arch, board.paddr_top)
-          |    sddf = Sddf(args.sddf)
-          |
-          |    global obj_copy
-          |    obj_copy = args.objcopy
-          |
-          |    with open(args.dtb, "rb") as f:
-          |        dtb = DeviceTree(f.read())
-          |
-          |    generate(args.sdf, args.output, dtb)
-          |"""
-
-    val sdScheduleXmlPath = s"${options.sel4OutputDir.get}/${SystemDescriptionProvider_MCS.metaPy}"
-    resources = resources :+ ResourceUtil.createResourceWithMarkers(sdScheduleXmlPath, metaContent, ISZ(marker), F, F)
 
     @pure def emitStaticSdFResources(): Unit = {
       val sdfgen_helperPath = s"${options.sel4OutputDir.get}/sdfgen_helper.py"

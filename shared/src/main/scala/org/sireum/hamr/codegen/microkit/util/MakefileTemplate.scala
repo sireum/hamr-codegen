@@ -28,7 +28,12 @@ object MakefileTemplate {
           |
           |override MICROKIT_SDK := $$(abspath $${MICROKIT_SDK})
           |
+          |# SYSTEM_MAKEFILE points to the makefile containing all compile/link rules.
+          |# Override this only if you want to substitute an entirely different rule set
           |SYSTEM_MAKEFILE ?= system.mk
+          |
+          |# By default we make a debug build so that the client debug prints can be seen.
+          |export MICROKIT_CONFIG ?= debug
           |
           |export CPU = cortex-a53
           |export QEMU = qemu-system-aarch64
@@ -46,13 +51,9 @@ object MakefileTemplate {
           |
           |export TARGET := aarch64-none-elf
           |
-          |# By default we make a debug build so that the client debug prints can be seen.
-          |export MICROKIT_CONFIG ?= debug
-          |
           |export MICROKIT_SDK := $$(abspath $$(MICROKIT_SDK))
           |export MICROKIT_TOOL := $$(abspath $$(MICROKIT_SDK)/bin/microkit)
           |export MICROKIT_BOARD_DIR := $$(abspath $$(MICROKIT_SDK)/board/$$(MICROKIT_BOARD)/$$(MICROKIT_CONFIG))
-          |
           |
           |IMAGE_FILE := $$(TOP_BUILD_DIR)/loader.img
           |REPORT_FILE := $$(TOP_BUILD_DIR)/report.txt
@@ -123,8 +124,7 @@ object MakefileTemplate {
           |LDFLAGS := -L$$(MICROKIT_BOARD_DIR)/lib
           |LIBS := --start-group -lmicrokit -Tmicrokit.ld --end-group
           |
-          |SYSTEM_FILE := $$(TOP_DIR)/${MicrokitCodegen.microkitSystemXmlFilename}
-          |SCHEDULE_FILE := $$(TOP_DIR)/${MicrokitCodegen.microkitScheduleXmlFilename}
+          |MSD ?= ${MicrokitCodegen.microkitSystemXmlFilename}
           |
           |IMAGES := ${(elfFiles, " ")}
           |IMAGE_FILE = loader.img
@@ -154,9 +154,9 @@ object MakefileTemplate {
           |
           |${(elfEntries, "\n\n")}
           |
-          |$$(IMAGE_FILE): $$(IMAGES) $$(SYSTEM_FILE)
-          |${TAB}xmllint --xinclude $$(SYSTEM_FILE) -o $$(SYSTEM_FILE).merged
-          |${TAB}$$(MICROKIT_TOOL) $$(SYSTEM_FILE).merged --search-path $$(TOP_BUILD_DIR) --board $$(MICROKIT_BOARD) --config $$(MICROKIT_CONFIG) -o $$(IMAGE_FILE) -r $$(REPORT_FILE)
+          |$$(IMAGE_FILE): $$(IMAGES) $$(TOP_DIR)/$$(MSD)
+          |${TAB}xmllint --xinclude $$(TOP_DIR)/$$(MSD) -o $$(TOP_BUILD_DIR)/$$(MSD).merged
+          |${TAB}$$(MICROKIT_TOOL) $$(TOP_BUILD_DIR)/$$(MSD).merged --search-path $$(TOP_BUILD_DIR) --board $$(MICROKIT_BOARD) --config $$(MICROKIT_CONFIG) -o $$(IMAGE_FILE) -r $$(REPORT_FILE)
           |
           |
           |qemu:

@@ -12,7 +12,7 @@ import org.sireum.hamr.codegen.common.symbols.SymbolTable
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.HamrCli.{CodegenHamrPlatform, CodegenOption}
 import org.sireum.hamr.codegen.common.util.ModelUtil.ModelElements
-import org.sireum.hamr.codegen.common.util.{CodeGenResults, ExperimentalOptions, ModelUtil}
+import org.sireum.hamr.codegen.common.util.{CodeGenResults, ExperimentalOptions, ModelUtil, MonitorInjector}
 import org.sireum.hamr.codegen.common.{DirectoryUtil, StringUtil}
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen
 import org.sireum.hamr.codegen.microkit.util.{JvmMicrokitUtil, MicrokitUtil}
@@ -147,7 +147,9 @@ object CodeGen {
         plugins = plugins, codegenResults = CodeGenResults.empty, currentStore = localStore, reporter = reporter)
     }
 
-    val (rmodel, aadlTypes, symbolTable): (Aadl, AadlTypes, SymbolTable) = (result._1.get.model, result._1.get.types, result._1.get.symbolTable)
+    var rmodel: Aadl = result._1.get.model
+    var aadlTypes: AadlTypes = result._1.get.types
+    var symbolTable: SymbolTable = result._1.get.symbolTable
 
     if (modOptions.runtimeMonitoring && symbolTable.getThreads().isEmpty) {
       reporter.error(None(), toolName, "Model must contain threads in order to enable runtime monitoring")

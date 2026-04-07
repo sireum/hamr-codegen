@@ -6,7 +6,8 @@ import org.sireum.hamr.codegen.common.containers.{BlockMarker, Marker}
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
 
-@datatype class SystemDescription (val schedulingDomains: ISZ[SchedulingDomain],
+@datatype class SystemDescription (val name: String,
+                                   val schedulingDomains: ISZ[SchedulingDomain],
                                    val protectionDomains: ISZ[ProtectionDomain],
                                    val memoryRegions: ISZ[MemoryRegion],
                                    val channels: ISZ[Channel]) {
@@ -16,6 +17,11 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
   @pure def getMarkers: ISZ[Marker] = {
     return ISZ(contentMarker)
   }
+
+  val infix: String = if (name == "normal") "" else s".${name}"
+  val systemName: String = s"microkit$infix.system"
+  val scheduleName: String = s"microkit$infix.schedule.xml"
+  val dotName: String = s"microkit$infix.dot"
 
   val stSchedulingDomain: Option[ST] =
     if (schedulingDomains.nonEmpty) Some(
@@ -40,7 +46,7 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
           |<system xmlns:xi="http://www.w3.org/2001/XInclude">
           |  <!-- Content in between markers will be preserved if codegen is rerun -->
           |
-          |  <xi:include href="${MicrokitCodegen.microkitScheduleXmlFilename}" />
+          |  <xi:include href="$scheduleName" />
           |
           |  ${(stProtectionDomains, "\n\n")}
           |

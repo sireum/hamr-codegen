@@ -2,17 +2,17 @@
 package org.sireum.hamr.codegen.microkit
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.containers.Resource
 import org.sireum.hamr.codegen.common.CommonUtil.{BoolValue, Store}
+import org.sireum.hamr.codegen.common.containers.Resource
 import org.sireum.hamr.codegen.common.plugin.Plugin
 import org.sireum.hamr.codegen.common.properties.Hamr_Microkit_Properties
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.HamrCli.CodegenOption
-import org.sireum.hamr.codegen.common.util.{CodeGenResults, ResourceUtil}
+import org.sireum.hamr.codegen.common.util.{CodeGenResults, ModelUtil, MonitorInjector, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.plugins.c.components.CComponentPlugin
 import org.sireum.hamr.codegen.microkit.plugins.c.connections.CConnectionProviderPlugin
-import org.sireum.hamr.codegen.microkit.plugins.{MicrokitInitPlugin, MicrokitLintPlugin, MicrokitPlugin, PluginUtil, StoreUtil}
+import org.sireum.hamr.codegen.microkit.plugins._
 import org.sireum.hamr.codegen.microkit.util._
 import org.sireum.hamr.ir.Aadl
 import org.sireum.message.Reporter
@@ -22,6 +22,7 @@ object MicrokitCodegen {
 
   val microkitSystemXmlFilename: String = "microkit.system"
   val microkitScheduleXmlFilename: String = "microkit.schedule.xml"
+
   val systemMakeFilename: String = "system.mk"
 
   val dirComponents: String = "components"
@@ -32,15 +33,19 @@ object MicrokitCodegen {
 @record class MicrokitCodegen {
   var resources: ISZ[Resource] = ISZ()
 
-  def run(model: Aadl, options: CodegenOption, types: AadlTypes, symbolTable: SymbolTable, plugins: ISZ[Plugin], store: Store, reporter: Reporter): (CodeGenResults, Store) = {
+  def run(modelP: Aadl, options: CodegenOption, aadlTypesP: AadlTypes, symbolTableP: SymbolTable, plugins: ISZ[Plugin], store: Store, reporter: Reporter): (CodeGenResults, Store) = {
     var localStore = store
+
+    var model = modelP
+    var aadlTypes = aadlTypesP
+    var symbolTable = symbolTableP
 
     if (!reporter.hasError) { // linting phase (one pass)
       var validModel = T
       for (p <- plugins) {
         p match {
           case p: MicrokitLintPlugin =>
-            val results = p.validModel(model, options, types, symbolTable, localStore, reporter)
+            val results = p.validModel(model, options, aadlTypes, symbolTable, localStore, reporter)
             validModel = validModel && results._2
             localStore = results._1
           case _ =>
@@ -49,6 +54,20 @@ object MicrokitCodegen {
 
       if (!validModel) {
         return (CodeGenResults.empty, localStore)
+      }
+    }
+
+    if (options.runtimeMonitoring && !reporter.hasError) {
+      // TODO mutating the model should be done by a plugin
+      model = MonitorInjector.inject(model, symbolTable, reporter)
+      if (!reporter.hasError) {
+        val reResult = ModelUtil.resolve(model, model.components(0).identifier.pos, "", options, localStore, reporter)
+        localStore = reResult._2
+        if (reResult._1.nonEmpty) {
+          model = reResult._1.get.model
+          aadlTypes = reResult._1.get.types
+          symbolTable = reResult._1.get.symbolTable
+        }
       }
     }
 
@@ -67,7 +86,7 @@ object MicrokitCodegen {
       for (p <- plugins) {
         p match {
           case p: MicrokitInitPlugin =>
-            localStore = p.init(model, options, types, symbolTable, localStore, reporter)
+            localStore = p.init(model, options, aadlTypes, symbolTable, localStore, reporter)
           case _ =>
         }
       }
@@ -83,8 +102,8 @@ object MicrokitCodegen {
       while (continue) {
         var somethingHandled = F
         for (plugin <- microkitPlugins if continue) {
-          if (plugin.canHandle(model, options, types, symbolTable, localStore, reporter)) {
-            val results = plugin.handle(model, options, types, symbolTable, localStore, reporter)
+          if (plugin.canHandle(model, options, aadlTypes, symbolTable, localStore, reporter)) {
+            val results = plugin.handle(model, options, aadlTypes, symbolTable, localStore, reporter)
             localStore = results._1
             resources = resources ++ results._2
             somethingHandled = T
@@ -93,8 +112,11 @@ object MicrokitCodegen {
         continue = somethingHandled
       }
     }
-    
-    val makefileContents = MakefileTemplate.mainMakefile(MakefileUtil.getMakefileTargets(ISZ("Makefile"), localStore), MicrokitPlugin.modelIsRusty(localStore))
+
+    val makeFileTargetes = MakefileUtil.getMakefileTargets(ISZ("Makefile"), localStore)
+    val modelIsRusty = MicrokitPlugin.modelIsRusty(localStore)
+    val makefileContents = MakefileTemplate.mainMakefile(makeFileTargetes, modelIsRusty)
+
     val makefilePath = s"${options.sel4OutputDir.get}/Makefile"
     resources = resources :+ ResourceUtil.createResource(makefilePath, makefileContents, T)
 
@@ -166,8 +188,8 @@ object MicrokitCodegen {
       while (continue) {
         var somethingHandled = F
         for (plugin <- microkitFinalizePlugins if continue) {
-          if (plugin.canFinalizeMicrokit(model, options, types, symbolTable, localStore, reporter)) {
-            val results = plugin.finalizeMicrokit(model, options, types, symbolTable, localStore, reporter)
+          if (plugin.canFinalizeMicrokit(model, options, aadlTypes, symbolTable, localStore, reporter)) {
+            val results = plugin.finalizeMicrokit(model, options, aadlTypes, symbolTable, localStore, reporter)
             localStore = results._1
             resources = resources ++ results._2
             somethingHandled = T

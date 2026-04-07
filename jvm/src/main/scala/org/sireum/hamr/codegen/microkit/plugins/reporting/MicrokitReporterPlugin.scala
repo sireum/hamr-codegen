@@ -9,7 +9,7 @@ import org.sireum.hamr.codegen.common.plugin.Plugin
 import org.sireum.hamr.codegen.common.reporting.{CodegenReporting, CodegenReports, JSON, ResourceReport, Status, ToolReport}
 import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlEventPort, AadlPort, AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlTypes
-import org.sireum.hamr.codegen.common.util.{CodeGenResults, HamrCli}
+import org.sireum.hamr.codegen.common.util.{CodeGenResults, HamrCli, MonitorInjector}
 import org.sireum.hamr.codegen.microkit.plugins.reporting.CContainers.CFile
 import org.sireum.hamr.codegen.microkit.plugins.reporting.MSDContainers.system
 import org.sireum.hamr.codegen.microkit.plugins.reporting.RustContainers.RustFile
@@ -142,7 +142,7 @@ object MicrokitReporterPlugin {
 
     var componentReports: HashSMap[IdPathR, ComponentReport] = HashSMap.empty
 
-    for (t <- symbolTable.get.getThreads()) {
+    for (t <- symbolTable.get.getThreads() if t.identifier != MonitorInjector.monitorThreadId) {
 
       var ports: HashSMap[IdPathR, PortReport] = HashSMap.empty
 
@@ -517,7 +517,7 @@ object MicrokitReporterPlugin {
 
     var behaviorCodeReports: ISZ[ST] = ISZ()
 
-    for (t <- symbolTable.getThreads()) {
+    for (t <- symbolTable.getThreads() if t.identifier != MonitorInjector.monitorThreadId) {
       val classifier = t.classifier
       assert (classifier.size == 2)
 

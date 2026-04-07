@@ -129,6 +129,15 @@ object MicrokitLinterPlugin {
       }
     }
 
+    if (options.runtimeMonitoring) {
+      for (thread <- symbolTable.getThreads()) {
+        if (thread.toVirtualMachine(symbolTable)) {
+          reporter.error(thread.component.identifier.pos, MicrokitCodegen.toolName,
+            st"Runtime monitoring is not supported for models containing VM components (found VM thread '${thread.identifier}'). Disable runtime monitoring or remove VM components.".render)
+        }
+      }
+    }
+
     return (localStore, !reporter.hasError)
   }
 

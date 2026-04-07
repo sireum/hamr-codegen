@@ -2,19 +2,19 @@
 package org.sireum.hamr.codegen.microkit.plugins.c.components
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.CommonUtil.{BoolValue, Store}
+import org.sireum.hamr.codegen.common.CommonUtil.Store
 import org.sireum.hamr.codegen.common.containers.Resource
 import org.sireum.hamr.codegen.common.properties.Hamr_Microkit_Properties
 import org.sireum.hamr.codegen.common.symbols.{AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlTypes
-import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
+import org.sireum.hamr.codegen.common.util.{HamrCli, MonitorInjector, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen.toolName
 import org.sireum.hamr.codegen.microkit.connections.{ConnectionStore, VMRamVaddr, cConnectionContributions}
 import org.sireum.hamr.codegen.microkit.plugins.StoreUtil
 import org.sireum.hamr.codegen.microkit.plugins.c.connections.CConnectionProviderPlugin
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
-import org.sireum.hamr.codegen.microkit.util.{Channel, IRQ, MakefileContainer, MemoryMap, MemoryRegion, MicrokitDomain, MicrokitUtil, Perm, PortSharedMemoryRegion, ProtectionDomain, SchedulingDomain, VirtualMachine, VirtualMachineMemoryRegion, VirtualMemoryRegionType}
+import org.sireum.hamr.codegen.microkit.util._
 import org.sireum.hamr.codegen.microkit.vm.{VmMakefileTemplate, VmUser, VmUtil}
 import org.sireum.hamr.ir.Aadl
 import org.sireum.message.Reporter
@@ -490,7 +490,7 @@ import org.sireum.message.Reporter
 
     val connectionStore = CConnectionProviderPlugin.getCConnectionStore(localStore)
 
-    for (t <- symbolTable.getThreads()) {
+    for (t <- symbolTable.getThreads() if t.identifier != MonitorInjector.monitorThreadId) {
       processThread(t, connectionStore)
     }
 
@@ -520,10 +520,15 @@ import org.sireum.message.Reporter
       xmlMemoryRegions = xmlMemoryRegions :+ s
     }
 
-    localStore = StoreUtil.addChannels(xmlChannels, localStore)
-    localStore = StoreUtil.addMemoryRegions(xmlMemoryRegions, localStore)
-    localStore = StoreUtil.addProtectionDomains(xmlProtectionDomains, localStore)
-    localStore = StoreUtil.addSchedulingDomains(xmlScheds, localStore)
+    val name = "normal"
+
+    val sd = SystemDescription(
+      name = name,
+      schedulingDomains = xmlSchedulingDomains,
+      protectionDomains = xmlProtectionDomains,
+      memoryRegions = xmlMemoryRegions,
+      channels = xmlChannels)
+
     localStore = StoreUtil.addMakefileContainers(makefileContainers, localStore)
 
     return (localStore, resources)

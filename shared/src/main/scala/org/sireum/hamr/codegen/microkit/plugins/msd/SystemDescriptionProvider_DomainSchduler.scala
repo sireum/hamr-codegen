@@ -8,8 +8,6 @@ import org.sireum.hamr.codegen.common.properties.Hamr_Microkit_Properties
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
-import org.sireum.hamr.codegen.microkit.MicrokitCodegen
-import org.sireum.hamr.codegen.microkit.plugins.StoreUtil
 import org.sireum.hamr.codegen.microkit.plugins.c.components.CComponentPlugin
 import org.sireum.hamr.codegen.microkit.util.SystemDescription
 import org.sireum.hamr.ir.Aadl
@@ -30,30 +28,30 @@ import org.sireum.message.Reporter
     var localStore = store + name ~> BoolValue(T)
     var resources = ISZ[Resource]()
 
-    val xmlProtectionDomains = StoreUtil.getProtectionDomains(localStore)
+    val msds: Map[String, SystemDescription] = SystemDescriptionProviderPlugin.getMSDs(localStore)
+    for (msd <- msds.values) {
 
-    val markers: ISZ[Marker] = ((for (p <- xmlProtectionDomains) yield p.getMarkers)).flatMap((s: ISZ[Marker]) => s)
+      val xmlProtectionDomains = msd.protectionDomains
 
-    val sd = SystemDescription(
-      schedulingDomains = StoreUtil.getSchedulingDomains(localStore),// xmlScheds,
-      protectionDomains = xmlProtectionDomains,
-      memoryRegions = StoreUtil.getMemoryRegions(localStore),
-      channels = StoreUtil.getChannels(localStore))
+      val markers: ISZ[Marker] = ((for (p <- xmlProtectionDomains) yield p.getMarkers)).flatMap((s: ISZ[Marker]) => s)
 
-    val sdXmlPath = s"${options.sel4OutputDir.get}/${MicrokitCodegen.microkitSystemXmlFilename}"
-    resources = resources :+ ResourceUtil.createResourceWithMarkers(
-      path = sdXmlPath,
-      content = sd.prettyST,
-      markers = markers ++ sd.getMarkers,
-      invertMarkers = T,
-      overwrite = F)
+      val sdXmlPath = s"${options.sel4OutputDir.get}/${msd.systemName}"
+      resources = resources :+ ResourceUtil.createResourceWithMarkers(
+        path = sdXmlPath,
+        content = msd.prettyST,
+        markers = markers ++ msd.getMarkers,
+        invertMarkers = T,
+        overwrite = F)
 
-    val sdScheduleXmlPath = s"${options.sel4OutputDir.get}/${MicrokitCodegen.microkitScheduleXmlFilename}"
-    resources = resources :+ ResourceUtil.createResource(sdScheduleXmlPath, sd.scheduleText, F)
+      val sdScheduleXmlPath = s"${options.sel4OutputDir.get}/${msd.scheduleName}"
+      resources = resources :+ ResourceUtil.createResource(sdScheduleXmlPath, msd.scheduleText, F)
 
-    val sysDot = sd.toDot
-    val dotPath = s"${options.sel4OutputDir.get}/microkit.dot"
-    resources = resources :+ ResourceUtil.createResource(path = dotPath, content = sysDot, overwrite = T)
+
+      val sysDot = msd.toDot
+      val dotPath = s"${options.sel4OutputDir.get}/${msd.dotName}"
+      resources = resources :+ ResourceUtil.createResource(path = dotPath, content = sysDot, overwrite = T)
+    }
+
 
     return (localStore, resources)
   }
