@@ -3,6 +3,7 @@
 package org.sireum.hamr.codegen.arsit.templates
 
 import org.sireum._
+import org.sireum.hamr.codegen.common.templates.CommentTemplate
 
 object InspectorTemplate {
 
@@ -16,6 +17,8 @@ object InspectorTemplate {
           |import org.sireum.hamr.inspector.capabilities.InspectorCapabilitiesLauncher
           |import org.sireum.hamr.inspector.gui.InspectorGUILauncher
           |import org.sireum.hamr.inspector.stream.Flux
+          |
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |object InspectorDemo extends App {
           |

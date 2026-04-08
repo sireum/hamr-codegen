@@ -29,7 +29,7 @@ object DSCTemplate {
           |import org.sireum._
           |${(_imports, "\n")}
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |// containers for the pre and post state values of ports and state variables
           |
@@ -206,7 +206,7 @@ object DSCTemplate {
           |import org.sireum.Random.Gen64
           |import org.sireum.Random.Impl.Xoshiro256
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |// Distribute SlangCheck test runners
           |
@@ -269,7 +269,7 @@ object DSCTemplate {
           |
           |import org.sireum._
           |
-          |${CommentTemplate.safeToEditComment_scala}
+          |${CommentTemplate.safeToEditComment_slash}
           |
           |object $recordUnsatPreObjectName {
           |

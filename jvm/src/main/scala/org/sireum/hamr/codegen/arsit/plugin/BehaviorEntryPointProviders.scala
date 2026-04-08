@@ -341,7 +341,7 @@ object BehaviorEntryPointElementProvider {
           |${StubTemplate.addImports(entries.flatMap((f: BehaviorEntryPointObjectContributions) => f.imports))}
           |
           |${wrapST(entries.flatMap((f: BehaviorEntryPointObjectContributions) => f.preObjectBlocks), "\n\n")}
-          |${CommentTemplate.safeToEditComment_scala}
+          |${CommentTemplate.safeToEditComment_slash}
           |object ${names.componentSingletonType} {
           |
           |  $body

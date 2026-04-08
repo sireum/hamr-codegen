@@ -79,6 +79,8 @@ object SeL4NixTemplate {
           |import org.sireum._
           |import art._
           |
+          |${CommentTemplate.doNotEditComment_slash}
+          |
           |object ${sel4ExtensionStubName} {
           |  ${entries}
           |}
@@ -92,7 +94,7 @@ object SeL4NixTemplate {
     val ret: ST =
       st"""// #Sireum
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |package ${packageName}
           |
@@ -196,6 +198,8 @@ object SeL4NixTemplate {
           |import art._
           |import ${packageName}._
           |
+          |${CommentTemplate.doNotEditComment_slash}
+          |
           |object ${identifier} extends App {
           |  def main(args: ISZ[String]): Z = {
           |
@@ -224,8 +228,6 @@ object SeL4NixTemplate {
     val ret: ST =
       st"""// #Sireum
           |
-          |${CommentTemplate.doNotEditComment_scala}
-          |
           |package ${packageName}.${instanceName}
           |
           |import org.sireum._
@@ -235,6 +237,8 @@ object SeL4NixTemplate {
           |import art.DispatchPropertyProtocol._
           |import art.PortMode._
           |${(imports, "\n")}
+          |
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |object $appName extends App {
           |
@@ -532,6 +536,8 @@ object SeL4NixTemplate {
           |
           |#include <all.h>
           |
+          |${CommentTemplate.doNotEditComment_slash}
+          |
           |${(headerMethods, "\n\n")}
           |
           |#endif
@@ -556,6 +562,8 @@ object SeL4NixTemplate {
     val ret: ST =
       st"""#include <${fileName}.h>
           |${_includes}
+          |
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |${_globals}
           |${(implMethods, "\n\n")}
@@ -618,7 +626,7 @@ object SeL4NixTemplate {
           |
           |import org.sireum._
           |
-          |${CommentTemplate.safeToEditComment_scala}
+          |${CommentTemplate.safeToEditComment_slash}
           |
           |object ${TRANSPILER_TOUCHER_OBJECT_NAME} {
           |  def ${TRANSPILER_TOUCHER_METHOD_NAME}(): Unit = {
@@ -637,7 +645,7 @@ object SeL4NixTemplate {
       st"""#ifndef EXT_H
           |#define EXT_H
           |
-          |${CommentTemplate.safeToEditComment_c}
+          |${CommentTemplate.safeToEditComment_slash}
           |
           |#include <all.h>
           |
@@ -650,7 +658,7 @@ object SeL4NixTemplate {
     val ret: ST =
       st"""#include <ext.h>
           |
-          |${CommentTemplate.safeToEditComment_c}
+          |${CommentTemplate.safeToEditComment_slash}
           |
           |// add c extension code here
           |

@@ -9,6 +9,7 @@ import org.sireum.hamr.codegen.act.templates.EventDataQueueTemplate
 import org.sireum.hamr.codegen.act.util._
 import org.sireum.hamr.codegen.common.properties.{CaseSchedulingProperties, OsateProperties}
 import org.sireum.hamr.codegen.common.symbols.Dispatch_Protocol
+import org.sireum.hamr.codegen.common.templates.CommentTemplate
 
 object PacerTemplate {
 
@@ -93,6 +94,8 @@ object PacerTemplate {
           |#include <sel4/sel4.h>
           |${(_includes, "\n")}
           |
+          |${CommentTemplate.doNotEditComment_slash}
+          |
           |${(methods, "\n\n")}
           |
           |int run(void) {
@@ -138,7 +141,7 @@ object PacerTemplate {
           |#include <object/structures.h>
           |#include <model/statedata.h>
           |
-          |// this file will not be overwritten and is safe to edit
+          |${CommentTemplate.safeToEditComment_slash}
           |
           |/************************************************************
           |

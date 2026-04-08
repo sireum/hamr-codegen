@@ -2,6 +2,7 @@
 package org.sireum.hamr.codegen.act.templates
 
 import org.sireum._
+import org.sireum.hamr.codegen.common.templates.CommentTemplate
 
 object ScriptTemplate {
 
@@ -60,6 +61,8 @@ object ScriptTemplate {
 
     val ret: ST =
       st"""#!/usr/bin/env bash
+          |
+          |${CommentTemplate.doNotEditComment_hash}
           |
           |set -o errexit -o pipefail -o nounset
           |

@@ -328,7 +328,7 @@ object CakeMLTemplate {
                   globals: ISZ[ST],
                   methods: ISZ[ST]): ST = {
     val ret: ST =
-      st"""${CommentTemplate.doNotEditComment_c}
+      st"""${CommentTemplate.doNotEditComment_slash}
           |
           |${(includes, "\n")}
           |
@@ -341,7 +341,7 @@ object CakeMLTemplate {
 
   def emptyAssemblyFile(): ST = {
     val ret: ST =
-      st"""${CommentTemplate.safeToEditComment_c}
+      st"""${CommentTemplate.safeToEditComment_slash}
           |
           |// placeholder for CakeML assembly"""
     return ret

@@ -11,6 +11,7 @@ import org.sireum.hamr.codegen.act.vm.MetaPort
 import org.sireum.hamr.codegen.common.containers.FileResource
 import org.sireum.hamr.codegen.common.properties.PropertyUtil
 import org.sireum.hamr.codegen.common.symbols._
+import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.util.ResourceUtil
 import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
 import org.sireum.hamr.ir
@@ -423,6 +424,8 @@ object Util {
       st"""#pragma once
           |
           |#include <stdint.h>
+          |
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |typedef _Atomic uintmax_t ${SB_EVENT_COUNTER_TYPE};
           |"""

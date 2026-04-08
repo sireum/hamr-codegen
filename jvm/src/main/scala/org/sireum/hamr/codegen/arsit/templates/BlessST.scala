@@ -26,7 +26,7 @@ object BlessST {
                 ): ST = {
     assert(imports.isEmpty)
     val ret: ST =
-      st"""${CommentTemplate.doNotEditComment_scala}
+      st"""${CommentTemplate.doNotEditComment_slash}
           |
           |@enum object ${completeStateEnumName} {
           |  ${(states, "\n")}
@@ -267,7 +267,7 @@ object BlessST {
           |
           |import org.sireum._
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |@ext object ${vizObjectName} {
           |  def createStateMachines(): Unit = $$
@@ -300,7 +300,7 @@ object BlessST {
           |import javax.swing.SwingUtilities
           |import org.sireum.{IS, Z}
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |object ${vizObjectName}_Ext {
           |

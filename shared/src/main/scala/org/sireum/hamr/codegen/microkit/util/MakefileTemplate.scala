@@ -2,6 +2,7 @@
 package org.sireum.hamr.codegen.microkit.util
 
 import org.sireum._
+import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.TAB
 
@@ -24,7 +25,7 @@ object MakefileTemplate {
       else None()
 
     val content =
-      st"""${MicrokitUtil.doNotEditMakefile}
+      st"""${CommentTemplate.doNotEditComment_hash}
           |
           |override MICROKIT_SDK := $$(abspath $${MICROKIT_SDK})
           |
@@ -107,7 +108,7 @@ object MakefileTemplate {
       else None()
 
     val content =
-      st"""${MicrokitUtil.doNotEditMakefile}
+      st"""${CommentTemplate.doNotEditComment_hash}
           |
           |MICROKIT_TOOL ?= $$(MICROKIT_SDK)/bin/microkit
           |
@@ -189,7 +190,7 @@ object MakefileTemplate {
                     |""")
 
     val content =
-      st"""${MicrokitUtil.doNotEditMakefile}
+      st"""${CommentTemplate.doNotEditComment_hash}
           |
           |ifeq ($$(strip $$(LIONSOS)),)
           |$$(error LIONSOS must be specified)

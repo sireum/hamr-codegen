@@ -3,6 +3,7 @@ package org.sireum.hamr.codegen.arsit.templates
 
 import org.sireum._
 import org.sireum.hamr.codegen.arsit.util.ArsitLibrary
+import org.sireum.hamr.codegen.common.templates.CommentTemplate
 
 object ProjectTemplate {
 
@@ -99,7 +100,9 @@ object ProjectTemplate {
           |::!#*/
           |// #Sireum
           |
-          |// Example Sireum Proyek build definitions -- the contents of this file will not be overwritten
+          |${CommentTemplate.safeToEditComment_slash}
+          |
+          |// Example Sireum Proyek build definitions
           |//
           |// To install Sireum (Proyek and IVE) see https://sireum.org/getting-started/
           |//
@@ -181,7 +184,8 @@ object ProjectTemplate {
     // remove the following from version.properties
     // |com.intellij%forms_rt%=${formsRtVersion}
     val ret: ST =
-    st"""org.sireum.slang-embedded-art%%slang-embedded-art%=${artVersion}
+    st"""${CommentTemplate.safeToEditComment_hash}
+        |org.sireum.slang-embedded-art%%slang-embedded-art%=${artVersion}
         |
         |org.sireum%inspector-capabilities%=${inspectorVersion}
         |org.sireum%inspector-gui%=${inspectorVersion}
@@ -222,7 +226,9 @@ object ProjectTemplate {
     }
 
     val ret: ST =
-      st"""// Example sbt build definitions -- the contents of this file will not be overwritten
+      st"""${CommentTemplate.safeToEditComment_slash}
+          |
+          |// Example sbt build definitions
           |//
           |// sbt can be obtained from https://www.scala-sbt.org/download.html
           |//
@@ -340,7 +346,9 @@ object ProjectTemplate {
   def sbtBuildPropertiesContents(): ST = {
     val sbtVersion: String = ArsitLibrary.getSBTVersion()
     val ret: ST =
-      st"""sbt.version=${sbtVersion}
+      st"""${CommentTemplate.safeToEditComment_hash}
+          |
+          |sbt.version=${sbtVersion}
           |"""
     return ret
   }
@@ -348,7 +356,9 @@ object ProjectTemplate {
   def sbtPluginsSbtContents(): ST = {
     val sbtAssemblyVersion = ArsitLibrary.getSbtAssemblyVersion()
     val ret: ST =
-      st"""addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "${sbtAssemblyVersion}")
+      st"""${CommentTemplate.safeToEditComment_slash}
+          |
+          |addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "${sbtAssemblyVersion}")
           |"""
     return ret
   }
@@ -374,7 +384,9 @@ object ProjectTemplate {
       st"""import mill._
           |import scalalib._
           |
-          |// Example mill build -- the contents of this file will not be overwritten.
+          |${CommentTemplate.safeToEditComment_slash}
+          |
+          |// Example mill build
           |//
           |// A custom mill build for Sireum can be obtained from https://github.com/sireum/rolling/releases/tag/mill
           |// On Windows, rename 'mill' to 'mill.bat'

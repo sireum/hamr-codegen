@@ -24,7 +24,7 @@ object TestTemplate {
           |import org.sireum._
           |import ${basePackage}._
           |
-          |${CommentTemplate.safeToEditComment_scala}
+          |${CommentTemplate.safeToEditComment_slash}
           |class ${names.testName} extends ${names.testScalaTestName} {
           |
           |  test("Example Unit Test for Initialise Entry Point"){
@@ -238,7 +238,7 @@ object TestTemplate {
           |import art.Art
           |import ${basePackage}._
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |@msig trait ${names.testApisName} {
           |
           |  def BeforeEntrypoint(): Unit = {
@@ -281,7 +281,7 @@ object TestTemplate {
           |import org.scalatest.funsuite.AnyFunSuite
           |import org.sireum.$$internal.MutableMarker
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |abstract class ${className2Use} extends
           |  AnyFunSuite with OneInstancePerTest with BeforeAndAfterEach with
           |  ${extendsName2Use} {

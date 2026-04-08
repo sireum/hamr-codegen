@@ -6,6 +6,7 @@ import org.sireum.hamr.codegen.common.CommonUtil.Store
 import org.sireum.hamr.codegen.common.containers.Resource
 import org.sireum.hamr.codegen.common.properties.Hamr_Microkit_Properties
 import org.sireum.hamr.codegen.common.symbols.{AadlThread, SymbolTable}
+import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.{HamrCli, MonitorInjector, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen
@@ -297,7 +298,7 @@ import org.sireum.message.Reporter
             |#include <sddf/util/printf.h>
             |#define printf sddf_dprintf
             |
-            |${MicrokitUtil.doNotEdit}
+            |${CommentTemplate.doNotEditComment_slash}
             |
             |#define SCHEDULER_CH 0
             |
@@ -328,7 +329,7 @@ import org.sireum.message.Reporter
       resources = resources :+ ResourceUtil.createResource(cMonitorPath, cMonitorSource, T)
 
       val cMonitorUserSource =
-        st"""${MicrokitUtil.safeToEdit}
+        st"""${CommentTemplate.safeToEditComment_slash}
             |
             |void partition_init() {
             |  // Place all initialisation code here. Such as port creation etc.
@@ -401,7 +402,7 @@ import org.sireum.message.Reporter
       val cBridgeSource =
         st"""#include "$cHeaderFileName"
             |
-            |${MicrokitUtil.doNotEdit}
+            |${CommentTemplate.doNotEditComment_slash}
             |
             |${(for (u <- cCodeContributions.cBridge_EntrypointMethodSignatures) yield st"$u;", "\n")}
             |
@@ -446,7 +447,7 @@ import org.sireum.message.Reporter
         } else {
           st"""#include "$cHeaderFileName"
               |
-              |${MicrokitUtil.safeToEdit}
+              |${CommentTemplate.doNotEditComment_slash}
               |
               |${(cCodeContributions.cUser_MethodDefaultImpls, "\n\n")}
               |"""
@@ -474,7 +475,7 @@ import org.sireum.message.Reporter
             |#include <microkit.h>
             |#include <${MicrokitTypeUtil.cAllTypesFilename}>
             |
-            |${MicrokitUtil.doNotEdit}
+            |${CommentTemplate.doNotEditComment_slash}
             |
             |
             |${(cCodeContributions.cPortApiMethodSigs, ";\n")};

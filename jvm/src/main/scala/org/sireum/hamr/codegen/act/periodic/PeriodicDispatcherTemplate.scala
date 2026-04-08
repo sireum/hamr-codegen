@@ -7,6 +7,7 @@ import org.sireum.hamr.codegen.act.ast
 import org.sireum.hamr.codegen.act.templates.StringTemplate
 import org.sireum.hamr.codegen.act.util._
 import org.sireum.hamr.codegen.common.containers.FileResource
+import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.util.ResourceUtil
 
 object PeriodicDispatcherTemplate {
@@ -46,6 +47,8 @@ object PeriodicDispatcherTemplate {
       st"""#include <string.h>
           |#include <camkes.h>
           |#include ${modelTypesHeader}
+          |
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |// prototypes for clock functions
           |void clock_init();

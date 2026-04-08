@@ -15,8 +15,8 @@ import org.sireum.hamr.codegen.common.types._
 
   @pure def defaultPreBlocks: ISZ[ST] = {
     val ret: ISZ[ST] = ISZ(
-      if (willBeOverwritten) st"${CommentTemplate.doNotEditComment_scala}"
-      else st"${CommentTemplate.safeToEditComment_scala}")
+      if (willBeOverwritten) st"${CommentTemplate.doNotEditComment_slash}"
+      else st"${CommentTemplate.safeToEditComment_slash}")
 
     return if (typ.isInstanceOf[TODOType]) ret :+ st"// This is a type skeleton as HAMR doesn't know how to translate ${typ.name}"
     else ret

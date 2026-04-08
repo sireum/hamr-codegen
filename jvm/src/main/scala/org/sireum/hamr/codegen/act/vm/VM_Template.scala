@@ -118,6 +118,8 @@ object VM_Template {
           |#include <sel4vmmplatsupport/drivers/pci_helper.h>
           |#include <pci/helper.h>
           |
+          |${CommentTemplate.doNotEditComment_slash}
+          |
           |#ifdef CONFIG_PLAT_QEMU_ARM_VIRT
           |#define CONNECTION_BASE_ADDRESS 0xDF000000
           |#else
@@ -216,7 +218,7 @@ object VM_Template {
     val ret: ST =
       st"""${CMakeTemplate.CMAKE_MINIMUM_REQUIRED_VERSION}
           |
-          |${CommentTemplate.safeToEditComment_cmake}
+          |${CommentTemplate.safeToEditComment_hash}
           |
           |project(arm-vm C)
           |
@@ -557,7 +559,7 @@ object VM_Template {
           |"""
     })
     val ret: ST =
-      st"""${CommentTemplate.safeToEditComment_c}
+      st"""${CommentTemplate.safeToEditComment_slash}
           |
           |#include <configurations/vm.h>
           |#define VM_RAM_OFFSET      0x00000000
@@ -629,7 +631,7 @@ object VM_Template {
     })
 
     val ret: ST =
-      st"""${CommentTemplate.safeToEditComment_c}
+      st"""${CommentTemplate.safeToEditComment_slash}
           |
           |#include <configurations/vm.h>
           |
@@ -663,7 +665,7 @@ object VM_Template {
     val ret: ST =
       st"""#!/bin/sh
           |
-          |${CommentTemplate.doNotEditComment_cmake}
+          |${CommentTemplate.doNotEditComment_hash}
           |
           |insmod /lib/modules/4.14.87/kernel/drivers/vmm/connection.ko"""
     return ret
@@ -674,7 +676,7 @@ object VM_Template {
       st"""# @TAG(CUSTOM)
           |# /etc/inittab
           |#
-          |${CommentTemplate.safeToEditComment_cmake}
+          |${CommentTemplate.safeToEditComment_hash}
           |#
           |# Copyright (C) 2001 Erik Andersen <andersen@codepoet.org>
           |#
@@ -725,7 +727,7 @@ object VM_Template {
     val ret: ST =
       st"""${CMakeTemplate.CMAKE_MINIMUM_REQUIRED_VERSION}
           |
-          |${CommentTemplate.safeToEditComment_cmake}
+          |${CommentTemplate.safeToEditComment_hash}
           |
           |project(${processID} C)
           |
@@ -760,7 +762,7 @@ object VM_Template {
           |
           |${(_includes, "\n")}
           |
-          |${CommentTemplate.safeToEditComment_c}
+          |${CommentTemplate.safeToEditComment_slash}
           |
           |int main(int argc, char *argv[]) {
           |  printf("VM App ${vmProcessId} started\n");

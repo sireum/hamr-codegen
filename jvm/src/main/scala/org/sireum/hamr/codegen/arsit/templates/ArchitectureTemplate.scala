@@ -36,7 +36,7 @@ object ArchitectureTemplate {
           |import org.sireum._
           |import art.scheduling.Scheduler
           |
-          |${CommentTemplate.safeToEditComment_scala}
+          |${CommentTemplate.safeToEditComment_slash}
           |
           |object Demo extends App {
           |
@@ -263,7 +263,7 @@ object ArchitectureTemplate {
           |import art.Art.PortId._
           |${(_imports, "\n")}
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |object $architectureName {
           |  ${(bridges, "\n")}

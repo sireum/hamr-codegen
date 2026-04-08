@@ -148,7 +148,7 @@ object CMakeTemplate {
     val isInterfaceTypeLib = filtered.isEmpty
 
     val ret: ST =
-      st"""${CommentTemplate.doNotEditComment_cmake}
+      st"""${CommentTemplate.doNotEditComment_hash}
           |
           |${CMakeTemplate.CMAKE_MINIMUM_REQUIRED_VERSION}
           |
@@ -185,7 +185,7 @@ object CMakeTemplate {
                  preludes: ISZ[ST]): ST = {
 
     return (
-      st"""${CommentTemplate.doNotEditComment_cmake}
+      st"""${CommentTemplate.doNotEditComment_hash}
           |
           |${CMakeTemplate.CMAKE_MINIMUM_REQUIRED_VERSION}
           |
@@ -203,7 +203,7 @@ object CMakeTemplate {
 
   def genSettingsCmake(settingsCmakeEntries: ISZ[ST]): ST = {
     val ret: ST =
-      st"""${CommentTemplate.safeToEditComment_cmake}
+      st"""${CommentTemplate.safeToEditComment_hash}
           |
           |${CMakeTemplate.CMAKE_MINIMUM_REQUIRED_VERSION}
           |
@@ -265,7 +265,10 @@ object CMakeTemplate {
   def cmake_add_options(options: ISZ[CMakeOption]): ST = {
     val ret: ISZ[ST] = options.map((m: CMakeOption) => CMakeTemplate.cmake_add_option(m))
 
-    return st"${(ret, "\n\n")}"
+    return(
+    st"""${CommentTemplate.doNotEditComment_hash}
+        |
+        |${(ret, "\n\n")}""")
   }
 
   def addStackUsageOption(): ST = {

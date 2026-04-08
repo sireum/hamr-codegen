@@ -608,17 +608,17 @@ import org.sireum.hamr.codegen.common.util.{ExperimentalOptions, ResourceUtil}
 
     val path = "kernel/domain_schedule.c"
 
-    val contents: ST = aadlProcessor.getScheduleSourceText() match {
+    val (contents, userSupplied): (ST, B) = aadlProcessor.getScheduleSourceText() match {
       case Some(path2) =>
         if (Os.path(path2).exists) {
           val p = Os.path(path2)
-          st"${p.read}"
+          (st"${p.read}", T)
         } else {
           actOptions.workspaceRootDir match {
             case Some(root) =>
               val candidate = Os.path(root) / path2
               if (candidate.exists) {
-                st"${candidate.read}"
+                (st"${candidate.read}", T)
               } else {
                 halt(s"Could not locate Schedule_Source_Text ${candidate}")
               }
@@ -692,9 +692,15 @@ import org.sireum.hamr.codegen.common.util.{ExperimentalOptions, ResourceUtil}
         val pad: Z = (framePeriod - (otherLen + pacerLen + sumExecutionTime)) / clockPeriod
         entries = entries :+ PacerTemplate.pacerScheduleEntry(z"0", pad, Some(st" // pad rest of frame period"))
 
-        PacerTemplate.pacerExampleSchedule(clockPeriod, framePeriod, componentComments, entries, T)
+        (PacerTemplate.pacerExampleSchedule(clockPeriod, framePeriod, componentComments, entries, T), F)
     }
 
-    return ISZ(ResourceUtil.createResource(path, contents, aadlProcessor.getScheduleSourceText().nonEmpty))
+    if (userSupplied) {
+      return ISZ(ResourceUtil.createResourceI(
+        path = path, content = contents, overwrite = F, isDatatype = F, skipCommentChecks = T))
+    } else {
+      return ISZ(ResourceUtil.createResource(path, contents, F))
+    }
+
   }
 }

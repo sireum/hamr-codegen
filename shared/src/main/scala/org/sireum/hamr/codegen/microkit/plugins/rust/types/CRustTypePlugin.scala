@@ -6,6 +6,7 @@ import org.sireum.hamr.codegen.common.CommonUtil.{BoolValue, IdPath, Store, Stor
 import org.sireum.hamr.codegen.common.StringUtil
 import org.sireum.hamr.codegen.common.containers.Resource
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
+import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.types._
 import org.sireum.hamr.codegen.common.util.HamrCli.CodegenHamrPlatform
 import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
@@ -13,7 +14,7 @@ import org.sireum.hamr.codegen.microkit.plugins.linters.MicrokitLinterPlugin
 import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, MicrokitPlugin, MicrokitTypePlugin}
 import org.sireum.hamr.codegen.microkit.rust.Visibility
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
-import org.sireum.hamr.codegen.microkit.util.{MicrokitUtil, RustUtil}
+import org.sireum.hamr.codegen.microkit.util.RustUtil
 import org.sireum.hamr.codegen.microkit.{rust => RAST}
 import org.sireum.hamr.ir.Aadl
 import org.sireum.message.Reporter
@@ -154,7 +155,7 @@ object CRustTypePlugin {
 
       for(p <- modIncludes.entries) { // src/data/<package>/mod.rs
         val packageMod =
-          st"""${MicrokitUtil.doNotEdit}
+          st"""${CommentTemplate.doNotEditComment_slash}
               |
               |${(p._2, "\n")}
               |
@@ -182,7 +183,7 @@ object CRustTypePlugin {
 
       { // src/data/sb_event_counter.rs
         val sbEventCounter =
-          st"""${MicrokitUtil.doNotEdit}
+          st"""${CommentTemplate.doNotEditComment_slash}
               |
               |pub type sb_event_counter_t = usize;
               |"""
@@ -192,7 +193,7 @@ object CRustTypePlugin {
 
       { // src/data/sb_microkit_types.rs
         val sbMicrokitTypes =
-          st"""${MicrokitUtil.doNotEdit}
+          st"""${CommentTemplate.doNotEditComment_slash}
               |
               |pub type microkit_channel = u32;
               |"""
@@ -210,7 +211,7 @@ object CRustTypePlugin {
               |
               |${RustUtil.defaultCrateLevelAttributes}
               |
-              |${MicrokitUtil.doNotEdit}
+              |${CommentTemplate.doNotEditComment_slash}
               |
               |$includes
               |
@@ -222,7 +223,7 @@ object CRustTypePlugin {
       }
 
     { // Cargo.toml
-      val content = st"""${MicrokitUtil.safeToEditMakefile}
+      val content = st"""${CommentTemplate.safeToEditComment_hash}
                         |
                         |[package]
                         |name = "data"
@@ -286,7 +287,7 @@ object CRustTypePlugin {
 
     var ret: ISZ[RAST.Item] = ISZ()
 
-    ret = ret :+ RAST.ItemST(MicrokitUtil.doNotEdit)
+    ret = ret :+ RAST.ItemST(st"${CommentTemplate.doNotEditComment_slash}")
     ret = ret :+ RAST.Use(ISZ(), RAST.IdentString("vstd::prelude::*"))
     ret = ret :+ RAST.Use(ISZ(), RAST.IdentString("super::*"))
 

@@ -185,7 +185,7 @@ object ArtNixTemplate {
           |import art.Art.PortId._
           |import art.scheduling.nop.NopScheduler
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |object ${objectName} extends App {
           |
@@ -263,7 +263,7 @@ object ArtNixTemplate {
           |import art._
           |import art.Art.PortId._
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |object IPCPorts {
           |  ${(ports, "\n")}
@@ -292,7 +292,7 @@ object ArtNixTemplate {
           |import org.sireum._
           |import art._
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |object ArtNix {
           |
@@ -426,7 +426,7 @@ object ArtNixTemplate {
           |import org.sireum._
           |import art._
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |object LegacyDemo extends App {
           |  def main(args: ISZ[String]): Z = {
@@ -461,7 +461,7 @@ object ArtNixTemplate {
           |import org.sireum._
           |import art._
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |@ext object SharedMemory {
           |  def create(id: Z): Z = $$
@@ -482,7 +482,7 @@ object ArtNixTemplate {
           |import org.sireum._
           |import art._
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |object SharedMemory_Ext {
           |  def create(id: Z): Z = halt("stub")
@@ -507,7 +507,7 @@ object ArtNixTemplate {
           |import org.sireum._
           |import art._
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |@ext object $PlatformComm {
           |  def initialise(seed: Z, portOpt: Option[Art.PortId]): Unit = $$
@@ -528,7 +528,7 @@ object ArtNixTemplate {
           |import org.sireum._
           |import art._
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |object ${PlatformComm}_Ext {
           |  def initialise(seed: Z, portOpt: Option[Art.PortId]): Unit = halt("stub")
@@ -579,7 +579,7 @@ object ArtNixTemplate {
           |import org.sireum._
           |import art._
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |object ${PlatformComm}Nix {
           |
@@ -628,7 +628,7 @@ object ArtNixTemplate {
           |import org.sireum._
           |import art.Art
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |@ext object Process {
           |  def sleep(n: Z): Unit = $$
@@ -646,7 +646,7 @@ object ArtNixTemplate {
           |import org.sireum._
           |import art.Art
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |object Process_Ext {
           |  def sleep(millis: Z): Unit = halt("stub")
@@ -680,7 +680,7 @@ object ArtNixTemplate {
           |
           |import org.sireum._
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |val home = Os.slashDir
           |
@@ -767,7 +767,7 @@ object ArtNixTemplate {
     val ret: ST =
       st"""#!/usr/bin/env bash
           |#
-          |${CommentTemplate.doNotEditComment_bash}
+          |${CommentTemplate.doNotEditComment_hash}
           |#
           |set -e
           |export SCRIPT_HOME=$$( cd "$$( dirname "$$0" )" &> /dev/null && pwd )
@@ -791,7 +791,7 @@ object ArtNixTemplate {
     val ret: ST =
       st"""#!/usr/bin/env bash
           |#
-          |${CommentTemplate.doNotEditComment_bash}
+          |${CommentTemplate.doNotEditComment_hash}
           |#
           |set -e
           |export SCRIPT_HOME=$$( cd "$$( dirname "$$0" )" &> /dev/null && pwd )
@@ -943,7 +943,7 @@ object ArtNixTemplate {
     val ret: ST =
       st"""#!/usr/bin/env bash
           |#
-          |${CommentTemplate.doNotEditComment_bash}
+          |${CommentTemplate.doNotEditComment_hash}
           |#
           |set -e
           |export SCRIPT_HOME=$$( cd "$$( dirname "$$0" )" &> /dev/null && pwd )
@@ -964,7 +964,7 @@ object ArtNixTemplate {
     val ret: ST =
       st"""#!/usr/bin/env bash
           |#
-          |${CommentTemplate.doNotEditComment_bash}
+          |${CommentTemplate.doNotEditComment_hash}
           |#
           |APPS="Demo ${(apps, " ")}"
           |for APP in $${APPS}; do

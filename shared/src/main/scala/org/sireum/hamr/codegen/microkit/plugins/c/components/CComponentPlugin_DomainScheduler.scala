@@ -6,6 +6,7 @@ import org.sireum.hamr.codegen.common.CommonUtil.Store
 import org.sireum.hamr.codegen.common.containers.Resource
 import org.sireum.hamr.codegen.common.properties.Hamr_Microkit_Properties
 import org.sireum.hamr.codegen.common.symbols.{AadlThread, SymbolTable}
+import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.{HamrCli, MonitorInjector, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen
@@ -96,6 +97,8 @@ import org.sireum.message.Reporter
       val content =
         st"""#include <stdint.h>
             |#include <microkit.h>
+            |
+            |${CommentTemplate.doNotEditComment_slash}
             |
             |${(codePacerDefines, "\n")}
             |
@@ -268,7 +271,7 @@ import org.sireum.message.Reporter
           guestInitRamDiskVaddrInHex = "0x4d700000",
           maxIrqs = 1
         )
-        resources = resources :+ ResourceUtil.createResource(s"${options.sel4OutputDir.get}/${mk.relativePathIncludeDir}/${threadId}_user.h", vmm_config, T)
+        resources = resources :+ ResourceUtil.createResource(s"${options.sel4OutputDir.get}/${mk.relativePathIncludeDir}/${threadId}_user.h", vmm_config, F)
       } // end isVM
 
       if (makefileCleanEntries.nonEmpty) {
@@ -352,7 +355,7 @@ import org.sireum.message.Reporter
       val cMonitorSource =
         st"""#include <microkit.h>
             |
-            |${MicrokitUtil.doNotEdit}
+            |${CommentTemplate.doNotEditComment_slash}
             |
             |#define PORT_PACER $pacerChannelId
             |
@@ -427,7 +430,7 @@ import org.sireum.message.Reporter
       val cBridgeSource =
         st"""#include "$cHeaderFileName"
             |
-            |${MicrokitUtil.doNotEdit}
+            |${CommentTemplate.doNotEditComment_slash}
             |
             |${(for (u <- cCodeContributions.cBridge_EntrypointMethodSignatures) yield st"$u;", "\n")}
             |
@@ -468,7 +471,7 @@ import org.sireum.message.Reporter
         } else {
           st"""#include "$cHeaderFileName"
               |
-              |${MicrokitUtil.safeToEdit}
+              |${CommentTemplate.safeToEditComment_slash}
               |
               |${(cCodeContributions.cUser_MethodDefaultImpls, "\n\n")}
               |"""
@@ -495,7 +498,7 @@ import org.sireum.message.Reporter
             |#include <microkit.h>
             |#include <${MicrokitTypeUtil.cAllTypesFilename}>
             |
-            |${MicrokitUtil.doNotEdit}
+            |${CommentTemplate.doNotEditComment_slash}
             |
             |
             |${(cCodeContributions.cPortApiMethodSigs, ";\n")};

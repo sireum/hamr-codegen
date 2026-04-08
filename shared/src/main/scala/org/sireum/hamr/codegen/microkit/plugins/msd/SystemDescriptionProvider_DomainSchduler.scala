@@ -41,7 +41,7 @@ import org.sireum.message.Reporter
         content = msd.prettyST,
         markers = markers ++ msd.getMarkers,
         invertMarkers = T,
-        overwrite = F)
+        overwrite = T)
 
       val sdScheduleXmlPath = s"${options.sel4OutputDir.get}/${msd.scheduleName}"
       resources = resources :+ ResourceUtil.createResource(sdScheduleXmlPath, msd.scheduleText, F)

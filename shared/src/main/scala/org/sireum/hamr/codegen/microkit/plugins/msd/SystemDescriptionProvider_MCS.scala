@@ -6,10 +6,11 @@ import org.sireum.hamr.codegen.common.CommonUtil.{BoolValue, Store}
 import org.sireum.hamr.codegen.common.containers.{Marker, Resource}
 import org.sireum.hamr.codegen.common.properties.Hamr_Microkit_Properties
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
+import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.plugins.c.components.CComponentPlugin
-import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.{KiBytesToHex, safeToEditMakefile}
+import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
 import org.sireum.hamr.codegen.microkit.util.{MemoryMap, ProtectionDomain, SystemDescription}
 import org.sireum.hamr.ir.Aadl
 import org.sireum.message.Reporter
@@ -119,7 +120,7 @@ object SystemDescriptionProvider_MCS {
             |from sdfgen import SystemDescription, Sddf, DeviceTree, LionsOs
             |from importlib.metadata import version
             |
-            |${safeToEditMakefile}
+            |${CommentTemplate.doNotEditComment_hash}
             |
             |assert version('sdfgen').split(".")[1] == "27", "Unexpected sdfgen version"
             |

@@ -522,7 +522,7 @@ object CodeGen {
           p.up.mkdirAll()
           r match {
             case i: IResource =>
-              if (i.overwrite || !p.exists) {
+              if (!p.exists || (!i.invertMarkers && i.overwrite)) {
                 val content = render(i)
                 p.writeOver(content)
                 reporter.info(None(), toolName, s"Wrote: ${p}")

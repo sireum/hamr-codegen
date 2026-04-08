@@ -7,6 +7,7 @@ import org.sireum.hamr.codegen.act.ast
 import org.sireum.hamr.codegen.act.proof.ProofContainer.SchedulingType
 import org.sireum.hamr.codegen.act.util.{ActPlatform, Sel4ConnectorTypes}
 import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlDispatchableComponent, Dispatch_Protocol, Processor}
+import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.ir.{ComponentCategory, Direction, FeatureCategory}
 
 object SMT2Template {
@@ -123,6 +124,8 @@ object SMT2Template {
 
     val ret: ST =
       st"""(set-logic ALL)
+          |
+          |${CommentTemplate.doNotEditComment_smt2}
           |
           |(declare-datatypes ((Option 1))
           |  ((par (T) ((Some (value T))

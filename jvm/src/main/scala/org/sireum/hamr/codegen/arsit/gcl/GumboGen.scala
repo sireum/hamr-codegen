@@ -344,7 +344,7 @@ object GumboGen {
           |import ${basePackage}._
           |${_imports}
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |object ${GUMBO__Library} {
           |  ${(methods, "\n\n")}

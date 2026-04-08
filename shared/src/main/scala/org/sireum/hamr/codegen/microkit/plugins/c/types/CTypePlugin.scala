@@ -7,13 +7,13 @@ import org.sireum.hamr.codegen.common.CommonUtil.{Store, StoreValue}
 import org.sireum.hamr.codegen.common.StringUtil
 import org.sireum.hamr.codegen.common.containers.Resource
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
+import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.types._
 import org.sireum.hamr.codegen.common.util.HamrCli.CodegenHamrPlatform
 import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.plugins.MicrokitTypePlugin
 import org.sireum.hamr.codegen.microkit.plugins.linters.MicrokitLinterPlugin
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
-import org.sireum.hamr.codegen.microkit.util.MicrokitUtil
 import org.sireum.hamr.ir.Aadl
 import org.sireum.message.Reporter
 
@@ -91,7 +91,7 @@ object CTypePlugin {
           |#include <stdbool.h>
           |#include <stdint.h>
           |
-          |${MicrokitUtil.doNotEdit}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |${(defs, "\n\n")}
           |"""

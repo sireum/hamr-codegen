@@ -44,7 +44,7 @@ object ToolsTemplate {
     val ret: ST =
       st"""$header
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |// create SlangCheck artifacts for the Slang types used in the project
           |
@@ -74,7 +74,7 @@ object ToolsTemplate {
     val ret: ST =
       st"""$header
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |// create serializers/deserializers for the Slang types used in the project
           |

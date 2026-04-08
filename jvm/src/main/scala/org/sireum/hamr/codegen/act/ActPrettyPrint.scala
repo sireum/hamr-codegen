@@ -319,7 +319,7 @@ import org.sireum.ops.StringOps
     }
 
     val st =
-      st"""${CommentTemplate.doNotEditComment_c}
+      st"""${CommentTemplate.doNotEditComment_slash}
           |
           |${(preprocessorIncludes, "\n")}
           |${(imports.elements, "\n")}
@@ -386,6 +386,9 @@ import org.sireum.ops.StringOps
 
         val st =
           st"""${(c.imports.map((i: String) => s"import ${i};"), "\n")}
+              |
+              |${CommentTemplate.doNotEditComment_slash}
+              |
               |${(c.preprocessorIncludes.map((i: String) => s"#include ${i}"), "\n")}
               |component ${name} {
               |  ${(c.includes.map((i: String) => s"include ${i};"), "\n")}
@@ -421,7 +424,9 @@ import org.sireum.ops.StringOps
     }
 
     val st =
-      st"""procedure ${o.name} {
+      st"""${CommentTemplate.doNotEditComment_slash}
+          |
+          |procedure ${o.name} {
           |  ${(o.includes.map((i: String) => s"include ${i};"), "\n")}
           |  ${(methods, "\n")}
           |};"""
@@ -452,7 +457,7 @@ import org.sireum.ops.StringOps
   }
 
   def addString(path: String, content: String): Unit = {
-    add(path, st"${content}")
+    resources = resources :+ ResourceUtil.createResourceI(path = path, content = st"${content}", overwrite = T, isDatatype = F, skipCommentChecks = T)
   }
 
   def addResource(r: FileResource): Unit = {

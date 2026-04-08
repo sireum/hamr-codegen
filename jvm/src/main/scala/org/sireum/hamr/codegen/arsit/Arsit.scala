@@ -112,7 +112,7 @@ object Arsit {
                 |
                 |import org.sireum._
                 |
-                |${CommentTemplate.safeToEditComment_scala}
+                |${CommentTemplate.safeToEditComment_slash}
                 |
                 |// Any datatype definitions placed in this file will be processed by sergen and SlangCheck
                 |""",
@@ -165,7 +165,7 @@ object Arsit {
           entry._2
         }
 
-      resources = resources :+ ResourceUtil.createStringResource(Util.pathAppend(outputDir, ISZ(entry._1)), _c, T)
+      resources = resources :+ ResourceUtil.createStringResourceI(path = Util.pathAppend(outputDir, ISZ(entry._1)), content = _c, overwrite = T, isDatatype = F, skipCommentChecks = T)
     }
 
     for (i <- 0 until resources.size) {

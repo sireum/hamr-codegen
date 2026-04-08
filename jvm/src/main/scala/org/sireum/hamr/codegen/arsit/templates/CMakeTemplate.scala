@@ -3,6 +3,7 @@
 package org.sireum.hamr.codegen.arsit.templates
 
 import org.sireum._
+import org.sireum.hamr.codegen.common.templates.CommentTemplate
 
 object CMakeTemplate {
 
@@ -29,7 +30,9 @@ object CMakeTemplate {
 
   def cmake_sel4_settings_cmake(libraryName: String): ST = {
     val ret: ST =
-      st"""${cmake_sel4_addCamkesDefinition()}
+      st"""${CommentTemplate.safeToEditComment_hash}
+          |
+          |${cmake_sel4_addCamkesDefinition()}
           |
           |${cmake_sel4_add_muscl(libraryName)}"""
     return ret

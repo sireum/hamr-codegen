@@ -11,6 +11,7 @@ import org.sireum.hamr.codegen.common.util.HamrCli.CodegenHamrPlatform
 import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
 import GumboXRustUtil._
 import SlangExpUtil.Context
+import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.microkit.plugins.rust.apis.CRustApiPlugin
 import org.sireum.hamr.codegen.microkit.plugins.rust.component.{CRustComponentPlugin, CRustComponentStoreUtil}
 import org.sireum.hamr.codegen.microkit.plugins.rust.testing.CRustTestingPlugin
@@ -1749,7 +1750,7 @@ object GumboXComputeContributions {
         }
 
         val content =
-          st"""${MicrokitUtil.doNotEdit}
+          st"""${CommentTemplate.doNotEditComment_slash}
               |
               |use ${CRustTypePlugin.usePath};
               |
@@ -1763,7 +1764,7 @@ object GumboXComputeContributions {
 
       { // cb_api
         val content =
-          st"""${MicrokitUtil.doNotEdit}
+          st"""${CommentTemplate.doNotEditComment_slash}
               |
               |use data::*;
               |

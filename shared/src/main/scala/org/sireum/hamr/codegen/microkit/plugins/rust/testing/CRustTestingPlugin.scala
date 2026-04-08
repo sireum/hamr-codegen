@@ -5,6 +5,7 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{BoolValue, IdPath, Store, StoreValue}
 import org.sireum.hamr.codegen.common.containers.Resource
 import org.sireum.hamr.codegen.common.symbols._
+import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.types._
 import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.plugins.linters.{MicrokitLinterPlugin, TouchedTypes}
@@ -526,7 +527,7 @@ object CRustTestingPlugin {
 
       { // src/test/mod.rs
         val content =
-          st"""${MicrokitUtil.safeToEdit}
+          st"""${CommentTemplate.safeToEditComment_slash}
               |
               |${(for(i <- e._2.modEntries) yield  i.prettyST, "\n\n")}
               |"""
@@ -536,7 +537,7 @@ object CRustTestingPlugin {
 
       { // src/test/tests.rs
         val content =
-          st"""${MicrokitUtil.safeToEdit}
+          st"""${CommentTemplate.safeToEditComment_slash}
               |
               |${(for(i <- e._2.testsEntries) yield i.prettyST, "\n\n")}
               |"""
@@ -546,7 +547,7 @@ object CRustTestingPlugin {
 
       { // src/test/util/mod.rs
         val content =
-          st"""${MicrokitUtil.doNotEdit}
+          st"""${CommentTemplate.doNotEditComment_slash}
               |
               |${(for(i <- e._2.utilModEntries) yield  i.prettyST, "\n\n")}
               |"""
@@ -556,7 +557,7 @@ object CRustTestingPlugin {
 
       { // src/test/util/generators.rs
         val content =
-          st"""${MicrokitUtil.doNotEdit}
+          st"""${CommentTemplate.doNotEditComment_slash}
               |
               |use data::*;
               |
@@ -570,7 +571,7 @@ object CRustTestingPlugin {
 
       { // src/test/util/test_apis.rs
         val content =
-          st"""${MicrokitUtil.doNotEdit}
+          st"""${CommentTemplate.doNotEditComment_slash}
               |
               |use crate::bridge::extern_c_api as extern_api;
               |use ${CRustTypePlugin.usePath};

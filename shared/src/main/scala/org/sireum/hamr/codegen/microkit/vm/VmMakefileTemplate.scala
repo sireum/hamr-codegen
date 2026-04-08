@@ -3,14 +3,14 @@
 package org.sireum.hamr.codegen.microkit.vm
 
 import org.sireum._
-import org.sireum.hamr.codegen.microkit.util.MicrokitUtil
+import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.TAB
 
 object VmMakefileTemplate {
 
   @pure def Makefile(threadId: String): ST = {
     val ret =
-      st"""${MicrokitUtil.safeToEditMakefile}
+      st"""${CommentTemplate.safeToEditComment_hash}
           |
           |ifeq ($$(strip $$(MICROKIT_SDK)),)
           |$$(error MICROKIT_SDK must be specified)
@@ -139,6 +139,8 @@ object VmMakefileTemplate {
 
   val linux_dts: ST = st"""/dts-v1/;
                           |
+                          |${CommentTemplate.safeToEditComment_dts}
+                          |
                           |/ {
                           |	interrupt-parent = <0x8001>;
                           |	#size-cells = <0x02>;
@@ -236,6 +238,9 @@ object VmMakefileTemplate {
                             | *
                             | * SPDX-License-Identifier: BSD-2-Clause
                             | */
+                            |
+                            |  ${CommentTemplate.safeToEditComment_dts}
+                            |
                             |/ {
                             |    /* Need to specify how much RAM the guest will have */
                             |    memory@40000000 {
@@ -263,6 +268,9 @@ object VmMakefileTemplate {
                               |
                               | SPDX-License-Identifier: BSD-2-Clause
                               |-->
+                              |
+                              |${CommentTemplate.safeToEditComment_xml}
+                              |
                               |<system>
                               |    <!--
                               |     Here we give the guest 256MiB to use as RAM. Note that we use 2MiB page

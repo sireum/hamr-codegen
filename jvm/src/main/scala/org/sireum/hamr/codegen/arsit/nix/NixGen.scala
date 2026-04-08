@@ -470,7 +470,7 @@ object NixGen {
               |#include <${userHeaderFile.name}>
               |#include <${NixGen.EXT_H}>
               |
-              |${CommentTemplate.safeToEditComment_c}
+              |${CommentTemplate.safeToEditComment_slash}
               |
               |static char* component_id = "${names.instanceName}";
               |
@@ -488,8 +488,8 @@ object NixGen {
       // api helper methods (cakeml ffi's link against the c helper apis)
       if (arsitOptions.excludeImpl || threadOrDevice.isCakeMLComponent()) {
 
-        var headerMethods: ISZ[ST] = ISZ(st"${CommentTemplate.doNotEditComment_c}")
-        var implMethods: ISZ[ST] = ISZ(st"${CommentTemplate.doNotEditComment_c}")
+        var headerMethods: ISZ[ST] = ISZ(st"${CommentTemplate.doNotEditComment_slash}")
+        var implMethods: ISZ[ST] = ISZ(st"${CommentTemplate.doNotEditComment_slash}")
 
         for (p <- ports) {
           val typeNames = p._portType.nameProvider

@@ -1144,7 +1144,7 @@ object GumboXGen {
             |import ${componentNames.basePackage}._
             |${StubTemplate.addImports(imports.elements)}
             |
-            |${CommentTemplate.doNotEditComment_scala}
+            |${CommentTemplate.doNotEditComment_slash}
             |object ${simpleName} {
             |  ${(blocks, "\n\n")}
             |}
@@ -1614,7 +1614,7 @@ object GumboXGen {
             |import ${componentNames.basePackage}.GumboXUtil.GumboXResult
             |${StubTemplate.addImports(localGumboStore.imports)}
             |
-            |${CommentTemplate.doNotEditComment_scala}
+            |${CommentTemplate.doNotEditComment_slash}
             |@msig trait ${simpleTestHarnessName} extends ${componentNames.testApisName} {
             |  def verbose: B
             |
@@ -1638,7 +1638,7 @@ object GumboXGen {
             |
             |package ${componentNames.packageName}
             |
-            |${CommentTemplate.doNotEditComment_scala}
+            |${CommentTemplate.doNotEditComment_slash}
             |
             |import org.sireum._
             |import $basePackage.GumboXUtil.GumboXResult
@@ -1697,7 +1697,7 @@ object GumboXGen {
             |import $basePackage.util.{Container, UnitTestConfigurationBatch}
             |import ${componentNames.packageName}.$unitTestConfigUtilSimpleName._
             |
-            |${CommentTemplate.safeToEditComment_scala}
+            |${CommentTemplate.safeToEditComment_slash}
             |
             |class $unitTestRunnerSimpleName extends $simpleTestHarnessSlang2ScalaTestName {
             |
@@ -1798,7 +1798,7 @@ object GumboXGen {
             |import ${basePackage}.util.Container
             |import ${basePackage}.util.UnitTestConfiguration
             |
-            |${CommentTemplate.doNotEditComment_scala}
+            |${CommentTemplate.doNotEditComment_slash}
             |
             |object ${dscUnitTestSimpleName} extends App {
             |  def main(args: ISZ[String]): Z = {

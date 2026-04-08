@@ -3,8 +3,8 @@
 package org.sireum.hamr.codegen.microkit.vm
 
 import org.sireum._
+import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.microkit.connections.GlobalVarContribution
-import org.sireum.hamr.codegen.microkit.util.MicrokitUtil
 
 object VmUser {
   def vmUserCode(componentPath: String,
@@ -19,7 +19,7 @@ object VmUser {
           |#include <libvmm/guest.h>
           |#include <libvmm/virq.h>
           |
-          |${MicrokitUtil.safeToEdit}
+          |${CommentTemplate.safeToEditComment_slash}
           |
           |// Data for the guest's kernel image.
           |extern char _guest_kernel_image[];

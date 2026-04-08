@@ -2,7 +2,7 @@
 package org.sireum.hamr.codegen.microkit.vm
 
 import org.sireum._
-import org.sireum.hamr.codegen.microkit.util.MicrokitUtil
+import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.bytesToKiBytes
 
 object VmUtil {
@@ -159,7 +159,7 @@ object VmUtil {
           |
           |#include <microkit.h>
           |
-          |${MicrokitUtil.safeToEdit}
+          |${CommentTemplate.safeToEditComment_slash}
           |
           |#if defined(BOARD_qemu_virt_aarch64)
           |#define GUEST_DTB_VADDR           $guestDtbVaddrInHex

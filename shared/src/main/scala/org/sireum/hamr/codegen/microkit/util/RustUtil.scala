@@ -3,6 +3,7 @@ package org.sireum.hamr.codegen.microkit.util
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.Store
+import org.sireum.hamr.codegen.common.templates.CommentTemplate
 
 object RustUtil {
 
@@ -22,7 +23,7 @@ object RustUtil {
         |#![allow(unused_variables)]"""
 
   val defaultRustToolChainToml: ST =
-    st"""${MicrokitUtil.safeToEditMakefile}
+    st"""${CommentTemplate.safeToEditComment_hash}
         |
         |[toolchain]
         |channel = "$verusChannel"

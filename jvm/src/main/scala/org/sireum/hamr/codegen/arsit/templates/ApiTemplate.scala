@@ -90,7 +90,7 @@ object ApiTemplate {
           |import ${basePackageName}._
           |${(for (i <- apiImports.elements) yield s"import $i", "\n")}
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |${collect(names.api, traitSPFs ++ opSPFs)}
           |@sig trait ${names.api} {

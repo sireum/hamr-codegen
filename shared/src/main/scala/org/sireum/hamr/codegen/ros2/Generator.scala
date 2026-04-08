@@ -5,7 +5,8 @@ package org.sireum.hamr.codegen.ros2
 import org.sireum._
 import org.sireum.hamr.codegen.common.containers.{BlockMarker, Marker}
 import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlDataPort, AadlEventDataPort, AadlPort, AadlProcess, AadlSystem, AadlThread, Dispatch_Protocol}
-import org.sireum.hamr.codegen.common.types.{AadlType, ArrayType, BaseType, EnumType, RecordType}
+import org.sireum.hamr.codegen.common.templates.CommentTemplate
+import org.sireum.hamr.codegen.common.types.{AadlType, EnumType}
 import org.sireum.hamr.ir.Direction
 import org.sireum.message.Reporter
 import org.sireum.ops.{ISZOps, StringOps}
@@ -227,6 +228,8 @@ object Generator {
           |
           |from setuptools import find_packages, setup
           |
+          |${CommentTemplate.doNotEditComment_hash}
+          |
           |package_name = '${top_level_package_nameT}'
           |
           |setup(
@@ -316,6 +319,8 @@ object Generator {
       st"""cmake_minimum_required(VERSION 3.8)
           |project(${top_level_package_nameT})
           |
+          |${CommentTemplate.invertedMarkerComment_hash}
+          |
           |if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
           |    add_compile_options(-Wall -Wextra -Wpedantic)
           |endif()
@@ -342,7 +347,7 @@ object Generator {
 
     val filePath: ISZ[String] = IS("src", top_level_package_nameT, fileName)
 
-    return (filePath, setupFileBody, F, IS(marker))
+    return (filePath, setupFileBody, T, IS(marker))
   }
 
   //  Setup file for node source package
@@ -365,6 +370,9 @@ object Generator {
     val setupFileBody =
       st"""<?xml version="1.0"?>
           |<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+          |
+          |${CommentTemplate.invertedMarkerComment_xml}
+          |
           |<package format="3">
           |    <name>${top_level_package_nameT}</name>
           |    <version>0.0.0</version>
@@ -392,7 +400,7 @@ object Generator {
 
     val filePath: ISZ[String] = IS("src", top_level_package_nameT, fileName)
 
-    return (filePath, setupFileBody, F, IS(marker))
+    return (filePath, setupFileBody, T, IS(marker))
   }
 
 
@@ -407,6 +415,8 @@ object Generator {
     val setupFileBody =
       st"""cmake_minimum_required(VERSION 3.8)
           |project(${top_level_package_nameT}_bringup)
+          |
+          |${CommentTemplate.doNotEditComment_hash}
           |
           |if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
           |    add_compile_options(-Wall -Wextra -Wpedantic)
@@ -441,6 +451,9 @@ object Generator {
     val setupFileBody =
       st"""<?xml version="1.0"?>
           |<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+          |
+          |${CommentTemplate.invertedMarkerComment_xml}
+          |
           |<package format="3">
           |    <name>${top_level_package_nameT}_bringup</name>
           |    <version>0.0.0</version>
@@ -467,7 +480,7 @@ object Generator {
 
     val filePath: ISZ[String] = IS("src", s"${top_level_package_nameT}_bringup", fileName)
 
-    return (filePath, setupFileBody, F, IS(marker))
+    return (filePath, setupFileBody, T, IS(marker))
   }
 
 
@@ -531,6 +544,8 @@ object Generator {
     val launchFileBody =
       st"""from launch import LaunchDescription
           |from launch_ros.actions import Node
+          |
+          |${CommentTemplate.doNotEditComment_hash}
           |
           |def generate_launch_description():
           |    ld = LaunchDescription()
@@ -609,7 +624,9 @@ object Generator {
       val launch_decls: ISZ[ST] = genXmlFormatLaunchDecls(system, top_level_package_nameT)
 
       val launchFileBody =
-        st"""<launch>
+        st"""${CommentTemplate.doNotEditComment_xml}
+            |
+            |<launch>
             |    ${(launch_decls, "\n")}
             |</launch>
         """
@@ -634,14 +651,17 @@ object Generator {
     for (datatype <- datatypeMap.entries) {
       msg_files = msg_files :+ genMsgFile(modelName, datatype._2._1, datatype._2._2)
     }
-    msg_files = msg_files :+ (ISZ("src", s"${genCppPackageName(modelName)}_interfaces", "msg", "Empty.msg"), st"", T, IS())
+    msg_files = msg_files :+ (ISZ("src", s"${genCppPackageName(modelName)}_interfaces", "msg", "Empty.msg"), st"${CommentTemplate.doNotEditComment_hash}", T, IS())
     return msg_files
   }
 
   def genMsgFile(modelName: String, datatypeName: String, datatypeContent: ISZ[String]): (ISZ[String], ST, B, ISZ[Marker]) = {
     val top_level_package_nameT: String = genCppPackageName(modelName)
 
-    val fileBody = st"${(datatypeContent, "\n")}"
+    val fileBody =
+      st"""${CommentTemplate.doNotEditComment_hash}
+           |
+           |${(datatypeContent, "\n")}"""
 
     val filePath: ISZ[String] = IS("src", s"${top_level_package_nameT}_interfaces", "msg", s"${datatypeName}.msg")
 
@@ -660,6 +680,8 @@ object Generator {
     val setupFileBody =
       st"""cmake_minimum_required(VERSION 3.8)
           |project(${top_level_package_nameT}_interfaces)
+          |
+          |${CommentTemplate.doNotEditComment_hash}
           |
           |if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
           |    add_compile_options(-Wall -Wextra -Wpedantic)
@@ -690,6 +712,9 @@ object Generator {
     val setupFileBody =
       st"""<?xml version="1.0"?>
           |<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+          |
+          |${CommentTemplate.doNotEditComment_xml}
+          |
           |<package format="3">
           |    <name>${top_level_package_nameT}_interfaces</name>
           |    <version>0.0.0</version>
@@ -1955,9 +1980,7 @@ object Generator {
           |${(typeIncludes, "\n")}
           |${(stdIncludes, "\n")}
           |
-          |//========================================================
-          |// Re-running Codegen will overwrite changes to this file
-          |//========================================================
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |class ${nodeName} : public rclcpp::Node
           |{
@@ -2278,9 +2301,7 @@ object Generator {
     var fileBody =
       st"""#include "${packageName}/base_headers/${nodeName}${cpp_src_node_header_name_suffix}"
           |
-          |//========================================================
-          |// Re-running Codegen will overwrite changes to this file
-          |//========================================================
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |${nodeName}::${nodeName}() : Node("${genNodeName(component)}")
           |{
@@ -2440,9 +2461,7 @@ object Generator {
     var fileBody =
       st"""#include "${packageName}/base_headers/${nodeName}_base${cpp_src_node_header_name_suffix}"
           |
-          |//========================================================
-          |// Re-running Codegen will overwrite changes to this file
-          |//========================================================
+          |${CommentTemplate.invertedMarkerComment_slash}
           |
           |class ${nodeName} : public ${nodeName}_base
           |{
@@ -2486,7 +2505,7 @@ object Generator {
 
     val filePath: ISZ[String] = IS("src", packageName, "include", packageName, "user_headers", fileName)
 
-    return (filePath, fileBody, F, IS(marker))
+    return (filePath, fileBody, T, IS(marker))
   }
 
   def genCppUserNodeCppFile(packageName: String, component: AadlThread, datatypeMap: Map[AadlType, (String, ISZ[String])],
@@ -2555,9 +2574,7 @@ object Generator {
     var fileBody =
       st"""${includeFiles}
           |
-          |//===========================================================
-          |// This file will not be overwritten when re-running Codegen
-          |//===========================================================
+          |${CommentTemplate.safeToEditComment_slash}
           |
           |//=================================================
           |//  I n i t i a l i z e    E n t r y    P o i n t
@@ -2614,9 +2631,7 @@ object Generator {
     val fileBody =
       st"""#include "${packageName}/user_headers/${nodeName}${cpp_src_node_header_name_suffix}"
           |
-          |//========================================================
-          |// Re-running Codegen will overwrite changes to this file
-          |//========================================================
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |${nodeName}::${nodeName}() : ${nodeName}_base()
           |{
@@ -2692,6 +2707,8 @@ object Generator {
       st"""#ifndef ENUM_CONVERTER_HPP
           |#define ENUM_CONVERTER_HPP
           |
+          |${CommentTemplate.doNotEditComment_slash}
+          |
           |#include <string>
           |${(includes, "\n")}
           |
@@ -2752,9 +2769,7 @@ object Generator {
     val fileBody =
       st"""#include "${packageName}/base_headers/enum_converter.hpp"
           |
-          |//========================================================
-          |// Re-running Codegen will overwrite changes to this file
-          |//========================================================
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |${(genCppEnumConverters(packageName, enumTypes, strictAADLMode), "\n")}
         """

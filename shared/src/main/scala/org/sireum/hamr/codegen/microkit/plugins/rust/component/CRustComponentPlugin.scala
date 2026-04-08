@@ -5,6 +5,7 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{BoolValue, IdPath, Store, StoreValue}
 import org.sireum.hamr.codegen.common.containers.{Marker, Resource}
 import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlThread, SymbolTable}
+import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.plugins.rust.apis.CRustApiPlugin
@@ -286,7 +287,7 @@ object ComponentContributions {}
               |
               |${RustUtil.defaultCrateLevelAttributes}
               |
-              |${MicrokitUtil.doNotEdit}
+              |${CommentTemplate.doNotEditComment_slash}
               |
               |mod bridge;
               |mod component;
@@ -344,7 +345,7 @@ object ComponentContributions {}
 
       { // src/logging.rs
         val content =
-          st"""// This file will not be overwritten if codegen is rerun
+          st"""${CommentTemplate.safeToEditComment_slash}
               |
               |use log::LevelFilter;
               |
@@ -424,7 +425,7 @@ object ComponentContributions {}
         val content =
           st"""${(for (d <- e._2.appModDirectives) yield d.prettyST, "\n")}
               |
-              |${MicrokitUtil.safeToEdit}
+              |${CommentTemplate.safeToEditComment_slash}
               |
               |${(for (u <- uses) yield u.prettyST, "\n")}
               |
@@ -441,7 +442,7 @@ object ComponentContributions {}
 
       { // src/component/mod.rs
         val content =
-          st"""${MicrokitUtil.doNotEdit}
+          st"""${CommentTemplate.safeToEditComment_slash}
               |
               |pub mod $modName;
               |"""
@@ -457,7 +458,7 @@ object ComponentContributions {}
           else None()
 
         val content =
-          st"""${MicrokitUtil.safeToEditMakefile}
+          st"""${CommentTemplate.safeToEditComment_hash}
               |
               |[package]
               |name = "$threadId"
@@ -497,7 +498,7 @@ object ComponentContributions {}
 
       { // Makefile
         val content =
-          st"""${MicrokitUtil.safeToEditMakefile}
+          st"""${CommentTemplate.safeToEditComment_hash}
               |
               |microkit_sdk_config_dir := $$(MICROKIT_SDK)/board/$$(MICROKIT_BOARD)/$$(MICROKIT_CONFIG)
               |

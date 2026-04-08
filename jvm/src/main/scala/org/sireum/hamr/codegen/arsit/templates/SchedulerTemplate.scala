@@ -31,7 +31,7 @@ object SchedulerTemplate {
           |import art.scheduling.static.Schedule.{DSchedule, DScheduleSpec}
           |import art.scheduling.static._
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |@datatype class ProcessorTimingProperties(val clockPeriod: Option[Z],
           |                                          val framePeriod: Option[Z],
@@ -152,7 +152,7 @@ object SchedulerTemplate {
           |import art.Art
           |import art.scheduling.static.Schedule.DScheduleSpec
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |object ScheduleProvider {
           |
@@ -172,7 +172,7 @@ object SchedulerTemplate {
     val ret: ST =
       st"""#include <all.h>
           |
-          |${CommentTemplate.safeToEditComment_c}
+          |${CommentTemplate.safeToEditComment_slash}
           |
           |Unit art_scheduling_legacy_LegacyInterface_computePhase(STACK_FRAME IS_058E6F bridges) {
           |  printf("Infeasible.  You should not get here in C");
@@ -197,7 +197,7 @@ object SchedulerTemplate {
       st"""#include <all.h>
           |#include <signal.h>
           |
-          |${CommentTemplate.safeToEditComment_c}
+          |${CommentTemplate.safeToEditComment_slash}
           |
           |// Transpiled signature of the Slang variable ${slangSymbol}
           |// in ${slangPath}.  This weak function declaration allows
@@ -289,7 +289,7 @@ object SchedulerTemplate {
     val ret: ST =
       st"""#include <all.h>
           |
-          |${CommentTemplate.safeToEditComment_c}
+          |${CommentTemplate.safeToEditComment_slash}
           |
           |// Transpiled signature of the Slang variable ${slangSymbol}
           |// in ${slangPath}.  This weak function declaration allows
@@ -362,7 +362,7 @@ object SchedulerTemplate {
           |#include <sys/time.h>
           |#include <time.h>
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |/** Returns current system time in milliseconds
           |  * NOTE: this requires returning 64bit ints

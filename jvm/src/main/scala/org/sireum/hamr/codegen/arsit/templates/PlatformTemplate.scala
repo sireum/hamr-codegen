@@ -48,7 +48,7 @@ object PlatformTemplate {
           |import org.sireum._
           |$importOpt
           |
-          |${CommentTemplate.safeToEditComment_scala}
+          |${CommentTemplate.safeToEditComment_slash}
           |
           |object Platform {
           |

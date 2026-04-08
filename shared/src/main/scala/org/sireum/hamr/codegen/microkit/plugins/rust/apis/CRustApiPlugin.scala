@@ -5,6 +5,7 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{BoolValue, IdPath, Store, StoreValue}
 import org.sireum.hamr.codegen.common.containers.Resource
 import org.sireum.hamr.codegen.common.symbols.{AadlThread, SymbolTable}
+import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.HamrCli.CodegenHamrPlatform
 import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
@@ -166,7 +167,7 @@ object ComponentApiContributions {
 
       { // extern_c_api.rs
         val content =
-          st"""${MicrokitUtil.doNotEdit}
+          st"""${CommentTemplate.doNotEditComment_slash}
               |
               |//! C-interface for the component.
               |//! This code must be unsafe.
@@ -218,7 +219,7 @@ object ComponentApiContributions {
         val initApiTypeName = CRustApiPlugin.initializationApiType(thread)
         val computeApiTypeName = CRustApiPlugin.computeApiType(thread)
         val content =
-          st"""${MicrokitUtil.doNotEdit}
+          st"""${CommentTemplate.doNotEditComment_slash}
               |
               |use vstd::prelude::*;
               |use ${CRustTypePlugin.usePath};
@@ -283,7 +284,7 @@ object ComponentApiContributions {
 
       { // bridge/mod.rs
         val content =
-          st"""${MicrokitUtil.doNotEdit}
+          st"""${CommentTemplate.doNotEditComment_slash}
               |
               |pub mod extern_c_api;
               |pub mod ${threadId}_api;

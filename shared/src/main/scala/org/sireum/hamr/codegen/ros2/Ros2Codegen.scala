@@ -5,11 +5,12 @@ package org.sireum.hamr.codegen.ros2
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.CommonUtil.Store
-import org.sireum.hamr.codegen.common.containers.{IResource, Marker, Resource}
+import org.sireum.hamr.codegen.common.containers.{Marker, Resource}
 import org.sireum.hamr.codegen.common.plugin.Plugin
 import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlSystem, AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, ArrayType, BaseType, EnumType, RecordType}
 import org.sireum.hamr.codegen.common.util.HamrCli.CodegenOption
+import org.sireum.hamr.codegen.common.util.ResourceUtil
 import org.sireum.hamr.ir
 import org.sireum.hamr.ir.{Aadl, Component, ConnectionInstance}
 import org.sireum.message.Reporter
@@ -73,15 +74,13 @@ object Ros2Codegen {
         case _ => filePath
       }
 
-      resources = resources :+ IResource(
-        dstPath = absPath,
+      resources = resources :+ ResourceUtil.createResourceWithMarkers(
+        path = absPath,
         content = file._2,
         markers = file._4,
-        invertMarkers = T,
-        overwrite = file._3,
-        makeExecutable = F,
-        makeCRLF = F,
-        isDatatype = F)
+        invertMarkers = file._4.nonEmpty,
+        overwrite = file._3
+      )
     }
 
     return (Ros2Results(resources), store)

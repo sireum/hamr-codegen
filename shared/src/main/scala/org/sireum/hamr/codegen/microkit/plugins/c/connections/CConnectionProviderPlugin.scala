@@ -5,14 +5,14 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{BoolValue, ISZValue, Store}
 import org.sireum.hamr.codegen.common.containers.Resource
 import org.sireum.hamr.codegen.common.symbols.{AadlPort, AadlThread, SymbolTable}
+import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen
 import org.sireum.hamr.codegen.microkit.connections._
-import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, MicrokitPlugin}
+import org.sireum.hamr.codegen.microkit.plugins.MicrokitPlugin
 import org.sireum.hamr.codegen.microkit.plugins.c.types.CTypePlugin
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
-import org.sireum.hamr.codegen.microkit.util.MicrokitUtil
 import org.sireum.hamr.ir.{Aadl, Direction}
 import org.sireum.message.Reporter
 
@@ -150,7 +150,7 @@ object CConnectionProviderPlugin {
     val allTypesContent =
       st"""#pragma once
           |
-          |${MicrokitUtil.doNotEdit}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |${(for (i <- typeHeaderFilenames) yield st"#include <$i>", "\n")}
           |"""

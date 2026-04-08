@@ -3,7 +3,7 @@ package org.sireum.hamr.codegen.microkit.util
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.containers.{BlockMarker, Marker}
-import org.sireum.hamr.codegen.microkit.MicrokitCodegen
+import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
 
 @datatype class SystemDescription (val name: String,
@@ -32,7 +32,7 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
 
   @pure def scheduleText: ST = {
     return (
-      st"""${MicrokitUtil.safeToEditXml}
+      st"""${CommentTemplate.safeToEditComment_xml}
           |
           |$stSchedulingDomain""")
   }
@@ -44,7 +44,7 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
     val ret =
       st"""<?xml version="1.0" encoding="UTF-8"?>
           |<system xmlns:xi="http://www.w3.org/2001/XInclude">
-          |  <!-- Content in between markers will be preserved if codegen is rerun -->
+          |  ${CommentTemplate.invertedMarkerComment_xml}
           |
           |  <xi:include href="$scheduleName" />
           |
@@ -70,6 +70,8 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
     val ret =
       st"""digraph microkit {
           |  compound=true;
+          |
+          |  ${CommentTemplate.doNotEditComment_slash}
           |
           |  // protection domains
           |  ${(for(p <- protectionDomains) yield p.toDot, "\n\n")}

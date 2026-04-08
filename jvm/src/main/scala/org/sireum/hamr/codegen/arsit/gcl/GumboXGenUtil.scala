@@ -25,7 +25,7 @@ object GumboXGenUtil {
           |
           |import org.sireum._
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |object GumboXUtil {
           |
@@ -83,6 +83,8 @@ object GumboXGenUtil {
           |
           |import org.sireum._
           |
+          |${CommentTemplate.doNotEditComment_slash}
+          |
           |@sig trait Container extends art.DataContent
           |
           |@datatype class EmptyContainer extends Container
@@ -100,7 +102,7 @@ object GumboXGenUtil {
           |import $packageName.util.Container
           |import $packageName.GumboXUtil.GumboXResult
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |@msig trait UnitTestConfiguration {
           |  def name: String
@@ -129,6 +131,8 @@ object GumboXGenUtil {
                 |
                 |import org.sireum._
                 |import org.sireum.$$internal.MutableMarker
+                |
+                |${CommentTemplate.doNotEditComment_slash}
                 |
                 |trait MutableBase extends MutableMarker {
                 |  def string: String = super.toString
@@ -359,7 +363,7 @@ object GumboXGenUtil {
             |import ${basePackage}.util.EmptyContainer
             |import ${basePackage}.RandomLib
             |
-            |${CommentTemplate.doNotEditComment_scala}
+            |${CommentTemplate.doNotEditComment_slash}
             |
             |// Profile for initialise entrypoint
             |${genInitProfile()}

@@ -89,7 +89,7 @@ object GumboXRuntimeMonitoring {
             |
             |import org.sireum._
             |
-            |${CommentTemplate.doNotEditComment_scala}
+            |${CommentTemplate.doNotEditComment_slash}
             |
             |@msig trait ${injectionProviderName} {
             |  def pre_receiveInput(): Unit
@@ -462,7 +462,7 @@ object GumboXRuntimeMonitoring {
           |import art._
           |import ${componentNames.basePackage}._
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |object ${epCompanionName} {
           |
@@ -552,7 +552,7 @@ object GumboXRuntimeMonitoring {
           |import $basePackage.SystemTestSuiteSlang._
           |import $basePackage.runtimemonitor.{GumboXDispatcher, ObservationKind, RuntimeMonitor, RuntimeMonitorListener}
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |object SystemTestSuiteSlang {
           |  // for now just keep the last post state for a bridge
@@ -620,7 +620,7 @@ object GumboXRuntimeMonitoring {
           |import org.scalatest.{BeforeAndAfterEach, OneInstancePerTest}
           |import org.sireum.$$internal.MutableMarker
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |abstract class SystemTestSuite extends AnyFunSuite with OneInstancePerTest with BeforeAndAfterEach with SystemTestSuiteSlang {
           |
@@ -660,7 +660,7 @@ object GumboXRuntimeMonitoring {
           |import art.Art
           |import art.scheduling.static._
           |
-          |${CommentTemplate.safeToEditComment_scala}
+          |${CommentTemplate.safeToEditComment_slash}
           |
           |class SystemTests extends SystemTestSuite {
           |
@@ -805,7 +805,7 @@ object GumboXRuntimeMonitoring {
           |import ${componentNames.basePackage}.SystemTestSuiteSlang.runtimeMonitorStream
           |import ${componentNames.basePackage}._
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |object $objectName {
           |  ${concretePut}
@@ -837,7 +837,7 @@ object GumboXRuntimeMonitoring {
           |import org.sireum._
           |import ${basePackageName}._
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |@enum object ObservationKind {
           |  ${(rmContainer.entrypointKinds, "\n")}
@@ -853,7 +853,7 @@ object GumboXRuntimeMonitoring {
           |import org.sireum._
           |import ${basePackageName}._
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |object GumboXDispatcher {
           |  def checkContract(observationKind: ObservationKind.Type, preContainer: Option[art.DataContent], postContainer: Option[art.DataContent]): B = {
@@ -928,7 +928,7 @@ object GumboXRuntimeMonitoring {
           |import org.sireum._
           |import art.Art.BridgeId
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |@msig trait RuntimeMonitorListener {
           |  def init(modelInfo: ModelInfo): Unit
@@ -981,7 +981,7 @@ object GumboXRuntimeMonitoring {
           |
           |import java.awt.GraphicsEnvironment
           |
-          |${CommentTemplate.safeToEditComment_scala}
+          |${CommentTemplate.safeToEditComment_slash}
           |
           |object RuntimeMonitor_Ext {
           |
@@ -1089,7 +1089,7 @@ object GumboXRuntimeMonitoring {
           |import org.sireum._
           |import ${basePackageName}.Schedulers
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |object GumboXRuntimeMonitor {
           |  // assign a new map to threadNickNames to provide custom nicknames (e.g. shorter)
@@ -1347,7 +1347,7 @@ object GumboXRuntimeMonitoring {
           |import org.sireum._
           |import ${basePackage}._
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |object ModelInfo {
           |  ${(for (i <- componentInfos) yield i._2, "\n\n")}
@@ -1459,7 +1459,7 @@ object GumboXRuntimeMonitoring {
           |import org.sireum._
           |import art.scheduling.static.CommandProvider
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |object HamrVision {
           |
@@ -1494,7 +1494,7 @@ object GumboXRuntimeMonitoring {
           |import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
           |import scala.jdk.CollectionConverters._
           |
-          |${CommentTemplate.doNotEditComment_scala}
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |object HamrVisionRuntimeMonitorI_Ext {
           |  def getCommandProvider(): CommandProvider = {

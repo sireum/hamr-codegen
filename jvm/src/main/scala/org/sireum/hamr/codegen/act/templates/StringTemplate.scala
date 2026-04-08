@@ -42,7 +42,7 @@ object StringTemplate {
     }
 
     val ret: ST =
-      st"""${CommentTemplate.doNotEditComment_c}
+      st"""${CommentTemplate.doNotEditComment_slash}
           |
           |#ifndef ${macroName}
           |#define ${macroName}
@@ -82,6 +82,8 @@ object StringTemplate {
           |#ifndef ${SB_VERIFY}
           |#include <stddef.h>
           |#endif // ${SB_VERIFY}
+          |
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |#define __${Util.cbrand("OS")}_CAMKES__${badges}
           |
@@ -162,6 +164,8 @@ object StringTemplate {
       st"""#include ${typeHeaderFilename}
           |#include <${monitorTypeHeaderFilename}.h>
           |
+          |${CommentTemplate.doNotEditComment_slash}
+          |
           |${senderSig}int monsig_emit(void);
           |
           |static $typeName contents;
@@ -209,6 +213,8 @@ object StringTemplate {
           |#include ${typeHeaderFilename}
           |#include <${monitorTypeHeaderFilename}.h>
           |
+          |${CommentTemplate.doNotEditComment_slash}
+          |
           |int mon_get_sender_id(void);
           |int monsig_emit(void);
           |
@@ -255,6 +261,8 @@ object StringTemplate {
       st"""#include <camkes.h>
           |#include <stdio.h>
           |#include <string.h>
+          |
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |int32_t num_events = 0;
           |
@@ -322,6 +330,8 @@ object StringTemplate {
           |#include ${typeHeaderFilename}
           |#include "<${monitorTypeHeaderFilename}.h>"
           |
+          |${CommentTemplate.doNotEditComment_slash}
+          |
           |struct queue {
           |    int head;
           |    int tail;
@@ -371,6 +381,8 @@ object StringTemplate {
     return (
       st"""#ifndef _SEQNUM_H_
           |#define _SEQNUM_H_
+          |
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |// Typedef for seqNum to make it easy to change the type. Keep these consistent!
           |typedef uintmax_t seqNum_t;
@@ -613,7 +625,7 @@ object StringTemplate {
     val filteredIncludes: Set[String] = Set.empty[String] ++ includes.map((s: ST) => s.render)
 
     val ret: ST =
-      st"""${CommentTemplate.doNotEditComment_c}
+      st"""${CommentTemplate.doNotEditComment_slash}
           |
           |#include <${componentHeaderFilename}>
           |${(filteredIncludes.elements, "\n")}
@@ -693,6 +705,8 @@ object StringTemplate {
 #include ${Util.getSbTypeHeaderFilenameForIncludes()}
 #include <seqNum.h>
 
+${CommentTemplate.doNotEditComment_slash}
+
 // Sampling port message with bool data
 typedef struct ${s.name} {
 
@@ -736,6 +750,8 @@ bool is_empty_${s.name}(${s.structName} *port);
       st"""
 
 #include <${s.name}.h>
+
+${CommentTemplate.doNotEditComment_slash}
 
 void init_${s.name}(${s.structName} *port, seqNum_t *seqNum) {
   *seqNum = 0; // First message sequence number will be 1.

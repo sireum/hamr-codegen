@@ -6,6 +6,7 @@ import org.sireum._
 import org.sireum.hamr.codegen.act.util._
 import org.sireum.hamr.codegen.common.StringUtil
 import org.sireum.hamr.codegen.common.containers.FileResource
+import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.util.ResourceUtil
 
 object EventDataQueueTemplate {
@@ -65,6 +66,8 @@ object EventDataQueueTemplate {
           |#include <${sbCounterFileName}>
           |#include <${typeHeaderFileName}>
           |#include <stdbool.h>
+          |
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |// Queue size must be an integer factor of the size for ${counterTypeName} (an unsigned
           |// integer type). Since we are using standard C unsigned integers for the
@@ -211,6 +214,8 @@ object EventDataQueueTemplate {
           |#include <${queueHeaderFilename}>
           |#include <stdint.h>
           |#include <stddef.h>
+          |
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |//------------------------------------------------------------------------------
           |// Sender API

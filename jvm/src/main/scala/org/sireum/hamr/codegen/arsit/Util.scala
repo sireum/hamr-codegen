@@ -7,6 +7,7 @@ import org.sireum.hamr.codegen.arsit.util.{ArsitLibrary, ArsitOptions, ArsitPlat
 import org.sireum.hamr.codegen.common.containers.{FileResource, Resource}
 import org.sireum.hamr.codegen.common.properties.{OsateProperties, PropertyUtil}
 import org.sireum.hamr.codegen.common.symbols.{AadlFeature, AadlThreadOrDevice}
+import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.types._
 import org.sireum.hamr.codegen.common.util.NameUtil.NameProvider
 import org.sireum.hamr.codegen.common.util.{NameUtil, PathUtil}
@@ -132,7 +133,10 @@ object Util {
     }
     val lib = Util.getLibraryFile(r).render
     val c = StringUtil.replaceAll(lib, PACKAGE_PLACEHOLDER, packageName)
-    return st"${c}"
+    return (
+      st"""${CommentTemplate.doNotEditComment_slash}
+          |
+          |${c}""")
   }
 }
 

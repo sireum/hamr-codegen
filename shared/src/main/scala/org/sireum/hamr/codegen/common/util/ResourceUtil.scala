@@ -4,8 +4,31 @@ package org.sireum.hamr.codegen.common.util
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.containers.{EResource, IResource, Marker, FileResource}
+import org.sireum.hamr.codegen.common.templates.CommentTemplate
 
 object ResourceUtil {
+
+  def checkOverwriteConsistency(path: String, content: ST, overwrite: B, invertedMarker: B): B = {
+    val renderedContent = content.render
+
+    if (invertedMarker) {
+      if (!ops.StringOps(renderedContent).contains(CommentTemplate.invertedMarkerComment)) {
+        halt(s"Resource at '$path' has inverted markers but it doesn't contain the inverted marker comment")
+      }
+      if (!overwrite) {
+        halt(s"Resource at '$path' has inverted markers but its overwrite is set to F")
+      }
+    } else {
+      if (overwrite && !ops.StringOps(renderedContent).contains(CommentTemplate.doNotEditComment)) {
+        halt(s"Resource at '$path' will be overwritten, but it doesn't have a 'do not edit' comment")
+      }
+      if (!overwrite && !ops.StringOps(renderedContent).contains(CommentTemplate.safeToEditComment)) {
+        halt(s"Resource at '$path' has will not be overwritten, but it doesn't contain a 'safe to edit' comment")
+      }
+    }
+
+    return T
+  }
 
   def createResource(path: String,
                      content: ST,
@@ -16,7 +39,16 @@ object ResourceUtil {
   def createResourceH(path: String,
                       content: ST,
                       overwrite: B,
-                      isDatatype: B): FileResource = {
+                      isDatatype: B) : FileResource = {
+    return createResourceI(path = path, content = content, overwrite = overwrite, isDatatype = isDatatype, skipCommentChecks = F)
+  }
+
+  def createResourceI(path: String,
+                      content: ST,
+                      overwrite: B,
+                      isDatatype: B,
+                      skipCommentChecks: B): FileResource = {
+    assert(skipCommentChecks || checkOverwriteConsistency(path, content, overwrite, F))
     return IResource(
       dstPath = path,
       content = content,
@@ -48,8 +80,9 @@ object ResourceUtil {
                                  invertMarkers: B,
                                  overwrite: B,
                                  isDatatype: B): FileResource = {
-
-    assert (invertMarkers -->: !overwrite, "Overwrite should be false when inverted markers are used")
+    assert (invertMarkers -->: markers.nonEmpty, s"invertMarkers is T but markers are empty for $path")
+    assert (invertMarkers -->: overwrite, s"Overwrite should be T when inverted markers are used for $path")
+    assert(checkOverwriteConsistency(path, content, overwrite, invertMarkers))
 
     return IResource(
       dstPath = path,
@@ -65,6 +98,7 @@ object ResourceUtil {
   def createExeResource(path: String,
                         content: ST,
                         overwrite: B): FileResource = {
+    assert(checkOverwriteConsistency(path, content, overwrite, F))
     return IResource(
       dstPath = path,
       content = content,
@@ -79,6 +113,7 @@ object ResourceUtil {
   def createExeCrlfResource(path: String,
                             content: ST,
                             overwrite: B): FileResource = {
+    assert(checkOverwriteConsistency(path, content, overwrite, F))
     return IResource(
       dstPath = path,
       content = content,
@@ -104,7 +139,15 @@ object ResourceUtil {
                             content: String,
                             overwrite: B,
                             isDatatype: B): FileResource = {
-    return createResourceH(path = path, content = st"${content}", overwrite = overwrite, isDatatype = isDatatype)
+    return createStringResourceI(path = path, content = content, overwrite = overwrite, isDatatype = isDatatype, skipCommentChecks = F)
+  }
+
+  def createStringResourceI(path: String,
+                            content: String,
+                            overwrite: B,
+                            isDatatype: B,
+                            skipCommentChecks: B): FileResource = {
+    return createResourceI(path = path, content = st"${content}", overwrite = overwrite, isDatatype = isDatatype, skipCommentChecks = skipCommentChecks)
   }
 
   def createExeStringResource(path: String,

@@ -4,6 +4,7 @@ package org.sireum.hamr.codegen.microkit.types
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.StringUtil
+import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.types.{AadlType, ArrayType}
 import org.sireum.hamr.codegen.microkit.plugins.c.types.{CTypeNameProvider, CTypePlugin}
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil
@@ -368,6 +369,8 @@ object QueueTemplate {
           |
           |${MicrokitUtil.microkit_util_imports}
           |
+          |${CommentTemplate.doNotEditComment_slash}
+          |
           |// Queue size must be an integer factor of the size for ${MicrokitTypeUtil.eventCounterTypename} (an unsigned
           |// integer type). Since we are using standard C unsigned integers for the
           |// counter, picking a queue size that is a power of 2 is a good choice. We
@@ -525,6 +528,8 @@ object QueueTemplate {
           | */
           |
           |#include <${queueHeaderFilename}>
+          |
+          |${CommentTemplate.doNotEditComment_slash}
           |
           |//------------------------------------------------------------------------------
           |// Sender API

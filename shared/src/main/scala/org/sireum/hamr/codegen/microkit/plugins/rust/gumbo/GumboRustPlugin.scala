@@ -3,18 +3,18 @@ package org.sireum.hamr.codegen.microkit.plugins.rust.gumbo
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil._
-import org.sireum.hamr.codegen.common.containers.{BlockMarker, Marker, Resource}
+import org.sireum.hamr.codegen.common.containers.{Marker, Resource}
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes}
 import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
 import SlangExpUtil.Context
+import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.microkit.plugins.linters.MicrokitLinterPlugin
 import org.sireum.hamr.codegen.microkit.plugins.rust.apis.CRustApiPlugin
 import org.sireum.hamr.codegen.microkit.plugins.rust.component.CRustComponentPlugin
 import org.sireum.hamr.codegen.microkit.plugins.rust.testing.CRustTestingPlugin
 import org.sireum.hamr.codegen.microkit.plugins.rust.types.{CRustTypePlugin, CRustTypeProvider}
 import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, MicrokitInitPlugin, MicrokitPlugin}
-import org.sireum.hamr.codegen.microkit.rust.Item
 import org.sireum.hamr.codegen.microkit.util.{MakefileTarget, MakefileUtil, MicrokitUtil, RustUtil}
 import org.sireum.hamr.codegen.microkit.{MicrokitCodegen, rust => RAST}
 import org.sireum.hamr.ir._
@@ -803,7 +803,7 @@ object GumboRustPlugin {
                   |
                   |${RustUtil.defaultCrateLevelAttributes}
                   |
-                  |${MicrokitUtil.safeToEdit}
+                  |${CommentTemplate.safeToEditComment_slash}
                   |
                   |use data::*;
                   |use vstd::prelude::*;
@@ -820,7 +820,7 @@ object GumboRustPlugin {
           }
 
           { // crates/<aadl-package-name>/Cargo.toml
-            val content = st"""${MicrokitUtil.safeToEditMakefile}
+            val content = st"""${CommentTemplate.safeToEditComment_hash}
                               |
                               |[package]
                               |name = "${e._1}"

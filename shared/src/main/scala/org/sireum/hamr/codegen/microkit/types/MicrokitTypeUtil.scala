@@ -2,15 +2,14 @@
 package org.sireum.hamr.codegen.microkit.types
 
 import org.sireum._
-import org.sireum.CircularQueue.Policy
 import org.sireum.hamr.codegen.common.properties.{HamrProperties, OsateProperties, PropertyUtil}
 import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlEventPort, AadlFeatureData, AadlPort, GclAnnexClauseInfo, GclAnnexLibInfo, SymbolTable}
+import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypeNameProvider, AadlTypes, ArraySizeKind, ArrayType, BaseType, BitType, EnumType, RecordType, SlangType, TypeKind, TypeUtil}
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen
 import org.sireum.hamr.codegen.microkit.connections._
 import org.sireum.hamr.codegen.microkit.plugins.c.types.CTypeProvider
 import org.sireum.hamr.codegen.microkit.plugins.rust.types.{CRustTypePlugin, CRustTypeProvider}
-import org.sireum.hamr.codegen.microkit.util.MicrokitUtil
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.brand
 import org.sireum.hamr.ir
 import org.sireum.hamr.ir.{GclMethod, GclStateVar}
@@ -63,7 +62,7 @@ object MicrokitTypeUtil {
         |
         |#include <stdint.h>
         |
-        |${MicrokitUtil.doNotEdit}
+        |${CommentTemplate.doNotEditComment_slash}
         |
         |typedef _Atomic uintmax_t ${eventCounterTypename};
         |"""
