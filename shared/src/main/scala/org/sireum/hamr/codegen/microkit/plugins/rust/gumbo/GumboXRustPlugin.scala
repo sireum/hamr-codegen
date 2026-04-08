@@ -29,6 +29,36 @@ object GumboXRustPlugin {
   @strictpure def getGumboXContributions(store: Store): Option[GumboXContributions] = store.get(KEY_GumboXPlugin).asInstanceOf[Option[GumboXContributions]]
 
   @strictpure def putGumboXContributions(contributions: GumboXContributions, store: Store): Store = store + KEY_GumboXPlugin ~> contributions
+
+  /** Generate the proptest fn-parameter binding for a tuple strategy.
+    * Proptest only implements Strategy for tuples up to 12 elements.
+    * When the number of parameters exceeds 12, the tuple is split into
+    * chunks of at most 10 and nested so each inner tuple stays within the limit.
+    */
+  @pure def makeProptestTupleApp(names: ISZ[String], stratNames: ISZ[String]): ST = {
+    val maxFlatSize: Z = 12
+    if (names.size <= maxFlatSize) {
+      return st"""(${(names, ", ")})
+                 |    in (${(stratNames, ", ")})"""
+    }
+    val chunkSize: Z = 10
+    var nameChunks: ISZ[ISZ[String]] = ISZ()
+    var stratChunks: ISZ[ISZ[String]] = ISZ()
+    var i: Z = 0
+    while (i < names.size) {
+      val end: Z = if (i + chunkSize < names.size) i + chunkSize else names.size
+      nameChunks = nameChunks :+ ops.ISZOps(names).slice(i, end)
+      stratChunks = stratChunks :+ ops.ISZOps(stratNames).slice(i, end)
+      i = i + chunkSize
+    }
+    val nameParts: ISZ[ST] = for (chunk <- nameChunks) yield st"(${(chunk, ", ")})"
+    val stratParts: ISZ[ST] = for (chunk <- stratChunks) yield st"(${(chunk, ", ")})"
+    return st"""(
+               |  ${(nameParts, ",\n")}
+               |) in (
+               |  ${(stratParts, ",\n")}
+               |)"""
+  }
 }
 
 @sig trait GumboXContributions extends StoreValue {
@@ -1445,8 +1475,10 @@ object GumboXComputeContributions {
 
       val app: ST =
         if (sorted_pre_without_state_vars.isEmpty) st"empty in ::proptest::strategy::Just(())"
-        else st"""(${(for (p <- sorted_pre_without_state_vars) yield p.name, ", ")})
-                 |    in (${(for (p <- sorted_pre_without_state_vars) yield s"$$${p.name}_strat", ", ")})"""
+        else GumboXRustPlugin.makeProptestTupleApp(
+          for (p <- sorted_pre_without_state_vars) yield p.name,
+          for (p <- sorted_pre_without_state_vars) yield s"$$${p.name}_strat"
+        )
 
       val body =
         st"""proptest!{
@@ -1587,8 +1619,10 @@ object GumboXComputeContributions {
 
       val app: ST =
         if (sorted_Pre_State_Params.isEmpty) st"empty in ::proptest::strategy::Just(())"
-        else st"""(${(for (p <- sorted_Pre_State_Params) yield p.name, ", ")})
-                 |    in (${(for (p <- sorted_Pre_State_Params) yield s"$$${p.name}_strat", ", ")})"""
+        else GumboXRustPlugin.makeProptestTupleApp(
+          for (p <- sorted_Pre_State_Params) yield p.name,
+          for (p <- sorted_Pre_State_Params) yield s"$$${p.name}_strat"
+        )
       val body =
         st"""proptest!{
             |  #![proptest_config($$config)]
