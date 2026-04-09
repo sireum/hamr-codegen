@@ -3,9 +3,10 @@ package org.sireum.hamr.codegen.arsit.bts
 
 import org.sireum._
 import org.sireum.hamr.codegen.arsit.plugin.BehaviorProviderPlugin
-import org.sireum.hamr.codegen.common.containers.{EResource, IResource, Resource}
+import org.sireum.hamr.codegen.common.containers.{EResource, Resource}
 import org.sireum.hamr.codegen.common.symbols.{AadlThreadOrDevice, AnnexClauseInfo, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlTypes
+import org.sireum.hamr.codegen.common.util.ResourceUtil
 import org.sireum.hamr.ir._
 import org.sireum.message.Reporter
 
@@ -42,16 +43,11 @@ object BlessBehaviorProviderPlugin {
       m.values.map((r: BTSResource) =>
         r match {
           case t: BTSText =>
-            IResource(
-              dstPath = filename,
+            ResourceUtil.createResourceH(
+              path = filename,
               content = st"${t.source}",
-              markers = ISZ(),
-              invertMarkers = F,
               overwrite = t.overwrite,
-              makeExecutable = F,
-              makeCRLF = F,
               isDatatype = F)
-
           case p: BTSPath =>
             EResource(
               srcPath = p.path,

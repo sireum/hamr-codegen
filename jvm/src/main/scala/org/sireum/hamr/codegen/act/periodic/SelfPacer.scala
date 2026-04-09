@@ -25,9 +25,15 @@ import org.sireum.hamr.codegen.common.util.ResourceUtil
     var configurations: ISZ[ast.Configuration] = ISZ()
     var connections: ISZ[ast.Connection] = ISZ()
     var auxResources: ISZ[FileResource] = ISZ()
+    var userContributions: ISZ[FileResource] = ISZ()
 
     if (threads.nonEmpty) {
-      auxResources = auxResources ++ getSchedule(threads, symbolTable)
+      val f = getSchedule(threads, symbolTable)
+      if (f._1) {
+        userContributions = userContributions :+ f._2
+      } else {
+        auxResources = auxResources :+ f._2
+      }
     }
 
     val periodicThreads = symbolTable.getPeriodicThreads()
@@ -62,6 +68,7 @@ import org.sireum.hamr.codegen.common.util.ResourceUtil
       configurations = configurations,
       settingCmakeEntries = settingCmakeEntries,
       auxResourceFiles = auxResources,
+      userContributions = userContributions,
 
       imports = ISZ(),
       instances = ISZ(),
@@ -158,7 +165,7 @@ import org.sireum.hamr.codegen.common.util.ResourceUtil
     return (componentContributions, glueCodeContributions)
   }
 
-  def getSchedule(allThreads: ISZ[AadlThread], symbolTable: SymbolTable): ISZ[FileResource] = {
+  def getSchedule(allThreads: ISZ[AadlThread], symbolTable: SymbolTable): (B, FileResource) = {
 
     val aadlProcessor = PeriodicUtil.getBoundProcessor(symbolTable)
 
@@ -233,10 +240,10 @@ import org.sireum.hamr.codegen.common.util.ResourceUtil
     }
 
     if (userSupplied) {
-      return ISZ(ResourceUtil.createResourceI(
-        path = path, content = contents, overwrite = F, isDatatype = F, skipCommentChecks = T))
+      return (T, ResourceUtil.createResourceI(
+        path = path, content = contents, overwrite = F, isDatatype = F, skipConsistencyChecks = T))
     } else {
-      return ISZ(ResourceUtil.createResource(path, contents, F))
+      return (F, ResourceUtil.createResource(path, contents, F))
     }
   }
 }

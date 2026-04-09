@@ -20,6 +20,7 @@ import org.sireum.ops.StringOps
 @record class ActPrettyPrint {
 
   var resources: ISZ[FileResource] = ISZ()
+  var userResources: ISZ[FileResource] = ISZ()
   var rootServer: String = ""
   var actContainer: Option[ActContainer] = None[ActContainer]()
 
@@ -63,14 +64,14 @@ import org.sireum.ops.StringOps
           if (p.exists) {
             if (StringOps(st).endsWith(".c")) {
               val fname = s"${rootDestDir}/src/${p.name}"
-              addString(fname, p.read)
+              addString(s"$destDir/$fname", p.read)
 
               sourcePaths = sourcePaths :+ fname
 
             }
             else if (StringOps(st).endsWith(".h")) {
               val fname = s"${rootDestDir}/includes/${p.name}"
-              addString(fname, p.read)
+              addString(s"$destDir/$fname", p.read)
             }
             else {
               reporter.warn(None(), Util.toolName, s"${path} does not appear to be a valid C source file")
@@ -233,15 +234,16 @@ import org.sireum.ops.StringOps
       val dstPath = s"${destDir}/${o.dstPath}"
       o match {
         case i: IResource =>
-          IResource(
-            dstPath = dstPath,
+          ResourceUtil.createResourceWithMarkersJ(
+            path = dstPath,
             content = i.content,
             markers = i.markers,
             invertMarkers = F,
             overwrite = i.overwrite,
+            isDatatype = F,
             makeExecutable = i.makeExecutable,
             makeCRLF = i.makeCRLF,
-            isDatatype = F)
+            skipConsistencyChecks = F)
         case e: EResource =>
           EResource(
             srcPath = e.srcPath,
@@ -251,7 +253,29 @@ import org.sireum.ops.StringOps
       }
     })
 
-    return ret
+    for (o <- container.userContributions) {
+      val dstPath = s"${destDir}/${o.dstPath}"
+      o match {
+        case i: IResource =>
+          userResources = userResources :+
+            ResourceUtil.createResourceWithMarkersJ(
+              path = dstPath,
+              content = i.content,
+              markers = i.markers,
+              invertMarkers = F,
+              overwrite = i.overwrite,
+              isDatatype = F,
+              makeExecutable = i.makeExecutable,
+              makeCRLF = i.makeCRLF,
+              skipConsistencyChecks = T)
+        case e: EResource =>
+          EResource(
+            srcPath = e.srcPath, dstPath = e.dstPath, symLink = e.symLink
+          )
+      }
+    }
+
+    return ret ++ userResources
   }
 
   def prettyPrint(objs: ISZ[ASTObject]): Unit = {
@@ -457,7 +481,9 @@ import org.sireum.ops.StringOps
   }
 
   def addString(path: String, content: String): Unit = {
-    resources = resources :+ ResourceUtil.createResourceI(path = path, content = st"${content}", overwrite = T, isDatatype = F, skipCommentChecks = T)
+    userResources = userResources :+ ResourceUtil.createResourceI(
+      path = path, content = st"${content}", overwrite = T, isDatatype = F,
+      skipConsistencyChecks = T)
   }
 
   def addResource(r: FileResource): Unit = {

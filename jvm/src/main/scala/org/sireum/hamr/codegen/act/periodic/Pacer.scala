@@ -37,6 +37,7 @@ import org.sireum.hamr.codegen.common.util.{ExperimentalOptions, ResourceUtil}
     var configurations: ISZ[ast.Configuration] = ISZ()
     var cContainers: ISZ[C_Container] = ISZ()
     var auxResources: ISZ[FileResource] = ISZ()
+    var userContributions: ISZ[FileResource] = ISZ()
 
     imports = imports :+ PacerTemplate.pacerImport()
 
@@ -44,7 +45,12 @@ import org.sireum.hamr.codegen.common.util.{ExperimentalOptions, ResourceUtil}
 
     if (periodicComponents.nonEmpty) {
 
-      auxResources = auxResources ++ getSchedule(periodicComponents, symbolTable)
+      val sched = getSchedule(periodicComponents, symbolTable)
+      if (sched._1) {
+        userContributions = userContributions :+ sched._2
+      } else {
+        auxResources = auxResources :+ sched._2
+      }
 
       // TODO handle components with different periods
       var emits: ISZ[ast.Emits] = ISZ()
@@ -210,7 +216,7 @@ import org.sireum.hamr.codegen.common.util.{ExperimentalOptions, ResourceUtil}
     val settingCmakeEntries: ISZ[ST] = ISZ(PacerTemplate.settings_cmake_entries(maxDomain))
 
     return CamkesAssemblyContribution(imports, instances, connections, configurations, cContainers,
-      settingCmakeEntries, auxResources)
+      settingCmakeEntries, auxResources, userContributions)
   }
 
   def handlePeriodicComponents_CASE_Connector(connectionCounter: Counter,
@@ -225,6 +231,7 @@ import org.sireum.hamr.codegen.common.util.{ExperimentalOptions, ResourceUtil}
     var configurations: ISZ[ast.Configuration] = ISZ()
     var cContainers: ISZ[C_Container] = ISZ()
     var auxResources: ISZ[FileResource] = ISZ()
+    var userContributions: ISZ[FileResource] = ISZ()
 
     imports = imports :+ PacerTemplate.pacerImport()
 
@@ -247,7 +254,12 @@ import org.sireum.hamr.codegen.common.util.{ExperimentalOptions, ResourceUtil}
 
     if (periodicComponents.nonEmpty) {
 
-      auxResources = auxResources ++ getSchedule(periodicComponents, symbolTable)
+      val sched = getSchedule(periodicComponents, symbolTable)
+      if (sched._1) {
+        userContributions = userContributions :+ sched._2
+      } else {
+        auxResources = auxResources :+ sched._2
+      }
 
       // TODO handle components with different periods
       var emits: ISZ[ast.Emits] = ISZ()
@@ -409,7 +421,7 @@ import org.sireum.hamr.codegen.common.util.{ExperimentalOptions, ResourceUtil}
     }
 
     return CamkesAssemblyContribution(imports, instances, connections, configurations, cContainers,
-      settingCmakeEntries, auxResources)
+      settingCmakeEntries, auxResources, userContributions)
   }
 
   def handlePeriodicComponent(aadlComponent: AadlComponent, symbolTable: SymbolTable): (CamkesComponentContributions, CamkesGlueCodeContributions) = {
@@ -602,7 +614,7 @@ import org.sireum.hamr.codegen.common.util.{ExperimentalOptions, ResourceUtil}
     return ResourceUtil.createResource(PacerTemplate.pacerGlueCodePath(), glueCode, T)
   }
 
-  def getSchedule(allComponents: ISZ[AadlComponent], symbolTable: SymbolTable): ISZ[FileResource] = {
+  def getSchedule(allComponents: ISZ[AadlComponent], symbolTable: SymbolTable): (B, FileResource) = {
 
     val aadlProcessor = PeriodicUtil.getBoundProcessor(symbolTable)
 
@@ -696,10 +708,10 @@ import org.sireum.hamr.codegen.common.util.{ExperimentalOptions, ResourceUtil}
     }
 
     if (userSupplied) {
-      return ISZ(ResourceUtil.createResourceI(
-        path = path, content = contents, overwrite = F, isDatatype = F, skipCommentChecks = T))
+      return (T, ResourceUtil.createResourceI(
+        path = path, content = contents, overwrite = F, isDatatype = F, skipConsistencyChecks = T))
     } else {
-      return ISZ(ResourceUtil.createResource(path, contents, F))
+      return (F, ResourceUtil.createResource(path, contents, F))
     }
 
   }

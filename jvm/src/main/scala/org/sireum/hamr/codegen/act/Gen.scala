@@ -45,6 +45,8 @@ import org.sireum.ops.ISZOps
   var containers: ISZ[C_Container] = ISZ()
   var auxResourceFiles: ISZ[FileResource] = ISZ()
 
+  var userContributions: ISZ[FileResource] = ISZ()
+
   var camkesComponents: ISZ[ast.Component] = ISZ()
   var camkesConnections: ISZ[ast.Connection] = ISZ()
   var camkesConnectorContainers: ISZ[ConnectorContainer] = ISZ()
@@ -159,6 +161,7 @@ import org.sireum.ops.ISZOps
         containers = containers ++ periodicAssemblyContributions.cContainers
         settingsCmakeEntries = settingsCmakeEntries ++ periodicAssemblyContributions.settingCmakeEntries
         auxResourceFiles = auxResourceFiles ++ periodicAssemblyContributions.auxResourceFiles
+        userContributions = userContributions ++ periodicAssemblyContributions.userContributions
       }
 
       auxResourceFiles = auxResourceFiles :+
@@ -218,6 +221,7 @@ import org.sireum.ops.ISZOps
         samplingPorts = samplingPorts.values,
         cContainers = containers,
         auxFiles = auxResourceFiles,
+        userContributions = userContributions,
         globalImports = globalImports.elements,
         globalPreprocessorIncludes = globalPreprocessorIncludes.elements,
         requiresTimeServer = PeriodicUtil.requiresTimeServer(symbolTable, useDomainScheduling)))

@@ -8,10 +8,13 @@ import org.sireum.hamr.codegen.common.templates.CommentTemplate
 
 object ResourceUtil {
 
-  def checkOverwriteConsistency(path: String, content: ST, overwrite: B, invertedMarker: B): B = {
+  def checkConsistency(path: String, content: ST, overwrite: B, invertedMarker: B, markers: ISZ[Marker]): B = {
     val renderedContent = content.render
 
     if (invertedMarker) {
+      if (markers.isEmpty) {
+        halt(s"Resource at '$path' has inverted markers but does not contain markers")
+      }
       if (!ops.StringOps(renderedContent).contains(CommentTemplate.invertedMarkerComment)) {
         halt(s"Resource at '$path' has inverted markers but it doesn't contain the inverted marker comment")
       }
@@ -40,24 +43,18 @@ object ResourceUtil {
                       content: ST,
                       overwrite: B,
                       isDatatype: B) : FileResource = {
-    return createResourceI(path = path, content = content, overwrite = overwrite, isDatatype = isDatatype, skipCommentChecks = F)
+    return createResourceI(
+      path = path, content = content, overwrite = overwrite, isDatatype = isDatatype, skipConsistencyChecks = F)
   }
 
   def createResourceI(path: String,
                       content: ST,
                       overwrite: B,
                       isDatatype: B,
-                      skipCommentChecks: B): FileResource = {
-    assert(skipCommentChecks || checkOverwriteConsistency(path, content, overwrite, F))
-    return IResource(
-      dstPath = path,
-      content = content,
-      markers = ISZ(),
-      invertMarkers = F,
-      overwrite = overwrite,
-      makeExecutable = F,
-      makeCRLF = F,
-      isDatatype = isDatatype)
+                      skipConsistencyChecks: B): FileResource = {
+    return createResourceWithMarkersI(
+      path = path, content = content, markers = ISZ(), invertMarkers = F, overwrite = overwrite,
+      isDatatype = isDatatype, skipConsistencyChecks = skipConsistencyChecks)
   }
 
   def createResourceWithMarkers(path: String,
@@ -66,12 +63,8 @@ object ResourceUtil {
                                 invertMarkers: B,
                                 overwrite: B): FileResource = {
     return createResourceWithMarkersH(
-      path = path,
-      content = content,
-      markers = markers,
-      invertMarkers = invertMarkers,
-      overwrite = overwrite,
-      isDatatype = F)
+      path = path, content = content, markers = markers, invertMarkers = invertMarkers,
+      overwrite = overwrite, isDatatype = F)
   }
 
   def createResourceWithMarkersH(path: String,
@@ -80,9 +73,34 @@ object ResourceUtil {
                                  invertMarkers: B,
                                  overwrite: B,
                                  isDatatype: B): FileResource = {
-    assert (invertMarkers -->: markers.nonEmpty, s"invertMarkers is T but markers are empty for $path")
-    assert (invertMarkers -->: overwrite, s"Overwrite should be T when inverted markers are used for $path")
-    assert(checkOverwriteConsistency(path, content, overwrite, invertMarkers))
+    return createResourceWithMarkersI(
+      path = path, content = content, markers = markers, invertMarkers = invertMarkers,
+      overwrite = overwrite, isDatatype = isDatatype, skipConsistencyChecks = F)
+  }
+
+  def createResourceWithMarkersI(path: String,
+                                 content: ST,
+                                 markers: ISZ[Marker],
+                                 invertMarkers: B,
+                                 overwrite: B,
+                                 isDatatype: B,
+                                 skipConsistencyChecks: B): FileResource = {
+    return createResourceWithMarkersJ(
+      path = path, content = content, markers = markers, invertMarkers = invertMarkers,
+      overwrite = overwrite, makeExecutable = F, makeCRLF = F, isDatatype = isDatatype,
+      skipConsistencyChecks = skipConsistencyChecks)
+  }
+
+  def createResourceWithMarkersJ(path: String,
+                                 content: ST,
+                                 markers: ISZ[Marker],
+                                 invertMarkers: B,
+                                 overwrite: B,
+                                 isDatatype: B,
+                                 makeExecutable: B,
+                                 makeCRLF: B,
+                                 skipConsistencyChecks: B): FileResource = {
+    assert(skipConsistencyChecks || checkConsistency(path, content, overwrite, invertMarkers, markers))
 
     return IResource(
       dstPath = path,
@@ -90,64 +108,49 @@ object ResourceUtil {
       markers = markers,
       invertMarkers = invertMarkers,
       overwrite = overwrite,
-      makeExecutable = F,
-      makeCRLF = F,
+      makeExecutable = makeExecutable,
+      makeCRLF = makeCRLF,
       isDatatype = isDatatype)
   }
 
   def createExeResource(path: String,
                         content: ST,
                         overwrite: B): FileResource = {
-    assert(checkOverwriteConsistency(path, content, overwrite, F))
-    return IResource(
-      dstPath = path,
-      content = content,
-      markers = ISZ(),
-      invertMarkers = F,
-      overwrite = overwrite,
-      makeExecutable = T,
-      makeCRLF = F,
-      isDatatype = F)
+    return createResourceWithMarkersJ(
+      path = path, content = content, markers = ISZ(), invertMarkers = F, overwrite = overwrite,
+      isDatatype = F, makeExecutable = T, makeCRLF = F, skipConsistencyChecks = F)
   }
 
   def createExeCrlfResource(path: String,
                             content: ST,
                             overwrite: B): FileResource = {
-    assert(checkOverwriteConsistency(path, content, overwrite, F))
-    return IResource(
-      dstPath = path,
-      content = content,
-      markers = ISZ(),
-      invertMarkers = F,
-      overwrite = overwrite,
-      makeExecutable = T,
-      makeCRLF = T,
-      isDatatype = F)
+    return createResourceWithMarkersJ(
+      path = path, content = content, markers = ISZ(), invertMarkers = F, overwrite = overwrite,
+      isDatatype = F, makeExecutable = T, makeCRLF = T, skipConsistencyChecks = F)
   }
 
   def createStringResource(path: String,
                            content: String,
                            overwrite: B): FileResource = {
-    return createStringResourceH(
-      path = path,
-      content = content,
-      overwrite = overwrite,
-      isDatatype = F)
+    return createStringResourceH(path = path, content = content, overwrite = overwrite, isDatatype = F)
   }
 
   def createStringResourceH(path: String,
                             content: String,
                             overwrite: B,
                             isDatatype: B): FileResource = {
-    return createStringResourceI(path = path, content = content, overwrite = overwrite, isDatatype = isDatatype, skipCommentChecks = F)
+    return createStringResourceI(
+      path = path, content = content, overwrite = overwrite, isDatatype = isDatatype, skipConsistencyChecks = F)
   }
 
   def createStringResourceI(path: String,
                             content: String,
                             overwrite: B,
                             isDatatype: B,
-                            skipCommentChecks: B): FileResource = {
-    return createResourceI(path = path, content = st"${content}", overwrite = overwrite, isDatatype = isDatatype, skipCommentChecks = skipCommentChecks)
+                            skipConsistencyChecks: B): FileResource = {
+    return createResourceI(
+      path = path, content = st"${content}", overwrite = overwrite, isDatatype = isDatatype,
+      skipConsistencyChecks = skipConsistencyChecks)
   }
 
   def createExeStringResource(path: String,

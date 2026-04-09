@@ -15,6 +15,7 @@ import org.sireum.hamr.ir
                              samplingPorts: ISZ[SamplingPortInterface],
                              cContainers: ISZ[C_Container],
                              auxFiles: ISZ[FileResource],
+                             userContributions: ISZ[FileResource],
                              globalImports: ISZ[String],
                              globalPreprocessorIncludes: ISZ[String],
                              requiresTimeServer: B
@@ -79,7 +80,9 @@ import org.sireum.hamr.ir
                                            configurations: ISZ[ast.Configuration],
                                            cContainers: ISZ[C_Container],
                                            settingCmakeEntries: ISZ[ST],
-                                           auxResourceFiles: ISZ[FileResource])
+                                           auxResourceFiles: ISZ[FileResource],
+                                           userContributions: ISZ[FileResource]
+                                          )
 
 @datatype class CamkesComponentContributions(shell: ast.Component)
 

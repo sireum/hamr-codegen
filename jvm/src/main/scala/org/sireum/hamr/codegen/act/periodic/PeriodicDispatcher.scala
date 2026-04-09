@@ -136,7 +136,7 @@ import org.sireum.hamr.codegen.common.symbols._
 
     val settingsCmakeEntries: ISZ[ST] = ISZ()
     return CamkesAssemblyContribution(imports, instances, connections, configurations, cContainers,
-      settingsCmakeEntries, auxResources)
+      settingsCmakeEntries, auxResources, ISZ())
   }
 
 

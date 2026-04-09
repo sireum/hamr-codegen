@@ -165,7 +165,7 @@ object Arsit {
           entry._2
         }
 
-      resources = resources :+ ResourceUtil.createStringResourceI(path = Util.pathAppend(outputDir, ISZ(entry._1)), content = _c, overwrite = T, isDatatype = F, skipCommentChecks = T)
+      resources = resources :+ ResourceUtil.createStringResourceI(path = Util.pathAppend(outputDir, ISZ(entry._1)), content = _c, overwrite = T, isDatatype = F, skipConsistencyChecks = T)
     }
 
     for (i <- 0 until resources.size) {
