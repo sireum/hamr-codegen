@@ -44,23 +44,35 @@ object Ros2Codegen {
 
     mapDatatypes(aadlTypes, symbolTable, reporter)
 
+    val microRosThreads: ISZ[AadlThread] = ISZOps(threadComponents).filter(t => RosUtil.isMicroRos(t))
+    val ros2Threads: ISZ[AadlThread] = ISZOps(threadComponents).filter(t => !RosUtil.isMicroRos(t))
+
     var files: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
 
     options.ros2NodesLanguage.name match {
-      case "Cpp" => files =
-        Generator.genCppNodePkg(modelName, threadComponents, connectionMap, datatypeMap, options.strictAadlMode,
-                                options.invertTopicBinding, reporter)
+      case "Cpp" =>
+        if (ros2Threads.nonEmpty) {
+          files = Generator.genCppNodePkg(modelName, ros2Threads, connectionMap, datatypeMap, options.strictAadlMode,
+                                          options.invertTopicBinding, reporter)
+        }
+        if (microRosThreads.nonEmpty) {
+          files = files ++ Generator.genMicroRosNodePkg(modelName, microRosThreads, connectionMap, datatypeMap,
+                                                        options.invertTopicBinding, reporter)
+        }
       //case "Python" => files = Generator.genPyNodePkg(modelName, threadComponents, connectionMap, options.strictAadlMode)
       case _ => reporter.error(None(), toolName, s"Unknown code type: ${options.ros2NodesLanguage.name}")
     }
 
     options.ros2LaunchLanguage.name match {
-      case "Xml" => files = files ++ Generator.genXmlLaunchPkg(modelName, threadComponents, systemComponents)
-      case "Python" => files = files ++ Generator.genPyLaunchPkg(modelName, threadComponents)
+      case "Xml" => files = files ++ Generator.genXmlLaunchPkg(modelName, ros2Threads, systemComponents, microRosThreads)
+      case "Python" => files = files ++ Generator.genPyLaunchPkg(modelName, ros2Threads)
       case _ => reporter.error(None(), toolName, s"Unknown code type: ${options.ros2NodesLanguage.name}")
     }
 
     files = files ++ Generator.genInterfacesPkg(modelName, datatypeMap)
+
+    files = files :+ Generator.genReadme(modelName, ros2Threads, microRosThreads)
+    files = files :+ Generator.genMakefile(modelName, ros2Threads, microRosThreads)
 
     for (file <- files) {
       var filePath: String = ""

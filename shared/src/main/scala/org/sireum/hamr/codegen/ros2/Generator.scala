@@ -6,7 +6,7 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.containers.{BlockMarker, Marker}
 import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlDataPort, AadlEventDataPort, AadlPort, AadlProcess, AadlSystem, AadlThread, Dispatch_Protocol}
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
-import org.sireum.hamr.codegen.common.types.{AadlType, EnumType}
+import org.sireum.hamr.codegen.common.types.{AadlType, BaseType, EnumType, RecordType}
 import org.sireum.hamr.ir.Direction
 import org.sireum.message.Reporter
 import org.sireum.ops.{ISZOps, StringOps}
@@ -26,6 +26,11 @@ object Generator {
   val cpp_src_node_name_suffix: String = "_src.cpp"
   val cpp_src_node_header_name_suffix: String = "_src.hpp"
   val cpp_node_runner_name_suffix: String = "_runner.cpp"
+
+  val microros_package_name_suffix: String = "_microros_pkg"
+  val c_src_node_name_suffix: String = "_src.c"
+  val c_src_node_header_name_suffix: String = "_src.h"
+  val c_node_runner_name_suffix: String = "_runner.c"
 
   // This value will work for Python and C++ code
   val callback_group_type: String = "Reentrant"
@@ -592,17 +597,19 @@ object Generator {
     return s
   }
 
-  def genXmlFormatLaunchDecls(component: AadlComponent, packageName: String): ISZ[ST] = {
+  def genXmlFormatLaunchDecls(component: AadlComponent, ros2PkgName: String,
+                             microrosPkgName: String, microRosThreadPaths: Set[ISZ[String]]): ISZ[ST] = {
     var launch_decls: ISZ[ST] = IS()
 
     for (comp <- component.subComponents) {
       comp match {
         case thread: AadlThread =>
-          launch_decls = launch_decls :+ genXmlFormatLaunchNodeDecl(packageName, thread)
+          val pkgName: String = if (microRosThreadPaths.contains(thread.path.toISZ)) microrosPkgName else ros2PkgName
+          launch_decls = launch_decls :+ genXmlFormatLaunchNodeDecl(pkgName, thread)
         case system: AadlSystem =>
-          launch_decls = launch_decls :+ genXmlFormatLaunchSystemDecl(packageName, system)
+          launch_decls = launch_decls :+ genXmlFormatLaunchSystemDecl(ros2PkgName, system)
         case process: AadlProcess =>
-          launch_decls = launch_decls ++ genXmlFormatLaunchDecls(process, packageName)
+          launch_decls = launch_decls ++ genXmlFormatLaunchDecls(process, ros2PkgName, microrosPkgName, microRosThreadPaths)
         case _ =>
       }
     }
@@ -613,25 +620,43 @@ object Generator {
   // For example, see https://github.com/santoslab/ros-examples/blob/main/tempControl_ws/src/tc_bringup/launch/tc.launch.py
   // Creates a launch file for each system component in the model
   def genXmlFormatLaunchFiles(modelName: String, threadComponents: ISZ[AadlThread],
-                              systemComponents: ISZ[AadlSystem]): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
-    val top_level_package_nameT: String = genCppPackageName(modelName)
+                              systemComponents: ISZ[AadlSystem],
+                              microRosThreads: ISZ[AadlThread]): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
+    val ros2PkgName: String = genCppPackageName(modelName)
+    val microrosPkgName: String = genMicroRosPackageName(modelName)
+
+    var microRosThreadPaths: Set[ISZ[String]] = Set.empty
+    for (t <- microRosThreads) {
+      microRosThreadPaths = microRosThreadPaths + t.path.toISZ
+    }
 
     var launchFiles: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
 
     for (system <- systemComponents) {
       val fileName = genXmlLaunchFileName(system.identifier)
 
-      val launch_decls: ISZ[ST] = genXmlFormatLaunchDecls(system, top_level_package_nameT)
+      val launch_decls: ISZ[ST] = genXmlFormatLaunchDecls(system, ros2PkgName, microrosPkgName, microRosThreadPaths)
 
-      val launchFileBody =
-        st"""${CommentTemplate.doNotEditComment_xml}
-            |
-            |<launch>
-            |    ${(launch_decls, "\n")}
-            |</launch>
-        """
+      val launchFileBody: ST =
+        if (microRosThreads.nonEmpty)
+          st"""${CommentTemplate.doNotEditComment_xml}
+              |
+              |<launch>
+              |    <!-- micro-ROS agent: bridges rmw_microxrcedds nodes to the ROS2 DDS world -->
+              |    <executable cmd="micro_ros_agent udp4 --port 8888" output="screen"/>
+              |
+              |    ${(launch_decls, "\n")}
+              |</launch>
+          """
+        else
+          st"""${CommentTemplate.doNotEditComment_xml}
+              |
+              |<launch>
+              |    ${(launch_decls, "\n")}
+              |</launch>
+          """
 
-      val filePath: ISZ[String] = IS("src", s"${top_level_package_nameT}_bringup", "launch", fileName)
+      val filePath: ISZ[String] = IS("src", s"${ros2PkgName}_bringup", "launch", fileName)
 
       launchFiles = launchFiles :+ (filePath, launchFileBody, T, IS())
     }
@@ -1352,8 +1377,9 @@ object Generator {
       publisherCode =
         st"put_${handlerName}();"
     } else {
+      val initExpr = portExampleInit(outPort, s"${dataPortType}()", datatypeMap)
       publisherCode =
-        st"""${dataPortType} ${handlerName} = ${dataPortType}();
+        st"""${dataPortType} ${handlerName} = ${initExpr};
             |put_${handlerName}(${handlerName});"""
     }
 
@@ -1826,8 +1852,9 @@ object Generator {
 
 
   def genCppBaseNodeHeaderFile(packageName: String, component: AadlThread, connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
-                               datatypeMap: Map[AadlType, (String, ISZ[String])], strictAADLMode: B,
-                               invertTopicBinding: B, reporter: Reporter): (ISZ[String], ST, B, ISZ[Marker]) = {
+                               datatypeMap: Map[AadlType, (String, ISZ[String])], hasEnumConverter: B,
+                               strictAADLMode: B, invertTopicBinding: B,
+                               reporter: Reporter): (ISZ[String], ST, B, ISZ[Marker]) = {
     val nodeName = s"${genNodeName(component)}_base"
     val fileName = genCppNodeSourceHeaderName(nodeName)
 
@@ -1842,7 +1869,7 @@ object Generator {
     var strictPublisherHeaders: ISZ[ST] = IS()
     var msgTypes: ISZ[String] = IS()
     var dataPortInitializerHeaders: ISZ[ST] = IS()
-    var msgToString: ST = st""
+    var msgToStringMacro: ST = st""
 
     for (p <- component.getPorts()) {
       val portDatatype: String = genPortDatatype(p, packageName, datatypeMap, reporter)
@@ -1965,7 +1992,8 @@ object Generator {
 
     val typeIncludes: ISZ[ST] = genCppHeaderFileMsgTypeIncludes(msgTypes)
     var stdIncludes: ST =
-      st"""#include <queue>"""
+      st"""#include <queue>
+          |#include <sstream>"""
 
     if (strictAADLMode) {
       stdIncludes =
@@ -1975,13 +2003,30 @@ object Generator {
             |#include <mutex>"""
     }
 
+    val enumConverterInclude: ST = if (hasEnumConverter) st"""#include "${packageName}/base_headers/enum_converter.hpp"""" else st""
+    val exampleTypesInclude: ST = st"""#include "${packageName}/base_headers/example_types.hpp""""
+    val msgToStringBlockOpt = genCppMsgToStringBlock(component, packageName, datatypeMap, hasEnumConverter, reporter)
+    val msgToStringHelpers: ST = msgToStringBlockOpt match {
+      case Some(block) => st"\n${block}\n"
+      case _ => st""
+    }
+    if (msgToStringBlockOpt.nonEmpty) {
+      if (strictAADLMode) {
+        msgToStringMacro = st"#define MESSAGE_TO_STRING(message) _messageToString(message).c_str()"
+      } else {
+        msgToStringMacro = st"#define MESSAGE_TO_STRING(message) _messageToString(*message).c_str()"
+      }
+    }
+
     var fileBody =
       st"""#include "rclcpp/rclcpp.hpp"
           |${(typeIncludes, "\n")}
           |${(stdIncludes, "\n")}
+          |${enumConverterInclude}
+          |${exampleTypesInclude}
           |
           |${CommentTemplate.doNotEditComment_slash}
-          |
+          |${msgToStringHelpers}
           |class ${nodeName} : public rclcpp::Node
           |{
           |protected:"""
@@ -1991,10 +2036,6 @@ object Generator {
         st"""${fileBody}
             |    using MsgType = std::variant<${(msgTypes, ", ")}>;
           """
-
-      msgToString = st"#define MESSAGE_TO_STRING(message) ${packageName}_interfaces::msg::to_yaml(message).c_str()"
-    } else {
-      msgToString = st"#define MESSAGE_TO_STRING(message) ${packageName}_interfaces::msg::to_yaml(*message).c_str()"
     }
 
     fileBody =
@@ -2005,7 +2046,7 @@ object Generator {
           |    //  C o m m u n i c a t i o n
           |    //=================================================
           |
-          |    ${msgToString}
+          |    ${msgToStringMacro}
           |    #define PRINT_INFO(...) RCLCPP_INFO(this->get_logger(), __VA_ARGS__)
           |    #define PRINT_WARN(...) RCLCPP_WARN(this->get_logger(), __VA_ARGS__)
           |    #define PRINT_ERROR(...) RCLCPP_ERROR(this->get_logger(), __VA_ARGS__)
@@ -2614,9 +2655,10 @@ object Generator {
     for (p <- inDataPorts) {
       val portDatatype = genPortDatatype(p, packageName, datatypeMap, reporter)
       val portName = p.identifier
+      val initExpr = portExampleInit(p, s"${portDatatype}()", datatypeMap)
 
       initializers = initializers :+
-        st"""${portDatatype} ${portName} = ${portDatatype}();
+        st"""${portDatatype} ${portName} = ${initExpr};
             |init_${portName}(${portName});
           """
     }
@@ -2667,8 +2709,8 @@ object Generator {
 
     for (comp <- threadComponents) {
       cpp_files =
-        cpp_files :+ genCppBaseNodeHeaderFile(top_level_package_nameT, comp, connectionMap, datatypeMap, strictAADLMode,
-                                              invertTopicBinding, reporter)
+        cpp_files :+ genCppBaseNodeHeaderFile(top_level_package_nameT, comp, connectionMap, datatypeMap, hasConverterFiles,
+                                              strictAADLMode, invertTopicBinding, reporter)
       cpp_files =
         cpp_files :+ genCppBaseNodeCppFile(top_level_package_nameT, comp, connectionMap, datatypeMap, strictAADLMode,
                                            invertTopicBinding, reporter)
@@ -2683,8 +2725,7 @@ object Generator {
     return cpp_files
   }
 
-  def genCppEnumConverterHeaderFile(packageName: String, enumTypes: ISZ[(String, AadlType)],
-                                    strictAADLMode: B): (ISZ[String], ST, B, ISZ[Marker]) = {
+  def genCppEnumConverterHeaderFile(packageName: String, enumTypes: ISZ[(String, AadlType)]): (ISZ[String], ST, B, ISZ[Marker]) = {
     var includes: ISZ[ST] = IS()
     var converterHeaders: ISZ[ST] = IS()
 
@@ -2693,14 +2734,8 @@ object Generator {
 
       includes = includes :+ st"#include \"${packageName}_interfaces/msg/${enum._1}.hpp\""
 
-      if (strictAADLMode) {
-        converterHeaders = converterHeaders :+
-          st"const char* enumToString(${packageName}_interfaces::msg::${enumName} value);"
-      }
-      else {
-        converterHeaders = converterHeaders :+
-          st"const char* enumToString(${packageName}_interfaces::msg::${enumName}* value);"
-      }
+      converterHeaders = converterHeaders :+
+        st"const char* enumToString(const ${packageName}_interfaces::msg::${enumName}& value);"
     }
 
     val fileBody =
@@ -2722,7 +2757,7 @@ object Generator {
     return (filePath, fileBody, T, IS())
   }
 
-  def genCppEnumConverters(packageName: String, enumTypes: ISZ[(String, AadlType)], strictAADLMode: B): ISZ[ST] = {
+  def genCppEnumConverters(packageName: String, enumTypes: ISZ[(String, AadlType)]): ISZ[ST] = {
     var converters: ISZ[ST] = IS()
 
     for (enum <- enumTypes) {
@@ -2737,41 +2772,27 @@ object Generator {
               |    return "${enumName} ${value}";"""
       }
 
-      if (strictAADLMode) {
-        converters = converters :+
-          st"""const char* enumToString(${packageName}_interfaces::msg::${enumName} value) {
-              |    switch (value.${enum._1}) {
-              |        ${(cases, "\n")}
-              |        default:
-              |            return "Unknown value for ${enumName}";
-              |    }
-              |}
+      converters = converters :+
+        st"""const char* enumToString(const ${packageName}_interfaces::msg::${enumName}& value) {
+            |    switch (value.${enum._1}) {
+            |        ${(cases, "\n")}
+            |        default:
+            |            return "Unknown value for ${enumName}";
+            |    }
+            |}
         """
-      }
-      else {
-        converters = converters :+
-          st"""const char* enumToString(${packageName}_interfaces::msg::${enumName}* value) {
-              |    switch (value->${enum._1}) {
-              |        ${(cases, "\n")}
-              |        default:
-              |            return "Unknown value for ${enumName}";
-              |    }
-              |}
-        """
-      }
     }
 
     return converters
   }
 
-  def genCppEnumConverterFile(packageName: String, enumTypes: ISZ[(String, AadlType)],
-                              strictAADLMode: B): (ISZ[String], ST, B, ISZ[Marker]) = {
+  def genCppEnumConverterFile(packageName: String, enumTypes: ISZ[(String, AadlType)]): (ISZ[String], ST, B, ISZ[Marker]) = {
     val fileBody =
       st"""#include "${packageName}/base_headers/enum_converter.hpp"
           |
           |${CommentTemplate.doNotEditComment_slash}
           |
-          |${(genCppEnumConverters(packageName, enumTypes, strictAADLMode), "\n")}
+          |${(genCppEnumConverters(packageName, enumTypes), "\n")}
         """
 
     val filePath: ISZ[String] = IS("src", packageName, "src", "base_code", "enum_converter.cpp")
@@ -2800,8 +2821,8 @@ object Generator {
     var files: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
     val packageName: String = genCppPackageName(modelName)
 
-    files = files :+ genCppEnumConverterHeaderFile(packageName, enumTypes, strictAADLMode)
-    files = files :+ genCppEnumConverterFile(packageName, enumTypes, strictAADLMode)
+    files = files :+ genCppEnumConverterHeaderFile(packageName, enumTypes)
+    files = files :+ genCppEnumConverterFile(packageName, enumTypes)
 
     return files
   }
@@ -2843,19 +2864,1576 @@ object Generator {
       genCppNodeFiles(modelName, threadComponents, connectionMap, datatypeMap, hasConverterFiles, strictAADLMode,
                       invertTopicBinding, reporter)
     files = files ++ converterFiles
+    files = files :+ genCppExampleTypesFile(modelName, datatypeMap)
     files = files :+ genCppCMakeListsFile(modelName, threadComponents, hasConverterFiles)
     files = files :+ genCppPackageFile(modelName)
 
     return files
   }
 
-  def genXmlLaunchPkg(modelName: String, threadComponents: ISZ[AadlThread], systemComponents: ISZ[AadlSystem]): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
+  def genXmlLaunchPkg(modelName: String, threadComponents: ISZ[AadlThread], systemComponents: ISZ[AadlSystem],
+                     microRosThreads: ISZ[AadlThread]): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
     var files: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
 
-    files = files ++ genXmlFormatLaunchFiles(modelName, threadComponents, systemComponents)
+    files = files ++ genXmlFormatLaunchFiles(modelName, threadComponents, systemComponents, microRosThreads)
     files = files :+ genLaunchCMakeListsFile(modelName)
     files = files :+ genLaunchPackageFile(modelName)
 
+    return files
+  }
+
+  //================================================
+  //  M i c r o R O S   C   H e l p e r s
+  //================================================
+
+  def genMicroRosPackageName(packageNameS: String): String = {
+    return s"${packageNameS}${microros_package_name_suffix}"
+  }
+
+  // Convert C++ type "pkg_interfaces::msg::Foo" to C struct name "pkg_interfaces__msg__Foo"
+  def cppTypeToCStructName(cppType: String): String = {
+    return ops.StringOps(cppType).replaceAllLiterally("::", "__")
+  }
+
+  // Non-empty parts of splitting C++ type "pkg::msg::Foo" by ':'
+  def cppTypeParts(cppType: String): ISZ[String] = {
+    return ISZOps(ops.StringOps(cppType).split(c => c == ':')).filter(s => s.size > 0)
+  }
+
+  // "pkg_interfaces::msg::Foo" → "ROSIDL_GET_MSG_TYPE_SUPPORT(pkg_interfaces, msg, Foo)"
+  def cppTypeToROSIDLSupport(cppType: String): String = {
+    val parts = cppTypeParts(cppType)
+    return s"ROSIDL_GET_MSG_TYPE_SUPPORT(${parts(0)}, ${parts(1)}, ${parts(2)})"
+  }
+
+  // "pkg_interfaces::msg::Foo" → "pkg_interfaces/msg/foo.h"  (using existing snake_case formatter)
+  def cppTypeToCHeaderPath(cppType: String): String = {
+    return s"${formatDatatypeForInclude(cppType)}.h"
+  }
+
+  // Generate C #include lines for a set of C++ type strings
+  def genCHeaderFileMsgTypeIncludes(msgTypes: ISZ[String]): ISZ[ST] = {
+    var includes: ISZ[ST] = IS()
+    for (msgType <- msgTypes) {
+      val path = cppTypeToCHeaderPath(msgType)
+      includes = includes :+ st"""#include "${path}""""
+    }
+    return includes
+  }
+
+  // Derive the C put function parameter declaration for an out port
+  // For data/eventdata ports: "CStructName * msg"  For event ports: no payload param
+  def isEventPortType(portType: String): B = {
+    return isEventPort(portType)
+  }
+
+  //================================================
+  //  E x a m p l e   T y p e s
+  //================================================
+
+  // Returns "example_TypeName()" for RecordType ports, fallback otherwise.
+  // fallback is e.g. "DataType()" for C++ or "{0}" for C.
+  def portExampleInit(port: AadlPort, fallback: String,
+      datatypeMap: Map[AadlType, (String, ISZ[String])]): String = {
+    val aadlTypeOpt: Option[AadlType] = port match {
+      case dp: AadlDataPort => Some(dp.aadlType)
+      case edp: AadlEventDataPort => Some(edp.aadlType)
+      case _ => None()
+    }
+    aadlTypeOpt match {
+      case Some(aadlType) =>
+        aadlType match {
+          case _: RecordType =>
+            datatypeMap.get(aadlType) match {
+              case Some((typeName, _)) => return s"example_${typeName}()"
+              case _ =>
+            }
+          case _ =>
+        }
+      case _ =>
+    }
+    return fallback
+  }
+
+  def cBaseTypeZeroLiteral(ros2TypeName: String): String = {
+    if (ros2TypeName == "float32") {
+      return "0.0f"
+    } else if (ros2TypeName == "float64") {
+      return "0.0"
+    } else if (ros2TypeName == "bool") {
+      return "false"
+    } else {
+      return "0"
+    }
+  }
+
+  // Returns C field-init statements for a RecordType's fields, setting all to zero/first-enum-value.
+  // accessPrefix ends with ".", e.g. "msg." or "msg.low."
+  def genCExampleFieldInits(aadlType: AadlType, accessPrefix: String,
+      cppPkgName: String, datatypeMap: Map[AadlType, (String, ISZ[String])]): ISZ[ST] = {
+    val content: ISZ[String] = datatypeMap.get(aadlType).get._2
+    val fieldLines: ISZ[String] = ISZOps(content).filter(line => !ops.StringOps(line).contains("="))
+    var stmts: ISZ[ST] = IS()
+    for (line <- fieldLines) {
+      val parts = ops.StringOps(line).split(c => c == ' ')
+      val fieldTypeName = parts(0)
+      val fieldName = parts(1)
+      val fieldAccess: String = st"${accessPrefix}${fieldName}".render
+      lookupAadlTypeByRos2Name(fieldTypeName, datatypeMap) match {
+        case Some(nestedType) =>
+          nestedType match {
+            case _: BaseType =>
+              val ros2Type = ops.StringOps(datatypeMap.get(nestedType).get._2(0)).split(c => c == ' ')(0)
+              if (ros2Type == "string") {
+                // TODO: investigate replacing the default heap allocator with a static memory pool allocator
+                //       (e.g. via rcutils_allocator_t / micro_ros_utilities) to avoid malloc on embedded targets
+                stmts = stmts :+ st"""rosidl_runtime_c__String__assign(&${fieldAccess}.data, "");"""
+              } else {
+                stmts = stmts :+ st"${fieldAccess}.data = ${cBaseTypeZeroLiteral(ros2Type)};"
+              }
+            case et: EnumType =>
+              val enumContent = datatypeMap.get(nestedType).get._2
+              val enumFieldLine = ISZOps(enumContent).filter(l => !ops.StringOps(l).contains("="))(0)
+              val enumFieldName = ops.StringOps(enumFieldLine).split(c => c == ' ')(1)
+              val firstConstLine = ISZOps(enumContent).filter(l => ops.StringOps(l).contains("="))(0)
+              val firstConst = ops.StringOps(ops.StringOps(firstConstLine).split(c => c == ' ')(1)).split(c => c == '=')(0)
+              val enumCStructName = cppTypeToCStructName(st"${cppPkgName}_interfaces::msg::${et.simpleName}".render)
+              stmts = stmts :+ st"${fieldAccess}.${enumFieldName} = ${enumCStructName}__${firstConst};"
+            case _: RecordType =>
+              val simpleTypeName = datatypeMap.get(nestedType).get._1
+              stmts = stmts :+ st"${fieldAccess} = example_${simpleTypeName}();"
+            case _ =>
+          }
+        case _ =>
+      }
+    }
+    return stmts
+  }
+
+  // Returns C++ field-init statements for a RecordType's fields.
+  def genCppExampleFieldInits(aadlType: AadlType, accessPrefix: String,
+      cppPkgName: String, datatypeMap: Map[AadlType, (String, ISZ[String])]): ISZ[ST] = {
+    val content: ISZ[String] = datatypeMap.get(aadlType).get._2
+    val fieldLines: ISZ[String] = ISZOps(content).filter(line => !ops.StringOps(line).contains("="))
+    var stmts: ISZ[ST] = IS()
+    for (line <- fieldLines) {
+      val parts = ops.StringOps(line).split(c => c == ' ')
+      val fieldTypeName = parts(0)
+      val fieldName = parts(1)
+      val fieldAccess: String = st"${accessPrefix}${fieldName}".render
+      lookupAadlTypeByRos2Name(fieldTypeName, datatypeMap) match {
+        case Some(nestedType) =>
+          nestedType match {
+            case _: BaseType =>
+              val ros2Type = ops.StringOps(datatypeMap.get(nestedType).get._2(0)).split(c => c == ' ')(0)
+              if (ros2Type == "string") {
+                stmts = stmts :+ st"""${fieldAccess}.data = "";"""
+              } else {
+                stmts = stmts :+ st"${fieldAccess}.data = ${cBaseTypeZeroLiteral(ros2Type)};"
+              }
+            case et: EnumType =>
+              val enumContent = datatypeMap.get(nestedType).get._2
+              val enumFieldLine = ISZOps(enumContent).filter(l => !ops.StringOps(l).contains("="))(0)
+              val enumFieldName = ops.StringOps(enumFieldLine).split(c => c == ' ')(1)
+              val firstConstLine = ISZOps(enumContent).filter(l => ops.StringOps(l).contains("="))(0)
+              val firstConst = ops.StringOps(ops.StringOps(firstConstLine).split(c => c == ' ')(1)).split(c => c == '=')(0)
+              val enumCppType = st"${cppPkgName}_interfaces::msg::${et.simpleName}".render
+              stmts = stmts :+ st"${fieldAccess}.${enumFieldName} = ${enumCppType}::${firstConst};"
+            case _: RecordType =>
+              val simpleTypeName = datatypeMap.get(nestedType).get._1
+              stmts = stmts :+ st"${fieldAccess} = example_${simpleTypeName}();"
+            case _ =>
+          }
+        case _ =>
+      }
+    }
+    return stmts
+  }
+
+  def genMicroRosExampleTypesFile(modelName: String, cppPkgName: String,
+      datatypeMap: Map[AadlType, (String, ISZ[String])]): (ISZ[String], ST, B, ISZ[Marker]) = {
+    val microrosPkgName = genMicroRosPackageName(modelName)
+    val interfacesPkg = st"${cppPkgName}_interfaces".render
+
+    var includes: ISZ[ST] = IS()
+    var forwardDecls: ISZ[ST] = IS()
+    var definitions: ISZ[ST] = IS()
+
+    for (key <- datatypeMap.keys) {
+      key match {
+        case _: RecordType =>
+          val typeName = datatypeMap.get(key).get._1
+          val cppType = st"${interfacesPkg}::msg::${typeName}".render
+          val cStructName = cppTypeToCStructName(cppType)
+          includes = includes :+ st"#include \"${cppTypeToCHeaderPath(cppType)}\""
+          forwardDecls = forwardDecls :+ st"static inline ${cStructName} example_${typeName}(void);"
+          val fieldInits = genCExampleFieldInits(key, "msg.", cppPkgName, datatypeMap)
+          val bodyLines: ISZ[ST] = ISZ(st"${cStructName} msg = {0};") ++ fieldInits :+ st"return msg;"
+          definitions = definitions :+
+            st"""static inline ${cStructName} example_${typeName}(void) {
+                |    ${(bodyLines, "\n")}
+                |}"""
+        case _ =>
+      }
+    }
+
+    val stringFunctionsInclude: ST =
+      if (includes.nonEmpty) st"#include <rosidl_runtime_c/string_functions.h>" else st""
+
+    val fileBody =
+      st"""#ifndef EXAMPLE_TYPES_H
+          |#define EXAMPLE_TYPES_H
+          |
+          |${CommentTemplate.doNotEditComment_slash}
+          |
+          |${(includes, "\n")}
+          |${stringFunctionsInclude}
+          |
+          |${(forwardDecls, "\n")}
+          |
+          |${(definitions, "\n\n")}
+          |
+          |#endif  // EXAMPLE_TYPES_H
+        """
+
+    val filePath: ISZ[String] = IS("microros_apps", microrosPkgName, "include", microrosPkgName, "base_headers", "example_types.h")
+    return (filePath, fileBody, T, IS())
+  }
+
+  def genCppExampleTypesFile(modelName: String, datatypeMap: Map[AadlType, (String, ISZ[String])]): (ISZ[String], ST, B, ISZ[Marker]) = {
+    val packageName = genCppPackageName(modelName)
+    val interfacesPkg = st"${packageName}_interfaces".render
+
+    var includes: ISZ[ST] = IS()
+    var forwardDecls: ISZ[ST] = IS()
+    var definitions: ISZ[ST] = IS()
+
+    for (key <- datatypeMap.keys) {
+      key match {
+        case _: RecordType =>
+          val typeName = datatypeMap.get(key).get._1
+          val cppType = st"${interfacesPkg}::msg::${typeName}".render
+          includes = includes :+ st"#include \"${formatDatatypeForInclude(cppType)}.hpp\""
+          forwardDecls = forwardDecls :+ st"static inline ${cppType} example_${typeName}();"
+          val fieldInits = genCppExampleFieldInits(key, "msg.", packageName, datatypeMap)
+          val bodyLines: ISZ[ST] = ISZ(st"${cppType} msg;") ++ fieldInits :+ st"return msg;"
+          definitions = definitions :+
+            st"""static inline ${cppType} example_${typeName}() {
+                |    ${(bodyLines, "\n")}
+                |}"""
+        case _ =>
+      }
+    }
+
+    val fileBody =
+      st"""#ifndef EXAMPLE_TYPES_HPP
+          |#define EXAMPLE_TYPES_HPP
+          |
+          |${CommentTemplate.doNotEditComment_slash}
+          |
+          |${(includes, "\n")}
+          |
+          |${(forwardDecls, "\n")}
+          |
+          |${(definitions, "\n\n")}
+          |
+          |#endif  // EXAMPLE_TYPES_HPP
+        """
+
+    val filePath: ISZ[String] = IS("src", packageName, "include", packageName, "base_headers", "example_types.hpp")
+    return (filePath, fileBody, T, IS())
+  }
+
+  //================================================
+  //  C p p   M e s s a g e   T o   S t r i n g
+  //================================================
+
+  // Returns an oss << chain fragment for the given AadlType at the given access expression.
+  // For BaseType: "accessExpr.data"
+  // For EnumType: "enumToString(accessExpr)"
+  // For RecordType: "\"TypeName{field1: \" << val1 << \", field2: \" << val2 << \"}\""
+  def genCppOssChain(aadlType: AadlType, accessExpr: String, simpleTypeName: String,
+      datatypeMap: Map[AadlType, (String, ISZ[String])], hasEnumConverter: B): ST = {
+    val content: ISZ[String] = datatypeMap.get(aadlType).get._2
+    val fieldLines: ISZ[String] = ISZOps(content).filter(line => !ops.StringOps(line).contains("="))
+    val r: ST = aadlType match {
+      case _: BaseType =>
+        st"${accessExpr}.data"
+      case _: EnumType =>
+        if (hasEnumConverter) {
+          st"enumToString(${accessExpr})"
+        } else {
+          val fieldName = ops.StringOps(fieldLines(0)).split(c => c == ' ')(1)
+          st"static_cast<int>(${accessExpr}.${fieldName})"
+        }
+      case _: RecordType =>
+        var parts: ISZ[ST] = IS()
+        var isFirst: B = T
+        for (line <- fieldLines) {
+          val lineParts = ops.StringOps(line).split(c => c == ' ')
+          val fieldTypeName = lineParts(0)
+          val fieldName = lineParts(1)
+          val labelStr: String = if (isFirst) st"${simpleTypeName}{${fieldName}: ".render else st", ${fieldName}: ".render
+          isFirst = F
+          val nestedAccess: String = st"${accessExpr}.${fieldName}".render
+          lookupAadlTypeByRos2Name(fieldTypeName, datatypeMap) match {
+            case Some(nestedType) =>
+              val innerChain = genCppOssChain(nestedType, nestedAccess, fieldTypeName, datatypeMap, hasEnumConverter)
+              parts = parts :+ st""""${labelStr}" << ${innerChain}"""
+            case _ =>
+              parts = parts :+ st""""${labelStr}" << ${nestedAccess}"""
+          }
+        }
+        st"""${(parts, " << ")} << "}""""
+      case _ =>
+        st""""unknown""""
+    }
+    return r
+  }
+
+  // Generate inline _messageToString overloads for all data port types of the component.
+  // Returns None if there are no data ports.
+  def genCppMsgToStringBlock(component: AadlThread, packageName: String,
+      datatypeMap: Map[AadlType, (String, ISZ[String])], hasEnumConverter: B,
+      reporter: Reporter): Option[ST] = {
+    var seen: ISZ[String] = IS()
+    var helpers: ISZ[ST] = IS()
+    for (p <- component.getPorts()) {
+      val portDatatype = genPortDatatype(p, packageName, datatypeMap, reporter)
+      if (!isEventPort(portDatatype)) {
+        if (!ISZOps(seen).contains(portDatatype)) {
+          seen = seen :+ portDatatype
+          val parts = cppTypeParts(portDatatype)
+          val simpleTypeName = parts(parts.size - 1)
+          val aadlTypeOpt: Option[AadlType] = p match {
+            case dp: AadlDataPort => Some(dp.aadlType)
+            case edp: AadlEventDataPort => Some(edp.aadlType)
+            case _ => None()
+          }
+          aadlTypeOpt match {
+            case Some(rawType) =>
+              var aadlType = rawType
+              for (key <- datatypeMap.keys) {
+                if (key.name == rawType.name) {
+                  aadlType = key
+                }
+              }
+              val ossChain = genCppOssChain(aadlType, "msg", simpleTypeName, datatypeMap, hasEnumConverter)
+              helpers = helpers :+
+                st"""static inline std::string _messageToString(const ${portDatatype}& msg) {
+                    |    std::ostringstream oss;
+                    |    oss << ${ossChain};
+                    |    return oss.str();
+                    |}"""
+            case _ =>
+          }
+        }
+      }
+    }
+    if (helpers.isEmpty) {
+      return None()
+    }
+    return Some(st"${(helpers, "\n\n")}")
+  }
+
+  //================================================
+  //  M i c r o R O S   M e s s a g e   T o   S t r i n g
+  //================================================
+
+  def ros2BaseTypeFmt(ros2TypeName: String): String = {
+    if (ros2TypeName == "float32") {
+      return "%f"
+    } else if (ros2TypeName == "float64") {
+      return "%lf"
+    } else if (ros2TypeName == "int8" || ros2TypeName == "int16" || ros2TypeName == "int32" || ros2TypeName == "bool") {
+      return "%d"
+    } else if (ros2TypeName == "int64") {
+      return "%ld"
+    } else if (ros2TypeName == "uint8" || ros2TypeName == "uint16" || ros2TypeName == "uint32") {
+      return "%u"
+    } else if (ros2TypeName == "uint64") {
+      return "%lu"
+    } else if (ros2TypeName == "char") {
+      return "%c"
+    } else if (ros2TypeName == "string") {
+      return "%s"
+    } else {
+      return "%p"
+    }
+  }
+
+  def ros2BaseTypeCast(ros2TypeName: String): String = {
+    if (ros2TypeName == "bool") {
+      return "(int)"
+    } else {
+      return ""
+    }
+  }
+
+  def lookupAadlTypeByRos2Name(name: String, datatypeMap: Map[AadlType, (String, ISZ[String])]): Option[AadlType] = {
+    for (entry <- datatypeMap.entries) {
+      if (entry._2._1 == name) {
+        return Some(entry._1)
+      }
+    }
+    return None()
+  }
+
+  // Returns (printf format pattern, snprintf args) for the given AadlType.
+  // accessPath ends with "->" (top-level pointer) or "." (nested struct value), e.g. "msg->" or "msg->degrees."
+  def genCMsgFmtArgs(aadlType: AadlType, accessPath: String,
+      datatypeMap: Map[AadlType, (String, ISZ[String])], hasEnumConverter: B): (String, ISZ[String]) = {
+    val content: ISZ[String] = datatypeMap.get(aadlType).get._2
+    val fieldLines: ISZ[String] = ISZOps(content).filter(line => !ops.StringOps(line).contains("="))
+    val r: (String, ISZ[String]) = aadlType match {
+      case _: BaseType =>
+        val ros2Type = ops.StringOps(fieldLines(0)).split(c => c == ' ')(0)
+        val fmt = ros2BaseTypeFmt(ros2Type)
+        val cast = ros2BaseTypeCast(ros2Type)
+        if (ros2Type == "string") {
+          (fmt, ISZ(st"${accessPath}data".render))
+        } else {
+          (fmt, ISZ(st"${cast}${accessPath}data".render))
+        }
+      case et: EnumType =>
+        val fieldName = ops.StringOps(fieldLines(0)).split(c => c == ' ')(1)
+        if (hasEnumConverter) {
+          ("%s", ISZ(st"enumToString_${et.simpleName}(${accessPath}${fieldName})".render))
+        } else {
+          ("%d", ISZ(st"(int)(${accessPath}${fieldName})".render))
+        }
+      case _: RecordType =>
+        var fmtParts: ISZ[String] = IS()
+        var args: ISZ[String] = IS()
+        for (line <- fieldLines) {
+          val lineParts = ops.StringOps(line).split(c => c == ' ')
+          val ros2TypeName = lineParts(0)
+          val fieldName = lineParts(1)
+          lookupAadlTypeByRos2Name(ros2TypeName, datatypeMap) match {
+            case Some(nestedType) =>
+              val subAccessPath = st"${accessPath}${fieldName}.".render
+              val (subFmt, subArgs) = genCMsgFmtArgs(nestedType, subAccessPath, datatypeMap, hasEnumConverter)
+              fmtParts = fmtParts :+ st"${fieldName}: ${subFmt}".render
+              args = args ++ subArgs
+            case _ =>
+              fmtParts = fmtParts :+ st"${fieldName}: %p".render
+              args = args :+ st"(void*)&${accessPath}${fieldName}".render
+          }
+        }
+        (st"${(fmtParts, ", ")}".render, args)
+      case _ =>
+        ("%p", ISZ(st"(void*)${accessPath}".render))
+    }
+    return r
+  }
+
+  // Generate a MESSAGE_TO_STRING macro block for the given out data ports.
+  // Returns None if there are no data out ports.
+  def genCMsgToStringBlock(outPorts: ISZ[AadlPort], cppPkgName: String,
+      datatypeMap: Map[AadlType, (String, ISZ[String])], hasEnumConverter: B,
+      reporter: Reporter): Option[ST] = {
+    var seen: ISZ[String] = IS()
+    var helpers: ISZ[ST] = IS()
+    var caseLines: ISZ[ST] = IS()
+    for (p <- outPorts) {
+      val portDatatype = genPortDatatype(p, cppPkgName, datatypeMap, reporter)
+      if (!isEventPort(portDatatype)) {
+        val cStructName = cppTypeToCStructName(portDatatype)
+        if (!ISZOps(seen).contains(cStructName)) {
+          seen = seen :+ cStructName
+          val parts = cppTypeParts(portDatatype)
+          val simpleTypeName = parts(parts.size - 1)
+          val helperName = st"_MESSAGE_TO_STRING_${simpleTypeName}".render
+          val aadlTypeOpt: Option[AadlType] = p match {
+            case dp: AadlDataPort => Some(dp.aadlType)
+            case edp: AadlEventDataPort => Some(edp.aadlType)
+            case _ => None()
+          }
+          aadlTypeOpt match {
+            case Some(rawType) =>
+              var aadlType = rawType
+              for (key <- datatypeMap.keys) {
+                if (key.name == rawType.name) {
+                  aadlType = key
+                }
+              }
+              val (fmt, args) = genCMsgFmtArgs(aadlType, "msg->", datatypeMap, hasEnumConverter)
+              val argsSection: ST = if (args.nonEmpty) st",\n        ${(args, ",\n        ")}" else st""
+              helpers = helpers :+
+                st"""static inline const char* ${helperName}(
+                    |        const ${cStructName}* msg, char* _buf, int _buf_size) {
+                    |    snprintf(_buf, _buf_size, "${simpleTypeName}{${fmt}}"${argsSection});
+                    |    return _buf;
+                    |}"""
+              caseLines = caseLines :+
+                st"    ${cStructName}*: ${helperName}((msg), _MESSAGE_TO_STRING_buf, sizeof(_MESSAGE_TO_STRING_buf)), \\"
+            case _ =>
+          }
+        }
+      }
+    }
+    if (helpers.isEmpty) {
+      return None()
+    }
+    val macroLines: ISZ[ST] =
+      ISZ(st"#define MESSAGE_TO_STRING(msg) _Generic((msg), \\") ++
+      caseLines :+
+      st"""    default: "(unknown type)")"""
+    val block: ST =
+      st"""${(helpers, "\n\n")}
+          |
+          |static char _MESSAGE_TO_STRING_buf[512];
+          |${(macroLines, "\n")}"""
+    return Some(block)
+  }
+
+  //================================================
+  //  M i c r o R O S   B a s e   H e a d e r
+  //================================================
+
+  def genMicroRosPublisherStructFields(outPorts: ISZ[AadlPort], cppPkgName: String,
+                                      datatypeMap: Map[AadlType, (String, ISZ[String])],
+                                      connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
+                                      invertTopicBinding: B, reporter: Reporter): ISZ[ST] = {
+    var fields: ISZ[ST] = IS()
+    for (p <- outPorts) {
+      val portName = genPortName(p)
+      val portDatatype = genPortDatatype(p, cppPkgName, datatypeMap, reporter)
+      val numPubs: Z = if (invertTopicBinding) 1 else if (connectionMap.get(p.path).nonEmpty) connectionMap.get(p.path).get.size else 1
+      if (numPubs == 1) {
+        fields = fields :+ st"rcl_publisher_t ${portName}_publisher;"
+      } else {
+        var i: Z = 1
+        while (i <= numPubs) {
+          fields = fields :+ st"rcl_publisher_t ${portName}_publisher_${i};"
+          i = i + 1
+        }
+      }
+    }
+    return fields
+  }
+
+  def genMicroRosPutFunctionDecls(outPorts: ISZ[AadlPort], nodeName: String, cppPkgName: String,
+                                  datatypeMap: Map[AadlType, (String, ISZ[String])],
+                                  reporter: Reporter): ISZ[ST] = {
+    var decls: ISZ[ST] = IS()
+    for (p <- outPorts) {
+      val portId = p.identifier
+      val portDatatype = genPortDatatype(p, cppPkgName, datatypeMap, reporter)
+      if (isEventPort(portDatatype)) {
+        decls = decls :+ st"void put_${portId}(${nodeName}_base_t * self);"
+      } else {
+        val cType = cppTypeToCStructName(portDatatype)
+        decls = decls :+ st"void put_${portId}(${nodeName}_base_t * self, ${cType} * msg);"
+      }
+    }
+    return decls
+  }
+
+  def genMicroRosSubscriberStructFields(inPorts: ISZ[AadlPort], cppPkgName: String,
+                                        datatypeMap: Map[AadlType, (String, ISZ[String])],
+                                        reporter: Reporter): ISZ[ST] = {
+    var fields: ISZ[ST] = IS()
+    for (p <- inPorts) {
+      val portName = genPortName(p)
+      val portDatatype = genPortDatatype(p, cppPkgName, datatypeMap, reporter)
+      val cType = cppTypeToCStructName(portDatatype)
+      fields = fields :+ st"rcl_subscription_t ${portName}_subscription;"
+      fields = fields :+ st"${cType} ${portName}_msg;"
+    }
+    return fields
+  }
+
+  def genMicroRosSubscriptionInits(inPorts: ISZ[AadlPort], cppPkgName: String,
+                                    datatypeMap: Map[AadlType, (String, ISZ[String])],
+                                    invertTopicBinding: B,
+                                    connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
+                                    reporter: Reporter): ISZ[ST] = {
+    var inits: ISZ[ST] = IS()
+    for (p <- inPorts) {
+      val portName = genPortName(p)
+      val portDatatype = genPortDatatype(p, cppPkgName, datatypeMap, reporter)
+      val rosidlSupport = cppTypeToROSIDLSupport(portDatatype)
+      val topicName: String =
+        if (invertTopicBinding && connectionMap.get(p.path).nonEmpty)
+          getPortNames(connectionMap.get(p.path).get)(0)
+        else
+          getPortNames(IS(p.path.toISZ))(0)
+      inits = inits :+
+        st"""rclc_subscription_init_default(
+            |    &self->${portName}_subscription,
+            |    &self->node,
+            |    ${rosidlSupport},
+            |    "${topicName}");
+          """
+    }
+    return inits
+  }
+
+  def genMicroRosHandleForwardDecls(inPorts: ISZ[AadlPort], nodeName: String, cppPkgName: String,
+                                     datatypeMap: Map[AadlType, (String, ISZ[String])],
+                                     reporter: Reporter): ISZ[ST] = {
+    val nodeNameBase = s"${nodeName}_base"
+    var decls: ISZ[ST] = IS()
+    for (p <- inPorts) {
+      if (!p.isInstanceOf[AadlDataPort]) {
+        val portId = p.identifier
+        val portDatatype = genPortDatatype(p, cppPkgName, datatypeMap, reporter)
+        val cType = cppTypeToCStructName(portDatatype)
+        if (isEventPort(portDatatype)) {
+          decls = decls :+ st"void ${nodeName}_handle_${portId}(${nodeNameBase}_t * self);"
+        } else {
+          decls = decls :+ st"void ${nodeName}_handle_${portId}(${nodeNameBase}_t * self, const ${cType} * msg);"
+        }
+      }
+    }
+    return decls
+  }
+
+  def genMicroRosSubscriptionCallbacks(inPorts: ISZ[AadlPort], nodeName: String, cppPkgName: String,
+                                        datatypeMap: Map[AadlType, (String, ISZ[String])],
+                                        reporter: Reporter): ISZ[ST] = {
+    var callbacks: ISZ[ST] = IS()
+    for (p <- inPorts) {
+      val portName = genPortName(p)
+      val portId = p.identifier
+      val portDatatype = genPortDatatype(p, cppPkgName, datatypeMap, reporter)
+      val cType = cppTypeToCStructName(portDatatype)
+      if (p.isInstanceOf[AadlDataPort]) {
+        callbacks = callbacks :+
+          st"""static void ${portName}_subscription_callback(const void * msgin)
+              |{
+              |    const ${cType} * msg = (const ${cType} *) msgin;
+              |    if (g_self != NULL) {
+              |        g_self->${portName}_msg = *msg;
+              |    }
+              |}
+            """
+      } else if (isEventPort(portDatatype)) {
+        callbacks = callbacks :+
+          st"""static void ${portName}_subscription_callback(const void * msgin)
+              |{
+              |    (void)msgin;
+              |    if (g_self != NULL) {
+              |        ${nodeName}_handle_${portId}(g_self);
+              |    }
+              |}
+            """
+      } else {
+        callbacks = callbacks :+
+          st"""static void ${portName}_subscription_callback(const void * msgin)
+              |{
+              |    const ${cType} * msg = (const ${cType} *) msgin;
+              |    if (g_self != NULL) {
+              |        ${nodeName}_handle_${portId}(g_self, msg);
+              |    }
+              |}
+            """
+      }
+    }
+    return callbacks
+  }
+
+  def genMicroRosSubscriptionExecutorAdds(inPorts: ISZ[AadlPort]): ISZ[ST] = {
+    var adds: ISZ[ST] = IS()
+    for (p <- inPorts) {
+      val portName = genPortName(p)
+      adds = adds :+
+        st"rclc_executor_add_subscription(&self->executor, &self->${portName}_subscription, &self->${portName}_msg, ${portName}_subscription_callback, ON_NEW_DATA);"
+    }
+    return adds
+  }
+
+  def genMicroRosGetFunctionDecls(dataInPorts: ISZ[AadlPort], nodeName: String, cppPkgName: String,
+                                   datatypeMap: Map[AadlType, (String, ISZ[String])],
+                                   reporter: Reporter): ISZ[ST] = {
+    val nodeNameBase = s"${nodeName}_base"
+    var decls: ISZ[ST] = IS()
+    for (p <- dataInPorts) {
+      val portId = p.identifier
+      val portDatatype = genPortDatatype(p, cppPkgName, datatypeMap, reporter)
+      val cType = cppTypeToCStructName(portDatatype)
+      decls = decls :+ st"${cType} * get_${portId}(${nodeNameBase}_t * self);"
+    }
+    return decls
+  }
+
+  def genMicroRosGetFunctionImpls(dataInPorts: ISZ[AadlPort], nodeName: String, cppPkgName: String,
+                                   datatypeMap: Map[AadlType, (String, ISZ[String])],
+                                   reporter: Reporter): ISZ[ST] = {
+    val nodeNameBase = s"${nodeName}_base"
+    var impls: ISZ[ST] = IS()
+    for (p <- dataInPorts) {
+      val portId = p.identifier
+      val portName = genPortName(p)
+      val portDatatype = genPortDatatype(p, cppPkgName, datatypeMap, reporter)
+      val cType = cppTypeToCStructName(portDatatype)
+      impls = impls :+
+        st"""${cType} * get_${portId}(${nodeNameBase}_t * self)
+            |{
+            |    return &self->${portName}_msg;
+            |}
+          """
+    }
+    return impls
+  }
+
+  def genMicroRosBaseNodeHeaderFile(microrosPkgName: String, cppPkgName: String, component: AadlThread,
+                                    connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
+                                    datatypeMap: Map[AadlType, (String, ISZ[String])],
+                                    hasEnumConverter: B, invertTopicBinding: B,
+                                    reporter: Reporter): (ISZ[String], ST, B, ISZ[Marker]) = {
+    val nodeName = genNodeName(component)
+    val nodeNameBase = s"${nodeName}_base"
+    val fileName = s"${nodeNameBase}${c_src_node_header_name_suffix}"
+    val guardName = ops.StringOps(s"${nodeNameBase}_h").toUpper
+
+    val outPorts = ISZOps(component.getPorts()).filter(p => p.direction == Direction.Out)
+    val inPorts = ISZOps(component.getPorts()).filter(p => p.direction == Direction.In)
+    val dataInPorts = ISZOps(inPorts).filter(p => p.isInstanceOf[AadlDataPort])
+
+    var msgTypes: ISZ[String] = IS()
+    for (p <- component.getPorts()) {
+      val portDatatype = genPortDatatype(p, cppPkgName, datatypeMap, reporter)
+      if (!ISZOps(msgTypes).contains(portDatatype)) {
+        msgTypes = msgTypes :+ portDatatype
+      }
+    }
+
+    val msgIncludes = genCHeaderFileMsgTypeIncludes(msgTypes)
+    val publisherFields = genMicroRosPublisherStructFields(outPorts, cppPkgName, datatypeMap, connectionMap, invertTopicBinding, reporter)
+    val putDecls = genMicroRosPutFunctionDecls(outPorts, nodeName, cppPkgName, datatypeMap, reporter)
+    val enumConverterInclude: ST = if (hasEnumConverter) st"""#include "${microrosPkgName}/base_headers/enum_converter.h"""" else st""
+    val exampleTypesInclude: ST = st"""#include "${microrosPkgName}/base_headers/example_types.h""""
+    val msgToStringBlockOpt = genCMsgToStringBlock(outPorts, cppPkgName, datatypeMap, hasEnumConverter, reporter)
+    val msgToStringSection: ST = msgToStringBlockOpt match {
+      case Some(block) => st"\n${block}\n"
+      case _ => st""
+    }
+
+    val callbackAndTimerSection: ST =
+      if (isSporadic(component)) {
+        val subscriberFields = genMicroRosSubscriberStructFields(inPorts, cppPkgName, datatypeMap, reporter)
+        st"""    //=================================================
+            |    //  S u b s c r i p t i o n s
+            |    //=================================================
+            |    ${(subscriberFields, "\n")}
+            |
+            |    //=================================================
+            |    //  E x e c u t o r
+            |    //=================================================
+            |    rclc_executor_t executor;"""
+      } else {
+        st"""    //=================================================
+            |    //  C a l l b a c k   a n d   T i m e r
+            |    //=================================================
+            |    rcl_timer_t period_timer;
+            |    rclc_executor_t executor;"""
+      }
+
+    val getDecls = genMicroRosGetFunctionDecls(dataInPorts, nodeName, cppPkgName, datatypeMap, reporter)
+    val getSection: ST =
+      if (isSporadic(component) && getDecls.nonEmpty)
+        st"""
+            |//=================================================
+            |//  D a t a   P o r t   A c c e s s
+            |//=================================================
+            |
+            |${(getDecls, "\n")}
+            |"""
+      else st""
+
+    val fileBody =
+      st"""#ifndef ${guardName}
+          |#define ${guardName}
+          |
+          |${CommentTemplate.doNotEditComment_slash}
+          |
+          |#include <stdio.h>
+          |#include <rcl/rcl.h>
+          |#include <rclc/rclc.h>
+          |#include <rclc/executor.h>
+          |${(msgIncludes, "\n")}
+          |${enumConverterInclude}
+          |${exampleTypesInclude}
+          |
+          |#define PRINT_INFO(fmt, ...) printf("[INFO] [${nodeName}] " fmt "\n", ##__VA_ARGS__)
+          |#define PRINT_WARN(fmt, ...) printf("[WARN] [${nodeName}] " fmt "\n", ##__VA_ARGS__)
+          |#define PRINT_ERROR(fmt, ...) printf("[ERROR] [${nodeName}] " fmt "\n", ##__VA_ARGS__)
+          |${msgToStringSection}
+          |
+          |//=================================================
+          |//  N o d e   S t a t e
+          |//=================================================
+          |
+          |typedef struct {
+          |    rcl_node_t node;
+          |    rclc_support_t support;
+          |    rcl_allocator_t allocator;
+          |
+          |    //=================================================
+          |    //  C o m m u n i c a t i o n
+          |    //=================================================
+          |    ${(publisherFields, "\n")}
+          |
+          |${callbackAndTimerSection}
+          |} ${nodeNameBase}_t;
+          |
+          |void ${nodeNameBase}_init(${nodeNameBase}_t * self);
+          |void ${nodeNameBase}_spin(${nodeNameBase}_t * self);
+          |
+          |//=================================================
+          |//  C o m m u n i c a t i o n
+          |//=================================================
+          |
+          |${(putDecls, "\n")}
+          |${getSection}
+          |#endif  // ${guardName}
+        """
+
+    val filePath: ISZ[String] = IS("microros_apps", microrosPkgName, "include", microrosPkgName, "base_headers", fileName)
+    return (filePath, fileBody, T, IS())
+  }
+
+  //================================================
+  //  M i c r o R O S   B a s e   S o u r c e
+  //================================================
+
+  def genMicroRosPublisherInits(outPorts: ISZ[AadlPort], nodeName: String, cppPkgName: String,
+                                datatypeMap: Map[AadlType, (String, ISZ[String])],
+                                connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
+                                invertTopicBinding: B, reporter: Reporter): ISZ[ST] = {
+    var inits: ISZ[ST] = IS()
+    for (p <- outPorts) {
+      val portName = genPortName(p)
+      val portDatatype = genPortDatatype(p, cppPkgName, datatypeMap, reporter)
+      val rosidlSupport = cppTypeToROSIDLSupport(portDatatype)
+
+      val topicNames: ISZ[String] = if (invertTopicBinding) getPortNames(IS(p.path.toISZ)) else if (connectionMap.get(p.path).nonEmpty) getPortNames(connectionMap.get(p.path).get) else getPortNames(IS(p.path.toISZ))
+
+      if (topicNames.size == 1) {
+        inits = inits :+
+          st"""rclc_publisher_init_default(
+              |    &self->${portName}_publisher,
+              |    &self->node,
+              |    ${rosidlSupport},
+              |    "${topicNames(0)}");
+            """
+      } else {
+        var i: Z = 1
+        while (i <= topicNames.size) {
+          val topic = topicNames(i - 1)
+          inits = inits :+
+            st"""rclc_publisher_init_default(
+                |    &self->${portName}_publisher_${i},
+                |    &self->node,
+                |    ${rosidlSupport},
+                |    "${topic}");
+              """
+          i = i + 1
+        }
+      }
+    }
+    return inits
+  }
+
+  def genMicroRosPutFunctionImpls(outPorts: ISZ[AadlPort], nodeName: String, cppPkgName: String,
+                                  datatypeMap: Map[AadlType, (String, ISZ[String])],
+                                  connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
+                                  invertTopicBinding: B, reporter: Reporter): ISZ[ST] = {
+    var impls: ISZ[ST] = IS()
+    for (p <- outPorts) {
+      val portId = p.identifier
+      val portName = genPortName(p)
+      val portDatatype = genPortDatatype(p, cppPkgName, datatypeMap, reporter)
+
+      val numPubs: Z = if (invertTopicBinding) 1 else if (connectionMap.get(p.path).nonEmpty) connectionMap.get(p.path).get.size else 1
+      val cType = cppTypeToCStructName(portDatatype)
+
+      val msgArg: String = if (isEventPort(portDatatype)) "&msg" else "msg"
+
+      var publishStmts: ISZ[ST] = IS()
+      if (numPubs == 1) {
+        publishStmts = IS(st"""rcl_ret_t ret = rcl_publish(&self->${portName}_publisher, ${msgArg}, NULL);
+                              |if (ret != RCL_RET_OK) {
+                              |    PRINT_ERROR("Failed to publish ${portId}");
+                              |}""")
+      } else {
+        var i: Z = 1
+        while (i <= numPubs) {
+          publishStmts = publishStmts :+
+            st"""rcl_ret_t ret${i} = rcl_publish(&self->${portName}_publisher_${i}, ${msgArg}, NULL);
+                |if (ret${i} != RCL_RET_OK) {
+                |    PRINT_ERROR("Failed to publish ${portId} (${i})");
+                |}"""
+          i = i + 1
+        }
+      }
+
+      if (isEventPort(portDatatype)) {
+        impls = impls :+
+          st"""void put_${portId}(${nodeName}_base_t * self)
+              |{
+              |    ${cType} msg;
+              |    ${cType}__init(&msg);
+              |    ${(publishStmts, "\n")}
+              |}
+            """
+      } else {
+        impls = impls :+
+          st"""void put_${portId}(${nodeName}_base_t * self, ${cType} * msg)
+              |{
+              |    ${(publishStmts, "\n")}
+              |}
+            """
+      }
+    }
+    return impls
+  }
+
+  def genMicroRosBaseNodeCFile(microrosPkgName: String, cppPkgName: String, component: AadlThread,
+                               connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
+                               datatypeMap: Map[AadlType, (String, ISZ[String])],
+                               invertTopicBinding: B, reporter: Reporter): (ISZ[String], ST, B, ISZ[Marker]) = {
+    val nodeName = genNodeName(component)
+    val nodeNameBase = s"${nodeName}_base"
+    val fileName = s"${nodeNameBase}${c_src_node_name_suffix}"
+
+    val outPorts = ISZOps(component.getPorts()).filter(p => p.direction == Direction.Out)
+    val inPorts = ISZOps(component.getPorts()).filter(p => p.direction == Direction.In)
+    val dataInPorts = ISZOps(inPorts).filter(p => p.isInstanceOf[AadlDataPort])
+
+    val publisherInits = genMicroRosPublisherInits(outPorts, nodeName, cppPkgName, datatypeMap, connectionMap, invertTopicBinding, reporter)
+    val putImpls = genMicroRosPutFunctionImpls(outPorts, nodeName, cppPkgName, datatypeMap, connectionMap, invertTopicBinding, reporter)
+
+    val fileBody: ST =
+      if (isSporadic(component)) {
+        val handleForwardDecls = genMicroRosHandleForwardDecls(inPorts, nodeName, cppPkgName, datatypeMap, reporter)
+        val subscriptionCallbacks = genMicroRosSubscriptionCallbacks(inPorts, nodeName, cppPkgName, datatypeMap, reporter)
+        val subscriptionInits = genMicroRosSubscriptionInits(inPorts, cppPkgName, datatypeMap, invertTopicBinding, connectionMap, reporter)
+        val executorAdds = genMicroRosSubscriptionExecutorAdds(inPorts)
+        val getImpls = genMicroRosGetFunctionImpls(dataInPorts, nodeName, cppPkgName, datatypeMap, reporter)
+        val numHandles: Z = inPorts.size
+        val getSection: ST =
+          if (getImpls.nonEmpty)
+            st"""
+                |//=================================================
+                |//  D a t a   P o r t   A c c e s s
+                |//=================================================
+                |
+                |${(getImpls, "\n")}"""
+          else st""
+        st"""#include "${microrosPkgName}/base_headers/${nodeNameBase}${c_src_node_header_name_suffix}"
+            |
+            |${CommentTemplate.doNotEditComment_slash}
+            |
+            |// Forward declarations of user compute entry points
+            |${(handleForwardDecls, "\n")}
+            |
+            |// Static instance pointer for subscription callback context (heap-free, MCU-compatible)
+            |static ${nodeNameBase}_t * g_self = NULL;
+            |
+            |//=================================================
+            |//  S u b s c r i p t i o n   C a l l b a c k s
+            |//=================================================
+            |
+            |${(subscriptionCallbacks, "\n")}
+            |//=================================================
+            |//  I n i t i a l i z a t i o n
+            |//=================================================
+            |
+            |void ${nodeNameBase}_init(${nodeNameBase}_t * self)
+            |{
+            |    g_self = self;
+            |
+            |    self->allocator = rcl_get_default_allocator();
+            |
+            |    rclc_support_init(&self->support, 0, NULL, &self->allocator);
+            |
+            |    rclc_node_init_default(&self->node, "${nodeName}", "", &self->support);
+            |
+            |    // Setting up connections
+            |    ${(publisherInits, "\n")}
+            |    // Setting up subscriptions
+            |    ${(subscriptionInits, "\n")}
+            |    rclc_executor_init(&self->executor, &self->support.context, ${numHandles}, &self->allocator);
+            |    ${(executorAdds, "\n")}
+            |}
+            |
+            |void ${nodeNameBase}_spin(${nodeNameBase}_t * self)
+            |{
+            |    rclc_executor_spin(&self->executor);
+            |}
+            |
+            |//=================================================
+            |//  C o m m u n i c a t i o n
+            |//=================================================
+            |
+            |${(putImpls, "\n")}${getSection}
+          """
+      } else {
+        val period = component.period.get
+        st"""#include "${microrosPkgName}/base_headers/${nodeNameBase}${c_src_node_header_name_suffix}"
+            |
+            |${CommentTemplate.doNotEditComment_slash}
+            |
+            |// Forward declaration of user compute entry point
+            |void ${nodeName}_timeTriggered(${nodeNameBase}_t * self);
+            |
+            |// Static instance pointer for timer callback context (heap-free, MCU-compatible)
+            |static ${nodeNameBase}_t * g_self = NULL;
+            |
+            |//=================================================
+            |//  C a l l b a c k   a n d   T i m e r
+            |//=================================================
+            |
+            |static void period_timer_callback(rcl_timer_t * timer, int64_t last_call_time)
+            |{
+            |    (void)timer;
+            |    (void)last_call_time;
+            |    if (g_self != NULL) {
+            |        ${nodeName}_timeTriggered(g_self);
+            |    }
+            |}
+            |
+            |//=================================================
+            |//  I n i t i a l i z a t i o n
+            |//=================================================
+            |
+            |void ${nodeNameBase}_init(${nodeNameBase}_t * self)
+            |{
+            |    g_self = self;
+            |
+            |    self->allocator = rcl_get_default_allocator();
+            |
+            |    rclc_support_init(&self->support, 0, NULL, &self->allocator);
+            |
+            |    rclc_node_init_default(&self->node, "${nodeName}", "", &self->support);
+            |
+            |    // Setting up connections
+            |    ${(publisherInits, "\n")}
+            |    // timeTriggered callback timer
+            |    rclc_timer_init_default(
+            |        &self->period_timer,
+            |        &self->support,
+            |        RCL_MS_TO_NS(${period}),
+            |        period_timer_callback);
+            |
+            |    rclc_executor_init(&self->executor, &self->support.context, 1, &self->allocator);
+            |    rclc_executor_add_timer(&self->executor, &self->period_timer);
+            |}
+            |
+            |void ${nodeNameBase}_spin(${nodeNameBase}_t * self)
+            |{
+            |    rclc_executor_spin(&self->executor);
+            |}
+            |
+            |//=================================================
+            |//  C o m m u n i c a t i o n
+            |//=================================================
+            |
+            |${(putImpls, "\n")}
+          """
+      }
+
+    val filePath: ISZ[String] = IS("microros_apps", microrosPkgName, "src", "base_code", fileName)
+    return (filePath, fileBody, T, IS())
+  }
+
+  //================================================
+  //  M i c r o R O S   R u n n e r
+  //================================================
+
+  def genMicroRosRunnerFile(microrosPkgName: String, component: AadlThread): (ISZ[String], ST, B, ISZ[Marker]) = {
+    val nodeName = genNodeName(component)
+    val nodeNameBase = s"${nodeName}_base"
+    val fileName = s"${nodeName}${c_node_runner_name_suffix}"
+
+    val fileBody =
+      st"""#include "${microrosPkgName}/user_headers/${nodeName}${c_src_node_header_name_suffix}"
+          |
+          |${CommentTemplate.doNotEditComment_slash}
+          |
+          |static ${nodeNameBase}_t node;
+          |
+          |int main(int argc, char ** argv)
+          |{
+          |    (void)argc;
+          |    (void)argv;
+          |
+          |    ${nodeNameBase}_init(&node);
+          |
+          |    // Invoke initialize entry point
+          |    ${nodeName}_initialize(&node);
+          |
+          |    PRINT_INFO("${nodeName} infrastructure set up");
+          |
+          |    ${nodeNameBase}_spin(&node);
+          |
+          |    return 0;
+          |}
+        """
+
+    val filePath: ISZ[String] = IS("microros_apps", microrosPkgName, "src", "base_code", fileName)
+    return (filePath, fileBody, T, IS())
+  }
+
+  //================================================
+  //  M i c r o R O S   U s e r   C o d e
+  //================================================
+
+  def genMicroRosUserNodeHeaderFile(microrosPkgName: String, cppPkgName: String, component: AadlThread,
+                                     datatypeMap: Map[AadlType, (String, ISZ[String])],
+                                     reporter: Reporter): (ISZ[String], ST, B, ISZ[Marker]) = {
+    val nodeName = genNodeName(component)
+    val nodeNameBase = s"${nodeName}_base"
+    val fileName = s"${nodeName}${c_src_node_header_name_suffix}"
+    val guardName = ops.StringOps(s"${nodeName}_src_h").toUpper
+
+    val computeEntryPointDecls: ST =
+      if (isSporadic(component)) {
+        val inPorts = ISZOps(component.getPorts()).filter(p => p.direction == Direction.In)
+        val handleDecls = genMicroRosHandleForwardDecls(inPorts, nodeName, cppPkgName, datatypeMap, reporter)
+        st"${(handleDecls, "\n")}"
+      } else {
+        st"void ${nodeName}_timeTriggered(${nodeNameBase}_t * self);"
+      }
+
+    val fileBody =
+      st"""#ifndef ${guardName}
+          |#define ${guardName}
+          |
+          |${CommentTemplate.doNotEditComment_slash}
+          |
+          |#include "${microrosPkgName}/base_headers/${nodeNameBase}${c_src_node_header_name_suffix}"
+          |
+          |//=================================================
+          |//  I n i t i a l i z e    E n t r y    P o i n t
+          |//=================================================
+          |void ${nodeName}_initialize(${nodeNameBase}_t * self);
+          |
+          |//=================================================
+          |//  C o m p u t e    E n t r y    P o i n t
+          |//=================================================
+          |${computeEntryPointDecls}
+          |
+          |#endif  // ${guardName}
+        """
+
+    val filePath: ISZ[String] = IS("microros_apps", microrosPkgName, "include", microrosPkgName, "user_headers", fileName)
+    return (filePath, fileBody, T, IS())
+  }
+
+  def genMicroRosUserNodeCFile(microrosPkgName: String, cppPkgName: String, component: AadlThread,
+                               datatypeMap: Map[AadlType, (String, ISZ[String])],
+                               hasEnumConverter: B, reporter: Reporter): (ISZ[String], ST, B, ISZ[Marker]) = {
+    val nodeName = genNodeName(component)
+    val nodeNameBase = s"${nodeName}_base"
+    val fileName = s"${nodeName}${c_src_node_name_suffix}"
+
+    val outPorts = ISZOps(component.getPorts()).filter(p => p.direction == Direction.Out)
+    val enumConverterInclude: ST = if (hasEnumConverter) st"""#include "${microrosPkgName}/base_headers/enum_converter.h"""" else st""
+
+    val computeSection: ST =
+      if (isSporadic(component)) {
+        val inPorts = ISZOps(component.getPorts()).filter(p => p.direction == Direction.In)
+        val dataInPorts = ISZOps(inPorts).filter(p => p.isInstanceOf[AadlDataPort])
+        val eventInPorts = ISZOps(inPorts).filter(p => !p.isInstanceOf[AadlDataPort])
+
+        var dataPortExamples: ISZ[ST] = IS()
+        for (dp <- dataInPorts) {
+          val dpId = dp.identifier
+          val dpDatatype = genPortDatatype(dp, cppPkgName, datatypeMap, reporter)
+          val dpCType = cppTypeToCStructName(dpDatatype)
+          dataPortExamples = dataPortExamples :+
+            st"""${dpCType} * ${dpId} = get_${dpId}(self);"""
+        }
+
+        var examplePublishes: ISZ[ST] = IS()
+        for (p <- outPorts) {
+          val portId = p.identifier
+          val portDatatype = genPortDatatype(p, cppPkgName, datatypeMap, reporter)
+          if (isEventPort(portDatatype)) {
+            examplePublishes = examplePublishes :+ st"put_${portId}(self);"
+          } else {
+            val cType = cppTypeToCStructName(portDatatype)
+            val initExpr = portExampleInit(p, "{0}", datatypeMap)
+            examplePublishes = examplePublishes :+
+              st"""${cType} ${portId} = ${initExpr};
+                  |put_${portId}(self, &${portId});
+                  |PRINT_INFO("Sent ${portId}: %s", MESSAGE_TO_STRING(&${portId}));"""
+          }
+        }
+
+        var handlers: ISZ[ST] = IS()
+        var isFirstHandler: B = T
+        for (p <- eventInPorts) {
+          val portId = p.identifier
+          val portDatatype = genPortDatatype(p, cppPkgName, datatypeMap, reporter)
+          val cType = cppTypeToCStructName(portDatatype)
+
+          var extraBodyLines: ISZ[ST] = IS()
+          if (isFirstHandler) {
+            isFirstHandler = F
+            if (dataPortExamples.nonEmpty) {
+              extraBodyLines = extraBodyLines :+ st""
+              extraBodyLines = extraBodyLines :+ st"    // example receiving messages on data ports"
+              for (ex <- dataPortExamples) {
+                extraBodyLines = extraBodyLines :+ st"    ${ex}"
+              }
+            }
+            if (examplePublishes.nonEmpty) {
+              extraBodyLines = extraBodyLines :+ st""
+              extraBodyLines = extraBodyLines :+ st"    // example publishing messages"
+              for (ex <- examplePublishes) {
+                extraBodyLines = extraBodyLines :+ st"    ${ex}"
+              }
+            }
+          }
+
+          if (isEventPort(portDatatype)) {
+            var bodyLines: ISZ[ST] = IS(st"    // Handle ${portId} event")
+            bodyLines = bodyLines :+ st"""    PRINT_INFO("Received ${portId}");"""
+            for (l <- extraBodyLines) {
+              bodyLines = bodyLines :+ l
+            }
+            handlers = handlers :+
+              st"""void ${nodeName}_handle_${portId}(${nodeNameBase}_t * self)
+                  |{
+                  |${(bodyLines, "\n")}
+                  |}
+                """
+          } else {
+            var bodyLines: ISZ[ST] = IS(st"    // Handle ${portId} msg")
+            bodyLines = bodyLines :+ st"""    PRINT_INFO("Received ${portId}");"""
+            for (l <- extraBodyLines) {
+              bodyLines = bodyLines :+ l
+            }
+            handlers = handlers :+
+              st"""void ${nodeName}_handle_${portId}(${nodeNameBase}_t * self, const ${cType} * msg)
+                  |{
+                  |${(bodyLines, "\n")}
+                  |}
+                """
+          }
+        }
+
+        st"""//=================================================
+            |//  C o m p u t e    E n t r y    P o i n t
+            |//=================================================
+            |${(handlers, "\n")}"""
+      } else {
+        var examplePublishes: ISZ[ST] = IS()
+        for (p <- outPorts) {
+          val portId = p.identifier
+          val portDatatype = genPortDatatype(p, cppPkgName, datatypeMap, reporter)
+          if (isEventPort(portDatatype)) {
+            examplePublishes = examplePublishes :+ st"put_${portId}(self);"
+          } else {
+            val cType = cppTypeToCStructName(portDatatype)
+            val initExpr = portExampleInit(p, "{0}", datatypeMap)
+            examplePublishes = examplePublishes :+
+              st"""${cType} ${portId} = ${initExpr};
+                  |put_${portId}(self, &${portId});
+                  |PRINT_INFO("Sent ${portId}: %s", MESSAGE_TO_STRING(&${portId}));"""
+          }
+        }
+        st"""//=================================================
+            |//  C o m p u t e    E n t r y    P o i n t
+            |//=================================================
+            |void ${nodeName}_timeTriggered(${nodeNameBase}_t * self)
+            |{
+            |    // Handle communication
+            |
+            |    // Example publishing messages
+            |    ${(examplePublishes, "\n")}
+            |}"""
+      }
+
+    val fileBody =
+      st"""#include "${microrosPkgName}/user_headers/${nodeName}${c_src_node_header_name_suffix}"
+          |${enumConverterInclude}
+          |
+          |${CommentTemplate.safeToEditComment_slash}
+          |
+          |//=================================================
+          |//  I n i t i a l i z e    E n t r y    P o i n t
+          |//=================================================
+          |void ${nodeName}_initialize(${nodeNameBase}_t * self)
+          |{
+          |    PRINT_INFO("Initialize Entry Point invoked");
+          |
+          |    // Initialize the node
+          |}
+          |
+          |${computeSection}
+        """
+
+    val filePath: ISZ[String] = IS("microros_apps", microrosPkgName, "src", "user_code", fileName)
+    return (filePath, fileBody, F, IS())
+  }
+
+  //================================================
+  //  M i c r o R O S   E n u m   C o n v e r t e r
+  //================================================
+
+  def genMicroRosEnumConverterHeaderFile(microrosPkgName: String, cppPkgName: String,
+                                         enumTypes: ISZ[(String, AadlType)]): (ISZ[String], ST, B, ISZ[Marker]) = {
+    var includes: ISZ[ST] = IS()
+    var converterHeaders: ISZ[ST] = IS()
+
+    for (enum <- enumTypes) {
+      val enumName: String = ops.StringOps(enum._2.classifier.apply(enum._2.classifier.size - 1)).replaceAllLiterally("_", "")
+      val msgTypeCpp: String = s"${cppPkgName}_interfaces::msg::${enumName}"
+      val headerPath: String = cppTypeToCHeaderPath(msgTypeCpp)
+
+      includes = includes :+ st"""#include "${headerPath}""""
+      converterHeaders = converterHeaders :+
+        st"const char* enumToString_${enumName}(uint8_t value);"
+    }
+
+    val fileBody =
+      st"""#ifndef ENUM_CONVERTER_H
+          |#define ENUM_CONVERTER_H
+          |
+          |${CommentTemplate.doNotEditComment_slash}
+          |
+          |#include <stdint.h>
+          |${(includes, "\n")}
+          |
+          |// C does not support function overloading; enum types are encoded in the name
+          |${(converterHeaders, "\n")}
+          |
+          |#endif  // ENUM_CONVERTER_H
+        """
+
+    val filePath: ISZ[String] = IS("microros_apps", microrosPkgName, "include", microrosPkgName, "base_headers", "enum_converter.h")
+    return (filePath, fileBody, T, IS())
+  }
+
+  def genMicroRosEnumConverterCFile(microrosPkgName: String, cppPkgName: String,
+                                    enumTypes: ISZ[(String, AadlType)]): (ISZ[String], ST, B, ISZ[Marker]) = {
+    var converters: ISZ[ST] = IS()
+
+    for (enum <- enumTypes) {
+      val enumName: String = ops.StringOps(enum._2.classifier.apply(enum._2.classifier.size - 1)).replaceAllLiterally("_", "")
+      val cPkgPrefix: String = ops.StringOps(s"${cppPkgName}_interfaces").replaceAllLiterally("::", "__")
+      val enumValues: ISZ[String] = enum._2.asInstanceOf[EnumType].values
+      val fieldUpper: String = ops.StringOps(enum._1).toUpper
+
+      var cases: ISZ[ST] = IS()
+      for (value <- enumValues) {
+        val cConst = s"${cPkgPrefix}__msg__${enumName}__${fieldUpper}_${ops.StringOps(value).toUpper}"
+        cases = cases :+ st"""case ${cConst}: return "${value}";"""
+      }
+
+      converters = converters :+
+        st"""const char* enumToString_${enumName}(uint8_t value)
+            |{
+            |    switch (value) {
+            |        ${(cases, "\n")}
+            |        default: return "Unknown";
+            |    }
+            |}
+          """
+    }
+
+    val fileBody =
+      st"""#include "${microrosPkgName}/base_headers/enum_converter.h"
+          |
+          |${CommentTemplate.doNotEditComment_slash}
+          |
+          |${(converters, "\n")}
+        """
+
+    val filePath: ISZ[String] = IS("microros_apps", microrosPkgName, "src", "base_code", "enum_converter.c")
+    return (filePath, fileBody, T, IS())
+  }
+
+  def genMicroRosEnumConverterFiles(modelName: String, cppPkgName: String,
+                                    datatypeMap: Map[AadlType, (String, ISZ[String])]): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
+    var enumTypes: ISZ[(String, AadlType)] = IS()
+
+    for (key <- datatypeMap.keys) {
+      key match {
+        case _: EnumType =>
+          val datatype: String = datatypeMap.get(key).get._2.apply(0)
+          val datatypeName: String = StringOps(datatype).substring(StringOps(datatype).indexOf(' ') + 1, datatype.size)
+          enumTypes = enumTypes :+ (datatypeName, key)
+        case _ =>
+      }
+    }
+
+    if (enumTypes.size == 0) {
+      return IS()
+    }
+
+    val microrosPkgName: String = genMicroRosPackageName(modelName)
+
+    var files: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
+    files = files :+ genMicroRosEnumConverterHeaderFile(microrosPkgName, cppPkgName, enumTypes)
+    files = files :+ genMicroRosEnumConverterCFile(microrosPkgName, cppPkgName, enumTypes)
+    return files
+  }
+
+  //================================================
+  //  M i c r o R O S   B u i l d   F i l e s
+  //================================================
+
+  def genMicroRosCMakeListsFile(modelName: String, cppPkgName: String, microRosThreads: ISZ[AadlThread],
+                                hasEnumConverter: B): (ISZ[String], ST, B, ISZ[Marker]) = {
+    val microrosPkgName: String = genMicroRosPackageName(modelName)
+    val interfacesPkg: String = s"${cppPkgName}_interfaces"
+    val fileName: String = "CMakeLists.txt"
+
+    var entryPointDecls: ISZ[ST] = IS()
+    var entryPointExecutables: ISZ[String] = IS()
+
+    for (comp <- microRosThreads) {
+      val nodeName = genNodeName(comp)
+      var srcFiles: ISZ[String] = IS(
+        s"src/base_code/${nodeName}${c_node_runner_name_suffix}",
+        s"src/user_code/${nodeName}${c_src_node_name_suffix}",
+        s"src/base_code/${nodeName}_base${c_src_node_name_suffix}"
+      )
+      if (hasEnumConverter) {
+        srcFiles = srcFiles :+ s"src/base_code/enum_converter.c"
+      }
+      val execName = genExecutableFileName(nodeName)
+      entryPointDecls = entryPointDecls :+
+        st"""add_executable(${execName} ${(srcFiles, " ")})
+            |ament_target_dependencies(${execName} rclc ${interfacesPkg})"""
+      entryPointExecutables = entryPointExecutables :+ execName
+    }
+
+    val marker = BlockMarker(
+      id = "Additions within these tags will be preserved when re-running Codegen",
+      beginPrefix = "#",
+      optBeginSuffix = None(),
+      endPrefix = "#",
+      optEndSuffix = None())
+
+    val fileBody =
+      st"""cmake_minimum_required(VERSION 3.8)
+          |project(${microrosPkgName})
+          |
+          |${CommentTemplate.invertedMarkerComment_hash}
+          |
+          |if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+          |    add_compile_options(-Wall -Wextra -Wpedantic)
+          |endif()
+          |
+          |find_package(ament_cmake REQUIRED)
+          |find_package(rclc REQUIRED)
+          |find_package(${interfacesPkg} REQUIRED)
+          |
+          |${marker.beginMarker}
+          |
+          |${marker.endMarker}
+          |
+          |include_directories(include)
+          |
+          |${(entryPointDecls, "\n\n")}
+          |
+          |install(TARGETS
+          |    ${(entryPointExecutables, "\n")}
+          |    DESTINATION lib/$${PROJECT_NAME}
+          |)
+          |
+          |ament_package()
+        """
+
+    val filePath: ISZ[String] = IS("microros_apps", microrosPkgName, fileName)
+    return (filePath, fileBody, T, IS(marker))
+  }
+
+  def genMicroRosPackageFile(modelName: String, cppPkgName: String): (ISZ[String], ST, B, ISZ[Marker]) = {
+    val microrosPkgName: String = genMicroRosPackageName(modelName)
+    val interfacesPkg: String = s"${cppPkgName}_interfaces"
+    val fileName: String = "package.xml"
+
+    val marker = BlockMarker(
+      id = "Additions within these tags will be preserved when re-running Codegen",
+      beginPrefix = "<!--",
+      optBeginSuffix = Some("-->"),
+      endPrefix = "<!--",
+      optEndSuffix = Some("-->"))
+
+    val fileBody =
+      st"""<?xml version="1.0"?>
+          |<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+          |
+          |${CommentTemplate.invertedMarkerComment_xml}
+          |
+          |<package format="3">
+          |    <name>${microrosPkgName}</name>
+          |    <version>0.0.0</version>
+          |    <description>TODO: Package description</description>
+          |    <maintainer email="sireum@todo.todo">sireum</maintainer>
+          |    <license>TODO: License declaration</license>
+          |
+          |    <buildtool_depend>ament_cmake</buildtool_depend>
+          |
+          |    <depend>rclc</depend>
+          |    <depend>${interfacesPkg}</depend>
+          |
+          |    ${marker.beginMarker}
+          |
+          |    ${marker.endMarker}
+          |
+          |    <test_depend>ament_lint_auto</test_depend>
+          |    <test_depend>ament_lint_common</test_depend>
+          |
+          |    <export>
+          |        <build_type>ament_cmake</build_type>
+          |    </export>
+          |</package>
+        """
+
+    val filePath: ISZ[String] = IS("microros_apps", microrosPkgName, fileName)
+    return (filePath, fileBody, T, IS(marker))
+  }
+
+  //================================================
+  //  M i c r o R O S   N o d e   F i l e s
+  //================================================
+
+  def genMicroRosNodeFiles(modelName: String, microRosThreads: ISZ[AadlThread],
+                           connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
+                           datatypeMap: Map[AadlType, (String, ISZ[String])],
+                           hasEnumConverter: B, invertTopicBinding: B,
+                           reporter: Reporter): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
+    val microrosPkgName: String = genMicroRosPackageName(modelName)
+    val cppPkgName: String = genCppPackageName(modelName)
+
+    var files: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
+
+    for (comp <- microRosThreads) {
+      files = files :+ genMicroRosBaseNodeHeaderFile(microrosPkgName, cppPkgName, comp, connectionMap, datatypeMap, hasEnumConverter, invertTopicBinding, reporter)
+      files = files :+ genMicroRosBaseNodeCFile(microrosPkgName, cppPkgName, comp, connectionMap, datatypeMap, invertTopicBinding, reporter)
+      files = files :+ genMicroRosRunnerFile(microrosPkgName, comp)
+      files = files :+ genMicroRosUserNodeHeaderFile(microrosPkgName, cppPkgName, comp, datatypeMap, reporter)
+      files = files :+ genMicroRosUserNodeCFile(microrosPkgName, cppPkgName, comp, datatypeMap, hasEnumConverter, reporter)
+    }
+
+    return files
+  }
+
+  def genMicroRosNodePkg(modelName: String, microRosThreads: ISZ[AadlThread],
+                         connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
+                         datatypeMap: Map[AadlType, (String, ISZ[String])],
+                         invertTopicBinding: B, reporter: Reporter): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
+    val cppPkgName: String = genCppPackageName(modelName)
+
+    val converterFiles = genMicroRosEnumConverterFiles(modelName, cppPkgName, datatypeMap)
+    val hasEnumConverter: B = converterFiles.size > 0
+
+    var files: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
+    files = files ++ genMicroRosNodeFiles(modelName, microRosThreads, connectionMap, datatypeMap, hasEnumConverter, invertTopicBinding, reporter)
+    files = files ++ converterFiles
+    files = files :+ genMicroRosExampleTypesFile(modelName, cppPkgName, datatypeMap)
+    files = files :+ genMicroRosCMakeListsFile(modelName, cppPkgName, microRosThreads, hasEnumConverter)
+    files = files :+ genMicroRosPackageFile(modelName, cppPkgName)
     return files
   }
 
@@ -2869,5 +4447,312 @@ object Generator {
     files = files :+ genInterfacesPackageFile(modelName)
 
     return files
+  }
+
+  //================================================
+  //  R E A D M E
+  //================================================
+
+  def genReadme(modelName: String, ros2Threads: ISZ[AadlThread],
+                microRosThreads: ISZ[AadlThread]): (ISZ[String], ST, B, ISZ[Marker]) = {
+    val ros2PkgName: String = genCppPackageName(modelName)
+    val microrosPkgName: String = genMicroRosPackageName(modelName)
+    val dollar: String = "$"
+
+    val nodeTableRows: ISZ[ST] =
+      (for (t <- ros2Threads) yield
+        st"| `${genExecutableFileName(genNodeName(t))}` | `${ros2PkgName}` | ROS2 (rclcpp) |") ++
+      (for (t <- microRosThreads) yield
+        st"| `${genExecutableFileName(genNodeName(t))}` | `${microrosPkgName}` | microROS (rclc + rmw_microxrcedds) |")
+
+    val safeToEdit: String = CommentTemplate.safeToEditComment_xml
+
+    val content: ST =
+      if (microRosThreads.nonEmpty) {
+        val microRosRunEntries: ISZ[ST] = for (t <- microRosThreads) yield
+          st"""# ${genNodeName(t)} — microROS node
+              |RMW_IMPLEMENTATION=rmw_microxrcedds ros2 run ${microrosPkgName} ${genExecutableFileName(genNodeName(t))}
+              |"""
+        val ros2RunEntries: ISZ[ST] = for (t <- ros2Threads) yield
+          st"""# ${genNodeName(t)} — ROS2 node
+              |ros2 run ${ros2PkgName} ${genExecutableFileName(genNodeName(t))}
+              |"""
+        st"""${safeToEdit}
+            |
+            |# ${modelName} — Mixed ROS2 / microROS Workspace
+            |
+            |- [Prerequisites — micro-ROS Firmware Workspace (one-time setup)](#prerequisites--micro-ros-firmware-workspace-one-time-setup)
+            |- [Quick Start](#quick-start)
+            |- [Manual Steps](#manual-steps)
+            |  - [Build](#build)
+            |  - [Run](#run)
+            |
+            || Node | Package | Type |
+            ||---|---|---|
+            |${(nodeTableRows, "\n")}
+            |
+            |The microROS node(s) communicate via a micro-XRCE-DDS agent that bridges them to the ROS2 DDS bus.
+            |
+            |## Prerequisites — micro-ROS Firmware Workspace (one-time setup)
+            |
+            |microROS nodes require a firmware workspace containing the micro-ROS client stack and agent.
+            |This workspace is built once and shared across all your microROS projects — set `MICROROS_WS`
+            |to a stable location outside any individual project and reuse it everywhere.
+            |
+            |**Step 1 — choose a location** (edit this, then add it to your shell profile):
+            |
+            |```bash
+            |export MICROROS_WS=/path/to/microros_ws
+            |```
+            |
+            |**Step 2 — build the firmware workspace** (copy-paste as-is once `MICROROS_WS` is set):
+            |
+            |```bash
+            |mkdir -p ${dollar}MICROROS_WS && cd ${dollar}MICROROS_WS
+            |source /opt/ros/${dollar}ROS_DISTRO/setup.bash
+            |
+            |# 1. Add micro_ros_setup and build it
+            |git clone -b ${dollar}ROS_DISTRO https://github.com/micro-ROS/micro_ros_setup.git src/micro_ros_setup
+            |colcon build --packages-select micro_ros_setup
+            |source install/setup.bash
+            |
+            |# 2. Download the micro-ROS client stack
+            |ros2 run micro_ros_setup create_firmware_ws.sh host
+            |
+            |# 3. Ignore packages with known build failures that are not needed
+            |touch src/ros2/example_interfaces/COLCON_IGNORE
+            |touch src/uros/micro-ROS-demos/COLCON_IGNORE
+            |
+            |# 4. Build the full micro-ROS stack (takes a while, but only done once)
+            |ros2 run micro_ros_setup build_firmware.sh
+            |source install/setup.bash
+            |
+            |# 5. Build the micro-XRCE-DDS agent
+            |ros2 run micro_ros_setup create_agent_ws.sh
+            |ros2 run micro_ros_setup build_agent.sh
+            |source install/setup.bash
+            |```
+            |
+            |## Quick Start
+            |
+            |Run from this directory with `MICROROS_WS` set.
+            |
+            || Target | Description |
+            ||---|---|
+            || `make` | Build everything and launch all nodes in separate terminals |
+            || `make run` | Same as `make` |
+            || `make stop` | Kill all running nodes |
+            || `make clean` | Remove local build artifacts and copied packages from `MICROROS_WS` |
+            |
+            |## Manual Steps
+            |
+            |The Makefile targets automate the following steps.
+            |
+            |### Build
+            |
+            |Run from this directory. Requires `MICROROS_WS` to be set to the firmware workspace above.
+            |
+            |```bash
+            |source /opt/ros/${dollar}ROS_DISTRO/setup.bash && source ${dollar}MICROROS_WS/install/setup.bash
+            |
+            |# Copy the interfaces and microROS app into the firmware workspace and build them
+            |cp -r src/${ros2PkgName}_interfaces ${dollar}MICROROS_WS/src/
+            |cp -r microros_apps/${microrosPkgName} ${dollar}MICROROS_WS/src/
+            |cd ${dollar}MICROROS_WS && colcon build --packages-select ${ros2PkgName}_interfaces ${microrosPkgName}
+            |
+            |# Build the ROS2 packages from this workspace
+            |cd - && colcon build
+            |source install/setup.bash
+            |```
+            |
+            |### Run
+            |
+            |Each terminal requires:
+            |
+            |```bash
+            |source /opt/ros/${dollar}ROS_DISTRO/setup.bash && source ${dollar}MICROROS_WS/install/setup.bash
+            |```
+            |
+            |Terminals running ROS2 nodes also need:
+            |
+            |```bash
+            |source <path-to-this-workspace>/install/setup.bash
+            |```
+            |
+            |Start the agent before the microROS node(s).
+            |
+            |```bash
+            |# Terminal 1 — micro-XRCE-DDS agent (must start first)
+            |ros2 run micro_ros_agent micro_ros_agent udp4 --port 8888
+            |
+            |${(microRosRunEntries, "\n")}
+            |${(ros2RunEntries, "\n")}```
+            """
+      } else {
+        val ros2RunEntries: ISZ[ST] = for (t <- ros2Threads) yield
+          st"""# ${genNodeName(t)}
+              |ros2 run ${ros2PkgName} ${genExecutableFileName(genNodeName(t))}
+              |"""
+        st"""${safeToEdit}
+            |
+            |# ${modelName} — ROS2 Workspace
+            |
+            |## Table of Contents
+            |
+            |- [Quick Start](#quick-start)
+            |- [Manual Steps](#manual-steps)
+            |  - [Build](#build)
+            |  - [Run](#run)
+            |
+            || Node | Package |
+            ||---|---|
+            |${(for (t <- ros2Threads) yield st"| `${genExecutableFileName(genNodeName(t))}` | `${ros2PkgName}` |", "\n")}
+            |
+            |## Quick Start
+            |
+            || Target | Description |
+            ||---|---|
+            || `make` | Build and launch all nodes in separate terminals |
+            || `make run` | Same as `make` |
+            || `make stop` | Kill all running nodes |
+            || `make clean` | Remove build artifacts |
+            |
+            |## Manual Steps
+            |
+            |The Makefile targets automate the following steps.
+            |
+            |### Build
+            |
+            |```bash
+            |source /opt/ros/${dollar}ROS_DISTRO/setup.bash
+            |colcon build
+            |source install/setup.bash
+            |```
+            |
+            |### Run
+            |
+            |Each terminal requires:
+            |
+            |```bash
+            |source /opt/ros/${dollar}ROS_DISTRO/setup.bash && source install/setup.bash
+            |```
+            |
+            |```bash
+            |${(ros2RunEntries, "\n")}```
+            """
+      }
+
+    return (IS("README.md"), content, F, IS())
+  }
+
+  //================================================
+  //  M A K E F I L E
+  //================================================
+
+  def genMakefile(modelName: String, ros2Threads: ISZ[AadlThread],
+                  microRosThreads: ISZ[AadlThread]): (ISZ[String], ST, B, ISZ[Marker]) = {
+    val ros2PkgName: String = genCppPackageName(modelName)
+    val microrosPkgName: String = genMicroRosPackageName(modelName)
+    val safeToEdit: String = CommentTemplate.safeToEditComment_hash
+
+    val tab: String = "\t"
+
+    val content: ST =
+      if (microRosThreads.nonEmpty) {
+        val runLines: ISZ[ST] =
+          ISZ[ST](
+            st"""${tab}gnome-terminal --title="[agent] micro-XRCE-DDS" -- bash -c "$$(SOURCE_BASE); ros2 run micro_ros_agent micro_ros_agent udp4 --port 8888; exec bash"""",
+            st"${tab}sleep 2"
+          ) ++
+          (for (t <- microRosThreads) yield
+            st"""${tab}gnome-terminal --title="[microROS] ${genExecutableFileName(genNodeName(t))}" -- bash -c "$$(SOURCE_BASE); RMW_IMPLEMENTATION=rmw_microxrcedds ros2 run $$(MICROROS_PKG) ${genExecutableFileName(genNodeName(t))}; exec bash"""") ++
+          (for (t <- ros2Threads) yield
+            st"""${tab}gnome-terminal --title="[ROS2] ${genExecutableFileName(genNodeName(t))}" -- bash -c "$$(SOURCE_BASE); $$(SOURCE_LOCAL); ros2 run $$(ROS2_PKG) ${genExecutableFileName(genNodeName(t))}; exec bash"""")
+
+        val stopLines: ISZ[ST] =
+          ISZ[ST](st"${tab}-pkill -f 'micro_ros_agent udp4' 2>/dev/null || true") ++
+          (for (t <- microRosThreads) yield
+            st"${tab}-pkill -f 'ros2 run $$(MICROROS_PKG) ${genExecutableFileName(genNodeName(t))}' 2>/dev/null || true") ++
+          (for (t <- ros2Threads) yield
+            st"${tab}-pkill -f 'ros2 run $$(ROS2_PKG) ${genExecutableFileName(genNodeName(t))}' 2>/dev/null || true")
+
+        st"""${safeToEdit}
+            |
+            |MICROROS_WS ?= $$(error MICROROS_WS is not set. Export it to the path of your micro-ROS firmware workspace.)
+            |ROS2_PKG       := ${ros2PkgName}
+            |INTERFACES_PKG := ${ros2PkgName}_interfaces
+            |MICROROS_PKG   := ${microrosPkgName}
+            |
+            |SOURCE_BASE  := source /opt/ros/$$$${ROS_DISTRO}/setup.bash && source $$(MICROROS_WS)/install/setup.bash
+            |SOURCE_LOCAL := source $$(CURDIR)/install/setup.bash
+            |
+            |.PHONY: all build build-microros build-ros2 run stop clean check-ros2
+            |
+            |all: run
+            |
+            |build: check-ros2 build-microros build-ros2
+            |
+            |check-ros2:
+            |	@test -n "$$$${ROS_DISTRO}" || { echo "ERROR: ROS_DISTRO is not set. Source a ROS2 installation first (e.g., source /opt/ros/jazzy/setup.bash)."; exit 1; }
+            |	@test -f "/opt/ros/$$$${ROS_DISTRO}/setup.bash" || { echo "ERROR: /opt/ros/$$$${ROS_DISTRO}/setup.bash not found."; exit 1; }
+            |
+            |build-microros:
+            |	cp -r src/$$(INTERFACES_PKG) $$(MICROROS_WS)/src/
+            |	cp -r microros_apps/$$(MICROROS_PKG) $$(MICROROS_WS)/src/
+            |	cd $$(MICROROS_WS) && bash -c "$$(SOURCE_BASE); colcon build --packages-select $$(INTERFACES_PKG) $$(MICROROS_PKG)"
+            |
+            |build-ros2:
+            |	bash -c "$$(SOURCE_BASE); colcon build; $$(SOURCE_LOCAL)"
+            |
+            |run: build
+            |${(runLines, "\n")}
+            |	@echo "Nodes launched. Run 'make stop' to kill them."
+            |
+            |stop:
+            |${(stopLines, "\n")}
+            |
+            |clean:
+            |	rm -rf build install log
+            |	rm -rf $$(MICROROS_WS)/src/$$(INTERFACES_PKG) $$(MICROROS_WS)/src/$$(MICROROS_PKG)
+            |	rm -rf $$(MICROROS_WS)/build/$$(INTERFACES_PKG) $$(MICROROS_WS)/build/$$(MICROROS_PKG)
+            |	rm -rf $$(MICROROS_WS)/install/$$(INTERFACES_PKG) $$(MICROROS_WS)/install/$$(MICROROS_PKG)
+            """
+      } else {
+        val runLines: ISZ[ST] = for (t <- ros2Threads) yield
+          st"""${tab}gnome-terminal --title="[ROS2] ${genExecutableFileName(genNodeName(t))}" -- bash -c "source /opt/ros/$$$${ROS_DISTRO}/setup.bash && source $$(CURDIR)/install/setup.bash && ros2 run $$(ROS2_PKG) ${genExecutableFileName(genNodeName(t))}; exec bash""""
+
+        val stopLines: ISZ[ST] = for (t <- ros2Threads) yield
+          st"${tab}-pkill -f 'ros2 run $$(ROS2_PKG) ${genExecutableFileName(genNodeName(t))}' 2>/dev/null || true"
+
+        st"""${safeToEdit}
+            |
+            |ROS2_PKG     := ${ros2PkgName}
+            |SOURCE_ROS   := source /opt/ros/$$$${ROS_DISTRO}/setup.bash
+            |SOURCE_LOCAL := source $$(CURDIR)/install/setup.bash
+            |
+            |.PHONY: all build run stop clean check-ros2
+            |
+            |all: run
+            |
+            |check-ros2:
+            |	@test -n "$$$${ROS_DISTRO}" || { echo "ERROR: ROS_DISTRO is not set. Source a ROS2 installation first (e.g., source /opt/ros/jazzy/setup.bash)."; exit 1; }
+            |	@test -f "/opt/ros/$$$${ROS_DISTRO}/setup.bash" || { echo "ERROR: /opt/ros/$$$${ROS_DISTRO}/setup.bash not found."; exit 1; }
+            |
+            |build: check-ros2
+            |	bash -c "$$(SOURCE_ROS); colcon build; $$(SOURCE_LOCAL)"
+            |
+            |run: build
+            |${(runLines, "\n")}
+            |	@echo "Nodes launched. Run 'make stop' to kill them."
+            |
+            |stop:
+            |${(stopLines, "\n")}
+            |
+            |clean:
+            |	rm -rf build install log
+            """
+      }
+
+    return (IS("Makefile"), content, F, IS())
   }
 }

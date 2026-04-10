@@ -1,0 +1,128 @@
+name: microROS
+
+on:
+  push:
+    paths:
+      - "shared/src/main/scala/org/sireum/hamr/codegen/ros2/**"
+      - "jvm/src/test/scala/org/sireum/hamr/codegen/test/ros2/**"
+      - "jvm/src/test/resources/expected/ros2/**"
+      - "jvm/src/test/resources/models/**"
+      - ".github/workflows/CI-microROS.yml"
+  workflow_dispatch:
+    inputs:
+      verbose:
+        type: boolean
+        description: Enable verbose testing output
+        default: false
+
+jobs:
+
+  ci-microros:
+    runs-on: ubuntu-22.04
+    container:
+      image: ubuntu:22.04
+    env:
+      MICROROS_WS: ${{ github.workspace }}/microros_ws
+    steps:
+      - name: Install Required Tools
+        run: |
+          apt-get update -y && apt-get install -y git wget curl zip unzip build-essential
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Retrieve versions.properties
+        run: |
+          wget -q https://raw.githubusercontent.com/sireum/kekinian/master/versions.properties
+
+      - name: Install ROS 2 Humble
+        run: |
+          apt-get update -y
+          DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get install -y software-properties-common
+          add-apt-repository -y universe
+          apt-get update -y
+          export ROS_APT_SOURCE_VERSION=$(curl -s https://api.github.com/repos/ros-infrastructure/ros-apt-source/releases/latest | grep -F "tag_name" | awk -F\" '{print $4}')
+          curl -L -o /tmp/ros2-apt-source.deb "https://github.com/ros-infrastructure/ros-apt-source/releases/download/${ROS_APT_SOURCE_VERSION}/ros2-apt-source_${ROS_APT_SOURCE_VERSION}.$(. /etc/os-release && echo ${UBUNTU_CODENAME:-${VERSION_CODENAME}})_all.deb"
+          dpkg -i /tmp/ros2-apt-source.deb
+          apt-get update -y
+          apt-get install -y ros-dev-tools ros-humble-ros-base
+
+      - name: Cache Java
+        id: cache-java
+        uses: actions/cache@v4
+        with:
+          path: bin/linux/java
+          key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-java
+
+      - name: Cache Scala
+        id: cache-scala
+        uses: actions/cache@v4
+        with:
+          path: bin/scala
+          key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-scala
+
+      - name: Cache Coursier
+        id: cache-coursier
+        uses: actions/cache@v4
+        with:
+          path: cache/coursier
+          key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-coursier
+
+      - name: Cache OSATE
+        id: cache-osate
+        uses: actions/cache@v4
+        with:
+          path: bin/linux/osate
+          key: ${{ runner.os }}-${{ hashFiles('jvm/src/main/resources/phantom_versions.properties') }}-osate
+
+      - name: Get latest micro_ros_setup commit on humble
+        id: microros-sha
+        run: |
+          sha=$(git ls-remote https://github.com/micro-ROS/micro_ros_setup.git refs/heads/humble | cut -f1)
+          echo "sha=$sha" >> $GITHUB_OUTPUT
+
+      - name: Cache micro-ROS firmware workspace
+        id: cache-microros
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.MICROROS_WS }}
+          key: microros-humble-${{ steps.microros-sha.outputs.sha }}
+
+      - name: Build micro-ROS firmware workspace
+        if: steps.cache-microros.outputs.cache-hit != 'true'
+        run: |
+          source /opt/ros/humble/setup.bash
+          mkdir -p $MICROROS_WS && cd $MICROROS_WS
+
+          # 1. Add micro_ros_setup (the tool that drives the rest of the build) and build it
+          git clone -b humble https://github.com/micro-ROS/micro_ros_setup.git src/micro_ros_setup
+          colcon build --packages-select micro_ros_setup
+          source install/setup.bash
+
+          # 2. Download the micro-ROS client stack source into firmware/src/
+          ros2 run micro_ros_setup create_firmware_ws.sh host
+
+          # 3. Ignore packages with known build failures that are not needed
+          touch src/ros2/example_interfaces/COLCON_IGNORE
+          touch src/uros/micro-ROS-demos/COLCON_IGNORE
+
+          # 4. Build the full micro-ROS client stack (rclc, rmw_microxrcedds, etc.)
+          ros2 run micro_ros_setup build_firmware.sh
+          source install/setup.bash
+
+          # 5. Build the micro-XRCE-DDS agent (bridges microROS nodes to the ROS2 DDS bus)
+          ros2 run micro_ros_setup create_agent_ws.sh
+          ros2 run micro_ros_setup build_agent.sh
+
+      - name: Test
+        env:
+          VERBOSE_DEBUG: ${{ ( runner.debug == '1' || inputs.verbose == true ) && ',verbose' || '' }}
+        run: |
+          export ROS2_HOME=/opt/ros/humble
+          export MICROROS_WS=$MICROROS_WS
+          export COURSIER_CACHE=$GITHUB_WORKSPACE/cache/coursier
+          export testmodes=compile${VERBOSE_DEBUG}
+          cd $GITHUB_WORKSPACE
+          bin/build.cmd test --suffixes Ros2Tests
