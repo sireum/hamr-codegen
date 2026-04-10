@@ -39,8 +39,10 @@ jobs:
 
       - name: Install ROS 2 Humble
         run: |
+          export DEBIAN_FRONTEND=noninteractive
+          export TZ=Etc/UTC
           apt-get update -y
-          DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get install -y software-properties-common
+          apt-get install -y software-properties-common
           add-apt-repository -y universe
           apt-get update -y
           export ROS_APT_SOURCE_VERSION=$(curl -s https://api.github.com/repos/ros-infrastructure/ros-apt-source/releases/latest | grep -F "tag_name" | awk -F\" '{print $4}')
@@ -125,4 +127,4 @@ jobs:
           export COURSIER_CACHE=$GITHUB_WORKSPACE/cache/coursier
           export testmodes=compile${VERBOSE_DEBUG}
           cd $GITHUB_WORKSPACE
-          bin/build.cmd test --suffixes Ros2Tests
+          bin/build.cmd test --suffixes MicroRosTests
