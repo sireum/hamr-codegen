@@ -40,33 +40,48 @@ jobs:
         id: cache-java
         uses: actions/cache@v4
         with:
-          path: bin/linux/java
-          key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-java
+          path: hamr-codegen/bin/linux/java
+          key: ${{ runner.os }}-${{ hashFiles('hamr-codegen/versions.properties') }}-java
       - name: Cache Scala
         id: cache-scala
         uses: actions/cache@v4
         with:
-          path: bin/scala
-          key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-scala
+          path: hamr-codegen/bin/scala
+          key: ${{ runner.os }}-${{ hashFiles('hamr-codegen/versions.properties') }}-scala
       - name: Cache Coursier
         id: cache-coursier
         uses: actions/cache@v4
         with:
-          path: cache/coursier
-          key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-coursier
+          path: hamr-codegen/cache/coursier
+          key: ${{ runner.os }}-${{ hashFiles('hamr-codegen/versions.properties') }}-coursier
       - name: Cache OSATE
         id: cache-osate
         uses: actions/cache@v4
         with:
-          path: bin/linux/osate
-          key: ${{ runner.os }}-${{ hashFiles('jvm/src/main/resources/phantom_versions.properties') }}-osate
+          path: hamr-codegen/bin/linux/osate
+          key: ${{ runner.os }}-${{ hashFiles('hamr-codegen/jvm/src/main/resources/phantom_versions.properties') }}-osate
       - name: Build
         env:
           # add verbose flag if workflow is restarted with "enable debug logging" checked or if requested
           # via workflow dispatch
           VERBOSE_DEBUG: ${{ ( runner.debug == '1' || inputs.verbose == '1' ) && ',verbose' || '' }}
         run: |
-          export SEL4_CAMKES_ENV=true 
+          # Debian Bullseye is no longer fully available on deb.debian.org or security.debian.org,
+          # especially for the armel architecture. Packages have been moved to archive.debian.org,
+          # which no longer supports signed Release files or valid-until metadata.
+          # This forces us to:
+          # 1. Use archive.debian.org URLs instead of deb.debian.org.
+          # 2. Disable APT's date validation with Acquire::Check-Valid-Until "false".
+
+          cat > /etc/apt/sources.list <<EOF
+          deb http://archive.debian.org/debian bullseye main contrib non-free
+          #deb http://archive.debian.org/debian-security bullseye-security main contrib non-free
+          deb http://archive.debian.org/debian bullseye-updates main contrib non-free
+          EOF
+
+          echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until
+
+          export SEL4_CAMKES_ENV=true
 
           # github sets HOME to /github/home but some tools (Sireum's Os.home, Haskell) use
           # the containers /root instead leading to inconsistent installs. Setting HOME
@@ -74,13 +89,13 @@ jobs:
           # https://github.com/actions/runner/issues/1474#issuecomment-965805123
           export HOME=/root
 
-          mv ./hamr-codegen /root/
-          
+          ln -s $GITHUB_WORKSPACE/hamr-codegen /root/hamr-codegen
+
           export aptInstall="apt-get install -f -y --no-install-recommends"
           export DEBIAN_FRONTEND=noninteractive
           apt-get update
           ${aptInstall} p7zip-full
-          
+
           # Installing emacs installs some package(s) that resolve an issue where
           # the OSATE gumbo parser fails to initialize when used in the docker container.
           ${aptInstall} emacs
@@ -114,5 +129,17 @@ jobs:
           
           export ALSO_TRANSPILE_VIA_CALLBACKS=true
           echo "ALSO_TRANSPILE_VIA_CALLBACKS=${ALSO_TRANSPILE_VIA_CALLBACKS}"
-          
+
+          # Debian Bullseye's ca-certificates bundle does not include the
+          # "Sectigo Public Server Authentication Root R46" CA used by
+          # download.bell-sw.com (BellSoft JDK). Download Mozilla's current
+          # CA bundle via wget (which works because github.com uses ISRG Root X1,
+          # which IS in Bullseye's bundle), append it to the system CA store,
+          # and also point curl at it via CURL_CA_BUNDLE.
+          wget -qO /tmp/cacert.pem https://curl.se/ca/cacert.pem
+          cat /tmp/cacert.pem >> /etc/ssl/certs/ca-certificates.crt
+          export CURL_CA_BUNDLE=/tmp/cacert.pem
+
+          export COURSIER_CACHE=$GITHUB_WORKSPACE/hamr-codegen/cache/coursier
+
           $HOME/hamr-codegen/bin/build.cmd test
