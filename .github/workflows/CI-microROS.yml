@@ -94,12 +94,15 @@ jobs:
 
       - name: Build micro-ROS firmware workspace
         if: steps.cache-microros.outputs.cache-hit != 'true'
+        shell: bash
         run: |
           source /opt/ros/humble/setup.bash
           mkdir -p $MICROROS_WS && cd $MICROROS_WS
 
           # 1. Add micro_ros_setup (the tool that drives the rest of the build) and build it
           git clone -b humble https://github.com/micro-ROS/micro_ros_setup.git src/micro_ros_setup
+          rosdep init
+          rosdep update
           colcon build --packages-select micro_ros_setup
           source install/setup.bash
 
