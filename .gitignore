@@ -1,8 +1,17 @@
 /jvm/src/test-ext
 
-# stuff from build.cmd
+# build artifacts
 out/
 target
+lib
+/resources/
+versions.properties
+project.json
+*.cmd.jar
+*.cmd.com
+*.dot
+
+# bin/ artifacts
 bin/platform.sh
 bin/prelude.sh
 bin/prelude.ps1
@@ -12,22 +21,25 @@ bin/sireum.jar
 bin/sireum-mcp.bat
 bin/slang-run.*
 bin/.sireum-win.jar
+bin/.aot/
+bin/install/
 bin/linux
 bin/mac
 bin/win
 bin/scala
-lib
-/resources/
-versions.properties
-*.cmd.jar
-*.cmd.com
+bin/sbt/
+bin/verilator/
+*7zz*
+
+# submodules
 air/
 etc/
 parser/
 runtime/
 slang/
 sysml/
-project.json
-*.dot
-bin/install/
-*7zz*
+
+# local artifacts
+.docker-*/
+.settings/
+cache/
