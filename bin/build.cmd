@@ -135,7 +135,7 @@ def test(options: ISZ[String]): Unit = {
 
   val opts: String = if (options.nonEmpty) st"${(options, " ")}".render else ""
 
-  val wildcardPackages: String = (if (ops.ISZOps(options).contains("--packages")) "" else "org.sireum.hamr.codegen")
+  val wildcardPackages: String = "org.sireum.hamr.codegen"
 
   println(s"Testing ${if(options.nonEmpty) s"with $opts " else ""}...")
 
