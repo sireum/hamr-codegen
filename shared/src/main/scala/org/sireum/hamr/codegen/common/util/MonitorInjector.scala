@@ -5,7 +5,6 @@ package org.sireum.hamr.codegen.common.util
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.symbols.{AadlPortConnection, AadlThread, SymbolTable}
-import org.sireum.hamr.codegen.common.properties.PropertyUtil
 import org.sireum.hamr.ir
 import org.sireum.message.Reporter
 
@@ -15,14 +14,24 @@ object MonitorInjector {
 
   val toolName: String = "Monitor Injector"
 
+  // Classifier for the synthetic AADL record type that mirrors sched_state_t in scheduler_config.h.
+  val schedStateClassifier: String = "hamr::SchedState"
+
+  // Name of the incoming data port added to the monitor thread for schedule-state observation.
+  val schedStatePortName: String = "sched_state"
+
   /** Injects a synthetic monitor process/thread into the AIR model.  For each
     * unique source port in the model the monitor receives an incoming port of the
     * same category and classifier.  Fan-out connections sharing the same source
     * port produce only one monitor port.  The caller is responsible for
     * re-running ModelUtil.resolve on the returned model to obtain an updated
     * SymbolTable.
+    *
+    * @param isMCS when true, also injects the sched_state data port and the
+    *              hamr::SchedState record type so that the MCS user-land scheduler's
+    *              shared-memory broadcast region is reflected in the AADL type system.
     */
-  def inject(model: ir.Aadl, symbolTable: SymbolTable, reporter: Reporter): ir.Aadl = {
+  def inject(model: ir.Aadl, symbolTable: SymbolTable, isMCS: B, reporter: Reporter): ir.Aadl = {
     // VM components cannot participate in runtime monitoring because the monitor's
     // fan-out connections would mix native and VM endpoints, which is unsupported.
     for (t <- symbolTable.getThreads()) {
@@ -160,6 +169,51 @@ object MonitorInjector {
       reporter.warn(None(), toolName, "No port connections found; monitor will have no incoming ports")
     }
 
+    // Inject the synthetic sched_state incoming data port only for MCS user-land scheduling.
+    // The domain scheduler does not use shared-memory broadcast, so the port and its type
+    // are irrelevant there and would produce spurious memory regions in the system XML.
+    // The port is intentionally left unconnected here; wiring to the shared memory region
+    // is a separate step.
+    if (isMCS) {
+      val monitorSchedStateThreadPortPath: ISZ[String] = monitorThreadPath :+ schedStatePortName
+      val monitorSchedStateProcessPortPath: ISZ[String] = monitorProcessPath :+ schedStatePortName
+
+      monitorThreadFeatures = monitorThreadFeatures :+
+        ir.FeatureEnd(
+          identifier = ir.Name(name = monitorSchedStateThreadPortPath, pos = None()),
+          direction = ir.Direction.In,
+          category = ir.FeatureCategory.DataPort,
+          classifier = Some(ir.Classifier(schedStateClassifier)),
+          properties = ISZ(),
+          uriFrag = "")
+
+      monitorProcessFeatures = monitorProcessFeatures :+
+        ir.FeatureEnd(
+          identifier = ir.Name(name = monitorSchedStateProcessPortPath, pos = None()),
+          direction = ir.Direction.In,
+          category = ir.FeatureCategory.DataPort,
+          classifier = Some(ir.Classifier(schedStateClassifier)),
+          properties = ISZ(),
+          uriFrag = "")
+
+      monitorProcessConnections = monitorProcessConnections :+
+        ir.Connection(
+          name = ir.Name(name = monitorProcessPath :+ s"deleg_${schedStatePortName}", pos = None()),
+          src = ISZ(ir.EndPoint(
+            component = ir.Name(name = monitorProcessPath, pos = None()),
+            feature = Some(ir.Name(name = monitorSchedStateProcessPortPath, pos = None())),
+            direction = Some(ir.Direction.In))),
+          dst = ISZ(ir.EndPoint(
+            component = ir.Name(name = monitorThreadPath, pos = None()),
+            feature = Some(ir.Name(name = monitorSchedStateThreadPortPath, pos = None())),
+            direction = Some(ir.Direction.In))),
+          kind = ir.ConnectionKind.Port,
+          isBiDirectional = F,
+          connectionInstances = ISZ(),
+          properties = ISZ(),
+          uriFrag = "")
+    }
+
     // Inherit the processor binding from the first process so the linter's
     // "Processes must be bound to an actual processor" check passes.
     val processorBindingProp: ir.Property = {
@@ -235,6 +289,52 @@ object MonitorInjector {
       connections = system.connections ++ systemFanOutConnections,
       connectionInstances = system.connectionInstances ++ systemConnectionInstances)
 
-    return model(components = ISZ(updatedSystem))
+    // For MCS, build the synthetic hamr::SchedState record type.  Its two Unsigned_32 fields mirror
+    // the sched_state_t struct in scheduler_config.h.  The type is added to model.dataComponents
+    // so that TypeResolver builds it into the AadlTypes map and the Rust/C type generators
+    // produce corresponding struct definitions and getters for the monitor thread's sched_state port.
+    var newDataComponents: ISZ[ir.Component] = model.dataComponents
+    if (isMCS) {
+      val u32Classifier: String = "Base_Types::Unsigned_32"
+
+      def makeFieldComp(fieldName: String): ir.Component = {
+        return ir.Component(
+          identifier = ir.Name(name = ISZ(fieldName), pos = None()),
+          category = ir.ComponentCategory.Data,
+          classifier = Some(ir.Classifier(u32Classifier)),
+          features = ISZ(), subComponents = ISZ(), connections = ISZ(),
+          connectionInstances = ISZ(), properties = ISZ(),
+          flows = ISZ(), modes = ISZ(), annexes = ISZ(), uriFrag = "")
+      }
+
+      val schedStateDataComp = ir.Component(
+        identifier = ir.Name(name = ISZ(), pos = None()),
+        category = ir.ComponentCategory.Data,
+        classifier = Some(ir.Classifier(schedStateClassifier)),
+        features = ISZ(),
+        subComponents = ISZ(makeFieldComp("last_yielded_ch"), makeFieldComp("next_dispatch_ch")),
+        connections = ISZ(), connectionInstances = ISZ(), properties = ISZ(),
+        flows = ISZ(), modes = ISZ(), annexes = ISZ(), uriFrag = "")
+
+      // Ensure Base_Types::Unsigned_32 is registered in model.dataComponents so that
+      // SymbolResolver can look it up when it recursively processes SchedState's field sub-components.
+      val u32AlreadyPresent: B = ops.ISZOps(model.dataComponents).exists(
+        (c: ir.Component) => c.classifier match {
+          case Some(cl) => cl.name == u32Classifier
+          case _ => F
+        })
+      if (!u32AlreadyPresent) {
+        newDataComponents = newDataComponents :+ ir.Component(
+          identifier = ir.Name(name = ISZ(), pos = None()),
+          category = ir.ComponentCategory.Data,
+          classifier = Some(ir.Classifier(u32Classifier)),
+          features = ISZ(), subComponents = ISZ(), connections = ISZ(),
+          connectionInstances = ISZ(), properties = ISZ(),
+          flows = ISZ(), modes = ISZ(), annexes = ISZ(), uriFrag = "")
+      }
+      newDataComponents = newDataComponents :+ schedStateDataComp
+    }
+
+    return model(components = ISZ(updatedSystem), dataComponents = newDataComponents)
   }
 }

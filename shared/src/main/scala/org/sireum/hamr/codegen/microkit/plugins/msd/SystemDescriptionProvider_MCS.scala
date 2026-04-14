@@ -9,6 +9,7 @@ import org.sireum.hamr.codegen.common.symbols.SymbolTable
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
+import org.sireum.hamr.codegen.microkit.plugins.MicrokitFinalizePlugin
 import org.sireum.hamr.codegen.microkit.plugins.c.components.CComponentPlugin
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
 import org.sireum.hamr.codegen.microkit.util.{MemoryMap, ProtectionDomain, SystemDescription}
@@ -19,18 +20,22 @@ object SystemDescriptionProvider_MCS {
   val metaPy: String = "meta.py"
 }
 
-@datatype class SystemDescriptionProvider_MCS extends SystemDescriptionProviderPlugin {
+@datatype class SystemDescriptionProvider_MCS extends MicrokitFinalizePlugin {
 
   val name: String = "SystemDescriptionProvider_MSC"
 
-  @strictpure override def hasHandled(store: Store): B = store.contains(name)
+  @strictpure def hasHandled(store: Store): B = store.contains(name)
 
-  override def canHandle(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): B = {
-    return super.canHandle(model, options, types, symbolTable, store, reporter) &&
-      CComponentPlugin.getSchedulingType(symbolTable.rootSystem) == Hamr_Microkit_Properties.SchedulingType.MCS
+  @pure override def canFinalizeMicrokit(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): B = {
+    return !reporter.hasError &&
+      options.platform == HamrCli.CodegenHamrPlatform.Microkit &&
+      !isDisabled(store) &&
+      CComponentPlugin.getSchedulingType(symbolTable.rootSystem) == Hamr_Microkit_Properties.SchedulingType.MCS &&
+      SystemDescriptionProviderPlugin.getMSDs(store).nonEmpty &&
+      !hasHandled(store)
   }
 
-  override def handle(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
+  override def finalizeMicrokit(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
     var localStore = store + name ~> BoolValue(T)
     var resources = ISZ[Resource]()
 
@@ -85,24 +90,40 @@ object SystemDescriptionProvider_MCS {
 
       var schedulePairs: ISZ[ST] = ISZ()
       var schedule: ISZ[ST] = ISZ()
-      for (sd <- ops.ISZOps(schedulingDomains).sortWith((a,b) => a.id <= b.id)) {
-        val channelName: String = if (sd.id == 0) "0" else s"channel_${sd.componentName}"
-        schedulePairs = schedulePairs :+ st"ts_${sd.componentName} = ($channelName, ${sd.length})"
-        schedule = schedule :+ st"ts_${sd.componentName}"
+      var seenPairNames: Set[String] = Set.empty
+      for (sd <- schedulingDomains) {
+        val channelName: String = if (sd.componentName == "pad") "0" else s"channel_${sd.componentName}"
+        val varName: String = s"ts_${sd.componentName}"
+        if (!seenPairNames.contains(varName)) {
+          schedulePairs = schedulePairs :+ st"$varName = ($channelName, ${sd.length}, ${if (sd.isUserPartition) "True" else "False"})"
+          seenPairNames = seenPairNames + varName
+        }
+        schedule = schedule :+ st"$varName"
       }
 
-      var memoryRegionsST: ISZ[ST]= ISZ()
-      var mapsSt: ISZ[ST]= ISZ()
+      var memoryRegionsST: ISZ[ST] = ISZ()
+      var mapsSt: ISZ[ST] = ISZ()
+      // Maps for template-managed regions (e.g. sched_state_mr) are emitted separately,
+      // after the template defines the Python variable they reference.
+      var templateManagedMapsSt: ISZ[ST] = ISZ()
       for (m <- memoryRegions) {
-
-        memoryRegionsST = memoryRegionsST :+
-          st"""${m.name} = MemoryRegion(sdf, "${m.name}", ${KiBytesToHex(m.sizeInKiBytes)})
-              |sdf.add_mr(${m.name})"""
-
-        val maps = memMaps.get(m.name).get
-        for (map <- maps) {
-          val addr = KiBytesToHex(map._1.vaddrInKiBytes)
-          mapsSt = mapsSt :+ st"""${map._2}.add_map(Map(${m.name}, $addr, perms="${map._1.permsPettyPrint}"))"""
+        // Skip regions that no PD in this SD variant maps (e.g. a region belonging to a
+        // stripped monitor PD is present in memoryRegions but absent from the normal SD's PDs).
+        // Template-managed regions (isTemplateManaged=T) are created directly in the meta.py
+        // template; the loop only emits their PD add_map calls, not the MemoryRegion creation.
+        memMaps.get(m.name) match {
+          case Some(maps) =>
+            if (!m.isTemplateManaged) {
+              memoryRegionsST = memoryRegionsST :+
+                st"""${m.name} = MemoryRegion(sdf, "${m.name}", ${KiBytesToHex(m.sizeInKiBytes)})
+                    |sdf.add_mr(${m.name})"""
+            }
+            for (map <- maps) {
+              val addr = KiBytesToHex(map._1.vaddrInKiBytes)
+              mapsSt = mapsSt :+
+                st"""${map._2}.add_map(Map(${m.name}, $addr, perms="${map._1.permsPettyPrint}"))"""
+            }
+          case _ =>
         }
       }
 
@@ -120,7 +141,7 @@ object SystemDescriptionProvider_MCS {
             |from sdfgen import SystemDescription, Sddf, DeviceTree, LionsOs
             |from importlib.metadata import version
             |
-            |${CommentTemplate.doNotEditComment_hash}
+            |${CommentTemplate.safeToEditComment_hash}
             |
             |assert version('sdfgen').split(".")[1] == "27", "Unexpected sdfgen version"
             |
@@ -158,8 +179,14 @@ object SystemDescriptionProvider_MCS {
             |    $tq
             |    entries: sequence of (channel, timeslice_ns)
             |    $tq
-            |    part_ch, part_timeslices = zip(*entries)
-            |    return UserSchedule(list(part_timeslices), list(part_ch))
+            |    part_ch, part_timeslices, is_user_partition = zip(*entries)
+            |    return UserSchedule(list(part_timeslices), list(part_ch), list(is_user_partition))
+            |
+            |# Virtual address at which the schedule state shared memory region is mapped
+            |# in the scheduler (rw) and in every _MON protection domain (r).
+            |# Must match SCHED_STATE_VADDR / SCHED_STATE_SIZE in scheduler_config.h.
+            |SCHED_STATE_VADDR = 0x4_000_000
+            |SCHED_STATE_SIZE  = 0x1000  # 4 KB
             |
             |def generate(sdf_path: str, output_dir: str, dtb: DeviceTree):
             |    timer_node = dtb.node(board.timer)
@@ -169,6 +196,17 @@ object SystemDescriptionProvider_MCS {
             |    timer_system = Sddf.Timer(sdf, timer_node, timer_driver)
             |
             |    scheduler = ProtectionDomain("scheduler", "scheduler.elf", priority=200)
+            |
+            |    #######################################
+            |    # SCHEDULE STATE
+            |    # Broadcast region written by the scheduler before every dispatch.
+            |    # The runtime monitor maps this region read-only to observe which
+            |    # protection domain last yielded and which will be dispatched next.
+            |    #######################################
+            |    sched_state_mr = MemoryRegion(sdf, "sched_state", SCHED_STATE_SIZE)
+            |    sdf.add_mr(sched_state_mr)
+            |    scheduler.add_map(Map(sched_state_mr, SCHED_STATE_VADDR, perms="rw"))
+            |    ${(templateManagedMapsSt, "\n")}
             |
             |    ${marker.beginMarker}
             |
@@ -251,25 +289,33 @@ object SystemDescriptionProvider_MCS {
             |    generate(args.sdf, args.output, dtb)
             |"""
 
-      val sdScheduleXmlPath = s"${options.sel4OutputDir.get}/${SystemDescriptionProvider_MCS.metaPy}"
+      val sdScheduleXmlPath = s"${options.sel4OutputDir.get}/meta${msd.infix}.py"
       resources = resources :+ ResourceUtil.createResourceWithMarkers(sdScheduleXmlPath, metaContent, ISZ(marker), F, F)
     }
 
 
     @pure def emitStaticSdFResources(): Unit = {
       val sdfgen_helperPath = s"${options.sel4OutputDir.get}/sdfgen_helper.py"
-      resources = resources :+ ResourceUtil.createResource(sdfgen_helperPath, StaticContent.sdfen_helper_py, T)
+      resources = resources :+ ResourceUtil.createResourceH(
+        path = sdfgen_helperPath, content = StaticContent.sdfen_helper_py,
+        overwrite = T, isDatatype = F)
 
       val schedulerPath = s"${options.sel4OutputDir.get}/scheduler"
 
       val scheduler_config_h_Path = s"$schedulerPath/include/scheduler_config.h"
-      resources = resources :+ ResourceUtil.createResource(scheduler_config_h_Path, StaticContent.scheduler_config_h, T)
+      resources = resources :+ ResourceUtil.createResourceH(
+        path = scheduler_config_h_Path, content = StaticContent.scheduler_config_h,
+        overwrite = T, isDatatype = F)
 
       val user_config_h_Path = s"$schedulerPath/include/user_config.h"
-      resources = resources :+ ResourceUtil.createResource(user_config_h_Path, StaticContent.user_config_h, T)
+      resources = resources :+ ResourceUtil.createResourceH(
+        path = user_config_h_Path, content = StaticContent.user_config_h,
+        overwrite = T, isDatatype = F)
 
       val scheduler_c_Path = s"$schedulerPath/src/scheduler.c"
-      resources = resources :+ ResourceUtil.createResource(scheduler_c_Path, StaticContent.scheduler_c, T)
+      resources = resources :+ ResourceUtil.createResourceH(
+        path = scheduler_c_Path, content = StaticContent.scheduler_c,
+        overwrite = T, isDatatype = F)
     }
 
     emitStaticSdFResources()
@@ -290,6 +336,8 @@ object StaticContent {
                          |import subprocess
                          |import shutil
                          |from os import path
+                         |
+                         |${CommentTemplate.doNotEditComment_hash}
                          |
                          |### Explanation
                          |# Since this script generates the python classes that will be used by the metaprogram, it will
@@ -740,6 +788,10 @@ object StaticContent {
         |#include <scheduler_config.h>
         |#include <user_config.h>
         |
+        |#include <sb_types.h>
+        |
+        |${CommentTemplate.doNotEditComment_slash}
+        |
         |/* Number of nanoseconds in a second */
         |#define NS_IN_S  1000000000ULL
         |
@@ -754,6 +806,18 @@ object StaticContent {
         |
         |bool scheduler_running;
         |
+        |// Pointer to the schedule state shared memory region.
+        |// Monitors that map this region can read last_yielded_ch and next_dispatch_ch.
+        |volatile sb_queue_hamr_SchedState_1_t *sb_queue_sched_state = (volatile sb_queue_hamr_SchedState_1_t *)SCHED_STATE_VADDR;
+        |
+        |hamr_SchedState sched_state = {0};
+        |
+        |bool put_sched_state() {
+        |  sb_queue_hamr_SchedState_1_enqueue((sb_queue_hamr_SchedState_1_t *) sb_queue_sched_state, (hamr_SchedState *) &sched_state);
+        |
+        |  return true;
+        |}
+        |
         |bool validChannel(microkit_channel ch) {
         |    for(int i = 0; i < user_schedule.num_timeslices; i++) {
         |        if (user_schedule.timeslice_ch[i] == ch) {
@@ -766,6 +830,13 @@ object StaticContent {
         |void notify() {
         |    microkit_channel ch = user_schedule.timeslice_ch[current_timeslice];
         |    if (ch != 0) { // channel 0 is used to pad out a schedule
+        |        if (user_schedule.is_user_partition[current_timeslice]) {
+        |            // Broadcast which PD is about to be dispatched before waking it
+        |            sched_state.last_yielded_ch = sched_state.next_dispatch_ch;
+        |            sched_state.next_dispatch_ch = (uint32_t)ch;
+        |            put_sched_state();
+        |        }
+        |
         |        microkit_notify(ch);
         |    }
         |    // Set a timeout for the length of this partition's timeslice
@@ -779,6 +850,7 @@ object StaticContent {
         |    if (current_timeslice == user_schedule.num_timeslices) {
         |        current_timeslice = 0;
         |    }
+        |
         |    notify();
         |}
         |
@@ -793,21 +865,19 @@ object StaticContent {
         |        }
         |    //} else if (ch < user_schedule.num_timeslices) {
         |    } else if (validChannel(ch)) {
-        |        // This should be where all our partition channels are
         |        if ((part_ready & (1 << ch)) == 0) {
+        |            // Initialisation: mark partition as ready
         |            sddf_dprintf("SCHEDULER | Marking partition %d as ready\n", ch);
         |            part_ready |= (1 << ch);
-        |            // Check if all partitions are now initialised
         |            if (part_ready == part_ready_check) {
-        |
         |                part_ready |= (1 << 0);  // ch 0 is always 'ready'
-        |
-        |                // Now we return to our programmed schedule
         |                sddf_dprintf("SCHEDULER | All partitions ready, beginning schedule\n");
-        |                // Timeout to let the last spd to become passive
+        |                // Timeout to let the last partition become passive before starting
         |                sddf_timer_set_timeout(config.driver_id, NS_IN_S);
         |            }
         |        }
+        |        // Runtime signals from partitions are ignored: the schedule is static and each
+        |        // partition runs for its full allotted time regardless of early completion.
         |    } else {
         |        sddf_dprintf("SCHEDULER |received unknown notification on channel: %d\n", ch);
         |    }
@@ -815,11 +885,14 @@ object StaticContent {
         |
         |void init(void)
         |{
+        |    sb_queue_hamr_SchedState_1_init((sb_queue_hamr_SchedState_1_t *) sb_queue_sched_state);
+        |
         |    current_timeslice = 0;
         |
         |    scheduler_running = false;
         |
         |    part_ready |= (1 << 0); // ch 0 is always 'ready'
+        |    part_ready_check |= (1 << 0); // ch 0 is always 'ready' -- keeps padding optional
         |
         |    // Construct the partition ready check value
         |    for (int i = 0; i < user_schedule.num_timeslices; i++) {
@@ -832,8 +905,11 @@ object StaticContent {
 
   val user_config_h: ST = st"""#pragma once
                               |
+                              |#include <stdbool.h>
                               |#include <stdint.h>
                               |#include <scheduler_config.h>
+                              |
+                              |${CommentTemplate.doNotEditComment_slash}
                               |
                               |// The metaprogram will omit a binary with the same format as this struct,
                               |// and will be patched into the scheduler at system build time
@@ -843,12 +919,15 @@ object StaticContent {
                               |    // @kwinter: In the future, will also need to keep track of
                               |    // all the PD's in a partition so that we can easily suspend them
                               |    uint32_t timeslice_ch[MAX_PARTITIONS];
+                              |    bool is_user_partition[MAX_PARTITIONS];
                               |    uint32_t num_timeslices;
                               |} user_schedule_t;"""
 
   val scheduler_config_h: ST = st"""#pragma once
                                    |
                                    |#include <microkit.h>
+                                   |
+                                   |${CommentTemplate.doNotEditComment_slash}
                                    |
                                    |// @kwinter: This is a first iteration of this config file. We will move it to the
                                    |// metaprogram after
@@ -857,6 +936,19 @@ object StaticContent {
                                    |// between the scheduler and a partition's initial process in microkit.
                                    |// One channel is taken by the sDDF timer subsystem.
                                    |#define MAX_PARTITIONS (MICROKIT_MAX_CHANNELS - 1)
+                                   |
+                                   |// Virtual address at which the schedule state shared memory region is mapped.
+                                   |// Must match SCHED_STATE_VADDR in meta.py. Change both if there is a conflict.
+                                   |#define SCHED_STATE_VADDR 0x4000000UL
+                                   |#define SCHED_STATE_SIZE  0x1000UL  // 4 KB
+                                   |
+                                   |// Schedule state broadcast: written by the scheduler before every dispatch.
+                                   |// Monitors that map this region (read-only) can inspect it to determine
+                                   |// which partition just ran and which is about to be dispatched.
+                                   |typedef struct sched_state {
+                                   |    uint32_t last_yielded_ch;   // channel of the PD whose timeslice just expired
+                                   |    uint32_t next_dispatch_ch;  // channel of the PD about to be dispatched
+                                   |} sched_state_t;
                                    |
                                    |typedef struct schedule_config {
                                    |    uint32_t num_partitions;

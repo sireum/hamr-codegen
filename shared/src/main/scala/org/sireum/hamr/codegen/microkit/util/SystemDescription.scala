@@ -2,6 +2,7 @@
 package org.sireum.hamr.codegen.microkit.util
 
 import org.sireum._
+import org.sireum.hamr.codegen.common.CommonUtil.IdPath
 import org.sireum.hamr.codegen.common.containers.{BlockMarker, Marker}
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
@@ -90,6 +91,7 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
 }
 
 @datatype class SchedulingDomain (val id: Z,
+                                  val isUserPartition: B, // true if this belongs to a model component
                                   val componentName: String,
                                   val length: Z) {
   @strictpure def prettyST: ST = st"""<domain name="domain_$id" length="$length" /> <!-- $componentName -->"""
@@ -243,6 +245,13 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
   def pageSizeInKiBytes: Option[Z]
   def physicalAddressInKiBytes: Option[Z]
 
+  /** When true the region is created directly in the meta.py template rather than
+    * by the standard MEMORY REGIONS loop.  The loop will emit PD add_map calls for
+    * such regions but will skip the MemoryRegion(...)/sdf.add_mr(...) creation lines
+    * to avoid duplicating what the template already emits.
+    */
+  @strictpure def isTemplateManaged: B = F
+
   @pure def prettyST: ST = {
     val optPageSize: Option[ST] =
       if (pageSizeInKiBytes.nonEmpty) Some(st"""               page_size="${KiBytesToHex(pageSizeInKiBytes.get)}"""")
@@ -306,6 +315,18 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
   def vmmVaddrName: String = {
     return s"${name}_vaddr"
   }
+}
+
+/** A memory region whose MemoryRegion(...)/sdf.add_mr(...) creation is emitted
+  * by the meta.py template rather than by the generated MEMORY REGIONS loop.
+  * Adding this to SystemDescription.memoryRegions causes the loop to emit
+  * PD add_map calls for the region while skipping the creation lines.
+  */
+@datatype class GenericMemoryRegion(val name: String,
+                                    val sizeInKiBytes: Z) extends MemoryRegion {
+  val pageSizeInKiBytes: Option[Z] = None()
+  val physicalAddressInKiBytes: Option[Z] = None()
+  @strictpure override def isTemplateManaged: B = T
 }
 
 @datatype class Channel (val firstPD: String,

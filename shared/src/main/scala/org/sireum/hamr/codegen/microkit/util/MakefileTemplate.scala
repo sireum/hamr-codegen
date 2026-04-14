@@ -216,7 +216,7 @@ object MakefileTemplate {
           |
           |include $${SDDF}/tools/make/board/common.mk
           |
-          |METAPROGRAM := $$(TOP_DIR)/meta.py
+          |MSD ?= meta.py
           |
           |SDFGEN_HELPER := $$(TOP_DIR)/sdfgen_helper.py
           |
@@ -277,14 +277,18 @@ object MakefileTemplate {
           |%.o: %.c $${SDDF}/include
           |${TAB}$${CC} $${CFLAGS} -c -o $$@ $$<
           |
+          |# explicit target as the included common make rules in sddf/tools/make/board/common.mk
+          |# do not include TYPE_OBJS
+          |scheduler.elf: $$(UTIL_OBJS) $$(TYPE_OBJS) scheduler.o
+          |${TAB}$$(LD) $$(LDFLAGS) $$^ $$(LIBS) -o $$@
           |
           |${(elfEntries, "\n\n")}
           |
           |
           |
-          |$$(SYSTEM_FILE): $$(METAPROGRAM) $$(IMAGES) $$(DTB)
+          |$$(SYSTEM_FILE): $$(TOP_DIR)/$$(MSD) $$(IMAGES) $$(DTB)
           |${TAB}$$(PYTHON) $$(SDFGEN_HELPER) --macros "$$(SDFGEN_UNKOWN_MACROS)" --configs "$$(SCHEDULER_CONFIG_HEADERS)" --output $$(TOP_BUILD_DIR)/config_structs.py
-          |${TAB}$$(PYTHON) $$(METAPROGRAM) --sddf $$(SDDF) --board $$(MICROKIT_BOARD) --dtb $$(DTB) --output . --sdf $$(SYSTEM_FILE) --objcopy $$(OBJCOPY)
+          |${TAB}$$(PYTHON) $$(TOP_DIR)/$$(MSD) --sddf $$(SDDF) --board $$(MICROKIT_BOARD) --dtb $$(DTB) --output . --sdf $$(SYSTEM_FILE) --objcopy $$(OBJCOPY)
           |${TAB}$$(OBJCOPY) --update-section .device_resources=timer_driver_device_resources.data timer_driver.elf
           |${TAB}$$(OBJCOPY) --update-section .timer_client_config=timer_client_scheduler.data scheduler.elf
           |

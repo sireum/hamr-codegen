@@ -8,7 +8,7 @@ import org.sireum.hamr.codegen.common.properties.Hamr_Microkit_Properties
 import org.sireum.hamr.codegen.common.symbols.{AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.types.AadlTypes
-import org.sireum.hamr.codegen.common.util.{HamrCli, MonitorInjector, ResourceUtil}
+import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen.toolName
 import org.sireum.hamr.codegen.microkit.connections.{ConnectionStore, VMRamVaddr, cConnectionContributions}
@@ -166,8 +166,10 @@ import org.sireum.message.Reporter
         case _ => defaultComputeExecutionTime
       }
 
+      val isUserPartition = !StoreUtil.isPluginGeneratedComponent(t.path, localStore)
+
       xmlSchedulingDomains = xmlSchedulingDomains :+
-        SchedulingDomain(id = schedulingDomain, componentName = threadMonId.render, length = computeExecutionTime)
+        SchedulingDomain(id = schedulingDomain, componentName = threadMonId.render, length = computeExecutionTime, isUserPartition = isUserPartition)
 
       var childMemMaps: ISZ[MemoryMap] = ISZ()
       var childIrqs: ISZ[IRQ] = ISZ()
@@ -515,63 +517,19 @@ import org.sireum.message.Reporter
 
     val connectionStore = CConnectionProviderPlugin.getCConnectionStore(localStore)
 
-    // Process all threads through processThread (which generates C components and microkit artefacts).
-    // The monitor thread is processed like any other thread but its scheduling domain slot is
-    // managed separately so it can be interleaved after each regular component in the schedule.
-    // The state of xmlProtectionDomains and xmlChannels just before the monitor is processed is
-    // snapshotted so we can build a "normal" (no-monitor) SystemDescription alongside the monitor one.
-    var monitorComputeTime: Z = 0
-    var monitorDomainSlotOpt: Option[SchedulingDomain] = None()
-    var normalXmlProtectionDomains: ISZ[ProtectionDomain] = ISZ()
-    var normalXmlChannels: ISZ[Channel] = ISZ()
-
     for (t <- symbolTable.getThreads()) {
-      val prevDomainSize = xmlSchedulingDomains.size
-      val isMonitor = t.identifier == MonitorInjector.monitorThreadId
-      if (isMonitor) {
-        // Snapshot state before processing the monitor so we can build a monitor-free SD.
-        normalXmlProtectionDomains = xmlProtectionDomains
-        normalXmlChannels = xmlChannels
-      }
-      val budget = processThread(t, connectionStore)
-      if (isMonitor) {
-        monitorComputeTime = budget
-        // Capture and remove the monitor's domain slot; we insert it manually below.
-        if (xmlSchedulingDomains.size > prevDomainSize) {
-          monitorDomainSlotOpt = Some(xmlSchedulingDomains(xmlSchedulingDomains.lastIndex))
-          xmlSchedulingDomains = ops.ISZOps(xmlSchedulingDomains).take(prevDomainSize)
-        }
-      } else {
-        usedBudget = usedBudget + budget
-      }
+      usedBudget = usedBudget + processThread(t, connectionStore)
     }
 
     addPacerComponent()
 
-    val pacerSlot = SchedulingDomain(id = pacerSchedulingDomain, componentName = "pacer", length = pacerComputeExecutionTime)
-    val regularComponentCount = xmlSchedulingDomains.size
+    val pacerSlot = SchedulingDomain(id = pacerSchedulingDomain, componentName = "pacer", length = pacerComputeExecutionTime, isUserPartition = F)
+    val componentCount = xmlSchedulingDomains.size
 
-    // If the monitor was processed, addPacerComponent() appended the pacer PD after the monitor PD.
-    // The snapshot was taken before the monitor PD, so we must append the pacer to the normal snapshot.
-    if (monitorDomainSlotOpt.nonEmpty) {
-      normalXmlProtectionDomains = normalXmlProtectionDomains :+ xmlProtectionDomains(xmlProtectionDomains.lastIndex)
-    }
-
-    // Budget for the "normal" schedule (no monitor): regular components + one pacer slot per component.
-    val normalUsedBudget: Z = usedBudget + (regularComponentCount * pacerComputeExecutionTime)
-
-    // With a monitor each regular component gets its own pacer→monitor slot, doubling the pacer budget.
-    val numPacerSlots: Z = if (monitorDomainSlotOpt.nonEmpty) 2 * regularComponentCount else regularComponentCount
-    usedBudget = usedBudget + (numPacerSlots * pacerComputeExecutionTime)
-
-    // The monitor runs once per regular component per frame.
-    monitorDomainSlotOpt match {
-      case Some(ms) => usedBudget = usedBudget + (regularComponentCount * ms.length)
-      case _ =>
-    }
+    usedBudget = usedBudget + (componentCount * pacerComputeExecutionTime)
 
     val boundProcessors = symbolTable.getAllActualBoundProcessors()
-    assert (boundProcessors.size == 1, "Linter should have ensured there is exactly one bound processor")
+    assert(boundProcessors.size == 1, "Linter should have ensured there is exactly one bound processor")
 
     var framePeriod: Z = 0
     boundProcessors(0).getFramePeriod() match {
@@ -579,37 +537,19 @@ import org.sireum.message.Reporter
       case _ => halt("Infeasible: linter should have ensured bound processor has frame period")
     }
 
-    if (usedBudget > framePeriod) {
-      monitorDomainSlotOpt match {
-        case Some(_) =>
-          val overrunMs = usedBudget - framePeriod
-          reporter.warn(None(), toolName,
-            s"The inclusion of the runtime monitor extends the frame schedule by ${overrunMs} ms beyond the configured ${framePeriod} ms frame period. Consider increasing the frame period to accommodate monitor execution.")
-        case _ =>
-          reporter.error(None(), toolName, s"Frame period ${framePeriod} is too small for the used budget ${usedBudget}")
-          return (localStore, resources)
-      }
+    if (usedBudget > framePeriod && !options.runtimeMonitoring) {
+      reporter.error(None(), toolName, s"Frame period ${framePeriod} is too small for the used budget ${usedBudget}")
+      return (localStore, resources)
     }
 
-    // Build both schedules.  The normal schedule is always pacer → component per component.
-    // When a monitor is present the monitor schedule interleaves: pacer → component → pacer → monitor.
-    var normalXmlScheds: ISZ[SchedulingDomain] = ISZ()
     var xmlScheds: ISZ[SchedulingDomain] = ISZ()
     for (x <- ops.ISZOps(xmlSchedulingDomains).sortWith((a, b) => a.id < b.id)) {
-      normalXmlScheds = normalXmlScheds :+ pacerSlot :+ x
-      monitorDomainSlotOpt match {
-        case Some(ms) => xmlScheds = xmlScheds :+ pacerSlot :+ x :+ pacerSlot :+ ms
-        case _ => xmlScheds = xmlScheds :+ pacerSlot :+ x
-      }
+      xmlScheds = xmlScheds :+ pacerSlot :+ x
     }
 
-    val normalPadding: Z = framePeriod - normalUsedBudget
-    if (normalPadding > 0) {
-      normalXmlScheds = normalXmlScheds :+ SchedulingDomain(id = 0, componentName = "padding", length = normalPadding)
-    }
-    if (framePeriod - usedBudget > 0) {
-      // switch to domain 0 to use up the rest of the budget
-      xmlScheds = xmlScheds :+ SchedulingDomain(id = 0, componentName = "padding", length = framePeriod - usedBudget)
+    val padding: Z = framePeriod - usedBudget
+    if (padding > 0) {
+      xmlScheds = xmlScheds :+ SchedulingDomain(id = 0, componentName = "padding", length = padding, isUserPartition = F)
     }
 
     for (e <- connectionStore;
@@ -617,31 +557,14 @@ import org.sireum.message.Reporter
       xmlMemoryRegions = xmlMemoryRegions :+ s
     }
 
-    // For the "normal" SD, use the pre-monitor snapshot for PDs and channels so the monitor
-    // thread PD and its pacer channels are excluded.  When no monitor was processed the
-    // snapshot vars are empty, so fall back to the full collections.
-    val normalPDs: ISZ[ProtectionDomain] = if (monitorDomainSlotOpt.nonEmpty) normalXmlProtectionDomains else xmlProtectionDomains
-    val normalChannels: ISZ[Channel] = if (monitorDomainSlotOpt.nonEmpty) normalXmlChannels else xmlChannels
-
     val normalName = "normal"
     val normalSd = SystemDescription(
       name = normalName,
-      schedulingDomains = normalXmlScheds,
-      protectionDomains = normalPDs,
+      schedulingDomains = xmlScheds,
+      protectionDomains = xmlProtectionDomains,
       memoryRegions = xmlMemoryRegions,
-      channels = normalChannels)
+      channels = xmlChannels)
     localStore = SystemDescriptionProviderPlugin.putMSD(normalName, normalSd, localStore)
-
-    if (options.runtimeMonitoring && monitorDomainSlotOpt.nonEmpty) {
-      val monitorName = "monitor"
-      val monitorSd = SystemDescription(
-        name = monitorName,
-        schedulingDomains = xmlScheds,
-        protectionDomains = xmlProtectionDomains,
-        memoryRegions = xmlMemoryRegions,
-        channels = xmlChannels)
-      localStore = SystemDescriptionProviderPlugin.putMSD(monitorName, monitorSd, localStore)
-    }
 
     localStore = StoreUtil.addMakefileContainers(makefileContainers, localStore)
 

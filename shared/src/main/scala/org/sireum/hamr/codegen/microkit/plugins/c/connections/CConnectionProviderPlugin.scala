@@ -8,11 +8,13 @@ import org.sireum.hamr.codegen.common.symbols.{AadlPort, AadlThread, SymbolTable
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
+import org.sireum.hamr.codegen.microkit.plugins.StoreUtil
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen
 import org.sireum.hamr.codegen.microkit.connections._
 import org.sireum.hamr.codegen.microkit.plugins.MicrokitPlugin
 import org.sireum.hamr.codegen.microkit.plugins.c.types.CTypePlugin
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
+import org.sireum.hamr.codegen.microkit.util.MemoryRegion
 import org.sireum.hamr.ir.{Aadl, Direction}
 import org.sireum.message.Reporter
 
@@ -98,8 +100,13 @@ object CConnectionProviderPlugin {
             codeContributions = codeContributions)
       } // end processing connections for source port
 
-      // now handle unconnected ports of the source thread
-      for (unconnectedPort <- srcThread.getPorts().filter(p => !symbolTable.inConnections.contains(p.path) && !symbolTable.outConnections.contains(p.path))) {
+      // now handle unconnected ports of the source thread.
+      // If the thread is plugin-generated (e.g. the runtime monitor), suppress shared memory
+      // regions — those ports are wired at the meta.py template level, not via HAMR queues.
+      val isPluginThread: B = StoreUtil.isPluginGeneratedComponent(srcThread.path, localStore)
+      for (unconnectedPort <- srcThread.getPorts().filter((p: AadlPort) =>
+        !symbolTable.inConnections.contains(p.path) &&
+        !symbolTable.outConnections.contains(p.path))) {
         val srcThreadContributions: UberConnectionContributions =
           if (unconnectedPort.direction == Direction.In) {
             ConnectionUtil.processInPort(
@@ -114,11 +121,14 @@ object CConnectionProviderPlugin {
         val typeApiContributions =
           MicrokitTypeUtil.getTypeApiContributions(srcThreadContributions.aadlType, cTypeProvider, srcThreadContributions.queueSize)
 
+        val sharedMemoryRegionContributions: ISZ[MemoryRegion] =
+          if (isPluginThread) ISZ() else srcThreadContributions.sharedMemoryMapping
+
         ret = ret :+
           DefaultConnectionStore(
             systemContributions =
               DefaultSystemContributions(
-                sharedMemoryRegionContributions = srcThreadContributions.sharedMemoryMapping,
+                sharedMemoryRegionContributions = sharedMemoryRegionContributions,
                 channelContributions = ISZ()),
             typeApiContributions = ISZ(typeApiContributions),
             senderName = srcThread.path,

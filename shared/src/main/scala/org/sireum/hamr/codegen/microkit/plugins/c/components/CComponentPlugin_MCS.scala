@@ -8,12 +8,13 @@ import org.sireum.hamr.codegen.common.properties.Hamr_Microkit_Properties
 import org.sireum.hamr.codegen.common.symbols.{AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.types.AadlTypes
-import org.sireum.hamr.codegen.common.util.{HamrCli, MonitorInjector, ResourceUtil}
+import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen.toolName
 import org.sireum.hamr.codegen.microkit.connections.{ConnectionStore, VMRamVaddr, cConnectionContributions}
 import org.sireum.hamr.codegen.microkit.plugins.StoreUtil
 import org.sireum.hamr.codegen.microkit.plugins.c.connections.CConnectionProviderPlugin
+import org.sireum.hamr.codegen.microkit.plugins.msd.SystemDescriptionProviderPlugin
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
 import org.sireum.hamr.codegen.microkit.util._
 import org.sireum.hamr.codegen.microkit.vm.{VmMakefileTemplate, VmUser, VmUtil}
@@ -120,8 +121,10 @@ import org.sireum.message.Reporter
 
       usedBudgetInMilli = usedBudgetInMilli + computeExecutionTimeinMilli
 
+      val isUserPartition = !StoreUtil.isPluginGeneratedComponent(t.path, localStore)
+
       xmlSchedulingDomains = xmlSchedulingDomains :+
-        SchedulingDomain(id = schedulingDomain, componentName = threadMonId.render, length = computeExecutionTimeinMilli * 1_000_000)
+        SchedulingDomain(id = schedulingDomain, componentName = threadMonId.render, length = computeExecutionTimeinMilli * 1_000_000, isUserPartition = isUserPartition)
 
       var childMemMaps: ISZ[MemoryMap] = ISZ()
       var childIrqs: ISZ[IRQ] = ISZ()
@@ -319,8 +322,9 @@ import org.sireum.message.Reporter
             |      microkit_notify(USER_PD);
             |      break;
             |    case USER_PD:
-            |      // THIS SHOULD ONLY BE FOR THE USER PD TO SIGNAL ITS FINISHED INIT
+            |      // Signal only used during initialisation (thread signals it has finished init)
             |      microkit_notify(SCHEDULER_CH);
+            |      break;
             |  }
             |}
             |"""
@@ -447,7 +451,7 @@ import org.sireum.message.Reporter
         } else {
           st"""#include "$cHeaderFileName"
               |
-              |${CommentTemplate.doNotEditComment_slash}
+              |${CommentTemplate.safeToEditComment_slash}
               |
               |${(cCodeContributions.cUser_MethodDefaultImpls, "\n\n")}
               |"""
@@ -491,7 +495,7 @@ import org.sireum.message.Reporter
 
     val connectionStore = CConnectionProviderPlugin.getCConnectionStore(localStore)
 
-    for (t <- symbolTable.getThreads() if t.identifier != MonitorInjector.monitorThreadId) {
+    for (t <- symbolTable.getThreads()) {
       processThread(t, connectionStore)
     }
 
@@ -513,7 +517,7 @@ import org.sireum.message.Reporter
 
     if (xmlScheds.nonEmpty && framePeriod - usedBudgetInMilli > 0) {
       val remainderInNano = (framePeriod - usedBudgetInMilli) * 1_000_000
-      xmlScheds = xmlScheds :+ SchedulingDomain(id = 0, componentName = "pad", length = remainderInNano)
+      xmlScheds = xmlScheds :+ SchedulingDomain(id = 0, componentName = "pad", length = remainderInNano, isUserPartition = F)
     }
 
     for (e <- connectionStore;
@@ -521,15 +525,22 @@ import org.sireum.message.Reporter
       xmlMemoryRegions = xmlMemoryRegions :+ s
     }
 
-    val name = "normal"
+    // Register the sched_state_mr region so that plugins (e.g. the runtime monitor) can
+    // add PD mappings for it via MemoryMap.  The region is template-managed: meta.py creates
+    // it directly in the SCHEDULE STATE section; the MEMORY REGIONS loop only emits add_map
+    // calls for PDs that reference this region.
+    xmlMemoryRegions = xmlMemoryRegions :+ GenericMemoryRegion(name = "sched_state_mr", sizeInKiBytes = 4)
+
+    val sdName = "normal"
 
     val sd = SystemDescription(
-      name = name,
-      schedulingDomains = xmlSchedulingDomains,
+      name = sdName,
+      schedulingDomains = xmlScheds,
       protectionDomains = xmlProtectionDomains,
       memoryRegions = xmlMemoryRegions,
       channels = xmlChannels)
 
+    localStore = SystemDescriptionProviderPlugin.putMSD(sdName, sd, localStore)
     localStore = StoreUtil.addMakefileContainers(makefileContainers, localStore)
 
     return (localStore, resources)

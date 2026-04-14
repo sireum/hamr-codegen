@@ -117,7 +117,7 @@ object MicrokitCodegen {
 
     val isMCS = CComponentPlugin.getSchedulingType(symbolTable.rootSystem) == Hamr_Microkit_Properties.SchedulingType.MCS
 
-    val typeObjectNames = Set.empty[String] ++ CConnectionProviderPlugin.getTypeObjectNames(localStore)
+
 
     val systemmkContents: ST =
       if (isMCS) {
@@ -130,6 +130,8 @@ object MicrokitCodegen {
           rustBuildEntries = rustBuildEntries :+ mk.rustBuildEntry
         }
 
+        val typeObjectNames = Set.empty[String] ++ CConnectionProviderPlugin.getTypeSimpleObjectNames(localStore)
+
         MakefileTemplate.systemMakefileMCS(
           includePaths = includesPaths,
           sourcePaths = sourcePaths,
@@ -139,6 +141,8 @@ object MicrokitCodegen {
           elfEntries = elfEntries.elements,
           miscTargets = MakefileUtil.getMakefileTargets(ISZ("system.mk"), localStore))
       } else {
+
+        val typeObjectNames = Set.empty[String] ++ CConnectionProviderPlugin.getTypeObjectNames(localStore)
 
         val buildEntries: ISZ[ST] =
           CConnectionProviderPlugin.getMakeFileEntries(localStore) ++
