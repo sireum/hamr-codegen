@@ -9,6 +9,7 @@ import org.sireum.hamr.codegen.microkit.plugins.rust.gumbo._
 object GumboPlugins {
 
   val gumboPlugins: ISZ[Plugin] = ISZ(
+    DefaultGumboRustModelTransformerPlugin(),
     DefaultMicrokitGumboLinter(),
     DefaultGumboRustPlugin(),
     DefaultGumboXPlugin()

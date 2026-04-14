@@ -7,7 +7,7 @@ import org.sireum.hamr.codegen.act.util.Util.ACT_INSTRUCTIONS_MESSAGE_KIND
 import org.sireum.hamr.codegen.arsit.Util.ARSIT_INSTRUCTIONS_MESSAGE_KIND
 import org.sireum.hamr.codegen.common.containers._
 import org.sireum.hamr.codegen.common.CommonUtil.Store
-import org.sireum.hamr.codegen.common.plugin.Plugin
+import org.sireum.hamr.codegen.common.plugin.{Plugin, PluginUtil}
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.HamrCli.{CodegenHamrPlatform, CodegenOption}
@@ -150,6 +150,29 @@ object CodeGen {
     var rmodel: Aadl = result._1.get.model
     var aadlTypes: AadlTypes = result._1.get.types
     var symbolTable: SymbolTable = result._1.get.symbolTable
+
+    val modelTransformerPlugins = PluginUtil.getModelTransformerPlugins(plugins)
+    var continue = T
+    // keep iterating until plugins stop offering to handle things
+    while (continue) {
+      var somethingHandled = F
+      for (plugin <- modelTransformerPlugins if continue) {
+        if (plugin.canHandleModelTransform(model, options, aadlTypes, symbolTable, localStore, reporter)) {
+          plugin.handleModelTransform(model, options, aadlTypes, symbolTable, localStore, reporter) match {
+            case Some((ustore, uaadl, uaadlTypes, usymTable))=>
+              localStore = ustore
+              rmodel = uaadl
+              aadlTypes = uaadlTypes
+              symbolTable = usymTable
+
+              somethingHandled = T
+            case _ =>
+          }
+
+        }
+      }
+      continue = somethingHandled
+    }
 
     if (modOptions.runtimeMonitoring && symbolTable.getThreads().isEmpty) {
       reporter.error(None(), toolName, "Model must contain threads in order to enable runtime monitoring")

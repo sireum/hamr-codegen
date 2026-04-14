@@ -5,7 +5,7 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{Store, UnitValue}
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
 import org.sireum.hamr.codegen.common.types.AadlTypes
-import org.sireum.hamr.codegen.common.util.CodeGenResults
+import org.sireum.hamr.codegen.common.util.{CodeGenResults, HamrCli}
 import org.sireum.hamr.codegen.common.util.HamrCli.CodegenOption
 import org.sireum.hamr.ir.Aadl
 import org.sireum.message.Reporter
@@ -42,4 +42,20 @@ object Plugin {
                            reporter: Reporter): Store = {
     return store
   }
+}
+
+@sig trait ModelTransformerPlugin extends Plugin {
+  @pure def canHandleModelTransform(model: Aadl,
+                                    options: HamrCli.CodegenOption,
+                                    types: AadlTypes,
+                                    symbolTable: SymbolTable,
+                                    store: Store,
+                                    reporter: Reporter): B
+
+  @pure def handleModelTransform(model: Aadl,
+                                 options: HamrCli.CodegenOption,
+                                 types: AadlTypes,
+                                 symbolTable: SymbolTable,
+                                 store: Store,
+                                 reporter: Reporter): Option[(Store, Aadl, AadlTypes, SymbolTable)]
 }

@@ -57,20 +57,6 @@ object MicrokitCodegen {
       }
     }
 
-    if (options.runtimeMonitoring && !reporter.hasError) {
-      // TODO mutating the model should be done by a plugin
-      model = MonitorInjector.inject(model, symbolTable, reporter)
-      if (!reporter.hasError) {
-        val reResult = ModelUtil.resolve(model, model.components(0).identifier.pos, "", options, localStore, reporter)
-        localStore = reResult._2
-        if (reResult._1.nonEmpty) {
-          model = reResult._1.get.model
-          aadlTypes = reResult._1.get.types
-          symbolTable = reResult._1.get.symbolTable
-        }
-      }
-    }
-
     if (reporter.hasError) {
       return (CodeGenResults.empty, localStore)
     } else {
