@@ -147,10 +147,11 @@ object RustModelTransformerPlugin {
             memoryRegions = rawSd.memoryRegions,
             channels = strippedChannels), localStore)
 
-          // Build monitor schedule: pacer → component → pacer → monitor for each regular component.
+          // Build monitor schedule: pacer → monitor → pacer → component for each component;
+          // no monitor after the last component since the frame wraps.
           var monitorScheds: ISZ[SchedulingDomain] = ISZ()
           for (s <- regularSlots) {
-            monitorScheds = monitorScheds :+ pacerSlot :+ s :+ pacerSlot :+ monitorSlot
+            monitorScheds = monitorScheds :+ pacerSlot :+ monitorSlot :+ pacerSlot :+ s
           }
           val monitorUsedBudget: Z = regularBudget + 2 * regularCount * pacerSlot.length + regularCount * monitorSlot.length
           if (monitorUsedBudget > framePeriod) {
@@ -200,10 +201,11 @@ object RustModelTransformerPlugin {
             memoryRegions = rawSd.memoryRegions,
             channels = strippedChannels), localStore)
 
-          // "monitor" SD: [pad?,] monitor dispatched after each regular thread
+          // "monitor" SD: [pad?,] monitor before each thread; no monitor after the
+          // last thread since the frame wraps and the monitor runs first next frame.
           var monitorInterleavedScheds: ISZ[SchedulingDomain] = ISZ()
           for (s <- regularThreadSlots) {
-            monitorInterleavedScheds = monitorInterleavedScheds :+ s :+ monitorSlot
+            monitorInterleavedScheds = monitorInterleavedScheds :+ monitorSlot :+ s
           }
           var monitorUsedNano: Z = 0
           for (s <- monitorInterleavedScheds) {
@@ -220,18 +222,23 @@ object RustModelTransformerPlugin {
               SchedulingDomain(id = 0, componentName = "pad", length = monitorRemainder, isUserPartition = F) +: monitorInterleavedScheds
             else monitorInterleavedScheds
 
-          // Add a read-only mapping of the sched_state_mr region to the monitor PD.
-          // The virtual address must match what CComponentPlugin_MCS assigned to the
-          // sched_state port's queue variable, since the C code accesses the scheduler
-          // state through that address.
+          // Add read-only mappings of the sched_state_mr and sched_schedule_mr regions
+          // to the monitor PD.  The virtual addresses must match what CComponentPlugin_MCS
+          // assigned to each port's queue variable, since the C code accesses the
+          // scheduler data through those addresses.
           val monitorPdName: String = s"${MonitorInjector.monitorProcessId}_${MonitorInjector.monitorThreadId}"
           val schedStatePortPrefix: String = s"${MonitorInjector.schedStatePortName}_"
+          val schedSchedulePortPrefix: String = s"${MonitorInjector.schedSchedulePortName}_"
           var schedStateVaddrOpt: Option[Z] = None()
+          var schedScheduleVaddrOpt: Option[Z] = None()
           for (pd <- rawSd.protectionDomains) {
             if (pd.name == monitorPdName) {
               for (m <- pd.memMaps) {
                 if (m.varAddr.nonEmpty && ops.StringOps(m.varAddr.get).startsWith(schedStatePortPrefix)) {
                   schedStateVaddrOpt = Some(m.vaddrInKiBytes)
+                }
+                if (m.varAddr.nonEmpty && ops.StringOps(m.varAddr.get).startsWith(schedSchedulePortPrefix)) {
+                  schedScheduleVaddrOpt = Some(m.vaddrInKiBytes)
                 }
               }
             }
@@ -239,20 +246,29 @@ object RustModelTransformerPlugin {
           if (schedStateVaddrOpt.isEmpty) {
             halt("Infeasible: sched_state MemoryMap not found in monitor PD")
           }
+          if (schedScheduleVaddrOpt.isEmpty) {
+            halt("Infeasible: sched_schedule MemoryMap not found in monitor PD")
+          }
           val schedStateMap = MemoryMap(
             memoryRegion = "sched_state_mr",
             vaddrInKiBytes = schedStateVaddrOpt.get,
             perms = ISZ(Perm.READ),
             varAddr = None(),
             cached = None())
-          val monitorPdsWithSchedState: ISZ[ProtectionDomain] = for (pd <- rawSd.protectionDomains) yield
-            if (pd.name == monitorPdName) pd(memMaps = pd.memMaps :+ schedStateMap)
+          val schedScheduleMap = MemoryMap(
+            memoryRegion = "sched_schedule_mr",
+            vaddrInKiBytes = schedScheduleVaddrOpt.get,
+            perms = ISZ(Perm.READ),
+            varAddr = None(),
+            cached = None())
+          val monitorPdsWithSchedMaps: ISZ[ProtectionDomain] = for (pd <- rawSd.protectionDomains) yield
+            if (pd.name == monitorPdName) pd(memMaps = pd.memMaps :+ schedStateMap :+ schedScheduleMap)
             else pd
 
           localStore = SystemDescriptionProviderPlugin.putMSD("monitor", SystemDescription(
             name = "monitor",
             schedulingDomains = monitorScheds,
-            protectionDomains = monitorPdsWithSchedState,
+            protectionDomains = monitorPdsWithSchedMaps,
             memoryRegions = rawSd.memoryRegions,
             channels = rawSd.channels), localStore)
 
@@ -260,8 +276,9 @@ object RustModelTransformerPlugin {
 
           // Annotate the monitor's ImplBase with a comment mapping each channel ID to its
           // model-level PD, so the Rust developer knows what channel to expect in notify().
-          val componentScheduleDomains = rawSd.schedulingDomains.filter((p: SchedulingDomain) => p.isUserPartition)
-          val channelComment = RAST.CommentRustDoc(for(p <- componentScheduleDomains) yield st"${p.id} - ${p.componentName}")
+          val channelComment = RAST.CommentRustDoc(ISZ(st"Channel Assignments", st"-------------------") ++
+            (for(p <- ops.ISZOps(rawSd.schedulingDomains).sortWith((a: SchedulingDomain, b: SchedulingDomain) => a.id < b.id)) yield st"${p.id} - ${p.componentName}"))
+
           val monitorThreadPath: IdPath = symbolTable.rootSystem.path :+ MonitorInjector.monitorProcessId :+ MonitorInjector.monitorThreadId
 
           val contributions = CRustComponentPlugin.getCRustComponentContributions(localStore)
@@ -281,6 +298,7 @@ object RustModelTransformerPlugin {
         }
       case _ =>
     }
+
     return (localStore, resources)
   }
 }

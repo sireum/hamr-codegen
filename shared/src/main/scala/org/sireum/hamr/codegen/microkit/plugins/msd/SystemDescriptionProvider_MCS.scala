@@ -188,6 +188,12 @@ object SystemDescriptionProvider_MCS {
             |SCHED_STATE_VADDR = 0x4_000_000
             |SCHED_STATE_SIZE  = 0x1000  # 4 KB
             |
+            |# Virtual address at which the schedule shared memory region is mapped
+            |# in the scheduler (rw) and in every _MON protection domain (r).
+            |# Must match SCHED_SCHEDULE_VADDR / SCHED_SCHEDULE_SIZE in scheduler_config.h.
+            |SCHED_SCHEDULE_VADDR = 0x4_001_000
+            |SCHED_SCHEDULE_SIZE  = 0x1000  # 4 KB
+            |
             |def generate(sdf_path: str, output_dir: str, dtb: DeviceTree):
             |    timer_node = dtb.node(board.timer)
             |    assert timer_node is not None
@@ -206,6 +212,16 @@ object SystemDescriptionProvider_MCS {
             |    sched_state_mr = MemoryRegion(sdf, "sched_state", SCHED_STATE_SIZE)
             |    sdf.add_mr(sched_state_mr)
             |    scheduler.add_map(Map(sched_state_mr, SCHED_STATE_VADDR, perms="rw"))
+            |
+            |    #######################################
+            |    # SCHEDULE
+            |    # The full user_schedule published by the scheduler at init.
+            |    # Monitors that map this region read-only can correlate
+            |    # current_timeslice indices with channel IDs and durations.
+            |    #######################################
+            |    sched_schedule_mr = MemoryRegion(sdf, "sched_schedule", SCHED_SCHEDULE_SIZE)
+            |    sdf.add_mr(sched_schedule_mr)
+            |    scheduler.add_map(Map(sched_schedule_mr, SCHED_SCHEDULE_VADDR, perms="rw"))
             |    ${(templateManagedMapsSt, "\n")}
             |
             |    ${marker.beginMarker}
@@ -807,13 +823,25 @@ object StaticContent {
         |bool scheduler_running;
         |
         |// Pointer to the schedule state shared memory region.
-        |// Monitors that map this region can read last_yielded_ch and next_dispatch_ch.
+        |// Monitors that map this region can read current_timeslice.
         |volatile sb_queue_hamr_SchedState_1_t *sb_queue_sched_state = (volatile sb_queue_hamr_SchedState_1_t *)SCHED_STATE_VADDR;
         |
         |hamr_SchedState sched_state = {0};
         |
         |bool put_sched_state() {
         |  sb_queue_hamr_SchedState_1_enqueue((sb_queue_hamr_SchedState_1_t *) sb_queue_sched_state, (hamr_SchedState *) &sched_state);
+        |
+        |  return true;
+        |}
+        |
+        |// Pointer to the schedule shared memory region.
+        |// Monitors that map this region can read the full schedule (all channels, timeslices, user-partition flags).
+        |volatile sb_queue_hamr_Schedule_1_t *sb_queue_sched_schedule = (volatile sb_queue_hamr_Schedule_1_t *)SCHED_SCHEDULE_VADDR;
+        |
+        |hamr_Schedule sched_schedule = {0};
+        |
+        |bool put_sched_schedule() {
+        |  sb_queue_hamr_Schedule_1_enqueue((sb_queue_hamr_Schedule_1_t *) sb_queue_sched_schedule, (hamr_Schedule *) &sched_schedule);
         |
         |  return true;
         |}
@@ -830,12 +858,8 @@ object StaticContent {
         |void notify() {
         |    microkit_channel ch = user_schedule.timeslice_ch[current_timeslice];
         |    if (ch != 0) { // channel 0 is used to pad out a schedule
-        |        if (user_schedule.is_user_partition[current_timeslice]) {
-        |            // Broadcast which PD is about to be dispatched before waking it
-        |            sched_state.last_yielded_ch = sched_state.next_dispatch_ch;
-        |            sched_state.next_dispatch_ch = (uint32_t)ch;
-        |            put_sched_state();
-        |        }
+        |        sched_state.current_timeslice = current_timeslice;
+        |        put_sched_state();
         |
         |        microkit_notify(ch);
         |    }
@@ -886,6 +910,7 @@ object StaticContent {
         |void init(void)
         |{
         |    sb_queue_hamr_SchedState_1_init((sb_queue_hamr_SchedState_1_t *) sb_queue_sched_state);
+        |    sb_queue_hamr_Schedule_1_init((sb_queue_hamr_Schedule_1_t *) sb_queue_sched_schedule);
         |
         |    current_timeslice = 0;
         |
@@ -900,6 +925,15 @@ object StaticContent {
         |        // initial task.
         |        part_ready_check |= (1 << user_schedule.timeslice_ch[i]);
         |    }
+        |
+        |    // Publish the full schedule so monitors can correlate timeslice indices with channels.
+        |    sched_schedule.num_timeslices = user_schedule.num_timeslices;
+        |    for (uint32_t i = 0; i < user_schedule.num_timeslices; i++) {
+        |        sched_schedule.timeslices[i] = user_schedule.timeslices[i];
+        |        sched_schedule.timeslice_ch[i] = user_schedule.timeslice_ch[i];
+        |        sched_schedule.is_user_partition[i] = user_schedule.is_user_partition[i];
+        |    }
+        |    put_sched_schedule();
         |}
         |"""
 
@@ -915,11 +949,11 @@ object StaticContent {
                               |// and will be patched into the scheduler at system build time
                               |
                               |typedef struct user_schedule {
-                              |    uint64_t timeslices[MAX_PARTITIONS];
+                              |    uint64_t timeslices[MAX_SCHEDULE_SLOTS];
                               |    // @kwinter: In the future, will also need to keep track of
                               |    // all the PD's in a partition so that we can easily suspend them
-                              |    uint32_t timeslice_ch[MAX_PARTITIONS];
-                              |    bool is_user_partition[MAX_PARTITIONS];
+                              |    uint32_t timeslice_ch[MAX_SCHEDULE_SLOTS];
+                              |    bool is_user_partition[MAX_SCHEDULE_SLOTS];
                               |    uint32_t num_timeslices;
                               |} user_schedule_t;"""
 
@@ -937,17 +971,26 @@ object StaticContent {
                                    |// One channel is taken by the sDDF timer subsystem.
                                    |#define MAX_PARTITIONS (MICROKIT_MAX_CHANNELS - 1)
                                    |
+                                   |// Maximum number of timeslice slots in a schedule.  A thread may appear
+                                   |// in multiple slots per frame period, so this can exceed MAX_PARTITIONS.
+                                   |// Must fit within the 4 KB shared-memory page (struct ≈ 13*N + 4 bytes).
+                                   |#define MAX_SCHEDULE_SLOTS 128
+                                   |
                                    |// Virtual address at which the schedule state shared memory region is mapped.
                                    |// Must match SCHED_STATE_VADDR in meta.py. Change both if there is a conflict.
                                    |#define SCHED_STATE_VADDR 0x4000000UL
                                    |#define SCHED_STATE_SIZE  0x1000UL  // 4 KB
                                    |
+                                   |// Virtual address at which the schedule shared memory region is mapped.
+                                   |// Must match SCHED_SCHEDULE_VADDR in meta.py. Change both if there is a conflict.
+                                   |#define SCHED_SCHEDULE_VADDR 0x4001000UL
+                                   |#define SCHED_SCHEDULE_SIZE  0x1000UL  // 4 KB
+                                   |
                                    |// Schedule state broadcast: written by the scheduler before every dispatch.
                                    |// Monitors that map this region (read-only) can inspect it to determine
-                                   |// which partition just ran and which is about to be dispatched.
+                                   |// the current timeslice index.
                                    |typedef struct sched_state {
-                                   |    uint32_t last_yielded_ch;   // channel of the PD whose timeslice just expired
-                                   |    uint32_t next_dispatch_ch;  // channel of the PD about to be dispatched
+                                   |    uint32_t current_timeslice; // index into the schedule of the current timeslice
                                    |} sched_state_t;
                                    |
                                    |typedef struct schedule_config {

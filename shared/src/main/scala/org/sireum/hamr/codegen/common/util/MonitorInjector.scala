@@ -20,6 +20,24 @@ object MonitorInjector {
   // Name of the incoming data port added to the monitor thread for schedule-state observation.
   val schedStatePortName: String = "sched_state"
 
+  // Classifier for the synthetic AADL record type that mirrors user_schedule_t.
+  val schedScheduleClassifier: String = "hamr::Schedule"
+
+  // Classifiers for the array sub-types of hamr::Schedule.
+  val schedTimeslicesClassifier: String = "hamr::ScheduleTimeslices"
+  val schedChannelsClassifier: String = "hamr::ScheduleChannels"
+  val schedUserPartitionsClassifier: String = "hamr::ScheduleUserPartitions"
+
+  // Maximum number of timeslice slots in a schedule.  A thread may appear in
+  // multiple slots per frame period, so this can be larger than the number of
+  // partitions.  The struct is copied by value in the sb_queue API so it must
+  // also fit on a microkit PD stack (~4 KB).  At 128 slots the struct is
+  // ~1.7 KB (13*128 + 4).
+  val maxScheduleSlots: Z = 128
+
+  // Name of the incoming data port added to the monitor thread for schedule observation.
+  val schedSchedulePortName: String = "sched_schedule"
+
   /** Injects a synthetic monitor process/thread into the AIR model.  For each
     * unique source port in the model the monitor receives an incoming port of the
     * same category and classifier.  Fan-out connections sharing the same source
@@ -27,9 +45,11 @@ object MonitorInjector {
     * re-running ModelUtil.resolve on the returned model to obtain an updated
     * SymbolTable.
     *
-    * @param isMCS when true, also injects the sched_state data port and the
-    *              hamr::SchedState record type so that the MCS user-land scheduler's
-    *              shared-memory broadcast region is reflected in the AADL type system.
+    * @param isMCS when true, also injects the sched_state and sched_schedule data
+    *              ports along with the hamr::SchedState and hamr::Schedule record
+    *              types (plus their array sub-types) so that the MCS user-land
+    *              scheduler's shared-memory broadcast regions are reflected in the
+    *              AADL type system.
     */
   def inject(model: ir.Aadl, symbolTable: SymbolTable, isMCS: B, reporter: Reporter): ir.Aadl = {
     // VM components cannot participate in runtime monitoring because the monitor's
@@ -212,6 +232,46 @@ object MonitorInjector {
           connectionInstances = ISZ(),
           properties = ISZ(),
           uriFrag = "")
+
+      // Inject the sched_schedule incoming data port so the monitor can observe the
+      // full schedule (all timeslice channels, durations, and user-partition flags).
+      val monitorSchedScheduleThreadPortPath: ISZ[String] = monitorThreadPath :+ schedSchedulePortName
+      val monitorSchedScheduleProcessPortPath: ISZ[String] = monitorProcessPath :+ schedSchedulePortName
+
+      monitorThreadFeatures = monitorThreadFeatures :+
+        ir.FeatureEnd(
+          identifier = ir.Name(name = monitorSchedScheduleThreadPortPath, pos = None()),
+          direction = ir.Direction.In,
+          category = ir.FeatureCategory.DataPort,
+          classifier = Some(ir.Classifier(schedScheduleClassifier)),
+          properties = ISZ(),
+          uriFrag = "")
+
+      monitorProcessFeatures = monitorProcessFeatures :+
+        ir.FeatureEnd(
+          identifier = ir.Name(name = monitorSchedScheduleProcessPortPath, pos = None()),
+          direction = ir.Direction.In,
+          category = ir.FeatureCategory.DataPort,
+          classifier = Some(ir.Classifier(schedScheduleClassifier)),
+          properties = ISZ(),
+          uriFrag = "")
+
+      monitorProcessConnections = monitorProcessConnections :+
+        ir.Connection(
+          name = ir.Name(name = monitorProcessPath :+ s"deleg_${schedSchedulePortName}", pos = None()),
+          src = ISZ(ir.EndPoint(
+            component = ir.Name(name = monitorProcessPath, pos = None()),
+            feature = Some(ir.Name(name = monitorSchedScheduleProcessPortPath, pos = None())),
+            direction = Some(ir.Direction.In))),
+          dst = ISZ(ir.EndPoint(
+            component = ir.Name(name = monitorThreadPath, pos = None()),
+            feature = Some(ir.Name(name = monitorSchedScheduleThreadPortPath, pos = None())),
+            direction = Some(ir.Direction.In))),
+          kind = ir.ConnectionKind.Port,
+          isBiDirectional = F,
+          connectionInstances = ISZ(),
+          properties = ISZ(),
+          uriFrag = "")
     }
 
     // Inherit the processor binding from the first process so the linter's
@@ -312,27 +372,150 @@ object MonitorInjector {
         category = ir.ComponentCategory.Data,
         classifier = Some(ir.Classifier(schedStateClassifier)),
         features = ISZ(),
-        subComponents = ISZ(makeFieldComp("last_yielded_ch"), makeFieldComp("next_dispatch_ch")),
+        subComponents = ISZ(makeFieldComp("last_yielded_ch"), makeFieldComp("next_dispatch_ch"), makeFieldComp("current_timeslice")),
         connections = ISZ(), connectionInstances = ISZ(), properties = ISZ(),
         flows = ISZ(), modes = ISZ(), annexes = ISZ(), uriFrag = "")
 
-      // Ensure Base_Types::Unsigned_32 is registered in model.dataComponents so that
-      // SymbolResolver can look it up when it recursively processes SchedState's field sub-components.
-      val u32AlreadyPresent: B = ops.ISZOps(model.dataComponents).exists(
-        (c: ir.Component) => c.classifier match {
-          case Some(cl) => cl.name == u32Classifier
-          case _ => F
-        })
-      if (!u32AlreadyPresent) {
-        newDataComponents = newDataComponents :+ ir.Component(
+      // Ensure base types used by SchedState and Schedule fields are registered in
+      // model.dataComponents so that SymbolResolver can look them up.
+      def ensureBaseType(classifier: String): Unit = {
+        val alreadyPresent: B = ops.ISZOps(newDataComponents).exists(
+          (c: ir.Component) => c.classifier match {
+            case Some(cl) => cl.name == classifier
+            case _ => F
+          }) || ops.ISZOps(model.dataComponents).exists(
+          (c: ir.Component) => c.classifier match {
+            case Some(cl) => cl.name == classifier
+            case _ => F
+          })
+        if (!alreadyPresent) {
+          newDataComponents = newDataComponents :+ ir.Component(
+            identifier = ir.Name(name = ISZ(), pos = None()),
+            category = ir.ComponentCategory.Data,
+            classifier = Some(ir.Classifier(classifier)),
+            features = ISZ(), subComponents = ISZ(), connections = ISZ(),
+            connectionInstances = ISZ(), properties = ISZ(),
+            flows = ISZ(), modes = ISZ(), annexes = ISZ(), uriFrag = "")
+        }
+      }
+
+      ensureBaseType(u32Classifier)
+      newDataComponents = newDataComponents :+ schedStateDataComp
+
+      // Build the synthetic hamr::Schedule record type and its array sub-types.
+      // The arrays model the fields of user_schedule_t (scheduler_config.h) with
+      // dimension = maxScheduleSlots (256), allowing threads to appear in multiple
+      // timeslice slots per frame period.
+
+      val u64Classifier: String = "Base_Types::Unsigned_64"
+      val boolClassifier: String = "Base_Types::Boolean"
+
+      ensureBaseType(u64Classifier)
+      ensureBaseType(boolClassifier)
+
+      def makeArrayTypeComp(arrayClassifier: String, baseTypeClassifier: String,
+                            dim: Z, elementBits: Z): ir.Component = {
+        val bitSize: Z = dim * elementBits
+        return ir.Component(
           identifier = ir.Name(name = ISZ(), pos = None()),
           category = ir.ComponentCategory.Data,
-          classifier = Some(ir.Classifier(u32Classifier)),
+          classifier = Some(ir.Classifier(arrayClassifier)),
           features = ISZ(), subComponents = ISZ(), connections = ISZ(),
-          connectionInstances = ISZ(), properties = ISZ(),
+          connectionInstances = ISZ(),
+          properties = ISZ(
+            ir.Property(
+              name = ir.Name(name = ISZ("Data_Model::Data_Representation"), pos = None()),
+              propertyValues = ISZ(ir.ValueProp("Array")),
+              appliesTo = ISZ()),
+            ir.Property(
+              name = ir.Name(name = ISZ("Data_Model::Base_Type"), pos = None()),
+              propertyValues = ISZ(ir.ClassifierProp(baseTypeClassifier)),
+              appliesTo = ISZ()),
+            ir.Property(
+              name = ir.Name(name = ISZ("Data_Model::Dimension"), pos = None()),
+              propertyValues = ISZ(ir.UnitProp(value = dim.string, unit = None())),
+              appliesTo = ISZ()),
+            ir.Property(
+              name = ir.Name(name = ISZ("Memory_Properties::Data_Size"), pos = None()),
+              propertyValues = ISZ(ir.UnitProp(value = bitSize.string, unit = None())),
+              appliesTo = ISZ()),
+            ir.Property(
+              name = ir.Name(name = ISZ("HAMR::Array_Size_Kind"), pos = None()),
+              propertyValues = ISZ(ir.ValueProp("Fixed")),
+              appliesTo = ISZ())),
           flows = ISZ(), modes = ISZ(), annexes = ISZ(), uriFrag = "")
       }
-      newDataComponents = newDataComponents :+ schedStateDataComp
+
+      // Array types must appear before the record type that references them.
+      newDataComponents = newDataComponents :+ makeArrayTypeComp(
+        arrayClassifier = schedTimeslicesClassifier,
+        baseTypeClassifier = u64Classifier,
+        dim = maxScheduleSlots,
+        elementBits = 64)
+
+      newDataComponents = newDataComponents :+ makeArrayTypeComp(
+        arrayClassifier = schedChannelsClassifier,
+        baseTypeClassifier = u32Classifier,
+        dim = maxScheduleSlots,
+        elementBits = 32)
+
+      newDataComponents = newDataComponents :+ makeArrayTypeComp(
+        arrayClassifier = schedUserPartitionsClassifier,
+        baseTypeClassifier = boolClassifier,
+        dim = maxScheduleSlots,
+        elementBits = 8)
+
+      // Field sub-components of a record that reference array types must carry the
+      // full array properties (Data_Representation, Base_Type, Dimension, Data_Size,
+      // Array_Size_Kind) inline, because the TypeResolver processes each field
+      // sub-component via processType and checks for isArrayType on its properties.
+      def makeArrayFieldComp(fieldName: String, arrayClassifier: String,
+                             baseTypeClassifier: String, dim: Z, elementBits: Z): ir.Component = {
+        val bitSize: Z = dim * elementBits
+        return ir.Component(
+          identifier = ir.Name(name = ISZ(fieldName), pos = None()),
+          category = ir.ComponentCategory.Data,
+          classifier = Some(ir.Classifier(arrayClassifier)),
+          features = ISZ(), subComponents = ISZ(), connections = ISZ(),
+          connectionInstances = ISZ(),
+          properties = ISZ(
+            ir.Property(
+              name = ir.Name(name = ISZ("Data_Model::Data_Representation"), pos = None()),
+              propertyValues = ISZ(ir.ValueProp("Array")),
+              appliesTo = ISZ()),
+            ir.Property(
+              name = ir.Name(name = ISZ("Data_Model::Base_Type"), pos = None()),
+              propertyValues = ISZ(ir.ClassifierProp(baseTypeClassifier)),
+              appliesTo = ISZ()),
+            ir.Property(
+              name = ir.Name(name = ISZ("Data_Model::Dimension"), pos = None()),
+              propertyValues = ISZ(ir.UnitProp(value = dim.string, unit = None())),
+              appliesTo = ISZ()),
+            ir.Property(
+              name = ir.Name(name = ISZ("Memory_Properties::Data_Size"), pos = None()),
+              propertyValues = ISZ(ir.UnitProp(value = bitSize.string, unit = Some("bits"))),
+              appliesTo = ISZ()),
+            ir.Property(
+              name = ir.Name(name = ISZ("HAMR::Array_Size_Kind"), pos = None()),
+              propertyValues = ISZ(ir.ValueProp("Fixed")),
+              appliesTo = ISZ())),
+          flows = ISZ(), modes = ISZ(), annexes = ISZ(), uriFrag = "")
+      }
+
+      val schedScheduleDataComp = ir.Component(
+        identifier = ir.Name(name = ISZ(), pos = None()),
+        category = ir.ComponentCategory.Data,
+        classifier = Some(ir.Classifier(schedScheduleClassifier)),
+        features = ISZ(),
+        subComponents = ISZ(
+          makeArrayFieldComp("timeslices", schedTimeslicesClassifier, u64Classifier, maxScheduleSlots, 64),
+          makeArrayFieldComp("timeslice_ch", schedChannelsClassifier, u32Classifier, maxScheduleSlots, 32),
+          makeArrayFieldComp("is_user_partition", schedUserPartitionsClassifier, boolClassifier, maxScheduleSlots, 8),
+          makeFieldComp("num_timeslices")),
+        connections = ISZ(), connectionInstances = ISZ(), properties = ISZ(),
+        flows = ISZ(), modes = ISZ(), annexes = ISZ(), uriFrag = "")
+
+      newDataComponents = newDataComponents :+ schedScheduleDataComp
     }
 
     return model(components = ISZ(updatedSystem), dataComponents = newDataComponents)

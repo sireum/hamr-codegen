@@ -525,11 +525,12 @@ import org.sireum.message.Reporter
       xmlMemoryRegions = xmlMemoryRegions :+ s
     }
 
-    // Register the sched_state_mr region so that plugins (e.g. the runtime monitor) can
-    // add PD mappings for it via MemoryMap.  The region is template-managed: meta.py creates
-    // it directly in the SCHEDULE STATE section; the MEMORY REGIONS loop only emits add_map
-    // calls for PDs that reference this region.
+    // Register the sched_state_mr and sched_schedule_mr regions so that plugins (e.g. the
+    // runtime monitor) can add PD mappings for them via MemoryMap.  The regions are
+    // template-managed: meta.py creates them directly; the MEMORY REGIONS loop only emits
+    // add_map calls for PDs that reference these regions.
     xmlMemoryRegions = xmlMemoryRegions :+ GenericMemoryRegion(name = "sched_state_mr", sizeInKiBytes = 4)
+    xmlMemoryRegions = xmlMemoryRegions :+ GenericMemoryRegion(name = "sched_schedule_mr", sizeInKiBytes = 4)
 
     val sdName = "normal"
 
