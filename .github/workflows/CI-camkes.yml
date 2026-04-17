@@ -104,10 +104,9 @@ jobs:
           
           # Installing emacs installs some package(s) that resolve an issue where
           # the OSATE gumbo parser fails to initialize when used in the docker container.
+          # Use emacs-nox only — the X11-dependent variants (emacs-lucid, emacs-gtk)
+          # fail due to debianutils/x11-common version conflicts in the container.
           ${aptInstall} emacs-nox
-          ${aptInstall} emacs-lucid
-          ${aptInstall} emacs-gtk
-          ${aptInstall} emacs
           
           mkdir -p $HOME/.ssh
           touch $HOME/.ssh/config
