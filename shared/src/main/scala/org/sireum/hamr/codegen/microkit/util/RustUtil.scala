@@ -7,8 +7,6 @@ import org.sireum.hamr.codegen.common.templates.CommentTemplate
 
 object RustUtil {
 
-  val verusChannel: String = "nightly"
-
   val defaultCrateLevelAttributes: ST =
     st"""#![allow(non_camel_case_types)]
         |#![allow(non_snake_case)]
@@ -22,13 +20,25 @@ object RustUtil {
         |#![allow(unused_unsafe)]
         |#![allow(unused_variables)]"""
 
-  val defaultRustToolChainToml: ST =
-    st"""${CommentTemplate.safeToEditComment_hash}
-        |
-        |[toolchain]
-        |channel = "$verusChannel"
-        |components = [ "rustfmt", "rust-src", "rustc-dev", "llvm-tools-preview", "rust-analyzer" ]
-        |"""
+  @pure def defaultRustToolChainToml(store: Store): ST = {
+    val versions = MicrokitUtil.getMicrokitVersions(store)
+    val channel = versions.get("rust-nightly-channel").get
+    return st"""${CommentTemplate.safeToEditComment_hash}
+               |
+               |# Verus hooks into rustc internals (rustc-dev, rustc_driver) which change
+               |# nightly-to-nightly with no stability guarantees. The nightly date is pinned
+               |# to match the Verus crate versions in Cargo.toml -- using a later nightly may
+               |# cause compilation failures. If you update the Verus dependencies, update the
+               |# nightly date to match.
+               |# The rustc-dev and rust-src components are required for Verus verification;
+               |# llvm-tools-preview is needed for microkit's no_std linking;
+               |# rust-analyzer provides IDE support (code completion, type hints, etc.).
+               |
+               |[toolchain]
+               |channel = "$channel"
+               |components = [ "rustfmt", "rust-src", "rustc-dev", "llvm-tools-preview", "rust-analyzer" ]
+               |"""
+  }
 
   //val verusCargoDependencies: ST =
   //  st"""vstd = { git = "https://github.com/verus-lang/verus.git", default-features=false, rev="$verusCommitTip"}

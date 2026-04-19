@@ -571,7 +571,7 @@ object ComponentContributions {}
       }
 
       { // rust-toolchain.toml
-        val content = RustUtil.defaultRustToolChainToml
+        val content = RustUtil.defaultRustToolChainToml(store)
 
         val path = s"$componentCrateDir/rust-toolchain.toml"
         resources = resources :+ ResourceUtil.createResource(path, content, F)

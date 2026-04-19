@@ -240,7 +240,7 @@ object CRustTypePlugin {
     }
 
     { // rust-toolchain.toml
-      val content = RustUtil.defaultRustToolChainToml
+      val content = RustUtil.defaultRustToolChainToml(store)
 
       val rusttoolchain = s"${rootDataDir}/rust-toolchain.toml"
       resources = resources :+ ResourceUtil.createResourceH(path = rusttoolchain, content = content, overwrite = F, isDatatype = T)

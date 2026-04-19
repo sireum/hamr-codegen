@@ -839,7 +839,7 @@ object GumboRustPlugin {
           }
 
           { // crates/<aadl-package-name>/rust-toolchain.toml
-            val content = RustUtil.defaultRustToolChainToml
+            val content = RustUtil.defaultRustToolChainToml(store)
 
             val rusttoolchain = s"${rootDir}/rust-toolchain.toml"
             resources = resources :+ ResourceUtil.createResourceH(path = rusttoolchain, content = content, overwrite = F, isDatatype = T)
