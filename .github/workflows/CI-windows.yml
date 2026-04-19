@@ -19,7 +19,7 @@ jobs:
       - name: Support longpaths
         run: git config --system core.longpaths true
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
       - name: Install Cygwin
@@ -33,25 +33,25 @@ jobs:
           Invoke-WebRequest -Uri "https://raw.githubusercontent.com/sireum/kekinian/master/versions.properties" -OutFile "versions.properties"
       - name: Cache Java
         id: cache-java
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: bin\win\java
           key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-java
       - name: Cache Scala
         id: cache-scala
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: bin\scala
           key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-scala
       - name: Cache Coursier
         id: cache-coursier
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: cache\coursier
           key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-coursier
       - name: Cache OSATE
         id: cache-osate
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: bin\win\osate
           key: ${{ runner.os }}-${{ hashFiles('jvm\src\main\resources\phantom_versions.properties') }}-osate

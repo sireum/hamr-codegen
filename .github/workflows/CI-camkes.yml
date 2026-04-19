@@ -27,7 +27,7 @@ jobs:
     name: 'VM Partition=${{ matrix.VM_PARTITION }}'
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: hamr-codegen
           submodules: recursive
@@ -36,25 +36,25 @@ jobs:
           wget -q https://raw.githubusercontent.com/sireum/kekinian/master/versions.properties
       - name: Cache Java
         id: cache-java
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: hamr-codegen/bin/linux/java
           key: ${{ runner.os }}-${{ hashFiles('hamr-codegen/versions.properties') }}-java
       - name: Cache Scala
         id: cache-scala
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: hamr-codegen/bin/scala
           key: ${{ runner.os }}-${{ hashFiles('hamr-codegen/versions.properties') }}-scala
       - name: Cache Coursier
         id: cache-coursier
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: hamr-codegen/cache/coursier
           key: ${{ runner.os }}-${{ hashFiles('hamr-codegen/versions.properties') }}-coursier
       - name: Cache OSATE
         id: cache-osate
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: hamr-codegen/bin/linux/osate
           key: ${{ runner.os }}-${{ hashFiles('hamr-codegen/jvm/src/main/resources/phantom_versions.properties') }}-osate
