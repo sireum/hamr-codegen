@@ -223,7 +223,7 @@ object CRustTypePlugin {
       }
 
     { // Cargo.toml
-      val content = st"""${CommentTemplate.safeToEditComment_hash}
+      val content = st"""${CommentTemplate.doNotEditComment_hash}
                         |
                         |[package]
                         |name = "data"
@@ -236,14 +236,14 @@ object CRustTypePlugin {
                         |${RustUtil.commonCargoTomlEntries}
                         |"""
       val cargoTomlPath = s"${rootDataDir}/Cargo.toml"
-      resources = resources :+ ResourceUtil.createResourceH(path = cargoTomlPath, content = content, overwrite = F, isDatatype = T)
+      resources = resources :+ ResourceUtil.createResourceH(path = cargoTomlPath, content = content, overwrite = T, isDatatype = T)
     }
 
     { // rust-toolchain.toml
       val content = RustUtil.defaultRustToolChainToml(store)
 
       val rusttoolchain = s"${rootDataDir}/rust-toolchain.toml"
-      resources = resources :+ ResourceUtil.createResourceH(path = rusttoolchain, content = content, overwrite = F, isDatatype = T)
+      resources = resources :+ ResourceUtil.createResourceH(path = rusttoolchain, content = content, overwrite = T, isDatatype = T)
     }
 
     return (store + s"FINALIZED_$name" ~> BoolValue(true), resources)

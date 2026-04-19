@@ -820,7 +820,7 @@ object GumboRustPlugin {
           }
 
           { // crates/<aadl-package-name>/Cargo.toml
-            val content = st"""${CommentTemplate.safeToEditComment_hash}
+            val content = st"""${CommentTemplate.doNotEditComment_hash}
                               |
                               |[package]
                               |name = "${e._1}"
@@ -835,14 +835,14 @@ object GumboRustPlugin {
                               |${RustUtil.commonCargoTomlEntries}
                               |"""
             val cargoTomlPath = s"${rootDir}/Cargo.toml"
-            resources = resources :+ ResourceUtil.createResourceH(path = cargoTomlPath, content = content, overwrite = F, isDatatype = T)
+            resources = resources :+ ResourceUtil.createResourceH(path = cargoTomlPath, content = content, overwrite = T, isDatatype = T)
           }
 
           { // crates/<aadl-package-name>/rust-toolchain.toml
             val content = RustUtil.defaultRustToolChainToml(store)
 
             val rusttoolchain = s"${rootDir}/rust-toolchain.toml"
-            resources = resources :+ ResourceUtil.createResourceH(path = rusttoolchain, content = content, overwrite = F, isDatatype = T)
+            resources = resources :+ ResourceUtil.createResourceH(path = rusttoolchain, content = content, overwrite = T, isDatatype = T)
 
           }
         }

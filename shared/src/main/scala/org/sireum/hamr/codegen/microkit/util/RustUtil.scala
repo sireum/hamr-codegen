@@ -23,7 +23,7 @@ object RustUtil {
   @pure def defaultRustToolChainToml(store: Store): ST = {
     val versions = MicrokitUtil.getMicrokitVersions(store)
     val channel = versions.get("rust-nightly-channel").get
-    return st"""${CommentTemplate.safeToEditComment_hash}
+    return st"""${CommentTemplate.doNotEditComment_hash}
                |
                |# Verus hooks into rustc internals (rustc-dev, rustc_driver) which change
                |# nightly-to-nightly with no stability guarantees. The nightly date is pinned

@@ -4,7 +4,7 @@ package org.sireum.hamr.codegen.common.util
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.containers.{EResource, IResource, Marker, FileResource}
-import org.sireum.hamr.codegen.common.templates.CommentTemplate
+import org.sireum.hamr.codegen.common.templates.{CommentStyle, CommentTemplate}
 
 object ResourceUtil {
 
@@ -100,6 +100,29 @@ object ResourceUtil {
                                  makeExecutable: B,
                                  makeCRLF: B,
                                  skipConsistencyChecks: B): FileResource = {
+    return createResourceWithMarkersK(
+      path = path,
+      content = content,
+      markers = markers,
+      invertMarkers = invertMarkers,
+      overwrite = overwrite,
+      makeExecutable = makeExecutable,
+      makeCRLF = makeCRLF,
+      isDatatype = isDatatype,
+      commentStyle = detectCommentStyle(path),
+      skipConsistencyChecks = skipConsistencyChecks)
+  }
+
+  def createResourceWithMarkersK(path: String,
+                                 content: ST,
+                                 markers: ISZ[Marker],
+                                 invertMarkers: B,
+                                 overwrite: B,
+                                 isDatatype: B,
+                                 makeExecutable: B,
+                                 makeCRLF: B,
+                                 commentStyle: CommentStyle.Type,
+                                 skipConsistencyChecks: B): FileResource = {
     assert(skipConsistencyChecks || checkConsistency(path, content, overwrite, invertMarkers, markers))
 
     return IResource(
@@ -110,7 +133,57 @@ object ResourceUtil {
       overwrite = overwrite,
       makeExecutable = makeExecutable,
       makeCRLF = makeCRLF,
-      isDatatype = isDatatype)
+      isDatatype = isDatatype,
+      commentStyle = commentStyle)
+  }
+
+  @pure def detectCommentStyle(path: String): CommentStyle.Type = {
+    val s = ops.StringOps(path)
+
+    if (s.endsWith("c") ||
+      s.endsWith("h") ||
+      s.endsWith("cpp") ||
+      s.endsWith("hpp") ||
+      s.endsWith("camkes") ||
+      s.endsWith("dot") ||
+      s.endsWith("rs") ||
+      s.endsWith("cmd") ||
+      s.endsWith(".idl4") ||
+      s.endsWith("sbt") ||
+      s.endsWith("scala") ||
+      s.endsWith("slang")) {
+      return CommentStyle.Slash
+    }
+
+    if (s.endsWith("xml") ||
+      s.endsWith("system") ||
+      s.endsWith("md")) {
+      return CommentStyle.Xml
+    }
+
+    if (s.endsWith("cmake") ||
+      s.endsWith("Makefile") ||
+      s.endsWith("CMakeLists.txt") ||
+      s.endsWith("mk") ||
+      s.endsWith("properties") ||
+      s.endsWith(".S") ||
+      s.endsWith("msg") ||
+      s.endsWith("cross_vm_module_init") ||
+      s.endsWith("hvc0") ||
+      s.endsWith("py") ||
+      s.endsWith("toml")) {
+      return CommentStyle.Hash
+    }
+
+    if (s.endsWith("dts")) {
+      return CommentStyle.Block
+    }
+
+    if (s.endsWith("smt2")) {
+      return CommentStyle.Smt2
+    }
+
+    halt("path")
   }
 
   def createExeResource(path: String,

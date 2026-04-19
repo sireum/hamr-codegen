@@ -3,6 +3,7 @@
 package org.sireum.hamr.codegen.common.containers
 
 import org.sireum._
+import org.sireum.hamr.codegen.common.templates.CommentStyle
 
 object Resource {
   @pure def projectTranspilerConfigs(auxResources: ISZ[Resource]): ISZ[SireumSlangTranspilersCOption] = {
@@ -118,6 +119,7 @@ object Marker {
   def makeExecutable: B
   def makeCRLF: B
   def isDatatype: B
+  def commentStyle: CommentStyle.Type
 }
 
 // Internal Resource
@@ -130,7 +132,9 @@ object Marker {
                           val makeCRLF: B,
 
                           // isDataype indicates whether resource should be added to sergen/slangcheck
-                          val isDatatype: B
+                          val isDatatype: B,
+
+                          val commentStyle: CommentStyle.Type
                          ) extends InternalResource {
 
   // overwrite should be false if invertMarkers is true

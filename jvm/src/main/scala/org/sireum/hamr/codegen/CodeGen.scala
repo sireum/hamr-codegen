@@ -12,6 +12,7 @@ import org.sireum.hamr.codegen.common.symbols.SymbolTable
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.HamrCli.{CodegenHamrPlatform, CodegenOption}
 import org.sireum.hamr.codegen.common.util.ModelUtil.ModelElements
+import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.util.{CodeGenResults, ExperimentalOptions, ModelUtil, MonitorInjector}
 import org.sireum.hamr.codegen.common.{DirectoryUtil, StringUtil}
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen
@@ -545,7 +546,24 @@ object CodeGen {
           p.up.mkdirAll()
           r match {
             case i: IResource =>
-              if (!p.exists || (!i.invertMarkers && i.overwrite)) {
+              val noOverwritePrefix = CommentTemplate.noOverwriteLinePrefix(i.commentStyle)
+              val hasNoOverwriteDirective: B = if (p.exists && i.overwrite) {
+                val lines = ops.StringOps(p.read).split((c: C) => c == '\n')
+                var found: B = F
+                for (line <- lines) {
+                  if (!found) {
+                    if (ops.StringOps(line).startsWith(noOverwritePrefix)) {
+                      found = T
+                    }
+                  }
+                }
+                found
+              } else {
+                F
+              }
+              if (hasNoOverwriteDirective) {
+                reporter.info(None(), toolName, s"File contains ${CommentTemplate.noOverwriteDirective}, will not overwrite: ${p}")
+              } else if (!p.exists || (!i.invertMarkers && i.overwrite)) {
                 val content = render(i)
                 p.writeOver(content)
                 reporter.info(None(), toolName, s"Wrote: ${p}")

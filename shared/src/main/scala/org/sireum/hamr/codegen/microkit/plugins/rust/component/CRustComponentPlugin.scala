@@ -458,7 +458,7 @@ object ComponentContributions {}
           else None()
 
         val content =
-          st"""${CommentTemplate.safeToEditComment_hash}
+          st"""${CommentTemplate.doNotEditComment_hash}
               |
               |[package]
               |name = "$threadId"
@@ -493,7 +493,7 @@ object ComponentContributions {}
               |${RustUtil.commonCargoTomlEntries}
               |"""
         val path = s"$componentCrateDir/Cargo.toml"
-        resources = resources :+ ResourceUtil.createResource(path, content, F)
+        resources = resources :+ ResourceUtil.createResource(path, content, T)
       }
 
       { // Makefile
@@ -574,7 +574,7 @@ object ComponentContributions {}
         val content = RustUtil.defaultRustToolChainToml(store)
 
         val path = s"$componentCrateDir/rust-toolchain.toml"
-        resources = resources :+ ResourceUtil.createResource(path, content, F)
+        resources = resources :+ ResourceUtil.createResource(path, content, T)
       }
     }
     return (localStore + s"FINALIZED_$name" ~> BoolValue(T), resources)
