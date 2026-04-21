@@ -4461,9 +4461,9 @@ object Generator {
 
     val nodeTableRows: ISZ[ST] =
       (for (t <- ros2Threads) yield
-        st"| `${genExecutableFileName(genNodeName(t))}` | `${ros2PkgName}` | ROS2 (rclcpp) |") ++
+        st"| `${genExecutableFileName(genNodeName(t))}` | `${ros2PkgName}` | ROS2 (rclcpp) | ${if (isSporadic(t)) "Sporadic" else "Periodic"} |") ++
       (for (t <- microRosThreads) yield
-        st"| `${genExecutableFileName(genNodeName(t))}` | `${microrosPkgName}` | microROS (rclc + rmw_microxrcedds) |")
+        st"| `${genExecutableFileName(genNodeName(t))}` | `${microrosPkgName}` | microROS (rclc + rmw_microxrcedds) | ${if (isSporadic(t)) "Sporadic" else "Periodic"} |")
 
     val safeToEdit: String = CommentTemplate.safeToEditComment_xml
 
@@ -4481,57 +4481,60 @@ object Generator {
             |
             |# ${modelName} — Mixed ROS2 / microROS Workspace
             |
-            |- [Prerequisites — micro-ROS Firmware Workspace (one-time setup)](#prerequisites--micro-ros-firmware-workspace-one-time-setup)
+            |- [Prerequisites](#prerequisites)
             |- [Quick Start](#quick-start)
             |- [Manual Steps](#manual-steps)
             |  - [Build](#build)
             |  - [Run](#run)
             |
-            || Node | Package | Type |
-            ||---|---|---|
+            || Node | Package | Type | Dispatch |
+            ||---|---|---|---|
             |${(nodeTableRows, "\n")}
             |
             |The microROS node(s) communicate via a micro-XRCE-DDS agent that bridges them to the ROS2 DDS bus.
             |
-            |## Prerequisites — micro-ROS Firmware Workspace (one-time setup)
+            |## Prerequisites
             |
-            |microROS nodes require a firmware workspace containing the micro-ROS client stack and agent.
-            |This workspace is built once and shared across all your microROS projects — set `MICROROS_WS`
-            |to a stable location outside any individual project and reuse it everywhere.
+            |- [ROS2 Humble](https://docs.ros.org/en/humble/Installation.html)
+            |- micro-ROS Firmware Workspace (one-time setup)
             |
-            |**Step 1 — choose a location** (edit this, then add it to your shell profile):
+            |  microROS nodes require a firmware workspace containing the micro-ROS client stack and agent.
+            |  This workspace is built once and shared across all your microROS projects — set `MICROROS_WS`
+            |  to a stable location outside any individual project and reuse it everywhere.
             |
-            |```bash
-            |export MICROROS_WS=/path/to/microros_ws
-            |```
+            |  **Step 1 — choose a location** (edit this, then add it to your shell profile):
             |
-            |**Step 2 — build the firmware workspace** (copy-paste as-is once `MICROROS_WS` is set):
+            |  ```bash
+            |  export MICROROS_WS=/path/to/microros_ws
+            |  ```
             |
-            |```bash
-            |mkdir -p ${dollar}MICROROS_WS && cd ${dollar}MICROROS_WS
-            |source /opt/ros/${dollar}ROS_DISTRO/setup.bash
+            |  **Step 2 — build the firmware workspace** (copy-paste as-is once `MICROROS_WS` is set):
             |
-            |# 1. Add micro_ros_setup and build it
-            |git clone -b ${dollar}ROS_DISTRO https://github.com/micro-ROS/micro_ros_setup.git src/micro_ros_setup
-            |colcon build --packages-select micro_ros_setup
-            |source install/setup.bash
+            |  ```bash
+            |  mkdir -p ${dollar}MICROROS_WS && cd ${dollar}MICROROS_WS
+            |  source /opt/ros/${dollar}ROS_DISTRO/setup.bash
             |
-            |# 2. Download the micro-ROS client stack
-            |ros2 run micro_ros_setup create_firmware_ws.sh host
+            |  # 1. Add micro_ros_setup and build it
+            |  git clone -b ${dollar}ROS_DISTRO https://github.com/micro-ROS/micro_ros_setup.git src/micro_ros_setup
+            |  colcon build --packages-select micro_ros_setup
+            |  source install/setup.bash
             |
-            |# 3. Ignore packages with known build failures that are not needed
-            |touch src/ros2/example_interfaces/COLCON_IGNORE
-            |touch src/uros/micro-ROS-demos/COLCON_IGNORE
+            |  # 2. Download the micro-ROS client stack
+            |  ros2 run micro_ros_setup create_firmware_ws.sh host
             |
-            |# 4. Build the full micro-ROS stack (takes a while, but only done once)
-            |ros2 run micro_ros_setup build_firmware.sh
-            |source install/setup.bash
+            |  # 3. Ignore packages with known build failures that are not needed
+            |  touch src/ros2/example_interfaces/COLCON_IGNORE
+            |  touch src/uros/micro-ROS-demos/COLCON_IGNORE
             |
-            |# 5. Build the micro-XRCE-DDS agent
-            |ros2 run micro_ros_setup create_agent_ws.sh
-            |ros2 run micro_ros_setup build_agent.sh
-            |source install/setup.bash
-            |```
+            |  # 4. Build the full micro-ROS stack (takes a while, but only done once)
+            |  ros2 run micro_ros_setup build_firmware.sh
+            |  source install/setup.bash
+            |
+            |  # 5. Build the micro-XRCE-DDS agent
+            |  ros2 run micro_ros_setup create_agent_ws.sh
+            |  ros2 run micro_ros_setup build_agent.sh
+            |  source install/setup.bash
+            |  ```
             |
             |## Quick Start
             |
@@ -4604,9 +4607,9 @@ object Generator {
             |  - [Build](#build)
             |  - [Run](#run)
             |
-            || Node | Package |
-            ||---|---|
-            |${(for (t <- ros2Threads) yield st"| `${genExecutableFileName(genNodeName(t))}` | `${ros2PkgName}` |", "\n")}
+            || Node | Package | Dispatch |
+            ||---|---|---|
+            |${(for (t <- ros2Threads) yield st"| `${genExecutableFileName(genNodeName(t))}` | `${ros2PkgName}` | ${if (isSporadic(t)) "Sporadic" else "Periodic"} |", "\n")}
             |
             |## Quick Start
             |
@@ -4642,7 +4645,7 @@ object Generator {
             """
       }
 
-    return (IS("README.md"), content, F, IS())
+    return (IS("readme.md"), content, F, IS())
   }
 
   //================================================
