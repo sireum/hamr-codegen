@@ -68,7 +68,7 @@ object GclResolver {
   @record class SymbolFinder(val mode: RewriteMode.Type,
                              val context: AadlComponent,
                              val isContextGeneralAssumeClause: B,
-                             val optHandledPort: Option[AadlPort],
+                             val isIntegrationContext: B,
                              val indexingTypeFingerprints: Map[String, TypeIdPath],
 
                              val stateVars: ISZ[GclStateVar],
@@ -227,6 +227,11 @@ object GclResolver {
             case _ => return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
           }
         } else {
+          if (isIntegrationContext) {
+            reporter.error(o.fullPosOpt, toolName,
+              s"${o.ident.id.value} cannot be used in integration constraints. Integration constraints are only evaluated when data is present on the port, so event-checking predicates are unnecessary")
+            return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
+          }
           if (o.ident.id.value == uif__MustSend || o.ident.id.value == uif__MustSendWithExpectedValue) {
             if (o.args.isEmpty) {
               reporter.error(o.fullPosOpt, toolName, "Invalid MustSend expression. First argument must be outgoing event port")
@@ -732,7 +737,7 @@ object GclResolver {
                      methods: Map[ISZ[String], GclMethod],
                      symbolTable: SymbolTable,
                      reporter: Reporter): (MOption[Exp], ISZ[SymbolHolder], ISZ[AadlPort]) = {
-    return collectSymbolsH(exp, mode, context, isContextGeneralAssumeClause, None(), indexingTypeFingerprints,
+    return collectSymbolsH(exp, mode, context, isContextGeneralAssumeClause, F, indexingTypeFingerprints,
       stateVars, methods, symbolTable, reporter)
   }
 
@@ -740,7 +745,7 @@ object GclResolver {
                       mode: RewriteMode.Type,
                       context: AadlComponent,
                       isContextGeneralAssumeClause: B,
-                      optHandledPort: Option[AadlPort],
+                      isIntegrationContext: B,
                       indexingTypeFingerprints: Map[String, TypeIdPath],
                       stateVars: ISZ[GclStateVar],
                       methods: Map[ISZ[String], GclMethod],
@@ -750,7 +755,7 @@ object GclResolver {
       // already in an inconsistent state
       return (MNone(), ISZ(), ISZ())
     } else {
-      val sf = SymbolFinder(mode, context, isContextGeneralAssumeClause, optHandledPort,
+      val sf = SymbolFinder(mode, context, isContextGeneralAssumeClause, isIntegrationContext,
         indexingTypeFingerprints, stateVars, methods, symbolTable)
       val rexp = sf.transform_langastExp(exp)
       reporter.reports(sf.reporter.messages)
@@ -1164,7 +1169,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
           if (!reporter.hasError) {
             val (expTrans, symbols, apiRefs) =
-              GclResolver.collectSymbols(expTipe, RewriteMode.Normal, component, F, indexingTypeFingerprints,
+              GclResolver.collectSymbolsH(expTipe, RewriteMode.Normal, component, F, T, indexingTypeFingerprints,
             ISZ(), gclMethods, symbolTable, reporter)
 
             val resolvedExpr: AST.Exp = expTrans match {
