@@ -306,6 +306,8 @@ object GumboXGenUtil {
       var traitFields: ISZ[ST] = ISZ()
       var fieldDecls: ISZ[ST] = ISZ()
       var nextEntries: ISZ[ST] = ISZ()
+      var traitUpdateMethods: ISZ[ST] = ISZ()
+      var recordUpdateMethods: ISZ[ST] = ISZ()
       val sps = sortParam(params)
 
       @pure def wrapOption(p: GGParam): String = {
@@ -317,12 +319,19 @@ object GumboXGenUtil {
         traitFields = traitFields :+ st"def ${p.name}: RandomLib // random lib for generating ${p.aadlType.nameProvider.qualifiedTypeName}"
         fieldDecls = fieldDecls :+ st"var ${p.name}: RandomLib${if (i < sps.size - 1) "," else ""} // random lib for generating ${p.aadlType.nameProvider.qualifiedTypeName}"
         nextEntries = nextEntries :+ st"${p.name} = ${p.name}.next${wrapOption(p)}()"
+        traitUpdateMethods = traitUpdateMethods :+ st"def update_${p.name}(v: RandomLib): $profileTraitName"
+        recordUpdateMethods = recordUpdateMethods :+
+          st"""override def update_${p.name}(v: RandomLib): $profileTraitName = {
+              |  return this(${p.name} = v)
+              |}"""
       }
 
       val extend: String = if (includeStateVars) baseProfileTraitName else "Profile"
       return (
         st"""@msig trait $profileTraitName extends $extend {
             |  ${(traitFields, "\n")}
+            |
+            |  ${(traitUpdateMethods, "\n")}
             |}
             |
             |@record class $profileName(
@@ -334,6 +343,8 @@ object GumboXGenUtil {
             |    return (${containerName} (
             |      ${(nextEntries, ",\n")}))
             |  }
+            |
+            |  ${(recordUpdateMethods, "\n\n")}
             |}""")
     }
 
