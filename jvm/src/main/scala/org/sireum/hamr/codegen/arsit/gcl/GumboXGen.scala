@@ -156,6 +156,80 @@ object GumboXGen {
     return componentNames.packageNameI :+ s"${componentNames.componentSingletonType}_DSC_UnitTests"
   }
 
+  /** Generates a conjunction of calls using val bindings so that each call's result is
+    * independently observable (e.g. during debugging), making it easier to identify which
+    * clause failed. A single call is returned as-is; multiple calls produce a block:
+    *   {
+    *     val r0 = call0(...)
+    *     val r1 = call1(...)
+    *
+    *     r0 & r1
+    *   }
+    */
+  def conjoin(calls: ISZ[ST]): ST = {
+    if (calls.size == 1) {
+      return calls(0)
+    }
+    val valDecls: ISZ[ST] = for (i <- 0 until calls.size) yield st"val r$i = ${calls(i)}"
+    val refs: ISZ[ST] = for (i <- 0 until calls.size) yield st"r$i"
+    return (
+      st"""{
+          |  ${(valDecls, "\n")}
+          |
+          |  ${(refs, " & ")}
+          |}""")
+  }
+
+  /** Like [[conjoin]] but for composite contract methods (e.g. CEP-Pre, CEP-Post, IEP-Post)
+    * that group calls under labeled sections (D-Inv-Guard, I-Assm-Guard, CEP-Guar, etc.).
+    * Each segment is a (comment, calls) pair. A single call preserves its comment:
+    *   {
+    *     // CEP-Guar: ...
+    *     compute_CEP_T_Guar(...)
+    *   }
+    * Multiple calls get val bindings with comments, conjoined at the end:
+    *   {
+    *     // D-Inv-Guard: ...
+    *     val r0 = inv1(x)
+    *     val r1 = inv2(y)
+    *
+    *     // CEP-Guar: ...
+    *     val r2 = compute_CEP_T_Guar(...)
+    *
+    *     r0 & r1 & r2
+    *   }
+    */
+  def conjoinSegments(segments: ISZ[(ST, ISZ[ST])]): ST = {
+    var totalCalls: Z = 0
+    for (s <- segments) {
+      totalCalls = totalCalls + s._2.size
+    }
+    if (totalCalls == 1) {
+      return (
+        st"""{
+            |  // ${segments(0)._1}
+            |  ${segments(0)._2(0)}
+            |}""")
+    }
+    var valBlocks: ISZ[ST] = ISZ()
+    var counter: Z = 0
+    for (seg <- segments) {
+      var block: ISZ[ST] = ISZ(st"// ${seg._1}")
+      for (call <- seg._2) {
+        block = block :+ st"val r$counter = $call"
+        counter = counter + 1
+      }
+      valBlocks = valBlocks :+ st"${(block, "\n")}"
+    }
+    val refs: ISZ[ST] = for (i <- 0 until counter) yield st"r$i"
+    return (
+      st"""{
+          |  ${(valBlocks, "\n\n")}
+          |
+          |  ${(refs, " & ")}
+          |}""")
+  }
+
   def processDescriptor(descriptor: Option[String], pad: String): Option[ST] = {
     def getPipeLoc(cis: ISZ[C]): Z = {
       var firstNonSpace: Z = 0
@@ -395,7 +469,7 @@ object GumboXGen {
                 |  */
                 |@strictpure def ${simpleName} (
                 |    ${(for (p <- sorted_IEP_Guar_Params) yield p.getParamDef, ",\n")}): B =
-                |  ${(combinedSpecCalls, " &\n")}"""
+                |  ${GumboXGen.conjoin(combinedSpecCalls)}"""
           (combinedInitializeMethodName, content)
         }
 
@@ -449,21 +523,15 @@ object GumboXGen {
     val iepPostMethodName = GumboXGen.getInitialize_IEP_Post_MethodName(componentNames)
     val simple_IEP_Post = ops.ISZOps(iepPostMethodName).last
 
-    var segments: ISZ[ST] = ISZ()
+    var segments: ISZ[(ST, ISZ[ST])] = ISZ()
     if (D_Inv_Guards.nonEmpty) {
-      segments = segments :+
-        st"""// D-Inv-Guard: Datatype invariants for the types associated with ${component.identifier}'s state variables and outgoing ports
-            |${(D_Inv_Guards, " &\n")}"""
+      segments = segments :+ (st"D-Inv-Guard: Datatype invariants for the types associated with ${component.identifier}'s state variables and outgoing ports", D_Inv_Guards)
     }
     if (I_Guar_Guard.nonEmpty) {
-      segments = segments :+
-        st"""// I-Guar-Guard: Integration constraints for ${component.identifier}'s outgoing ports"
-            |${(I_Guar_Guard, " &\n")}"""
+      segments = segments :+ (st"I-Guar-Guard: Integration constraints for ${component.identifier}'s outgoing ports", I_Guar_Guard)
     }
     if (IEP_Guard.nonEmpty) {
-      segments = segments :+
-        st"""// IEP-Guar: Initialize Entrypoint contract for ${component.identifier}
-            |${(IEP_Guard, " &\n")}"""
+      segments = segments :+ (st"IEP-Guar: Initialize Entrypoint contract for ${component.identifier}", IEP_Guard)
     }
 
     if (segments.nonEmpty) {
@@ -474,7 +542,7 @@ object GumboXGen {
             |  */
             |@strictpure def ${simple_IEP_Post} (
             |    ${(for (p <- sorted_IEP_Post_Params) yield p.getParamDef, ",\n")}): B =
-            |  (${(segments, " & \n\n")})"""
+            |  ${GumboXGen.conjoinSegments(segments)}"""
 
       val simple_IEP_Post_container = ops.ISZOps(GumboXGen.getInitialize_IEP_Post_Container_MethodName(componentNames)).last
       val postContainerName = GumboXGenUtil.genContainerName(componentNames.componentSingletonType, F, T)
@@ -603,7 +671,7 @@ object GumboXGen {
                   |  */
                   |@strictpure def ${simpleName} (
                   |    ${(for (p <- sorted_CEP_T_Assm_Params) yield p.getParamDef, ",\n")}): B =
-                  |  ${(topLevelAssumeCallsCombined, " &\n")}"""
+                  |  ${GumboXGen.conjoin(topLevelAssumeCallsCombined)}"""
             CEP_T_Assm = Some(
               ContractHolder(CEP_T_Assm_MethodName, sorted_CEP_T_Assm_Params, localGumboStore.imports, content)
             )
@@ -622,7 +690,7 @@ object GumboXGen {
                   |  */
                   |@strictpure def ${simpleName} (
                   |    ${(for (p <- sorted_CEP_T_Guar_Params) yield p.getParamDef, ",\n")}): B =
-                  |  ${(topLevelGuaranteesCombined, " &\n")}"""
+                  |  ${GumboXGen.conjoin(topLevelGuaranteesCombined)}"""
             CEP_T_Guar = Some(
               ContractHolder(CEP_T_Guar_MethodName, sorted_CEP_T_Guar_Params, localGumboStore.imports, content)
             )
@@ -693,7 +761,7 @@ object GumboXGen {
                 |  */
                 |@strictpure def ${simpleName} (
                 |    ${(for (p <- sorted_CEP_T_Case_Params) yield p.getParamDef, ",\n")}): B =
-                |  ${(caseCallsCombined, " &\n")}"""
+                |  ${GumboXGen.conjoin(caseCallsCombined)}"""
           CEP_T_Case = Some(
             ContractHolder(CEP_T_Case_MethodName, sorted_CEP_T_Case_Params, localGumboStore.imports, content)
           )
@@ -760,7 +828,7 @@ object GumboXGen {
                   |@strictpure def ${simpleName} (
                   |    ${(for (p <- sorted_CEP_H_Guar_Params) yield p.getParamDef, ",\n")}): B =
                   |  ${aadlPortParam.name}.nonEmpty ___>: (
-                  |    ${(handlers_Guarantees_Calls_Combined, " &\n")})"""
+                  |    ${GumboXGen.conjoin(handlers_Guarantees_Calls_Combined)})"""
             CEP_T_Handlers = CEP_T_Handlers :+
               ContractHolder(CEP_T_Guar_MethodName, sorted_CEP_H_Guar_Params, localGumboStore.imports, content)
           }
@@ -817,21 +885,17 @@ object GumboXGen {
         val cepPreMethodName = GumboXGen.getCompute_CEP_Pre_MethodName(componentNames)
         val simpleCepPre = ops.ISZOps(cepPreMethodName).last
 
-        @strictpure def pre_opt(sts: ISZ[ST], desc: String): ST =
-          st"""// $desc
-              |${(sts, " & \n")}"""
-
         val sorted_Cep_Pre_Params = sortParam(CEP_Pre_Params.elements)
 
-        var segments: ISZ[ST] = ISZ()
+        var segments: ISZ[(ST, ISZ[ST])] = ISZ()
         if (D_Inv_Guards.nonEmpty) {
-          segments = segments :+ pre_opt(D_Inv_Guards, s"D-Inv-Guard: Datatype invariants for the types associated with ${component.identifier}'s state variables and incoming ports")
+          segments = segments :+ (st"D-Inv-Guard: Datatype invariants for the types associated with ${component.identifier}'s state variables and incoming ports", D_Inv_Guards)
         }
         if (I_Assm_Guard.nonEmpty) {
-          segments = segments :+ pre_opt(I_Assm_Guard, s"I-Assm-Guard: Integration constraints for ${component.identifier}'s incoming ports")
+          segments = segments :+ (st"I-Assm-Guard: Integration constraints for ${component.identifier}'s incoming ports", I_Assm_Guard)
         }
         if (CEP_Assm_call.nonEmpty) {
-          segments = segments :+ pre_opt(ISZ(CEP_Assm_call.get), s"CEP-Assm: assume clauses of ${component.identifier}'s compute entrypoint")
+          segments = segments :+ (st"CEP-Assm: assume clauses of ${component.identifier}'s compute entrypoint", ISZ(CEP_Assm_call.get))
         }
 
         val cep_pre =
@@ -841,7 +905,7 @@ object GumboXGen {
               |  */
               |@strictpure def ${simpleCepPre} (
               |    ${(for (p <- sorted_Cep_Pre_Params) yield p.getParamDef, ",\n")}): B =
-              |  (${(segments, " & \n\n")})"""
+              |  ${GumboXGen.conjoinSegments(segments)}"""
 
         val simpleCepPreContainer = ops.ISZOps(GumboXGen.getCompute_CEP_Pre_Container_MethodName(componentNames)).last
         val preContainerName_wL = GumboXGenUtil.genContainerName(componentNames.componentSingletonType, T, T)
@@ -949,27 +1013,23 @@ object GumboXGen {
         val simpleCepPost = ops.ISZOps(cepPostMethodName).last
 
 
-        @strictpure def opt(sts: ISZ[ST], desc: String): ST =
-          st"""// $desc
-              |${(sts, " & \n")}"""
-
         val sorted_Cep_Post_Params = sortParam(CEP_Post_Params.elements)
 
-        var segments: ISZ[ST] = ISZ()
+        var segments: ISZ[(ST, ISZ[ST])] = ISZ()
         if (D_Inv_Guards.nonEmpty) {
-          segments = segments :+ opt(D_Inv_Guards, s"D-Inv-Guard: Datatype invariants for the types associated with ${component.identifier}'s state variables and outgoing ports")
+          segments = segments :+ (st"D-Inv-Guard: Datatype invariants for the types associated with ${component.identifier}'s state variables and outgoing ports", D_Inv_Guards)
         }
         if (I_Guar_Guard.nonEmpty) {
-          segments = segments :+ opt(I_Guar_Guard, s"I-Guar-Guard: Integration constraints for ${component.identifier}'s outgoing ports")
+          segments = segments :+ (st"I-Guar-Guard: Integration constraints for ${component.identifier}'s outgoing ports", I_Guar_Guard)
         }
         if (CEP_Guar_call.nonEmpty) {
-          segments = segments :+ opt(ISZ(CEP_Guar_call.get), s"CEP-Guar: guarantee clauses of ${component.identifier}'s compute entrypoint")
+          segments = segments :+ (st"CEP-Guar: guarantee clauses of ${component.identifier}'s compute entrypoint", ISZ(CEP_Guar_call.get))
         }
         if (CEP_T_Case_call.nonEmpty) {
-          segments = segments :+ opt(ISZ(CEP_T_Case_call.get), s"CEP-T-Case: case clauses of ${component.identifier}'s compute entrypoint")
+          segments = segments :+ (st"CEP-T-Case: case clauses of ${component.identifier}'s compute entrypoint", ISZ(CEP_T_Case_call.get))
         }
         if (CEP_T_Handler_calls.nonEmpty) {
-          segments = segments :+ opt(CEP_T_Handler_calls, s"CEP-T-Handlers: handler clauses of ${component.identifier}'s compute entrypoint")
+          segments = segments :+ (st"CEP-T-Handlers: handler clauses of ${component.identifier}'s compute entrypoint", CEP_T_Handler_calls)
         }
 
         val cep_post =
@@ -979,7 +1039,7 @@ object GumboXGen {
               |  */
               |@strictpure def ${simpleCepPost} (
               |    ${(for (p <- sorted_Cep_Post_Params) yield p.getParamDef, ",\n")}): B =
-              |  (${(segments, " & \n\n")})"""
+              |  ${GumboXGen.conjoinSegments(segments)}"""
 
         val simpleCepPostContainer = ops.ISZOps(GumboXGen.getCompute_CEP_Post_Container_MethodName(componentNames)).last
         val preContainerName = GumboXGenUtil.genContainerName(componentNames.componentSingletonType, T, T)
