@@ -818,6 +818,13 @@ object GumboXGen {
             val sorted_CEP_H_Guar_Params = sortParam(handlers_Guar_Params.elements)
             val CEP_T_Guar_MethodName = GumboXGen.getCompute_CEP_T_Handler_Guarantee_MethodName(handler.port, componentNames)
             val simpleName = ops.ISZOps(CEP_T_Guar_MethodName).last
+
+            val body: ST = if (handlers_Guarantees_Calls_Combined.size == 1)
+              st"""{
+                  |  ${handlers_Guarantees_Calls_Combined(0)}
+                  |}"""
+            else GumboXGen.conjoin(handlers_Guarantees_Calls_Combined)
+
             val content =
               st"""${(handlers_Guarantees_Methods, "\n\n")}
                   |
@@ -826,9 +833,12 @@ object GumboXGen {
                   |  ${(paramsToComment(sorted_CEP_H_Guar_Params), "\n")}
                   |  */
                   |@strictpure def ${simpleName} (
-                  |    ${(for (p <- sorted_CEP_H_Guar_Params) yield p.getParamDef, ",\n")}): B =
-                  |  ${aadlPortParam.name}.nonEmpty ___>: (
-                  |    ${GumboXGen.conjoin(handlers_Guarantees_Calls_Combined)})"""
+                  |    ${(for (p <- sorted_CEP_H_Guar_Params) yield p.getParamDef, ",\n")}): B = {
+                  |  if (${aadlPortParam.name}.isEmpty) {
+                  |    T
+                  |  } else
+                  |  $body
+                  |}"""
             CEP_T_Handlers = CEP_T_Handlers :+
               ContractHolder(CEP_T_Guar_MethodName, sorted_CEP_H_Guar_Params, localGumboStore.imports, content)
           }
