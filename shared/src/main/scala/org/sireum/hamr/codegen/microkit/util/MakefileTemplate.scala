@@ -184,6 +184,10 @@ object MakefileTemplate {
                               buildEntries: ISZ[ST],
                               elfEntries: ISZ[String],
                               miscTargets: ISZ[MakefileTarget]): ST = {
+    val miscTargetsOpt: Option[ST] =
+      if (miscTargets.nonEmpty) Some(st"""${(for(t <- miscTargets) yield t.prettyST, "\n\n")}""")
+      else None()
+
     val buildEntriesOpt: Option[ST] =
       if(buildEntries.isEmpty) None()
       else Some(st"""${(buildEntries, "\n\n")}
@@ -308,6 +312,8 @@ object MakefileTemplate {
           |clobber:: clean
           |${TAB}rm -f *.a
           |${TAB}rm -f $${IMAGE_FILE} $${REPORT_FILE}
+          |
+          |$miscTargetsOpt
           |"""
     return content
   }
