@@ -2,13 +2,14 @@
 package org.sireum.hamr.codegen.microkit.types
 
 import org.sireum._
+import org.sireum.hamr.codegen.common.CommonUtil.Store
 import org.sireum.hamr.codegen.common.properties.{HamrProperties, OsateProperties, PropertyUtil}
 import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlEventPort, AadlFeatureData, AadlPort, GclAnnexClauseInfo, GclAnnexLibInfo, SymbolTable}
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypeNameProvider, AadlTypes, ArraySizeKind, ArrayType, BaseType, BitType, EnumType, RecordType, SlangType, TypeKind, TypeUtil}
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen
 import org.sireum.hamr.codegen.microkit.connections._
-import org.sireum.hamr.codegen.microkit.plugins.c.types.CTypeProvider
+import org.sireum.hamr.codegen.microkit.plugins.c.types.{CTypePlugin, CTypeProvider}
 import org.sireum.hamr.codegen.microkit.plugins.rust.types.{CRustTypePlugin, CRustTypeProvider}
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.brand
 import org.sireum.hamr.ir
@@ -291,7 +292,7 @@ object MicrokitTypeUtil {
     *         will be mapped to an array based version where the dimension is the largest String dimension
     *         seen in the model, default is 100)
     */
-  @pure def getAllTouchedTypes(aadlTypes: AadlTypes, symbolTable: SymbolTable, reporter: Reporter): (ISZ[String], Map[String, AadlType]) = {
+  @pure def getAllTouchedTypes(aadlTypes: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): (ISZ[String], Map[String, AadlType]) = {
     var ret: Set[AadlType] = Set.empty
 
     var maxStringDim: Z = 0
@@ -367,6 +368,18 @@ object MicrokitTypeUtil {
           case d: AadlFeatureData => add(port.feature.identifier.pos, d.aadlType)
           case _ =>
         }
+      }
+    }
+
+    // Process force-touched types registered via CTypePlugin.addToForceTouchedTypes.
+    // These are types that must appear in the generated C type artifacts even though
+    // no thread port references them (e.g. MCS scheduler types when runtime monitoring
+    // is disabled).  The add() call handles transitive dependencies (record fields,
+    // array base types) so only the top-level classifiers need to be registered.
+    for (forcedTypeClassifier <- CTypePlugin.getForceTouchedTypes(store)) {
+      aadlTypes.typeMap.get(forcedTypeClassifier) match {
+        case Some(t) => add(None(), t)
+        case _ =>
       }
     }
 

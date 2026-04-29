@@ -3,7 +3,7 @@
 package org.sireum.hamr.codegen.microkit.plugins.c.types
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.CommonUtil.{Store, StoreValue}
+import org.sireum.hamr.codegen.common.CommonUtil.{Store, StoreValue, ISZValue, TypeIdPath}
 import org.sireum.hamr.codegen.common.StringUtil
 import org.sireum.hamr.codegen.common.containers.Resource
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
@@ -24,10 +24,32 @@ object CTypePlugin {
 
   @strictpure def putCTypeProvider(c: CTypeProvider, store: Store): Store = store + KEY_MicrokitCTypeProvider ~> c
 
+
+  // Type classifiers that must be treated as "touched" even though no thread
+  // port references them.  This is consumed in two places:
+  //   1. MicrokitTypeUtil.getAllTouchedTypes — includes them in the ordered
+  //      dependency list so CTypePlugin generates their struct definitions
+  //      in sb_aadl_types.h.
+  //   2. CConnectionProviderPlugin — generates the queue wrapper C files
+  //      (sb_queue_*.h/.c), Makefile object entries, and sb_types.h includes
+  //      that are normally driven by port connections.
+  val KEY_ForceTouchedTypes: String = "KEY_FORCE_TOUCHED_TYPES"
+
+  @strictpure def addToForceTouchedTypes(typeNames: ISZ[String], store: Store): Store =
+    store + (KEY_ForceTouchedTypes ~> (ISZValue(getForceTouchedTypes(store) ++ typeNames)))
+
+  @strictpure def getForceTouchedTypes(store: Store): ISZ[String] = {
+    val e = store.getOrElse(KEY_ForceTouchedTypes, ISZValue[String](ISZ())).asInstanceOf[ISZValue[String]]
+    e.elements
+  }
+
+
+
   // TODO: maybe move everything below into the Store
   @strictpure def getArrayStringByteSizeDefineName(arrayTypeNampeProvider: CTypeNameProvider): String = st"${(arrayTypeNampeProvider.mangledName, "_")}_BYTE_SIZE".render
 
   @strictpure def getArrayStringDimDefineName(arrayTypeNampeProvider: CTypeNameProvider, dim: Z): String = st"${(arrayTypeNampeProvider.mangledName, "_")}_DIM_$dim".render
+
 }
 
 @sig trait CTypeNameProvider {

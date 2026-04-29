@@ -36,7 +36,7 @@ object MicrokitLinterPlugin {
     val allProcesses = symbolTable.getProcesses()
 
     // getAllTouchedTypes also lints the touched types
-    val touchedTypes = MicrokitTypeUtil.getAllTouchedTypes(types, symbolTable, reporter)
+    val touchedTypes = MicrokitTypeUtil.getAllTouchedTypes(types, symbolTable, localStore, reporter)
     localStore = localStore + MicrokitLinterPlugin.KEY_MicrokitLinter ~>
       TouchedTypes(touchedTypes._1, touchedTypes._2)
 

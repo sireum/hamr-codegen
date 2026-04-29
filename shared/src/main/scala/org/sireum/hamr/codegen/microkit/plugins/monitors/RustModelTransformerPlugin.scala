@@ -34,6 +34,9 @@ object RustModelTransformerPlugin {
 
   @strictpure def haveHandledModelTransform(store: Store): B = store.contains(KEY_RustModelTransformerPlugin)
 
+  @strictpure def isMCS(symbolTable: SymbolTable): B =
+    CComponentPlugin.getSchedulingType(symbolTable.rootSystem) == Hamr_Microkit_Properties.SchedulingType.MCS
+
   @pure override def canHandleModelTransform(model: Aadl,
                                               options: HamrCli.CodegenOption,
                                               types: AadlTypes,
@@ -43,7 +46,7 @@ object RustModelTransformerPlugin {
       !isDisabled(store) &&
       !haveHandledModelTransform(store) &&
       !reporter.hasError &&
-      options.runtimeMonitoring
+      (options.runtimeMonitoring || isMCS(symbolTable))
   }
       // && GumboXRustUtil.hasGumbo(model, symbolTable)
 
@@ -55,14 +58,29 @@ object RustModelTransformerPlugin {
                                     reporter: Reporter): Option[(Store, Aadl, AadlTypes, SymbolTable)] = {
     var localStore = store + KEY_RustModelTransformerPlugin ~> BoolValue(T)
 
-    val isMCS: B = CComponentPlugin.getSchedulingType(symbolTable.rootSystem) == Hamr_Microkit_Properties.SchedulingType.MCS
-    val rmodel = MonitorInjector.inject(model, symbolTable, isMCS, reporter)
+    val mcs: B = isMCS(symbolTable)
+
+    val rmodel: Aadl =
+      if (options.runtimeMonitoring) {
+        val s = MonitorInjector.inject(model, symbolTable, mcs, localStore, reporter)
+        localStore = s._2
+        s._1
+      } else if (mcs) {
+        val s = MonitorInjector.injectMCSTypes(model.dataComponents, localStore)
+        localStore = s._2
+        model(dataComponents = s._1)
+      } else {
+        return None()
+      }
+
     if (!reporter.hasError) {
       val reResult = ModelUtil.resolve(rmodel, rmodel.components(0).identifier.pos, "", options, localStore, reporter)
       localStore = reResult._2
       if (reResult._1.nonEmpty) {
-        val monitorThreadPath = rmodel.components(0).identifier.name :+ MonitorInjector.monitorProcessId :+ MonitorInjector.monitorThreadId
-        localStore = StoreUtil.addPluginGeneratedComponent(monitorThreadPath, localStore)
+        if (options.runtimeMonitoring) {
+          val monitorThreadPath = rmodel.components(0).identifier.name :+ MonitorInjector.monitorProcessId :+ MonitorInjector.monitorThreadId
+          localStore = StoreUtil.addPluginGeneratedComponent(monitorThreadPath, localStore)
+        }
         return Some((localStore, reResult._1.get.model, reResult._1.get.types, reResult._1.get.symbolTable))
       }
     }
@@ -74,6 +92,7 @@ object RustModelTransformerPlugin {
 
   @pure override def canHandle(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): B = {
     return !reporter.hasError &&
+      options.runtimeMonitoring &&
       haveHandledModelTransform(store) &&
       SystemDescriptionProviderPlugin.getMSDs(store).nonEmpty &&
       !hasHandled(store) &&
