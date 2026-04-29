@@ -158,7 +158,7 @@ object GumboRustPlugin {
       assert(gclLib.name.size == 2 && gclLib.name(1) == "GUMBO__Library", gclLib.name.string)
       val name = gclLib.name(0)
 
-      val (verusLibFuns, developerVerusUifs): (ISZ[RAST.Item], ISZ[RAST.Item]) = handleGclLibrary(gclLib, symbolTable, types, store, reporter)
+      val (verusLibFuns, developerVerusUifs): (ISZ[RAST.Item], ISZ[RAST.Item]) = handleGclLibrary(gclLib, options, symbolTable, types, store, reporter)
 
 
       libraryAnnexes = libraryAnnexes + name ~> GumboRustPlugin.LibraryAnnex(
@@ -176,10 +176,19 @@ object GumboRustPlugin {
       val subclauseInfo = GumboRustUtil.getGumboSubclauseOrDummy(threadPath, symbolTable)
       val componentContributions = CRustComponentPlugin.getCRustComponentContributions(localStore)
       val threadContributions = componentContributions.componentContributions.get(threadPath).get
+      var appUses = threadContributions.appUses
       var structDef = threadContributions.appStructDef
-      val structImpl = threadContributions.appStructImpl.asInstanceOf[RAST.ImplBase]
-      var crateLevelEntries = threadContributions.crateLevelEntries
+      var structImpl = threadContributions.appStructImpl.asInstanceOf[RAST.ImplBase]
+      var moduleLevelEntries = threadContributions.moduleLevelEntries
       val crateDependencies = threadContributions.crateDependencies ++ crateDeps
+
+      appUses = appUses :+ RAST.Use(ISZ(), RAST.IdentString("vstd::prelude::*"))
+
+      if (options.verusAttributeSyntax) {
+        val verusVerify = RAST.AttributeST(inner = F, content = st"verus_verify")
+        structDef = structDef(attributes = structDef.attributes :+ verusVerify)
+        structImpl = structImpl(attributes = structImpl.attributes :+ verusVerify)
+      }
 
       var optStateVarInits: ISZ[RAST.Item] = ISZ()
       if (subclauseInfo.annex.state.nonEmpty) {
@@ -201,7 +210,8 @@ object GumboRustPlugin {
                   outputs = RAST.FnRetTyImpl(RAST.TyPath(items = ISZ(np.qualifiedRustNameS), aadlType = Some(aadlType.classifier)))
                 ),
                 verusHeader = None(), generics = None()),
-              attributes = ISZ(), contract = None(), meta =  ISZ(),
+              attributes = ISZ(), meta =  ISZ(),
+              verusAttributeSyntax = options.verusAttributeSyntax, contract = None(),
               body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
                 st"""unsafe {
                     |  match &crate::app {
@@ -221,7 +231,8 @@ object GumboRustPlugin {
                   inputs = ISZ(RAST.ParamImpl(ident = RAST.IdentString("value"), kind = typ)),
                   outputs = RAST.FnRetTyDefault()),
                 verusHeader = None(), generics = None()),
-              attributes = ISZ(), contract = None(), meta =  ISZ(),
+              attributes = ISZ(), meta =  ISZ(),
+              verusAttributeSyntax = options.verusAttributeSyntax, contract = None(),
               body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
                 st"""unsafe {
                     |  match &mut crate::app {
@@ -272,6 +283,7 @@ object GumboRustPlugin {
                 isLibraryMethod = F,
 
                 inVerus = T,
+                options = options,
 
                 aadlTypes = types,
                 tp = CRustTypePlugin.getCRustTypeProvider(localStore).get,
@@ -292,6 +304,7 @@ object GumboRustPlugin {
                 isLibraryMethod = F,
 
                 inVerus = T,
+                options = options,
 
                 aadlTypes = types,
                 tp = CRustTypePlugin.getCRustTypeProvider(localStore).get,
@@ -303,14 +316,22 @@ object GumboRustPlugin {
 
         val m = Marker.createSlashMarker(GumboRustUtil.GumboMarkers.gumboMethods)
         markers = markers :+ m
-        crateLevelEntries = crateLevelEntries :+ RAST.MarkerWrap(m, verusFuns, "\n\n", None())
+        val marked = RAST.MarkerWrap(m, verusFuns, "\n\n", None())
 
-        crateLevelEntries = crateLevelEntries ++ developerUifFuns
+
+        val items: ISZ[RAST.Item] = if (options.verusAttributeSyntax) {
+          // gumbo and uif functions use 'open', 'spec', etc so need to be wrapped in verus macro
+          ISZ(RAST.MacCall(macName = "verus", items = ISZ[RAST.Item](marked) ++ developerUifFuns))
+        } else {
+          marked +: developerUifFuns
+        }
+
+        moduleLevelEntries = moduleLevelEntries ++ items
 
       } else {
         val m = Marker.createSlashPlaceholderMarker(GumboRustUtil.GumboMarkers.gumboMethods)
         markers = markers :+ m
-        crateLevelEntries = crateLevelEntries :+ RAST.MarkerPlaceholder(m)
+        moduleLevelEntries = moduleLevelEntries :+ RAST.MarkerPlaceholder(m)
       }
 
       if (subclauseInfo.annex.integration.nonEmpty) {
@@ -452,18 +473,21 @@ object GumboRustPlugin {
         }
       }
 
-      var annotatedCrateLevelItems: ISZ[RAST.Item] = ISZ()
-      for (f <- crateLevelEntries) {
+      var annotatedModuleLevelItems: ISZ[RAST.Item] = ISZ()
+      val externalBodyAttr: ST =
+        if (options.verusAttributeSyntax) st"verus_verify(external_body)"
+        else st"verifier::external_body"
+      for (f <- moduleLevelEntries) {
         f match {
           case (fi: RAST.FnImpl) if fi.ident.string == "log_info" || fi.ident.string == "log_warn_channel" =>
             val attrs = fi.attributes
-            annotatedCrateLevelItems = annotatedCrateLevelItems :+ fi(
-              attributes =  attrs :+ RAST.AttributeST(F, st"verifier::external_body"))
+            annotatedModuleLevelItems = annotatedModuleLevelItems :+ fi(
+              attributes =  attrs :+ RAST.AttributeST(F, externalBodyAttr))
           case _ =>
-            annotatedCrateLevelItems = annotatedCrateLevelItems :+ f
+            annotatedModuleLevelItems = annotatedModuleLevelItems :+ f
         }
       }
-      crateLevelEntries = annotatedCrateLevelItems
+      moduleLevelEntries = annotatedModuleLevelItems
 
       localStore = CRustComponentPlugin.putComponentContributions(
         componentContributions.replaceComponentContributions(
@@ -471,9 +495,10 @@ object GumboRustPlugin {
             threadContributions(
               markers = markers,
               requiresVerus = T,
+              appUses = appUses,
               appStructDef = structDef,
               appStructImpl = structImpl(items = updatedImplItems),
-              crateLevelEntries = annotatedCrateLevelItems,
+              moduleLevelEntries = annotatedModuleLevelItems,
               crateDependencies = crateDependencies)),
         localStore)
 
@@ -488,6 +513,7 @@ object GumboRustPlugin {
   }
 
   @pure def handleGclLibrary(gclLib: GclAnnexLibInfo,
+                             options: HamrCli.CodegenOption,
                              symbolTable: SymbolTable,
                              types: AadlTypes,
                              store: Store,
@@ -507,6 +533,8 @@ object GumboRustPlugin {
             isLibraryMethod = T,
 
             inVerus = T,
+            options = options,
+
             aadlTypes = types,
             tp = CRustTypePlugin.getCRustTypeProvider(store).get,
             gclSymbolTable = gclSymbolTable,
@@ -525,6 +553,8 @@ object GumboRustPlugin {
             isLibraryMethod = T,
 
             inVerus = T,
+            options = options,
+
             aadlTypes = types,
             tp = CRustTypePlugin.getCRustTypeProvider(store).get,
             gclSymbolTable = gclSymbolTable,

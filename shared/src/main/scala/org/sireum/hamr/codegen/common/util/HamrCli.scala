@@ -57,6 +57,7 @@ object HamrCli {
     val maxStringSize: Z,
     val maxArraySize: Z,
     val runTranspiler: B,
+    val verusAttributeSyntax: B,
     val sel4OutputDir: Option[String],
     val sel4AuxCodeDirs: ISZ[String],
     val workspaceRootDir: Option[String],
@@ -184,6 +185,10 @@ import HamrCli._
           |-t, --run-transpiler     Run Transpiler during HAMR Codegen
           |
           |CAmkES/Microkit Options:
+          |    --verus-attribute-syntax
+          |                          Use Verus attribute syntax (#[verus_spec],
+          |                           #[verus_verify]) instead of the verus! macro for
+          |                           exec functions
           |    --sel4-output-dir    Output directory for the generated CAmkES/Microkit
           |                           project files (expects a path)
           |    --sel4-aux-code-dirs Directories containing C files to be included in
@@ -207,15 +212,9 @@ import HamrCli._
           |                          The programming language for the launch file (expects
           |                           one of { Python, Xml }; default: Python)
           |    --invert-topic-binding
-<<<<<<< HEAD
           |                          By default, topic names are based on in ports, and
           |                           fan out ports would have multiple publishers.  This
           |                           option inverts that behavior.
-=======
-          |                          By default, topic names are based on in ports, and fan
-          |                           out ports would have multiple publishers.  This option
-          |                           inverts that behavior."
->>>>>>> b76ef58 (Added ROS2 codegen option (invertTopicBinding) and added topic inversion option into generator)
           |
           |Experimental Options:
           |-x, --experimental-options    
@@ -240,6 +239,7 @@ import HamrCli._
     var maxStringSize: Z = 100
     var maxArraySize: Z = 100
     var runTranspiler: B = false
+    var verusAttributeSyntax: B = false
     var sel4OutputDir: Option[String] = None[String]()
     var sel4AuxCodeDirs: ISZ[String] = ISZ[String]()
     var workspaceRootDir: Option[String] = None[String]()
@@ -372,6 +372,12 @@ import HamrCli._
              case Some(v) => runTranspiler = v
              case _ => return None()
            }
+         } else if (arg == "--verus-attribute-syntax") {
+           val o: Option[B] = { j = j - 1; Some(!verusAttributeSyntax) }
+           o match {
+             case Some(v) => verusAttributeSyntax = v
+             case _ => return None()
+           }
          } else if (arg == "--sel4-output-dir") {
            val o: Option[Option[String]] = parsePath(args, j + 1)
            o match {
@@ -441,7 +447,7 @@ import HamrCli._
         isOption = F
       }
     }
-    return Some(CodegenOption(help, parseArguments(args, j), msgpack, verbose, runtimeMonitoring, platform, outputDir, parseableMessages, slangOutputDir, packageName, noProyekIve, noEmbedArt, devicesAsThreads, genSbtMill, slangAuxCodeDirs, slangOutputCDir, excludeComponentImpl, bitWidth, maxStringSize, maxArraySize, runTranspiler, sel4OutputDir, sel4AuxCodeDirs, workspaceRootDir, strictAadlMode, ros2OutputWorkspaceDir, ros2Dir, ros2NodesLanguage, ros2LaunchLanguage, invertTopicBinding, experimentalOptions))
+    return Some(CodegenOption(help, parseArguments(args, j), msgpack, verbose, runtimeMonitoring, platform, outputDir, parseableMessages, slangOutputDir, packageName, noProyekIve, noEmbedArt, devicesAsThreads, genSbtMill, slangAuxCodeDirs, slangOutputCDir, excludeComponentImpl, bitWidth, maxStringSize, maxArraySize, runTranspiler, verusAttributeSyntax, sel4OutputDir, sel4AuxCodeDirs, workspaceRootDir, strictAadlMode, ros2OutputWorkspaceDir, ros2Dir, ros2NodesLanguage, ros2LaunchLanguage, invertTopicBinding, experimentalOptions))
   }
 
   def parseArguments(args: ISZ[String], i: Z): ISZ[String] = {

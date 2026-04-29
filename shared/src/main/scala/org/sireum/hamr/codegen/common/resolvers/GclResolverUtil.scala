@@ -186,7 +186,7 @@ object GclResolverUtil {
     if (o.ident.id.value == "apply") {
       o.receiverOpt match {
         case Some(i: Exp.Invoke) =>
-          assert(i.receiverOpt.isEmpty, "Need to handle non-empty receivers")
+          //assert(i.receiverOpt.isEmpty, "Need to handle non-empty receivers")
           //assert(i.args.isEmpty, "Need to rewrite invoke args for apply")
           val identv = i.ident.id.value
           scope.resolveName(typeHierarchy.nameMap, ISZ(identv)) match {

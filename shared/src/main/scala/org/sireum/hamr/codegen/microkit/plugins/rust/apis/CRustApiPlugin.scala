@@ -153,7 +153,7 @@ object ComponentApiContributions {
           val full: ComponentApiContributions = if (svPort.direction == Direction.In) {
             CRustApiUtil.processInPort(srcThread, svPort, crustTypeProvider, apiPorts)
           } else {
-            CRustApiUtil.processOutPort(srcThread, svPort, crustTypeProvider, apiPorts)
+            CRustApiUtil.processOutPort(srcThread, svPort, crustTypeProvider, apiPorts )
           }
           contributions = contributions.combine(ComponentApiContributions.empty(
             externCApis = full.externCApis,
@@ -235,6 +235,62 @@ object ComponentApiContributions {
         val appInterfaceName = CRustApiPlugin.applicationApiType(thread)
         val initApiTypeName = CRustApiPlugin.initializationApiType(thread)
         val computeApiTypeName = CRustApiPlugin.computeApiType(thread)
+
+        // TODO: switch to verus attribute syntax once ghost struct fields and (res : Type)
+        //   return-value naming have attribute-syntax equivalents
+        val macCall = RAST.MacCall(macName = "verus", items = ISZ(RAST.ItemST(
+          st"""pub trait $apiTraitName {}
+              |
+              |pub trait $apiPutTraitName: $apiTraitName {
+              |  ${(for (f <- c._2.unverifiedPutApis) yield f.prettyST, "\n\n")}
+              |}
+              |
+              |pub trait $apiGetTraitName: $apiTraitName {
+              |  ${(for (f <- c._2.unverifiedGetApis) yield f.prettyST, "\n\n")}
+              |}
+              |
+              |pub trait $apiFullTraitName: $apiPutTraitName + $apiGetTraitName {}
+              |
+              |pub struct $appInterfaceName<API: $apiTraitName> {
+              |  pub api: API,
+              |
+              |  ${(for (g <- c._2.ghostVariables) yield g.prettyST, ",\n")}
+              |}
+              |
+              |impl<API: $apiPutTraitName> $appInterfaceName<API> {
+              |  ${(for (f <- c._2.appApiDefaultPutters) yield f.prettyST)}
+              |}
+              |
+              |impl<API: $apiGetTraitName> $appInterfaceName<API> {
+              |  ${(for (f <- c._2.appApiDefaultGetters) yield f.prettyST)}
+              |}
+              |
+              |pub struct $initApiTypeName;
+              |impl $apiTraitName for $initApiTypeName {}
+              |impl $apiPutTraitName for $initApiTypeName {}
+              |
+              |pub const fn init_api() -> $appInterfaceName<$initApiTypeName> {
+              |  return $appInterfaceName {
+              |    api: $initApiTypeName {},
+              |
+              |    ${(for (g <- c._2.ghostInitializations) yield g.prettyST, ",\n")}
+              |  }
+              |}
+              |
+              |pub struct $computeApiTypeName;
+              |impl $apiTraitName for $computeApiTypeName {}
+              |impl $apiPutTraitName for $computeApiTypeName {}
+              |impl $apiGetTraitName for $computeApiTypeName {}
+              |impl $apiFullTraitName for $computeApiTypeName {}
+              |
+              |pub const fn compute_api() -> $appInterfaceName<$computeApiTypeName> {
+              |  return $appInterfaceName {
+              |    api: $computeApiTypeName {},
+              |
+              |    ${(for (g <- c._2.ghostInitializations) yield g.prettyST, ",\n")}
+              |  }
+              |}""")))
+
         val content =
           st"""${CommentTemplate.doNotEditComment_slash}
               |
@@ -242,59 +298,8 @@ object ComponentApiContributions {
               |use ${CRustTypePlugin.usePath};
               |use super::extern_c_api as extern_api;
               |
-              |verus! {
-              |  pub trait $apiTraitName {}
-              |
-              |  pub trait $apiPutTraitName: $apiTraitName {
-              |    ${(for(f <- c._2.unverifiedPutApis) yield f.prettyST, "\n\n")}
-              |  }
-              |
-              |  pub trait $apiGetTraitName: $apiTraitName {
-              |    ${(for(f <- c._2.unverifiedGetApis) yield f.prettyST, "\n\n")}
-              |  }
-              |
-              |  pub trait $apiFullTraitName: $apiPutTraitName + $apiGetTraitName {}
-              |
-              |  pub struct $appInterfaceName<API: $apiTraitName> {
-              |    pub api: API,
-              |
-              |    ${(for (g <- c._2.ghostVariables) yield g.prettyST, ",\n")}
-              |  }
-              |
-              |  impl<API: $apiPutTraitName> $appInterfaceName<API> {
-              |    ${(for(f <- c._2.appApiDefaultPutters) yield f.prettyST)}
-              |  }
-              |
-              |  impl<API: $apiGetTraitName> $appInterfaceName<API> {
-              |    ${(for(f <- c._2.appApiDefaultGetters) yield f.prettyST)}
-              |  }
-              |
-              |  pub struct $initApiTypeName;
-              |  impl $apiTraitName for $initApiTypeName {}
-              |  impl $apiPutTraitName for $initApiTypeName {}
-              |
-              |  pub const fn init_api() -> $appInterfaceName<$initApiTypeName> {
-              |    return $appInterfaceName {
-              |      api: $initApiTypeName {},
-              |
-              |      ${(for (g <- c._2.ghostInitializations) yield g.prettyST, ",\n")}
-              |    }
-              |  }
-              |
-              |  pub struct $computeApiTypeName;
-              |  impl $apiTraitName for $computeApiTypeName {}
-              |  impl $apiPutTraitName for $computeApiTypeName {}
-              |  impl $apiGetTraitName for $computeApiTypeName {}
-              |  impl $apiFullTraitName for $computeApiTypeName {}
-              |
-              |  pub const fn compute_api() -> $appInterfaceName<$computeApiTypeName> {
-              |    return $appInterfaceName {
-              |      api: $computeApiTypeName {},
+              |${macCall.prettyST}"""
 
-              |      ${(for (g <- c._2.ghostInitializations) yield g.prettyST, ",\n")}
-              |    }
-              |  }
-              |}"""
         val path = s"$bridgeDir/${CRustApiPlugin.apiModuleName(thread)}.rs"
         resources = resources :+ ResourceUtil.createResource(path, content, T)
       }

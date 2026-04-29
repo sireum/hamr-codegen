@@ -526,7 +526,10 @@ import org.sireum.message.Reporter
     val pacerSlot = SchedulingDomain(id = pacerSchedulingDomain, componentName = "pacer", length = pacerComputeExecutionTime, isUserPartition = F)
     val componentCount = xmlSchedulingDomains.size
 
-    usedBudget = usedBudget + (componentCount * pacerComputeExecutionTime)
+    val componentUsage = usedBudget
+    val pacerUsage = componentCount * pacerComputeExecutionTime
+
+    usedBudget = usedBudget + pacerUsage
 
     val boundProcessors = symbolTable.getAllActualBoundProcessors()
     assert(boundProcessors.size == 1, "Linter should have ensured there is exactly one bound processor")
@@ -538,7 +541,7 @@ import org.sireum.message.Reporter
     }
 
     if (usedBudget > framePeriod && !options.runtimeMonitoring) {
-      reporter.error(None(), toolName, s"Frame period ${framePeriod} is too small for the used budget ${usedBudget}")
+      reporter.error(None(), toolName, s"Frame period ${framePeriod}ms is too small for the used budget ${usedBudget}ms (${componentUsage} for components, ${pacerUsage}ms for Pacer)")
       return (localStore, resources)
     }
 

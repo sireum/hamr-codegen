@@ -18,7 +18,10 @@ object RustUtil {
         |#![allow(unused_macros)]
         |#![allow(unused_parens)]
         |#![allow(unused_unsafe)]
-        |#![allow(unused_variables)]"""
+        |#![allow(unused_variables)]
+        |
+        |#![feature(proc_macro_hygiene)]
+        |#![cfg_attr(not(verus_keep_ghost), feature(stmt_expr_attributes))]"""
 
   @pure def defaultRustToolChainToml(store: Store): ST = {
     val versions = MicrokitUtil.getMicrokitVersions(store)

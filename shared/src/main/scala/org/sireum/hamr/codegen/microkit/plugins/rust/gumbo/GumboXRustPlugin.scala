@@ -162,7 +162,7 @@ object GumboXComputeContributions {
       val name = gclLib.name(0)
 
       val (rustItems, verusDeveloperItems): (ISZ[RAST.Item], ISZ[RAST.Item]) =
-        handleGclLibrary(gclLib, symbolTable, types, store, reporter)
+        handleGclLibrary(gclLib, options, symbolTable, types, store, reporter)
 
       val libAnnex: GumboRustPlugin.LibraryAnnex = libraryAnnexes.get(name).get
 
@@ -180,15 +180,15 @@ object GumboXComputeContributions {
 
         val subclauseInfoOpt = GumboRustUtil.getGumboSubclauseOpt(thread.path, symbolTable)
 
-        val integrationConstraints = processIntegrationConstraints(thread, subclauseInfoOpt, crustTypeProvider, types, localStore, reporter)
+        val integrationConstraints = processIntegrationConstraints(thread, subclauseInfoOpt, options, crustTypeProvider, types, localStore, reporter)
 
-        val initializeContributions = processInitialize(thread, datatypeInvariants, integrationConstraints, subclauseInfoOpt, crustTypeProvider, types, localStore, reporter)
+        val initializeContributions = processInitialize(thread, datatypeInvariants, integrationConstraints, subclauseInfoOpt, options, crustTypeProvider, types, localStore, reporter)
 
-        val computeContributions = processCompute(thread, datatypeInvariants, integrationConstraints, subclauseInfoOpt, crustTypeProvider, types, localStore, reporter)
+        val computeContributions = processCompute(thread, datatypeInvariants, integrationConstraints, subclauseInfoOpt, options, crustTypeProvider, types, localStore, reporter)
 
-        val (verusMethods, developerUifMethods) = processGumboSubclauseMethods(thread, subclauseInfoOpt, crustTypeProvider, types, localStore, reporter)
+        val (verusMethods, developerUifMethods) = processGumboSubclauseMethods(thread, subclauseInfoOpt, options, crustTypeProvider, types, localStore, reporter)
 
-        val (cb_api_Entries, test_api_Entries, gumboTestModEntries) = buildGumboxTestMethods(thread, initializeContributions, computeContributions, subclauseInfoOpt, crustTypeProvider, types, localStore, reporter)
+        val (cb_api_Entries, test_api_Entries, gumboTestModEntries) = buildGumboxTestMethods(thread, initializeContributions, computeContributions, subclauseInfoOpt, options, crustTypeProvider, types, localStore, reporter)
 
         val existingTestingContributions = testingContributions.get(thread.path).get
 
@@ -220,7 +220,19 @@ object GumboXComputeContributions {
         if (developerUifMethods.nonEmpty) {
           val componentContributions = CRustComponentPlugin.getCRustComponentContributions(localStore)
           var threadContributions = componentContributions.componentContributions.get(thread.path).get
-          threadContributions = threadContributions(crateLevelEntries = threadContributions.crateLevelEntries ++ developerUifMethods.asInstanceOf[ISZ[RAST.Item]])
+
+          var modEntries: ISZ[RAST.Item] = ISZ()
+          for (i <- threadContributions.moduleLevelEntries) {
+            i match {
+              case m @ RAST.MacCall("verus", isz) =>
+                // the developerUifMethods will contain 'exec' keyword so need to be in the verus macro
+
+                modEntries = modEntries :+ m(items = isz ++ developerUifMethods.asInstanceOf[ISZ[RAST.Item]])
+              case _ => modEntries = modEntries :+ i
+            }
+          }
+
+          threadContributions = threadContributions(moduleLevelEntries = modEntries)
 
           localStore = CRustComponentPlugin.putComponentContributions(
             componentContributions.replaceComponentContributions(
@@ -241,6 +253,7 @@ object GumboXComputeContributions {
   }
 
   @pure def handleGclLibrary(gclLib: GclAnnexLibInfo,
+                             options: HamrCli.CodegenOption,
                              symbolTable: SymbolTable,
                              types: AadlTypes,
                              store: Store,
@@ -260,6 +273,8 @@ object GumboXComputeContributions {
             isLibraryMethod = T,
 
             inVerus = F,
+            options = options,
+
             aadlTypes = types,
             tp = CRustTypePlugin.getCRustTypeProvider(store).get,
             gclSymbolTable = gclSymbolTable,
@@ -278,6 +293,8 @@ object GumboXComputeContributions {
             isLibraryMethod = T,
 
             inVerus = F,
+            options = options,
+
             aadlTypes = types,
             tp = CRustTypePlugin.getCRustTypeProvider(store).get,
             gclSymbolTable = gclSymbolTable,
@@ -380,6 +397,7 @@ object GumboXComputeContributions {
 
   @pure def processGumboSubclauseMethods(thread: AadlThread,
                                          subclauseInfoOpt: Option[GclAnnexClauseInfo],
+                                         options: HamrCli.CodegenOption,
                                          crustTypeProvider: CRustTypeProvider,
                                          types: AadlTypes,
                                          store: Store,
@@ -399,6 +417,8 @@ object GumboXComputeContributions {
                 isLibraryMethod = F,
 
                 inVerus = F,
+                options = options,
+
                 aadlTypes = types,
                 tp = crustTypeProvider,
                 gclSymbolTable = c.gclSymbolTable,
@@ -417,6 +437,8 @@ object GumboXComputeContributions {
                 isLibraryMethod = F,
 
                 inVerus = F,
+                options = options,
+
                 aadlTypes = types,
                 tp = crustTypeProvider,
                 gclSymbolTable = c.gclSymbolTable,
@@ -431,6 +453,7 @@ object GumboXComputeContributions {
 
   @pure def processIntegrationConstraints(thread: AadlThread,
                                           subclauseInfoOpt: Option[GclAnnexClauseInfo],
+                                          options: HamrCli.CodegenOption,
                                           crustTypeProvider: CRustTypeProvider,
                                           types: AadlTypes,
                                           store: Store,
@@ -482,7 +505,8 @@ object GumboXComputeContributions {
                     inputs = ISZ(param),
                     outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
                   verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
-                attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(),
+                attributes = ISZ(), visibility = RAST.Visibility.Public,
+                verusAttributeSyntax = options.verusAttributeSyntax, contract = None(),
                 body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(rewrittenExp)))),
                 meta = ISZ(RAST.MetaOrigin(port.path)))
 
@@ -525,7 +549,8 @@ object GumboXComputeContributions {
                     inputs = ISZ(param),
                     outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
                   verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
-                attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(),
+                attributes = ISZ(), visibility = RAST.Visibility.Public,
+                verusAttributeSyntax = options.verusAttributeSyntax, contract = None(),
                 body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(rewrittenExp)))),
                 meta = ISZ(RAST.MetaOrigin(port.path)))
 
@@ -562,6 +587,7 @@ object GumboXComputeContributions {
                               datatypeInvariants: Map[PortIdPath, ISZ[RAST.Fn]],
                               integrationConstraints: Map[PortIdPath, ISZ[RAST.Fn]],
                               subclauseInfoOpt: Option[GclAnnexClauseInfo],
+                              options: HamrCli.CodegenOption,
                               crustTypeProvider: CRustTypeProvider,
                               types: AadlTypes,
                               store: Store,
@@ -617,7 +643,8 @@ object GumboXComputeContributions {
                 inputs = for (p <- sortedParams) yield p.toRustParam,
                 outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
               verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
-            attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(),
+            attributes = ISZ(), visibility = RAST.Visibility.Public,
+            verusAttributeSyntax = options.verusAttributeSyntax, contract = None(),
             body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(rewrittenExp)))),
             meta = ISZ())
         }
@@ -639,7 +666,8 @@ object GumboXComputeContributions {
               inputs = for (p <- sorted_IEP_Guar_Params) yield p.toRustParam,
               outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
             verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
-          attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(),
+          attributes = ISZ(), visibility = RAST.Visibility.Public,
+          verusAttributeSyntax = options.verusAttributeSyntax, contract = None(),
           body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(st"${(combinedSpecCalls, " &&\n")}")))),
           meta = ISZ())
       case _ =>
@@ -719,7 +747,8 @@ object GumboXComputeContributions {
             inputs = for (p <- sorted_IEP_Post_Params) yield p.toRustParam,
             outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
           verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
-        attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(),
+        attributes = ISZ(), visibility = RAST.Visibility.Public,
+        verusAttributeSyntax = options.verusAttributeSyntax, contract = None(),
         body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(st"""${(bodySegments, "&& \n\n")}""")))),
         meta = ISZ())
     }
@@ -731,6 +760,7 @@ object GumboXComputeContributions {
                            datatypeInvariants: Map[DataIdPath, ISZ[RAST.Fn]],
                            integrationConstraints: Map[PortIdPath, ISZ[RAST.Fn]],
                            subclauseInfoOpt: Option[GclAnnexClauseInfo],
+                           options: HamrCli.CodegenOption,
                            crustTypeProvider: CRustTypeProvider,
                            types: AadlTypes,
                            store: Store,
@@ -808,7 +838,8 @@ object GumboXComputeContributions {
                 inputs = for (p <- sortedParams) yield p.toRustParam,
                 outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
               verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
-            attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(),
+            attributes = ISZ(), visibility = RAST.Visibility.Public,
+            verusAttributeSyntax = options.verusAttributeSyntax, contract = None(),
             body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(rexp)))),
             meta = ISZ())
         }
@@ -853,7 +884,8 @@ object GumboXComputeContributions {
                 inputs = for (p <- sortedParams) yield p.toRustParam,
                 outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
               verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
-            attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(),
+            attributes = ISZ(), visibility = RAST.Visibility.Public,
+            verusAttributeSyntax = options.verusAttributeSyntax, contract = None(),
             body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(rexp)))),
             meta = ISZ())
         }
@@ -876,7 +908,8 @@ object GumboXComputeContributions {
                 inputs = for (p <- sorted_CEP_T_Assm_Params) yield p.toRustParam,
                 outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
               verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
-            attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(),
+            attributes = ISZ(), visibility = RAST.Visibility.Public,
+            verusAttributeSyntax = options.verusAttributeSyntax, contract = None(),
             body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
               st"""${(for (i <- 0 until topLevelAssumeCallsCombined.size) yield st"let r$i: bool = ${topLevelAssumeCallsCombined(i)};", "\n")}
                   |
@@ -900,7 +933,8 @@ object GumboXComputeContributions {
                 inputs = for (p <- sorted_CEP_T_Guar_Params) yield p.toRustParam,
                 outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
               verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
-            attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(), meta = ISZ(),
+            attributes = ISZ(), visibility = RAST.Visibility.Public, meta = ISZ(),
+            verusAttributeSyntax = options.verusAttributeSyntax, contract = None(),
             body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
               st"""${(for (i <- 0 until topLevelGuaranteesCombined.size) yield st"let r$i: bool = ${topLevelGuaranteesCombined(i)};", "\n")}
                   |
@@ -981,7 +1015,8 @@ object GumboXComputeContributions {
                   inputs = for (p <- sortedParams) yield p.toRustParam,
                   outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
                 verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
-              attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(),
+              attributes = ISZ(), visibility = RAST.Visibility.Public,
+              verusAttributeSyntax = options.verusAttributeSyntax, contract = None(),
               body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(pred)))),
               meta = ISZ())
           } // end for
@@ -1001,7 +1036,8 @@ object GumboXComputeContributions {
                 inputs = for (p <- sorted_CEP_T_Case_Params) yield p.toRustParam,
                 outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
               verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
-            attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(),
+            attributes = ISZ(), visibility = RAST.Visibility.Public,
+            verusAttributeSyntax = options.verusAttributeSyntax, contract = None(),
             body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
               st"""${(for (i <- 0 until caseCallsCombined.size) yield st"let r$i: bool = ${caseCallsCombined(i)};", "\n")}
                   |
@@ -1097,7 +1133,8 @@ object GumboXComputeContributions {
               inputs = for (p <- sorted_Cep_Pre_Params) yield p.toRustParam,
               outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
             verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
-          attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(), meta = ISZ(),
+          attributes = ISZ(), visibility = RAST.Visibility.Public,  meta = ISZ(),
+          verusAttributeSyntax = options.verusAttributeSyntax, contract = None(),
           body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
             st"""${(bodySegments, "\n\n")}
                 |
@@ -1205,7 +1242,8 @@ object GumboXComputeContributions {
               inputs = for (p <- sorted_Cep_Post_Params) yield p.toRustParam,
               outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
             verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
-          attributes = ISZ(), visibility = RAST.Visibility.Public, contract = None(), meta = ISZ(),
+          attributes = ISZ(), visibility = RAST.Visibility.Public, meta = ISZ(),
+          verusAttributeSyntax = options.verusAttributeSyntax, contract = None(),
           body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
             st"""${(segments, "\n\n")}
                 |
@@ -1228,7 +1266,9 @@ object GumboXComputeContributions {
   @pure def buildGumboxTestMethods(thread: AadlThread,
                                    initializeContributions: GumboXInitializeContributions,
                                    computeContributions: GumboXComputeContributions,
-                                   subclauseInfoOpt: Option[GclAnnexClauseInfo], crustTypeProvider: CRustTypeProvider, types: AadlTypes, localStore: Store, reporter: Reporter
+                                   subclauseInfoOpt: Option[GclAnnexClauseInfo],
+                                   options: HamrCli.CodegenOption,
+                                   crustTypeProvider: CRustTypeProvider, types: AadlTypes, localStore: Store, reporter: Reporter
                                   ): (ISZ[RAST.Item], ISZ[RAST.Item], ISZ[RAST.Item]) = {
     assert(thread.isPeriodic(), s"Need to handle sporadic threads: ${thread.classifierAsString}")
 
@@ -1296,7 +1336,8 @@ object GumboXComputeContributions {
         comments = ISZ(RAST.CommentST(
           st"""/** Contract-based test harness for the initialize entry point
               |  */""")),
-        attributes = ISZ(), contract = None(), meta = ISZ())
+        attributes = ISZ(), meta = ISZ(),
+        verusAttributeSyntax = options.verusAttributeSyntax, contract = None())
 
       cb_api_Items = cb_api_Items :+ testInitialize
     }
@@ -1435,7 +1476,8 @@ object GumboXComputeContributions {
               |  *
               |  ${(paramsToComment(sorted_pre_without_state_vars), "\n")}
               |  */""")),
-        attributes = ISZ(), contract = None(), meta = ISZ())
+        attributes = ISZ(), meta = ISZ(),
+        verusAttributeSyntax = options.verusAttributeSyntax, contract = None())
 
       cb_api_Items = cb_api_Items :+ testComputeWithoutStateVars
 
@@ -1455,7 +1497,8 @@ object GumboXComputeContributions {
         comments = ISZ(RAST.CommentST(
           st"""/** Contract-based test harness for the compute entry point
               |  */""")),
-        attributes = ISZ(), contract = None(), meta = ISZ())
+        attributes = ISZ(), meta = ISZ(),
+        verusAttributeSyntax = options.verusAttributeSyntax, contract = None())
 
       cb_api_Items = cb_api_Items :+ testComputeContainerWithoutStateVars
     }
@@ -1582,7 +1625,8 @@ object GumboXComputeContributions {
               |  *
               |  ${(paramsToComment(sorted_Pre_State_Params), "\n")}
               |  */""")),
-        attributes = ISZ(), contract = None(), meta = ISZ())
+        attributes = ISZ(), meta = ISZ(),
+        verusAttributeSyntax = options.verusAttributeSyntax, contract = None())
 
       cb_api_Items = cb_api_Items :+ testComputeWithStateVars
 
@@ -1601,7 +1645,8 @@ object GumboXComputeContributions {
         comments = ISZ(RAST.CommentST(
           st"""/** Contract-based test harness for the compute entry point
               |  */""")),
-        attributes = ISZ(), contract = None(), meta = ISZ())
+        attributes = ISZ(), meta = ISZ(),
+        verusAttributeSyntax = options.verusAttributeSyntax, contract = None())
 
       cb_api_Items = cb_api_Items :+ testComputeWithStateVarsContainer
     }

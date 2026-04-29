@@ -36,9 +36,14 @@ object MicrokitReporterPlugin {
   @pure override def canFinalize(model: Aadl, aadlTypes: Option[AadlTypes], symbolTable: Option[SymbolTable], codegenResults: CodeGenResults, store: Store, options: HamrCli.CodegenOption, reporter: Reporter): B = {
     return (
       !reporter.hasError &&
-      !hasFinalized(store) &&
+        !hasFinalized(store) &&
         options.platform == HamrCli.CodegenHamrPlatform.Microkit &&
-      symbolTable.nonEmpty)
+
+        // TODO
+        !options.verusAttributeSyntax &&
+
+
+        symbolTable.nonEmpty)
   }
 
   @pure override def finalizePlugin(model: Aadl,

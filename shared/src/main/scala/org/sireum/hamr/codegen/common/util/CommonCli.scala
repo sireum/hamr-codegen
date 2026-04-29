@@ -95,6 +95,9 @@ object CommonCli {
         description = "Run Transpiler during HAMR Codegen")
     )),
     OptGroup(name = "CAmkES/Microkit", opts = ISZ(
+      Opt(name = "verusAttributeSyntax", longKey = "verus-attribute-syntax", shortKey = None(),
+        tpe = Type.Flag(F),
+        description = "Use Verus attribute syntax (#[verus_spec], #[verus_verify]) instead of the verus! macro for exec functions"),
       Opt(name = "sel4OutputDir", longKey = "sel4-output-dir", shortKey = None(),
         tpe = Type.Path(multiple = F, default = None()),
         description = "Output directory for the generated CAmkES/Microkit project files"),

@@ -121,7 +121,7 @@ object CRustTypePlugin {
 
     val rustItems = HashSMap.empty[String, ISZ[RAST.Item]] ++ (
       for (aadlTypeName <- touchedTypes.orderedDependencies if !TypeUtil.isBaseTypeS(aadlTypeName) || TypeUtil.isBaseTypesStringS(aadlTypeName)) yield
-        aadlTypeName ~> getRustItems(types.typeMap.get(aadlTypeName).get, typeNameProvider, touchedTypes.substitutionTypeMap))
+        aadlTypeName ~> getRustItems(types.typeMap.get(aadlTypeName).get, options, typeNameProvider, touchedTypes.substitutionTypeMap))
 
     val ret = DefaultCRustTypeProvider(rustItems, typeNameProvider, touchedTypes.substitutionTypeMap)
     return (CRustTypePlugin.putCRustTypeProvider(ret, store), resources)
@@ -262,6 +262,7 @@ object CRustTypePlugin {
   }
 
   @pure def getRustItems(aadlType: AadlType,
+                         options: HamrCli.CodegenOption,
                          typeNameProvider: Map[String, CRustTypeNameProvider],
                          substitutions: Map[String, AadlType]): ISZ[RAST.Item] = {
     @pure def getTypeSimpleName(a: AadlType): String = {
@@ -400,7 +401,8 @@ object CRustTypePlugin {
               ident = RAST.IdentString("default"),
               generics = None(),
               fnDecl = RAST.FnDecl(ISZ(), RAST.FnRetTyImpl(RAST.TypeRust(ISZ("Self"))))),
-            comments = ISZ(), attributes = ISZ(), visibility = RAST.Visibility.Private, contract = None(), meta = ISZ(),
+            comments = ISZ(), attributes = ISZ(), visibility = RAST.Visibility.Private, meta = ISZ(),
+            verusAttributeSyntax = options.verusAttributeSyntax, contract = None(),
             body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(implBody.get)))))),
           comments = ISZ(),attributes = ISZ())
     }

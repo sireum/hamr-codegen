@@ -78,8 +78,8 @@ object CRustTestingPlugin {
       val testEntries = genTestEntries(thread, crustTypeProvider, reporter)
 
       val testApiEntries =
-        genTestApiConcreteInputsEntries(thread, crustTypeProvider) ++
-          genTestApiGetterSettersEntries(thread, crustTypeProvider)
+        genTestApiConcreteInputsEntries(thread, options, crustTypeProvider) ++
+          genTestApiGetterSettersEntries(thread, options, crustTypeProvider)
 
       val touchedTypes = MicrokitLinterPlugin.getTouchedTypes(localStore)
       val proptestGenerators = genProptestGenerators(touchedTypes, thread, crustTypeProvider, model, options, types, symbolTable, store, reporter)
@@ -100,7 +100,7 @@ object CRustTestingPlugin {
     return (CRustTestingPlugin.putCRustTestingContributions(CRustTestingPlugin.CRustTestingContributions(ret), localStore), resources)
   }
 
-  @pure def genTestApiGetterSettersEntries(thread: AadlThread, crustTypeProvider: CRustTypeProvider): ISZ[RAST.Item] = {
+  @pure def genTestApiGetterSettersEntries(thread: AadlThread, options: HamrCli.CodegenOption, crustTypeProvider: CRustTypeProvider): ISZ[RAST.Item] = {
     var ret: ISZ[RAST.Item] = ISZ()
     for (p <- thread.getPorts()) {
       val portType: AadlType = crustTypeProvider.getRepresentativeType(MicrokitTypeUtil.getPortType(p))
@@ -141,7 +141,7 @@ object CRustTestingPlugin {
               outputs = RAST.FnRetTyDefault()),
             verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
           comments = ISZ(RAST.CommentRustDoc(ISZ(st"setter for IN $paramKind"))),
-          contract = None(), meta = ISZ(),
+          verusAttributeSyntax = options.verusAttributeSyntax, contract = None(), meta = ISZ(),
           body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(testApiBody)))))
       }
       else {
@@ -165,7 +165,7 @@ object CRustTestingPlugin {
               outputs = RAST.FnRetTyImpl(retType)),
             verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
           comments = ISZ(RAST.CommentRustDoc(ISZ(st"getter for OUT $paramKind"))),
-          contract = None(), meta = ISZ(),
+          verusAttributeSyntax = options.verusAttributeSyntax, contract = None(), meta = ISZ(),
           body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(testApiBody)))))
       }
     }
@@ -173,7 +173,7 @@ object CRustTestingPlugin {
     return ret
   }
 
-  @pure def genTestApiConcreteInputsEntries(thread: AadlThread, crustTypeProvider: CRustTypeProvider): ISZ[RAST.Item] = {
+  @pure def genTestApiConcreteInputsEntries(thread: AadlThread, options: HamrCli.CodegenOption, crustTypeProvider: CRustTypeProvider): ISZ[RAST.Item] = {
     var params: ISZ[RAST.Param] = ISZ()
     var structItems: ISZ[RAST.Item] = ISZ()
     var bodyItems: ISZ[ST] = ISZ()
@@ -221,7 +221,8 @@ object CRustTestingPlugin {
           outputs = RAST.FnRetTyDefault()),
         fnHeader = RAST.FnHeader(F), verusHeader = None(), generics = None()),
       body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(st"${(containerBodyItems, "\n")}")))),
-      meta = ISZ(), contract = None(), attributes = ISZ())
+      meta = ISZ(), attributes = ISZ(),
+      verusAttributeSyntax = options.verusAttributeSyntax, contract = None())
 
     val putter =  RAST.FnImpl(
       comments = ISZ(RAST.CommentRustDoc(ISZ(st"setter for component's incoming port values"))),
@@ -233,12 +234,13 @@ object CRustTestingPlugin {
           outputs = RAST.FnRetTyDefault()),
         fnHeader = RAST.FnHeader(F), verusHeader = None(), generics = None()),
       body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(st"${(bodyItems, "\n")}")))),
-      meta = ISZ(), contract = None(), attributes = ISZ())
+      meta = ISZ(), attributes = ISZ(),
+      verusAttributeSyntax = options.verusAttributeSyntax, contract = None())
 
     return ISZ(struct, containerPutter, putter)
   }
 
-  @pure def propTestOptionMethod(): ISZ[RAST.Item] = {
+  @pure def propTestOptionMethod(options: HamrCli.CodegenOption): ISZ[RAST.Item] = {
     var generics: ISZ[RAST.GenericParam] = ISZ()
     generics = generics :+ RAST.GenericParam(
       ident = RAST.IdentString("T"),
@@ -264,7 +266,8 @@ object CRustTestingPlugin {
         fnHeader = RAST.FnHeader(F), verusHeader = None()),
       body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
         st"""option_strategy_bias(1, base)""")))),
-      meta = ISZ(), comments = ISZ(), attributes = ISZ(), contract = None())
+      meta = ISZ(), comments = ISZ(), attributes = ISZ(),
+      verusAttributeSyntax = options.verusAttributeSyntax, contract = None())
 
     val custStrategy = RAST.FnImpl(
       visibility = RAST.Visibility.Public,
@@ -287,7 +290,9 @@ object CRustTestingPlugin {
             |  bias => base.prop_map(Some),
             |  1 => Just(None),
             |]""")))),
-      meta = ISZ(), comments = ISZ(), attributes = ISZ(), contract = None())
+      meta = ISZ(), comments = ISZ(), attributes = ISZ(),
+      verusAttributeSyntax = options.verusAttributeSyntax,
+      contract = None())
 
     return ISZ(defaultStrategy, custStrategy)
   }
@@ -296,7 +301,7 @@ object CRustTestingPlugin {
                                   thread: AadlThread, cRustTypeProvider: CRustTypeProvider,
                                   model: Aadl, options: HamrCli.CodegenOption,
                                   types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): ISZ[RAST.Item] = {
-    var ret: ISZ[RAST.Item] = propTestOptionMethod()
+    var ret: ISZ[RAST.Item] = propTestOptionMethod(options)
     for (t <- touchedTypes.orderedDependencies) {
       val o = types.typeMap.get(t).get
       val rep = cRustTypeProvider.getRepresentativeType(o)
@@ -332,7 +337,8 @@ object CRustTestingPlugin {
               fnHeader = RAST.FnHeader(F), generics = None(), verusHeader = None()),
             body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
               st"""$custName(${getDefaultGenerator("base_strategy", baseRep)})""")))),
-            meta = ISZ(), comments = ISZ(), attributes = ISZ(), contract = None())
+            meta = ISZ(), comments = ISZ(), attributes = ISZ(),
+            verusAttributeSyntax = options.verusAttributeSyntax, contract = None())
 
 
 
@@ -366,7 +372,8 @@ object CRustTestingPlugin {
                   |    let boxed: Box<[${baseNp.qualifiedRustName}; $dim]> = v.into_boxed_slice().try_into().unwrap();
                   |    *boxed
                   |})""")))),
-            meta = ISZ(), comments = ISZ(), attributes = ISZ(), contract = None())
+            meta = ISZ(), comments = ISZ(), attributes = ISZ(),
+            verusAttributeSyntax = options.verusAttributeSyntax, contract = None())
 
           ret = ret :+ defaultStrategy :+ custStrategy
 
@@ -385,7 +392,8 @@ object CRustTestingPlugin {
               st"""$custName(
                   |  ${(items, ",\n")}
                   |)""")))),
-            meta = ISZ(), comments = ISZ(), attributes = ISZ(), contract = None())
+            meta = ISZ(), comments = ISZ(), attributes = ISZ(),
+            verusAttributeSyntax = options.verusAttributeSyntax, contract = None())
 
           var strategyNames: ISZ[String] = ISZ()
           var fieldNames: ISZ[String] = ISZ()
@@ -422,7 +430,8 @@ object CRustTestingPlugin {
               st"""(${(strategyNames, ", ")}).prop_map(|(${(fieldNames, ", ")})| {
                   |  ${np.qualifiedRustName} { ${(fieldNames, ", ")} }
                   |})""")))),
-            meta = ISZ(), comments = ISZ(), attributes = ISZ(), contract = None())
+            meta = ISZ(), comments = ISZ(), attributes = ISZ(),
+            verusAttributeSyntax = options.verusAttributeSyntax, contract = None())
 
           ret = ret :+ defaultStrategy :+ custStrategy
 
@@ -443,7 +452,8 @@ object CRustTestingPlugin {
               fnHeader = RAST.FnHeader(F), generics = None(), verusHeader = None()),
             body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
               st"$custName(${(bias_args, ", ")})")))),
-            meta = ISZ(), comments = ISZ(), attributes = ISZ(), contract = None())
+            meta = ISZ(), comments = ISZ(), attributes = ISZ(),
+            verusAttributeSyntax = options.verusAttributeSyntax, contract = None())
 
           ret = ret :+ RAST.FnImpl(
             visibility = RAST.Visibility.Public,
@@ -457,7 +467,8 @@ object CRustTestingPlugin {
               st"""prop_oneof![
                   |  ${(items, ",\n")}
                   |]""")))),
-            meta = ISZ(), comments = ISZ(), attributes = ISZ(), contract = None())
+            meta = ISZ(), comments = ISZ(), attributes = ISZ(),
+            verusAttributeSyntax = options.verusAttributeSyntax, contract = None())
         case x =>
           halt("Unexpected type: $x")
       }

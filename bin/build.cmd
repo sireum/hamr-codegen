@@ -497,7 +497,7 @@ def usage(): Unit = {
   println("HAMR Codegen /build")
   println(
     st"""Usage: ( compile | test | tipe
-        |       | regen-trans | regen-cli regen-report
+        |       | regen-trans | regen-cli | regen-report
         |       | install-osate-gumbo | install-sbt-mill )+
         |
         |

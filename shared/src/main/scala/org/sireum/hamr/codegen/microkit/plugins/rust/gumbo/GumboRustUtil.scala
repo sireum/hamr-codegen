@@ -4,6 +4,7 @@ package org.sireum.hamr.codegen.microkit.plugins.rust.gumbo
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, Store}
 import org.sireum.hamr.codegen.common.{STUtil, StringUtil}
+import org.sireum.hamr.codegen.common.util.HamrCli
 import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlThread, GclAnnexClauseInfo, GclSymbolTable, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import SlangExpUtil.Context
@@ -243,6 +244,8 @@ object GumboRustUtil {
 
                              inVerus: B,
 
+                             options: HamrCli.CodegenOption,
+
                              aadlTypes: AadlTypes,
                              tp: CRustTypeProvider,
                              gclSymbolTable: GclSymbolTable,
@@ -338,6 +341,7 @@ object GumboRustUtil {
           if (inVerus) Some(FnVerusHeader(isOpen = T, kind = RAST.VerusFnKind.spec))
           else None(),
         fnHeader = RAST.FnHeader(F), generics = None()),
+      verusAttributeSyntax = options.verusAttributeSyntax,
       contract = contractOpt,
       body = bodyOpt,
       meta = ISZ())
@@ -350,6 +354,7 @@ object GumboRustUtil {
                              optComponent: Option[AadlThread],
                              isLibraryMethod: B,
                              inVerus: B,
+                             options: HamrCli.CodegenOption,
                              aadlTypes: AadlTypes,
                              tp: CRustTypeProvider,
                              gclSymbolTable: GclSymbolTable,
@@ -441,6 +446,7 @@ object GumboRustUtil {
         attributes = ISZ(),
         visibility = RAST.Visibility.Public,
         sig = verusSig,
+        verusAttributeSyntax = options.verusAttributeSyntax,
         contract = None(),
         body = bodyOpt,
         meta = ISZ())
@@ -465,6 +471,7 @@ object GumboRustUtil {
         attributes = ISZ(),
         visibility = RAST.Visibility.Public,
         sig = developerSig,
+        verusAttributeSyntax = F, // will have the keyword 'exec' so needs to be in verus wrapper
         contract = developerContract,
         body = developerBody,
         meta = ISZ())

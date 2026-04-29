@@ -11,6 +11,10 @@ import org.sireum.hamr.ir.Direction
 
 object CRustApiUtil {
 
+  // TODO: switch to verus attribute syntax once ghost struct fields and (res : Type)
+  //   return-value naming have attribute-syntax equivalents
+  val WRAPPED_IN_VERUS_MACRO: B = F
+
   def processInPort(dstThread: AadlThread, dstPort: AadlPort,
                     crustTypeProvider: CRustTypeProvider,
                     apiPorts: ISZ[AadlPort]): ComponentApiContributions = {
@@ -138,7 +142,8 @@ object CRustApiUtil {
           outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)
         ),
         verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
-      comments = ISZ(), attributes = ISZ(), contract = None(), meta = ISZ(),
+      comments = ISZ(), attributes = ISZ(), meta = ISZ(),
+      verusAttributeSyntax = WRAPPED_IN_VERUS_MACRO, contract = None(),
       body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(body)))))
   }
 
@@ -184,7 +189,8 @@ object CRustApiUtil {
           inputs = ISZ(),
           outputs = RAST.FnRetTyImpl(returnType)),
         verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
-      comments = ISZ(), attributes = ISZ(), contract = None(), meta = ISZ(),
+      comments = ISZ(), attributes = ISZ(), meta = ISZ(),
+      verusAttributeSyntax = WRAPPED_IN_VERUS_MACRO, contract = None(),
       body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(body)))))
   }
 
@@ -240,6 +246,7 @@ object CRustApiUtil {
           inputs = inputs,
           outputs = RAST.FnRetTyDefault()),
         verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
+      verusAttributeSyntax = WRAPPED_IN_VERUS_MACRO,
       contract = Some(RAST.FnContract(
         optEnsuresMarker = None(),
         ensures = ensures,
@@ -275,6 +282,7 @@ object CRustApiUtil {
             RAST.ParamFixMe(st"&mut self")),
           outputs = retType),
         verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
+      verusAttributeSyntax = WRAPPED_IN_VERUS_MACRO,
       contract = Some(RAST.FnContract(
         optEnsuresMarker = None(),
         ensures = ensures,
@@ -305,7 +313,8 @@ object CRustApiUtil {
         ident = RAST.IdentString(methodName),
         fnDecl = RAST.FnDecl(args, RAST.FnRetTyDefault()),
         verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
-      comments = ISZ(), visibility = RAST.Visibility.Private, contract = None(), meta = ISZ(),
+      comments = ISZ(), visibility = RAST.Visibility.Private, meta = ISZ(),
+      verusAttributeSyntax = WRAPPED_IN_VERUS_MACRO, contract = None(),
       body = Some(RAST.MethodBody(ISZ(body))))
   }
 
@@ -351,6 +360,7 @@ object CRustApiUtil {
           outputs = retType),
         verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
       // TODO: probably move all verus to gumbo plug
+      verusAttributeSyntax = WRAPPED_IN_VERUS_MACRO,
       contract = Some(RAST.FnContract(
         optRequiresMarker = None(),
         requires = ISZ(),
@@ -411,7 +421,8 @@ object CRustApiUtil {
             inputs = inputs,
             outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
           verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
-        comments = ISZ(), visibility = RAST.Visibility.Public, contract = None(), meta = ISZ(),
+        comments = ISZ(), visibility = RAST.Visibility.Public, meta = ISZ(),
+        verusAttributeSyntax = WRAPPED_IN_VERUS_MACRO, contract = None(),
         body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(externApiBody)))))
 
       return (externApiTestVariable, externApiMethod)
@@ -442,7 +453,8 @@ object CRustApiUtil {
             inputs = inputs,
             outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
           verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
-        comments = ISZ(), visibility = RAST.Visibility.Public, contract = None(), meta = ISZ(),
+        comments = ISZ(), visibility = RAST.Visibility.Public, meta = ISZ(),
+        verusAttributeSyntax = WRAPPED_IN_VERUS_MACRO, contract = None(),
         body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
           st"""unsafe {
               |  *$varName.lock().unwrap_or_else(|e| e.into_inner()) = Some($value);

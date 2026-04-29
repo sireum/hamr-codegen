@@ -137,7 +137,9 @@ object Printers {
   @pure override def prettyST: ST = {
     return (
       st"""$macName! {
+          |
           |  ${printItems(items, "\n\n")}
+          |
           |}""")
   }
 }
@@ -492,17 +494,32 @@ object Printers {
 
                        //val generics: Option[Generics],
                        val sig: FnSig,
+
+                       val verusAttributeSyntax: B,
                        val contract: Option[FnContract],
+
                        val body: Option[MethodBody],
 
                        val meta: ISZ[Meta]) extends Fn {
 
   @pure override def prettyST: ST = {
-    val contractST: Option[ST] =
-      if (contract.nonEmpty) Some(
-        st"""
-            |  ${contract.get.prettyST}""")
-      else None()
+    var lattributes = attributes
+    var verusMacroContractST: Option[ST] = None()
+
+    if (contract.nonEmpty) {
+      if (verusAttributeSyntax) {
+        lattributes = lattributes :+ AttributeST(inner = F, content =
+          st"""verus_spec(
+              |  ${contract.get.prettyST}
+              |)""")
+      }
+      else {
+        verusMacroContractST = Some(
+          st"""
+              |  ${contract.get.prettyST}""")
+      }
+    }
+
     val optBody: Option[ST] =
       if (body.isEmpty) None()
       else Some(
@@ -510,12 +527,14 @@ object Printers {
             |{
             |  ${body.get.prettyST}
             |}""")
+
     return (
       st"""${printComments(comments)}
-          |${printAttributes(attributes)}
-          |${printVis(visibility)}${sig.prettyST}$contractST$optBody""")
+          |${printAttributes(lattributes)}
+          |${printVis(visibility)}${sig.prettyST}$verusMacroContractST$optBody""")
   }
 }
+
 
 @datatype class MethodBody(val items: ISZ[BodyItem]) {
   @pure def prettyST: ST = {

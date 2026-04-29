@@ -424,7 +424,8 @@ object GumboMonitorPlugin {
                       inputs = ISZ(),
                       outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
                     verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
-                  comments = ISZ(), attributes = ISZ(), contract = None(), meta = ISZ(),
+                  comments = ISZ(), attributes = ISZ(), meta = ISZ(),
+                  verusAttributeSyntax = options.verusAttributeSyntax, contract = None(),
                   body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
                     st"""unsafe {
                         |  return is_monitoring_enabled();
@@ -447,7 +448,8 @@ object GumboMonitorPlugin {
                       inputs = ISZ(),
                       outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
                     verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
-                  comments = ISZ(), visibility = RAST.Visibility.Public, contract = None(), meta = ISZ(),
+                  comments = ISZ(), visibility = RAST.Visibility.Public, meta = ISZ(),
+                  verusAttributeSyntax = options.verusAttributeSyntax, contract = None(),
                   body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
                     st"""unsafe {
                         |  match *MONITORING_ENABLED.lock().unwrap_or_else(|e| e.into_inner()) {
