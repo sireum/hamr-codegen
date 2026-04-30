@@ -1,6 +1,6 @@
 // #Sireum
 
-package org.sireum.hamr.codegen.common.util
+package org.sireum.hamr.codegen.microkit.plugins.monitors
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil

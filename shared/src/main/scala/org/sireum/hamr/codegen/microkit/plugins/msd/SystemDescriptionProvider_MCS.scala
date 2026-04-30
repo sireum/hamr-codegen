@@ -88,6 +88,12 @@ object SystemDescriptionProvider_MCS {
         }
       }
 
+      var setvarMappingsST: ISZ[ST] = ISZ()
+      for (pd <- protectionDomains; map <- pd.memMaps if map.varAddr.nonEmpty) {
+        setvarMappingsST = setvarMappingsST :+
+          st"""("${pd.name}", "${map.memoryRegion}"): "${map.varAddr.get}""""
+      }
+
       var schedulePairs: ISZ[ST] = ISZ()
       var schedule: ISZ[ST] = ISZ()
       var seenPairNames: Set[String] = Set.empty
@@ -103,9 +109,10 @@ object SystemDescriptionProvider_MCS {
 
       var memoryRegionsST: ISZ[ST] = ISZ()
       var mapsSt: ISZ[ST] = ISZ()
-      // Maps for template-managed regions (e.g. sched_state_mr) are emitted separately,
-      // after the template defines the Python variable they reference.
-      var templateManagedMapsSt: ISZ[ST] = ISZ()
+      // Plugin-contributed Python code (e.g. sched_state/sched_schedule region creation
+      // by the runtime monitor plugin).  Template-managed regions have their MemoryRegion
+      // creation emitted here; the standard loop only emits their PD add_map calls.
+      val templateManagedMapsSt: ISZ[ST] = msd.templateContributions
       for (m <- memoryRegions) {
         // Skip regions that no PD in this SD variant maps (e.g. a region belonging to a
         // stripped monitor PD is present in memoryRegions but absent from the normal SD's PDs).
@@ -135,6 +142,7 @@ object SystemDescriptionProvider_MCS {
             |# SPDX-License-Identifier: BSD-2-Clause
             |import argparse
             |import struct
+            |import xml.etree.ElementTree as ET
             |from random import randint
             |from dataclasses import dataclass
             |from typing import List, Tuple, Optional
@@ -182,17 +190,25 @@ object SystemDescriptionProvider_MCS {
             |    part_ch, part_timeslices, is_user_partition = zip(*entries)
             |    return UserSchedule(list(part_timeslices), list(part_ch), list(is_user_partition))
             |
-            |# Virtual address at which the schedule state shared memory region is mapped
-            |# in the scheduler (rw) and in every _MON protection domain (r).
-            |# Must match SCHED_STATE_VADDR / SCHED_STATE_SIZE in scheduler_config.h.
-            |SCHED_STATE_VADDR = 0x4_000_000
-            |SCHED_STATE_SIZE  = 0x1000  # 4 KB
+            |def add_setvar_vaddr(xml_str, mappings):
+            |    $tq
+            |    Post-process sdf.render() output to add setvar_vaddr attributes.
+            |    sdfgen v27-29 does not support setvar_vaddr natively.
+            |    mappings: dict of (pd_name, mr_name) -> var_name
+            |    $tq
+            |    root = ET.fromstring(xml_str)
+            |    for pd in root.iter('protection_domain'):
+            |        pd_name = pd.get('name')
+            |        for m in pd.findall('map'):
+            |            key = (pd_name, m.get('mr'))
+            |            if key in mappings:
+            |                m.set('setvar_vaddr', mappings[key])
+            |    ET.indent(root, space='  ')
+            |    return ET.tostring(root, encoding='unicode', xml_declaration=True)
             |
-            |# Virtual address at which the schedule shared memory region is mapped
-            |# in the scheduler (rw) and in every _MON protection domain (r).
-            |# Must match SCHED_SCHEDULE_VADDR / SCHED_SCHEDULE_SIZE in scheduler_config.h.
-            |SCHED_SCHEDULE_VADDR = 0x4_001_000
-            |SCHED_SCHEDULE_SIZE  = 0x1000  # 4 KB
+            |setvar_mappings = {
+            |    ${(setvarMappingsST, ",\n")}
+            |}
             |
             |def generate(sdf_path: str, output_dir: str, dtb: DeviceTree):
             |    timer_node = dtb.node(board.timer)
@@ -203,25 +219,6 @@ object SystemDescriptionProvider_MCS {
             |
             |    scheduler = ProtectionDomain("scheduler", "scheduler.elf", priority=200)
             |
-            |    #######################################
-            |    # SCHEDULE STATE
-            |    # Broadcast region written by the scheduler before every dispatch.
-            |    # The runtime monitor maps this region read-only to observe which
-            |    # protection domain last yielded and which will be dispatched next.
-            |    #######################################
-            |    sched_state_mr = MemoryRegion(sdf, "sched_state", SCHED_STATE_SIZE)
-            |    sdf.add_mr(sched_state_mr)
-            |    scheduler.add_map(Map(sched_state_mr, SCHED_STATE_VADDR, perms="rw"))
-            |
-            |    #######################################
-            |    # SCHEDULE
-            |    # The full user_schedule published by the scheduler at init.
-            |    # Monitors that map this region read-only can correlate
-            |    # current_timeslice indices with channel IDs and durations.
-            |    #######################################
-            |    sched_schedule_mr = MemoryRegion(sdf, "sched_schedule", SCHED_SCHEDULE_SIZE)
-            |    sdf.add_mr(sched_schedule_mr)
-            |    scheduler.add_map(Map(sched_schedule_mr, SCHED_SCHEDULE_VADDR, perms="rw"))
             |    ${(templateManagedMapsSt, "\n")}
             |
             |    ${marker.beginMarker}
@@ -273,7 +270,7 @@ object SystemDescriptionProvider_MCS {
             |                       data_path)
             |
             |    with open(f"{output_dir}/{sdf_path}", "w+") as f:
-            |        f.write(sdf.render())
+            |        f.write(add_setvar_vaddr(sdf.render(), setvar_mappings))
             |
             |
             |if __name__ == '__main__':
@@ -318,17 +315,17 @@ object SystemDescriptionProvider_MCS {
 
       val schedulerPath = s"${options.sel4OutputDir.get}/scheduler"
 
-      val scheduler_config_h_Path = s"$schedulerPath/include/scheduler_config.h"
+      val scheduler_config_h_Path = s"$schedulerPath/include/default.scheduler_config.h"
       resources = resources :+ ResourceUtil.createResourceH(
         path = scheduler_config_h_Path, content = StaticContent.scheduler_config_h,
         overwrite = T, isDatatype = F)
 
-      val user_config_h_Path = s"$schedulerPath/include/user_config.h"
+      val user_config_h_Path = s"$schedulerPath/include/default.user_config.h"
       resources = resources :+ ResourceUtil.createResourceH(
         path = user_config_h_Path, content = StaticContent.user_config_h,
         overwrite = T, isDatatype = F)
 
-      val scheduler_c_Path = s"$schedulerPath/src/scheduler.c"
+      val scheduler_c_Path = s"$schedulerPath/src/default.scheduler.c"
       resources = resources :+ ResourceUtil.createResourceH(
         path = scheduler_c_Path, content = StaticContent.scheduler_c,
         overwrite = T, isDatatype = F)
@@ -801,10 +798,8 @@ object StaticContent {
         |#include <sddf/timer/config.h>
         |#include <sddf/util/printf.h>
         |
-        |#include <scheduler_config.h>
-        |#include <user_config.h>
-        |
-        |#include <sb_types.h>
+        |#include <default.scheduler_config.h>
+        |#include <default.user_config.h>
         |
         |${CommentTemplate.doNotEditComment_slash}
         |
@@ -822,45 +817,9 @@ object StaticContent {
         |
         |bool scheduler_running;
         |
-        |// Pointer to the schedule state shared memory region.
-        |// Monitors that map this region can read current_timeslice.
-        |volatile sb_queue_hamr_SchedState_1_t *sb_queue_sched_state = (volatile sb_queue_hamr_SchedState_1_t *)SCHED_STATE_VADDR;
-        |
-        |hamr_SchedState sched_state = {0};
-        |
-        |bool put_sched_state() {
-        |  sb_queue_hamr_SchedState_1_enqueue((sb_queue_hamr_SchedState_1_t *) sb_queue_sched_state, (hamr_SchedState *) &sched_state);
-        |
-        |  return true;
-        |}
-        |
-        |// Pointer to the schedule shared memory region.
-        |// Monitors that map this region can read the full schedule (all channels, timeslices, user-partition flags).
-        |volatile sb_queue_hamr_Schedule_1_t *sb_queue_sched_schedule = (volatile sb_queue_hamr_Schedule_1_t *)SCHED_SCHEDULE_VADDR;
-        |
-        |hamr_Schedule sched_schedule = {0};
-        |
-        |bool put_sched_schedule() {
-        |  sb_queue_hamr_Schedule_1_enqueue((sb_queue_hamr_Schedule_1_t *) sb_queue_sched_schedule, (hamr_Schedule *) &sched_schedule);
-        |
-        |  return true;
-        |}
-        |
-        |bool validChannel(microkit_channel ch) {
-        |    for(int i = 0; i < user_schedule.num_timeslices; i++) {
-        |        if (user_schedule.timeslice_ch[i] == ch) {
-        |            return true;
-        |        }
-        |    }
-        |    return false;
-        |}
-        |
         |void notify() {
         |    microkit_channel ch = user_schedule.timeslice_ch[current_timeslice];
         |    if (ch != 0) { // channel 0 is used to pad out a schedule
-        |        sched_state.current_timeslice = current_timeslice;
-        |        put_sched_state();
-        |
         |        microkit_notify(ch);
         |    }
         |    // Set a timeout for the length of this partition's timeslice
@@ -868,40 +827,38 @@ object StaticContent {
         |}
         |
         |void next_partition() {
-        |    current_timeslice++;
-        |
-        |    // Wrap the schedule back around to the beginning if we are at the end
-        |    if (current_timeslice == user_schedule.num_timeslices) {
-        |        current_timeslice = 0;
-        |    }
-        |
+        |    current_timeslice = (current_timeslice + 1) % user_schedule.num_timeslices;
         |    notify();
         |}
         |
         |void notified(microkit_channel ch)
         |{
         |    if (ch == config.driver_id) {
+        |        // Timer driver fired — either the initial timeout after all partitions reported
+        |        // ready (starts the schedule) or a periodic tick (advances to the next timeslice).
         |        if (scheduler_running == false) {
         |            notify();
         |            scheduler_running = true;
         |        } else {
         |            next_partition();
         |        }
-        |    //} else if (ch < user_schedule.num_timeslices) {
-        |    } else if (validChannel(ch)) {
+        |    } else if ((part_ready_check & (1 << ch)) != 0) { // valid channel belonging to  partition
         |        if ((part_ready & (1 << ch)) == 0) {
-        |            // Initialisation: mark partition as ready
+        |            // Channel not yet marked ready — this is the partition's first notification
+        |            // during the initialisation handshake (before the schedule starts running).
+        |
         |            sddf_dprintf("SCHEDULER | Marking partition %d as ready\n", ch);
-        |            part_ready |= (1 << ch);
-        |            if (part_ready == part_ready_check) {
-        |                part_ready |= (1 << 0);  // ch 0 is always 'ready'
+        |            part_ready |= (1 << ch);  // Set this channel's bit in the readiness bitstring
+        |
+        |            if (part_ready == part_ready_check) {  // All expected partitions have reported ready
         |                sddf_dprintf("SCHEDULER | All partitions ready, beginning schedule\n");
         |                // Timeout to let the last partition become passive before starting
         |                sddf_timer_set_timeout(config.driver_id, NS_IN_S);
         |            }
+        |        } else {
+        |            // Runtime signals from partitions are ignored: the schedule is static and each
+        |            // partition runs for its full allotted time regardless of early completion.
         |        }
-        |        // Runtime signals from partitions are ignored: the schedule is static and each
-        |        // partition runs for its full allotted time regardless of early completion.
         |    } else {
         |        sddf_dprintf("SCHEDULER |received unknown notification on channel: %d\n", ch);
         |    }
@@ -909,9 +866,6 @@ object StaticContent {
         |
         |void init(void)
         |{
-        |    sb_queue_hamr_SchedState_1_init((sb_queue_hamr_SchedState_1_t *) sb_queue_sched_state);
-        |    sb_queue_hamr_Schedule_1_init((sb_queue_hamr_Schedule_1_t *) sb_queue_sched_schedule);
-        |
         |    current_timeslice = 0;
         |
         |    scheduler_running = false;
@@ -919,21 +873,14 @@ object StaticContent {
         |    part_ready |= (1 << 0); // ch 0 is always 'ready'
         |    part_ready_check |= (1 << 0); // ch 0 is always 'ready' -- keeps padding optional
         |
-        |    // Construct the partition ready check value
+        |    // Build a bitmask of all channels that must report ready before the schedule
+        |    // can start. Each bit position corresponds to a channel ID. During the
+        |    // initialisation handshake, partitions notify on their channel; part_ready
+        |    // accumulates those bits and is compared against this mask to detect when
+        |    // every scheduled partition has checked in.
         |    for (int i = 0; i < user_schedule.num_timeslices; i++) {
-        |        // Construct the ready check based on the channels to the partitions
-        |        // initial task.
         |        part_ready_check |= (1 << user_schedule.timeslice_ch[i]);
         |    }
-        |
-        |    // Publish the full schedule so monitors can correlate timeslice indices with channels.
-        |    sched_schedule.num_timeslices = user_schedule.num_timeslices;
-        |    for (uint32_t i = 0; i < user_schedule.num_timeslices; i++) {
-        |        sched_schedule.timeslices[i] = user_schedule.timeslices[i];
-        |        sched_schedule.timeslice_ch[i] = user_schedule.timeslice_ch[i];
-        |        sched_schedule.is_user_partition[i] = user_schedule.is_user_partition[i];
-        |    }
-        |    put_sched_schedule();
         |}
         |"""
 
@@ -941,7 +888,7 @@ object StaticContent {
                               |
                               |#include <stdbool.h>
                               |#include <stdint.h>
-                              |#include <scheduler_config.h>
+                              |#include <default.scheduler_config.h>
                               |
                               |${CommentTemplate.doNotEditComment_slash}
                               |
@@ -963,9 +910,6 @@ object StaticContent {
                                    |
                                    |${CommentTemplate.doNotEditComment_slash}
                                    |
-                                   |// @kwinter: This is a first iteration of this config file. We will move it to the
-                                   |// metaprogram after
-                                   |
                                    |// The max partitions is limited by the number of channels that we can establish
                                    |// between the scheduler and a partition's initial process in microkit.
                                    |// One channel is taken by the sDDF timer subsystem.
@@ -975,23 +919,6 @@ object StaticContent {
                                    |// in multiple slots per frame period, so this can exceed MAX_PARTITIONS.
                                    |// Must fit within the 4 KB shared-memory page (struct ≈ 13*N + 4 bytes).
                                    |#define MAX_SCHEDULE_SLOTS 128
-                                   |
-                                   |// Virtual address at which the schedule state shared memory region is mapped.
-                                   |// Must match SCHED_STATE_VADDR in meta.py. Change both if there is a conflict.
-                                   |#define SCHED_STATE_VADDR 0x4000000UL
-                                   |#define SCHED_STATE_SIZE  0x1000UL  // 4 KB
-                                   |
-                                   |// Virtual address at which the schedule shared memory region is mapped.
-                                   |// Must match SCHED_SCHEDULE_VADDR in meta.py. Change both if there is a conflict.
-                                   |#define SCHED_SCHEDULE_VADDR 0x4001000UL
-                                   |#define SCHED_SCHEDULE_SIZE  0x1000UL  // 4 KB
-                                   |
-                                   |// Schedule state broadcast: written by the scheduler before every dispatch.
-                                   |// Monitors that map this region (read-only) can inspect it to determine
-                                   |// the current timeslice index.
-                                   |typedef struct sched_state {
-                                   |    uint32_t current_timeslice; // index into the schedule of the current timeslice
-                                   |} sched_state_t;
                                    |
                                    |typedef struct schedule_config {
                                    |    uint32_t num_partitions;

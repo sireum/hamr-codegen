@@ -9,7 +9,7 @@ import org.sireum.hamr.codegen.common.properties.Hamr_Microkit_Properties
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.HamrCli.CodegenOption
-import org.sireum.hamr.codegen.common.util.{CodeGenResults, ModelUtil, MonitorInjector, ResourceUtil}
+import org.sireum.hamr.codegen.common.util.{CodeGenResults, ModelUtil, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.plugins.c.components.CComponentPlugin
 import org.sireum.hamr.codegen.microkit.plugins.c.connections.CConnectionProviderPlugin
 import org.sireum.hamr.codegen.microkit.plugins._

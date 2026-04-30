@@ -121,7 +121,7 @@ import org.sireum.message.Reporter
 
       usedBudgetInMilli = usedBudgetInMilli + computeExecutionTimeinMilli
 
-      val isUserPartition = !StoreUtil.isPluginGeneratedComponent(t.path, localStore)
+      val isUserPartition = !StoreUtil.isNonModelElement(t.path, localStore)
 
       xmlSchedulingDomains = xmlSchedulingDomains :+
         SchedulingDomain(id = schedulingDomain, componentName = threadMonId.render, length = computeExecutionTimeinMilli * 1_000_000, isUserPartition = isUserPartition)
@@ -226,20 +226,15 @@ import org.sireum.message.Reporter
         case _ => None()
       }
 
-      var varAddrMap: Map[String, MemoryMap] = Map.empty
       for (r <- sharedMemoryRegions) {
         r match {
           case p: PortSharedMemoryRegion =>
-            val m = MemoryMap(
+            childMemMaps = childMemMaps :+ MemoryMap(
               memoryRegion = p.name,
               vaddrInKiBytes = nextMemAddressInKiBytes,
               perms = p.perms,
               varAddr = Some(p.varAddr),
               cached = None())
-
-            childMemMaps = childMemMaps :+ m
-            varAddrMap = varAddrMap + p.varAddr ~> m
-
             nextMemAddressInKiBytes = nextMemAddressInKiBytes + p.sizeInKiBytes
           case _ => halt("")
         }
@@ -389,15 +384,7 @@ import org.sireum.message.Reporter
       var vaddrEntries: ISZ[ST] = ISZ()
       for (v <- cCodeContributions.cBridge_GlobalVarContributions) {
         if (!v.isInstanceOf[VMRamVaddr]) {
-
-          val simpleVarName = ops.StringOps(v.varName).replaceAllLiterally("*", "")
-
-          val init: Option[String] = varAddrMap.get(simpleVarName) match {
-            case Some(memMap) =>
-              Some(s" = (${v.typ} *) ${MicrokitUtil.KiBytesToHexH(memMap.vaddrInKiBytes, F)}")
-            case _ => None()
-          }
-          vaddrEntries = vaddrEntries :+ st"${v.pretty}$init;"
+          vaddrEntries = vaddrEntries :+ st"${v.pretty};"
         }
       }
 
@@ -525,13 +512,6 @@ import org.sireum.message.Reporter
       xmlMemoryRegions = xmlMemoryRegions :+ s
     }
 
-    // Register the sched_state_mr and sched_schedule_mr regions so that plugins (e.g. the
-    // runtime monitor) can add PD mappings for them via MemoryMap.  The regions are
-    // template-managed: meta.py creates them directly; the MEMORY REGIONS loop only emits
-    // add_map calls for PDs that reference these regions.
-    xmlMemoryRegions = xmlMemoryRegions :+ GenericMemoryRegion(name = "sched_state_mr", sizeInKiBytes = 4)
-    xmlMemoryRegions = xmlMemoryRegions :+ GenericMemoryRegion(name = "sched_schedule_mr", sizeInKiBytes = 4)
-
     val sdName = "normal"
 
     val sd = SystemDescription(
@@ -539,7 +519,8 @@ import org.sireum.message.Reporter
       schedulingDomains = xmlScheds,
       protectionDomains = xmlProtectionDomains,
       memoryRegions = xmlMemoryRegions,
-      channels = xmlChannels)
+      channels = xmlChannels,
+      templateContributions = ISZ())
 
     localStore = SystemDescriptionProviderPlugin.putMSD(sdName, sd, localStore)
     localStore = StoreUtil.addMakefileContainers(makefileContainers, localStore)

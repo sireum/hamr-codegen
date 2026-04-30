@@ -4,14 +4,14 @@ package org.sireum.hamr.codegen.microkit.plugins.rust.apis
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{BoolValue, IdPath, Store, StoreValue}
 import org.sireum.hamr.codegen.common.containers.Resource
-import org.sireum.hamr.codegen.common.symbols.{AadlThread, SymbolTable}
+import org.sireum.hamr.codegen.common.symbols.{AadlPort, AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.HamrCli.CodegenHamrPlatform
 import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.plugins.rust.component.CRustComponentPlugin
 import org.sireum.hamr.codegen.microkit.plugins.rust.types.CRustTypePlugin
-import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, MicrokitPlugin}
+import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, MicrokitPlugin, StoreUtil}
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil
 import org.sireum.hamr.codegen.microkit.{rust => RAST}
 import org.sireum.hamr.ir.{Aadl, Direction}
@@ -138,11 +138,28 @@ object ComponentApiContributions {
       if (MicrokitUtil.isRusty(srcThread)) {
         var contributions = ComponentApiContributions.empty
 
-        for (inPort <- srcThread.getPorts().filter(p => p.direction == Direction.In)) {
-          contributions = contributions.combine(CRustApiUtil.processInPort(srcThread, inPort, crustTypeProvider))
+        val apiPorts: ISZ[AadlPort] = srcThread.getPorts().filter((p: AadlPort) =>
+          !StoreUtil.isNonModelElement(p.path, localStore))
+
+        for (inPort <- apiPorts.filter((p: AadlPort) => p.direction == Direction.In)) {
+          contributions = contributions.combine(CRustApiUtil.processInPort(srcThread, inPort, crustTypeProvider, apiPorts))
         }
-        for (outPort <- srcThread.getPorts().filter(p => p.direction == Direction.Out)) {
-          contributions = contributions.combine(CRustApiUtil.processOutPort(srcThread, outPort, crustTypeProvider))
+        for (outPort <- apiPorts.filter((p: AadlPort) => p.direction == Direction.Out)) {
+          contributions = contributions.combine(CRustApiUtil.processOutPort(srcThread, outPort, crustTypeProvider, apiPorts))
+        }
+
+        for (svPort <- srcThread.getPorts().filter((p: AadlPort) =>
+          StoreUtil.isNonModelElement(p.path, localStore))) {
+          val full: ComponentApiContributions = if (svPort.direction == Direction.In) {
+            CRustApiUtil.processInPort(srcThread, svPort, crustTypeProvider, apiPorts)
+          } else {
+            CRustApiUtil.processOutPort(srcThread, svPort, crustTypeProvider, apiPorts)
+          }
+          contributions = contributions.combine(ComponentApiContributions.empty(
+            externCApis = full.externCApis,
+            unsafeExternCApiWrappers = full.unsafeExternCApiWrappers,
+            externApiTestMockVariables = full.externApiTestMockVariables,
+            externApiTestingApis = full.externApiTestingApis))
         }
 
         ret = ret + srcThread.path ~> contributions

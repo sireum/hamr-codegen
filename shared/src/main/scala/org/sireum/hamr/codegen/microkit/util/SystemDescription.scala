@@ -11,7 +11,8 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
                                    val schedulingDomains: ISZ[SchedulingDomain],
                                    val protectionDomains: ISZ[ProtectionDomain],
                                    val memoryRegions: ISZ[MemoryRegion],
-                                   val channels: ISZ[Channel]) {
+                                   val channels: ISZ[Channel],
+                                   val templateContributions: ISZ[ST]) {
 
   val contentMarker: BlockMarker = Marker.createXmlMarker("MSD CONTENT MARKER")
 

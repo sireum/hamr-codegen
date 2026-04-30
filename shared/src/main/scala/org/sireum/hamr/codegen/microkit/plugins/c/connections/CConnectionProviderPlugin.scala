@@ -103,7 +103,7 @@ object CConnectionProviderPlugin {
       // now handle unconnected ports of the source thread.
       // If the thread is plugin-generated (e.g. the runtime monitor), suppress shared memory
       // regions — those ports are wired at the meta.py template level, not via HAMR queues.
-      val isPluginThread: B = StoreUtil.isPluginGeneratedComponent(srcThread.path, localStore)
+      val isPluginThread: B = StoreUtil.isNonModelElement(srcThread.path, localStore)
       for (unconnectedPort <- srcThread.getPorts().filter((p: AadlPort) =>
         !symbolTable.inConnections.contains(p.path) &&
         !symbolTable.outConnections.contains(p.path))) {

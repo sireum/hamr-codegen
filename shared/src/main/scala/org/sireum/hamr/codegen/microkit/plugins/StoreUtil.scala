@@ -8,7 +8,6 @@ import org.sireum.hamr.codegen.microkit.util._
 object StoreUtil {
 
   val KEY_MakefileContainers: String = "KEY_MakefileContainers"
-
   @strictpure def getMakefileContainers(store: Store): ISZ[MakefileContainer] =
     store.getOrElse(KEY_MakefileContainers, ISZValue[MakefileContainer](ISZ())).asInstanceOf[ISZValue[MakefileContainer]].elements
 
@@ -16,15 +15,14 @@ object StoreUtil {
     store + KEY_MakefileContainers ~> ISZValue(getMakefileContainers(store) ++ s)
 
 
-  val KEY_PluginGeneratedComponent: String = "KEY_PluginGeneratedComponent"
-  @strictpure def isPluginGeneratedComponent(id: IdPath, store: Store): B = {
-    val pluginGenerated: ISZ[IdPath] = store.getOrElse(KEY_PluginGeneratedComponent, ISZValue[IdPath](ISZ())).asInstanceOf[ISZValue[IdPath]].elements
+  val KEY_NonModelElement: String = "KEY_NoneModelElement"
+  @strictpure def isNonModelElement(id: IdPath, store: Store): B = {
+    val pluginGenerated: ISZ[IdPath] = store.getOrElse(KEY_NonModelElement, ISZValue[IdPath](ISZ())).asInstanceOf[ISZValue[IdPath]].elements
     ops.ISZOps(pluginGenerated).contains(id)
   }
 
-  @strictpure def addPluginGeneratedComponent(id: IdPath, store: Store): Store = {
-    val pluginGenerated: ISZ[IdPath] = store.getOrElse(KEY_PluginGeneratedComponent, ISZValue[IdPath](ISZ())).asInstanceOf[ISZValue[IdPath]].elements
-    store + KEY_PluginGeneratedComponent ~> ISZValue(pluginGenerated :+ id)
+  @strictpure def addNonModelElement(id: IdPath, store: Store): Store = {
+    val pluginGenerated: ISZ[IdPath] = store.getOrElse(KEY_NonModelElement, ISZValue[IdPath](ISZ())).asInstanceOf[ISZValue[IdPath]].elements
+    store + KEY_NonModelElement ~> ISZValue(pluginGenerated :+ id)
   }
-
 }

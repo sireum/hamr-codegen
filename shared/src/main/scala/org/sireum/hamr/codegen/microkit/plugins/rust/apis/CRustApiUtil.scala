@@ -12,7 +12,8 @@ import org.sireum.hamr.ir.Direction
 object CRustApiUtil {
 
   def processInPort(dstThread: AadlThread, dstPort: AadlPort,
-                    crustTypeProvider: CRustTypeProvider): ComponentApiContributions = {
+                    crustTypeProvider: CRustTypeProvider,
+                    apiPorts: ISZ[AadlPort]): ComponentApiContributions = {
     val portType: AadlType = crustTypeProvider.getRepresentativeType(MicrokitTypeUtil.getPortType(dstPort))
     val portTypeNameProvider = crustTypeProvider.getTypeNameProvider(portType)
 
@@ -28,14 +29,16 @@ object CRustApiUtil {
       unverifiedGetApis = ISZ(getBridgeGetApi(dstPort, portType, crustTypeProvider)),
 
       //appApiDefaultPutters = ISZ(),
-      appApiDefaultGetters = ISZ(getApiDefaultGetter(dstThread, dstPort, portType, crustTypeProvider)),
+      appApiDefaultGetters = ISZ(getApiDefaultGetter(dstPort, portType, crustTypeProvider, apiPorts)),
 
       ghostVariables = ISZ(getGhostVariable(dstPort, portType, portTypeNameProvider)),
       ghostInitializations = ISZ(getGhostInitializations(dstPort, portType, crustTypeProvider))
     )
   }
 
-  @pure def processOutPort(srcThread: AadlThread, srcPort: AadlPort, crustTypeProvider: CRustTypeProvider): ComponentApiContributions = {
+  @pure def processOutPort(srcThread: AadlThread, srcPort: AadlPort,
+                           crustTypeProvider: CRustTypeProvider,
+                           apiPorts: ISZ[AadlPort]): ComponentApiContributions = {
     val portType: AadlType = crustTypeProvider.getRepresentativeType(MicrokitTypeUtil.getPortType(srcPort))
     val portTypeNameProvider = crustTypeProvider.getTypeNameProvider(portType)
 
@@ -50,7 +53,7 @@ object CRustApiUtil {
       unverifiedPutApis = ISZ(getBridgePutApi(srcPort, portType, crustTypeProvider)),
       //getApis = ISZ(),
 
-      appApiDefaultPutters = ISZ(getApiDefaultPutter(srcThread, srcPort, portType, crustTypeProvider)),
+      appApiDefaultPutters = ISZ(getApiDefaultPutter(srcPort, portType, crustTypeProvider, apiPorts)),
       //appApiDefaultGetters = ISZ(),
 
       ghostVariables = ISZ(getGhostVariable(srcPort, portType, portTypeNameProvider)),
@@ -185,10 +188,10 @@ object CRustApiUtil {
       body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(body)))))
   }
 
-  @pure def getApiContract(srcPort: AadlPort, srcThread: AadlThread): ISZ[RAST.Expr] = {
+  @pure def getApiContract(srcPort: AadlPort, apiPorts: ISZ[AadlPort]): ISZ[RAST.Expr] = {
     val isEventPort = srcPort.isInstanceOf[AadlEventPort]
     var r: ISZ[RAST.Expr] = ISZ()
-    for (otherPort <- srcThread.getPorts()) {
+    for (otherPort <- apiPorts) {
       if (srcPort.path == otherPort.path) {
         if (srcPort.direction == Direction.Out) {
           srcPort match {
@@ -210,14 +213,14 @@ object CRustApiUtil {
     return r
   }
 
-  @pure def getApiDefaultPutter(srcThread: AadlThread, srcPort: AadlPort, aadlType: AadlType, crustTypeProvider: CRustTypeProvider): RAST.Item = {
+  @pure def getApiDefaultPutter(srcPort: AadlPort, aadlType: AadlType, crustTypeProvider: CRustTypeProvider, apiPorts: ISZ[AadlPort]): RAST.Item = {
     val isEventPort = srcPort.isInstanceOf[AadlEventPort]
 
     val methodName = s"put_${srcPort.identifier}"
     val unverifiedMethodName = s"unverified_$methodName"
     val ghostName = getGhostName(srcPort)
     val portTypeNP = crustTypeProvider.getTypeNameProvider(aadlType)
-    val ensures = getApiContract(srcPort, srcThread)
+    val ensures = getApiContract(srcPort, apiPorts)
     val bodyGhost: RAST.BodyItem =
       srcPort match {
         case i: AadlEventPort => RAST.BodyItemST(st"self.${ghostName} = Some(${MicrokitTypeUtil.eventPortRustValue});")
@@ -249,12 +252,12 @@ object CRustApiUtil {
           bodyGhost))))
   }
 
-  @pure def getApiDefaultGetter(thread: AadlThread, port: AadlPort, aadlType: AadlType, crustTypeProvider: CRustTypeProvider): RAST.Item = {
+  @pure def getApiDefaultGetter(port: AadlPort, aadlType: AadlType, crustTypeProvider: CRustTypeProvider, apiPorts: ISZ[AadlPort]): RAST.Item = {
     val methodName = s"get_${port.identifier}"
     val unverifiedMethodName = s"unverified_$methodName"
     val ghostName = getGhostName(port)
     val portTypeNP = crustTypeProvider.getTypeNameProvider(aadlType)
-    val ensures = getApiContract(port, thread)
+    val ensures = getApiContract(port, apiPorts)
     val retType: RAST.FnRetTy =
       port match {
         case i: AadlDataPort => RAST.FnRetTyImpl(RAST.TyTuple(ISZ(

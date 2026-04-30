@@ -166,7 +166,7 @@ import org.sireum.message.Reporter
         case _ => defaultComputeExecutionTime
       }
 
-      val isUserPartition = !StoreUtil.isPluginGeneratedComponent(t.path, localStore)
+      val isUserPartition = !StoreUtil.isNonModelElement(t.path, localStore)
 
       xmlSchedulingDomains = xmlSchedulingDomains :+
         SchedulingDomain(id = schedulingDomain, componentName = threadMonId.render, length = computeExecutionTime, isUserPartition = isUserPartition)
@@ -563,7 +563,8 @@ import org.sireum.message.Reporter
       schedulingDomains = xmlScheds,
       protectionDomains = xmlProtectionDomains,
       memoryRegions = xmlMemoryRegions,
-      channels = xmlChannels)
+      channels = xmlChannels,
+      templateContributions = ISZ())
     localStore = SystemDescriptionProviderPlugin.putMSD(normalName, normalSd, localStore)
 
     localStore = StoreUtil.addMakefileContainers(makefileContainers, localStore)

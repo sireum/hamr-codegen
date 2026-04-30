@@ -2,116 +2,105 @@
 
 ## Problem
 
-The existing runtime monitor (created by `RustModelTransformerPlugin`) is connected to every outgoing thread port and can observe port values. To check GUMBO pre/post conditions, the monitor also needs access to each thread's **state variables** (e.g., `lastCmd: On_Off` in the isolette's `thermostat_mt_ma_ma`).
+The existing runtime monitor (created by `RustScheduleAwareMonitorPlugin` via `MonitorInjector`) is connected to every outgoing thread port and can observe port values. To check GUMBO pre/post conditions, the monitor also needs access to each thread's **state variables** (e.g., `lastCmd: On_Off` in the isolette's `thermostat_mt_ma_ma`).
 
 All threads and the monitor run in separate seL4/Microkit protection domains. seL4 provides **no debug-mode introspection** of another PD's private memory — isolation is absolute. The only cross-PD data sharing mechanism is explicitly declared shared memory regions.
 
-## Proposed Solution: Shared Memory Regions for State Vars
+## Proposed Solution: Port-Based State Variable Exposure
 
 ### Overview
 
-A new `GumboMonitorPlugin` (modeled after `RustModelTransformerPlugin`) would:
+A new `GumboMonitorPlugin` post-processes the model returned by `MonitorInjector.inject` to add port-based state variable exposure. The approach reuses the existing port/shared-memory infrastructure rather than introducing a separate mechanism:
 
-1. For each thread with GUMBO state vars, add a `memory_region` to the **monitor MSD** (e.g., `thermostat_mt_ma_ma_state_vars_mr`)
-2. Map the region `rw` into both the thread PD and the monitor PD
-3. Generate C and Rust infrastructure for reading/writing state vars through the region
-4. The **normal MSD** has no such region — this is the enable/disable toggle
+1. For each thread with GUMBO state vars, add **output data ports** to the source thread (one per state var)
+2. Add corresponding **input data ports** to the monitor thread
+3. The ports are left **unconnected** in the AADL connection graph
+4. Existing codegen handles the rest: unconnected output ports on normal threads automatically get shared memory regions; the GumboMonitorPlugin wires those regions into the monitor PD at MSD generation time
 
-Users enable runtime monitoring by pointing to the monitor version of the MSD (e.g., `meta.monitor.py` instead of `meta.py`), which is the existing pattern.
+### Plugin Architecture
 
-### Zero Overhead When Monitoring Is Disabled
+`GumboMonitorPlugin` is a separate plugin that runs **after** `RustScheduleAwareMonitorPlugin`:
 
-The same generated code works for both configurations with no runtime cost when monitoring is off:
+```
+RustScheduleAwareMonitorPlugin.handleModelTransform
+  └── MonitorInjector.inject(model, symbolTable, ...)
+      └── returns (ir.Aadl, Store) with monitor thread wired to all outgoing ports
+  └── ModelUtil.resolve → updated SymbolTable
 
-- **C side**: State var pointers are initialized to `NULL`. The Microkit loader patches them via `setvar_vaddr` only when the monitor MSD provides the memory region mapping.
-- **Rust side**: On initialization, `lib.rs` calls a single FFI function to check if the pointer is non-null, and stores the result in a `static mut monitoring_enabled: bool`. All subsequent state var get/put calls are guarded by this boolean — no FFI crossing when monitoring is off.
+GumboMonitorPlugin.handleModelTransform  (runs next)
+  └── takes the already-resolved model + SymbolTable
+  └── iterates threads, finds GCL state vars via symbolTable.annexClauseInfos
+  └── adds output data ports to source threads/processes
+  └── adds input data ports to monitor thread/process
+  └── adds delegation connections inside both processes
+  └── ModelUtil.resolve → updated SymbolTable
+  └── returns (Store, Aadl, AadlTypes, SymbolTable)
+```
 
-### Rust Integration (`lib.rs`)
+The plugin gates on `RustScheduleAwareMonitorPlugin` having completed its model transform (via its store key). If GUMBO monitoring is not needed, the plugin simply doesn't run and `MonitorInjector`'s output passes through unchanged.
 
-State var reads/writes are placed in the generated `lib.rs` (not in user code):
+### How State Vars Are Found
 
-```rust
-static mut monitoring_enabled: bool = false;
+Each thread's GUMBO state variables are accessible via:
 
-pub extern "C" fn thermostat_mt_ma_ma_initialize() {
-    unsafe {
-        monitoring_enabled = extern_c_api::is_monitoring_enabled();
-
-        let mut _app = thermostat_mt_ma_ma::new();
-        _app.initialize(&mut init_api);
-
-        if monitoring_enabled {
-            extern_c_api::put_state_var_lastCmd(_app.lastCmd);
-        }
-
-        app = Some(_app);
-    }
-}
-
-pub extern "C" fn thermostat_mt_ma_ma_timeTriggered() {
-    unsafe {
-        if let Some(_app) = app.as_mut() {
-            // Monitor may have mutated state vars (e.g., for unit testing)
-            if monitoring_enabled {
-                _app.lastCmd = extern_c_api::get_state_var_lastCmd();
-            }
-
-            _app.timeTriggered(&mut compute_api);
-
-            // Write state vars for monitor to observe
-            if monitoring_enabled {
-                extern_c_api::put_state_var_lastCmd(_app.lastCmd);
-            }
-        }
-    }
+```scala
+symbolTable.annexClauseInfos.get(threadPath) match {
+  case Some(clauses) =>
+    val gclInfo = clauses(0).asInstanceOf[GclAnnexClauseInfo]
+    val stateVars: ISZ[GclStateVar] = gclInfo.annex.state
+    // each GclStateVar has .name (String) and .classifier (String)
 }
 ```
 
-### C Backend
+This is the same path used by `GumboRustPlugin` (via `GumboRustUtil.getGumboSubclauseOpt`).
 
-Per-state-var functions avoid struct construction overhead:
+### Port Injection (Model Transform Phase)
 
-```c
-// Patched by setvar_vaddr when monitor MSD is used; stays NULL otherwise
-volatile state_vars_t *state_vars_region = NULL;
+For each thread with GUMBO state vars, the plugin adds ports at both thread and process levels, plus delegation connections. All ports are **unconnected** — no system-level connections or connection instances are created.
 
-bool is_monitoring_enabled(void) {
-    return state_vars_region != NULL;
-}
+**Source thread side** (e.g., `thermostat_mt_ma_ma` with state var `lastCmd: On_Off`):
 
-void put_state_var_lastCmd(On_Off value) {
-    if (state_vars_region != NULL) {
-        state_vars_region->lastCmd = value;
-    }
-}
+- Output data port on thread: `sv_lastCmd` with classifier `On_Off`
+- Output data port on process: `sv_lastCmd` (same name, process-level boundary)
+- Delegation connection inside process: thread.`sv_lastCmd` → process.`sv_lastCmd`
 
-On_Off get_state_var_lastCmd(void) {
-    return state_vars_region->lastCmd;
-}
-```
+**Monitor side**:
 
-### System Description (Monitor MSD)
+- Input data port on monitor thread: `thermostat_mt_ma_ma_sv_lastCmd`
+- Input data port on monitor process: `thermostat_mt_ma_ma_sv_lastCmd`
+- Delegation connection inside monitor process: process port → thread port
 
-The monitor MSD adds the state var memory region and maps it into both PDs:
+### How Shared Memory Regions Are Created
 
-```python
-# State var memory region for thermostat_mt_ma_ma
-ma_ma_state_vars_mr = MemoryRegion("thermostat_mt_ma_ma_state_vars_mr", size=0x1000)
+The key insight is how `CConnectionProviderPlugin` handles unconnected ports (lines 103–136):
 
-# Thread PD: rw access, setvar_vaddr patches the C pointer
-thermostat_mt_ma_ma.add_map(Map(ma_ma_state_vars_mr, 0x10_00A_000,
-    perms="rw", setvar_vaddr="state_vars_region"))
+1. **Normal threads**: Unconnected output ports get full shared memory regions + C queue wrappers + put APIs automatically. The source thread's `sv_lastCmd` output port triggers all of this.
 
-# Monitor PD: rw access (bidirectional for unit testing)
-monitor_thread.add_map(Map(ma_ma_state_vars_mr, 0x10_00X_000,
-    perms="rw", setvar_vaddr="thermostat_mt_ma_ma_state_vars_region"))
-```
+2. **Plugin-generated threads** (the monitor): Unconnected input ports get C type/API scaffolding (get functions, type definitions) but **no shared memory regions** — those are suppressed via the `isPluginThread` check. The comment says: "those ports are wired at the meta.py template level, not via HAMR queues."
 
-The normal MSD has none of this, so the pointer stays `NULL` and `monitoring_enabled` is `false`.
+This is exactly the split we need: the source side gets memory regions automatically, and the GumboMonitorPlugin wires those regions into the monitor PD at MSD generation time.
+
+### MSD Wiring (Handle Phase)
+
+In its `handle` phase (after model transform), the GumboMonitorPlugin:
+
+1. Finds the shared memory regions created for each source thread's state var output ports
+2. Maps those same regions into the monitor PD with read permissions
+3. Connects them to the monitor's corresponding input ports via `setvar_vaddr`
+
+The naming convention is the glue: `sv_` prefix on source threads maps to `{process}_{thread}_sv_{name}` on the monitor.
+
+### Naming Conventions
+
+| Artifact | Pattern | Example |
+|----------|---------|---------|
+| Source thread output port | `sv_{stateVarName}` | `sv_lastCmd` |
+| Monitor input port | `{srcProcess}_{srcThread}_sv_{stateVarName}` | `thermostat_mt_ma_ma_sv_lastCmd` |
+| Shared memory region | (auto-generated from output port path) | — |
 
 ## Bidirectional Use Cases
 
-Because the region is `rw` for both PDs:
+Because the shared memory regions can be mapped `rw` for both PDs:
 
 1. **Post-condition checking**: Monitor reads state vars + output ports after a thread runs, evaluates GUMBO post-conditions
 2. **Pre-condition checking**: Monitor reads the receiving thread's state vars + incoming port values, evaluates GUMBO pre-conditions
@@ -137,16 +126,27 @@ The static ARINC schedule guarantees temporal separation — the monitor's times
 
 | File | Role |
 |------|------|
-| `codegen/.../plugins/monitors/RustModelTransformerPlugin.scala` | Existing plugin — template for GumboMonitorPlugin |
-| `isolette/.../thermostat_mt_ma_ma/src/component/thermostat_mt_ma_ma_app.rs` | Example thread with GUMBO state var `lastCmd` |
-| `isolette/.../thermostat_mt_ma_ma/src/lib.rs` | Where state var get/put calls would be inserted |
-| `base_type/.../monitor_process_monitor_thread/src/component/monitor_process_monitor_thread_app.rs` | Example monitor implementation |
-| `base_type/.../monitor_process_monitor_thread.c` | C backend showing shared memory pointer + extern pattern |
-| `meta.monitor.py` / `meta.py` | Monitor vs normal MSD configs |
+| `codegen/.../plugins/monitors/RustScheduleAwareMonitorPlugin.scala` | Existing plugin — calls `MonitorInjector.inject`, handles model transform + MSD generation |
+| `codegen/.../plugins/monitors/MonitorInjector.scala` | Injects monitor thread into AIR model, creates ports + connections for outgoing thread ports |
+| `codegen/.../plugins/c/connections/CConnectionProviderPlugin.scala` | Processes connected and unconnected ports — creates shared memory regions (suppressed for plugin-generated threads) |
+| `codegen/.../plugins/rust/gumbo/GumboRustPlugin.scala` | Existing GUMBO plugin — shows how to access GCL state vars per thread |
+| `codegen/.../plugins/rust/gumbo/GumboRustUtil.scala` | `getGumboSubclauseOpt` — retrieves GCL annex clause info from SymbolTable |
+| `air/.../ir/GumboAST.scala` | `GclStateVar` definition (`.name`, `.classifier`); `GclSubclause.state: ISZ[GclStateVar]` |
+| `codegen/.../common/symbols/AadlSymbols.scala` | `GclAnnexClauseInfo` — wraps `GclSubclause` + `GclSymbolTable` |
 
-## Open Items
+## Implementation Status (updated 2026-05-03)
 
-- Determine how GUMBO state vars are represented in the symbol table / AIR for the plugin to read
-- Define the `state_vars_t` struct layout convention (field ordering, alignment, padding)
-- Decide naming conventions for the generated memory regions, C functions, and Rust extern declarations
-- Consider whether the plugin should be a separate `@sig trait` or extend the existing `RustModelTransformerPlugin`
+### Done
+
+1. **Model Transform** — `GumboMonitorPlugin.handleModelTransform` adds synthetic `sv_` output ports to threads with GUMBO state vars, corresponding input ports to the monitor thread, and delegation connections inside both processes. Gates on `RustScheduleAwareMonitorPlugin`'s store key.
+2. **MSD Wiring** — `GumboMonitorPlugin.handle` wires the source thread's shared memory regions into the monitor PD with read permissions.
+3. **Rust extern_c_api.rs** — `GumboMonitorPlugin.handle` generates `is_monitoring_enabled` (extern C declaration, unsafe wrapper, test mock with `MONITORING_ENABLED` lazy_static). No separate get/put_state_var functions — uses the existing `put_sv_X` wrappers that CRustComponentPlugin already generates for the synthetic ports.
+4. **Rust lib.rs replacement** — `GumboMonitorPlugin.finalizeMicrokit` emits a replacement `lib.rs` (via resource override) that tracks a `monitoring_enabled` flag and calls `unsafe_put_sv_X` after both `_initialize` and `_timeTriggered`, conditional on `monitoring_enabled`. Non-monitoring threads are unaffected.
+5. **Default codegen is monitoring-clean** — `CRustComponentPlugin` is not modified. The default `lib.rs` template, meta.py template, and system description contain no monitoring-conditional code. Monitor plugins add/remove their own infrastructure.
+6. **sched_state/sched_schedule regions moved to monitor plugin** — Removed from the default MCS template (`SystemDescriptionProvider_MCS`) and `CComponentPlugin_MCS`. Moved to `RustScheduleAwareMonitorPlugin` via a new `SystemDescription.templateContributions: ISZ[ST]` field that allows plugins to inject Python code into meta.py per MSD variant.
+7. **All 31 Microkit tests pass** (4 ignored).
+
+### Open Items
+
+- Monitor-side consumption of state var data (the monitor PD can read the `sv_` shared memory regions but no codegen yet for how it processes them)
+- GUMBO contract evaluation in the monitor (pre/post condition checking using state var + port data)
