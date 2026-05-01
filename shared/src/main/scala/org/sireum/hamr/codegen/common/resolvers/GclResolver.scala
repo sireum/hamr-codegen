@@ -810,6 +810,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
     modelContainsBoundArrays = F
     arrayIndexInterpolateImports = ISZ()
     indexingTypeFingerprints = Map.empty
+    slangTypeToAadlType = Map.empty
 
     return T
   }
@@ -1861,6 +1862,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       val posOpt: Option[Position] = if (aadlType.container.nonEmpty) aadlType.container.get.identifier.pos else posOptP
 
       val qualifiedName = aadlType.classifier
+      val packageName = ops.ISZOps(qualifiedName).dropRight(1)
 
       val qualifiedTypeName: ISZ[String] =
         aadlType match {
@@ -1871,6 +1873,9 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       if (globalTypeMap.contains(qualifiedTypeName)) {
         return globalTypeMap.get(qualifiedTypeName).get
       }
+
+      // build Slang package from AADL package
+      buildPackageInfo(packageName, posOpt)
 
       val attr = AST.Attr(posOpt)
       val rattr = AST.ResolvedAttr(posOpt = posOpt, resOpt = None(), typedOpt = None())
@@ -1942,10 +1947,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             return globalTypeMap.get(qualifiedName).get
           }
 
-          val packageName = ops.ISZOps(qualifiedName).dropRight(1)
           val simpleName = qualifiedName(qualifiedName.lastIndex)
-
-          buildPackageInfo(packageName, posOpt)
 
           val baseTypeFQN: ISZ[String] = GclResolverUtil.getSlangName(a.baseType, reporter)
 
@@ -2313,8 +2315,6 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
         case b: BaseType =>
           val simpleName = b.simpleName
-          val packageName = ops.ISZOps(qualifiedTypeName).dropRight(1)
-          buildPackageInfo(packageName, posOpt)
 
           val imports: ISZ[AST.Stmt.Import] = ISZ()
 
@@ -2950,9 +2950,6 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       assert(packageName.nonEmpty)
 
       val posOpt = a.component.identifier.pos
-
-      // build Slang package from AADL package
-      buildPackageInfo(packageName, posOpt)
 
       // enclosingName is the same as the packageName
       val adtScope = scope(packageName, globalImports(packageName), packageName)
