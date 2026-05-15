@@ -46,14 +46,18 @@ object GumboRustPlugin {
 @sig trait GumboRustContributions extends StoreValue {
   @pure def datatypeInvariants: Map[DataIdPath, ISZ[RAST.Fn]]
 
-  @pure def getLibraryAnnexes: Map[String, GumboRustPlugin.LibraryAnnex]
-  @pure def setLibraryAnnexes(m: Map[String, GumboRustPlugin.LibraryAnnex]): GumboRustContributions
+  @pure def getTheLibraryAnnexes: Map[String, GumboRustPlugin.LibraryAnnex]
+
+  @pure def setTheLibraryAnnexes(m: Map[String, GumboRustPlugin.LibraryAnnex]): GumboRustContributions
 }
 
 @datatype class DefaultGumboRustContributions(val datatypeInvariants: Map[DataIdPath, ISZ[RAST.Fn]],
                                               val libraryAnnexes: Map[String, GumboRustPlugin.LibraryAnnex]) extends GumboRustContributions {
 
-  @strictpure override def setLibraryAnnexes(m: Map[String, GumboRustPlugin.LibraryAnnex]): GumboRustContributions = DefaultGumboRustContributions(datatypeInvariants, m)
+  @strictpure override def getTheLibraryAnnexes: Map[String, GumboRustPlugin.LibraryAnnex] = libraryAnnexes
+
+  @strictpure override def setTheLibraryAnnexes(m: Map[String, GumboRustPlugin.LibraryAnnex]): GumboRustContributions =
+    DefaultGumboRustContributions(datatypeInvariants, m)
 }
 
 @sig trait GumboRustPlugin extends MicrokitInitPlugin with MicrokitPlugin with MicrokitFinalizePlugin {
@@ -120,7 +124,7 @@ object GumboRustPlugin {
 
   @pure override def canFinalizeMicrokit(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): B = {
     val hasLibraryAnnexes: B = GumboRustPlugin.getGumboRustContributions(store) match {
-      case Some(c) => c.getLibraryAnnexes.nonEmpty
+      case Some(c) => c.getTheLibraryAnnexes.nonEmpty
       case _ => F
     }
 
@@ -792,11 +796,11 @@ object GumboRustPlugin {
       case Some(c) =>
         // write out any gumbo library annex crates
 
-        assert (c.getLibraryAnnexes.nonEmpty)
+        assert (c.getTheLibraryAnnexes.nonEmpty)
         var localStore = store
         var resources: ISZ[Resource] = ISZ()
 
-        for (e <- c.getLibraryAnnexes.entries) {
+        for (e <- c.getTheLibraryAnnexes.entries) {
 
           val rootDir = s"${options.sel4OutputDir.get}/crates/${e._1}"
 

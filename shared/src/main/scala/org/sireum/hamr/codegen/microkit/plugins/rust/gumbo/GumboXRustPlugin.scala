@@ -155,7 +155,7 @@ object GumboXComputeContributions {
     val datatypeInvariants = GumboRustPlugin.getGumboRustContributions(localStore).get.datatypeInvariants
     var items: Map[ThreadIdPath, GumboXComponentContributions] = Map.empty
 
-    var libraryAnnexes: Map[String, GumboRustPlugin.LibraryAnnex] = GumboRustPlugin.getGumboRustContributions(localStore).get.getLibraryAnnexes
+    var libraryAnnexes: Map[String, GumboRustPlugin.LibraryAnnex] = GumboRustPlugin.getGumboRustContributions(localStore).get.getTheLibraryAnnexes
 
     for(gclLib <- GumboRustPlugin.getGclLibraryAnnexes(symbolTable)) {
       assert(gclLib.name.size == 2 && gclLib.name(1) == "GUMBO__Library", gclLib.name.string)
@@ -247,7 +247,7 @@ object GumboXComputeContributions {
       CRustTestingPlugin.CRustTestingContributions(testingContributions), localStore)
 
     localStore = GumboRustPlugin.putGumboRustContributions(
-      GumboRustPlugin.getGumboRustContributions(localStore).get.setLibraryAnnexes(libraryAnnexes), localStore)
+      GumboRustPlugin.getGumboRustContributions(localStore).get.setTheLibraryAnnexes(libraryAnnexes), localStore)
 
     return (GumboXRustPlugin.putGumboXContributions(DefaultGumboXContributions(items), localStore), resources)
   }
@@ -595,7 +595,7 @@ object GumboXComputeContributions {
 
     var IEP_Guarantee: ISZ[RAST.Fn] = ISZ()
     var IEP_Guarantee_Params: Set[GGParam] = Set.empty[GGParam] ++
-      GumboXRustUtil.outPortsToParams(thread, crustTypeProvider) ++
+      GumboXRustUtil.outPortsToParams(thread, crustTypeProvider, store) ++
       GumboXRustUtil.stateVarsToParams(subclauseInfoOpt, F, types, crustTypeProvider)
 
     subclauseInfoOpt match {
@@ -774,12 +774,12 @@ object GumboXComputeContributions {
 
 
     var CEP_Pre_Params: Set[GGParam] = Set.empty[GGParam] ++
-      GumboXRustUtil.inPortsToParams(thread, crustTypeProvider) ++
+      GumboXRustUtil.inPortsToParams(thread, crustTypeProvider, store) ++
       GumboXRustUtil.stateVarsToParams(subclauseInfoOpt, T, types, crustTypeProvider)
 
     var CEP_Post_Params: Set[GGParam] = Set.empty[GGParam] ++
       CEP_Pre_Params.elements ++
-      GumboXRustUtil.outPortsToParams(thread, crustTypeProvider) ++
+      GumboXRustUtil.outPortsToParams(thread, crustTypeProvider, store) ++
       GumboXRustUtil.stateVarsToParams(subclauseInfoOpt, F, types, crustTypeProvider)
 
     subclauseInfoOpt match {

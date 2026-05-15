@@ -355,7 +355,7 @@ object MonitorInjector {
 
     val newDataComponents: ISZ[ir.Component] =
       if (isMCS) {
-        val s =injectMCSTypes(model.dataComponents, localStore)
+        val s = injectMCSTypes(model.dataComponents, localStore)
         localStore = s._2
         s._1
       }

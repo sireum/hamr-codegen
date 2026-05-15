@@ -2,10 +2,10 @@
 package org.sireum.hamr.codegen.microkit.plugins.rust.gumbo
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.CommonUtil.{Store, TypeIdPath}
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes}
+import org.sireum.hamr.codegen.microkit.plugins.StoreUtil
 import org.sireum.hamr.codegen.microkit.plugins.rust.types.{CRustTypeNameProvider, CRustTypeProvider}
 import org.sireum.hamr.codegen.microkit.rust.Param
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
@@ -370,13 +370,16 @@ object GumboXRustUtil {
     return feature.isInstanceOf[AadlPort] && feature.asInstanceOf[AadlPort].direction == Direction.In
   }
 
-  @pure def inPortsToParams(thread: AadlThread, typeProvider: CRustTypeProvider): ISZ[GGParam] = {
-    val ports: ISZ[AadlPort] = for (p <- thread.features.filter(f => isInPort(f))) yield p.asInstanceOf[AadlPort]
+  @strictpure def isPluginProvided(feature: AadlFeature, store: Store): B =
+    StoreUtil.isNonModelElement(feature.path, store)
+
+  @pure def inPortsToParams(thread: AadlThread, typeProvider: CRustTypeProvider, store: Store): ISZ[GGParam] = {
+    val ports: ISZ[AadlPort] = for (p <- thread.features.filter(f => isInPort(f) && !isPluginProvided(f, store))) yield p.asInstanceOf[AadlPort]
     return portsToParams(ports, typeProvider)
   }
 
-  def outPortsToParams(thread: AadlThread, typeProvider: CRustTypeProvider): ISZ[GGParam] = {
-    val ports: ISZ[AadlPort] = for (p <- thread.features.filter(f => isOutPort(f))) yield p.asInstanceOf[AadlPort]
+  def outPortsToParams(thread: AadlThread, typeProvider: CRustTypeProvider, store: Store): ISZ[GGParam] = {
+    val ports: ISZ[AadlPort] = for (p <- thread.features.filter(f => isOutPort(f) && ~isPluginProvided(f, store))) yield p.asInstanceOf[AadlPort]
     return portsToParams(ports, typeProvider)
   }
 
