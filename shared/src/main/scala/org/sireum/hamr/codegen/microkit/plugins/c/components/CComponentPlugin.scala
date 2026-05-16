@@ -24,14 +24,6 @@ object CComponentPlugin {
 
   @strictpure def processedThreads(store: Store): B = store.contains(name)
 
-  @pure def getSchedulingType(s: AadlSystem): Hamr_Microkit_Properties.SchedulingType.Type = {
-    val ret: Hamr_Microkit_Properties.SchedulingType.Type = PropertyUtil.getDiscreetPropertyValue(s.properties, Hamr_Microkit_Properties.HAMR_MICROKIT__SCHEDULING) match {
-      case Some(ir.ValueProp("Domain_Scheduling")) => Hamr_Microkit_Properties.SchedulingType.Domain_Scheduling
-      case Some(ir.ValueProp("MCS")) => Hamr_Microkit_Properties.SchedulingType.MCS
-      case _ => Hamr_Microkit_Properties.SchedulingType.Domain_Scheduling
-    }
-    return ret
-  }
 }
 
 @sig trait CComponentPlugin extends MicrokitPlugin {

@@ -35,7 +35,7 @@ import org.sireum.message.Reporter
 
   override def canHandle(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): B = {
     return super.canHandle(model, options, types, symbolTable, store, reporter) &&
-      CComponentPlugin.getSchedulingType(symbolTable.rootSystem) == Hamr_Microkit_Properties.SchedulingType.MCS
+      MicrokitUtil.isMCS(options, symbolTable.rootSystem)
   }
 
   override def handle(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {

@@ -95,6 +95,10 @@ object CommonCli {
         description = "Run Transpiler during HAMR Codegen")
     )),
     OptGroup(name = "CAmkES/Microkit", opts = ISZ(
+      Opt(name = "scheduling", longKey = "scheduling", shortKey = None(),
+        tpe = Type.Choice(name = "Scheduling", sep = None(),
+          elements = ISZ("Domain", "UserLand")),
+        description = "Scheduling type"),
       Opt(name = "verusAttributeSyntax", longKey = "verus-attribute-syntax", shortKey = None(),
         tpe = Type.Flag(F),
         description = "Use Verus attribute syntax (#[verus_spec], #[verus_verify]) instead of the verus! macro for exec functions"),

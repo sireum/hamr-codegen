@@ -115,8 +115,7 @@ object MicrokitCodegen {
 
     val elfEntries: Set[String] = Set.empty[String] ++ (for (mk <- makefileContainers) yield mk.elfEntry.render)
 
-    val isMCS = CComponentPlugin.getSchedulingType(symbolTable.rootSystem) == Hamr_Microkit_Properties.SchedulingType.MCS
-
+    val isMCS = MicrokitUtil.isMCS(options, symbolTable.rootSystem)
 
 
     val systemmkContents: ST =

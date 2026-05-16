@@ -1,5 +1,5 @@
 // #Sireum
-package org.sireum.hamr.codegen.microkit.plugins.rust.gumbo
+package org.sireum.hamr.codegen.microkit.plugins.gumbo
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil._
@@ -16,7 +16,7 @@ import org.sireum.hamr.codegen.microkit.plugins.rust.apis.CRustApiPlugin
 import org.sireum.hamr.codegen.microkit.plugins.rust.component.{CRustComponentPlugin, CRustComponentStoreUtil}
 import org.sireum.hamr.codegen.microkit.plugins.rust.testing.CRustTestingPlugin
 import org.sireum.hamr.codegen.microkit.plugins.rust.types.{CRustTypePlugin, CRustTypeProvider}
-import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, MicrokitPlugin}
+import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, MicrokitPlugin, StoreUtil}
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil
 import org.sireum.hamr.codegen.microkit.{rust => RAST}
@@ -172,7 +172,9 @@ object GumboXComputeContributions {
       )
     }
 
-    for (thread <- symbolTable.getThreads() if MicrokitUtil.isRusty(thread)) {
+    for (thread <- symbolTable.getThreads()
+         if MicrokitUtil.isRusty(thread) && !StoreUtil.isNonModelElement(thread.path, localStore)) {
+
       assert(!items.contains(thread.path), "Not expecting anyone else to have made gumbox contributions up to this point")
 
       if (datatypesWithContracts.nonEmpty || ops.ISZOps(componentsWithContracts).contains(thread.path)) {
@@ -1273,7 +1275,6 @@ object GumboXComputeContributions {
     assert(thread.isPeriodic(), s"Need to handle sporadic threads: ${thread.classifierAsString}")
 
     var cb_api_Items: ISZ[RAST.Item] = ISZ()
-    var test_api_rs_Items: ISZ[RAST.Item] = ISZ()
     var tests_rs_Items: ISZ[ST] = ISZ()
 
     cb_api_Items = cb_api_Items :+ RAST.EnumDef(
@@ -1755,7 +1756,7 @@ object GumboXComputeContributions {
           |  ${(tests_rs_Items, "\n\n")}
           |}"""
 
-    return (cb_api_Items, test_api_rs_Items, ISZ(RAST.ItemST(testrsMod)))
+    return (cb_api_Items, ISZ(), ISZ(RAST.ItemST(testrsMod)))
   }
 
   @pure override def finalizeMicrokit(model: Aadl, options: HamrCli.CodegenOption,

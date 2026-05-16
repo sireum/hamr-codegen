@@ -1,5 +1,5 @@
 // #Sireum
-package org.sireum.hamr.codegen.microkit.plugins.monitors
+package org.sireum.hamr.codegen.microkit.plugins.gumbo
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil._
@@ -10,12 +10,12 @@ import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.types.{AadlTypes, TypeUtil}
 import org.sireum.hamr.codegen.common.util.{HamrCli, ModelUtil, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.connections._
-import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, MicrokitPlugin}
-import org.sireum.hamr.codegen.microkit.plugins.StoreUtil
 import org.sireum.hamr.codegen.microkit.plugins.c.connections.CConnectionProviderPlugin
 import org.sireum.hamr.codegen.microkit.plugins.c.types.CTypePlugin
+import org.sireum.hamr.codegen.microkit.plugins.monitors.{MonitorInjector, RustScheduleAwareMonitorPlugin}
 import org.sireum.hamr.codegen.microkit.plugins.rust.apis.{CRustApiPlugin, ComponentApiContributions}
 import org.sireum.hamr.codegen.microkit.plugins.rust.component.CRustComponentPlugin
+import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, MicrokitPlugin, StoreUtil}
 import org.sireum.hamr.codegen.microkit.types.{MicrokitTypeUtil, QueueTemplate}
 import org.sireum.hamr.codegen.microkit.util.{MicrokitUtil, RustUtil}
 import org.sireum.hamr.codegen.microkit.{rust => RAST}

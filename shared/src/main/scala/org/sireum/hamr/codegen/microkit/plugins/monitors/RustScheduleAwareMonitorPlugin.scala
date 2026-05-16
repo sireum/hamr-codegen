@@ -238,9 +238,6 @@ object RustScheduleAwareMonitorPlugin {
   extends ModelTransformerPlugin
   with MicrokitPlugin {
 
-  @strictpure def isMCS(symbolTable: SymbolTable): B =
-    CComponentPlugin.getSchedulingType(symbolTable.rootSystem) == Hamr_Microkit_Properties.SchedulingType.MCS
-
   @pure override def canHandleModelTransform(model: Aadl,
                                               options: HamrCli.CodegenOption,
                                               types: AadlTypes,
@@ -250,7 +247,7 @@ object RustScheduleAwareMonitorPlugin {
       !isDisabled(store) &&
       !RustScheduleAwareMonitorPlugin.haveHandledModelTransform(store) &&
       !reporter.hasError &&
-      (options.runtimeMonitoring || isMCS(symbolTable))
+      (options.runtimeMonitoring || MicrokitUtil.isMCS(options, symbolTable.rootSystem))
   }
       // && GumboXRustUtil.hasGumbo(model, symbolTable)
 
@@ -262,7 +259,7 @@ object RustScheduleAwareMonitorPlugin {
                                     reporter: Reporter): Option[(Store, Aadl, AadlTypes, SymbolTable)] = {
     var localStore = store + KEY_RustScheduleAwareMonitorPlugin ~> BoolValue(T)
 
-    val mcs: B = isMCS(symbolTable)
+    val mcs: B = MicrokitUtil.isMCS(options, symbolTable.rootSystem)
 
     val rmodel: Aadl =
       if (options.runtimeMonitoring) {
@@ -658,7 +655,7 @@ object RustScheduleAwareMonitorPlugin {
       case _ =>
     }
 
-    if (isMCS(symbolTable)) {
+    if (MicrokitUtil.isMCS(options, symbolTable.rootSystem)) {
       val schedulerPath = s"${options.sel4OutputDir.get}/scheduler"
 
       resources = resources :+ ResourceUtil.createResourceH(

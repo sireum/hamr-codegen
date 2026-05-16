@@ -3,9 +3,10 @@ package org.sireum.hamr.codegen.microkit.util
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{MapValue, Store}
-import org.sireum.hamr.codegen.common.properties.{HamrProperties, PropertyUtil}
-import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlThread}
+import org.sireum.hamr.codegen.common.properties.{HamrProperties, Hamr_Microkit_Properties, PropertyUtil}
+import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlSystem, AadlThread}
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
+import org.sireum.hamr.codegen.common.util.HamrCli
 import org.sireum.hamr.ir
 
 
@@ -22,6 +23,21 @@ object MicrokitUtil {
   val MemAlignmentInKiBytes: Z = 4
 
   val KEY_MICROKIT_VERSIONS: String = "KEY_MICROKIT_VERSISION"
+
+  @pure def isMCS(options: HamrCli.CodegenOption, aadl: AadlSystem): B = {
+
+    @pure def getSchedulingType(): Hamr_Microkit_Properties.SchedulingType.Type = {
+      val ret: Hamr_Microkit_Properties.SchedulingType.Type = PropertyUtil.getDiscreetPropertyValue(aadl.properties, Hamr_Microkit_Properties.HAMR_MICROKIT__SCHEDULING) match {
+        case Some(ir.ValueProp("Domain_Scheduling")) => Hamr_Microkit_Properties.SchedulingType.Domain_Scheduling
+        case Some(ir.ValueProp("MCS")) => Hamr_Microkit_Properties.SchedulingType.MCS
+        case _ => Hamr_Microkit_Properties.SchedulingType.Domain_Scheduling
+      }
+      return ret
+    }
+
+    return options.scheduling == HamrCli.CodegenScheduling.UserLand ||
+      getSchedulingType() == Hamr_Microkit_Properties.SchedulingType.MCS
+  }
 
   @strictpure def getMicrokitVersions(store: Store): Map[String, String] =
     store.get(KEY_MICROKIT_VERSIONS).get.asInstanceOf[MapValue[String, String]].map

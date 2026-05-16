@@ -4,13 +4,11 @@ package org.sireum.hamr.codegen.microkit.plugins.msd
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{BoolValue, Store}
 import org.sireum.hamr.codegen.common.containers.{Marker, Resource}
-import org.sireum.hamr.codegen.common.properties.Hamr_Microkit_Properties
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.plugins.MicrokitFinalizePlugin
-import org.sireum.hamr.codegen.microkit.plugins.c.components.CComponentPlugin
-import org.sireum.hamr.codegen.microkit.util.SystemDescription
+import org.sireum.hamr.codegen.microkit.util.{MicrokitUtil, SystemDescription}
 import org.sireum.hamr.ir.Aadl
 import org.sireum.message.Reporter
 
@@ -24,7 +22,7 @@ import org.sireum.message.Reporter
     return !reporter.hasError &&
       options.platform == HamrCli.CodegenHamrPlatform.Microkit &&
       !isDisabled(store) &&
-      CComponentPlugin.getSchedulingType(symbolTable.rootSystem) == Hamr_Microkit_Properties.SchedulingType.Domain_Scheduling &&
+      !MicrokitUtil.isMCS(options, symbolTable.rootSystem) &&
       SystemDescriptionProviderPlugin.getMSDs(store).nonEmpty &&
       !hasHandled(store)
   }

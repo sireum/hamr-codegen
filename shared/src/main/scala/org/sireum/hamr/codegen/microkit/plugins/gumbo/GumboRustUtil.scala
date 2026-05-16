@@ -1,5 +1,5 @@
 // #Sireum
-package org.sireum.hamr.codegen.microkit.plugins.rust.gumbo
+package org.sireum.hamr.codegen.microkit.plugins.gumbo
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, Store}

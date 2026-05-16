@@ -25,6 +25,11 @@ object HamrCli {
     "Ros2"
   }
 
+  @enum object CodegenScheduling {
+    "Domain"
+    "UserLand"
+  }
+
   @enum object CodegenNodesCodeLanguage {
     "Python"
     "Cpp"
@@ -57,6 +62,7 @@ object HamrCli {
     val maxStringSize: Z,
     val maxArraySize: Z,
     val runTranspiler: B,
+    val scheduling: CodegenScheduling.Type,
     val verusAttributeSyntax: B,
     val sel4OutputDir: Option[String],
     val sel4AuxCodeDirs: ISZ[String],
@@ -98,6 +104,25 @@ import HamrCli._
       return None()
     }
     val r = parseCodegenHamrPlatformH(args(i))
+    return r
+  }
+
+  def parseCodegenSchedulingH(arg: String): Option[CodegenScheduling.Type] = {
+    arg.native match {
+      case "Domain" => return Some(CodegenScheduling.Domain)
+      case "UserLand" => return Some(CodegenScheduling.UserLand)
+      case s =>
+        eprintln(s"Expecting one of the following: { Domain, UserLand }, but found '$s'.")
+        return None()
+    }
+  }
+
+  def parseCodegenScheduling(args: ISZ[String], i: Z): Option[CodegenScheduling.Type] = {
+    if (i >= args.size) {
+      eprintln("Expecting one of the following: { Domain, UserLand }, but none found.")
+      return None()
+    }
+    val r = parseCodegenSchedulingH(args(i))
     return r
   }
 
@@ -185,6 +210,8 @@ import HamrCli._
           |-t, --run-transpiler     Run Transpiler during HAMR Codegen
           |
           |CAmkES/Microkit Options:
+          |    --scheduling         Scheduling type (expects one of { Domain, UserLand };
+          |                           default: Domain)
           |    --verus-attribute-syntax
           |                          Use Verus attribute syntax (#[verus_spec],
           |                           #[verus_verify]) instead of the verus! macro for
@@ -239,6 +266,7 @@ import HamrCli._
     var maxStringSize: Z = 100
     var maxArraySize: Z = 100
     var runTranspiler: B = false
+    var scheduling: CodegenScheduling.Type = CodegenScheduling.Domain
     var verusAttributeSyntax: B = false
     var sel4OutputDir: Option[String] = None[String]()
     var sel4AuxCodeDirs: ISZ[String] = ISZ[String]()
@@ -372,6 +400,12 @@ import HamrCli._
              case Some(v) => runTranspiler = v
              case _ => return None()
            }
+         } else if (arg == "--scheduling") {
+           val o: Option[CodegenScheduling.Type] = parseCodegenScheduling(args, j + 1)
+           o match {
+             case Some(v) => scheduling = v
+             case _ => return None()
+           }
          } else if (arg == "--verus-attribute-syntax") {
            val o: Option[B] = { j = j - 1; Some(!verusAttributeSyntax) }
            o match {
@@ -447,7 +481,7 @@ import HamrCli._
         isOption = F
       }
     }
-    return Some(CodegenOption(help, parseArguments(args, j), msgpack, verbose, runtimeMonitoring, platform, outputDir, parseableMessages, slangOutputDir, packageName, noProyekIve, noEmbedArt, devicesAsThreads, genSbtMill, slangAuxCodeDirs, slangOutputCDir, excludeComponentImpl, bitWidth, maxStringSize, maxArraySize, runTranspiler, verusAttributeSyntax, sel4OutputDir, sel4AuxCodeDirs, workspaceRootDir, strictAadlMode, ros2OutputWorkspaceDir, ros2Dir, ros2NodesLanguage, ros2LaunchLanguage, invertTopicBinding, experimentalOptions))
+    return Some(CodegenOption(help, parseArguments(args, j), msgpack, verbose, runtimeMonitoring, platform, outputDir, parseableMessages, slangOutputDir, packageName, noProyekIve, noEmbedArt, devicesAsThreads, genSbtMill, slangAuxCodeDirs, slangOutputCDir, excludeComponentImpl, bitWidth, maxStringSize, maxArraySize, runTranspiler, scheduling, verusAttributeSyntax, sel4OutputDir, sel4AuxCodeDirs, workspaceRootDir, strictAadlMode, ros2OutputWorkspaceDir, ros2Dir, ros2NodesLanguage, ros2LaunchLanguage, invertTopicBinding, experimentalOptions))
   }
 
   def parseArguments(args: ISZ[String], i: Z): ISZ[String] = {
