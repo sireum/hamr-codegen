@@ -16,10 +16,12 @@ object StoreUtil {
 
 
   val KEY_NonModelElement: String = "KEY_NoneModelElement"
-  @strictpure def isNonModelElement(id: IdPath, store: Store): B = {
-    val pluginGenerated: ISZ[IdPath] = store.getOrElse(KEY_NonModelElement, ISZValue[IdPath](ISZ())).asInstanceOf[ISZValue[IdPath]].elements
-    ops.ISZOps(pluginGenerated).contains(id)
-  }
+
+  @strictpure def getNonModelElements(store: Store): ISZ[IdPath] =
+    store.getOrElse(KEY_NonModelElement, ISZValue[IdPath](ISZ())).asInstanceOf[ISZValue[IdPath]].elements
+
+  @strictpure def isNonModelElement(id: IdPath, store: Store): B =
+    ops.ISZOps(getNonModelElements(store)).contains(id)
 
   @strictpure def addNonModelElement(id: IdPath, store: Store): Store = {
     val pluginGenerated: ISZ[IdPath] = store.getOrElse(KEY_NonModelElement, ISZValue[IdPath](ISZ())).asInstanceOf[ISZValue[IdPath]].elements

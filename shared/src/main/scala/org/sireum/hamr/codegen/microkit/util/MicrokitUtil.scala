@@ -24,6 +24,10 @@ object MicrokitUtil {
 
   val KEY_MICROKIT_VERSIONS: String = "KEY_MICROKIT_VERSISION"
 
+  @pure def isDomainScheduling(options: HamrCli.CodegenOption, aadl: AadlSystem): B = {
+    return !isMCS(options, aadl)
+  }
+
   @pure def isMCS(options: HamrCli.CodegenOption, aadl: AadlSystem): B = {
 
     @pure def getSchedulingType(): Hamr_Microkit_Properties.SchedulingType.Type = {

@@ -187,12 +187,13 @@ object CConnectionProviderPlugin {
       }
     }
 
+    val uniqueTypeHeaderFilenames: ISZ[String] = (Set.empty[String] ++ typeHeaderFilenames).elements
     val allTypesContent =
       st"""#pragma once
           |
           |${CommentTemplate.doNotEditComment_slash}
           |
-          |${(for (i <- typeHeaderFilenames) yield st"#include <$i>", "\n")}
+          |${(for (i <- uniqueTypeHeaderFilenames) yield st"#include <$i>", "\n")}
           |"""
     val allTypesPath = s"$baseTypesIncludePath/${MicrokitTypeUtil.cAllTypesFilename}"
     resources = resources :+ ResourceUtil.createResourceH(

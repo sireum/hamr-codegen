@@ -31,6 +31,70 @@ object GumboXRustPlugin {
 
   @strictpure def putGumboXContributions(contributions: GumboXContributions, store: Store): Store = store + KEY_GumboXPlugin ~> contributions
 
+  @pure def generateGumboxModuleContent(contribs: GumboXComponentContributions): ST = {
+    var entries: ISZ[ST] = ISZ()
+
+    entries = entries ++ (for (m <- contribs.gumboMethods) yield m.prettyST)
+
+    entries = entries ++ (for (values <- contribs.integrationConstraints.values;
+                               v <- values) yield v.prettyST)
+
+    entries = entries ++ (for (i <- contribs.initializeContributions.IEP_Guarantee) yield i.prettyST)
+
+    entries = entries ++ (for (a <- contribs.computeContributions.CEP_T_Assum__methods) yield a.prettyST)
+    if (contribs.computeContributions.CEP_Pre.nonEmpty) {
+      entries = entries :+ contribs.computeContributions.CEP_Pre.get.prettyST
+    }
+
+    entries = entries ++ (for (g <- contribs.computeContributions.CEP_T_Guar__methods) yield g.prettyST)
+    entries = entries ++ (for (c <- contribs.computeContributions.CEP_T_Case__methods) yield c.prettyST)
+
+    if (contribs.computeContributions.CEP_Post.nonEmpty) {
+      entries = entries :+ contribs.computeContributions.CEP_Post.get.prettyST
+    }
+
+    return st"""${CommentTemplate.doNotEditComment_slash}
+               |
+               |use ${CRustTypePlugin.usePath};
+               |
+               |${GumboRustUtil.RustImplicationMacros}
+               |
+               |${(entries, "\n\n")}
+               |"""
+  }
+
+  @pure def generateMonitorContainerContent(threadId: String, contribs: GumboXComponentContributions): ST = {
+    val preParams = GumboXRustUtil.sortParams(contribs.computeContributions.CEP_Pre_Params)
+    val postParams = GumboXRustUtil.sortParams(
+      contribs.computeContributions.CEP_Post_Params.filter(p =>
+        p.kind == GumboXRustUtil.SymbolKind.StateVar || p.isOutPort))
+
+    val preFields: ISZ[ST] = for (p <- preParams) yield st"pub ${p.name}: ${p.langType},"
+    val postFields: ISZ[ST] = for (p <- postParams) yield st"pub ${p.name}: ${p.langType},"
+
+    return st"""${CommentTemplate.doNotEditComment_slash}
+               |
+               |use ${CRustTypePlugin.usePath};
+               |use vstd::prelude::*;
+               |
+               |verus! {
+               |
+               |  #[repr(C)]
+               |  #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+               |  pub struct PreState_${threadId} {
+               |    ${(preFields, "\n")}
+               |  }
+               |
+               |  #[repr(C)]
+               |  #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+               |  pub struct PostState_${threadId} {
+               |    ${(postFields, "\n")}
+               |  }
+               |
+               |}
+               |"""
+  }
+
   /** Generate the proptest fn-parameter binding for a tuple strategy.
     * Proptest only implements Strategy for tuples up to 12 elements.
     * When the number of parameters exceeds 12, the tuple is split into
@@ -223,18 +287,15 @@ object GumboXComputeContributions {
           val componentContributions = CRustComponentPlugin.getCRustComponentContributions(localStore)
           var threadContributions = componentContributions.componentContributions.get(thread.path).get
 
-          var modEntries: ISZ[RAST.Item] = ISZ()
-          for (i <- threadContributions.moduleLevelEntries) {
-            i match {
-              case m @ RAST.MacCall("verus", isz) =>
-                // the developerUifMethods will contain 'exec' keyword so need to be in the verus macro
-
-                modEntries = modEntries :+ m(items = isz ++ developerUifMethods.asInstanceOf[ISZ[RAST.Item]])
-              case _ => modEntries = modEntries :+ i
-            }
+          val uifs: ISZ[RAST.Item] = if (options.verusAttributeSyntax) {
+            // the developerUifMethods will contain 'exec' keyword so need to be in the verus macro
+            ISZ(RAST.MacCall(macName = "verus", items = developerUifMethods.asInstanceOf[ISZ[RAST.Item]]))
+          } else {
+            developerUifMethods.asInstanceOf[ISZ[RAST.Item]]
           }
 
-          threadContributions = threadContributions(moduleLevelEntries = modEntries)
+          threadContributions = threadContributions(
+            moduleLevelEntries = threadContributions.moduleLevelEntries ++ uifs)
 
           localStore = CRustComponentPlugin.putComponentContributions(
             componentContributions.replaceComponentContributions(
@@ -1773,37 +1834,7 @@ object GumboXComputeContributions {
 
       { // the gumbox module
         val apiDirectory = CRustApiPlugin.apiDirectory(thread, options)
-
-        var entries: ISZ[ST] = ISZ()
-
-        entries = entries ++ (for (m <- entry._2.gumboMethods) yield m.prettyST)
-
-        entries = entries ++ (for (values <- entry._2.integrationConstraints.values;
-                                   v <- values) yield v.prettyST)
-
-        entries = entries ++ (for (i <- entry._2.initializeContributions.IEP_Guarantee) yield i.prettyST)
-
-        entries = entries ++ (for (a <- entry._2.computeContributions.CEP_T_Assum__methods) yield a.prettyST)
-        if (entry._2.computeContributions.CEP_Pre.nonEmpty) {
-          entries = entries :+ entry._2.computeContributions.CEP_Pre.get.prettyST
-        }
-
-        entries = entries ++ (for (g <- entry._2.computeContributions.CEP_T_Guar__methods) yield g.prettyST)
-        entries = entries ++ (for (c <- entry._2.computeContributions.CEP_T_Case__methods) yield c.prettyST)
-
-        if (entry._2.computeContributions.CEP_Post.nonEmpty) {
-          entries = entries :+ entry._2.computeContributions.CEP_Post.get.prettyST
-        }
-
-        val content =
-          st"""${CommentTemplate.doNotEditComment_slash}
-              |
-              |use ${CRustTypePlugin.usePath};
-              |
-              |${GumboRustUtil.RustImplicationMacros}
-              |
-              |${(entries, "\n\n")}
-              |"""
+        val content = GumboXRustPlugin.generateGumboxModuleContent(entry._2)
         val path = s"$apiDirectory/${threadId}_GUMBOX.rs"
         resources = resources :+ ResourceUtil.createResource(path, content, T)
       }

@@ -70,10 +70,13 @@ object CodeGen {
     val systemRootDirectory: Os.Path = getSystemRoot(model, modOptions.workspaceRootDir)
 
     def getPath(path: String): Os.Path = {
+      /*
       val p = Os.path(path)
       return (
         if (p.isAbs) p // use the abs path the user requested
         else systemRootDirectory / path) // make the user's request relative to the system's root directory
+       */
+      return Os.path(path)
     }
 
     val outputDir: Path = getPath(modOptions.outputDir.getOrElse("hamr"))

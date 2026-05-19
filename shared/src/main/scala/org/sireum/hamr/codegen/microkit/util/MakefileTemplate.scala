@@ -277,10 +277,10 @@ object MakefileTemplate {
           |
           |all: cache.o
           |
-          |# Sentinel file whose name encodes a hash of CFLAGS, BOARD, and MICROKIT_CONFIG.
-          |# When any of those change the old sentinel is removed and a new one is created,
-          |# which can be used as a prerequisite to force recompilation.
-          |CHECK_FLAGS_BOARD_MD5:=.board_cflags-$$(shell echo -- $${CFLAGS} $${BOARD} $${MICROKIT_CONFIG}| shasum | sed 's/ *-//')
+          |# Sentinel file whose name encodes a hash of build-affecting variables.
+          |# When any of these change the old sentinel is removed and a new one is created,
+          |# forcing dependent targets to rebuild.
+          |CHECK_FLAGS_BOARD_MD5:=.board_cflags-$$(shell echo -- $${CFLAGS} $${BOARD} $${MICROKIT_CONFIG} $${MICROKIT_SDK} $${MSD} $${SCHEDULER_C} $${SCHEDULER_CONFIG_HEADERS}| shasum | sed 's/ *-//')
           |
           |$${CHECK_FLAGS_BOARD_MD5}:
           |${TAB}-rm -f .board_cflags-*
@@ -296,7 +296,7 @@ object MakefileTemplate {
           |IMAGES := timer_driver.elf scheduler.elf \
           |${TAB}${(elfFiles, s" \\\n${TAB}")}
           |
-          |$${IMAGES}: libsddf_util_debug.a
+          |$${IMAGES}: libsddf_util_debug.a $${CHECK_FLAGS_BOARD_MD5}
           |
           |
           |$buildEntriesOpt
@@ -308,14 +308,14 @@ object MakefileTemplate {
           |$$(SCHEDULER_OBJ): $$(SCHEDULER_C) $${SDDF}/include
           |${TAB}$${CC} $${CFLAGS} -c -o $$@ $$<
           |
-          |scheduler.elf: $$(UTIL_OBJS) $$(TYPE_OBJS) $$(SCHEDULER_OBJ)
-          |${TAB}$$(LD) $$(LDFLAGS) $$^ $$(LIBS) -o $$@
+          |scheduler.elf: $$(UTIL_OBJS) $$(TYPE_OBJS) $$(SCHEDULER_OBJ) $${CHECK_FLAGS_BOARD_MD5}
+          |${TAB}$$(LD) $$(LDFLAGS) $$(filter %.o, $$^) $$(LIBS) -o $$@
           |
           |${(elfEntries, "\n\n")}
           |
           |
           |
-          |$$(SYSTEM_FILE): $$(MSD) $$(IMAGES) $$(DTB)
+          |$$(SYSTEM_FILE): $$(IMAGES) $$(DTB) $${CHECK_FLAGS_BOARD_MD5}
           |${TAB}$$(PYTHON) $$(SDFGEN_HELPER) --macros "$$(SDFGEN_UNKOWN_MACROS)" --configs "$$(SCHEDULER_CONFIG_HEADERS)" --output $$(TOP_BUILD_DIR)/config_structs.py
           |${TAB}$$(PYTHON) $$(MSD) --sddf $$(SDDF) --board $$(MICROKIT_BOARD) --dtb $$(DTB) --output . --sdf $$(SYSTEM_FILE) --objcopy $$(OBJCOPY)
           |${TAB}$$(OBJCOPY) --update-section .device_resources=timer_driver_device_resources.data timer_driver.elf
