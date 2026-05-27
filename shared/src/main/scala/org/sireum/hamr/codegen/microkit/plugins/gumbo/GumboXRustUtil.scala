@@ -403,7 +403,7 @@ object GumboXRustUtil {
                         isPreState: B, types: AadlTypes, typeProvider: CRustTypeProvider): ISZ[GGParam] = {
     var ret: ISZ[GGParam] = ISZ()
     gclSubclauseInfo match {
-      case Some(GclAnnexClauseInfo(GclSubclause(stateVars, _, _, _, _, _), _)) =>
+      case Some(GclAnnexClauseInfo(GclSubclause(stateVars, _, _, _, _, _, _), _)) =>
         for (i <- 0 until stateVars.size) {
           val stateVar = stateVars(i)
           val typ = types.typeMap.get(stateVar.classifier).get

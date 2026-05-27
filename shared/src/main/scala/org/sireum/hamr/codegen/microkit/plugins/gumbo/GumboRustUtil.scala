@@ -73,6 +73,7 @@ object GumboRustUtil {
             initializes = None(),
             integration = None(),
             compute = None(),
+            schedule = None(),
             attr = Attr(None())),
           gclSymbolTable = GclSymbolTable(
             slangTypeHierarchy = TypeHierarchy.empty,
