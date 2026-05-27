@@ -79,6 +79,8 @@ jobs:
         run: |
           [ -d /opt/ros/jazzy ] && export ROS2_HOME=/opt/ros/jazzy
 
+          # x86_64 JVM defaults to 1MB thread stack; scalac plugin 4.20260224+ overflows during Erasure phase
+          export JAVA_OPTS="-Xss4m"
           export COURSIER_CACHE=$GITHUB_WORKSPACE/cache/coursier
           cd $GITHUB_WORKSPACE
           
