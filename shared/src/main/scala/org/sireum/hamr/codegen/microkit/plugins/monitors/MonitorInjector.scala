@@ -6,6 +6,7 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, Store}
 import org.sireum.hamr.codegen.common.symbols.{AadlPortConnection, AadlThread, SymbolTable}
+import org.sireum.hamr.codegen.microkit.util.MicrokitUtil
 import org.sireum.hamr.ir
 import org.sireum.message.Reporter
 import MonitorInjector._
@@ -78,7 +79,7 @@ object MonitorInjector {
             val srcThread = pc.srcComponent.asInstanceOf[AadlThread]
             val srcProcess = srcThread.getParent(symbolTable)
             val portName: String = CommonUtil.getLastName(pc.srcFeature.feature.identifier)
-            val monitorPortName: String = s"${srcProcess.identifier}_${srcThread.identifier}_${portName}"
+            val monitorPortName: String = s"${MicrokitUtil.getComponentIdPath(srcThread)}_${portName}"
 
             val srcFeatureEnd = pc.srcFeature.feature.asInstanceOf[ir.FeatureEnd]
 

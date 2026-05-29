@@ -33,8 +33,8 @@ object GumboMonitorPlugin {
   @strictpure def stateVarPortName(stateVarName: String): String =
     s"${stateVarPortPrefix}${stateVarName}"
 
-  @strictpure def monitorStateVarPortName(srcProcessId: String, srcThreadId: String, stateVarName: String): String =
-    s"${srcProcessId}_${srcThreadId}_${stateVarPortPrefix}${stateVarName}"
+  @strictpure def monitorStateVarPortName(threadId: String, stateVarName: String): String =
+    s"${threadId}_${stateVarPortPrefix}${stateVarName}"
 
   val KEY_RUST_MONITORING: String = "KEY_RUST_MONITORING"
 
@@ -44,12 +44,11 @@ object GumboMonitorPlugin {
 
 
   @pure def computeMonitorGetterCall(param: GumboXRustUtil.GGParam,
-                                      processId: String,
-                                      threadSimpleId: String,
-                                      dstPortToMonitorPortName: Map[ISZ[String], String]): ST = {
+                                     threadId: String,
+                                     dstPortToMonitorPortName: Map[ISZ[String], String]): ST = {
     param match {
       case sv: GumboXRustUtil.GGStateVarParam =>
-        return st"api.get_${processId}_${threadSimpleId}_sv_${sv.originName}()"
+        return st"api.get_${threadId}_sv_${sv.originName}()"
       case pp: GumboXRustUtil.GGPortParam =>
         if (pp.isIn) {
           dstPortToMonitorPortName.get(pp.port.path) match {
@@ -57,7 +56,7 @@ object GumboMonitorPlugin {
             case _ => return st"api.get_UNKNOWN_${pp.originName}()"
           }
         } else {
-          return st"api.get_${processId}_${threadSimpleId}_${pp.originName}()"
+          return st"api.get_${threadId}_${pp.originName}()"
         }
       case _ => return st"api.get_UNKNOWN()"
     }
@@ -75,15 +74,23 @@ object GumboMonitorPlugin {
 
   // Phase store keys derived from getMonitorName so each subtype gets its own namespace
   @strictpure def keyModelTransformed: String = s"KEY_${getMonitorName}_Model_Transformed"
+
   @strictpure def keyModelHandled: String = s"KEY_${getMonitorName}_Model_handled"
+
   @strictpure def keyCBackend: String = s"KEY_${getMonitorName}_CBackend"
+
   @strictpure def keyRustFinalized: String = s"KEY_${getMonitorName}_RustFinalized"
+
   @strictpure def keyMonitorMethod: String = s"KEY_${getMonitorName}_MonitorMethod"
 
   @strictpure def haveHandledModelTransform(store: Store): B = store.contains(keyModelTransformed)
+
   @strictpure def hasHandled(store: Store): B = store.contains(keyModelHandled)
+
   @strictpure def haveHandledCBackend(store: Store): B = store.contains(keyCBackend)
+
   @strictpure def haveRustFinalized(store: Store): B = store.contains(keyRustFinalized)
+
   @strictpure def haveHandledMonitorMethod(store: Store): B = store.contains(keyMonitorMethod)
 
   @strictpure override def getRetainedNonModelPorts(store: Store): ISZ[IdPath] =
@@ -125,13 +132,29 @@ object GumboMonitorPlugin {
         var systemFanOutConnections: ISZ[ir.Connection] = ISZ()
         var systemConnectionInstances: ISZ[ir.ConnectionInstance] = ISZ()
 
-        // Track which threads already have state var ports (from a prior plugin run)
-        val existingFeatureNames: Set[String] = {
+        // Track which source threads already have sv_ ports (from a prior
+        // monitor plugin's transform). These are shared across monitors.
+        val existingThreadFeatureNames: Set[String] = {
           var s = Set.empty[String]
           for (thread <- symbolTable.getThreads()) {
             for (f <- thread.component.features) {
               s = s + CommonUtil.getLastName(f.identifier)
             }
+          }
+          s
+        }
+
+        // Track which ports the current monitor thread already has (from a
+        // prior plugin that shares the same monitor thread, if any)
+        val existingMonitorFeatureNames: Set[String] = {
+          var s = Set.empty[String]
+          symbolTable.componentMap.get(monitorThreadPath) match {
+            case Some(monThread) =>
+              for (f <- monThread.component.features) {
+                s = s + CommonUtil.getLastName(f.identifier)
+
+              }
+            case _ =>
           }
           s
         }
@@ -147,138 +170,144 @@ object GumboMonitorPlugin {
 
             for (sv <- stateVars) {
               val svPortName = GumboMonitorPlugin.stateVarPortName(sv.name)
-
-              if (existingFeatureNames.contains(svPortName)) {
-                // State var port already added by a prior monitor plugin instance
-              } else {
-
-              val monPortName = GumboMonitorPlugin.monitorStateVarPortName(srcProcess.identifier, thread.identifier, sv.name)
+              val monPortName = GumboMonitorPlugin.monitorStateVarPortName(MicrokitUtil.getComponentIdPath(thread), sv.name)
               val classifier = Some(ir.Classifier(sv.classifier))
-
-              // Output data port on source thread
               val threadPortPath: ISZ[String] = thread.path :+ svPortName
-              localStore = StoreUtil.addNonModelElement(threadPortPath, localStore)
-              additionalThreadFeatures = additionalThreadFeatures :+ ir.FeatureEnd(
-                identifier = ir.Name(name = threadPortPath, pos = None()),
-                direction = ir.Direction.Out,
-                category = ir.FeatureCategory.DataPort,
-                classifier = classifier,
-                properties = ISZ(),
-                uriFrag = "")
-
-              // Output data port on source process
               val processPortPath: ISZ[String] = srcProcess.path :+ svPortName
-              additionalProcessFeatures = additionalProcessFeatures :+ ir.FeatureEnd(
-                identifier = ir.Name(name = processPortPath, pos = None()),
-                direction = ir.Direction.Out,
-                category = ir.FeatureCategory.DataPort,
-                classifier = classifier,
-                properties = ISZ(),
-                uriFrag = "")
 
-              // Delegation: srcThread.svPort → srcProcess.svPort (Out-to-Out going up)
-              val srcDelegConnName: ISZ[String] = srcProcess.path :+ s"deleg_${svPortName}"
-              additionalProcessConnections = additionalProcessConnections :+
-                ir.Connection(
-                  name = ir.Name(name = srcDelegConnName, pos = None()),
-                  src = ISZ(ir.EndPoint(
-                    component = ir.Name(name = thread.path, pos = None()),
-                    feature = Some(ir.Name(name = threadPortPath, pos = None())),
-                    direction = Some(ir.Direction.Out))),
-                  dst = ISZ(ir.EndPoint(
-                    component = ir.Name(name = srcProcess.path, pos = None()),
-                    feature = Some(ir.Name(name = processPortPath, pos = None())),
-                    direction = Some(ir.Direction.Out))),
-                  kind = ir.ConnectionKind.Port,
-                  isBiDirectional = F,
-                  connectionInstances = ISZ(),
+              // Thread-side and process-side sv_ ports are shared across
+              // monitor instances — only add them once
+              if (!existingThreadFeatureNames.contains(svPortName)) {
+                // Output data port on source thread
+                localStore = StoreUtil.addNonModelElement(threadPortPath, localStore)
+                additionalThreadFeatures = additionalThreadFeatures :+ ir.FeatureEnd(
+                  identifier = ir.Name(name = threadPortPath, pos = None()),
+                  direction = ir.Direction.Out,
+                  category = ir.FeatureCategory.DataPort,
+                  classifier = classifier,
                   properties = ISZ(),
                   uriFrag = "")
 
-              // Input data port on monitor thread
-              val monitorThreadPortPath: ISZ[String] = monitorThreadPath :+ monPortName
-              additionalMonitorThreadFeatures = additionalMonitorThreadFeatures :+ ir.FeatureEnd(
-                identifier = ir.Name(name = monitorThreadPortPath, pos = None()),
-                direction = ir.Direction.In,
-                category = ir.FeatureCategory.DataPort,
-                classifier = classifier,
-                properties = ISZ(),
-                uriFrag = "")
-
-              // Input data port on monitor process
-              val monitorProcessPortPath: ISZ[String] = monitorProcessPath :+ monPortName
-              additionalMonitorProcessFeatures = additionalMonitorProcessFeatures :+ ir.FeatureEnd(
-                identifier = ir.Name(name = monitorProcessPortPath, pos = None()),
-                direction = ir.Direction.In,
-                category = ir.FeatureCategory.DataPort,
-                classifier = classifier,
-                properties = ISZ(),
-                uriFrag = "")
-
-              // Delegation: monitorProcess.port → monitorThread.port (In-to-In going down)
-              val monitorDelegConnName: ISZ[String] = monitorProcessPath :+ s"deleg_${monPortName}"
-              additionalMonitorProcessConnections = additionalMonitorProcessConnections :+
-                ir.Connection(
-                  name = ir.Name(name = monitorDelegConnName, pos = None()),
-                  src = ISZ(ir.EndPoint(
-                    component = ir.Name(name = monitorProcessPath, pos = None()),
-                    feature = Some(ir.Name(name = monitorProcessPortPath, pos = None())),
-                    direction = Some(ir.Direction.In))),
-                  dst = ISZ(ir.EndPoint(
-                    component = ir.Name(name = monitorThreadPath, pos = None()),
-                    feature = Some(ir.Name(name = monitorThreadPortPath, pos = None())),
-                    direction = Some(ir.Direction.In))),
-                  kind = ir.ConnectionKind.Port,
-                  isBiDirectional = F,
-                  connectionInstances = ISZ(),
+                // Output data port on source process
+                additionalProcessFeatures = additionalProcessFeatures :+ ir.FeatureEnd(
+                  identifier = ir.Name(name = processPortPath, pos = None()),
+                  direction = ir.Direction.Out,
+                  category = ir.FeatureCategory.DataPort,
+                  classifier = classifier,
                   properties = ISZ(),
                   uriFrag = "")
 
-              // System-level fan-out: srcProcess.svPort → monitorProcess.port
-              val systemFanOutConnName: ISZ[String] = systemPath :+ s"sv_mon_${monPortName}"
-              systemFanOutConnections = systemFanOutConnections :+
-                ir.Connection(
-                  name = ir.Name(name = systemFanOutConnName, pos = None()),
-                  src = ISZ(ir.EndPoint(
-                    component = ir.Name(name = srcProcess.path, pos = None()),
-                    feature = Some(ir.Name(name = processPortPath, pos = None())),
-                    direction = Some(ir.Direction.Out))),
-                  dst = ISZ(ir.EndPoint(
-                    component = ir.Name(name = monitorProcessPath, pos = None()),
-                    feature = Some(ir.Name(name = monitorProcessPortPath, pos = None())),
-                    direction = Some(ir.Direction.In))),
-                  kind = ir.ConnectionKind.Port,
-                  isBiDirectional = F,
-                  connectionInstances = ISZ(),
+                // Delegation: srcThread.svPort → srcProcess.svPort (Out-to-Out going up)
+                val srcDelegConnName: ISZ[String] = srcProcess.path :+ s"deleg_${svPortName}"
+                additionalProcessConnections = additionalProcessConnections :+
+                  ir.Connection(
+                    name = ir.Name(name = srcDelegConnName, pos = None()),
+                    src = ISZ(ir.EndPoint(
+                      component = ir.Name(name = thread.path, pos = None()),
+                      feature = Some(ir.Name(name = threadPortPath, pos = None())),
+                      direction = Some(ir.Direction.Out))),
+                    dst = ISZ(ir.EndPoint(
+                      component = ir.Name(name = srcProcess.path, pos = None()),
+                      feature = Some(ir.Name(name = processPortPath, pos = None())),
+                      direction = Some(ir.Direction.Out))),
+                    kind = ir.ConnectionKind.Port,
+                    isBiDirectional = F,
+                    connectionInstances = ISZ(),
+                    properties = ISZ(),
+                    uriFrag = "")
+              }
+
+              // Monitor-side ports, delegations, fan-out connections, and
+              // connection instances — skip if a prior monitor plugin already
+              // added them to this monitor thread
+              if (!existingMonitorFeatureNames.contains(monPortName)) {
+
+                // Input data port on monitor thread
+                val monitorThreadPortPath: ISZ[String] = monitorThreadPath :+ monPortName
+
+                // Input data port on monitor process
+                val monitorProcessPortPath: ISZ[String] = monitorProcessPath :+ monPortName
+
+                additionalMonitorThreadFeatures = additionalMonitorThreadFeatures :+ ir.FeatureEnd(
+                  identifier = ir.Name(name = monitorThreadPortPath, pos = None()),
+                  direction = ir.Direction.In,
+                  category = ir.FeatureCategory.DataPort,
+                  classifier = classifier,
                   properties = ISZ(),
                   uriFrag = "")
 
-              // ConnectionInstance: srcThread.svPort → monitorThread.port
-              val connInstNameStr: String =
-                st"${(threadPortPath, ".")} -> ${(monitorThreadPortPath, ".")}".render
-              systemConnectionInstances = systemConnectionInstances :+
-                ir.ConnectionInstance(
-                  name = ir.Name(name = ISZ(connInstNameStr), pos = None()),
-                  src = ir.EndPoint(
-                    component = ir.Name(name = thread.path, pos = None()),
-                    feature = Some(ir.Name(name = threadPortPath, pos = None())),
-                    direction = Some(ir.Direction.Out)),
-                  dst = ir.EndPoint(
-                    component = ir.Name(name = monitorThreadPath, pos = None()),
-                    feature = Some(ir.Name(name = monitorThreadPortPath, pos = None())),
-                    direction = Some(ir.Direction.In)),
-                  kind = ir.ConnectionKind.Port,
-                  connectionRefs = ISZ(
-                    ir.ConnectionReference(
-                      name = ir.Name(name = systemFanOutConnName, pos = None()),
-                      context = ir.Name(name = systemPath, pos = None()),
-                      isParent = T),
-                    ir.ConnectionReference(
-                      name = ir.Name(name = monitorDelegConnName, pos = None()),
-                      context = ir.Name(name = monitorProcessPath, pos = None()),
-                      isParent = F)),
-                  properties = ISZ())
-              } // end else (skip if feature already exists)
+                additionalMonitorProcessFeatures = additionalMonitorProcessFeatures :+ ir.FeatureEnd(
+                  identifier = ir.Name(name = monitorProcessPortPath, pos = None()),
+                  direction = ir.Direction.In,
+                  category = ir.FeatureCategory.DataPort,
+                  classifier = classifier,
+                  properties = ISZ(),
+                  uriFrag = "")
+
+                // Delegation: monitorProcess.port → monitorThread.port (In-to-In going down)
+                val monitorDelegConnName: ISZ[String] = monitorProcessPath :+ s"deleg_${monPortName}"
+                additionalMonitorProcessConnections = additionalMonitorProcessConnections :+
+                  ir.Connection(
+                    name = ir.Name(name = monitorDelegConnName, pos = None()),
+                    src = ISZ(ir.EndPoint(
+                      component = ir.Name(name = monitorProcessPath, pos = None()),
+                      feature = Some(ir.Name(name = monitorProcessPortPath, pos = None())),
+                      direction = Some(ir.Direction.In))),
+                    dst = ISZ(ir.EndPoint(
+                      component = ir.Name(name = monitorThreadPath, pos = None()),
+                      feature = Some(ir.Name(name = monitorThreadPortPath, pos = None())),
+                      direction = Some(ir.Direction.In))),
+                    kind = ir.ConnectionKind.Port,
+                    isBiDirectional = F,
+                    connectionInstances = ISZ(),
+                    properties = ISZ(),
+                    uriFrag = "")
+
+                // System-level fan-out: srcProcess.svPort → monitorProcess.port
+                val systemFanOutConnName: ISZ[String] = systemPath :+ s"sv_mon_${monPortName}"
+                systemFanOutConnections = systemFanOutConnections :+
+                  ir.Connection(
+                    name = ir.Name(name = systemFanOutConnName, pos = None()),
+                    src = ISZ(ir.EndPoint(
+                      component = ir.Name(name = srcProcess.path, pos = None()),
+                      feature = Some(ir.Name(name = processPortPath, pos = None())),
+                      direction = Some(ir.Direction.Out))),
+                    dst = ISZ(ir.EndPoint(
+                      component = ir.Name(name = monitorProcessPath, pos = None()),
+                      feature = Some(ir.Name(name = monitorProcessPortPath, pos = None())),
+                      direction = Some(ir.Direction.In))),
+                    kind = ir.ConnectionKind.Port,
+                    isBiDirectional = F,
+                    connectionInstances = ISZ(),
+                    properties = ISZ(),
+                    uriFrag = "")
+
+                // ConnectionInstance: srcThread.svPort → monitorThread.port
+                val connInstNameStr: String =
+                  st"${(threadPortPath, ".")} -> ${(monitorThreadPortPath, ".")}".render
+                systemConnectionInstances = systemConnectionInstances :+
+                  ir.ConnectionInstance(
+                    name = ir.Name(name = ISZ(connInstNameStr), pos = None()),
+                    src = ir.EndPoint(
+                      component = ir.Name(name = thread.path, pos = None()),
+                      feature = Some(ir.Name(name = threadPortPath, pos = None())),
+                      direction = Some(ir.Direction.Out)),
+                    dst = ir.EndPoint(
+                      component = ir.Name(name = monitorThreadPath, pos = None()),
+                      feature = Some(ir.Name(name = monitorThreadPortPath, pos = None())),
+                      direction = Some(ir.Direction.In)),
+                    kind = ir.ConnectionKind.Port,
+                    connectionRefs = ISZ(
+                      ir.ConnectionReference(
+                        name = ir.Name(name = systemFanOutConnName, pos = None()),
+                        context = ir.Name(name = systemPath, pos = None()),
+                        isParent = T),
+                      ir.ConnectionReference(
+                        name = ir.Name(name = monitorDelegConnName, pos = None()),
+                        context = ir.Name(name = monitorProcessPath, pos = None()),
+                        isParent = F)),
+                    properties = ISZ())
+              } // end if (!existingFeatureNames.contains(monPortName))
             }
 
             // Update the source thread and process with the new state var ports
@@ -320,7 +349,6 @@ object GumboMonitorPlugin {
         return None()
     }
   }
-
 
 
   // The plugin's handle method executes in 3 phases, each gated by a store key
@@ -372,7 +400,7 @@ object GumboMonitorPlugin {
   }
 
   @pure override def handle(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes,
-                             symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
+                            symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
     var localStore: Store = store
     var resources: ISZ[Resource] = ISZ()
 
@@ -413,7 +441,7 @@ object GumboMonitorPlugin {
   // Rust side, registers the is_monitoring_enabled extern C API and its unsafe wrapper
   // so Rust components can query monitoring status.
   @pure def handleCBackend(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes,
-                            symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
+                           symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
     var localStore: Store = store + keyCBackend ~> BoolValue(T)
 
     val cTypeProvider = CTypePlugin.getCTypeProvider(localStore).get
@@ -613,12 +641,12 @@ object GumboMonitorPlugin {
   // per-component contract checking. Adds scheduling state fields (frame_period,
   // last_index, prev/next user channel tables) and pre-state fields to the struct,
   // updates new() with their initializers, replaces timeTriggered() to call
-  // self.monitor(api), and appends the monitor method. The monitor method dispatches
+  // self.gumbo_monitor(api), and appends the gumbo_monitor method. The method dispatches
   // on prev_user_ch to run post-condition checks and on next_user_ch to capture
   // pre-state for each component. Also appends buildUserChannelTables as a
   // module-level function.
   @pure def handleMonitorMethod(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes,
-                                 symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
+                                symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
     var localStore: Store = store + keyMonitorMethod ~> BoolValue(T)
 
     val gumboxContribs = GumboXRustPlugin.getGumboXContributions(localStore).get
@@ -632,9 +660,8 @@ object GumboMonitorPlugin {
         conn match {
           case pc: AadlPortConnection =>
             val srcThread = pc.srcComponent.asInstanceOf[AadlThread]
-            val srcProcess = srcThread.getParent(symbolTable)
             val portName = CommonUtil.getLastName(pc.srcFeature.feature.identifier)
-            val monPortName: String = s"${srcProcess.identifier}_${srcThread.identifier}_${portName}"
+            val monPortName: String = s"${MicrokitUtil.getComponentIdPath(srcThread)}_${portName}"
             dstPortToMonitorPortName = dstPortToMonitorPortName + pc.dstFeature.path ~> monPortName
           case _ =>
         }
@@ -653,9 +680,6 @@ object GumboMonitorPlugin {
           for (entry <- gumboxContribs.componentContributions.entries) {
             val thread = symbolTable.componentMap.get(entry._1).get.asInstanceOf[AadlThread]
             val threadId = MicrokitUtil.getComponentIdPath(thread)
-            val process = thread.getParent(symbolTable)
-            val processId = process.identifier
-            val threadSimpleId = thread.identifier
             val contribs = entry._2
 
             gumboxUses = gumboxUses :+ RAST.Use(ISZ(), RAST.IdentString(s"crate::gumbox::${threadId}_containers::*"))
@@ -677,7 +701,7 @@ object GumboMonitorPlugin {
             val iepPostParams = GumboXRustUtil.sortParams(contribs.initializeContributions.IEP_Post_Params)
             if (contribs.initializeContributions.IEP_Guarantee.nonEmpty) {
               val postFieldInits: ISZ[ST] = for (p <- iepPostParams) yield
-                st"${p.name}: ${GumboMonitorPlugin.computeMonitorGetterCall(p, processId, threadSimpleId, dstPortToMonitorPortName)},"
+                st"${p.name}: ${GumboMonitorPlugin.computeMonitorGetterCall(p, threadId, dstPortToMonitorPortName)},"
               val postArgs: ISZ[ST] = for (p <- iepPostParams) yield
                 st"post_${threadId}.${p.name}"
 
@@ -701,7 +725,7 @@ object GumboMonitorPlugin {
                 p.kind == GumboXRustUtil.SymbolKind.StateVar || p.isOutPort)
 
               val postFieldInits: ISZ[ST] = for (p <- postOnlyParams) yield
-                st"${p.name}: ${GumboMonitorPlugin.computeMonitorGetterCall(p, processId, threadSimpleId, dstPortToMonitorPortName)},"
+                st"${p.name}: ${GumboMonitorPlugin.computeMonitorGetterCall(p, threadId, dstPortToMonitorPortName)},"
 
               val cepPostArgs: ISZ[ST] = for (p <- cepPostParams) yield
                 st"${if (p.kind == GumboXRustUtil.SymbolKind.StateVarPre || p.isInPort) "pre" else "post"}.${p.name}"
@@ -732,7 +756,7 @@ object GumboMonitorPlugin {
                 else GumboXRustUtil.sortParams(contribs.computeContributions.CEP_Post_Params).filter(p =>
                   p.kind == GumboXRustUtil.SymbolKind.StateVarPre || p.isInPort)
               val preFieldInits: ISZ[ST] = for (p <- preParams) yield
-                st"${p.name}: ${GumboMonitorPlugin.computeMonitorGetterCall(p, processId, threadSimpleId, dstPortToMonitorPortName)},"
+                st"${p.name}: ${GumboMonitorPlugin.computeMonitorGetterCall(p, threadId, dstPortToMonitorPortName)},"
 
               val preCheckBody: ST =
                 if (hasCepPre) {
@@ -777,7 +801,7 @@ object GumboMonitorPlugin {
 
           val monitorMethod = RAST.FnImpl(
             sig = RAST.FnSig(
-              ident = RAST.IdentString("monitor"),
+              ident = RAST.IdentString("gumbo_monitor"),
               generics = Some(RAST.Generics(ISZ(RAST.GenericParam(
                 ident = RAST.IdentString("API"),
                 attributes = ISZ(),
@@ -867,7 +891,7 @@ object GumboMonitorPlugin {
                 } else if (fn.sig.ident.prettyST.render == "timeTriggered") {
                   updatedImplItems = updatedImplItems :+ fn(
                     body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
-                      st"self.monitor(api);")))))
+                      st"self.gumbo_monitor(api);")))))
                 } else {
                   updatedImplItems = updatedImplItems :+ item
                 }
@@ -938,7 +962,7 @@ object GumboMonitorPlugin {
   }
 
   @pure override def canFinalizeMicrokit(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes,
-                                          symbolTable: SymbolTable, store: Store, reporter: Reporter): B = {
+                                         symbolTable: SymbolTable, store: Store, reporter: Reporter): B = {
     return (
       !reporter.hasError &&
         !isDisabled(store) &&
@@ -953,7 +977,7 @@ object GumboMonitorPlugin {
   //       contribution-based approach (like the component app modules) so that plugins can modify
   //       it directly rather than regenerating the entire file.
   @pure override def finalizeMicrokit(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes,
-                                       symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
+                                      symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
     var resources: ISZ[Resource] = ISZ()
 
     val monitoringStore = GumboMonitorPlugin.getRustMonitoringStore(store).get

@@ -1805,8 +1805,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
   def declareName(entity: String, name: QName, info: Info, posOpt: Option[Position], reporter: Reporter): Unit = {
     globalNameMap.get(name) match {
       case Some(_) =>
-        reporter
-          .error(posOpt, GclResolver.toolName, s"Cannot declare $entity because the name has already been declared previously.")
+        reportError(posOpt, s"Cannot declare $entity because the name has already been declared previously.", reporter)
       case _ => globalNameMap = globalNameMap + name ~> info
     }
   }

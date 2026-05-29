@@ -118,11 +118,38 @@ object UserLandMonitorPlugin {
         !UserLandMonitorPlugin.hasHandled(store))
   }
 
+  // Each monitor plugin's handle method produces a system description variant
+  // by filtering the "normal" SD — stripping non-model memory regions (like
+  // sv_ state var regions) that aren't retained, and adding monitor-specific
+  // scheduling slots. The first monitor to run writes its filtered version
+  // back as "normal", which removes the sv_ memory regions from it. If a
+  // second monitor then reads "normal", those regions are already gone and
+  // its SD variant will be missing the state var memory mappings.
+  //
+  // To fix this, the first monitor to call getOriginalMsd snapshots the
+  // unmodified "normal" SD under "MONITOR_ORIG_MSD". All subsequent monitors
+  // read from that snapshot, ensuring every monitor starts from the same
+  // baseline that includes all memory regions.
+  @pure def getOriginalMsd(store: Store): (SystemDescription, Store) = {
+    val MONITOR_ORIG_MSD = "MONITOR_ORIG_MSD"
+    SystemDescriptionProviderPlugin.getMSDOpt(MONITOR_ORIG_MSD, store) match {
+      case Some(origMsd) => return (origMsd, store)
+      case _ => {
+        val normal = SystemDescriptionProviderPlugin.getMSD("normal", store)
+        val ustore = SystemDescriptionProviderPlugin.putMSD(MONITOR_ORIG_MSD, normal, store)
+        return (normal, ustore)
+      }
+    }
+  }
+
   override def handle(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
     var localStore = store + UserLandMonitorPlugin.KEY_UserLandMonitorPlugin_handled ~> BoolValue(T)
     var resources: ISZ[Resource] = ISZ()
 
-    val rawSd = SystemDescriptionProviderPlugin.getMSD("normal", localStore)
+    // Use the original unmodified "normal" SD so that memory regions
+    // removed by a prior monitor's filtering are still available
+    val (rawSd, s) = getOriginalMsd(localStore)
+    localStore = s
 
     val sysPath = model.components(0).identifier.name
     val monitorProcessorPath = getMonitorProcessPath(sysPath)
