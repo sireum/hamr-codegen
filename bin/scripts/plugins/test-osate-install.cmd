@@ -29,7 +29,10 @@ val localUpdateSites: B = T || ops.ISZOps(Os.cliArgs).contains("local")
 
 val sireumHome = Os.path(Os.env("SIREUM_HOME").get)
 
-val osateLoc = Os.path("/Applications") / "osate.app" / "Contents" / "MacOS" / "osate"
+val osateLoc: Os.Path =
+  if ((Os.path("/Applications") / "osate.app" / "Contents" / "MacOS" / "osate").exists) Os.path("/Applications") / "osate.app" / "Contents" / "MacOS" / "osate"
+  else Os.home / "Applications" / "osate.app" / "Contents" / "MacOS" / "osate"
+
 val fmideLoc = sireumHome / "bin" / "mac" / "fmide.app" / "Contents" / "MacOS" / "osate"
 
 val remoteUpdateSite = "https://raw.githubusercontent.com/sireum/osate-update-site/master"

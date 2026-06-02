@@ -18,10 +18,13 @@ import org.sireum.hamr.ir.Aadl
 import org.sireum.message.Reporter
 import org.sireum.hamr.codegen.microkit.{rust => RAST}
 
+@datatype class SDValue(val sd: SystemDescription) extends StoreValue
+
 object UserLandMonitorPlugin {
 
   val KEY_UserLandMonitorPlugin_Model_Transformed: String = "KEY_UserLandMonitorPlugin_Model_Transformed"
   val KEY_UserLandMonitorPlugin_handled: String = "KEY_RustScheduleAwareMonitorPlugin_handled"
+  val MONITOR_ORIG_MSD_KEY: String = "MONITOR_ORIG_MSD"
 
   @strictpure def haveHandledModelTransform(store: Store): B = store.contains(KEY_UserLandMonitorPlugin_Model_Transformed)
 
@@ -127,16 +130,16 @@ object UserLandMonitorPlugin {
   // its SD variant will be missing the state var memory mappings.
   //
   // To fix this, the first monitor to call getOriginalMsd snapshots the
-  // unmodified "normal" SD under "MONITOR_ORIG_MSD". All subsequent monitors
-  // read from that snapshot, ensuring every monitor starts from the same
-  // baseline that includes all memory regions.
+  // unmodified "normal" SD under a separate store key (not in the MSDs map,
+  // to avoid the finalize phase rendering it as a duplicate meta.py).
+  // All subsequent monitors read from that snapshot, ensuring every monitor
+  // starts from the same baseline that includes all memory regions.
   @pure def getOriginalMsd(store: Store): (SystemDescription, Store) = {
-    val MONITOR_ORIG_MSD = "MONITOR_ORIG_MSD"
-    SystemDescriptionProviderPlugin.getMSDOpt(MONITOR_ORIG_MSD, store) match {
-      case Some(origMsd) => return (origMsd, store)
+    store.get(UserLandMonitorPlugin.MONITOR_ORIG_MSD_KEY) match {
+      case Some(v) => return (v.asInstanceOf[SDValue].sd, store)
       case _ => {
         val normal = SystemDescriptionProviderPlugin.getMSD("normal", store)
-        val ustore = SystemDescriptionProviderPlugin.putMSD(MONITOR_ORIG_MSD, normal, store)
+        val ustore = store + UserLandMonitorPlugin.MONITOR_ORIG_MSD_KEY ~> SDValue(normal)
         return (normal, ustore)
       }
     }
@@ -180,11 +183,14 @@ object UserLandMonitorPlugin {
 
     monitorSlotOpt match {
       case Some(monitorSlot) =>
-        // Strip the monitor MON companion PD, the monitor user PD, and their channels from the "normal" SD.
-        val strippedPDs = rawSd.protectionDomains.filter(pd => pd.name != monitorMonPdName && pd.name != monitorThreadId)
+        // Strip ALL non-model PDs and their channels from the "normal" SD.
+        // Each monitor reads from the original snapshot (MONITOR_ORIG_MSD),
+        // so every monitor must strip all non-model elements — not just itself —
+        // to avoid restoring items that a prior monitor already removed.
+        val allNonModelPdNames: Set[String] = otherNonModelPdNames + monitorMonPdName + monitorThreadId
+        val strippedPDs = rawSd.protectionDomains.filter(pd => !allNonModelPdNames.contains(pd.name))
         val strippedChannels = rawSd.channels.filter(c =>
-          c.firstPD != monitorMonPdName && c.secondPD != monitorMonPdName &&
-            c.firstPD != monitorThreadId && c.secondPD != monitorThreadId)
+          !allNonModelPdNames.contains(c.firstPD) && !allNonModelPdNames.contains(c.secondPD))
 
         // MCS scheduling: no pacer; each thread has its own time budget via scheduling domains.
         val boundProcessors = symbolTable.getAllActualBoundProcessors()
@@ -199,16 +205,19 @@ object UserLandMonitorPlugin {
         // Strip the originally-computed pad from regularSlots; pads are recomputed per SD below
         val regularThreadSlots: ISZ[SchedulingDomain] = regularSlots.filter((sd: SchedulingDomain) => sd.componentName != "pad")
 
+        // For the normal variant, also exclude other non-model PDs' scheduling slots
+        val normalThreadSlots: ISZ[SchedulingDomain] = regularThreadSlots.filter((sd: SchedulingDomain) => !otherNonModelPdNames.contains(sd.componentName))
+
         // "normal" SD: [pad?,] regular threads (no monitor); pad uses full remaining budget
         var normalUsedNano: Z = 0
-        for (s <- regularThreadSlots) {
+        for (s <- normalThreadSlots) {
           normalUsedNano = normalUsedNano + s.length
         }
         val normalRemainder: Z = framePeriodNano - normalUsedNano
         val normalScheds: ISZ[SchedulingDomain] =
           if (normalRemainder > 0)
-            SchedulingDomain(id = 0, componentName = "pad", length = normalRemainder, isUserPartition = F) +: regularThreadSlots
-          else regularThreadSlots
+            SchedulingDomain(id = 0, componentName = "pad", length = normalRemainder, isUserPartition = F) +: normalThreadSlots
+          else normalThreadSlots
 
         val retainedPorts: ISZ[IdPath] = getRetainedNonModelPorts(localStore)
         var nonModelMrNames: Set[String] = Set.empty
