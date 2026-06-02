@@ -20,10 +20,10 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
     return ISZ(contentMarker)
   }
 
-  val infix: String = if (name == "normal") "" else s".${name}"
-  val systemName: String = s"microkit$infix.system"
-  val scheduleName: String = s"microkit$infix.schedule.xml"
-  val dotName: String = s"microkit$infix.dot"
+  val prefix: String = if (name == "normal") "" else s"${name}."
+  val systemName: String = s"${prefix}microkit.system"
+  val scheduleName: String = s"${prefix}microkit.schedule.xml"
+  val dotName: String = s"${prefix}microkit.dot"
 
   val stSchedulingDomain: Option[ST] =
     if (schedulingDomains.nonEmpty) Some(
@@ -147,15 +147,21 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
 }
 
 @datatype class ProtectionDomain (val name: String,
-                                  val schedulingDomain: Option[Z],
-                                  val id: Option[String],
-                                  val stackSizeInKiBytes: Option[Z],
-                                  val smc: Option[B],
+                                  val programImage: String,
+                                  val priority: Option[Z],
+                                  val budget: Option[Z],
+                                  val period: Option[Z],
                                   val passive: Option[B],
+                                  val stackSizeInKiBytes: Option[Z],
+                                  val cpu: Option[Z],
+
+                                  val id: Option[String],
+                                  val smc: Option[B],
+
+                                  val schedulingDomain: Option[Z],
 
                                   val memMaps: ISZ[MemoryMap],
                                   val irqs: ISZ[IRQ],
-                                  val programImage: String,
 
                                   val children: ISZ[MicrokitDomain]) extends MicrokitDomain {
 
@@ -165,11 +171,44 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
     return ISZ(contentMarker.asInstanceOf[Marker]) ++ ((for (c <- children) yield c.getMarkers).flatMap((s: ISZ[Marker]) => s))
   }
 
+  @pure def prettySdfgenProtectionDomainST: ST = {
+    var opts: ISZ[ST] = ISZ()
+    opts = opts :+ st"""name="$name""""
+    opts = opts :+ st"""program_image="$programImage""""
+    priority match {
+      case Some(v) => opts = opts :+ st"priority=$v"
+      case _ =>
+    }
+    budget match {
+      case Some(v) => opts = opts :+ st"budget=$v"
+      case _ =>
+    }
+    period match {
+      case Some(v) => opts = opts :+ st"period=$v"
+      case _ =>
+    }
+    passive match {
+      case Some(v) => opts = opts :+ st"passive=${if (v) "True" else "False"}"
+      case _ =>
+    }
+    stackSizeInKiBytes match {
+      case Some(k) => opts = opts :+ st"stack_size=${KiBytesToHex(k)}"
+      case _ =>
+    }
+    cpu match {
+      case Some(v) => opts = opts :+ st"cpu=$v"
+      case _ =>
+    }
+    return (
+    st"""ProtectionDomain(
+        |  ${(opts, ",\n")})""")
+  }
+
   @pure def prettyST: ST = {
-    val domain: Option[ST] =
+    val schedulingDomainOpt: Option[ST] =
       if (schedulingDomain.nonEmpty) Some(st""" domain="domain_${schedulingDomain.get}"""")
       else None()
-    val stId: Option[ST] =
+    val stIdOpt: Option[ST] =
       if (id.nonEmpty) Some(st""" id="${id.get}"""")
       else None()
     val stackSizeOpt: Option[ST] =
@@ -188,11 +227,16 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
         case Some(v) => Some(st""" passive="${if(v) "true" else "false"}"""")
         case _ => None()
       }
+    val priorityOpt: Option[ST] =
+      priority match {
+        case Some(v) => Some(st""" priority=$v""")
+        case _ => None()
+      }
 
-    val stChildren: Option[ST] =
+    val stChildrenOpt: Option[ST] =
       if (children.nonEmpty) Some(st"${(for (c <- children) yield c.prettyST, "\n")}")
       else None()
-    val stMaps: Option[ST] =
+    val stMapsOpt: Option[ST] =
       if (memMaps.nonEmpty) Some(st"${(for (m <- memMaps) yield m.prettyST, "\n")}")
       else None()
     val irqsOpt: Option[ST] =
@@ -200,11 +244,11 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
       else None()
 
     val ret =
-      st"""<protection_domain name="$name"$domain$stId$stackSizeOpt$smcOpt$passiveOpt>
+      st"""<protection_domain name="$name"${schedulingDomainOpt}${stIdOpt}${stackSizeOpt}${smcOpt}${passiveOpt}${priorityOpt}>
           |  <program_image path="$programImage" />
-          |  $stMaps
+          |  $stMapsOpt
           |  $irqsOpt
-          |  $stChildren
+          |  $stChildrenOpt
           |
           |  ${contentMarker.beginMarker}
           |  ${contentMarker.endMarker}
@@ -334,6 +378,9 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
                          val firstId: Z,
                          val secondPD: String,
                          val secondId: Z) {
+  @strictpure def prettySdfgenST: ST =
+    st"""Channel(a=$firstPD, a_id=$firstId, b=$secondPD, b_id=$secondId)"""
+
   @strictpure def prettyST: ST =
     st"""<channel>
         |  <end pd="$firstPD" id="$firstId" />

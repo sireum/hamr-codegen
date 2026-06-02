@@ -71,14 +71,18 @@ import org.sireum.message.Reporter
       xmlProtectionDomains = xmlProtectionDomains :+
         ProtectionDomain(
           name = pacerName,
-          schedulingDomain = Some(pacerSchedulingDomain),
-          id = None(),
+          programImage = s"${pacerName}.elf",
+          priority = None(),
+          budget = None(),
+          period = None(),
+          passive = None(),
           stackSizeInKiBytes = None(),
+          cpu = None(),
+          id = None(),
+          smc = None(),
+          schedulingDomain = Some(pacerSchedulingDomain),
           memMaps = ISZ(),
           irqs = ISZ(),
-          programImage = s"${pacerName}.elf",
-          smc = None(),
-          passive = None(),
           children = ISZ())
 
       portPacerToEndOfFrame = getNextPacerChannelId
@@ -176,7 +180,7 @@ import org.sireum.message.Reporter
 
       var vms: ISZ[MicrokitDomain] = ISZ()
       if (isVM) {
-        val vmName = threadId
+        val vmName = s"${threadId}_VM"
 
         val guestRam = VirtualMachineMemoryRegion(
           typ = VirtualMemoryRegionType.RAM,
@@ -306,27 +310,35 @@ import org.sireum.message.Reporter
       val child =
         ProtectionDomain(
           name = threadId,
-          schedulingDomain = Some(schedulingDomain),
-          id = Some(s"1"),
+          programImage = mk.elfName,
+          priority = None(),
+          budget = None(),
+          period = None(),
+          passive = Hamr_Microkit_Properties.getPassive(t.properties),
           stackSizeInKiBytes = childStackSizeInKiBytes,
+          cpu = None(),
+          id = Some(s"1"),
+          smc = Hamr_Microkit_Properties.getSmc(t.properties),
+          schedulingDomain = Some(schedulingDomain),
           memMaps = childMemMaps,
           irqs = childIrqs,
-          programImage = mk.elfName,
-          smc = Hamr_Microkit_Properties.getSmc(t.properties),
-          passive = Hamr_Microkit_Properties.getPassive(t.properties),
           children = vms)
 
       xmlProtectionDomains = xmlProtectionDomains :+
         ProtectionDomain(
           name = threadMonId.render,
-          schedulingDomain = Some(schedulingDomain),
-          id = None(),
+          programImage = mk.monElfName,
+          priority = None(),
+          budget = None(),
+          period = None(),
+          passive = None(),
           stackSizeInKiBytes = None(),
+          cpu = None(),
+          id = None(),
+          smc = None(),
+          schedulingDomain = Some(schedulingDomain),
           memMaps = ISZ(),
           irqs = ISZ(),
-          programImage = mk.monElfName,
-          smc = None(),
-          passive = None(),
           children = ISZ(child))
 
       val pacerChannelId = getNextPacerChannelId

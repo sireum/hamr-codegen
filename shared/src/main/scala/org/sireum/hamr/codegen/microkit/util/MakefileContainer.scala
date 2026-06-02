@@ -150,8 +150,11 @@ import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
             |$elfEntry"""
       return ret
     } else if (isVM) {
+      val monCompanion: Option[String] =
+        if (hasMonitorCompanion) Some(s"$userMonObjName ")
+        else None()
       val ret =
-        st"""$monElfName: $monObjName
+        st"""$monElfName: $monCompanion$monObjName
             |${TAB}$$(LD) $$(LDFLAGS) $$^ $$(LIBS) -o $$@
             |
             |$elfName: $$(${MicrokitTypeUtil.make_TYPE_OBJS}) $vmArchive

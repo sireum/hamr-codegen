@@ -124,9 +124,12 @@ object MicrokitCodegen {
 
         val sourcePaths: ISZ[String] = for (mk <- makefileContainers) yield s"$$(TOP_DIR)/${mk.relativePathSrcDir}"
 
-        var rustBuildEntries: ISZ[ST] = ISZ()
+        var mcsBuildEntries: ISZ[ST] = ISZ()
         for (mk <- makefileContainers if (mk.isRustic && mk.hasUserContent)) {
-          rustBuildEntries = rustBuildEntries :+ mk.rustBuildEntry
+          mcsBuildEntries = mcsBuildEntries :+ mk.rustBuildEntry
+        }
+        for (mk <- makefileContainers if mk.isVM) {
+          mcsBuildEntries = mcsBuildEntries :+ mk.buildEntry
         }
 
         val typeObjectNames = Set.empty[String] ++ CConnectionProviderPlugin.getTypeSimpleObjectNames(localStore)
@@ -136,7 +139,7 @@ object MicrokitCodegen {
           sourcePaths = sourcePaths,
           elfFiles = elfFiles.elements,
           typeObjectNames = typeObjectNames.elements,
-          buildEntries = rustBuildEntries,
+          buildEntries = mcsBuildEntries,
           elfEntries = elfEntries.elements,
           miscTargets = MakefileUtil.getMakefileTargets(ISZ("system.mk"), localStore))
       } else {

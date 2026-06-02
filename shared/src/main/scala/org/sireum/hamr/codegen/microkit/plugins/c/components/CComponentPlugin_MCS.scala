@@ -25,12 +25,6 @@ import org.sireum.message.Reporter
 
   val name: String = "CComponentPlugin_MCS"
 
-  val pacerName: String = "pacer"
-
-  val pacerSchedulingDomain: Z = 1
-
-  val pacerComputeExecutionTime: Z = 10
-
   val defaultComputeExecutionTime: Z = 50
 
   override def canHandle(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): B = {
@@ -53,19 +47,8 @@ import org.sireum.message.Reporter
     var xmlChannels: ISZ[Channel] = ISZ()
     var xmlMemoryRegions: ISZ[MemoryRegion] = ISZ()
 
-    var codePacerDefines: ISZ[ST] = ISZ()
-    var codePacerPings: ISZ[ST] = ISZ()
+    var makefileCleanEntries: ISZ[ST] = ISZ()
     var largestSchedulingDomain: Z = 2
-
-    //var portPacerToEndOfFrame: Z = -1
-    //var portEndOfFrameToPacer: Z = -1
-
-    var nextSchedulerChannelId: Z = 0 // FIXME document indicates < 63, but build indicates < 62
-
-    def getNextSchedulerChannelId: Z = {
-      nextSchedulerChannelId = nextSchedulerChannelId + 1
-      return nextSchedulerChannelId - 1
-    }
 
     def processThread(t: AadlThread,
                       connectionStore: ISZ[ConnectionStore]): Unit = {
@@ -131,7 +114,11 @@ import org.sireum.message.Reporter
 
       var vms: ISZ[MicrokitDomain] = ISZ()
       if (isVM) {
-        val vmName = threadId
+        // VM name must differ from the PD name. Microkit SDK 2.2.0 generates
+        // capdl object names from PD/VM names + vaddr, so a PD and its VM sharing
+        // the same name and mapping the same region at the same vaddr causes a
+        // "object names must be unique" panic. This was not required for SDK 1.4.1.
+        val vmName = s"${threadId}_VM"
 
         val guestRam = VirtualMachineMemoryRegion(
           typ = VirtualMemoryRegionType.RAM,
@@ -207,18 +194,36 @@ import org.sireum.message.Reporter
             ))
         )
 
+        makefileCleanEntries = makefileCleanEntries :+ st"rm -rf $${TOP_DIR}/${mk.relativePath}/build"
+
         val boardPath = s"${options.sel4OutputDir.get}/${mk.relativePathVmBoardDir}/qemu_virt_aarch64"
 
         val vmmMake = VmMakefileTemplate.Makefile(threadId)
-        resources = resources :+ ResourceUtil.createResource(s"${boardPath}/Makefile", vmmMake, F) // allow the user to customize vmm makefile
+        resources = resources :+ ResourceUtil.createResource(s"${boardPath}/Makefile", vmmMake, F)
 
+        val vmmLinuxDts = VmMakefileTemplate.linux_dts
+        resources = resources :+ ResourceUtil.createResource(s"${boardPath}/linux.dts", vmmLinuxDts, F)
+
+        val vmmOverlayDts = VmMakefileTemplate.overlay_dts
+        resources = resources :+ ResourceUtil.createResource(s"${boardPath}/overlay.dts", vmmOverlayDts, F)
+
+        val vmmSimpleSystem = VmMakefileTemplate.simple_system
+        resources = resources :+ ResourceUtil.createResource(s"${boardPath}/simple.system", vmmSimpleSystem, F)
 
         val vmm_config = VmUtil.vmm_config(
           guestDtbVaddrInHex = "0x4f000000",
           guestInitRamDiskVaddrInHex = "0x4d700000",
           maxIrqs = 1
         )
-        resources = resources :+ ResourceUtil.createResource(s"${options.sel4OutputDir.get}/${mk.relativePathIncludeDir}/${threadId}_user.h", vmm_config, T)
+        resources = resources :+ ResourceUtil.createResource(s"${options.sel4OutputDir.get}/${mk.relativePathIncludeDir}/${threadId}_user.h", vmm_config, F)
+      }
+
+      if (makefileCleanEntries.nonEmpty) {
+        localStore = MakefileUtil.addMakefileTargets(
+          ISZ("system.mk"),
+          ISZ(MakefileTarget(name = "clean", allowMultiple = T, dependencies = ISZ(), body = makefileCleanEntries)),
+          localStore
+        )
       }
 
       val childStackSizeInKiBytes: Option[Z] = t.stackSizeInBytes() match {
@@ -240,56 +245,52 @@ import org.sireum.message.Reporter
         }
       }
 
+      val child =
+        ProtectionDomain(
+          name = threadId,
+          programImage = mk.elfName,
+          priority = Some(140),
+          budget = None(),
+          period = None(),
+          passive = Some(T),
+          stackSizeInKiBytes = childStackSizeInKiBytes,
+          cpu = None(),
+          id = Some(s"1"),
+          smc = Hamr_Microkit_Properties.getSmc(t.properties),
+          schedulingDomain = Some(schedulingDomain),
+          memMaps = childMemMaps,
+          irqs = childIrqs,
+          children = vms)
+
       xmlProtectionDomains = xmlProtectionDomains :+
         ProtectionDomain(
           name = threadMonId.render,
-          schedulingDomain = Some(schedulingDomain),
-          id = None(),
+          programImage = mk.monElfName,
+          priority = Some(150),
+          budget = None(),
+          period = None(),
+          passive = Some(T),
           stackSizeInKiBytes = None(),
+          cpu = None(),
+          id = None(),
+          smc = None(),
+          schedulingDomain = Some(schedulingDomain),
           memMaps = ISZ(),
           irqs = ISZ(),
-          programImage = mk.monElfName,
-          smc = None(),
-          passive = None(),
-          children = ISZ())
-
-      xmlProtectionDomains = xmlProtectionDomains :+
-        ProtectionDomain(
-          name = threadId,
-          schedulingDomain = Some(schedulingDomain),
-          id = Some(s"1"),
-          stackSizeInKiBytes = childStackSizeInKiBytes,
-          memMaps = childMemMaps,
-          irqs = childIrqs,
-          programImage = mk.elfName,
-          smc = Hamr_Microkit_Properties.getSmc(t.properties),
-          passive = Hamr_Microkit_Properties.getPassive(t.properties),
-          children = vms)
-
-      val pacerChannelId = getNextSchedulerChannelId
-
-      xmlChannels = xmlChannels :+
-        Channel(
-          firstPD = pacerName, firstId = pacerChannelId,
-          secondPD = threadMonId.render, secondId = pacerChannelId)
+          children = ISZ(child))
 
       ///////////////////////////////////////////////////////////////////////////////////////////////////
       // C Monitor
       ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-      val threadMonCaps = s"PORT_TO_${ops.StringOps(threadMonId.render).toUpper}"
-
-      codePacerDefines = codePacerDefines :+ st"""#define $threadMonCaps $pacerChannelId"""
-      codePacerPings = codePacerPings :+
-        st"""case ${threadMonCaps}:
-            |  microkit_notify($threadMonCaps);
-            |  break;"""
-
-      val monChannelId = getNextSchedulerChannelId
 
       xmlChannels = xmlChannels :+ Channel(
-        firstPD = threadMonId.render, firstId = monChannelId,
-        secondPD = threadId, secondId = monChannelId)
+        firstPD = "scheduler", firstId = schedulingDomain,
+        secondPD = threadMonId.render, secondId = 0)
+
+      xmlChannels = xmlChannels :+ Channel(
+        firstPD = threadMonId.render, firstId = 1,
+        secondPD = threadId, secondId = 0)
 
       val cMonitorSource =
         st"""#include <microkit.h>
@@ -454,13 +455,12 @@ import org.sireum.message.Reporter
           st"""#include <libvmm/util/printf.h>
               |#include <libvmm/util/util.h>"""
         else
-          st"""#include <printf.h>
-              |#include <util.h>"""
+          st"""${MicrokitUtil.microkit_util_imports}"""
 
       val cApiContent =
         st"""#pragma once
             |
-            |${MicrokitUtil.microkit_util_imports}
+            |$utilIncludes
             |
             |#include <stdint.h>
             |#include <microkit.h>

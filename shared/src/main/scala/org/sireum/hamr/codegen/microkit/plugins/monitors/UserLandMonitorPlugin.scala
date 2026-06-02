@@ -316,20 +316,30 @@ object UserLandMonitorPlugin {
         var schedScheduleVaddrOpt: Option[Z] = None()
         var schedStateVarAddrOpt: Option[String] = None()
         var schedScheduleVarAddrOpt: Option[String] = None()
-        for (pd <- rawSd.protectionDomains) {
-          if (pd.name == monitorThreadId) {
-            for (m <- pd.memMaps) {
-              if (m.varAddr.nonEmpty && ops.StringOps(m.varAddr.get).startsWith(schedStatePortPrefix)) {
-                schedStateVaddrOpt = Some(m.vaddrInKiBytes)
-                schedStateVarAddrOpt = m.varAddr
+        def searchPdMemMaps(pds: ISZ[ProtectionDomain]): Unit = {
+          for (pd <- pds) {
+            if (pd.name == monitorThreadId) {
+              for (m <- pd.memMaps) {
+                if (m.varAddr.nonEmpty && ops.StringOps(m.varAddr.get).startsWith(schedStatePortPrefix)) {
+                  schedStateVaddrOpt = Some(m.vaddrInKiBytes)
+                  schedStateVarAddrOpt = m.varAddr
+                }
+                if (m.varAddr.nonEmpty && ops.StringOps(m.varAddr.get).startsWith(schedSchedulePortPrefix)) {
+                  schedScheduleVaddrOpt = Some(m.vaddrInKiBytes)
+                  schedScheduleVarAddrOpt = m.varAddr
+                }
               }
-              if (m.varAddr.nonEmpty && ops.StringOps(m.varAddr.get).startsWith(schedSchedulePortPrefix)) {
-                schedScheduleVaddrOpt = Some(m.vaddrInKiBytes)
-                schedScheduleVarAddrOpt = m.varAddr
+            }
+            for (child <- pd.children) {
+              child match {
+                case childPd: ProtectionDomain => searchPdMemMaps(ISZ(childPd))
+                case _ =>
               }
             }
           }
+          return
         }
+        searchPdMemMaps(rawSd.protectionDomains)
         if (schedStateVaddrOpt.isEmpty) {
           halt("Infeasible: sched_state MemoryMap not found in monitor PD")
         }
@@ -351,13 +361,25 @@ object UserLandMonitorPlugin {
         val monitorVariantPds = rawSd.protectionDomains.filter(pd => !otherNonModelPdNames.contains(pd.name))
         val monitorVariantPdsCompacted: ISZ[ProtectionDomain] = for (pd <- monitorVariantPds) yield
           filterDomainMemMapsMCS(pd, excludedMrNames, mrSizes).asInstanceOf[ProtectionDomain]
-        val monitorPdsWithSchedMaps: ISZ[ProtectionDomain] = for (pd <- monitorVariantPdsCompacted) yield
-          if (pd.name == monitorThreadId)
-            pd(memMaps = pd.memMaps.filter(m =>
+        def addSchedMapsToChild(c: MicrokitDomain): MicrokitDomain = {
+          c match {
+            case childPd: ProtectionDomain => return addSchedMaps(childPd)
+            case other => return other
+          }
+        }
+        def addSchedMaps(pd: ProtectionDomain): ProtectionDomain = {
+          if (pd.name == monitorThreadId) {
+            return pd(memMaps = pd.memMaps.filter(m =>
               !(m.varAddr.nonEmpty && (
                 ops.StringOps(m.varAddr.get).startsWith(schedStatePortPrefix) ||
                   ops.StringOps(m.varAddr.get).startsWith(schedSchedulePortPrefix)))) :+ schedStateMap :+ schedScheduleMap)
-          else pd
+          } else {
+            val updatedChildren: ISZ[MicrokitDomain] = for (c <- pd.children) yield addSchedMapsToChild(c)
+            return pd(children = updatedChildren)
+          }
+        }
+        val monitorPdsWithSchedMaps: ISZ[ProtectionDomain] = for (pd <- monitorVariantPdsCompacted) yield
+          addSchedMaps(pd)
 
         val schedTemplateContributions: ISZ[ST] = ISZ(
           st"""#######################################
@@ -440,7 +462,7 @@ object UserLandMonitorPlugin {
                   |
                   |# Monitor configuration for runtime monitoring scheduler variant.
                   |# Usage: make CONFIG=monitor.mk
-                  |export MSD := $$(TOP_DIR)/meta.$getMonitorName.py
+                  |export MSD := $$(TOP_DIR)/$getMonitorName.meta.py
                   |export SCHEDULER_C := $$(TOP_DIR)/scheduler/src/$getMonitorName.scheduler.c
                   |export SCHEDULER_CONFIG_HEADERS := $$(TOP_DIR)/scheduler/include/$getMonitorName.user_config.h"""
 

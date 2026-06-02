@@ -259,13 +259,15 @@ object MakefileTemplate {
           |
           |include $${SDDF_MAKEFILES}
           |
+          |# exporting TOP_TYPES_INCLUDE in case other makefiles need it
+          |export TOP_TYPES_INCLUDE = -I$$(TOP_DIR)/types/include
           |
           |CFLAGS += \
           |${TAB}-I$$(LIONSOS)/include \
           |${TAB}-I$$(SDDF)/include \
           |${TAB}-I$$(SDDF)/include/microkit \
           |${TAB}-I$$(TOP_DIR)/scheduler/include \
-          |${TAB}-I$$(TOP_DIR)/types/include \
+          |${TAB}$$(TOP_TYPES_INCLUDE) \
           |${TAB}${(includePaths, s" \\\n${TAB}")}
           |
           |
