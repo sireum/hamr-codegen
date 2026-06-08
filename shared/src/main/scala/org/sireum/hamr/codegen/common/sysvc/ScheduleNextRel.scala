@@ -1,9 +1,9 @@
 // #Sireum
-package org.sireum.hamr.codegen.microkit.plugins.gumbo
+package org.sireum.hamr.codegen.common.sysvc
 
 import org.sireum._
 import org.sireum.hamr.ir.{GclSchedule, GclScheduleAssert, GclScheduleComponentRef,
-  GclScheduleElement, GclScheduleSequence, GclScheduleSplitJoin}
+  GclScheduleElement, GclScheduleSplitJoin}
 
 object ScheduleNextRel {
 

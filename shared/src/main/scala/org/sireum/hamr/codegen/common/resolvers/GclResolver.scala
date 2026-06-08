@@ -34,6 +34,14 @@ object GclResolver {
   @strictpure def putSlangTypeToAadlType(m: Map[AST.Typed, TypeIdPath], store: Store): Store =
     store + KEY_SlangTypeToAadlType ~> MapValue(m)
 
+  val KEY_ResolvedComponentAliasMap: String = "KEY_ResolvedComponentAliasMap"
+  @strictpure def getResolvedComponentAliasMap(store: Store): Map[String, IdPath] =
+    store.getOrElse(KEY_ResolvedComponentAliasMap, MapValue[String, IdPath](Map.empty))
+      .asInstanceOf[MapValue[String, IdPath]].map
+
+  @strictpure def putResolvedComponentAliasMap(m: Map[String, IdPath], store: Store): Store =
+    store + KEY_ResolvedComponentAliasMap ~> MapValue(m)
+
   @sig trait SymbolHolder
 
   @datatype class AadlSymbolHolder(symbol: AadlSymbol) extends SymbolHolder
@@ -827,6 +835,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
   var arrayIndexInterpolateImports: ISZ[AST.Stmt.Import] = ISZ()
   var indexingTypeFingerprints: Map[String, TypeIdPath] = Map.empty
   var slangTypeToAadlType: Map[AST.Typed, TypeIdPath] = Map.empty
+  var resolvedComponentAliasMap: Map[String, IdPath] = Map.empty
 
   def reset: B = {
     apiReferences = Set.empty
@@ -3073,8 +3082,15 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       for (gclSubclause <- gclAnnexes) {
         gclSubclause.schedule match {
           case Some(sched) =>
-            val componentAliasMap: Map[String, ISZ[String]] = Map.empty[String, ISZ[String]] ++
-              (for (ca <- sched.componentAliases) yield ca.name ~> ca.componentPath.name)
+            for (ca <- sched.componentAliases) {
+              val fullComponentPath = sysInstancePath ++ ca.componentPath.name
+              symbolTable.componentMap.get(fullComponentPath) match {
+                case Some(_) =>
+                  resolvedComponentAliasMap = resolvedComponentAliasMap + ca.name ~> fullComponentPath
+                case _ =>
+                  reportError(ca.posOpt, s"Component alias '${ca.name}' does not resolve to a valid component at path ${(fullComponentPath, ".")}", reporter)
+              }
+            }
 
             for (pa <- sched.portAliases) {
               val pathSegments = pa.portPath.name
@@ -3083,12 +3099,10 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 val portName = pathSegments(pathSegments.size - 1)
                 val middleSegments: ISZ[String] = if (pathSegments.size > 2) ops.ISZOps(pathSegments).slice(1, pathSegments.size - 1) else ISZ()
 
-                val resolvedComponentPath: ISZ[String] = componentAliasMap.get(componentRef) match {
-                  case Some(aliasPath) => aliasPath ++ middleSegments
-                  case _ => ISZ(componentRef) ++ middleSegments
+                val fullFeaturePath: ISZ[String] = resolvedComponentAliasMap.get(componentRef) match {
+                  case Some(fullPath) => fullPath ++ middleSegments :+ portName
+                  case _ => sysInstancePath ++ ISZ(componentRef) ++ middleSegments :+ portName
                 }
-
-                val fullFeaturePath = sysInstancePath ++ resolvedComponentPath :+ portName
                 symbolTable.featureMap.get(fullFeaturePath) match {
                   case Some(port: AadlPort) =>
                     val fieldAadlType: AadlType = port match {
@@ -3136,9 +3150,6 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
         gclSubclause.schedule match {
           case Some(sched) =>
-            val componentAliasMap: Map[String, ISZ[String]] = Map.empty[String, ISZ[String]] ++
-              (for (ca <- sched.componentAliases) yield ca.name ~> ca.componentPath.name)
-
             for (sva <- sched.stateVarAliases) {
               val pathSegments = sva.stateVarPath.name
               if (pathSegments.size >= 2) {
@@ -3146,12 +3157,10 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 val stateVarName = pathSegments(pathSegments.size - 1)
                 val middleSegments: ISZ[String] = if (pathSegments.size > 2) ops.ISZOps(pathSegments).slice(1, pathSegments.size - 1) else ISZ()
 
-                val resolvedComponentPath: ISZ[String] = componentAliasMap.get(componentRef) match {
-                  case Some(aliasPath) => aliasPath ++ middleSegments
-                  case _ => ISZ(componentRef) ++ middleSegments
+                val fullComponentPath: ISZ[String] = resolvedComponentAliasMap.get(componentRef) match {
+                  case Some(fullPath) => fullPath ++ middleSegments
+                  case _ => sysInstancePath ++ ISZ(componentRef) ++ middleSegments
                 }
-
-                val fullComponentPath = sysInstancePath ++ resolvedComponentPath
                 symbolTable.componentMap.get(fullComponentPath) match {
                   case Some(targetComponent) =>
                     val gclSubclauses = targetComponent.component.annexes
@@ -3617,7 +3626,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
     val s1 = GclResolver.putIndexingTypeFingerprints(indexingTypeFingerprints, store)
     val s2 = GclResolver.putSlangTypeToAadlType(slangTypeToAadlType, s1)
-    return (result, s2)
+    val s3 = GclResolver.putResolvedComponentAliasMap(resolvedComponentAliasMap, s2)
+    return (result, s3)
   }
 
   def offerLibraries(annexLibs: ISZ[AnnexLib], symbolTable: SymbolTable, aadlTypes: AadlTypes, store:Store, reporter: Reporter): (ISZ[AnnexLibInfo], Store) = {

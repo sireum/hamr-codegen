@@ -3,8 +3,10 @@ package org.sireum.hamr.codegen.microkit.plugins.gumbo
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil._
+import org.sireum.hamr.codegen.common.resolvers.GclResolver
+import org.sireum.hamr.codegen.common.sysvc.{ScheduleNextRel, VCGenerator}
 import org.sireum.hamr.codegen.common.containers.Resource
-import org.sireum.hamr.codegen.common.symbols.{AadlThread, GclAnnexClauseInfo, SymbolTable}
+import org.sireum.hamr.codegen.common.symbols.{AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
@@ -12,42 +14,21 @@ import org.sireum.hamr.codegen.microkit.plugins.rust.component.CRustComponentPlu
 import org.sireum.hamr.codegen.microkit.plugins.rust.types.CRustTypePlugin
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil
 import org.sireum.hamr.codegen.microkit.{rust => RAST}
-import org.sireum.hamr.ir.{Aadl, GclBodyMethod, GclSchedule, GclScheduleComponentAlias, GclSpecMethod, GclSubclause}
+import org.sireum.hamr.ir.{Aadl, GclBodyMethod, GclSchedule, GclSpecMethod}
 import org.sireum.message.Reporter
 
-object GumboSysAssertPlugin {
+object GumboSysAssertMonitorPlugin {
 
   val GUMBO_MONITOR_CBACKEND_KEY: String = "KEY_gumbo_monitor_CBackend"
 
   val sysAssertFunctionsModuleName: String = "sys_assert_functions"
 
-  @pure def hasSystemSchedule(symbolTable: SymbolTable): B = {
-    return getSystemSchedule(symbolTable).nonEmpty
-  }
+  @strictpure def hasSystemSchedule(symbolTable: SymbolTable): B =
+    VCGenerator.hasSystemSchedule(symbolTable)
 
-  @pure def getSystemSchedule(symbolTable: SymbolTable): Option[GclSchedule] = {
-    symbolTable.annexClauseInfos.get(symbolTable.rootSystem.path) match {
-      case Some(infos) =>
-        for (info <- infos) {
-          info match {
-            case gclInfo: GclAnnexClauseInfo if gclInfo.annex.schedule.nonEmpty =>
-              return gclInfo.annex.schedule
-            case _ =>
-          }
-        }
-      case _ =>
-    }
-    return None()
-  }
+  @strictpure def getSystemSchedule(symbolTable: SymbolTable): Option[GclSchedule] =
+    VCGenerator.getSystemSchedule(symbolTable)
 
-  @pure def resolveComponentAliasToThread(alias: GclScheduleComponentAlias,
-                                           symbolTable: SymbolTable): Option[AadlThread] = {
-    val fullPath = symbolTable.rootSystem.path ++ alias.componentPath.name
-    symbolTable.componentMap.get(fullPath) match {
-      case Some(c: AadlThread) => return Some(c)
-      case _ => return None()
-    }
-  }
 }
 
 // Extends GumboMonitorPlugin to create a separate monitor protection domain for
@@ -57,7 +38,7 @@ object GumboSysAssertPlugin {
 // handleMonitorMethod to generate the sys assert dispatch logic derived from
 // the schedule's Petri net walk. Only activates when the root system implementation
 // has a schedule block in its GUMBO subclause.
-@sig trait GumboSysAssertPlugin extends GumboMonitorPlugin {
+@sig trait GumboSysAssertMonitorPlugin extends GumboMonitorPlugin {
 
   @strictpure override def getMonitorName: String = "sys_assert_monitor"
 
@@ -68,7 +49,7 @@ object GumboSysAssertPlugin {
                                               store: Store,
                                               reporter: Reporter): B = {
     return super.canHandleModelTransform(model, options, types, symbolTable, store, reporter) &&
-      GumboSysAssertPlugin.hasSystemSchedule(symbolTable)
+      GumboSysAssertMonitorPlugin.hasSystemSchedule(symbolTable)
   }
 
 
@@ -78,7 +59,7 @@ object GumboSysAssertPlugin {
   // already set it up; otherwise run normally (e.g. if gumbo monitor is disabled).
   @pure override def handleCBackend(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes,
                                      symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
-    if (store.contains(GumboSysAssertPlugin.GUMBO_MONITOR_CBACKEND_KEY)) {
+    if (store.contains(GumboSysAssertMonitorPlugin.GUMBO_MONITOR_CBACKEND_KEY)) {
       return (store + keyCBackend ~> BoolValue(T), ISZ())
     }
     return super.handleCBackend(model, options, types, symbolTable, store, reporter)
@@ -87,7 +68,7 @@ object GumboSysAssertPlugin {
   @pure override def canHandle(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes,
                                 symbolTable: SymbolTable, store: Store, reporter: Reporter): B = {
     return super.canHandle(model, options, types, symbolTable, store, reporter) &&
-      GumboSysAssertPlugin.hasSystemSchedule(symbolTable)
+      GumboSysAssertMonitorPlugin.hasSystemSchedule(symbolTable)
   }
 
   @pure override def handleMonitorMethod(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes,
@@ -100,7 +81,7 @@ object GumboSysAssertPlugin {
 
     var localStore = parentStore
 
-    val scheduleOpt = GumboSysAssertPlugin.getSystemSchedule(symbolTable)
+    val scheduleOpt = GumboSysAssertMonitorPlugin.getSystemSchedule(symbolTable)
     if (scheduleOpt.isEmpty) {
       return (localStore, parentResources)
     }
@@ -120,11 +101,12 @@ object GumboSysAssertPlugin {
         }
 
         // Build component alias → thread ID mapping
+        val resolvedAliasMap = GclResolver.getResolvedComponentAliasMap(localStore)
         var aliasToThreadId: Map[String, String] = Map.empty
-        for (ca <- schedule.componentAliases) {
-          GumboSysAssertPlugin.resolveComponentAliasToThread(ca, symbolTable) match {
-            case Some(thread) =>
-              aliasToThreadId = aliasToThreadId + ca.name ~> MicrokitUtil.getComponentIdPath(thread)
+        for (entry <- resolvedAliasMap.entries) {
+          symbolTable.componentMap.get(entry._2) match {
+            case Some(thread: AadlThread) =>
+              aliasToThreadId = aliasToThreadId + entry._1 ~> MicrokitUtil.getComponentIdPath(thread)
             case _ =>
           }
         }
@@ -612,7 +594,7 @@ object GumboSysAssertPlugin {
                 reporter = reporter)
               functions = functions :+ fn.prettyST
             case _: GclSpecMethod =>
-              reporter.warn(None(), "GumboSysAssertPlugin", "Spec methods in system-level GUMBO subclauses are not yet supported")
+              reporter.warn(None(), "GumboSysAssertMonitorPlugin", "Spec methods in system-level GUMBO subclauses are not yet supported")
           }
         }
 
@@ -631,11 +613,11 @@ object GumboSysAssertPlugin {
               |"""
 
         val moduleResource = ResourceUtil.createResource(
-          path = s"$componentDir/${GumboSysAssertPlugin.sysAssertFunctionsModuleName}.rs",
+          path = s"$componentDir/${GumboSysAssertMonitorPlugin.sysAssertFunctionsModuleName}.rs",
           content = moduleContent,
           overwrite = T)
 
-        val modName = GumboSysAssertPlugin.sysAssertFunctionsModuleName
+        val modName = GumboSysAssertMonitorPlugin.sysAssertFunctionsModuleName
         val modDirective: RAST.Item = RAST.ItemST(
           st"""#[path = "$modName.rs"]
               |pub mod $modName;""")
@@ -648,7 +630,7 @@ object GumboSysAssertPlugin {
   }
 }
 
-@datatype class DefaultGumboSysAssertPlugin extends GumboSysAssertPlugin {
+@datatype class DefaultGumboSysAssertMonitorPlugin extends GumboSysAssertMonitorPlugin {
 
-  val name: String = "DefaultGumboSysAssertPlugin"
+  val name: String = "DefaultGumboSysAssertMonitorPlugin"
 }
