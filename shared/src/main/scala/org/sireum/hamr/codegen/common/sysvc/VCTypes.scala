@@ -15,9 +15,14 @@ import org.sireum.hamr.ir.Name
   "Commutativity"
 }
 
+// `componentOpt` names the firing component when a VC is attributed to one (the
+// component whose write frame is in `VC.writeSetOpt`). `mhipPairOpt` identifies an
+// independence VC's MHIP pair by transition indices into `NextRelResult.transitions`
+// (indices rather than component names, since one member may be a control-point
+// transition that has no component).
 @datatype class VCSource(val transitionIdx: Option[Z],
                          val componentOpt: Option[Name],
-                         val mhipPairOpt: Option[(Name, Name)])
+                         val mhipPairOpt: Option[(Z, Z)])
 
 @datatype class VC(val kind: VCKind.Type,
                    val premises: ISZ[org.sireum.lang.ast.Exp],
