@@ -3,9 +3,9 @@ package org.sireum.hamr.codegen.common.sysvc
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.IdPath
-import org.sireum.hamr.codegen.common.symbols.{GclAnnexClauseInfo, SymbolTable}
+import org.sireum.hamr.codegen.common.symbols.{AadlThread, GclAnnexClauseInfo, SymbolTable}
 import org.sireum.hamr.codegen.common.sysvc.ScheduleNextRel._
-import org.sireum.hamr.ir.{GclCaseStatement, GclSchedule, GclScheduleComponentRef}
+import org.sireum.hamr.ir.{GclAssume, GclCaseStatement, GclGuarantee, GclSchedule, GclScheduleComponentRef}
 
 object VCGenerator {
 
@@ -117,6 +117,35 @@ object VCGenerator {
     }
   }
 
+  // Integration constraints are port invariants the component-level verification
+  // already discharges: guarantees on out ports are checked at every entrypoint
+  // exit (GUMBOX I-Guar, initialize included) and assumes on in ports are relied
+  // upon at every dispatch (I-Assm). They therefore contribute to the system-level
+  // task contracts -- guarantees join the component's postcondition (Next-Assert
+  // premises, Init-State premises) and assumes join its precondition (Pre-Assert
+  // obligations) -- without restating them as compute clauses in the model.
+  // Iterates the thread's ports against the symbol table's integrationMap (the
+  // resolved clauses; the resolver enforces in port => assume, out port =>
+  // guarantee) so the serializer can reconstruct the same clauses in the same
+  // order.
+  @pure def integrationExps(thread: AadlThread, info: GclAnnexClauseInfo, wantAssumes: B): ISZ[org.sireum.lang.ast.Exp] = {
+    var exps: ISZ[org.sireum.lang.ast.Exp] = ISZ()
+    for (port <- thread.getPorts()) {
+      info.gclSymbolTable.integrationMap.get(port) match {
+        case Some(a: GclAssume) =>
+          if (wantAssumes) {
+            exps = exps :+ a.exp
+          }
+        case Some(g: GclGuarantee) =>
+          if (!wantAssumes) {
+            exps = exps :+ g.exp
+          }
+        case _ =>
+      }
+    }
+    return exps
+  }
+
   @pure def generateInitStateVC(nextRel: NextRelResult,
                                 symbolTable: SymbolTable): VC = {
     var initGuarantees: ISZ[org.sireum.lang.ast.Exp] = ISZ()
@@ -130,6 +159,7 @@ object VCGenerator {
               }
             case _ =>
           }
+          initGuarantees = initGuarantees ++ integrationExps(thread, info, F)
         case _ =>
       }
     }
@@ -172,6 +202,7 @@ object VCGenerator {
             }
           case _ =>
         }
+        assumes = assumes ++ integrationExps(symbolTable.getThreadById(compPath), info, T)
       case _ =>
     }
 
@@ -227,6 +258,7 @@ object VCGenerator {
             }
           case _ =>
         }
+        postConditions = postConditions ++ integrationExps(symbolTable.getThreadById(compPath), info, F)
       case _ =>
     }
 

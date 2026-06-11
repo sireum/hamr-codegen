@@ -74,6 +74,28 @@ object ScheduleNextRel {
       return "seq"
     }
 
+    // Determines a split branch's start place (the split transition's out-place
+    // for that branch). A branch that begins with an assert gets the assert
+    // place directly -- routing through a synthetic unannotated place would
+    // decompose the obligation `split-in-asserts |- branch-assert` into
+    // `... |- true` and the unprovable `true |- branch-assert`, dropping the
+    // invariant (finding F1 of InitialVerusRunFindings.md in the
+    // hamr-system-reasoning-prototype repo).
+    def branchStartFor(seqElements: ISZ[GclScheduleElement]): PlaceId = {
+      if (seqElements.nonEmpty) {
+        seqElements(0) match {
+          case a: GclScheduleAssert =>
+            val p = PlaceId(a.id)
+            addPlace(p, Some(a))
+            return p
+          case _ =>
+        }
+      }
+      val p = freshPlace(s"pre_${firstElementLabel(seqElements)}")
+      addPlace(p, None())
+      return p
+    }
+
     def processElements(elements: ISZ[GclScheduleElement], entryPlace: PlaceId): PlaceId = {
       var currentPlace = entryPlace
       var i: Z = 0
@@ -116,9 +138,7 @@ object ScheduleNextRel {
             var branchStartPlaces: ISZ[PlaceId] = ISZ()
 
             for (seq <- sj.sequences) {
-              val label = firstElementLabel(seq.elements)
-              val branchStart = freshPlace(s"pre_$label")
-              addPlace(branchStart, None())
+              val branchStart = branchStartFor(seq.elements)
               branchStartPlaces = branchStartPlaces :+ branchStart
 
               val branchEnd = processElements(seq.elements, branchStart)
