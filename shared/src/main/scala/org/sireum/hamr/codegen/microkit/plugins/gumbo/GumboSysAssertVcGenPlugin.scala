@@ -15,6 +15,8 @@ import org.sireum.message.Reporter
 
 @sig trait GumboSysAssertVcGenPlugin extends MicrokitFinalizePlugin {
 
+  @strictpure def alreadyFinalized(store: Store): B = store.contains(s"FINALIZED_${name}")
+
   @pure override def canFinalizeMicrokit(model: Aadl,
                                           options: HamrCli.CodegenOption,
                                           types: AadlTypes,
@@ -24,6 +26,7 @@ import org.sireum.message.Reporter
     return (options.platform == HamrCli.CodegenHamrPlatform.Microkit &&
       !reporter.hasError &&
       !isDisabled(store) &&
+      !alreadyFinalized(store) &&
       VCGenerator.hasSystemSchedule(symbolTable))
   }
 
@@ -40,14 +43,15 @@ import org.sireum.message.Reporter
         val nextRel = ScheduleNextRel.build(schedule)
         val vcs = VCGenerator.generate(schedule, nextRel, resolvedAliasMap, symbolTable)
 
-        for (vc <- vcs) {
-          println(vc)
-        }
         // TODO: serialize VCs to Verus proof functions
 
-        return (store, ISZ())
+        // Mark finalized so the Microkit finalize fixpoint loop does not re-invoke this
+        // plugin every pass (canFinalizeMicrokit gates on !alreadyFinalized). Without this
+        // the loop never terminates because the plugin otherwise always reports it can
+        // finalize.
+        return (store + s"FINALIZED_${name}" ~> BoolValue(T), ISZ())
       case _ =>
-        return (store, ISZ())
+        return (store + s"FINALIZED_${name}" ~> BoolValue(T), ISZ())
     }
   }
 }

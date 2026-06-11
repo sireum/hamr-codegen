@@ -5,7 +5,7 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.IdPath
 import org.sireum.hamr.codegen.common.symbols.{GclAnnexClauseInfo, SymbolTable}
 import org.sireum.hamr.codegen.common.sysvc.ScheduleNextRel._
-import org.sireum.hamr.ir.{GclSchedule, GclScheduleComponentRef}
+import org.sireum.hamr.ir.{GclCaseStatement, GclSchedule, GclScheduleComponentRef}
 
 object VCGenerator {
 
@@ -78,9 +78,9 @@ object VCGenerator {
 
     vcs = vcs :+ generatePostPreVC(nextRel, placeMap)
 
-    val mhipPairs = MHIPComputer.compute(schedule)
+    val mhipPairs = MHIPComputer.computeMHIP(nextRel)
     for (pair <- mhipPairs) {
-      vcs = vcs ++ generateIndependenceVCs(pair, placeMap, nextRel, writeSets, resolvedComponentAliasMap, symbolTable)
+      vcs = vcs ++ generateIndependenceVCs(pair._1, pair._2, placeMap, nextRel, writeSets, resolvedComponentAliasMap)
     }
 
     return vcs
@@ -186,6 +186,25 @@ object VCGenerator {
         mhipPairOpt = None()))
   }
 
+  // A compute case's contribution to the component's verified postcondition is the
+  // implication `assume ==> guarantee` -- the component only establishes the guarantee
+  // when the case's assume held in the pre-state. Using the bare guarantee as a VC
+  // premise would assume more than component contract conformance establishes.
+  @strictpure def caseToExp(c: GclCaseStatement): org.sireum.lang.ast.Exp = c.assumes match {
+    case Some(a) => org.sireum.lang.ast.Exp.Binary(
+      left = a,
+      op = org.sireum.lang.ast.Exp.BinaryOp.CondImply,
+      right = c.guarantees,
+      attr = org.sireum.lang.ast.ResolvedAttr(
+        posOpt = c.posOpt,
+        resOpt = Some(org.sireum.lang.ast.ResolvedInfo.BuiltIn(
+          kind = org.sireum.lang.ast.ResolvedInfo.BuiltIn.Kind.BinaryCondImply,
+          defPosOpt = None())),
+        typedOpt = Some(org.sireum.lang.ast.Typed.b)),
+      opPosOpt = c.posOpt)
+    case _ => c.guarantees
+  }
+
   @pure def generateNextAssertTaskVC(transIdx: Z,
                                      t: Transition,
                                      compRef: GclScheduleComponentRef,
@@ -204,7 +223,7 @@ object VCGenerator {
               postConditions = postConditions :+ g.exp
             }
             for (c <- compute.cases) {
-              postConditions = postConditions :+ c.guarantees
+              postConditions = postConditions :+ caseToExp(c)
             }
           case _ =>
         }
@@ -257,99 +276,123 @@ object VCGenerator {
         mhipPairOpt = None()))
   }
 
-  @pure def generateIndependenceVCs(pair: (GclScheduleComponentRef, GclScheduleComponentRef),
+  // For a component transition, returns its component ref and write set; None for a
+  // control-point transition (which has no component contract or write frame).
+  @pure def transitionComponentInfo(t: Transition,
+                                    nextRel: NextRelResult,
+                                    writeSets: Map[IdPath, WriteFrameBuilder.ComponentWriteSet],
+                                    resolvedAliasMap: Map[String, IdPath]):
+                                    Option[(GclScheduleComponentRef, Option[WriteFrameBuilder.ComponentWriteSet])] = {
+    if (t.kind != TransitionKind.Component || t.inPlaces.isEmpty) {
+      return None()
+    }
+    nextRel.activationMap.get(t.inPlaces(0)) match {
+      case Some(compRef) =>
+        return Some((compRef, writeSets.get(resolveCompPath(compRef, resolvedAliasMap))))
+      case _ => return None()
+    }
+  }
+
+  // Generates the independence VCs for one MHIP pair of transitions (identified by their
+  // indices into `nextRel.transitions`), matching the Isabelle `independent` =
+  // `execIndependent ∧ nonBlocking ∧ nonContradictPost`. Each sub-property carries the
+  // activation guards from the formalization, so only the non-trivial obligations are
+  // emitted:
+  //   - NonBlocking / NonContradictPost (Preservation): one directed VC per pair member
+  //     that is a component transition (the direction in which that component fires).
+  //   - Commutativity (execIndependent): a single VC, only when BOTH members are
+  //     component transitions (symmetric, so one suffices).
+  // Consequently a (component, component) pair yields 5 VCs (2 + 2 + 1), a
+  // (component, control-point) pair yields 2 (1 + 1), and a (control-point, control-point)
+  // pair yields 0 (trivially independent).
+  @pure def generateIndependenceVCs(i1: Z,
+                                    i2: Z,
                                     placeMap: Map[PlaceId, PlaceInfo],
                                     nextRel: NextRelResult,
                                     writeSets: Map[IdPath, WriteFrameBuilder.ComponentWriteSet],
-                                    resolvedAliasMap: Map[String, IdPath],
-                                    symbolTable: SymbolTable): ISZ[VC] = {
+                                    resolvedAliasMap: Map[String, IdPath]): ISZ[VC] = {
     var vcs: ISZ[VC] = ISZ()
-    val c1 = pair._1
-    val c2 = pair._2
-    val mhipSource = (c1.component, c2.component)
+    val t1 = nextRel.transitions(i1)
+    val t2 = nextRel.transitions(i2)
+    val mhipSource = (i1, i2)
 
-    val c1PreOpt = findComponentPreAsserts(c1, nextRel, placeMap)
-    val c2PreOpt = findComponentPreAsserts(c2, nextRel, placeMap)
-    val c1PostOpt = findComponentPostAsserts(c1, nextRel, placeMap)
-    val c2PostOpt = findComponentPostAsserts(c2, nextRel, placeMap)
+    val t1Pre = collectPlaceAsserts(t1.inPlaces, placeMap)
+    val t1Post = collectPlaceAsserts(t1.outPlaces, placeMap)
+    val t2Pre = collectPlaceAsserts(t2.inPlaces, placeMap)
+    val t2Post = collectPlaceAsserts(t2.outPlaces, placeMap)
 
-    val c1Pre: ISZ[org.sireum.lang.ast.Exp] = c1PreOpt.getOrElse(ISZ())
-    val c2Pre: ISZ[org.sireum.lang.ast.Exp] = c2PreOpt.getOrElse(ISZ())
-    val c1Post: ISZ[org.sireum.lang.ast.Exp] = c1PostOpt.getOrElse(ISZ())
-    val c2Post: ISZ[org.sireum.lang.ast.Exp] = c2PostOpt.getOrElse(ISZ())
+    val info1 = transitionComponentInfo(t1, nextRel, writeSets, resolvedAliasMap)
+    val info2 = transitionComponentInfo(t2, nextRel, writeSets, resolvedAliasMap)
 
-    val ws1 = writeSets.get(resolveCompPath(c1, resolvedAliasMap))
-    val ws2 = writeSets.get(resolveCompPath(c2, resolvedAliasMap))
+    // NonBlocking: firing a component must preserve the other transition's pre-assertions.
+    // Direction guarded by "the firing transition is a component" (Isabelle nonBlocking).
+    info1 match {
+      case Some((c1, ws1)) =>
+        vcs = vcs :+ VC(
+          kind = VCKind.NonBlocking,
+          premises = t1Pre ++ t2Pre,
+          conclusion = t2Pre,
+          writeSetOpt = ws1,
+          source = VCSource(transitionIdx = None(), componentOpt = Some(c1.component), mhipPairOpt = Some(mhipSource)))
+      case _ =>
+    }
+    info2 match {
+      case Some((c2, ws2)) =>
+        vcs = vcs :+ VC(
+          kind = VCKind.NonBlocking,
+          premises = t1Pre ++ t2Pre,
+          conclusion = t1Pre,
+          writeSetOpt = ws2,
+          source = VCSource(transitionIdx = None(), componentOpt = Some(c2.component), mhipPairOpt = Some(mhipSource)))
+      case _ =>
+    }
 
-    vcs = vcs :+ VC(
-      kind = VCKind.NonBlocking,
-      premises = c1Pre ++ c2Pre,
-      conclusion = c2Pre,
-      writeSetOpt = ws1,
-      source = VCSource(
-        transitionIdx = None(),
-        componentOpt = Some(c1.component),
-        mhipPairOpt = Some(mhipSource)))
+    // Preservation (NonContradictPost): firing a component must not contradict the other
+    // transition's post-assertions. Same per-direction component guard.
+    info1 match {
+      case Some((c1, ws1)) =>
+        vcs = vcs :+ VC(
+          kind = VCKind.Preservation,
+          premises = t1Pre ++ t2Post,
+          conclusion = t2Post,
+          writeSetOpt = ws1,
+          source = VCSource(transitionIdx = None(), componentOpt = Some(c1.component), mhipPairOpt = Some(mhipSource)))
+      case _ =>
+    }
+    info2 match {
+      case Some((c2, ws2)) =>
+        vcs = vcs :+ VC(
+          kind = VCKind.Preservation,
+          premises = t1Post ++ t2Pre,
+          conclusion = t1Post,
+          writeSetOpt = ws2,
+          source = VCSource(transitionIdx = None(), componentOpt = Some(c2.component), mhipPairOpt = Some(mhipSource)))
+      case _ =>
+    }
 
-    vcs = vcs :+ VC(
-      kind = VCKind.NonBlocking,
-      premises = c1Pre ++ c2Pre,
-      conclusion = c1Pre,
-      writeSetOpt = ws2,
-      source = VCSource(
-        transitionIdx = None(),
-        componentOpt = Some(c2.component),
-        mhipPairOpt = Some(mhipSource)))
-
-    vcs = vcs :+ VC(
-      kind = VCKind.Preservation,
-      premises = c1Pre ++ c2Post,
-      conclusion = c2Post,
-      writeSetOpt = ws1,
-      source = VCSource(
-        transitionIdx = None(),
-        componentOpt = Some(c1.component),
-        mhipPairOpt = Some(mhipSource)))
-
-    vcs = vcs :+ VC(
-      kind = VCKind.Preservation,
-      premises = c1Post ++ c2Pre,
-      conclusion = c1Post,
-      writeSetOpt = ws2,
-      source = VCSource(
-        transitionIdx = None(),
-        componentOpt = Some(c2.component),
-        mhipPairOpt = Some(mhipSource)))
+    // Execution independence / commutativity (Isabelle execIndependent): under both
+    // transitions' pre-assertions, firing t1 then t2 yields the same system state as firing
+    // t2 then t1. The obligation is symmetric, so a single VC per pair suffices, and its
+    // activation guard requires BOTH members to be component transitions. The conclusion is
+    // a state-equality rather than a GUMBO assertion, so `conclusion` is empty: the
+    // serializer synthesizes the goal by abstracting each component's action as
+    // uninterpreted functions over its read scope. That encoding discharges automatically
+    // only when each component's write set is disjoint from the other's write set AND read
+    // scope (Bernstein's conditions -- write-set disjointness alone is insufficient, and a
+    // frame-only encoding is unprovable even for disjoint pairs; see FormalizationIssues.md
+    // in the hamr-system-reasoning-prototype repo). `writeSetOpt` carries t1's frame; t2's
+    // frame is resolved from `mhipPairOpt`.
+    (info1, info2) match {
+      case (Some((c1, ws1)), Some((_, _))) =>
+        vcs = vcs :+ VC(
+          kind = VCKind.Commutativity,
+          premises = t1Pre ++ t2Pre,
+          conclusion = ISZ(),
+          writeSetOpt = ws1,
+          source = VCSource(transitionIdx = None(), componentOpt = Some(c1.component), mhipPairOpt = Some(mhipSource)))
+      case _ =>
+    }
 
     return vcs
-  }
-
-  @pure def findComponentPreAsserts(compRef: GclScheduleComponentRef,
-                                    nextRel: NextRelResult,
-                                    placeMap: Map[PlaceId, PlaceInfo]): Option[ISZ[org.sireum.lang.ast.Exp]] = {
-    for (entry <- nextRel.activationMap.entries) {
-      if (entry._2.component == compRef.component) {
-        val exps = collectPlaceAsserts(ISZ(entry._1), placeMap)
-        return Some(exps)
-      }
-    }
-    return None()
-  }
-
-  @pure def findComponentPostAsserts(compRef: GclScheduleComponentRef,
-                                     nextRel: NextRelResult,
-                                     placeMap: Map[PlaceId, PlaceInfo]): Option[ISZ[org.sireum.lang.ast.Exp]] = {
-    for (i <- z"0" until nextRel.transitions.size) {
-      val t = nextRel.transitions(i)
-      nextRel.activationMap.get(t.inPlaces(0)) match {
-        case Some(ref) =>
-          if (ref.component == compRef.component) {
-            val exps = collectPlaceAsserts(t.outPlaces, placeMap)
-            return Some(exps)
-          }
-        case _ =>
-      }
-    }
-    return None()
   }
 }
