@@ -57,14 +57,14 @@ object VerusVCSerializer {
     }
   }
 
-  // Builds the flat system-state field map:
+  // Builds the flat system-state field map of one composition:
   //   1. canonicalize: each connected in port shares its source out port's channel
   //   2. enumerate: one field per channel (in thread/port declaration order) plus
   //      one per GUMBO state variable
-  //   3. name: schedule alias when declared; otherwise the bare port/state-var name
-  //      when globally unambiguous; otherwise prefixed with the component's schedule
+  //   3. name: composition alias when declared; otherwise the bare port/state-var
+  //      name when globally unambiguous; otherwise prefixed with the component's
   //      alias (e.g. MA's `lastCmd` becomes `ma_lastCmd` when MHS's is aliased)
-  @pure def buildSystemStateMap(schedule: ir.GclSchedule,
+  @pure def buildSystemStateMap(composition: ir.GclComposition,
                                 resolvedComponentAliasMap: Map[String, IdPath],
                                 symbolTable: SymbolTable,
                                 aadlTypes: AadlTypes,
@@ -154,7 +154,7 @@ object VerusVCSerializer {
       }
     }
 
-    for (pa <- schedule.portAliases) {
+    for (pa <- composition.portAliases) {
       resolveAliasComponent(pa.portPath, s"port alias '${pa.name}'") match {
         case Some(t) =>
           val portId = pa.portPath.name(pa.portPath.name.lastIndex)
@@ -167,7 +167,7 @@ object VerusVCSerializer {
         case _ =>
       }
     }
-    for (sva <- schedule.stateVarAliases) {
+    for (sva <- composition.stateVarAliases) {
       resolveAliasComponent(sva.stateVarPath, s"state var alias '${sva.name}'") match {
         case Some(t) =>
           val svName = sva.stateVarPath.name(sva.stateVarPath.name.lastIndex)
@@ -661,28 +661,24 @@ object VerusVCSerializer {
           |""")
   }
 
-  // One Petri-net place assertion rendered as a spec fn over `SystemState`
-  // (VerusProofSketch.md "System Assertions"). `placeName` keys the fn for the VC
-  // proof fns (a place without an assertion has no fn; its premises/conclusions
-  // render as literal `true`).
+  // One bound place assertion of one property, rendered as a spec fn over
+  // `SystemState` (VerusProofSketch.md "System Assertions"). `placeName` keys the
+  // fn for the VC proof fns (an unbound place has no fn; its premises/conclusions
+  // render as literal `true`, design D5).
   @datatype class AssertionFn(val placeName: String,
-                              val assertId: String,
+                              val pointName: String,
                               val fnName: String,
                               val fnST: ST)
 
-  // Builds (place assertion spec fns, system-level GUMBO fns). The schedule's
-  // assertion expressions reference port/state-var aliases, substituted with
-  // `st.<field>` via the SystemStateMap; the system-level GUMBO functions they call
-  // (e.g. sysProp_*) come from the root system's subclause, rendered as Verus spec
-  // fns by the same machinery the component crates use.
-  @pure def buildAssertions(nextRel: ScheduleNextRel.NextRelResult,
-                            ssm: SystemStateMap,
-                            symbolTable: SymbolTable,
-                            aadlTypes: AadlTypes,
-                            options: HamrCli.CodegenOption,
-                            crustTypeProvider: CRustTypeProvider,
-                            store: Store,
-                            reporter: Reporter): (ISZ[AssertionFn], ISZ[ST]) = {
+  // Builds the system-level GUMBO fns (e.g. sysProp_*) from the root system's
+  // subclause, rendered as Verus spec fns by the same machinery the component
+  // crates use. Property-independent: shared by all of a composition's properties.
+  @pure def buildSysFns(symbolTable: SymbolTable,
+                        aadlTypes: AadlTypes,
+                        options: HamrCli.CodegenOption,
+                        crustTypeProvider: CRustTypeProvider,
+                        store: Store,
+                        reporter: Reporter): ISZ[ST] = {
     val rootSystem = symbolTable.rootSystem
 
     var sysFns: ISZ[ST] = ISZ()
@@ -710,44 +706,63 @@ object VerusVCSerializer {
         }
       case _ =>
     }
+    return sysFns
+  }
 
-    // schedule alias -> st.<field>
+  // Builds one property's place-assertion spec fns from its resolved decoration
+  // (place -> binding, from ScheduleNextRel.decorate). The binding expressions
+  // reference port/state-var aliases, substituted with `st.<field>` via the
+  // SystemStateMap. Fn names are property-qualified
+  // (`sys_assert_<property>_<place>`) so each property's assertions live in
+  // their own module without collisions.
+  @pure def buildPropertyAssertions(propertyId: String,
+                                    decoration: Map[ScheduleNextRel.PlaceId, ir.GclPropertyBinding],
+                                    ssm: SystemStateMap,
+                                    symbolTable: SymbolTable,
+                                    aadlTypes: AadlTypes,
+                                    crustTypeProvider: CRustTypeProvider,
+                                    store: Store,
+                                    reporter: Reporter): ISZ[AssertionFn] = {
+    val rootSystem = symbolTable.rootSystem
+
+    // composition alias -> st.<field>
     var substitutions: Map[String, String] = Map.empty
     for (e <- ssm.byAlias.entries) {
       substitutions = substitutions + e._1 ~> s"st.${e._2.fieldName}"
     }
 
     var assertionFns: ISZ[AssertionFn] = ISZ()
-    for (pi <- nextRel.places) {
-      pi.assertOpt match {
-        case Some(a) =>
-          val body = SlangExpUtil.rewriteExpH(
-            rexp = a.exp,
-            owner = rootSystem.classifier,
-            optComponent = Some(rootSystem),
-            context = SlangExpUtil.Context.compute_clause,
-            substitutions = substitutions,
-            inRequires = F,
-            inVerus = T,
-            tp = crustTypeProvider,
-            aadlTypes = aadlTypes,
-            store = store,
-            reporter = reporter)
-          val fnName = s"sys_assert_${pi.placeId.name}"
-          assertionFns = assertionFns :+ AssertionFn(
-            placeName = pi.placeId.name,
-            assertId = a.id,
-            fnName = fnName,
-            fnST =
-              st"""/** assertion ${a.id} at place ${pi.placeId.name} */
-                  |pub open spec fn $fnName(st: SystemState) -> bool
-                  |{
-                  |  $body
-                  |}""")
-        case _ =>
-      }
+    for (e <- decoration.entries) {
+      val placeId = e._1
+      val b = e._2
+      val body = SlangExpUtil.rewriteExpH(
+        rexp = b.exp,
+        owner = rootSystem.classifier,
+        optComponent = Some(rootSystem),
+        context = SlangExpUtil.Context.compute_clause,
+        substitutions = substitutions,
+        inRequires = F,
+        inVerus = T,
+        tp = crustTypeProvider,
+        aadlTypes = aadlTypes,
+        store = store,
+        reporter = reporter)
+      val pointName = b.point.prettyST.render
+      val fnName = s"sys_assert_${propertyId}_${placeId.name}"
+      assertionFns = assertionFns :+ AssertionFn(
+        placeName = placeId.name,
+        pointName = pointName,
+        fnName = fnName,
+        fnST =
+          st"""/** property $propertyId, bound '$pointName' (place ${placeId.name})
+              |  ${GumboRustUtil.processDescriptor(b.descriptor, "*   ")}
+              |  */
+              |pub open spec fn $fnName(st: SystemState) -> bool
+              |{
+              |  $body
+              |}""")
     }
-    return (assertionFns, sysFns)
+    return assertionFns
   }
 
   // One component's write frames (VerusProofSketch.md "Write Frames"). The global
@@ -862,13 +877,14 @@ object VerusVCSerializer {
           |""")
   }
 
-  // Renders crates/sys_proof/src/assertions.rs.
-  @pure def genAssertionsRs(assertionFns: ISZ[AssertionFn], sysFns: ISZ[ST]): ST = {
+  // Renders src/assertions.rs: the system-level GUMBO functions (sysProp_*)
+  // shared by every property's assertion fns.
+  @pure def genSysFnsRs(sysFns: ISZ[ST]): ST = {
     return (
       st"""${CommentTemplate.doNotEditComment_slash}
           |
-          |//! System assertion spec functions -- one per Petri-net place assertion in
-          |//! the system schedule -- plus the system-level GUMBO functions they call.
+          |//! System-level GUMBO functions (e.g. sysProp_*) called by the
+          |//! properties' place-assertion spec functions.
           |
           |#![allow(non_snake_case)]
           |
@@ -879,11 +895,30 @@ object VerusVCSerializer {
           |
           |verus! {
           |
-          |// ---- system-level GUMBO functions ----
-          |
           |${(sysFns, "\n\n")}
           |
-          |// ---- place assertions ----
+          |} // verus!
+          |""")
+  }
+
+  // Renders src/assertions_<property>.rs: one property's bound place assertions.
+  @pure def genPropertyAssertionsRs(propertyId: String, assertionFns: ISZ[AssertionFn]): ST = {
+    return (
+      st"""${CommentTemplate.doNotEditComment_slash}
+          |
+          |//! Place-assertion spec functions of property `$propertyId` -- one per
+          |//! point its decoration binds (unbound points carry `true`, design D5).
+          |
+          |#![allow(non_snake_case)]
+          |#![allow(unused_imports)]
+          |
+          |use data::*;
+          |use vstd::prelude::*;
+          |
+          |use crate::assertions::*;
+          |use crate::system_state::SystemState;
+          |
+          |verus! {
           |
           |${(for (a <- assertionFns) yield a.fnST, "\n\n")}
           |
@@ -967,12 +1002,16 @@ object VerusVCSerializer {
   @strictpure def placeNames(placeIds: ISZ[ScheduleNextRel.PlaceId]): ST =
     st"${(for (p <- placeIds) yield p.name, ", ")}"
 
-  // Serializes the sequential VCs (Init-State, Pre-Assert, Next-Assert task/skip,
-  // Post-Pre) to empty-body proof fns; Verus checks `requires ==> ensures` via SMT.
-  // Premises/conclusions are reconstructed from the same model elements the
-  // generator used (same iteration order), keyed by `VC.source`; independence VCs
-  // (NonBlocking/Preservation/Commutativity) are serialized separately.
-  @pure def genSequentialVCs(vcs: ISZ[VC],
+  // Serializes one property's sequential VCs (Init-State, Pre-Assert, Next-Assert
+  // task/skip, Post-Pre) to empty-body proof fns; Verus checks
+  // `requires ==> ensures` via SMT. Premises/conclusions are reconstructed from
+  // the same model elements the generator used (same iteration order), keyed by
+  // `VC.source`; independence VCs (NonBlocking/Preservation/Commutativity) are
+  // serialized separately. Proof fns are named by the firing occurrence's id
+  // (its occurrence label, or its alias when it fires once) -- unique by the
+  // resolver's multi-firing label lint, so no disambiguation suffix is needed.
+  @pure def genSequentialVCs(propertyId: String,
+                             vcs: ISZ[VC],
                              nextRel: ScheduleNextRel.NextRelResult,
                              ssm: SystemStateMap,
                              contracts: ISZ[ComponentContracts],
@@ -993,16 +1032,27 @@ object VerusVCSerializer {
       framesByPath = framesByPath + fr.componentPath ~> fr
     }
 
-    var usedNames: Set[String] = Set.empty
-    // a component can fire more than once per hyperperiod; later transitions get a
-    // transition-index suffix
-    def uniqueName(base: String, transIdx: Z): String = {
-      var cand = base
-      if (usedNames.contains(cand)) {
-        cand = s"${base}_t$transIdx"
+    def occurrenceOf(t: ScheduleNextRel.Transition, transIdx: Z): String = {
+      if (t.inPlaces.nonEmpty) {
+        nextRel.activationMap.get(t.inPlaces(0)) match {
+          case Some(compRef) => return ScheduleNextRel.occurrenceId(compRef)
+          case _ =>
+        }
       }
-      usedNames = usedNames + cand
-      return cand
+      return s"t$transIdx"
+    }
+
+    // Contract projection (mirrors VCGenerator.coversTransition): the property
+    // uses a component's contract iff it binds one of the component's
+    // out-places; otherwise (taskPre, taskPost) := (true, true) -- the
+    // Pre-Assert is trivial and the Next-Assert is frame-only.
+    def coversTransition(t: ScheduleNextRel.Transition): B = {
+      for (p <- t.outPlaces) {
+        if (assertByPlace.contains(p.name)) {
+          return T
+        }
+      }
+      return F
     }
 
     def componentPathOf(vc: VC): IdPath = {
@@ -1042,19 +1092,25 @@ object VerusVCSerializer {
             case Some(fr) => fr.componentAlias
             case _ => "unknown"
           }
+          val preCovered = coversTransition(t)
           var ens: ISZ[ST] = ISZ()
-          contractsByPath.get(compPath) match {
-            case Some(cc) =>
-              for (f <- cc.fns) {
-                if (f.kind == ContractFnKind.ComputeAssume || f.kind == ContractFnKind.IntegrationAssume) {
-                  ens = ens :+ contractCall(cc.moduleName, f, compPath, ssm, "st", "st", reporter)
+          if (preCovered) {
+            contractsByPath.get(compPath) match {
+              case Some(cc) =>
+                for (f <- cc.fns) {
+                  if (f.kind == ContractFnKind.ComputeAssume || f.kind == ContractFnKind.IntegrationAssume) {
+                    ens = ens :+ contractCall(cc.moduleName, f, compPath, ssm, "st", "st", reporter)
+                  }
                 }
-              }
-            case _ =>
+              case _ =>
+            }
           }
+          val preDoc: ST =
+            if (preCovered) st"/** VC[$i]: Pre-Assert -- ${placeNames(t.inPlaces)} |- ${ops.StringOps(alias).toUpper} compute + integration assumes */"
+            else st"/** VC[$i]: Pre-Assert -- trivial: this property does not use ${ops.StringOps(alias).toUpper}'s contract (no bound out-place; contract projection) */"
           seqFns = seqFns :+ renderProofFn(
-            doc = st"/** VC[$i]: Pre-Assert -- ${placeNames(t.inPlaces)} |- ${ops.StringOps(alias).toUpper} compute + integration assumes */",
-            fnName = uniqueName(s"vc_pre_assert_$alias", transIdx),
+            doc = preDoc,
+            fnName = s"vc_pre_assert_${occurrenceOf(t, transIdx)}",
             paramsDecl = "st: SystemState",
             requiresClauses = assertCalls(t.inPlaces, assertByPlace, "st"),
             ensuresClauses = ens)
@@ -1076,19 +1132,21 @@ object VerusVCSerializer {
               reporter.error(None(), toolName,
                 st"No write frame for component ${(compPath, ".")}".render)
           }
-          contractsByPath.get(compPath) match {
-            case Some(cc) =>
-              for (f <- cc.fns) {
-                if (f.kind == ContractFnKind.ComputeGuarantee || f.kind == ContractFnKind.ComputeCase ||
-                  f.kind == ContractFnKind.IntegrationGuarantee) {
-                  req = req :+ contractCall(cc.moduleName, f, compPath, ssm, "pre", "post", reporter)
+          if (coversTransition(t)) {
+            contractsByPath.get(compPath) match {
+              case Some(cc) =>
+                for (f <- cc.fns) {
+                  if (f.kind == ContractFnKind.ComputeGuarantee || f.kind == ContractFnKind.ComputeCase ||
+                    f.kind == ContractFnKind.IntegrationGuarantee) {
+                    req = req :+ contractCall(cc.moduleName, f, compPath, ssm, "pre", "post", reporter)
+                  }
                 }
-              }
-            case _ =>
+              case _ =>
+            }
           }
           seqFns = seqFns :+ renderProofFn(
             doc = st"/** VC[$i]: Next-Assert (task) -- ${placeNames(t.inPlaces)} + frames + ${ops.StringOps(alias).toUpper} postcondition |- ${placeNames(t.outPlaces)} */",
-            fnName = uniqueName(s"vc_next_assert_task_$alias", transIdx),
+            fnName = s"vc_next_assert_task_${occurrenceOf(t, transIdx)}",
             paramsDecl = "pre: SystemState, post: SystemState",
             requiresClauses = req,
             ensuresClauses = assertCalls(t.outPlaces, assertByPlace, "post"))
@@ -1116,12 +1174,12 @@ object VerusVCSerializer {
     }
 
     return SequentialVCFns(
-      vcInitRs = vcFile("Init-State VC: the initial state (all initialize guarantees) satisfies the START assertion.", initFns),
-      vcSequentialRs = vcFile("Pre-Assert and Next-Assert VCs for every schedule transition.", seqFns),
-      vcPostPreRs = vcFile("Post-Pre VC: the END assertion implies the START assertion across hyperperiod boundaries.", postPreFns))
+      vcInitRs = vcFile(s"Property $propertyId -- Init-State VC: the initial state (all initialize + integration guarantees) satisfies the START assertion.", propertyId, initFns),
+      vcSequentialRs = vcFile(s"Property $propertyId -- Pre-Assert and Next-Assert VCs for every schema transition.", propertyId, seqFns),
+      vcPostPreRs = vcFile(s"Property $propertyId -- Post-Pre VC: the END assertion implies the START assertion across hyperperiod boundaries.", propertyId, postPreFns))
   }
 
-  @pure def vcFile(desc: String, fns: ISZ[ST]): ST = {
+  @pure def vcFile(desc: String, propertyId: String, fns: ISZ[ST]): ST = {
     return (
       st"""${CommentTemplate.doNotEditComment_slash}
           |
@@ -1131,10 +1189,12 @@ object VerusVCSerializer {
           |
           |#![allow(non_snake_case)]
           |#![allow(unused_variables)]
+          |#![allow(unused_imports)]
           |
           |use vstd::prelude::*;
           |
           |use crate::assertions::*;
+          |use crate::assertions_$propertyId::*;
           |use crate::contracts::*;
           |use crate::system_state::SystemState;
           |use crate::write_frames::*;
@@ -1297,18 +1357,18 @@ object VerusVCSerializer {
           |""")
   }
 
-  // Serializes the independence VCs (NonBlocking, Preservation, Commutativity).
-  // NonBlocking/Preservation over-approximate the firing component's actual action
-  // by its global write frame (sound: the real action satisfies the frame);
-  // Commutativity quantifies both interleavings via the `_fire` predicates and
-  // concludes state equality.
-  @pure def genIndependenceVCs(vcs: ISZ[VC],
-                               nextRel: ScheduleNextRel.NextRelResult,
-                               frames: ISZ[WriteFrameFn],
-                               assertionFns: ISZ[AssertionFn],
-                               actions: ISZ[ActionFns],
-                               resolvedComponentAliasMap: Map[String, IdPath],
-                               reporter: Reporter): ST = {
+  // Serializes one property's Non-Blocking and Preservation VCs. Both
+  // over-approximate the firing component's actual action by its global write
+  // frame (sound: the real action satisfies the frame). Commutativity is
+  // property-independent and serialized once per composition by
+  // `genCommutativityVCs`.
+  @pure def genPropertyIndependenceVCs(propertyId: String,
+                                       vcs: ISZ[VC],
+                                       nextRel: ScheduleNextRel.NextRelResult,
+                                       frames: ISZ[WriteFrameFn],
+                                       assertionFns: ISZ[AssertionFn],
+                                       resolvedComponentAliasMap: Map[String, IdPath],
+                                       reporter: Reporter): ST = {
     var assertByPlace: Map[String, AssertionFn] = Map.empty
     for (a <- assertionFns) {
       assertByPlace = assertByPlace + a.placeName ~> a
@@ -1316,10 +1376,6 @@ object VerusVCSerializer {
     var framesByPath: Map[IdPath, WriteFrameFn] = Map.empty
     for (fr <- frames) {
       framesByPath = framesByPath + fr.componentPath ~> fr
-    }
-    var actionsByPath: Map[IdPath, ActionFns] = Map.empty
-    for (a <- actions) {
-      actionsByPath = actionsByPath + a.componentPath ~> a
     }
 
     def transitionPathOpt(t: ScheduleNextRel.Transition): Option[IdPath] = {
@@ -1424,6 +1480,80 @@ object VerusVCSerializer {
             requiresClauses = req,
             ensuresClauses = assertCalls(other.outPlaces, assertByPlace, "post"))
 
+        case _ => // sequential VCs are serialized by genSequentialVCs; Commutativity by genCommutativityVCs
+      }
+    }
+
+    return (
+      st"""${CommentTemplate.doNotEditComment_slash}
+          |
+          |//! Property $propertyId -- Non-Blocking and Preservation VCs for every
+          |//! MHIP transition pair (per direction whose firing member is a component).
+          |//! Each proof fn has an empty body: Verus discharges `requires ==> ensures`
+          |//! via SMT; add proof hints in the body if a VC does not discharge.
+          |
+          |#![allow(non_snake_case)]
+          |#![allow(unused_variables)]
+          |#![allow(unused_imports)]
+          |
+          |use vstd::prelude::*;
+          |
+          |use crate::assertions::*;
+          |use crate::assertions_$propertyId::*;
+          |use crate::system_state::SystemState;
+          |use crate::write_frames::*;
+          |
+          |verus! {
+          |
+          |${(fns, "\n\n")}
+          |
+          |} // verus!
+          |""")
+  }
+
+  // Serializes the Commutativity VCs (execIndependent), once per composition --
+  // they mention no assertions, so they are shared by all properties.
+  // Commutativity quantifies both interleavings via the `_fire` predicates and
+  // concludes state equality.
+  @pure def genCommutativityVCs(vcs: ISZ[VC],
+                                nextRel: ScheduleNextRel.NextRelResult,
+                                actions: ISZ[ActionFns],
+                                resolvedComponentAliasMap: Map[String, IdPath],
+                                reporter: Reporter): ST = {
+    var actionsByPath: Map[IdPath, ActionFns] = Map.empty
+    for (a <- actions) {
+      actionsByPath = actionsByPath + a.componentPath ~> a
+    }
+
+    def transitionPathOpt(t: ScheduleNextRel.Transition): Option[IdPath] = {
+      if (t.inPlaces.isEmpty) {
+        return None()
+      }
+      nextRel.activationMap.get(t.inPlaces(0)) match {
+        case Some(compRef) =>
+          if (compRef.component.name.isEmpty) {
+            return Some(compRef.component.name)
+          }
+          return Some(resolvedComponentAliasMap.getOrElse(
+            compRef.component.name(compRef.component.name.lastIndex), compRef.component.name))
+        case _ => return None()
+      }
+    }
+
+    var usedNames: Set[String] = Set.empty
+    def uniqueName(base: String, vcIdx: Z): String = {
+      var cand = base
+      if (usedNames.contains(cand)) {
+        cand = s"${base}_vc$vcIdx"
+      }
+      usedNames = usedNames + cand
+      return cand
+    }
+
+    var fns: ISZ[ST] = ISZ()
+    for (i <- z"0" until vcs.size) {
+      val vc = vcs(i)
+      vc.kind match {
         case VCKind.Commutativity =>
           val pair = vc.source.mhipPairOpt.get
           val t1 = nextRel.transitions(pair._1)
@@ -1432,7 +1562,7 @@ object VerusVCSerializer {
             case (Some(path1), Some(path2)) =>
               (actionsByPath.get(path1), actionsByPath.get(path2)) match {
                 case (Some(a1), Some(a2)) =>
-                  var req = assertCalls(t1.inPlaces, assertByPlace, "st") ++ assertCalls(t2.inPlaces, assertByPlace, "st")
+                  var req: ISZ[ST] = ISZ()
                   req = req :+ st"${a1.fireFnName}(st, mid_a)"
                   req = req :+ st"${a2.fireFnName}(mid_a, post_a)"
                   req = req :+ st"${a2.fireFnName}(st, mid_b)"
@@ -1455,17 +1585,16 @@ object VerusVCSerializer {
               reporter.error(None(), toolName,
                 s"Commutativity VC[$i] members must both be component transitions")
           }
-
-        case _ => // sequential VCs are serialized by genSequentialVCs
+        case _ =>
       }
     }
 
     return (
       st"""${CommentTemplate.doNotEditComment_slash}
           |
-          |//! Independence VCs for every MHIP transition pair: Non-Blocking and
-          |//! Preservation (per direction whose firing member is a component) and
-          |//! Commutativity (once per component-component pair).
+          |//! Commutativity VCs (execIndependent), one per component-component MHIP
+          |//! pair. Assertion-free state equalities over the action abstractions --
+          |//! shared by all of the composition's properties.
           |//! Each proof fn has an empty body: Verus discharges `requires ==> ensures`
           |//! via SMT; add proof hints in the body if a VC does not discharge.
           |
@@ -1475,9 +1604,7 @@ object VerusVCSerializer {
           |use vstd::prelude::*;
           |
           |use crate::actions::*;
-          |use crate::assertions::*;
           |use crate::system_state::SystemState;
-          |use crate::write_frames::*;
           |
           |verus! {
           |
@@ -1487,10 +1614,20 @@ object VerusVCSerializer {
           |""")
   }
 
-  // Renders crates/sys_proof/src/lib.rs. The proof crate is verification-only --
-  // every fn is a spec or proof fn -- but it follows the workspace's no_std
-  // conventions so it builds alongside the other crates.
-  @pure def genLibRs(): ST = {
+  // Renders crates/sys_proof_<composition>/src/lib.rs. The proof crate is
+  // verification-only -- every fn is a spec or proof fn -- but it follows the
+  // workspace's no_std conventions so it builds alongside the other crates.
+  // Shared modules first, then per-property modules in declaration order.
+  @pure def genLibRs(compositionId: String, propertyModIds: ISZ[String]): ST = {
+    var propertyMods: ISZ[ST] = ISZ()
+    for (p <- propertyModIds) {
+      propertyMods = propertyMods :+
+        st"""pub mod assertions_$p;
+            |pub mod vc_${p}_independence;
+            |pub mod vc_${p}_init;
+            |pub mod vc_${p}_post_pre;
+            |pub mod vc_${p}_sequential;"""
+    }
     return (
       st"""#![cfg_attr(not(test), no_std)]
           |
@@ -1498,34 +1635,36 @@ object VerusVCSerializer {
           |
           |${CommentTemplate.doNotEditComment_slash}
           |
-          |//! System-level verification conditions for the GUMBO system contract,
-          |//! discharged by Verus. See the proof-fn doc comments for the VC indices
-          |//! tying each obligation back to the generator output.
+          |//! System-level verification conditions of composition `$compositionId`,
+          |//! discharged by Verus -- shared modules (state, contracts, frames,
+          |//! actions, commutativity) plus one module group per property. See the
+          |//! proof-fn doc comments for the VC indices tying each obligation back
+          |//! to the generator output.
           |
           |pub mod actions;
           |pub mod assertions;
           |pub mod contracts;
           |pub mod system_state;
-          |pub mod vc_independence;
-          |pub mod vc_init;
-          |pub mod vc_post_pre;
-          |pub mod vc_sequential;
+          |pub mod vc_commutativity;
           |pub mod write_frames;
+          |
+          |${(propertyMods, "\n")}
           |""")
   }
 
-  // Renders crates/sys_proof/Cargo.toml. The proof crate depends on `data` (shared
-  // AADL types) and the GUMBO library annex crates (ordinary rlibs holding the
-  // Verus library spec fns the contracts/assertions call) -- but NOT on any
-  // component staticlib crate, which is what enforces the modular abstraction
-  // boundary (the system proof sees contract copies, never implementations).
-  @pure def genSysProofCargoToml(libraryCrateNames: ISZ[String], store: Store): ST = {
+  // Renders crates/sys_proof_<composition>/Cargo.toml. The proof crate depends on
+  // `data` (shared AADL types) and the GUMBO library annex crates (ordinary rlibs
+  // holding the Verus library spec fns the contracts/assertions call) -- but NOT
+  // on any component staticlib crate, which is what enforces the modular
+  // abstraction boundary (the system proof sees contract copies, never
+  // implementations).
+  @pure def genSysProofCargoToml(crateName: String, libraryCrateNames: ISZ[String], store: Store): ST = {
     val libDeps: ISZ[ST] = for (k <- libraryCrateNames) yield st"""$k = { path = "../$k" }"""
     return (
       st"""${CommentTemplate.doNotEditComment_hash}
           |
           |[package]
-          |name = "sys_proof"
+          |name = "$crateName"
           |version = "0.1.0"
           |edition = "2021"
           |

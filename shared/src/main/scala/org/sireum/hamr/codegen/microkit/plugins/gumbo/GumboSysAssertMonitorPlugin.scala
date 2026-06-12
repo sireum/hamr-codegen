@@ -14,7 +14,7 @@ import org.sireum.hamr.codegen.microkit.plugins.rust.component.CRustComponentPlu
 import org.sireum.hamr.codegen.microkit.plugins.rust.types.CRustTypePlugin
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil
 import org.sireum.hamr.codegen.microkit.{rust => RAST}
-import org.sireum.hamr.ir.{Aadl, GclBodyMethod, GclSchedule, GclSpecMethod}
+import org.sireum.hamr.ir.{Aadl, GclBodyMethod, GclComposition, GclSpecMethod}
 import org.sireum.message.Reporter
 
 object GumboSysAssertMonitorPlugin {
@@ -23,16 +23,16 @@ object GumboSysAssertMonitorPlugin {
 
   val sysAssertFunctionsModuleName: String = "sys_assert_functions"
 
-  @strictpure def hasSystemSchedule(symbolTable: SymbolTable): B =
-    VCGenerator.hasSystemSchedule(symbolTable)
+  @strictpure def hasCompositions(symbolTable: SymbolTable): B =
+    VCGenerator.hasCompositions(symbolTable)
 
-  @strictpure def getSystemSchedule(symbolTable: SymbolTable): Option[GclSchedule] =
-    VCGenerator.getSystemSchedule(symbolTable)
+  @strictpure def getCompositions(symbolTable: SymbolTable): ISZ[GclComposition] =
+    VCGenerator.getCompositions(symbolTable)
 
 }
 
 // Extends GumboMonitorPlugin to create a separate monitor protection domain for
-// system-level assertion checking based on the GclSchedule. Inherits all phases
+// system-level assertion checking based on the composition schema. Inherits all phases
 // from GumboMonitorPlugin — each plugin instance gets its own store key namespace
 // via getMonitorName, so the two monitors operate independently. Overrides
 // handleMonitorMethod to generate the sys assert dispatch logic derived from
@@ -49,7 +49,7 @@ object GumboSysAssertMonitorPlugin {
                                               store: Store,
                                               reporter: Reporter): B = {
     return super.canHandleModelTransform(model, options, types, symbolTable, store, reporter) &&
-      GumboSysAssertMonitorPlugin.hasSystemSchedule(symbolTable)
+      GumboSysAssertMonitorPlugin.hasCompositions(symbolTable)
   }
 
 
@@ -68,7 +68,7 @@ object GumboSysAssertMonitorPlugin {
   @pure override def canHandle(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes,
                                 symbolTable: SymbolTable, store: Store, reporter: Reporter): B = {
     return super.canHandle(model, options, types, symbolTable, store, reporter) &&
-      GumboSysAssertMonitorPlugin.hasSystemSchedule(symbolTable)
+      GumboSysAssertMonitorPlugin.hasCompositions(symbolTable)
   }
 
   @pure override def handleMonitorMethod(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes,
@@ -81,23 +81,30 @@ object GumboSysAssertMonitorPlugin {
 
     var localStore = parentStore
 
-    val scheduleOpt = GumboSysAssertMonitorPlugin.getSystemSchedule(symbolTable)
-    if (scheduleOpt.isEmpty) {
+    val compositions = GumboSysAssertMonitorPlugin.getCompositions(symbolTable)
+    if (compositions.isEmpty) {
       return (localStore, parentResources)
     }
-    val schedule = scheduleOpt.get
+    // TODO (D8): one monitor per composition, named by the composition id, with a
+    // per-composition meta program. Until the multi-monitor plumbing lands, the
+    // monitor observes the first composition only.
+    if (compositions.size > 1) {
+      reporter.warn(None(), name,
+        s"${compositions.size} compositions declared; the sys-assert monitor currently observes only '${compositions(0).id}'")
+    }
+    val composition = compositions(0)
 
     contributions.componentContributions.get(monitorThreadPath) match {
       case Some(monitorContrib) =>
         val existingImpl = monitorContrib.appStructImpl.asInstanceOf[RAST.ImplBase]
 
-        // Build the NextRel from the schedule
-        val nextRel = ScheduleNextRel.build(schedule)
+        // Build the NextRel from the composition's schema
+        val nextRel = ScheduleNextRel.build(composition)
 
         // Assign bit positions to places
         var placeBits: Map[ScheduleNextRel.PlaceId, Z] = Map.empty
         for (i <- z"0" until nextRel.places.size) {
-          placeBits = placeBits + nextRel.places(i).placeId ~> i
+          placeBits = placeBits + nextRel.places(i) ~> i
         }
 
         // Build component alias → thread ID mapping
@@ -114,8 +121,8 @@ object GumboSysAssertMonitorPlugin {
         // Generate Rust constants for place bit positions
         var placeConstants: ISZ[ST] = ISZ()
         for (pi <- nextRel.places) {
-          val bit = placeBits.get(pi.placeId).get
-          val constName = ops.StringOps(pi.placeId.name).toUpper
+          val bit = placeBits.get(pi).get
+          val constName = ops.StringOps(pi.name).toUpper
           placeConstants = placeConstants :+ st"const PLACE_${constName}: u64 = 1u64 << $bit;"
         }
 
@@ -201,7 +208,7 @@ object GumboSysAssertMonitorPlugin {
         // Build substitution map: port alias name → API getter call.
         // State var aliases use the same pattern as port aliases.
         var portSubstitutions: Map[String, String] = Map.empty
-        for (pa <- schedule.portAliases) {
+        for (pa <- composition.portAliases) {
           val pathSegments = pa.portPath.name
           if (pathSegments.size >= z"2") {
             val componentRef = pathSegments(0)
@@ -215,7 +222,7 @@ object GumboSysAssertMonitorPlugin {
             }
           }
         }
-        for (sva <- schedule.stateVarAliases) {
+        for (sva <- composition.stateVarAliases) {
           val pathSegments = sva.stateVarPath.name
           if (pathSegments.size >= z"2") {
             val componentRef = pathSegments(0)
@@ -233,32 +240,39 @@ object GumboSysAssertMonitorPlugin {
         val rootSystem = symbolTable.rootSystem
         val crustTypeProvider = CRustTypePlugin.getCRustTypeProvider(localStore).get
 
+        // Per-property checks over shared place observations (design D8): each
+        // property's bindings resolve against the net and are checked when the
+        // bound place appears in the walk; violations are attributed
+        // (property, point) -- the same coordinates as the proof crate's VC names,
+        // so a runtime violation maps onto the proof chain whose TCB assumptions
+        // broke.
         var assertionChecks: ISZ[ST] = ISZ()
-        for (pi <- nextRel.places) {
-          pi.assertOpt match {
-            case Some(a) =>
-              val constName = ops.StringOps(pi.placeId.name).toUpper
+        for (property <- composition.properties) {
+          val decoration = ScheduleNextRel.decorate(nextRel, property, reporter)
+          for (e <- decoration.entries) {
+            val placeId = e._1
+            val b = e._2
+            val constName = ops.StringOps(placeId.name).toUpper
 
-              val rustExp = SlangExpUtil.rewriteExpH(
-                rexp = a.exp,
-                owner = rootSystem.classifier,
-                optComponent = Some(rootSystem),
-                context = SlangExpUtil.Context.compute_clause,
-                substitutions = portSubstitutions,
-                inRequires = F,
-                inVerus = T,
-                tp = crustTypeProvider,
-                aadlTypes = types,
-                store = localStore,
-                reporter = reporter)
+            val rustExp = SlangExpUtil.rewriteExpH(
+              rexp = b.exp,
+              owner = rootSystem.classifier,
+              optComponent = Some(rootSystem),
+              context = SlangExpUtil.Context.compute_clause,
+              substitutions = portSubstitutions,
+              inRequires = F,
+              inVerus = T,
+              tp = crustTypeProvider,
+              aadlTypes = types,
+              store = localStore,
+              reporter = reporter)
 
-              assertionChecks = assertionChecks :+
-                st"""if visited & PLACE_${constName} != 0 {
-                    |  if !($rustExp) {
-                    |    log::warn!("*** SYS ASSERT VIOLATION: ${a.id} ***");
-                    |  }
-                    |}"""
-            case _ =>
+            assertionChecks = assertionChecks :+
+              st"""if visited & PLACE_${constName} != 0 {
+                  |  if !($rustExp) {
+                  |    log::warn!("*** SYS ASSERT VIOLATION: property ${property.id}, ${b.point.prettyST.render} ***");
+                  |  }
+                  |}"""
           }
         }
 

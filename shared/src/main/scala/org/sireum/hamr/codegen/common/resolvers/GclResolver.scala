@@ -1731,12 +1731,17 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         case _ =>
       }
 
-      var resolvedSchedule: Option[GclSchedule] = s.schedule
-      s.schedule match {
-        case Some(sched) =>
-          val resolvedElements = visitScheduleElements(sched.elements)
-          resolvedSchedule = Some(sched(elements = resolvedElements))
-        case _ =>
+      var resolvedCompositions: ISZ[GclComposition] = ISZ()
+      var compositionIds: Set[String] = Set.empty
+      for (comp <- s.compositions) {
+        if (compositionIds.contains(comp.id)) {
+          reportError(comp.posOpt, s"Composition id '${comp.id}' is already declared for this system", reporter)
+        }
+        compositionIds = compositionIds + comp.id
+        validateSchemaLabels(comp)
+        val resolvedProperties: ISZ[GclCompositionProperty] =
+          for (p <- comp.properties) yield p(bindings = for (b <- p.bindings) yield visitPropertyBinding(b))
+        resolvedCompositions = resolvedCompositions :+ comp(properties = resolvedProperties)
       }
 
       return Some(s(
@@ -1745,32 +1750,71 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         initializes = resolvedInitializes,
         integration = resolvedIntegration,
         compute = resolvedCompute,
-        schedule = resolvedSchedule))
+        compositions = resolvedCompositions))
 
     }
 
-    def visitScheduleElements(elements: ISZ[GclScheduleElement]): ISZ[GclScheduleElement] = {
-      var resolved: ISZ[GclScheduleElement] = ISZ()
-      for (elem <- elements) {
-        elem match {
-          case sa: GclScheduleAssert =>
-            visitScheduleAssert(sa) match {
-              case Some(r) => resolved = resolved :+ r
-              case _ => resolved = resolved :+ sa
-            }
-          case sj: GclScheduleSplitJoin =>
-            val resolvedSeqs: ISZ[GclScheduleSequence] = for (seq <- sj.sequences) yield
-              seq(elements = visitScheduleElements(seq.elements))
-            resolved = resolved :+ sj(sequences = resolvedSeqs)
-          case other =>
-            resolved = resolved :+ other
+    // Schema sanity: labels (place and occurrence) are unique within a
+    // composition, must not collide with any component/port/state-var alias or
+    // the reserved START/END names, and every occurrence of a multi-firing component must
+    // carry an occurrence label (D8: 'after x' would otherwise be ambiguous).
+    def validateSchemaLabels(comp: GclComposition): Unit = {
+      var names: Set[String] = Set.empty[String] + "START" + "END"
+      var aliasNames: Set[String] = Set.empty[String]
+      for (a <- comp.componentAliases) {
+        aliasNames = aliasNames + a.name
+      }
+      for (a <- comp.portAliases) {
+        aliasNames = aliasNames + a.name
+      }
+      for (a <- comp.stateVarAliases) {
+        aliasNames = aliasNames + a.name
+      }
+      var occurrenceCounts: Map[String, Z] = Map.empty
+      var unlabeledOccurrences: Map[String, Z] = Map.empty
+
+      def declareLabel(l: String, posOpt: Option[Position]): Unit = {
+        if (names.contains(l)) {
+          reportError(posOpt, s"Schema label '$l' is already declared (START and END are reserved)", reporter)
+        }
+        if (aliasNames.contains(l)) {
+          reportError(posOpt, s"Schema label '$l' collides with a component/port/state-var alias", reporter)
+        }
+        names = names + l
+      }
+
+      def visitSchemaElements(elements: ISZ[GclSchemaElement]): Unit = {
+        for (elem <- elements) {
+          elem match {
+            case c: GclSchemaComponentRef =>
+              val key: String =
+                if (c.component.name.nonEmpty) c.component.name(c.component.name.lastIndex) else "?"
+              occurrenceCounts = occurrenceCounts + key ~> (occurrenceCounts.getOrElse(key, z"0") + 1)
+              c.occurrenceLabelOpt match {
+                case Some(l) => declareLabel(l, c.posOpt)
+                case _ =>
+                  unlabeledOccurrences = unlabeledOccurrences + key ~> (unlabeledOccurrences.getOrElse(key, z"0") + 1)
+              }
+            case l: GclSchemaLabel => declareLabel(l.id, l.posOpt)
+            case sj: GclSchemaSplitJoin =>
+              for (branch <- sj.branches) {
+                visitSchemaElements(branch.elements)
+              }
+          }
         }
       }
-      return resolved
+      visitSchemaElements(comp.schema)
+
+      for (e <- occurrenceCounts.entries) {
+        if (e._2 > 1 && unlabeledOccurrences.getOrElse(e._1, z"0") > 0) {
+          reportError(comp.posOpt,
+            s"Component '${e._1}' fires ${e._2} times per hyperperiod in composition '${comp.id}'; every occurrence must carry an occurrence label (<alias> @ <id>)", reporter)
+        }
+      }
     }
 
-    def visitScheduleAssert(sa: GclScheduleAssert): Option[GclScheduleAssert] = {
-      visitSlangExp(exp = sa.exp, context = context, scope = scope, mode = TypeChecker.ModeContext.Spec, typeHierarchy = typeHierarchy, reporter = reporter) match {
+    def visitPropertyBinding(b: GclPropertyBinding): GclPropertyBinding = {
+      visitSlangExp(exp = b.exp, context = context, scope = scope, mode = TypeChecker.ModeContext.Spec, typeHierarchy = typeHierarchy, reporter = reporter) match {
         case Some((rexp, roptType)) =>
           roptType match {
             case Some(AST.Typed.Name(ISZ("org", "sireum", "B"), _, _)) =>
@@ -1779,13 +1823,13 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               val resolvedExp: AST.Exp =
                 if (rexp2.isEmpty) rexp
                 else rexp2.get
-              return Some(sa(exp = resolvedExp))
-            case Some(x) => reportError(sa.exp.fullPosOpt, s"Expecting B but found ${x}", reporter)
-            case _ => assert(reporter.hasError, "Schedule assert expression is untyped so Tipe should have reported errors already")
+              return b(exp = resolvedExp)
+            case Some(x) => reportError(b.exp.fullPosOpt, s"Expecting B but found ${x}", reporter)
+            case _ => assert(reporter.hasError, "Property binding expression is untyped so Tipe should have reported errors already")
           }
-        case _ => reportError(sa.exp.fullPosOpt, "Unexpected: type checking returned none", reporter)
+        case _ => reportError(b.exp.fullPosOpt, "Unexpected: type checking returned none", reporter)
       }
-      return None()
+      return b
     }
 
     visitGclSubclause(subclause) match {
@@ -3076,23 +3120,31 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           reporter = reporter)
       }
 
-      // Declare port aliases as vars so schedule assertions can reference them
+      // Declare port aliases as vars so composition property assertions can
+      // reference them. A system may declare several compositions; aliases with
+      // the same name must agree across them (they share the system's namespace).
       val sysPackageName = sysOwner
       val sysInstancePath = a.component.identifier.name
       for (gclSubclause <- gclAnnexes) {
-        gclSubclause.schedule match {
-          case Some(sched) =>
-            for (ca <- sched.componentAliases) {
+        for (comp <- gclSubclause.compositions) {
+            for (ca <- comp.componentAliases) {
               val fullComponentPath = sysInstancePath ++ ca.componentPath.name
               symbolTable.componentMap.get(fullComponentPath) match {
                 case Some(_) =>
-                  resolvedComponentAliasMap = resolvedComponentAliasMap + ca.name ~> fullComponentPath
+                  resolvedComponentAliasMap.get(ca.name) match {
+                    case Some(existing) =>
+                      if (existing != fullComponentPath) {
+                        reportError(ca.posOpt, s"Component alias '${ca.name}' is already bound to ${(existing, ".")} by another composition", reporter)
+                      }
+                    case _ =>
+                      resolvedComponentAliasMap = resolvedComponentAliasMap + ca.name ~> fullComponentPath
+                  }
                 case _ =>
                   reportError(ca.posOpt, s"Component alias '${ca.name}' does not resolve to a valid component at path ${(fullComponentPath, ".")}", reporter)
               }
             }
 
-            for (pa <- sched.portAliases) {
+            for (pa <- comp.portAliases) {
               val pathSegments = pa.portPath.name
               if (pathSegments.size >= 2) {
                 val componentRef = pathSegments(0)
@@ -3136,7 +3188,11 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                       )
                     )
 
-                    declareName(pa.name, qualifiedFieldName, infoVar, pa.posOpt, reporter)
+                    // identical aliases may be shared by several compositions;
+                    // declare once
+                    if (!globalNameMap.contains(qualifiedFieldName)) {
+                      declareName(pa.name, qualifiedFieldName, infoVar, pa.posOpt, reporter)
+                    }
 
                   case _ =>
                     reportError(pa.posOpt, s"Could not resolve port alias '${pa.name}' to a port at path ${(fullFeaturePath, ".")}", reporter)
@@ -3145,12 +3201,8 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 reportError(pa.posOpt, s"Port alias '${pa.name}' path must have at least two segments (component.port)", reporter)
               }
             }
-          case _ =>
-        }
 
-        gclSubclause.schedule match {
-          case Some(sched) =>
-            for (sva <- sched.stateVarAliases) {
+            for (sva <- comp.stateVarAliases) {
               val pathSegments = sva.stateVarPath.name
               if (pathSegments.size >= 2) {
                 val componentRef = pathSegments(0)
@@ -3207,7 +3259,11 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                           )
                         )
 
-                        declareName(sva.name, qualifiedFieldName, infoVar, sva.posOpt, reporter)
+                        // identical aliases may be shared by several
+                        // compositions; declare once
+                        if (!globalNameMap.contains(qualifiedFieldName)) {
+                          declareName(sva.name, qualifiedFieldName, infoVar, sva.posOpt, reporter)
+                        }
 
                       case _ =>
                         reportError(sva.posOpt, s"Could not find state variable '${stateVarName}' on component at path ${(fullComponentPath, ".")}", reporter)
@@ -3220,7 +3276,6 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 reportError(sva.posOpt, s"State var alias '${sva.name}' path must have at least two segments (component.statevar)", reporter)
               }
             }
-          case _ =>
         }
       }
 

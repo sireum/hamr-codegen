@@ -6,7 +6,7 @@ import org.sireum.hamr.codegen.common.CommonUtil._
 import org.sireum.hamr.codegen.common.containers.Resource
 import org.sireum.hamr.codegen.common.resolvers.GclResolver
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
-import org.sireum.hamr.codegen.common.sysvc.{ScheduleNextRel, VCGenerator}
+import org.sireum.hamr.codegen.common.sysvc.{MHIPComputer, ScheduleNextRel, VCGenerator}
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.plugins.MicrokitFinalizePlugin
@@ -29,7 +29,7 @@ import org.sireum.message.Reporter
       !reporter.hasError &&
       !isDisabled(store) &&
       !alreadyFinalized(store) &&
-      VCGenerator.hasSystemSchedule(symbolTable))
+      VCGenerator.hasCompositions(symbolTable))
   }
 
   @pure override def finalizeMicrokit(model: Aadl,
@@ -44,11 +44,10 @@ import org.sireum.message.Reporter
     // finalize.
     val finalizedStore = store + s"FINALIZED_${name}" ~> BoolValue(T)
 
-    val scheduleOpt = VCGenerator.getSystemSchedule(symbolTable)
-    if (scheduleOpt.isEmpty) {
+    val compositions = VCGenerator.getCompositions(symbolTable)
+    if (compositions.isEmpty) {
       return (finalizedStore, ISZ())
     }
-    val schedule = scheduleOpt.get
 
     val tpOpt = CRustTypePlugin.getCRustTypeProvider(store)
     if (tpOpt.isEmpty) {
@@ -59,56 +58,83 @@ import org.sireum.message.Reporter
     val tp = tpOpt.get
 
     val resolvedAliasMap = GclResolver.getResolvedComponentAliasMap(store)
-    val nextRel = ScheduleNextRel.build(schedule)
-    val vcs = VCGenerator.generate(schedule, nextRel, resolvedAliasMap, symbolTable)
-
-    // serialize the VCs to Verus proof fns in the sys_proof crate
-    val ssm = VerusVCSerializer.buildSystemStateMap(schedule, resolvedAliasMap, symbolTable, types, reporter)
-    val contracts = VerusVCSerializer.buildComponentContracts(symbolTable, types, resolvedAliasMap, tp, options, store, reporter)
-    val assertionsPair = VerusVCSerializer.buildAssertions(nextRel, ssm, symbolTable, types, options, tp, store, reporter)
-    val assertionFns = assertionsPair._1
-    val sysFns = assertionsPair._2
-    val frames = VerusVCSerializer.buildWriteFrames(ssm, resolvedAliasMap, symbolTable)
-    val actions = VerusVCSerializer.buildActions(ssm, frames, symbolTable, tp, reporter)
-    val seqVCs = VerusVCSerializer.genSequentialVCs(vcs, nextRel, ssm, contracts, frames, assertionFns, resolvedAliasMap, reporter)
-    val indVCs = VerusVCSerializer.genIndependenceVCs(vcs, nextRel, frames, assertionFns, actions, resolvedAliasMap, reporter)
-
-    if (reporter.hasError) {
-      return (finalizedStore, ISZ())
-    }
 
     // the GUMBO library annex crates hold the Verus library spec fns the copied
     // contracts and system assertions call
     val libCrates: ISZ[String] =
       for (lib <- GumboRustPlugin.getGclLibraryAnnexes(symbolTable)) yield lib.name(0)
 
-    val rootDir = s"${options.sel4OutputDir.get}/crates/sys_proof"
     var resources: ISZ[Resource] = ISZ()
 
-    def add(path: String, content: ST): Unit = {
+    def add(rootDir: String, path: String, content: ST): Unit = {
       resources = resources :+ ResourceUtil.createResource(
         path = s"$rootDir/$path", content = content, overwrite = T)
     }
 
-    add("Cargo.toml", VerusVCSerializer.genSysProofCargoToml(libCrates, store))
-    // the toolchain file has no do-not-edit header (it is a shared template), so it
-    // is emitted overwrite = F like the other generated crates' toolchain files
-    resources = resources :+ ResourceUtil.createResource(
-      path = s"$rootDir/rust-toolchain.toml",
-      content = RustUtil.defaultRustToolChainToml(store),
-      overwrite = F)
-    add("src/lib.rs", VerusVCSerializer.genLibRs())
-    add("src/system_state.rs", VerusVCSerializer.genSystemStateRs(ssm, tp))
-    add("src/contracts.rs", VerusVCSerializer.genContractsRs(contracts))
-    add("src/assertions.rs", VerusVCSerializer.genAssertionsRs(assertionFns, sysFns))
-    add("src/write_frames.rs", VerusVCSerializer.genWriteFramesRs(frames))
-    add("src/actions.rs", VerusVCSerializer.genActionsRs(actions))
-    add("src/vc_init.rs", seqVCs.vcInitRs)
-    add("src/vc_sequential.rs", seqVCs.vcSequentialRs)
-    add("src/vc_post_pre.rs", seqVCs.vcPostPreRs)
-    add("src/vc_independence.rs", indVCs)
+    // one independently buildable proof crate per composition (design D8)
+    for (composition <- compositions) {
+      val crateName = s"sys_proof_${composition.id}"
+      val rootDir = s"${options.sel4OutputDir.get}/crates/$crateName"
 
-    reporter.info(None(), name, s"Generated ${vcs.size} system VCs in $rootDir")
+      // schema-derived, property-independent artifacts -- built once per composition
+      val nextRel = ScheduleNextRel.build(composition)
+      val mhipPairs = MHIPComputer.computeMHIP(nextRel)
+      val ssm = VerusVCSerializer.buildSystemStateMap(composition, resolvedAliasMap, symbolTable, types, reporter)
+      val contracts = VerusVCSerializer.buildComponentContracts(symbolTable, types, resolvedAliasMap, tp, options, store, reporter)
+      val sysFns = VerusVCSerializer.buildSysFns(symbolTable, types, options, tp, store, reporter)
+      val frames = VerusVCSerializer.buildWriteFrames(ssm, resolvedAliasMap, symbolTable)
+      val actions = VerusVCSerializer.buildActions(ssm, frames, symbolTable, tp, reporter)
+      val commutativityVCs = VCGenerator.generateCommutativityVCs(nextRel, mhipPairs, resolvedAliasMap, symbolTable)
+      val commVCsRs = VerusVCSerializer.genCommutativityVCs(commutativityVCs, nextRel, actions, resolvedAliasMap, reporter)
+
+      var totalVCs: Z = commutativityVCs.size
+      var propertyModIds: ISZ[String] = ISZ()
+
+      // per-property VC sets over the shared net
+      for (property <- composition.properties) {
+        val propModId = ops.StringOps(property.id).toLower // Rust module ids: lowercased property id
+        propertyModIds = propertyModIds :+ propModId
+
+        val decoration = ScheduleNextRel.decorate(nextRel, property, reporter)
+        val vcs = VCGenerator.generateForProperty(decoration, nextRel, mhipPairs, resolvedAliasMap, symbolTable)
+        totalVCs = totalVCs + vcs.size
+
+        val assertionFns = VerusVCSerializer.buildPropertyAssertions(
+          propModId, decoration, ssm, symbolTable, types, tp, store, reporter)
+        val seqVCs = VerusVCSerializer.genSequentialVCs(
+          propModId, vcs, nextRel, ssm, contracts, frames, assertionFns, resolvedAliasMap, reporter)
+        val indVCs = VerusVCSerializer.genPropertyIndependenceVCs(
+          propModId, vcs, nextRel, frames, assertionFns, resolvedAliasMap, reporter)
+
+        add(rootDir, s"src/assertions_$propModId.rs", VerusVCSerializer.genPropertyAssertionsRs(propModId, assertionFns))
+        add(rootDir, s"src/vc_${propModId}_init.rs", seqVCs.vcInitRs)
+        add(rootDir, s"src/vc_${propModId}_sequential.rs", seqVCs.vcSequentialRs)
+        add(rootDir, s"src/vc_${propModId}_post_pre.rs", seqVCs.vcPostPreRs)
+        add(rootDir, s"src/vc_${propModId}_independence.rs", indVCs)
+      }
+
+      if (reporter.hasError) {
+        return (finalizedStore, ISZ())
+      }
+
+      add(rootDir, "Cargo.toml", VerusVCSerializer.genSysProofCargoToml(crateName, libCrates, store))
+      // the toolchain file has no do-not-edit header (it is a shared template), so it
+      // is emitted overwrite = F like the other generated crates' toolchain files
+      resources = resources :+ ResourceUtil.createResource(
+        path = s"$rootDir/rust-toolchain.toml",
+        content = RustUtil.defaultRustToolChainToml(store),
+        overwrite = F)
+      add(rootDir, "src/lib.rs", VerusVCSerializer.genLibRs(composition.id, propertyModIds))
+      add(rootDir, "src/system_state.rs", VerusVCSerializer.genSystemStateRs(ssm, tp))
+      add(rootDir, "src/contracts.rs", VerusVCSerializer.genContractsRs(contracts))
+      add(rootDir, "src/assertions.rs", VerusVCSerializer.genSysFnsRs(sysFns))
+      add(rootDir, "src/write_frames.rs", VerusVCSerializer.genWriteFramesRs(frames))
+      add(rootDir, "src/actions.rs", VerusVCSerializer.genActionsRs(actions))
+      add(rootDir, "src/vc_commutativity.rs", commVCsRs)
+
+      reporter.info(None(), name,
+        s"Generated $totalVCs system VCs (${composition.properties.size} properties) in $rootDir")
+    }
 
     return (finalizedStore, resources)
   }

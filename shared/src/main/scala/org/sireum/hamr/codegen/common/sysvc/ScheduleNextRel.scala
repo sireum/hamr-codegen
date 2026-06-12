@@ -2,9 +2,18 @@
 package org.sireum.hamr.codegen.common.sysvc
 
 import org.sireum._
-import org.sireum.hamr.ir.{GclSchedule, GclScheduleAssert, GclScheduleComponentRef,
-  GclScheduleElement, GclScheduleSplitJoin}
+import org.sireum.hamr.ir.{GclComposition, GclCompositionProperty, GclPointAfter, GclPointAt, GclPointBefore,
+  GclPointEnd, GclPointStart, GclPropertyBinding, GclSchemaComponentRef, GclSchemaElement, GclSchemaLabel,
+  GclSchemaPoint, GclSchemaSplitJoin}
+import org.sireum.message.Reporter
 
+// Builds the Petri net of a composition's *schema* (design D8 of
+// VCGenerationDesign.md in the hamr-system-reasoning-prototype repo). The net
+// carries no assertions: a composition's properties are separate decorations of
+// the net's places, resolved per property by `decorate`. Point names are
+// stable: a place is reachable through any of its synonyms (`before`/`after` a
+// component occurrence, a `label`, START/END), and consecutive elements share a
+// place, so e.g. `after mrm` and `before mhs` resolve to the same PlaceId.
 object ScheduleNextRel {
 
   @datatype class PlaceId(val name: String)
@@ -18,130 +27,139 @@ object ScheduleNextRel {
     "ControlPoint"
   }
 
-  @datatype class PlaceInfo(val placeId: PlaceId,
-                            val assertOpt: Option[GclScheduleAssert])
-
   @datatype class NextRelResult(val transitions: ISZ[Transition],
-                                val places: ISZ[PlaceInfo],
-                                val activationMap: Map[PlaceId, GclScheduleComponentRef],
+                                val places: ISZ[PlaceId],
+                                val activationMap: Map[PlaceId, GclSchemaComponentRef],
                                 val startPlace: PlaceId,
-                                val endPlace: PlaceId)
+                                val endPlace: PlaceId,
+                                // point-name resolution: place labels (`label <id>;`)
+                                val labelMap: Map[String, PlaceId],
+                                // `before <occ>` / `after <occ>` where <occ> is an
+                                // occurrence label or the alias of a unique occurrence
+                                val beforeMap: Map[String, PlaceId],
+                                val afterMap: Map[String, PlaceId])
 
-  @pure def build(schedule: GclSchedule): NextRelResult = {
+  @pure def getComponentName(c: GclSchemaComponentRef): String = {
+    val names = c.component.name
+    if (names.nonEmpty) {
+      return names(names.lastIndex)
+    }
+    return "unknown"
+  }
+
+  // The occurrence's identity: its occurrence label when present (required by
+  // the resolver for multi-firing components), otherwise its alias. Used for
+  // point names and for naming the occurrence's generated proof fns.
+  @pure def occurrenceId(c: GclSchemaComponentRef): String = {
+    c.occurrenceLabelOpt match {
+      case Some(l) => return l
+      case _ => return getComponentName(c)
+    }
+  }
+
+  @pure def countOccurrences(elements: ISZ[GclSchemaElement], acc: Map[String, Z]): Map[String, Z] = {
+    var m = acc
+    for (e <- elements) {
+      e match {
+        case c: GclSchemaComponentRef =>
+          val key = getComponentName(c)
+          m = m + key ~> (m.getOrElse(key, z"0") + 1)
+        case sj: GclSchemaSplitJoin =>
+          for (branch <- sj.branches) {
+            m = countOccurrences(branch.elements, m)
+          }
+        case _ =>
+      }
+    }
+    return m
+  }
+
+  @pure def build(composition: GclComposition): NextRelResult = {
     var transitions: ISZ[Transition] = ISZ()
-    var places: ISZ[PlaceInfo] = ISZ()
-    var activationMap: Map[PlaceId, GclScheduleComponentRef] = Map.empty
+    var places: ISZ[PlaceId] = ISZ()
+    var activationMap: Map[PlaceId, GclSchemaComponentRef] = Map.empty
+    var labelMap: Map[String, PlaceId] = Map.empty
+    var beforeMap: Map[String, PlaceId] = Map.empty
+    var afterMap: Map[String, PlaceId] = Map.empty
     var counter: Z = 0
+
+    // a component alias may serve as an occurrence id only when the component
+    // fires once per hyperperiod (the resolver errors on unlabeled multi-firing
+    // occurrences, so this is belt-and-suspenders)
+    val occurrenceCounts = countOccurrences(composition.schema, Map.empty)
+
+    def addPlace(id: PlaceId): PlaceId = {
+      places = places :+ id
+      return id
+    }
 
     def freshPlace(prefix: String): PlaceId = {
       counter = counter + 1
-      return PlaceId(s"${prefix}_$counter")
+      return addPlace(PlaceId(s"${prefix}_$counter"))
     }
 
-    def addPlace(id: PlaceId, assertOpt: Option[GclScheduleAssert]): Unit = {
-      places = places :+ PlaceInfo(placeId = id, assertOpt = assertOpt)
+    def registerOccurrencePlaces(c: GclSchemaComponentRef, prePlace: PlaceId, postPlace: PlaceId): Unit = {
+      c.occurrenceLabelOpt match {
+        case Some(l) =>
+          beforeMap = beforeMap + l ~> prePlace
+          afterMap = afterMap + l ~> postPlace
+        case _ =>
+      }
+      val alias = getComponentName(c)
+      if (occurrenceCounts.getOrElse(alias, z"0") == 1) {
+        beforeMap = beforeMap + alias ~> prePlace
+        afterMap = afterMap + alias ~> postPlace
+      }
     }
 
-    // Determines the out-place for a component or split-join transition.
-    // If the next element is an assert, use its named place directly (the
-    // thesis model puts one place between every two transitions). Otherwise
-    // create a fresh implicit place named after the preceding element.
-    def resolvePostPlace(elements: ISZ[GclScheduleElement], nextIdx: Z,
-                         contextName: String): (PlaceId, B) = {
-      if (nextIdx < elements.size) {
-        elements(nextIdx) match {
-          case a: GclScheduleAssert =>
-            val p = PlaceId(a.id)
-            addPlace(p, Some(a))
-            return (p, T)
-          case _ =>
+    // Canonical name for a branch-entry place: `before_<occId>` of the first
+    // component past any leading labels, else a fresh anonymous name. (The
+    // leading labels and the first component's before-name register as
+    // synonyms of this place during processing.)
+    def branchEntryPlace(branchElements: ISZ[GclSchemaElement]): PlaceId = {
+      for (e <- branchElements) {
+        e match {
+          case c: GclSchemaComponentRef => return addPlace(PlaceId(s"before_${occurrenceId(c)}"))
+          case _: GclSchemaLabel =>
+          case _ => return freshPlace("pre_split")
         }
       }
-      val p = freshPlace(s"post_$contextName")
-      addPlace(p, None())
-      return (p, F)
+      return freshPlace("pre_seq")
     }
 
-    def firstElementLabel(elements: ISZ[GclScheduleElement]): String = {
-      if (elements.nonEmpty) {
-        elements(0) match {
-          case c: GclScheduleComponentRef => return getComponentName(c)
-          case a: GclScheduleAssert => return a.id
-          case _: GclScheduleSplitJoin => return "split"
-          case _ =>
-        }
-      }
-      return "seq"
-    }
-
-    // Determines a split branch's start place (the split transition's out-place
-    // for that branch). A branch that begins with an assert gets the assert
-    // place directly -- routing through a synthetic unannotated place would
-    // decompose the obligation `split-in-asserts |- branch-assert` into
-    // `... |- true` and the unprovable `true |- branch-assert`, dropping the
-    // invariant (finding F1 of InitialVerusRunFindings.md in the
-    // hamr-system-reasoning-prototype repo).
-    def branchStartFor(seqElements: ISZ[GclScheduleElement]): PlaceId = {
-      if (seqElements.nonEmpty) {
-        seqElements(0) match {
-          case a: GclScheduleAssert =>
-            val p = PlaceId(a.id)
-            addPlace(p, Some(a))
-            return p
-          case _ =>
-        }
-      }
-      val p = freshPlace(s"pre_${firstElementLabel(seqElements)}")
-      addPlace(p, None())
-      return p
-    }
-
-    def processElements(elements: ISZ[GclScheduleElement], entryPlace: PlaceId): PlaceId = {
+    def processElements(elements: ISZ[GclSchemaElement], entryPlace: PlaceId): PlaceId = {
       var currentPlace = entryPlace
-      var i: Z = 0
-      while (i < elements.size) {
-        val element = elements(i)
+      for (element <- elements) {
         element match {
-          case a: GclScheduleAssert =>
-            // If this assert was already consumed as a component's post-place,
-            // currentPlace already points to it. Otherwise we need a
-            // pass-through control-point transition.
-            if (currentPlace.name != a.id) {
-              val assertPlace = PlaceId(a.id)
-              addPlace(assertPlace, Some(a))
-              transitions = transitions :+ Transition(
-                inPlaces = ISZ(currentPlace),
-                outPlaces = ISZ(assertPlace),
-                kind = TransitionKind.ControlPoint)
-              currentPlace = assertPlace
-            }
+          case l: GclSchemaLabel =>
+            // purely naming: the label is a synonym of the place at this
+            // position -- no place or transition is created
+            labelMap = labelMap + l.id ~> currentPlace
 
-          case c: GclScheduleComponentRef =>
-            val componentName = getComponentName(c)
+          case c: GclSchemaComponentRef =>
             val prePlace = currentPlace
-            val pair = resolvePostPlace(elements, i + 1, componentName)
-            val postPlace = pair._1
-            val consumed = pair._2
+            val postPlace = addPlace(PlaceId(s"after_${occurrenceId(c)}"))
+            registerOccurrencePlaces(c, prePlace, postPlace)
             transitions = transitions :+ Transition(
               inPlaces = ISZ(prePlace),
               outPlaces = ISZ(postPlace),
               kind = TransitionKind.Component)
             activationMap = activationMap + prePlace ~> c
             currentPlace = postPlace
-            if (consumed) {
-              i = i + 1
-            }
 
-          case sj: GclScheduleSplitJoin =>
+          case sj: GclSchemaSplitJoin =>
             val splitInPlace = currentPlace
-            var branchEndPlaces: ISZ[PlaceId] = ISZ()
             var branchStartPlaces: ISZ[PlaceId] = ISZ()
+            var branchEndPlaces: ISZ[PlaceId] = ISZ()
 
-            for (seq <- sj.sequences) {
-              val branchStart = branchStartFor(seq.elements)
+            // each branch's entry place IS the split transition's out-place for
+            // that branch -- no synthetic pass-through places (finding F1 of
+            // InitialVerusRunFindings.md in the hamr-system-reasoning-prototype
+            // repo: an unannotatable hop would drop carried invariants)
+            for (branch <- sj.branches) {
+              val branchStart = branchEntryPlace(branch.elements)
               branchStartPlaces = branchStartPlaces :+ branchStart
-
-              val branchEnd = processElements(seq.elements, branchStart)
+              val branchEnd = processElements(branch.elements, branchStart)
               branchEndPlaces = branchEndPlaces :+ branchEnd
             }
 
@@ -150,57 +168,78 @@ object ScheduleNextRel {
               outPlaces = branchStartPlaces,
               kind = TransitionKind.ControlPoint)
 
-            // If a single assert follows the split, use it as the join
-            // out-place directly
-            val joinPair = resolvePostPlace(elements, i + 1, "join")
-            val joinOutPlace = joinPair._1
-            val joinConsumed = joinPair._2
-
+            val joinOutPlace = freshPlace("post_join")
             transitions = transitions :+ Transition(
               inPlaces = branchEndPlaces,
               outPlaces = ISZ(joinOutPlace),
               kind = TransitionKind.ControlPoint)
 
             currentPlace = joinOutPlace
-            if (joinConsumed) {
-              i = i + 1
-            }
 
-          case _ =>
+          case _ => halt(s"Unexpected schema element: $element")
         }
-        i = i + 1
       }
       return currentPlace
     }
 
-    val startPlace = PlaceId("START")
-    addPlace(startPlace, None())
+    val startPlace = addPlace(PlaceId("START"))
 
-    val lastPlace = processElements(schedule.elements, startPlace)
+    val lastPlace = processElements(composition.schema, startPlace)
 
-    val endPlace = PlaceId("END")
-    if (lastPlace.name != "END") {
-      addPlace(endPlace, None())
-      transitions = transitions :+ Transition(
-        inPlaces = ISZ(lastPlace),
-        outPlaces = ISZ(endPlace),
-        kind = TransitionKind.ControlPoint)
-    }
+    // the hyperperiod's END place, fed by a final control point so the Post-Pre
+    // VC (END |- START) is anchored on a dedicated place
+    val endPlace = addPlace(PlaceId("END"))
+    transitions = transitions :+ Transition(
+      inPlaces = ISZ(lastPlace),
+      outPlaces = ISZ(endPlace),
+      kind = TransitionKind.ControlPoint)
 
     return NextRelResult(
       transitions = transitions,
       places = places,
       activationMap = activationMap,
       startPlace = startPlace,
-      endPlace = endPlace)
+      endPlace = endPlace,
+      labelMap = labelMap,
+      beforeMap = beforeMap,
+      afterMap = afterMap)
   }
 
-  @pure def getComponentName(c: GclScheduleComponentRef): String = {
-    val names = c.component.name
-    if (names.nonEmpty) {
-      return names(names.lastIndex)
+  // Resolves a property's point reference to a place of the net.
+  @pure def resolvePoint(point: GclSchemaPoint, nextRel: NextRelResult): Option[PlaceId] = {
+    point match {
+      case _: GclPointStart => return Some(nextRel.startPlace)
+      case _: GclPointEnd => return Some(nextRel.endPlace)
+      case p: GclPointAt => return nextRel.labelMap.get(p.label)
+      case p: GclPointBefore => return nextRel.beforeMap.get(p.occurrence)
+      case p: GclPointAfter => return nextRel.afterMap.get(p.occurrence)
+      case _ => halt(s"Unexpected schema point: $point")
     }
-    return "unknown"
+  }
+
+  // Resolves one property's bindings against the net: place -> binding. A
+  // place may be bound through only one of its names (consecutive elements
+  // share a place, so `after mrm`, `before mhs`, and a label there are
+  // synonyms); binding it twice within one property is an error.
+  @pure def decorate(nextRel: NextRelResult,
+               property: GclCompositionProperty,
+               reporter: Reporter): Map[PlaceId, GclPropertyBinding] = {
+    var result: Map[PlaceId, GclPropertyBinding] = Map.empty
+    for (b <- property.bindings) {
+      resolvePoint(b.point, nextRel) match {
+        case Some(pid) =>
+          if (result.contains(pid)) {
+            reporter.error(b.posOpt, "ScheduleNextRel",
+              s"Property '${property.id}' binds place '${pid.name}' more than once (the point '${b.point.prettyST.render}' is a synonym of an already-bound point)")
+          } else {
+            result = result + pid ~> b
+          }
+        case _ =>
+          reporter.error(b.posOpt, "ScheduleNextRel",
+            s"Property '${property.id}': point '${b.point.prettyST.render}' does not name a point of the schema (unknown label or occurrence, or an ambiguous multi-firing alias)")
+      }
+    }
+    return result
   }
 
   @pure def fireTransition(ready: Set[PlaceId], t: Transition): Set[PlaceId] = {
@@ -249,7 +288,7 @@ object ScheduleNextRel {
   }
 
   @pure def findComponentTransition(ready: Set[PlaceId],
-                                     componentRef: GclScheduleComponentRef,
+                                     componentRef: GclSchemaComponentRef,
                                      nextRel: NextRelResult): Option[Transition] = {
     for (t <- nextRel.transitions) {
       if (t.kind == TransitionKind.Component && isEnabled(ready, t)) {
@@ -267,15 +306,14 @@ object ScheduleNextRel {
     return None()
   }
 
-  @pure def getActiveAssertions(places: Set[PlaceId],
-                                 nextRel: NextRelResult): ISZ[GclScheduleAssert] = {
-    var result: ISZ[GclScheduleAssert] = ISZ()
-    for (pi <- nextRel.places) {
-      if (places.contains(pi.placeId)) {
-        pi.assertOpt match {
-          case Some(a) => result = result :+ a
-          case _ =>
-        }
+  // The bindings of a decoration whose places are in the given marking (used by
+  // the runtime monitor: one observation, per-property checks).
+  @pure def getActiveBindings(placeSet: Set[PlaceId],
+                              decoration: Map[PlaceId, GclPropertyBinding]): ISZ[(PlaceId, GclPropertyBinding)] = {
+    var result: ISZ[(PlaceId, GclPropertyBinding)] = ISZ()
+    for (e <- decoration.entries) {
+      if (placeSet.contains(e._1)) {
+        result = result :+ e
       }
     }
     return result

@@ -5,33 +5,39 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.IdPath
 import org.sireum.hamr.codegen.common.symbols.{AadlThread, GclAnnexClauseInfo, SymbolTable}
 import org.sireum.hamr.codegen.common.sysvc.ScheduleNextRel._
-import org.sireum.hamr.ir.{GclAssume, GclCaseStatement, GclGuarantee, GclSchedule, GclScheduleComponentRef}
+import org.sireum.hamr.ir.{GclAssume, GclCaseStatement, GclComposition, GclCompositionProperty,
+  GclGuarantee, GclPropertyBinding, GclSchemaComponentRef}
 
+// Generates the system-level VCs of one composition (design D8 of
+// VCGenerationDesign.md in the hamr-system-reasoning-prototype repo). The net
+// and the MHIP relation derive from the schema alone and are shared; the
+// sequential VCs and the Non-Blocking/Preservation VCs are generated per
+// property against that property's decoration (place -> binding, from
+// `ScheduleNextRel.decorate`); the Commutativity VCs are assertion-free state
+// equalities generated once per composition.
 object VCGenerator {
 
-  @pure def hasSystemSchedule(symbolTable: SymbolTable): B = {
-    return getSystemSchedule(symbolTable).nonEmpty
+  @pure def hasCompositions(symbolTable: SymbolTable): B = {
+    return getCompositions(symbolTable).nonEmpty
   }
 
-  @pure def getSystemSchedule(symbolTable: SymbolTable): Option[GclSchedule] = {
+  @pure def getCompositions(symbolTable: SymbolTable): ISZ[GclComposition] = {
+    var result: ISZ[GclComposition] = ISZ()
     symbolTable.annexClauseInfos.get(symbolTable.rootSystem.path) match {
       case Some(infos) =>
         for (info <- infos) {
           info match {
             case gclInfo: GclAnnexClauseInfo =>
-              gclInfo.annex.schedule match {
-                case Some(_) => return gclInfo.annex.schedule
-                case _ =>
-              }
+              result = result ++ gclInfo.annex.compositions
             case _ =>
           }
         }
       case _ =>
     }
-    return None()
+    return result
   }
 
-  @pure def resolveCompPath(compRef: GclScheduleComponentRef,
+  @pure def resolveCompPath(compRef: GclSchemaComponentRef,
                             resolvedAliasMap: Map[String, IdPath]): IdPath = {
     if (compRef.component.name.isEmpty) {
       return compRef.component.name
@@ -43,10 +49,14 @@ object VCGenerator {
     }
   }
 
-  @pure def generate(schedule: GclSchedule,
-                     nextRel: NextRelResult,
-                     resolvedComponentAliasMap: Map[String, IdPath],
-                     symbolTable: SymbolTable): ISZ[VC] = {
+  // Generates one property's VC set: Init-State, Pre-Assert, Next-Assert
+  // (task and control point), Post-Pre, and the per-pair Non-Blocking and
+  // Preservation VCs (whose conclusions mention the decoration's assertions).
+  @pure def generateForProperty(decoration: Map[PlaceId, GclPropertyBinding],
+                                nextRel: NextRelResult,
+                                mhipPairs: ISZ[(Z, Z)],
+                                resolvedComponentAliasMap: Map[String, IdPath],
+                                symbolTable: SymbolTable): ISZ[VC] = {
     var vcs: ISZ[VC] = ISZ()
 
     val threads = symbolTable.getThreads()
@@ -54,54 +64,94 @@ object VCGenerator {
       threads = for (t <- threads) yield t,
       symbolTable = symbolTable)
 
-    val placeMap: Map[PlaceId, PlaceInfo] = {
-      var m: Map[PlaceId, PlaceInfo] = Map.empty
-      for (p <- nextRel.places) {
-        m = m + p.placeId ~> p
-      }
-      m
-    }
-
-    vcs = vcs :+ generateInitStateVC(nextRel, symbolTable)
+    vcs = vcs :+ generateInitStateVC(decoration, nextRel, symbolTable)
 
     for (i <- z"0" until nextRel.transitions.size) {
       val t = nextRel.transitions(i)
       nextRel.activationMap.get(t.inPlaces(0)) match {
         case Some(compRef) =>
           val compPath = resolveCompPath(compRef, resolvedComponentAliasMap)
-          vcs = vcs :+ generatePreAssertVC(i, t, compRef, placeMap, compPath, symbolTable)
-          vcs = vcs :+ generateNextAssertTaskVC(i, t, compRef, placeMap, compPath, writeSets, symbolTable)
+          // Contract projection: the property uses this component's contract iff
+          // it binds one of the component's out-places (otherwise its Next-Assert
+          // conclusion is trivial and only the write frames are needed). An unused
+          // contract is instantiated as (taskPre, taskPost) := (true, true), which
+          // trivially satisfies taskConVC and preTaskVC -- so a sparse property
+          // need not carry the upstream plumbing that establishes the assumes of
+          // components outside its story.
+          val covered = coversTransition(t, decoration)
+          vcs = vcs :+ generatePreAssertVC(i, t, compRef, decoration, compPath, covered, symbolTable)
+          vcs = vcs :+ generateNextAssertTaskVC(i, t, compRef, decoration, compPath, covered, writeSets, symbolTable)
         case _ =>
-          vcs = vcs :+ generateNextAssertSkipVC(i, t, placeMap)
+          vcs = vcs :+ generateNextAssertSkipVC(i, t, decoration)
       }
     }
 
-    vcs = vcs :+ generatePostPreVC(nextRel, placeMap)
+    vcs = vcs :+ generatePostPreVC(nextRel, decoration)
 
-    val mhipPairs = MHIPComputer.computeMHIP(nextRel)
     for (pair <- mhipPairs) {
-      vcs = vcs ++ generateIndependenceVCs(pair._1, pair._2, placeMap, nextRel, writeSets, resolvedComponentAliasMap)
+      vcs = vcs ++ generateIndependenceVCs(pair._1, pair._2, decoration, nextRel, writeSets, resolvedComponentAliasMap)
     }
 
     return vcs
   }
 
-  @pure def getAssertExp(placeId: PlaceId, placeMap: Map[PlaceId, PlaceInfo]): Option[org.sireum.lang.ast.Exp] = {
-    placeMap.get(placeId) match {
-      case Some(info) =>
-        info.assertOpt match {
-          case Some(a) => return Some(a.exp)
-          case _ => return None()
-        }
+  // Commutativity (execIndependent) is a state-equality over the components'
+  // frames -- it mentions no assertions, so it is generated once per
+  // composition and shared by all of its properties. Premises are empty: the
+  // uninterpreted-action encoding discharges by congruence when the pair
+  // satisfies Bernstein's conditions, independently of any decoration.
+  @pure def generateCommutativityVCs(nextRel: NextRelResult,
+                                     mhipPairs: ISZ[(Z, Z)],
+                                     resolvedComponentAliasMap: Map[String, IdPath],
+                                     symbolTable: SymbolTable): ISZ[VC] = {
+    var vcs: ISZ[VC] = ISZ()
+    val threads = symbolTable.getThreads()
+    val writeSets = WriteFrameBuilder.buildAll(
+      threads = for (t <- threads) yield t,
+      symbolTable = symbolTable)
+    for (pair <- mhipPairs) {
+      val t1 = nextRel.transitions(pair._1)
+      val t2 = nextRel.transitions(pair._2)
+      val info1 = transitionComponentInfo(t1, nextRel, writeSets, resolvedComponentAliasMap)
+      val info2 = transitionComponentInfo(t2, nextRel, writeSets, resolvedComponentAliasMap)
+      (info1, info2) match {
+        case (Some((c1, ws1)), Some((_, _))) =>
+          vcs = vcs :+ VC(
+            kind = VCKind.Commutativity,
+            premises = ISZ(),
+            conclusion = ISZ(),
+            writeSetOpt = ws1,
+            source = VCSource(transitionIdx = None(), componentOpt = Some(c1.component), mhipPairOpt = Some(pair)))
+        case _ =>
+      }
+    }
+    return vcs
+  }
+
+  // A property covers a component transition iff it binds one of the
+  // transition's out-places, i.e., its Next-Assert conclusion is non-trivial.
+  @pure def coversTransition(t: Transition, decoration: Map[PlaceId, GclPropertyBinding]): B = {
+    for (p <- t.outPlaces) {
+      if (decoration.contains(p)) {
+        return T
+      }
+    }
+    return F
+  }
+
+  @pure def getAssertExp(placeId: PlaceId,
+                         decoration: Map[PlaceId, GclPropertyBinding]): Option[org.sireum.lang.ast.Exp] = {
+    decoration.get(placeId) match {
+      case Some(b) => return Some(b.exp)
       case _ => return None()
     }
   }
 
   @pure def collectPlaceAsserts(placeIds: ISZ[PlaceId],
-                                placeMap: Map[PlaceId, PlaceInfo]): ISZ[org.sireum.lang.ast.Exp] = {
+                                decoration: Map[PlaceId, GclPropertyBinding]): ISZ[org.sireum.lang.ast.Exp] = {
     var exps: ISZ[org.sireum.lang.ast.Exp] = ISZ()
     for (pid <- placeIds) {
-      getAssertExp(pid, placeMap) match {
+      getAssertExp(pid, decoration) match {
         case Some(e) => exps = exps :+ e
         case _ =>
       }
@@ -146,7 +196,8 @@ object VCGenerator {
     return exps
   }
 
-  @pure def generateInitStateVC(nextRel: NextRelResult,
+  @pure def generateInitStateVC(decoration: Map[PlaceId, GclPropertyBinding],
+                                nextRel: NextRelResult,
                                 symbolTable: SymbolTable): VC = {
     var initGuarantees: ISZ[org.sireum.lang.ast.Exp] = ISZ()
     for (thread <- symbolTable.getThreads()) {
@@ -164,14 +215,7 @@ object VCGenerator {
       }
     }
 
-    val placeMap: Map[PlaceId, PlaceInfo] = {
-      var m: Map[PlaceId, PlaceInfo] = Map.empty
-      for (p <- nextRel.places) {
-        m = m + p.placeId ~> p
-      }
-      m
-    }
-    val startAsserts = collectPlaceAsserts(ISZ(nextRel.startPlace), placeMap)
+    val startAsserts = collectPlaceAsserts(ISZ(nextRel.startPlace), decoration)
 
     return VC(
       kind = VCKind.InitState,
@@ -184,26 +228,31 @@ object VCGenerator {
         mhipPairOpt = None()))
   }
 
+  // `covered = F` instantiates the component's taskPre as `true` (contract
+  // projection): the obligation is emitted trivially for uniformity (D5).
   @pure def generatePreAssertVC(transIdx: Z,
                                 t: Transition,
-                                compRef: GclScheduleComponentRef,
-                                placeMap: Map[PlaceId, PlaceInfo],
+                                compRef: GclSchemaComponentRef,
+                                decoration: Map[PlaceId, GclPropertyBinding],
                                 compPath: IdPath,
+                                covered: B,
                                 symbolTable: SymbolTable): VC = {
-    val preAsserts = collectPlaceAsserts(t.inPlaces, placeMap)
+    val preAsserts = collectPlaceAsserts(t.inPlaces, decoration)
 
     var assumes: ISZ[org.sireum.lang.ast.Exp] = ISZ()
-    getGclInfoOpt(compPath, symbolTable) match {
-      case Some(info) =>
-        info.annex.compute match {
-          case Some(compute) =>
-            for (a <- compute.assumes) {
-              assumes = assumes :+ a.exp
-            }
-          case _ =>
-        }
-        assumes = assumes ++ integrationExps(symbolTable.getThreadById(compPath), info, T)
-      case _ =>
+    if (covered) {
+      getGclInfoOpt(compPath, symbolTable) match {
+        case Some(info) =>
+          info.annex.compute match {
+            case Some(compute) =>
+              for (a <- compute.assumes) {
+                assumes = assumes :+ a.exp
+              }
+            case _ =>
+          }
+          assumes = assumes ++ integrationExps(symbolTable.getThreadById(compPath), info, T)
+        case _ =>
+      }
     }
 
     return VC(
@@ -236,33 +285,39 @@ object VCGenerator {
     case _ => c.guarantees
   }
 
+  // `covered = F` instantiates the component's taskPost as `true` (contract
+  // projection): the Next-Assert relies on the write frames alone -- sound
+  // without the component's Pre-Assert, since frames hold unconditionally.
   @pure def generateNextAssertTaskVC(transIdx: Z,
                                      t: Transition,
-                                     compRef: GclScheduleComponentRef,
-                                     placeMap: Map[PlaceId, PlaceInfo],
+                                     compRef: GclSchemaComponentRef,
+                                     decoration: Map[PlaceId, GclPropertyBinding],
                                      compPath: IdPath,
+                                     covered: B,
                                      writeSets: Map[IdPath, WriteFrameBuilder.ComponentWriteSet],
                                      symbolTable: SymbolTable): VC = {
-    val preAsserts = collectPlaceAsserts(t.inPlaces, placeMap)
+    val preAsserts = collectPlaceAsserts(t.inPlaces, decoration)
 
     var postConditions: ISZ[org.sireum.lang.ast.Exp] = ISZ()
-    getGclInfoOpt(compPath, symbolTable) match {
-      case Some(info) =>
-        info.annex.compute match {
-          case Some(compute) =>
-            for (g <- compute.guarantees) {
-              postConditions = postConditions :+ g.exp
-            }
-            for (c <- compute.cases) {
-              postConditions = postConditions :+ caseToExp(c)
-            }
-          case _ =>
-        }
-        postConditions = postConditions ++ integrationExps(symbolTable.getThreadById(compPath), info, F)
-      case _ =>
+    if (covered) {
+      getGclInfoOpt(compPath, symbolTable) match {
+        case Some(info) =>
+          info.annex.compute match {
+            case Some(compute) =>
+              for (g <- compute.guarantees) {
+                postConditions = postConditions :+ g.exp
+              }
+              for (c <- compute.cases) {
+                postConditions = postConditions :+ caseToExp(c)
+              }
+            case _ =>
+          }
+          postConditions = postConditions ++ integrationExps(symbolTable.getThreadById(compPath), info, F)
+        case _ =>
+      }
     }
 
-    val postAsserts = collectPlaceAsserts(t.outPlaces, placeMap)
+    val postAsserts = collectPlaceAsserts(t.outPlaces, decoration)
 
     return VC(
       kind = VCKind.NextAssertTask,
@@ -277,9 +332,9 @@ object VCGenerator {
 
   @pure def generateNextAssertSkipVC(transIdx: Z,
                                      t: Transition,
-                                     placeMap: Map[PlaceId, PlaceInfo]): VC = {
-    val preAsserts = collectPlaceAsserts(t.inPlaces, placeMap)
-    val postAsserts = collectPlaceAsserts(t.outPlaces, placeMap)
+                                     decoration: Map[PlaceId, GclPropertyBinding]): VC = {
+    val preAsserts = collectPlaceAsserts(t.inPlaces, decoration)
+    val postAsserts = collectPlaceAsserts(t.outPlaces, decoration)
 
     return VC(
       kind = VCKind.NextAssertSkip,
@@ -293,9 +348,9 @@ object VCGenerator {
   }
 
   @pure def generatePostPreVC(nextRel: NextRelResult,
-                               placeMap: Map[PlaceId, PlaceInfo]): VC = {
-    val endAsserts = collectPlaceAsserts(ISZ(nextRel.endPlace), placeMap)
-    val startAsserts = collectPlaceAsserts(ISZ(nextRel.startPlace), placeMap)
+                               decoration: Map[PlaceId, GclPropertyBinding]): VC = {
+    val endAsserts = collectPlaceAsserts(ISZ(nextRel.endPlace), decoration)
+    val startAsserts = collectPlaceAsserts(ISZ(nextRel.startPlace), decoration)
 
     return VC(
       kind = VCKind.PostPre,
@@ -314,7 +369,7 @@ object VCGenerator {
                                     nextRel: NextRelResult,
                                     writeSets: Map[IdPath, WriteFrameBuilder.ComponentWriteSet],
                                     resolvedAliasMap: Map[String, IdPath]):
-                                    Option[(GclScheduleComponentRef, Option[WriteFrameBuilder.ComponentWriteSet])] = {
+                                    Option[(GclSchemaComponentRef, Option[WriteFrameBuilder.ComponentWriteSet])] = {
     if (t.kind != TransitionKind.Component || t.inPlaces.isEmpty) {
       return None()
     }
@@ -325,21 +380,20 @@ object VCGenerator {
     }
   }
 
-  // Generates the independence VCs for one MHIP pair of transitions (identified by their
-  // indices into `nextRel.transitions`), matching the Isabelle `independent` =
-  // `execIndependent ∧ nonBlocking ∧ nonContradictPost`. Each sub-property carries the
-  // activation guards from the formalization, so only the non-trivial obligations are
-  // emitted:
+  // Generates the per-property independence VCs for one MHIP pair of transitions
+  // (identified by their indices into `nextRel.transitions`), matching the Isabelle
+  // `independent` = `execIndependent ∧ nonBlocking ∧ nonContradictPost`. Each
+  // sub-property carries the activation guards from the formalization, so only the
+  // non-trivial obligations are emitted:
   //   - NonBlocking / NonContradictPost (Preservation): one directed VC per pair member
   //     that is a component transition (the direction in which that component fires).
-  //   - Commutativity (execIndependent): a single VC, only when BOTH members are
-  //     component transitions (symmetric, so one suffices).
-  // Consequently a (component, component) pair yields 5 VCs (2 + 2 + 1), a
-  // (component, control-point) pair yields 2 (1 + 1), and a (control-point, control-point)
-  // pair yields 0 (trivially independent).
+  // Commutativity (execIndependent) mentions no assertions and is generated once per
+  // composition by `generateCommutativityVCs`, not here. Consequently, per property, a
+  // (component, component) pair yields 4 VCs (2 + 2), a (component, control-point) pair
+  // yields 2 (1 + 1), and a (control-point, control-point) pair yields 0.
   @pure def generateIndependenceVCs(i1: Z,
                                     i2: Z,
-                                    placeMap: Map[PlaceId, PlaceInfo],
+                                    decoration: Map[PlaceId, GclPropertyBinding],
                                     nextRel: NextRelResult,
                                     writeSets: Map[IdPath, WriteFrameBuilder.ComponentWriteSet],
                                     resolvedAliasMap: Map[String, IdPath]): ISZ[VC] = {
@@ -348,10 +402,10 @@ object VCGenerator {
     val t2 = nextRel.transitions(i2)
     val mhipSource = (i1, i2)
 
-    val t1Pre = collectPlaceAsserts(t1.inPlaces, placeMap)
-    val t1Post = collectPlaceAsserts(t1.outPlaces, placeMap)
-    val t2Pre = collectPlaceAsserts(t2.inPlaces, placeMap)
-    val t2Post = collectPlaceAsserts(t2.outPlaces, placeMap)
+    val t1Pre = collectPlaceAsserts(t1.inPlaces, decoration)
+    val t1Post = collectPlaceAsserts(t1.outPlaces, decoration)
+    val t2Pre = collectPlaceAsserts(t2.inPlaces, decoration)
+    val t2Post = collectPlaceAsserts(t2.outPlaces, decoration)
 
     val info1 = transitionComponentInfo(t1, nextRel, writeSets, resolvedAliasMap)
     val info2 = transitionComponentInfo(t2, nextRel, writeSets, resolvedAliasMap)
@@ -399,29 +453,6 @@ object VCGenerator {
           conclusion = t1Post,
           writeSetOpt = ws2,
           source = VCSource(transitionIdx = None(), componentOpt = Some(c2.component), mhipPairOpt = Some(mhipSource)))
-      case _ =>
-    }
-
-    // Execution independence / commutativity (Isabelle execIndependent): under both
-    // transitions' pre-assertions, firing t1 then t2 yields the same system state as firing
-    // t2 then t1. The obligation is symmetric, so a single VC per pair suffices, and its
-    // activation guard requires BOTH members to be component transitions. The conclusion is
-    // a state-equality rather than a GUMBO assertion, so `conclusion` is empty: the
-    // serializer synthesizes the goal by abstracting each component's action as
-    // uninterpreted functions over its read scope. That encoding discharges automatically
-    // only when each component's write set is disjoint from the other's write set AND read
-    // scope (Bernstein's conditions -- write-set disjointness alone is insufficient, and a
-    // frame-only encoding is unprovable even for disjoint pairs; see FormalizationIssues.md
-    // in the hamr-system-reasoning-prototype repo). `writeSetOpt` carries t1's frame; t2's
-    // frame is resolved from `mhipPairOpt`.
-    (info1, info2) match {
-      case (Some((c1, ws1)), Some((_, _))) =>
-        vcs = vcs :+ VC(
-          kind = VCKind.Commutativity,
-          premises = t1Pre ++ t2Pre,
-          conclusion = ISZ(),
-          writeSetOpt = ws1,
-          source = VCSource(transitionIdx = None(), componentOpt = Some(c1.component), mhipPairOpt = Some(mhipSource)))
       case _ =>
     }
 
