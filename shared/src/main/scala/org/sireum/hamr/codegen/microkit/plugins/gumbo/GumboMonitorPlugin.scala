@@ -114,16 +114,63 @@ object GumboMonitorPlugin {
                                     origSymbolTable: SymbolTable,
                                     origStore: Store,
                                     reporter: Reporter): Option[(Store, Aadl, AadlTypes, SymbolTable)] = {
-    var localStore: Store = origStore + keyModelTransformed ~> BoolValue(T)
+    // Inject and wire one monitor per name: size-1 for the component-level gumbo
+    // monitor, one per composition for the sys-assert monitor (design D8,
+    // approach (i)). Setting KEY_UserLandMonitorPlugin_Model_Transformed
+    // replicates the side effect of the prior super[UserLandMonitorPlugin].
+    // handleModelTransform call. Each iteration re-resolves, so the shared
+    // source-side sv_ ports (guarded by existingThreadFeatureNames against the
+    // current symbol table) are created on the first iteration and reused after.
+    var localStore: Store = origStore + keyModelTransformed ~> BoolValue(T) +
+      UserLandMonitorPlugin.KEY_UserLandMonitorPlugin_Model_Transformed ~> BoolValue(T)
+    var curModel = origModel
+    var curTypes = origTypes
+    var curSymbolTable = origSymbolTable
 
-    super[UserLandMonitorPlugin].handleModelTransform(origModel, options, origTypes, origSymbolTable, localStore, reporter) match {
-      case Some((uStore, model, types, symbolTable)) => {
-        localStore = uStore
+    for (mName <- monitorNames(origSymbolTable)) {
+      val sysPath = curModel.components(0).identifier.name
+      val mProcessPath = monitorProcessPathNamed(sysPath, mName)
+      val mThreadPath = monitorThreadPathNamed(sysPath, mName)
+
+      injectMonitorPDNamed(curModel, mProcessPath, mThreadPath, options, curSymbolTable, localStore, reporter) match {
+        case Some((s, m, t, st)) =>
+          localStore = s
+          curModel = m
+          curTypes = t
+          curSymbolTable = st
+        case _ => return None()
+      }
+
+      wireMonitorStateVars(curModel, options, curSymbolTable, mProcessPath, mThreadPath, localStore, reporter) match {
+        case Some((s, m, t, st)) =>
+          localStore = s
+          curModel = m
+          curTypes = t
+          curSymbolTable = st
+        case _ => return None()
+      }
+    }
+
+    return Some((localStore, curModel, curTypes, curSymbolTable))
+  }
+
+  // Wires each source thread's state-variable (sv_) ports to the given monitor:
+  // source-side ports are created once (guarded by existingThreadFeatureNames
+  // against the passed symbol table) and the monitor-side ports, delegations,
+  // fan-out connections, and connection instances are created for this monitor.
+  // Factored out of handleModelTransform so each monitor (one per composition
+  // for the sys-assert monitor, design D8 (i)) is wired in turn.
+  def wireMonitorStateVars(model: Aadl,
+                           options: HamrCli.CodegenOption,
+                           symbolTable: SymbolTable,
+                           monitorProcessPath: IdPath,
+                           monitorThreadPath: IdPath,
+                           store: Store,
+                           reporter: Reporter): Option[(Store, Aadl, AadlTypes, SymbolTable)] = {
+        var localStore = store
 
         val system = model.components(0)
         val systemPath = system.identifier.name
-        val monitorProcessPath = getMonitorProcessPath(systemPath)
-        val monitorThreadPath = getMonitorThreadPath(systemPath)
 
         var updatedSubComponents: ISZ[ir.Component] = system.subComponents
         var additionalMonitorThreadFeatures: ISZ[ir.Feature] = ISZ()
@@ -344,10 +391,6 @@ object GumboMonitorPlugin {
           }
         }
         return None()
-      }
-      case _ =>
-        return None()
-    }
   }
 
 
@@ -652,9 +695,8 @@ object GumboMonitorPlugin {
     val gumboxContribs = GumboXRustPlugin.getGumboXContributions(localStore).get
 
     if (gumboxContribs.componentContributions.nonEmpty) {
-      val monitorThreadPath: ISZ[String] = getMonitorThreadPath(symbolTable.rootSystem.path)
-
       // Build destination port path -> monitor port name mapping
+      // (composition-independent — built once, shared by all monitors)
       var dstPortToMonitorPortName: Map[ISZ[String], String] = Map.empty
       for (conn <- symbolTable.aadlConnections) {
         conn match {
@@ -667,6 +709,12 @@ object GumboMonitorPlugin {
         }
       }
 
+      // One monitor component per name: size-1 for the gumbo monitor, one per
+      // composition for the sys-assert monitor (design D8, approach (i)).
+      // Re-fetch contributions each iteration since the prior iteration updated
+      // a (different) monitor component.
+      for (monitorName <- monitorNames(symbolTable)) {
+      val monitorThreadPath: ISZ[String] = monitorThreadPathNamed(symbolTable.rootSystem.path, monitorName)
       val contributions = CRustComponentPlugin.getCRustComponentContributions(localStore)
       contributions.componentContributions.get(monitorThreadPath) match {
         case Some(monitorContrib) =>
@@ -956,6 +1004,7 @@ object GumboMonitorPlugin {
 
         case _ =>
       }
+      }
     }
 
     return (localStore, ISZ())
@@ -982,8 +1031,6 @@ object GumboMonitorPlugin {
 
     val monitoringStore = GumboMonitorPlugin.getRustMonitoringStore(store).get
     val componentContributions = CRustComponentPlugin.getCRustComponentContributions(store).componentContributions
-
-    val monitorThreadPath: ISZ[String] = getMonitorThreadPath(symbolTable.rootSystem.path)
 
     for (e <- componentContributions.entries) {
       monitoringStore.entries.get(e._1) match {
@@ -1089,9 +1136,13 @@ object GumboMonitorPlugin {
       }
     }
 
-    // Generate GUMBOX and container modules in the monitor crate under src/gumbox
+    // Generate GUMBOX and container modules in each monitor crate under src/gumbox.
+    // One monitor per name: size-1 for the gumbo monitor, one per composition for
+    // the sys-assert monitor (design D8, approach (i)).
     val gumboxContribsOpt = GumboXRustPlugin.getGumboXContributions(store)
     if (gumboxContribsOpt.nonEmpty) {
+      for (monitorName <- monitorNames(symbolTable)) {
+      val monitorThreadPath: ISZ[String] = monitorThreadPathNamed(symbolTable.rootSystem.path, monitorName)
       symbolTable.componentMap.get(monitorThreadPath) match {
         case Some(monitorComp) =>
           val monitorThread = monitorComp.asInstanceOf[AadlThread]
@@ -1205,6 +1256,7 @@ object GumboMonitorPlugin {
           resources = resources :+ ResourceUtil.createResource(s"$monitorSrcDir/lib.rs", monitorLibContent, T)
 
         case _ =>
+      }
       }
     }
 

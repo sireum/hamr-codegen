@@ -37,9 +37,28 @@ object UserLandMonitorPlugin {
 
   @strictpure def getMonitorName: String = "userland_monitor"
 
-  @strictpure def getMonitorProcessPath(root: IdPath): IdPath = root :+ s"${getMonitorName}_process"
+  // Monitor PD process/thread paths derived from an explicit monitor name. The
+  // no-arg getMonitorProcessPath/getMonitorThreadPath below delegate using
+  // getMonitorName (one monitor per plugin instance). The name-parameterized
+  // forms let a single plugin emit several monitors — e.g. the sys-assert
+  // monitor, which produces one per composition (design D8): the caller passes
+  // the per-composition monitor name (sys_assert_<id>_monitor).
+  @strictpure def monitorProcessPathNamed(root: IdPath, monitorName: String): IdPath =
+    root :+ s"${monitorName}_process"
 
-  @strictpure def getMonitorThreadPath(root: IdPath): IdPath = getMonitorProcessPath(root) :+ s"${getMonitorName}_thread"
+  @strictpure def monitorThreadPathNamed(root: IdPath, monitorName: String): IdPath =
+    monitorProcessPathNamed(root, monitorName) :+ s"${monitorName}_thread"
+
+  @strictpure def getMonitorProcessPath(root: IdPath): IdPath = monitorProcessPathNamed(root, getMonitorName)
+
+  @strictpure def getMonitorThreadPath(root: IdPath): IdPath = monitorThreadPathNamed(root, getMonitorName)
+
+  // The monitor names this plugin instance emits, in order. Default: a single
+  // monitor named getMonitorName. The sys-assert monitor overrides this to
+  // return one name per composition (sys_assert_<id>_monitor), so each phase
+  // loops over the result to emit N monitor components (design D8, approach
+  // (i)). All non-sys-assert monitors keep the singleton behavior (size-1 loop).
+  @strictpure def monitorNames(symbolTable: SymbolTable): ISZ[String] = ISZ(getMonitorName)
 
   @strictpure def getRetainedNonModelPorts(store: Store): ISZ[IdPath] = ISZ()
 
@@ -72,11 +91,25 @@ object UserLandMonitorPlugin {
                                     symbolTable: SymbolTable,
                                     store: Store,
                                     reporter: Reporter): Option[(Store, Aadl, AadlTypes, SymbolTable)] = {
-    var localStore = store + UserLandMonitorPlugin.KEY_UserLandMonitorPlugin_Model_Transformed ~> BoolValue(T)
-
+    val localStore = store + UserLandMonitorPlugin.KEY_UserLandMonitorPlugin_Model_Transformed ~> BoolValue(T)
     val sysPath = model.components(0).identifier.name
-    val monitorProcessorPath = getMonitorProcessPath(sysPath)
-    val monitorThreadPath = getMonitorThreadPath(sysPath)
+    return injectMonitorPDNamed(model, getMonitorProcessPath(sysPath), getMonitorThreadPath(sysPath),
+      options, symbolTable, localStore, reporter)
+  }
+
+  // Injects a single monitor PD at the given process/thread paths, re-resolves
+  // the model, and records the PD as a non-model element. Factored out of
+  // handleModelTransform so a plugin that emits several monitors (the sys-assert
+  // monitor: one per composition, design D8 approach (i)) can inject each in
+  // turn, threading the returned model/symbolTable into the next injection.
+  def injectMonitorPDNamed(model: Aadl,
+                           monitorProcessorPath: IdPath,
+                           monitorThreadPath: IdPath,
+                           options: HamrCli.CodegenOption,
+                           symbolTable: SymbolTable,
+                           store: Store,
+                           reporter: Reporter): Option[(Store, Aadl, AadlTypes, SymbolTable)] = {
+    var localStore = store
 
     val s = UserLandMonitorInjector().inject(
       model,
@@ -148,6 +181,22 @@ object UserLandMonitorPlugin {
   override def handle(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
     var localStore = store + UserLandMonitorPlugin.KEY_UserLandMonitorPlugin_handled ~> BoolValue(T)
     var resources: ISZ[Resource] = ISZ()
+    // One MSD/scheduler/.mk bundle per monitor: size-1 for the gumbo and userland
+    // monitors, one per composition for the sys-assert monitor (design D8,
+    // approach (i)). Each monitor's MSD strips the other monitors' PDs, so it
+    // includes only its own; the user selects one via CONFIG=<bundle>.mk.
+    for (monitorName <- monitorNames(symbolTable)) {
+      val r = handleForMonitor(model, options, symbolTable, monitorName, localStore, reporter)
+      localStore = r._1
+      resources = resources ++ r._2
+    }
+    return (localStore, resources)
+  }
+
+  def handleForMonitor(model: Aadl, options: HamrCli.CodegenOption, symbolTable: SymbolTable,
+                       monitorName: String, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
+    var localStore = store
+    var resources: ISZ[Resource] = ISZ()
 
     // Use the original unmodified "normal" SD so that memory regions
     // removed by a prior monitor's filtering are still available
@@ -155,8 +204,8 @@ object UserLandMonitorPlugin {
     localStore = s
 
     val sysPath = model.components(0).identifier.name
-    val monitorProcessorPath = getMonitorProcessPath(sysPath)
-    val monitorThreadPath = getMonitorThreadPath(sysPath)
+    val monitorProcessorPath = monitorProcessPathNamed(sysPath, monitorName)
+    val monitorThreadPath = monitorThreadPathNamed(sysPath, monitorName)
 
     val monitorThreadId = s"${monitorProcessorPath(monitorProcessorPath.lastIndex)}_${monitorThreadPath(monitorThreadPath.lastIndex)}"
     val monitorMonPdName = s"${monitorThreadId}_MON"
@@ -413,8 +462,8 @@ object UserLandMonitorPlugin {
           GenericMemoryRegion(name = "sched_state", sizeInKiBytes = 4) :+
           GenericMemoryRegion(name = "sched_schedule", sizeInKiBytes = 4)
 
-        localStore = SystemDescriptionProviderPlugin.putMSD(getMonitorName, SystemDescription(
-          name = getMonitorName,
+        localStore = SystemDescriptionProviderPlugin.putMSD(monitorName, SystemDescription(
+          name = monitorName,
           schedulingDomains = monitorScheds,
           protectionDomains = monitorPdsWithSchedMaps,
           memoryRegions = monitorMemoryRegions,
@@ -443,18 +492,18 @@ object UserLandMonitorPlugin {
             val schedulerPath = s"${options.sel4OutputDir.get}/scheduler"
 
             resources = resources :+ ResourceUtil.createResourceH(
-              path = s"$schedulerPath/src/$getMonitorName.scheduler.c",
-              content = StaticContent.monitor_scheduler_c(getMonitorName),
+              path = s"$schedulerPath/src/$monitorName.scheduler.c",
+              content = StaticContent.monitor_scheduler_c(monitorName),
               overwrite = T, isDatatype = F)
 
             resources = resources :+ ResourceUtil.createResourceH(
-              path = s"$schedulerPath/include/$getMonitorName.scheduler_config.h",
+              path = s"$schedulerPath/include/$monitorName.scheduler_config.h",
               content = StaticContent.monitor_scheduler_config_h,
               overwrite = T, isDatatype = F)
 
             resources = resources :+ ResourceUtil.createResourceH(
-              path = s"$schedulerPath/include/$getMonitorName.user_config.h",
-              content = StaticContent.monitor_user_config_h(getMonitorName),
+              path = s"$schedulerPath/include/$monitorName.user_config.h",
+              content = StaticContent.monitor_user_config_h(monitorName),
               overwrite = T, isDatatype = F)
 
             val monitorMkContent: ST =
@@ -462,19 +511,19 @@ object UserLandMonitorPlugin {
                   |
                   |# Monitor configuration for runtime monitoring scheduler variant.
                   |# Usage: make CONFIG=monitor.mk
-                  |export MSD := $$(TOP_DIR)/$getMonitorName.meta.py
-                  |export SCHEDULER_C := $$(TOP_DIR)/scheduler/src/$getMonitorName.scheduler.c
-                  |export SCHEDULER_CONFIG_HEADERS := $$(TOP_DIR)/scheduler/include/$getMonitorName.user_config.h"""
+                  |export MSD := $$(TOP_DIR)/$monitorName.meta.py
+                  |export SCHEDULER_C := $$(TOP_DIR)/scheduler/src/$monitorName.scheduler.c
+                  |export SCHEDULER_CONFIG_HEADERS := $$(TOP_DIR)/scheduler/include/$monitorName.user_config.h"""
 
             resources = resources :+ ResourceUtil.createResourceH(
-              path = s"${options.sel4OutputDir.get}/${getMonitorName}.mk",
+              path = s"${options.sel4OutputDir.get}/${monitorName}.mk",
               content = monitorMkContent,
               overwrite = T, isDatatype = F)
           case _ =>
-            reporter.error(None(), toolName, s"Injected monitor contributions for ${getMonitorName} was not found")
+            reporter.error(None(), toolName, s"Injected monitor contributions for ${monitorName} was not found")
         }
       case _ =>
-        reporter.error(None(), toolName, s"Injected monitor component '${getMonitorName}' was not found")
+        reporter.error(None(), toolName, s"Injected monitor component '${monitorName}' was not found")
     }
 
     return (localStore, resources)

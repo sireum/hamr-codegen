@@ -29,6 +29,13 @@ object GumboSysAssertMonitorPlugin {
   @strictpure def getCompositions(symbolTable: SymbolTable): ISZ[GclComposition] =
     VCGenerator.getCompositions(symbolTable)
 
+  // The per-composition monitor name. Each composition gets its own monitor
+  // component/crate (design D8, approach (i)); the id-derived name feeds the PD
+  // process/thread paths, the sys_assert_<id>_monitor.{meta.py,scheduler.c,mk}
+  // bundle, and the per-composition store sub-keys.
+  @strictpure def monitorNameForComposition(id: String): String =
+    s"sys_assert_${id}_monitor"
+
 }
 
 // Extends GumboMonitorPlugin to create a separate monitor protection domain for
@@ -41,6 +48,13 @@ object GumboSysAssertMonitorPlugin {
 @sig trait GumboSysAssertMonitorPlugin extends GumboMonitorPlugin {
 
   @strictpure override def getMonitorName: String = "sys_assert_monitor"
+
+  // One monitor per composition (design D8, approach (i)): each phase loops over
+  // these names. getMonitorName above remains the plugin's lifecycle/store-key
+  // namespace; the per-composition artifacts use these id-derived names.
+  @strictpure override def monitorNames(symbolTable: SymbolTable): ISZ[String] =
+    for (c <- GumboSysAssertMonitorPlugin.getCompositions(symbolTable))
+      yield GumboSysAssertMonitorPlugin.monitorNameForComposition(c.id)
 
   @pure override def canHandleModelTransform(model: Aadl,
                                               options: HamrCli.CodegenOption,
@@ -76,25 +90,23 @@ object GumboSysAssertMonitorPlugin {
 
     val (parentStore, parentResources) = super.handleMonitorMethod(model, options, types, symbolTable, store, reporter)
 
-    val monitorThreadPath: ISZ[String] = getMonitorThreadPath(symbolTable.rootSystem.path)
-    val contributions = CRustComponentPlugin.getCRustComponentContributions(parentStore)
-
     var localStore = parentStore
+    var resources = parentResources
 
     val compositions = GumboSysAssertMonitorPlugin.getCompositions(symbolTable)
     if (compositions.isEmpty) {
       return (localStore, parentResources)
     }
-    // TODO (D8): one monitor per composition, named by the composition id, with a
-    // per-composition meta program. Until the multi-monitor plumbing lands, the
-    // monitor observes the first composition only.
-    if (compositions.size > 1) {
-      reporter.warn(None(), name,
-        s"${compositions.size} compositions declared; the sys-assert monitor currently observes only '${compositions(0).id}'")
-    }
-    val composition = compositions(0)
 
-    contributions.componentContributions.get(monitorThreadPath) match {
+    // One monitor component per composition (design D8, approach (i)): each
+    // composition's dispatch/check body is baked into its own id-named monitor
+    // component (sys_assert_<id>_monitor). Re-fetch the contributions each
+    // iteration since the prior iteration updated a (different) monitor component.
+    for (composition <- compositions) {
+      val monitorName = GumboSysAssertMonitorPlugin.monitorNameForComposition(composition.id)
+      val monitorThreadPath: ISZ[String] = monitorThreadPathNamed(symbolTable.rootSystem.path, monitorName)
+      val contributions = CRustComponentPlugin.getCRustComponentContributions(localStore)
+      contributions.componentContributions.get(monitorThreadPath) match {
       case Some(monitorContrib) =>
         val existingImpl = monitorContrib.appStructImpl.asInstanceOf[RAST.ImplBase]
 
@@ -540,7 +552,7 @@ object GumboSysAssertMonitorPlugin {
         // module so they stay outside the verus! macro (they use bitwise bool ops
         // via the implies!/impliesL! macros which Verus rejects)
         val (moduleResources, modAndUse) =
-          getSystemGumboFunctions(symbolTable, options, types, localStore, reporter)
+          getSystemGumboFunctions(symbolTable, options, types, monitorThreadPath, localStore, reporter)
 
         val updatedContrib = monitorContrib(
           appStructDef = updatedStruct,
@@ -554,12 +566,13 @@ object GumboSysAssertMonitorPlugin {
             contributions.componentContributions + monitorThreadPath ~> updatedContrib),
           localStore)
 
-        return (localStore, parentResources ++ moduleResources)
+        resources = resources ++ moduleResources
 
       case _ =>
+      }
     }
 
-    return (localStore, parentResources)
+    return (localStore, resources)
   }
 
   @strictpure def placeConstName(p: ScheduleNextRel.PlaceId): String =
@@ -580,6 +593,7 @@ object GumboSysAssertMonitorPlugin {
   @pure def getSystemGumboFunctions(symbolTable: SymbolTable,
                                      options: HamrCli.CodegenOption,
                                      types: AadlTypes,
+                                     monitorThreadPath: ISZ[String],
                                      store: Store,
                                      reporter: Reporter): (ISZ[Resource], (ISZ[RAST.Item], ISZ[RAST.Item])) = {
 
@@ -613,7 +627,7 @@ object GumboSysAssertMonitorPlugin {
         }
 
         val monitorThread = symbolTable.componentMap.get(
-          getMonitorThreadPath(symbolTable.rootSystem.path)).get.asInstanceOf[AadlThread]
+          monitorThreadPath).get.asInstanceOf[AadlThread]
         val componentDir = CRustComponentPlugin.componentDirectory(monitorThread, options)
 
         val moduleContent: ST =
