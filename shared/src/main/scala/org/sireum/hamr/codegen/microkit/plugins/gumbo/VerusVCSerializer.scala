@@ -12,6 +12,7 @@ import org.sireum.hamr.codegen.common.util.HamrCli
 import org.sireum.hamr.codegen.microkit.plugins.rust.types.CRustTypeProvider
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
 import org.sireum.hamr.codegen.microkit.util.RustUtil
+import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.TAB
 import org.sireum.hamr.ir
 import org.sireum.message.Reporter
 
@@ -23,6 +24,10 @@ import org.sireum.message.Reporter
 object VerusVCSerializer {
 
   val toolName: String = "VerusVCSerializer"
+
+  // The proof crate name for a composition: sys_proof_<composition id>. Used both to
+  // emit the crate directory and to reference it from the generated makefiles.
+  @strictpure def sysProofCrateName(compositionId: String): String = s"sys_proof_$compositionId"
 
   @enum object StateFieldKind {
     "Channel" // an AADL connection's shared substrate storage, owned by the source
@@ -1687,6 +1692,73 @@ object VerusVCSerializer {
           |${RustUtil.verusCargoDependencies(store)}
           |
           |${RustUtil.commonCargoTomlEntries}
+          |""")
+  }
+
+  // Renders crates/sys_proof_<composition>/Makefile. `all` verifies the whole crate
+  // (every property plus the shared, property-independent Commutativity VCs) in one
+  // `cargo-verus verify`. In addition, one phony target per property (named by its
+  // lowercased module id) runs `cargo-verus verify` over just that property's
+  // generated VCs. A property's proof obligations live entirely in its four vc_*
+  // submodules (its `assertions` submodule holds only spec fns -- no proof
+  // obligations -- so it is not listed), so the per-property target verifies exactly
+  // those four.
+  //
+  // Each property target depends on the `warm-deps` target, which compiles the whole
+  // crate (and thus its dependency crates: vstd, data, the GUMBO library crates)
+  // with `--no-verify`, caching them as Verus import libraries. This is required
+  // because Verus applies the `--verify-module <prop>::...` flags to EVERY crate it
+  // compiles: on a clean build the flag would reach a dependency crate that has no
+  // such module and fail ("could not find module ... specified by --verify-module").
+  // Once the dependencies are cached they are not recompiled, so the per-property
+  // flag only ever reaches this crate.
+  //
+  // ENV_VARS/CARGO_FLAGS mirror the component crates' Makefile (the proof crate is
+  // also no_std and built for aarch64 with build-std).
+  @pure def genSysProofMakefile(propertyModIds: ISZ[String]): ST = {
+    // the per-property vc_* submodules declared by genPropertyModRs, in VC order
+    val vcModules: ISZ[String] = ISZ("vc_init", "vc_sequential", "vc_post_pre", "vc_independence")
+
+    val propTargets: ISZ[ST] =
+      for (p <- propertyModIds) yield
+        st"""# verify only property '$p'
+            |.PHONY: $p
+            |$p: warm-deps
+            |${TAB}$$(ENV_VARS) cargo-verus verify $$(CARGO_FLAGS) -- ${(for (m <- vcModules) yield st"--verify-module $p::$m", " ")}"""
+
+    return (
+      st"""${CommentTemplate.doNotEditComment_hash}
+          |
+          |# `make all` (or `make`) verifies the whole crate -- every property plus the
+          |# shared, property-independent Commutativity VCs -- in one `cargo-verus
+          |# verify`. `make <property>` runs `cargo-verus verify` on just that
+          |# property's generated VCs (its vc_init / vc_sequential / vc_post_pre /
+          |# vc_independence modules).
+          |
+          |ENV_VARS = RUSTC_BOOTSTRAP=1
+          |
+          |CARGO_FLAGS = -Z build-std=core,alloc,compiler_builtins \
+          |              -Z build-std-features=compiler-builtins-mem \
+          |              --target aarch64-unknown-none
+          |
+          |# verify the entire crate (every property plus the shared Commutativity VCs)
+          |.PHONY: all
+          |all:
+          |${TAB}$$(ENV_VARS) cargo-verus verify $$(CARGO_FLAGS)
+          |
+          |# Compile every crate WITHOUT verification so the dependency crates (vstd,
+          |# data, the GUMBO library crates) are cached as Verus import libraries before
+          |# any per-property `--verify-module` run -- that flag is otherwise forwarded
+          |# to the dependency crates too and fails on a clean build (see header note).
+          |.PHONY: warm-deps
+          |warm-deps:
+          |${TAB}$$(ENV_VARS) cargo-verus verify $$(CARGO_FLAGS) -- --no-verify
+          |
+          |${(propTargets, "\n\n")}
+          |
+          |.PHONY: clean
+          |clean:
+          |${TAB}cargo clean
           |""")
   }
 }

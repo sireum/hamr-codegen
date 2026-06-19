@@ -9,51 +9,57 @@ import org.sireum.hamr.codegen.common.symbols.SymbolTable
 import org.sireum.hamr.codegen.common.sysvc.{MHIPComputer, ScheduleNextRel, VCGenerator}
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
-import org.sireum.hamr.codegen.microkit.plugins.MicrokitFinalizePlugin
+import org.sireum.hamr.codegen.microkit.plugins.MicrokitPlugin
 import org.sireum.hamr.codegen.microkit.plugins.rust.types.CRustTypePlugin
-import org.sireum.hamr.codegen.microkit.util.RustUtil
+import org.sireum.hamr.codegen.microkit.util.{MakefileTarget, MakefileUtil, RustUtil}
 import org.sireum.hamr.ir.Aadl
 import org.sireum.message.Reporter
 
-@sig trait GumboSysAssertVcGenPlugin extends MicrokitFinalizePlugin {
+@sig trait GumboSysAssertVcGenPlugin extends MicrokitPlugin {
 
-  @strictpure def alreadyFinalized(store: Store): B = store.contains(s"FINALIZED_${name}")
+  @strictpure def alreadyHandled(store: Store): B = store.contains(s"HANDLED_${name}")
 
-  @pure override def canFinalizeMicrokit(model: Aadl,
-                                          options: HamrCli.CodegenOption,
-                                          types: AadlTypes,
-                                          symbolTable: SymbolTable,
-                                          store: Store,
-                                          reporter: Reporter): B = {
+  @pure override def canHandle(model: Aadl,
+                               options: HamrCli.CodegenOption,
+                               types: AadlTypes,
+                               symbolTable: SymbolTable,
+                               store: Store,
+                               reporter: Reporter): B = {
     return (options.platform == HamrCli.CodegenHamrPlatform.Microkit &&
       !reporter.hasError &&
       !isDisabled(store) &&
-      !alreadyFinalized(store) &&
-      VCGenerator.hasCompositions(symbolTable))
+      !alreadyHandled(store) &&
+      VCGenerator.hasCompositions(symbolTable) &&
+      // For a rusty model, run after GumboRustPlugin so its component `verus` makefile
+      // target is registered before this plugin appends the `verus-sys-proof` call to
+      // it (keeping `verus` ahead of `verus-sys-proof` in the merged target); waiting on
+      // GumboRustPlugin also guarantees the Rust type provider it depends on is ready. A
+      // non-rusty model has no proof crates to emit, but still runs once to surface the
+      // "no Rust components" warning below.
+      (!MicrokitPlugin.modelIsRusty(store) || GumboRustPlugin.getGumboRustContributions(store).nonEmpty))
   }
 
-  @pure override def finalizeMicrokit(model: Aadl,
-                                       options: HamrCli.CodegenOption,
-                                       types: AadlTypes,
-                                       symbolTable: SymbolTable,
-                                       store: Store,
-                                       reporter: Reporter): (Store, ISZ[Resource]) = {
-    // Mark finalized so the Microkit finalize fixpoint loop does not re-invoke this
-    // plugin every pass (canFinalizeMicrokit gates on !alreadyFinalized). Without this
-    // the loop never terminates because the plugin otherwise always reports it can
-    // finalize.
-    val finalizedStore = store + s"FINALIZED_${name}" ~> BoolValue(T)
+  @pure override def handle(model: Aadl,
+                            options: HamrCli.CodegenOption,
+                            types: AadlTypes,
+                            symbolTable: SymbolTable,
+                            store: Store,
+                            reporter: Reporter): (Store, ISZ[Resource]) = {
+    // Mark handled so the Microkit handle fixpoint loop does not re-invoke this plugin
+    // every pass (canHandle gates on !alreadyHandled). Without this the loop never
+    // terminates because the plugin otherwise always reports it can handle.
+    val handledStore = store + s"HANDLED_${name}" ~> BoolValue(T)
 
     val compositions = VCGenerator.getCompositions(symbolTable)
     if (compositions.isEmpty) {
-      return (finalizedStore, ISZ())
+      return (handledStore, ISZ())
     }
 
     val tpOpt = CRustTypePlugin.getCRustTypeProvider(store)
     if (tpOpt.isEmpty) {
       reporter.warn(None(), name,
         "CRustTypeProvider is not available (model has no Rust components?); skipping system VC serialization")
-      return (finalizedStore, ISZ())
+      return (handledStore, ISZ())
     }
     val tp = tpOpt.get
 
@@ -73,7 +79,7 @@ import org.sireum.message.Reporter
 
     // one independently buildable proof crate per composition (design D8)
     for (composition <- compositions) {
-      val crateName = s"sys_proof_${composition.id}"
+      val crateName = VerusVCSerializer.sysProofCrateName(composition.id)
       val rootDir = s"${options.sel4OutputDir.get}/crates/$crateName"
 
       // schema-derived, property-independent artifacts -- built once per composition
@@ -118,7 +124,7 @@ import org.sireum.message.Reporter
       }
 
       if (reporter.hasError) {
-        return (finalizedStore, ISZ())
+        return (handledStore, ISZ())
       }
 
       add(rootDir, "Cargo.toml", VerusVCSerializer.genSysProofCargoToml(crateName, libCrates, store))
@@ -136,11 +142,31 @@ import org.sireum.message.Reporter
       add(rootDir, "src/actions.rs", VerusVCSerializer.genActionsRs(actions))
       add(rootDir, "src/vc_commutativity.rs", commVCsRs)
 
+      // per-property `make <property>` targets that verify only that property's VCs
+      add(rootDir, "Makefile", VerusVCSerializer.genSysProofMakefile(propertyModIds))
+
       reporter.info(None(), name,
         s"Generated $totalVCs system VCs (${composition.properties.size} properties) in $rootDir")
     }
 
-    return (finalizedStore, resources)
+    // Register the makefile targets that drive the generated proof crates. Add a
+    // `verus-sys-proof` target to system.mk that runs each composition's proof-crate
+    // `all` target (cargo-verus verify over every property), and chain it into the
+    // main Makefile's `verus` target (contributed by GumboRustPlugin) -- same-named
+    // targets are merged by MakefileUtil.getMakefileTargets when the makefiles render.
+    var sysProofVerusItems: ISZ[ST] = ISZ()
+    for (composition <- compositions) {
+      sysProofVerusItems = sysProofVerusItems :+
+        st"make -C $${CRATES_DIR}/${VerusVCSerializer.sysProofCrateName(composition.id)} all"
+    }
+    var localStore = handledStore
+    localStore = MakefileUtil.addMakefileTargets(ISZ("system.mk"),
+      ISZ(MakefileTarget(name = "verus-sys-proof", allowMultiple = F, dependencies = ISZ(), body = sysProofVerusItems)), localStore)
+    localStore = MakefileUtil.addMakefileTargets(ISZ("Makefile"),
+      ISZ(MakefileTarget(name = "verus", allowMultiple = F, dependencies = ISZ(st"$${TOP_BUILD_DIR}/Makefile"),
+        body = ISZ(st"$${MAKE} -C $${TOP_BUILD_DIR} verus-sys-proof"))), localStore)
+
+    return (localStore, resources)
   }
 }
 
