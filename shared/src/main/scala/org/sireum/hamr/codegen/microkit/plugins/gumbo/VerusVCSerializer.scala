@@ -1194,7 +1194,7 @@ object VerusVCSerializer {
           |use vstd::prelude::*;
           |
           |use crate::assertions::*;
-          |use crate::assertions_$propertyId::*;
+          |use crate::${propertyId}::assertions::*;
           |use crate::contracts::*;
           |use crate::system_state::SystemState;
           |use crate::write_frames::*;
@@ -1499,7 +1499,7 @@ object VerusVCSerializer {
           |use vstd::prelude::*;
           |
           |use crate::assertions::*;
-          |use crate::assertions_$propertyId::*;
+          |use crate::${propertyId}::assertions::*;
           |use crate::system_state::SystemState;
           |use crate::write_frames::*;
           |
@@ -1617,16 +1617,28 @@ object VerusVCSerializer {
   // Renders crates/sys_proof_<composition>/src/lib.rs. The proof crate is
   // verification-only -- every fn is a spec or proof fn -- but it follows the
   // workspace's no_std conventions so it builds alongside the other crates.
+  // Renders src/<property>/mod.rs -- declares the property folder's submodules
+  // (its bound assertions plus the four VC modules). The content is identical for
+  // every property; the folder name carries the property identity.
+  @pure def genPropertyModRs(): ST = {
+    return (
+      st"""${CommentTemplate.doNotEditComment_slash}
+          |
+          |pub mod assertions;
+          |pub mod vc_independence;
+          |pub mod vc_init;
+          |pub mod vc_post_pre;
+          |pub mod vc_sequential;
+          |""")
+  }
+
   // Shared modules first, then per-property modules in declaration order.
   @pure def genLibRs(compositionId: String, propertyModIds: ISZ[String]): ST = {
+    // each property's assertions + VC modules live in its own folder src/<p>/,
+    // declared as a single module here (see genPropertyModRs for the folder's mod.rs)
     var propertyMods: ISZ[ST] = ISZ()
     for (p <- propertyModIds) {
-      propertyMods = propertyMods :+
-        st"""pub mod assertions_$p;
-            |pub mod vc_${p}_independence;
-            |pub mod vc_${p}_init;
-            |pub mod vc_${p}_post_pre;
-            |pub mod vc_${p}_sequential;"""
+      propertyMods = propertyMods :+ st"""pub mod $p;"""
     }
     return (
       st"""#![cfg_attr(not(test), no_std)]

@@ -106,11 +106,15 @@ import org.sireum.message.Reporter
         val indVCs = VerusVCSerializer.genPropertyIndependenceVCs(
           propModId, vcs, nextRel, frames, assertionFns, resolvedAliasMap, reporter)
 
-        add(rootDir, s"src/assertions_$propModId.rs", VerusVCSerializer.genPropertyAssertionsRs(propModId, assertionFns))
-        add(rootDir, s"src/vc_${propModId}_init.rs", seqVCs.vcInitRs)
-        add(rootDir, s"src/vc_${propModId}_sequential.rs", seqVCs.vcSequentialRs)
-        add(rootDir, s"src/vc_${propModId}_post_pre.rs", seqVCs.vcPostPreRs)
-        add(rootDir, s"src/vc_${propModId}_independence.rs", indVCs)
+        // one folder per property (design D8): the property's bound assertions and
+        // its four VC modules live together under src/<propModId>/
+        val propDir = s"src/$propModId"
+        add(rootDir, s"$propDir/mod.rs", VerusVCSerializer.genPropertyModRs())
+        add(rootDir, s"$propDir/assertions.rs", VerusVCSerializer.genPropertyAssertionsRs(propModId, assertionFns))
+        add(rootDir, s"$propDir/vc_init.rs", seqVCs.vcInitRs)
+        add(rootDir, s"$propDir/vc_sequential.rs", seqVCs.vcSequentialRs)
+        add(rootDir, s"$propDir/vc_post_pre.rs", seqVCs.vcPostPreRs)
+        add(rootDir, s"$propDir/vc_independence.rs", indVCs)
       }
 
       if (reporter.hasError) {
