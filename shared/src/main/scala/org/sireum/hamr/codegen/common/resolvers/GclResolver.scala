@@ -849,6 +849,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
     arrayIndexInterpolateImports = ISZ()
     indexingTypeFingerprints = Map.empty
     slangTypeToAadlType = Map.empty
+    resolvedComponentAliasMap = Map.empty
 
     return T
   }
