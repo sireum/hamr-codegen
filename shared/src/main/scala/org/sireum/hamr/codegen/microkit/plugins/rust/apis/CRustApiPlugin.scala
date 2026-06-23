@@ -139,7 +139,7 @@ object ComponentApiContributions {
         var contributions = ComponentApiContributions.empty
 
         val apiPorts: ISZ[AadlPort] = srcThread.getPorts().filter((p: AadlPort) =>
-          !StoreUtil.isNonModelElement(p.path, localStore))
+          !StoreUtil.isSynthetic(p.path, localStore))
 
         for (inPort <- apiPorts.filter((p: AadlPort) => p.direction == Direction.In)) {
           contributions = contributions.combine(CRustApiUtil.processInPort(srcThread, inPort, crustTypeProvider, apiPorts))
@@ -149,7 +149,7 @@ object ComponentApiContributions {
         }
 
         for (svPort <- srcThread.getPorts().filter((p: AadlPort) =>
-          StoreUtil.isNonModelElement(p.path, localStore))) {
+          StoreUtil.isSynthetic(p.path, localStore))) {
           val full: ComponentApiContributions = if (svPort.direction == Direction.In) {
             CRustApiUtil.processInPort(srcThread, svPort, crustTypeProvider, apiPorts)
           } else {

@@ -10,7 +10,7 @@ import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.HamrCli.CodegenHamrPlatform
 import org.sireum.hamr.codegen.common.util.{HamrCli, ModelUtil, ResourceUtil}
-import org.sireum.hamr.codegen.microkit.plugins.{MicrokitPlugin, StoreUtil}
+import org.sireum.hamr.codegen.microkit.plugins.{ComponentGenProfile, MicrokitPlugin, StoreUtil}
 import org.sireum.hamr.codegen.microkit.plugins.msd.SystemDescriptionProviderPlugin
 import org.sireum.hamr.codegen.microkit.plugins.rust.component.CRustComponentPlugin
 import org.sireum.hamr.codegen.microkit.util.{GenericMemoryRegion, MemoryMap, MemoryRegion, MicrokitDomain, MicrokitUtil, Perm, PortSharedMemoryRegion, ProtectionDomain, SchedulingDomain, SystemDescription, VirtualMachine}
@@ -61,6 +61,15 @@ object UserLandMonitorPlugin {
   @strictpure def monitorNames(symbolTable: SymbolTable): ISZ[String] = ISZ(getMonitorName)
 
   @strictpure def getRetainedNonModelPorts(store: Store): ISZ[IdPath] = ISZ()
+
+  // The code-generation policy for the monitor component(s) this plugin injects.
+  // Default (the generic userland monitor): a normal editable, Verus-verified
+  // component with a test harness, since the user is expected to add their own
+  // monitoring/test code. Subtypes whose behavior is fully derived from GUMBO
+  // contracts (gumbo/sys-assert monitors) override this to a fully-generated,
+  // non-Verus, non-editable profile.
+  @strictpure def getMonitorGenProfile: ComponentGenProfile =
+    ComponentGenProfile(verusVerified = T, userEditable = T, emitTestHarness = T)
 
   @pure def canHandleModelTransformHelper(model: Aadl,
                                                 options: HamrCli.CodegenOption,
@@ -127,8 +136,13 @@ object UserLandMonitorPlugin {
 
     if (reResult._1.nonEmpty) {
 
-      localStore = StoreUtil.addNonModelElement(monitorProcessorPath,
-        StoreUtil.addNonModelElement(monitorThreadPath, localStore))
+      localStore = StoreUtil.addSyntheticElement(monitorProcessorPath,
+        StoreUtil.addSyntheticElement(monitorThreadPath, localStore))
+
+      // Record this injected monitor's code-generation policy so the emitter
+      // (CRustComponentPlugin) knows whether to Verus-wrap it, preserve user
+      // edits, and emit a test harness -- independent of its synthetic provenance.
+      localStore = StoreUtil.putComponentGenProfile(monitorThreadPath, getMonitorGenProfile, localStore)
 
       return Some((localStore, reResult._1.get.model, reResult._1.get.types, reResult._1.get.symbolTable))
     } else {
@@ -211,7 +225,7 @@ object UserLandMonitorPlugin {
     val monitorMonPdName = s"${monitorThreadId}_MON"
 
     var otherNonModelPdNames: Set[String] = Set.empty
-    for (id <- StoreUtil.getNonModelElements(localStore)) {
+    for (id <- StoreUtil.getSyntheticElements(localStore)) {
       val pdName = st"${(ops.ISZOps(id).drop(1), "_")}".render
       if (pdName != monitorThreadId) {
         otherNonModelPdNames = otherNonModelPdNames + pdName + s"${pdName}_MON"
@@ -275,7 +289,7 @@ object UserLandMonitorPlugin {
         for (mr <- rawSd.memoryRegions) {
           mrSizes = mrSizes + mr.name ~> mr.sizeInKiBytes
           mr match {
-            case p: PortSharedMemoryRegion if StoreUtil.isNonModelElement(p.outgoingPortPath, localStore) =>
+            case p: PortSharedMemoryRegion if StoreUtil.isSynthetic(p.outgoingPortPath, localStore) =>
               nonModelMrNames = nonModelMrNames + p.name
               if (ops.ISZOps(retainedPorts).contains(p.outgoingPortPath)) {
                 retainedMrNames = retainedMrNames + p.name

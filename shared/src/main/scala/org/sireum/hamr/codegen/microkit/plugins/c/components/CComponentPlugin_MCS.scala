@@ -104,7 +104,7 @@ import org.sireum.message.Reporter
 
       usedBudgetInMilli = usedBudgetInMilli + computeExecutionTimeinMilli
 
-      val isUserPartition = !StoreUtil.isNonModelElement(t.path, localStore)
+      val isUserPartition = !StoreUtil.isSynthetic(t.path, localStore)
 
       xmlSchedulingDomains = xmlSchedulingDomains :+
         SchedulingDomain(id = schedulingDomain, componentName = threadMonId.render, length = computeExecutionTimeinMilli * 1_000_000, isUserPartition = isUserPartition)

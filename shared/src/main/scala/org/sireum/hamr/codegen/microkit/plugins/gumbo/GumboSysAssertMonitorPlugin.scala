@@ -273,7 +273,10 @@ object GumboSysAssertMonitorPlugin {
               context = SlangExpUtil.Context.compute_clause,
               substitutions = portSubstitutions,
               inRequires = F,
-              inVerus = T,
+              // the monitor body is executable (GUMBOX) code, not verus spec, so
+              // implication must render via the implies!/impliesL! macros rather
+              // than the spec-only `==>` operator (which is invalid in exec context)
+              inVerus = F,
               tp = crustTypeProvider,
               aadlTypes = types,
               store = localStore,
@@ -288,8 +291,11 @@ object GumboSysAssertMonitorPlugin {
           }
         }
 
+        // Plain-Rust (non-Verus) monitors get no external_body attribute at all;
+        // it's a Verus-only directive.
         val externalBodyAttr: String =
-          if (options.verusAttributeSyntax) "#[verus_verify(external_body)]"
+          if (!getMonitorGenProfile.verusVerified) ""
+          else if (options.verusAttributeSyntax) "#[verus_verify(external_body)]"
           else "#[verifier::external_body]"
 
         // Build the cascade function as a module-level item
@@ -646,8 +652,13 @@ object GumboSysAssertMonitorPlugin {
           overwrite = T)
 
         val modName = GumboSysAssertMonitorPlugin.sysAssertFunctionsModuleName
+        // #[macro_use] pulls the implies!/impliesL! macros (defined in the
+        // functions module) into the app module's scope so the sys_assert_monitor
+        // body can use them; they are plain macro_rules! (not #[macro_export]),
+        // so `use <mod>::*` alone would not bring them in.
         val modDirective: RAST.Item = RAST.ItemST(
-          st"""#[path = "$modName.rs"]
+          st"""#[macro_use]
+              |#[path = "$modName.rs"]
               |pub mod $modName;""")
         val useItem: RAST.Item = RAST.Use(ISZ(), RAST.IdentString(s"$modName::*"))
 

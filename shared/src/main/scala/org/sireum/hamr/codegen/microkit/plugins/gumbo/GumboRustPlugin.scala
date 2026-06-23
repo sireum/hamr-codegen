@@ -14,7 +14,7 @@ import org.sireum.hamr.codegen.microkit.plugins.rust.apis.CRustApiPlugin
 import org.sireum.hamr.codegen.microkit.plugins.rust.component.CRustComponentPlugin
 import org.sireum.hamr.codegen.microkit.plugins.rust.testing.CRustTestingPlugin
 import org.sireum.hamr.codegen.microkit.plugins.rust.types.{CRustTypePlugin, CRustTypeProvider}
-import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, MicrokitInitPlugin, MicrokitPlugin}
+import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, MicrokitInitPlugin, MicrokitPlugin, StoreUtil}
 import org.sireum.hamr.codegen.microkit.util.{MakefileTarget, MakefileUtil, MicrokitUtil, RustUtil}
 import org.sireum.hamr.codegen.microkit.{MicrokitCodegen, rust => RAST}
 import org.sireum.hamr.ir._
@@ -177,6 +177,10 @@ object GumboRustPlugin {
     for (thread <- symbolTable.getThreads() if MicrokitUtil.isRusty(thread)) {
       var markers: ISZ[Marker] = ISZ()
       val threadPath = thread.path
+      // Components whose policy is non-Verus (e.g. fully-generated monitors) skip
+      // all Verus weaving here -- no struct/impl #[verus_verify], no entry-point
+      // requires/ensures contracts -- so the emitted app is plain Rust.
+      val genVerus: B = StoreUtil.getComponentGenProfile(threadPath, localStore).verusVerified
       val subclauseInfo = GumboRustUtil.getGumboSubclauseOrDummy(threadPath, symbolTable)
       val componentContributions = CRustComponentPlugin.getCRustComponentContributions(localStore)
       val threadContributions = componentContributions.componentContributions.get(threadPath).get
@@ -188,7 +192,9 @@ object GumboRustPlugin {
 
       appUses = appUses :+ RAST.Use(ISZ(), RAST.IdentString("vstd::prelude::*"))
 
-      if (options.verusAttributeSyntax) {
+      // Only Verus-decorate the struct/impl for components whose policy says so;
+      // fully-generated monitors (verusVerified=F) stay plain Rust.
+      if (options.verusAttributeSyntax && genVerus) {
         val verusVerify = RAST.AttributeST(inner = F, content = st"verus_verify")
         structDef = structDef(attributes = structDef.attributes :+ verusVerify)
         structImpl = structImpl(attributes = structImpl.attributes :+ verusVerify)
@@ -434,7 +440,7 @@ object GumboRustPlugin {
                 updatedImplItems = updatedImplItems :+ f(body = b)
               }
             }
-            else if (f.ident.string == "initialize") {
+            else if (f.ident.string == "initialize" && genVerus) {
               if (subclauseInfo.annex.initializes.nonEmpty) {
                 val init: (Marker, RAST.FnImpl) = handleInitialize(
                   fn = f,
@@ -452,7 +458,7 @@ object GumboRustPlugin {
                 markers = markers :+ init._1
                 updatedImplItems = updatedImplItems :+ init._2
               }
-            } else if (f.ident.string == "timeTriggered") {
+            } else if (f.ident.string == "timeTriggered" && genVerus) {
               if (subclauseInfo.annex.compute.nonEmpty) {
                 val tt: (ISZ[Marker], RAST.FnImpl) = handleCompute(
                   fn = f,
@@ -498,7 +504,7 @@ object GumboRustPlugin {
           componentContributions.componentContributions + threadPath ~>
             threadContributions(
               markers = markers,
-              requiresVerus = T,
+              requiresVerus = genVerus,
               appUses = appUses,
               appStructDef = structDef,
               appStructImpl = structImpl(items = updatedImplItems),

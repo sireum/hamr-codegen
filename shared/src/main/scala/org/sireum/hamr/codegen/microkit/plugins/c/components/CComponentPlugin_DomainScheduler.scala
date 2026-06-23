@@ -170,7 +170,7 @@ import org.sireum.message.Reporter
         case _ => defaultComputeExecutionTime
       }
 
-      val isUserPartition = !StoreUtil.isNonModelElement(t.path, localStore)
+      val isUserPartition = !StoreUtil.isSynthetic(t.path, localStore)
 
       xmlSchedulingDomains = xmlSchedulingDomains :+
         SchedulingDomain(id = schedulingDomain, componentName = threadMonId.render, length = computeExecutionTime, isUserPartition = isUserPartition)

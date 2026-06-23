@@ -237,7 +237,7 @@ object GumboXComputeContributions {
     }
 
     for (thread <- symbolTable.getThreads()
-         if MicrokitUtil.isRusty(thread) && !StoreUtil.isNonModelElement(thread.path, localStore)) {
+         if MicrokitUtil.isRusty(thread) && !StoreUtil.isSynthetic(thread.path, localStore)) {
 
       assert(!items.contains(thread.path), "Not expecting anyone else to have made gumbox contributions up to this point")
 

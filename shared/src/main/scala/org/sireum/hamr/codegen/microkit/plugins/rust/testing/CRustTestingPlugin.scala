@@ -11,7 +11,7 @@ import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.plugins.linters.{MicrokitLinterPlugin, TouchedTypes}
 import org.sireum.hamr.codegen.microkit.plugins.rust.component.CRustComponentPlugin
 import org.sireum.hamr.codegen.microkit.plugins.rust.types.{CRustTypePlugin, CRustTypeProvider}
-import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, MicrokitPlugin}
+import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, MicrokitPlugin, StoreUtil}
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil
 import org.sireum.hamr.codegen.microkit.{MicrokitCodegen, rust => RAST}
@@ -70,7 +70,8 @@ object CRustTestingPlugin {
 
     var ret: Map[IdPath, CRustTestingPlugin.CRustTestingContribution] = Map.empty
 
-    for (thread <- symbolTable.getThreads() if MicrokitUtil.isRusty(thread)) {
+    for (thread <- symbolTable.getThreads()
+         if MicrokitUtil.isRusty(thread) && StoreUtil.getComponentGenProfile(thread.path, localStore).emitTestHarness) {
       val threadId = MicrokitUtil.getComponentIdPath(thread)
 
       val crustTypeProvider = CRustTypePlugin.getCRustTypeProvider(localStore).get

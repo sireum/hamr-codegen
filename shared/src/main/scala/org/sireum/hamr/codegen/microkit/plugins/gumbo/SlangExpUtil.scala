@@ -344,18 +344,22 @@ object SlangExpUtil {
         case exp: Exp.Ident =>
           exp.resOpt match {
             case Some(x: SAST.ResolvedInfo.Var) =>
-              if (!inVerus) {
-                return st"${exp.id.prettyST}"
-              } else {
-                if (inRequires) {
-                  return st"old(self).${exp.id.prettyST}"
-                }
-                else {
-                  substitutions.get(exp.id.value) match {
-                    case Some(sub) => return st"$sub"
-                    case _ => return st"self.${exp.id.prettyST}"
+              if (inVerus && inRequires) {
+                return st"old(self).${exp.id.prettyST}"
+              }
+              // A substitution (e.g. a composition port/state-var alias mapped to an
+              // api.get_*() call) applies in both Verus and exec/GUMBOX contexts --
+              // the system-assertion monitor is exec (inVerus=F) yet still needs its
+              // aliases resolved. Without a substitution, fall back to a bare
+              // reference (exec) or `self.<field>` (Verus state var).
+              substitutions.get(exp.id.value) match {
+                case Some(sub) => return st"$sub"
+                case _ =>
+                  if (!inVerus) {
+                    return st"${exp.id.prettyST}"
+                  } else {
+                    return st"self.${exp.id.prettyST}"
                   }
-                }
               }
             case Some(x: SAST.ResolvedInfo.LocalVar) =>
               if (inVerus && ops.ISZOps(quantifiers.elements).contains(x.id) && !appliedTrigger) {

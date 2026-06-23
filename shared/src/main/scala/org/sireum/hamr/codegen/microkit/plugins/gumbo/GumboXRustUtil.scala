@@ -371,7 +371,7 @@ object GumboXRustUtil {
   }
 
   @strictpure def isPluginProvided(feature: AadlFeature, store: Store): B =
-    StoreUtil.isNonModelElement(feature.path, store)
+    StoreUtil.isSynthetic(feature.path, store)
 
   @pure def inPortsToParams(thread: AadlThread, typeProvider: CRustTypeProvider, store: Store): ISZ[GGParam] = {
     val ports: ISZ[AadlPort] = for (p <- thread.features.filter(f => isInPort(f) && !isPluginProvided(f, store))) yield p.asInstanceOf[AadlPort]
