@@ -95,9 +95,10 @@ for(releaseDir <- releases) {
 }
 
 val (a,b): (ST, ST) = composite(releases.map(m => m.name))
+
 (dest / "compositeArtifacts.xml").writeOver(a.render)
 (dest / "compositeContent.xml").writeOver(b.render)
-(dest / "readme.md").writeOver(rootUpdateSiteReadme(releases).render)
+(dest / "readme.md").writeOver(rootUpdateSiteReadme(releases(releases.lastIndex), (dest / "readme.md").read))
 
 object Templates {
 
@@ -260,60 +261,19 @@ object Templates {
     return (a, b)
   }
 
-  def rootUpdateSiteReadme(dirs: ISZ[Os.Path]) : ST = {
-    val _dirs = dirs.map((m: Os.Path) => s"- [${m.name}](${m.name})")
-    val ret =
-      st"""# AADL GUMBO Update Site
+  def rootUpdateSiteReadme(currentRelease: Os.Path, currentContent: String) : String = {
+    val text = s"### [${currentRelease.name}](${currentRelease.name})"
+
+    val marker = "<!-- current-release -->"
+    val o = ops.StringOps(currentContent)
+    assert(o.contains(marker), s"Didn't find '$marker'")
+
+    val replacement =
+      st"""$marker
           |
-          |## How to Install
-          |
-          |Install [Sireum](https://github.com/sireum/kekinian#installing) (or update an existing installation, see below) and then execute the following on Mac/Linux
-          |
-          |```
-          |$$SIREUM_HOME/bin/sireum hamr phantom -u
-          |```
-          |
-          |or the following on Windows
-          |
-          |```
-          |%SIREUM_HOME%\bin\sireum.bat hamr phantom -u
-          |```
-          |
-          |**NOTE**: the ``-u`` phantom option also installs/updates the following Sireum OSATE plugins:
-          |* Base - transforms core AADL to [AIR](https://github.com/sireum/air)
-          |* CLI - provides a CLI for Sireum based OSATE plugins ***(documentation forthcoming)***
-          |* [AWAS](https://awas.sireum.org/) - information flow analyzer and visualizer for component-based systems
-          |* [HAMR](https://hamr.sireum.org) - code generation from AADL models
-          |
-          |Pass phantom's ``--help`` option for more information (e.g. how to install plugins into an existing OSATE installation)
-          |
-          |## How to Install into FMIDE
-          |
-          |```
-          |$$SIREUM_HOME/bin/install/fmide.cmd
-          |```
-          |
-          |## How to Update
-          |
-          |First close OSATE if open, then update HAMR Codegen by updating Sireum
-          |
-          |```
-          |cd $$SIREUM_HOME
-          |git pull --recurse
-          |bin/build.cmd
-          |```
-          |
-          |This will update ``$$SIREUM_HOME/bin/sireum.jar`` which will be used by the AADL GUMBO plugins when OSATE is relaunched.
-          |
-          |To update the OSATE plugins themselves simply rerun the ``hamr phantom`` command from the
-          |[How to Install](#how-to-install) section (only needed when new versions of the plugin are released)
-          |
-          |
-          |**Releases**
-          |
-          |${(_dirs, "\n")}
-          |"""
-    return ret
+          |$text"""
+
+    return o.replaceAllLiterally(marker, replacement.render)
   }
 
   def releaseUpdateSiteReadme(version: String, sireumVersion: String) : ST = {
