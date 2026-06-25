@@ -1742,7 +1742,10 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         validateSchemaLabels(comp)
         val resolvedProperties: ISZ[GclCompositionProperty] =
           for (p <- comp.properties) yield p(bindings = for (b <- p.bindings) yield visitPropertyBinding(b))
-        resolvedCompositions = resolvedCompositions :+ comp(properties = resolvedProperties)
+        // D9: validate the specialization graph + desugar each property to its
+        // effective (flattened) bindings before emitting the resolved composition.
+        val flattenedProperties = flattenPropertyInheritance(comp(properties = resolvedProperties))
+        resolvedCompositions = resolvedCompositions :+ comp(properties = flattenedProperties)
       }
 
       return Some(s(
@@ -1831,6 +1834,112 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         case _ => reportError(b.exp.fullPosOpt, "Unexpected: type checking returned none", reporter)
       }
       return b
+    }
+
+    // D9 property inheritance: validate the specialization graph (parent exists in
+    // this composition, no cycles, abstract bases non-empty) and desugar each
+    // property to its effective bindings -- the root-to-leaf chain's own bindings,
+    // conjoined per schema point. Concrete and abstract properties are both
+    // flattened (downstream skips the abstract ones). Producing one binding per
+    // point preserves ScheduleNextRel.decorate's one-binding-per-place invariant,
+    // so the VC set is identical to the hand-expanded (pre-inheritance) properties.
+    def flattenPropertyInheritance(comp: GclComposition): ISZ[GclCompositionProperty] = {
+      var byId: HashSMap[String, GclCompositionProperty] = HashSMap.empty
+      for (p <- comp.properties) {
+        if (byId.contains(p.id)) {
+          reportError(p.posOpt, s"Property id '${p.id}' is declared more than once in composition '${comp.id}'", reporter)
+        }
+        byId = byId + p.id ~> p
+      }
+
+      def pointKey(pt: GclSchemaPoint): String = {
+        pt match {
+          case _: GclPointStart => return "START"
+          case _: GclPointEnd => return "END"
+          case p: GclPointAt => return s"at:${p.label}"
+          case p: GclPointBefore => return s"before:${p.occurrence}"
+          case p: GclPointAfter => return s"after:${p.occurrence}"
+        }
+      }
+
+      // root-first specialization chain (root .. self); reports cycles / unknown parents
+      def chainOf(p: GclCompositionProperty): ISZ[GclCompositionProperty] = {
+        var seen: Set[String] = Set.empty
+        var rev: ISZ[GclCompositionProperty] = ISZ()
+        var curOpt: Option[GclCompositionProperty] = Some(p)
+        var ok: B = T
+        while (ok && curOpt.nonEmpty) {
+          val c = curOpt.get
+          if (seen.contains(c.id)) {
+            reportError(p.posOpt, s"Property '${p.id}' has a cyclic specialization chain (revisits '${c.id}')", reporter)
+            ok = F
+          } else {
+            seen = seen + c.id
+            rev = rev :+ c
+            c.extendsOpt match {
+              case Some(par) =>
+                byId.get(par) match {
+                  case Some(pp) => curOpt = Some(pp)
+                  case _ =>
+                    reportError(c.posOpt, s"Property '${c.id}' specializes unknown property '$par' (must be a property of composition '${comp.id}')", reporter)
+                    ok = F
+                }
+              case _ => curOpt = None()
+            }
+          }
+        }
+        var root: ISZ[GclCompositionProperty] = ISZ()
+        for (i <- rev.size - 1 to 0 by -1) {
+          root = root :+ rev(i)
+        }
+        return root
+      }
+
+      // conjoin (with '&') the bindings sharing a schema point, preserving the
+      // first-occurrence order of points (root contributions first)
+      def conjoinByPoint(bs: ISZ[GclPropertyBinding]): ISZ[GclPropertyBinding] = {
+        var order: ISZ[String] = ISZ()
+        var grouped: HashSMap[String, GclPropertyBinding] = HashSMap.empty
+        for (b <- bs) {
+          val k = pointKey(b.point)
+          grouped.get(k) match {
+            case Some(prev) =>
+              val conj = AST.Exp.Binary(
+                left = prev.exp,
+                op = AST.Exp.BinaryOp.And,
+                right = b.exp,
+                attr = AST.ResolvedAttr(
+                  posOpt = prev.exp.posOpt,
+                  resOpt = Some(AST.ResolvedInfo.BuiltIn(AST.ResolvedInfo.BuiltIn.Kind.BinaryAnd, None())),
+                  typedOpt = Some(AST.Typed.b)),
+                opPosOpt = prev.exp.posOpt)
+              grouped = grouped + k ~> prev(exp = conj)
+            case _ =>
+              order = order :+ k
+              grouped = grouped + k ~> b
+          }
+        }
+        var ret: ISZ[GclPropertyBinding] = ISZ()
+        for (k <- order) {
+          ret = ret :+ grouped.get(k).get
+        }
+        return ret
+      }
+
+      var result: ISZ[GclCompositionProperty] = ISZ()
+      for (p <- comp.properties) {
+        val chain = chainOf(p)
+        var own: ISZ[GclPropertyBinding] = ISZ()
+        for (c <- chain) {
+          own = own ++ c.bindings
+        }
+        val eff = conjoinByPoint(own)
+        if (p.isAbstract && eff.isEmpty) {
+          reportError(p.posOpt, s"Abstract property '${p.id}' has no bindings; an abstract base must contribute at least one assertion", reporter)
+        }
+        result = result :+ p(bindings = eff)
+      }
+      return result
     }
 
     visitGclSubclause(subclause) match {

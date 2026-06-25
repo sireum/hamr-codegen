@@ -96,8 +96,10 @@ import org.sireum.message.Reporter
       var totalVCs: Z = commutativityVCs.size
       var propertyModIds: ISZ[String] = ISZ()
 
-      // per-property VC sets over the shared net
-      for (property <- composition.properties) {
+      // per-property VC sets over the shared net (D9: abstract bases are not
+      // instantiated -- no VC set is generated for them; their bindings have
+      // already been folded into the concrete properties that specialize them)
+      for (property <- composition.properties if !property.isAbstract) {
         val propModId = ops.StringOps(property.id).toLower // Rust module ids: lowercased property id
         propertyModIds = propertyModIds :+ propModId
 
@@ -146,7 +148,7 @@ import org.sireum.message.Reporter
       add(rootDir, "Makefile", VerusVCSerializer.genSysProofMakefile(propertyModIds))
 
       reporter.info(None(), name,
-        s"Generated $totalVCs system VCs (${composition.properties.size} properties) in $rootDir")
+        s"Generated $totalVCs system VCs (${propertyModIds.size} properties) in $rootDir")
     }
 
     // Register the makefile targets that drive the generated proof crates. Add a

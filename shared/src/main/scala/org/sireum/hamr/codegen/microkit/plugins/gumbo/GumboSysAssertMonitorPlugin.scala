@@ -259,7 +259,9 @@ object GumboSysAssertMonitorPlugin {
         // so a runtime violation maps onto the proof chain whose TCB assumptions
         // broke.
         var assertionChecks: ISZ[ST] = ISZ()
-        for (property <- composition.properties) {
+        // D9: abstract bases are not instantiated -- no runtime checks are emitted
+        // for them; their bindings are already folded into the concrete properties.
+        for (property <- composition.properties if !property.isAbstract) {
           val decoration = ScheduleNextRel.decorate(nextRel, property, reporter)
           for (e <- decoration.entries) {
             val placeId = e._1
