@@ -1862,37 +1862,47 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         }
       }
 
-      // root-first specialization chain (root .. self); reports cycles / unknown parents
-      def chainOf(p: GclCompositionProperty): ISZ[GclCompositionProperty] = {
-        var seen: Set[String] = Set.empty
-        var rev: ISZ[GclCompositionProperty] = ISZ()
-        var curOpt: Option[GclCompositionProperty] = Some(p)
-        var ok: B = T
-        while (ok && curOpt.nonEmpty) {
-          val c = curOpt.get
-          if (seen.contains(c.id)) {
-            reportError(p.posOpt, s"Property '${p.id}' has a cyclic specialization chain (revisits '${c.id}')", reporter)
-            ok = F
-          } else {
-            seen = seen + c.id
-            rev = rev :+ c
-            c.extendsOpt match {
-              case Some(par) =>
-                byId.get(par) match {
-                  case Some(pp) => curOpt = Some(pp)
-                  case _ =>
-                    reportError(c.posOpt, s"Property '${c.id}' specializes unknown property '$par' (must be a property of composition '${comp.id}')", reporter)
-                    ok = F
+      // Deduped transitive ancestors of `p` in post-order -- every parent precedes
+      // its dependents and a shared ancestor (diamond) is emitted exactly once, with
+      // `p` itself last. Walks the specialization DAG (each property may have multiple
+      // parents); reports unknown parents and cyclic specialization. Iterative DFS with
+      // an explicit (node, next-parent-index) stack -- Slang has no recursive local defs.
+      def ancestorsOf(p: GclCompositionProperty): ISZ[GclCompositionProperty] = {
+        var order: ISZ[GclCompositionProperty] = ISZ()
+        var done: Set[String] = Set.empty
+        var onStack: Set[String] = Set.empty
+        var stack: ISZ[(GclCompositionProperty, Z)] = ISZ((p, z"0"))
+        onStack = onStack + p.id
+        while (stack.nonEmpty) {
+          val top = stack(stack.size - 1)
+          val c = top._1
+          val i = top._2
+          if (i < c.parents.size) {
+            stack = ops.ISZOps(stack).dropRight(1) :+ ((c, i + 1))
+            val par = c.parents(i)
+            byId.get(par) match {
+              case Some(pp) =>
+                if (!done.contains(pp.id)) {
+                  if (onStack.contains(pp.id)) {
+                    reportError(p.posOpt, s"Property '${p.id}' has a cyclic specialization (revisits '${pp.id}')", reporter)
+                  } else {
+                    stack = stack :+ ((pp, z"0"))
+                    onStack = onStack + pp.id
+                  }
                 }
-              case _ => curOpt = None()
+              case _ =>
+                reportError(c.posOpt, s"Property '${c.id}' specializes unknown property '$par' (must be a property of composition '${comp.id}')", reporter)
+            }
+          } else {
+            stack = ops.ISZOps(stack).dropRight(1)
+            onStack = onStack - c.id
+            if (!done.contains(c.id)) {
+              done = done + c.id
+              order = order :+ c
             }
           }
         }
-        var root: ISZ[GclCompositionProperty] = ISZ()
-        for (i <- rev.size - 1 to 0 by -1) {
-          root = root :+ rev(i)
-        }
-        return root
+        return order
       }
 
       // conjoin (with '&') the bindings sharing a schema point, preserving the
@@ -1928,9 +1938,9 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
       var result: ISZ[GclCompositionProperty] = ISZ()
       for (p <- comp.properties) {
-        val chain = chainOf(p)
+        val anc = ancestorsOf(p)
         var own: ISZ[GclPropertyBinding] = ISZ()
-        for (c <- chain) {
+        for (c <- anc) {
           own = own ++ c.bindings
         }
         val eff = conjoinByPoint(own)
