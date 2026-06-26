@@ -489,7 +489,7 @@ object GumboRustPlugin {
         else st"verifier::external_body"
       for (f <- moduleLevelEntries) {
         f match {
-          case (fi: RAST.FnImpl) if fi.ident.string == "log_info" || fi.ident.string == "log_warn_channel" =>
+          case (fi: RAST.FnImpl) if genVerus && (fi.ident.string == "log_info" || fi.ident.string == "log_warn_channel") =>
             val attrs = fi.attributes
             annotatedModuleLevelItems = annotatedModuleLevelItems :+ fi(
               attributes =  attrs :+ RAST.AttributeST(F, externalBodyAttr))
