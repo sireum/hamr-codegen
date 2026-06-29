@@ -1151,12 +1151,54 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       return None()
     }
 
+    // Mirrors the OSATE-side GumboValidator spec-section placement checks
+    // (checkSpecSectionForDataComponent / ...ForThreadComponent /
+    // ...ForSystemImplementation) so the SysMLv2 pipeline -- which bypasses the
+    // Xtext validator -- reports the same errors. Data components additionally
+    // forbid state/functions/initialize/integration/compute and require a
+    // datatype invariant; those are enforced during ADT construction, so here a
+    // data component only adds the composition restriction.
+    def validateSpecSectionPlacement(s: GclSubclause): Unit = {
+      component match {
+        case _: AadlData =>
+          if (s.compositions.nonEmpty) {
+            reportError(componentPos, "Composition blocks cannot be attached to data components", reporter)
+          }
+        case _: AadlThread =>
+          if (s.invariants.nonEmpty) {
+            reportError(componentPos, "Invariants cannot be attached to thread components", reporter)
+          }
+          if (s.compositions.nonEmpty) {
+            reportError(componentPos, "Composition blocks cannot be attached to thread components", reporter)
+          }
+        case _: AadlSystem =>
+          if (s.state.nonEmpty) {
+            reportError(componentPos, "State variables cannot be attached to system implementations", reporter)
+          }
+          if (s.invariants.nonEmpty) {
+            reportError(componentPos, "Invariants cannot be attached to system implementations", reporter)
+          }
+          if (s.initializes.nonEmpty) {
+            reportError(componentPos, "Initialize clauses cannot be attached to system implementations", reporter)
+          }
+          if (s.compute.nonEmpty) {
+            reportError(componentPos, "Compute clauses cannot be attached to system implementations", reporter)
+          }
+          if (s.integration.nonEmpty) {
+            reportError(componentPos, "Integration clauses cannot be attached to system implementations", reporter)
+          }
+        case _ =>
+      }
+    }
+
     def visitGclSubclause(s: GclSubclause): Option[GclSubclause] = {
       var seenInvariantIds: Set[String] = Set.empty
 
       if (reporter.hasError) {
         return None()
       }
+
+      validateSpecSectionPlacement(s)
 
       val threadMethods: Map[ISZ[String], GclMethod] = Map.empty[ISZ[String], GclMethod] ++ (for (m <- s.methods) yield (context :+ m.sig.id.value) ~> m)
 
@@ -1765,17 +1807,31 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
     def validateSchemaLabels(comp: GclComposition): Unit = {
       var names: Set[String] = Set.empty[String] + "START" + "END"
       var aliasNames: Set[String] = Set.empty[String]
+      // Component/port/state-var aliases share one namespace within a
+      // composition; a duplicate would make alias references ambiguous (mirrors
+      // GumboValidator.checkCompositionAliasUniqueness).
+      def declareAlias(name: String, posOpt: Option[Position]): Unit = {
+        if (aliasNames.contains(name)) {
+          reportError(posOpt, s"Duplicate alias name '$name' in composition '${comp.id}' (component, port, and state-variable aliases share one namespace)", reporter)
+        }
+        aliasNames = aliasNames + name
+      }
       for (a <- comp.componentAliases) {
-        aliasNames = aliasNames + a.name
+        declareAlias(a.name, a.posOpt)
       }
       for (a <- comp.portAliases) {
-        aliasNames = aliasNames + a.name
+        declareAlias(a.name, a.posOpt)
       }
       for (a <- comp.stateVarAliases) {
-        aliasNames = aliasNames + a.name
+        declareAlias(a.name, a.posOpt)
       }
       var occurrenceCounts: Map[String, Z] = Map.empty
       var unlabeledOccurrences: Map[String, Z] = Map.empty
+      // place labels (`at`-referenceable) and occurrence labels
+      // (`before`/`after`-referenceable) are tracked separately for point
+      // resolution below; they still share `names` for uniqueness.
+      var placeLabels: Set[String] = Set.empty[String]
+      var occurrenceLabels: Set[String] = Set.empty[String]
 
       def declareLabel(l: String, posOpt: Option[Position]): Unit = {
         if (names.contains(l)) {
@@ -1795,11 +1851,15 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 if (c.component.name.nonEmpty) c.component.name(c.component.name.lastIndex) else "?"
               occurrenceCounts = occurrenceCounts + key ~> (occurrenceCounts.getOrElse(key, z"0") + 1)
               c.occurrenceLabelOpt match {
-                case Some(l) => declareLabel(l, c.posOpt)
+                case Some(l) =>
+                  declareLabel(l, c.posOpt)
+                  occurrenceLabels = occurrenceLabels + l
                 case _ =>
                   unlabeledOccurrences = unlabeledOccurrences + key ~> (unlabeledOccurrences.getOrElse(key, z"0") + 1)
               }
-            case l: GclSchemaLabel => declareLabel(l.id, l.posOpt)
+            case l: GclSchemaLabel =>
+              declareLabel(l.id, l.posOpt)
+              placeLabels = placeLabels + l.id
             case sj: GclSchemaSplitJoin =>
               for (branch <- sj.branches) {
                 visitSchemaElements(branch.elements)
@@ -1813,6 +1873,41 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         if (e._2 > 1 && unlabeledOccurrences.getOrElse(e._1, z"0") > 0) {
           reportError(comp.posOpt,
             s"Component '${e._1}' fires ${e._2} times per hyperperiod in composition '${comp.id}'; every occurrence must carry an occurrence label (<alias> @ <id>)", reporter)
+        }
+      }
+
+      // Point references must resolve against this composition's schema (mirrors
+      // GumboValidator.checkSchemaPointResolution and ScheduleNextRel.resolvePoint,
+      // reported here at resolve time rather than only during sys-assert VC gen):
+      // 'at' names START/END or a place label; 'before'/'after' name an occurrence
+      // label or a component dispatched exactly once per hyperperiod.
+      def validateOccurrence(occ: String, posOpt: Option[Position]): Unit = {
+        if (!occurrenceLabels.contains(occ)) {
+          occurrenceCounts.get(occ) match {
+            case Some(count) =>
+              if (count > 1) {
+                reportError(posOpt, s"'$occ' is ambiguous in composition '${comp.id}': the component is dispatched $count times per hyperperiod; reference an occurrence label instead", reporter)
+              }
+            case _ =>
+              reportError(posOpt, s"'$occ' does not name a component occurrence of the schema in composition '${comp.id}'", reporter)
+          }
+        }
+      }
+      def validatePoint(point: GclSchemaPoint, posOpt: Option[Position]): Unit = {
+        point match {
+          case _: GclPointStart =>
+          case _: GclPointEnd =>
+          case p: GclPointAt =>
+            if (p.label != "START" && p.label != "END" && !placeLabels.contains(p.label)) {
+              reportError(posOpt, s"'${p.label}' does not name a schema label (or START/END) in composition '${comp.id}'", reporter)
+            }
+          case p: GclPointBefore => validateOccurrence(p.occurrence, posOpt)
+          case p: GclPointAfter => validateOccurrence(p.occurrence, posOpt)
+        }
+      }
+      for (p <- comp.properties) {
+        for (b <- p.bindings) {
+          validatePoint(b.point, b.posOpt)
         }
       }
     }
@@ -3245,19 +3340,35 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       // the same name must agree across them (they share the system's namespace).
       val sysPackageName = sysOwner
       val sysInstancePath = a.component.identifier.name
+      // Cross-composition alias consistency: an alias name reused across two
+      // compositions of the same system must resolve to the same element. A
+      // composition is free to bind a *different* name to a different element,
+      // but it may not rebind an existing name to something else -- that would
+      // silently break property fragments copied between compositions. Applies to
+      // every alias kind (component/port/state-var), which share one namespace.
+      // Within-composition uniqueness is enforced separately (validateSchemaLabels);
+      // duplicates inside a single composition are skipped here so that check owns
+      // their message.
+      var crossCompAliasTargets: Map[String, (String, ISZ[String])] = Map.empty
+      def checkCrossCompositionAlias(name: String, compId: String, target: ISZ[String], aliasPosOpt: Option[Position]): Unit = {
+        crossCompAliasTargets.get(name) match {
+          case Some((originComp, originTarget)) =>
+            if (originComp != compId && originTarget != target) {
+              reportError(aliasPosOpt, s"Alias '$name' in composition '$compId' refers to ${(target, ".")}, but composition '$originComp' binds it to ${(originTarget, ".")}; an alias reused across compositions must refer to the same element (bind a different element under a different name)", reporter)
+            }
+          case _ =>
+            crossCompAliasTargets = crossCompAliasTargets + name ~> ((compId, target))
+        }
+      }
       for (gclSubclause <- gclAnnexes) {
         for (comp <- gclSubclause.compositions) {
             for (ca <- comp.componentAliases) {
               val fullComponentPath = sysInstancePath ++ ca.componentPath.name
               symbolTable.componentMap.get(fullComponentPath) match {
                 case Some(_) =>
-                  resolvedComponentAliasMap.get(ca.name) match {
-                    case Some(existing) =>
-                      if (existing != fullComponentPath) {
-                        reportError(ca.posOpt, s"Component alias '${ca.name}' is already bound to ${(existing, ".")} by another composition", reporter)
-                      }
-                    case _ =>
-                      resolvedComponentAliasMap = resolvedComponentAliasMap + ca.name ~> fullComponentPath
+                  checkCrossCompositionAlias(ca.name, comp.id, fullComponentPath, ca.posOpt)
+                  if (!resolvedComponentAliasMap.contains(ca.name)) {
+                    resolvedComponentAliasMap = resolvedComponentAliasMap + ca.name ~> fullComponentPath
                   }
                 case _ =>
                   reportError(ca.posOpt, s"Component alias '${ca.name}' does not resolve to a valid component at path ${(fullComponentPath, ".")}", reporter)
@@ -3275,6 +3386,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                   case Some(fullPath) => fullPath ++ middleSegments :+ portName
                   case _ => sysInstancePath ++ ISZ(componentRef) ++ middleSegments :+ portName
                 }
+                checkCrossCompositionAlias(pa.name, comp.id, fullFeaturePath, pa.posOpt)
                 symbolTable.featureMap.get(fullFeaturePath) match {
                   case Some(port: AadlPort) =>
                     val fieldAadlType: AadlType = port match {
@@ -3333,6 +3445,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                   case Some(fullPath) => fullPath ++ middleSegments
                   case _ => sysInstancePath ++ ISZ(componentRef) ++ middleSegments
                 }
+                checkCrossCompositionAlias(sva.name, comp.id, fullComponentPath :+ stateVarName, sva.posOpt)
                 symbolTable.componentMap.get(fullComponentPath) match {
                   case Some(targetComponent) =>
                     val gclSubclauses = targetComponent.component.annexes
