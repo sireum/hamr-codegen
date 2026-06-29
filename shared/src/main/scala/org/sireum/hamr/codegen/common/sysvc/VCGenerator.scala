@@ -3,7 +3,7 @@ package org.sireum.hamr.codegen.common.sysvc
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.IdPath
-import org.sireum.hamr.codegen.common.symbols.{AadlThread, GclAnnexClauseInfo, SymbolTable}
+import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlFeature, AadlPort, AadlPortConnection, AadlThread, GclAnnexClauseInfo, SymbolTable}
 import org.sireum.hamr.codegen.common.sysvc.ScheduleNextRel._
 import org.sireum.hamr.ir.{GclAssume, GclCaseStatement, GclComposition, GclCompositionProperty,
   GclGuarantee, GclPropertyBinding, GclSchemaComponentRef}
@@ -194,6 +194,70 @@ object VCGenerator {
       }
     }
     return exps
+  }
+
+  // Returns the component's resolved port matching feature `f` by identifier.
+  // The integrationMap is keyed by the component's own ports (as iterated by
+  // `getPorts()`), so a connection endpoint feature is matched back to that port
+  // before keying the map -- mirroring how `integrationExps` looks them up.
+  @pure def findPort(c: AadlComponent, f: AadlFeature): Option[AadlPort] = {
+    for (p <- c.getPorts()) {
+      if (p.identifier == f.identifier) {
+        return Some(p)
+      }
+    }
+    return None()
+  }
+
+  // Collects one IntegrationVC per port connection whose destination in-port has
+  // an integration assume (resolved into the destination component's
+  // integrationMap; the resolver enforces in port => assume, out port =>
+  // guarantee). The sender's matching out-port integration guarantee, when
+  // present, becomes the VC premise; otherwise the premise is `true` (the
+  // receiver's assume must hold unconditionally). These obligations are static --
+  // independent of schedule, property, and composition -- so the full model's
+  // connections are collected; the per-composition proof crates each carry every
+  // component's contract fns, so each can discharge them independently.
+  @pure def generateIntegrationVCs(symbolTable: SymbolTable): ISZ[IntegrationVC] = {
+    var result: ISZ[IntegrationVC] = ISZ()
+    for (conn <- symbolTable.aadlConnections) {
+      conn match {
+        case c: AadlPortConnection =>
+          getGclInfoOpt(c.dstComponent.path, symbolTable) match {
+            case Some(dstInfo) =>
+              findPort(c.dstComponent, c.dstFeature) match {
+                case Some(dstPort) =>
+                  dstInfo.gclSymbolTable.integrationMap.get(dstPort) match {
+                    case Some(a: GclAssume) =>
+                      // sender's integration guarantee on the source out-port, if declared
+                      val srcPortOpt = findPort(c.srcComponent, c.srcFeature)
+                      var srcGuaranteeId: Option[String] = None()
+                      (srcPortOpt, getGclInfoOpt(c.srcComponent.path, symbolTable)) match {
+                        case (Some(sp), Some(srcInfo)) =>
+                          srcInfo.gclSymbolTable.integrationMap.get(sp) match {
+                            case Some(g: GclGuarantee) => srcGuaranteeId = Some(g.id)
+                            case _ =>
+                          }
+                        case _ =>
+                      }
+                      result = result :+ IntegrationVC(
+                        connName = c.name,
+                        srcCompPath = c.srcComponent.path,
+                        srcPort = if (srcPortOpt.nonEmpty) srcPortOpt.get else dstPort,
+                        srcGuaranteeId = srcGuaranteeId,
+                        dstCompPath = c.dstComponent.path,
+                        dstPort = dstPort,
+                        dstAssumeId = a.id)
+                    case _ =>
+                  }
+                case _ =>
+              }
+            case _ =>
+          }
+        case _ =>
+      }
+    }
+    return result
   }
 
   @pure def generateInitStateVC(decoration: Map[PlaceId, GclPropertyBinding],

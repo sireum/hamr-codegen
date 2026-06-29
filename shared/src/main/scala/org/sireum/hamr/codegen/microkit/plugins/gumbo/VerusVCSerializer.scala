@@ -5,7 +5,7 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, Store}
 import org.sireum.hamr.codegen.common.resolvers.GclResolver
 import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlPort, AadlThread, SymbolTable}
-import org.sireum.hamr.codegen.common.sysvc.{ScheduleNextRel, VC, VCKind, WriteFrameBuilder}
+import org.sireum.hamr.codegen.common.sysvc.{IntegrationVC, ScheduleNextRel, VC, VCKind, WriteFrameBuilder}
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes}
 import org.sireum.hamr.codegen.common.util.HamrCli
@@ -1184,6 +1184,104 @@ object VerusVCSerializer {
       vcPostPreRs = vcFile(s"Property $propertyId -- Post-Pre VC: the END assertion implies the START assertion across hyperperiod boundaries.", propertyId, postPreFns))
   }
 
+  // Renders src/vc_integration.rs: one empty-body proof fn per IntegrationVC.
+  // A connection carries a single value, so the proof fn takes one `wire`
+  // parameter (the connection's data type) and states
+  //   [sender's I-Guar(wire) ==>] receiver's I-Assm(wire)
+  // by passing `wire` to both copied integration spec fns (each of which takes
+  // its port as the sole parameter); the source out-port and destination in-port
+  // share the connection's data type, so a single `wire` types both calls. When
+  // the sender declares no integration guarantee the requires clause is omitted
+  // (premise `true`). Property- and schedule-independent -- emitted once per
+  // composition crate, like the Commutativity VCs.
+  @pure def genIntegrationVCs(ivcs: ISZ[IntegrationVC],
+                              resolvedComponentAliasMap: Map[String, IdPath],
+                              symbolTable: SymbolTable,
+                              crustTypeProvider: CRustTypeProvider): ST = {
+    val compAliasRev = componentAliasRev(resolvedComponentAliasMap)
+    def moduleOf(path: IdPath): String = {
+      return compAliasRev.getOrElse(path, symbolTable.getThreadById(path).identifier)
+    }
+    var usedNames: Set[String] = Set.empty
+    def uniqueName(base: String): String = {
+      var cand = base
+      var n: Z = 1
+      while (usedNames.contains(cand)) {
+        cand = s"${base}_$n"
+        n = n + 1
+      }
+      usedNames = usedNames + cand
+      return cand
+    }
+    var fns: ISZ[ST] = ISZ()
+    for (i <- z"0" until ivcs.size) {
+      val ivc = ivcs(i)
+      val srcMod = moduleOf(ivc.srcCompPath)
+      val dstMod = moduleOf(ivc.dstCompPath)
+      val wireType = GumboXRustUtil.portToParam(ivc.dstPort, crustTypeProvider).langType
+      val requiresClauses: ISZ[ST] = ivc.srcGuaranteeId match {
+        case Some(gid) => ISZ(st"$srcMod::integration_spec_${gid}_guarantee(wire)")
+        case _ => ISZ()
+      }
+      val premiseDoc: ST = ivc.srcGuaranteeId match {
+        case Some(gid) => st"$srcMod.${ivc.srcPort.identifier}'s I-Guar `$gid`"
+        case _ => st"`true` (sender declares no integration guarantee)"
+      }
+      fns = fns :+ renderProofFn(
+        doc =
+          st"""/** VC[$i]: Integration -- connection ${ivc.connName}: $premiseDoc
+              |  * implies $dstMod.${ivc.dstPort.identifier}'s I-Assm `${ivc.dstAssumeId}`, over
+              |  * the value the connection carries. Discharges when the sender's
+              |  * guarantee is at least as strong as the receiver's assume. */""",
+        fnName = uniqueName(s"vc_integration_${srcMod}_${ivc.srcPort.identifier}_to_${dstMod}_${ivc.dstPort.identifier}"),
+        paramsDecl = st"wire: $wireType".render,
+        requiresClauses = requiresClauses,
+        ensuresClauses = ISZ(st"$dstMod::integration_spec_${ivc.dstAssumeId}_assume(wire)"))
+    }
+    val docHeader =
+      st"""//! Integration-constraint VCs, one per connected port pair whose
+          |//! destination in-port has an integration assume. Each states that the
+          |//! sender's integration guarantee on the source out-port (or `true`, when
+          |//! the sender declares none) implies the receiver's integration assume on
+          |//! the destination in-port, over the value the connection carries. Static
+          |//! (schedule- and property-independent) -- shared by the whole composition."""
+    // No integration constraints in the model -> no obligations. Emit an explicit
+    // note instead of an empty `verus!` block so the (otherwise puzzling) empty
+    // module reads as intentional.
+    if (fns.isEmpty) {
+      return (
+        st"""${CommentTemplate.doNotEditComment_slash}
+            |
+            |$docHeader
+            |//!
+            |//! This model declares no integration constraints, so there are no
+            |//! integration VCs to discharge.
+            |""")
+    }
+    return (
+      st"""${CommentTemplate.doNotEditComment_slash}
+          |
+          |$docHeader
+          |//! Each proof fn has an empty body: Verus discharges `requires ==> ensures`
+          |//! via SMT; add proof hints in the body if a VC does not discharge.
+          |
+          |#![allow(non_snake_case)]
+          |#![allow(unused_variables)]
+          |#![allow(unused_imports)]
+          |
+          |use data::*;
+          |use vstd::prelude::*;
+          |
+          |use crate::contracts::*;
+          |
+          |verus! {
+          |
+          |${(fns, "\n\n")}
+          |
+          |} // verus!
+          |""")
+  }
+
   @pure def vcFile(desc: String, propertyId: String, fns: ISZ[ST]): ST = {
     return (
       st"""${CommentTemplate.doNotEditComment_slash}
@@ -1654,15 +1752,16 @@ object VerusVCSerializer {
           |
           |//! System-level verification conditions of composition `$compositionId`,
           |//! discharged by Verus -- shared modules (state, contracts, frames,
-          |//! actions, commutativity) plus one module group per property. See the
-          |//! proof-fn doc comments for the VC indices tying each obligation back
-          |//! to the generator output.
+          |//! actions, commutativity, integration) plus one module group per
+          |//! property. See the proof-fn doc comments for the VC indices tying each
+          |//! obligation back to the generator output.
           |
           |pub mod actions;
           |pub mod assertions;
           |pub mod contracts;
           |pub mod system_state;
           |pub mod vc_commutativity;
+          |pub mod vc_integration;
           |pub mod write_frames;
           |
           |${(propertyMods, "\n")}

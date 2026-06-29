@@ -93,7 +93,13 @@ import org.sireum.message.Reporter
       val commutativityVCs = VCGenerator.generateCommutativityVCs(nextRel, mhipPairs, resolvedAliasMap, symbolTable)
       val commVCsRs = VerusVCSerializer.genCommutativityVCs(commutativityVCs, nextRel, actions, resolvedAliasMap, reporter)
 
-      var totalVCs: Z = commutativityVCs.size
+      // integration-constraint VCs: per connected port pair whose destination
+      // in-port has an integration assume, prove the sender's out-port guarantee
+      // (or `true`) implies it. Static -- shared by the composition, like commutativity.
+      val integrationVCs = VCGenerator.generateIntegrationVCs(symbolTable)
+      val integrationVCsRs = VerusVCSerializer.genIntegrationVCs(integrationVCs, resolvedAliasMap, symbolTable, tp)
+
+      var totalVCs: Z = commutativityVCs.size + integrationVCs.size
       var propertyModIds: ISZ[String] = ISZ()
 
       // per-property VC sets over the shared net (D9: abstract bases are not
@@ -143,6 +149,7 @@ import org.sireum.message.Reporter
       add(rootDir, "src/write_frames.rs", VerusVCSerializer.genWriteFramesRs(frames))
       add(rootDir, "src/actions.rs", VerusVCSerializer.genActionsRs(actions))
       add(rootDir, "src/vc_commutativity.rs", commVCsRs)
+      add(rootDir, "src/vc_integration.rs", integrationVCsRs)
 
       // per-property `make <property>` targets that verify only that property's VCs
       add(rootDir, "Makefile", VerusVCSerializer.genSysProofMakefile(propertyModIds))
