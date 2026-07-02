@@ -733,6 +733,31 @@ object SymbolResolver {
 
     val annexLibInfos: ISZ[AnnexLibInfo] = ISZ()
 
+
+    { // lint: AADL does not permit fan-in connections into a (non-event) data port.
+      // A data port models sampled state with last-value-wins semantics, so it must
+      // be the destination of at most one connection.  Event data ports queue their
+      // arrivals and therefore may legally have fan-in.
+      for (e <- inConnections.entries) {
+        val dstPortPath = e._1
+        val cis = e._2
+        if (cis.size > 1) {
+          airFeatureMap.get(dstPortPath) match {
+            case Some(dstFeature) =>
+              if (CommonUtil.isAadlDataPort(dstFeature)) {
+                val dstName = CommonUtil.getName(dstFeature.identifier)
+                val srcNames: ISZ[String] = for (ci <- cis) yield
+                  (if (ci.src.feature.nonEmpty) CommonUtil.getName(ci.src.feature.get)
+                  else CommonUtil.getName(airComponentMap.get(ci.src.component.name).get.identifier))
+                reporter.error(dstFeature.identifier.pos, CommonUtil.toolName,
+                  st"AADL prohibits fan-in connections into a data port, but data port '$dstName' is the destination of ${cis.size} connections (sources: ${(srcNames, ", ")}). Use an event data port to allow queued fan-in, or connect each source to its own data port.".render)
+              }
+            case _ =>
+          }
+        }
+      }
+    }
+
     if (reporter.hasError) {
       return None()
     }
