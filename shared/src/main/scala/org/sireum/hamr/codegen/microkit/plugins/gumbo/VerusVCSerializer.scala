@@ -43,6 +43,11 @@ object VerusVCSerializer {
                              val entryId: String,
                              val kind: StateFieldKind.Type,
                              val aadlType: AadlType,
+                             // channels backed by an event or event-data port carry an
+                             // optional payload (None when no event is present this
+                             // dispatch), so the field's Rust type is Option<aadlType>.
+                             // Data-port channels and state variables are always present.
+                             val isOptional: B,
                              val aliasOpt: Option[String])
 
   // `byComponentEntry` is keyed by (thread path, port-or-state-var name) and maps
@@ -61,6 +66,16 @@ object VerusVCSerializer {
       case _ => return MicrokitTypeUtil.eventPortType
     }
   }
+
+  // Event and event-data ports carry an optional payload at the system-state level
+  // (None when no event is present); data ports are always present. Mirrors the
+  // component-level GGParam.isOptional (GumboXRustUtil).
+  @strictpure def isPortOptional(p: AadlPort): B = !p.isInstanceOf[AadlDataPort]
+
+  // Wraps the base Rust type name in Option<...> for optional (event/event-data)
+  // channels; plain otherwise.
+  @strictpure def rustFieldType(isOptional: B, baseRustName: String): ST =
+    if (isOptional) st"Option<$baseRustName>" else st"$baseRustName"
 
   // Builds the flat system-state field map of one composition:
   //   1. canonicalize: each connected in port shares its source out port's channel
@@ -103,7 +118,7 @@ object VerusVCSerializer {
     }
 
     // enumerate canonical entries in deterministic (thread, declaration) order
-    var canonicalOrder: ISZ[(IdPath, String, StateFieldKind.Type, AadlType)] = ISZ()
+    var canonicalOrder: ISZ[(IdPath, String, StateFieldKind.Type, AadlType, B)] = ISZ()
     var seen: Set[(IdPath, String)] = Set.empty
     for (t <- threads) {
       for (p <- t.getPorts()) {
@@ -111,7 +126,7 @@ object VerusVCSerializer {
         // connected in ports are registered when their source thread is visited
         if (key == ((t.path, p.identifier)) && !seen.contains(key)) {
           seen = seen + key
-          canonicalOrder = canonicalOrder :+ ((t.path, p.identifier, StateFieldKind.Channel, getPortType(p)))
+          canonicalOrder = canonicalOrder :+ ((t.path, p.identifier, StateFieldKind.Channel, getPortType(p), isPortOptional(p)))
         }
       }
       WriteFrameBuilder.getGclInfoOpt(t.path, symbolTable) match {
@@ -125,7 +140,7 @@ object VerusVCSerializer {
               aadlTypes.typeMap.get(sv.classifier) match {
                 case Some(svType) =>
                   seen = seen + key
-                  canonicalOrder = canonicalOrder :+ ((t.path, sv.name, StateFieldKind.StateVar, svType))
+                  canonicalOrder = canonicalOrder :+ ((t.path, sv.name, StateFieldKind.StateVar, svType, F))
                 case _ =>
                   reporter.error(sv.posOpt, toolName,
                     s"Could not resolve the type '${sv.classifier}' of state variable '${sv.name}'")
@@ -242,6 +257,7 @@ object VerusVCSerializer {
         entryId = e._2,
         kind = e._3,
         aadlType = e._4,
+        isOptional = e._5,
         aliasOpt = aliasOpt)
       fields = fields :+ field
       fieldByKey = fieldByKey + key ~> field
@@ -297,8 +313,9 @@ object VerusVCSerializer {
         case StateFieldKind.Channel => "channel"
         case StateFieldKind.StateVar => "state variable"
       }
+      val fieldRustType = rustFieldType(f.isOptional, tp.getTypeNameProvider(f.aadlType).qualifiedRustName)
       sections = sections :+
-        st"pub ${f.fieldName}: ${tp.getTypeNameProvider(f.aadlType).qualifiedRustName}, // $kindComment"
+        st"pub ${f.fieldName}: $fieldRustType, // $kindComment"
     }
 
     return (
@@ -565,8 +582,14 @@ object VerusVCSerializer {
             info.gclSymbolTable.integrationMap.get(port) match {
               case Some(spec) =>
                 val param = GumboXRustUtil.portToParam(port, crustTypeProvider)
-                val substitutions: Map[String, String] = Map.empty[String, String] + port.identifier ~> param.name
-                val body = SlangExpUtil.rewriteExpH(
+                // event / event-data ports carry an optional payload: bare references
+                // in the clause denote the payload, so they unwrap the Option, and the
+                // whole constraint is vacuously true when no event is present (the
+                // GUMBOX I-Assm/I-Guar guard, mirrored here for the copied spec fn).
+                val isOpt = isPortOptional(port)
+                val portRef: String = if (isOpt) st"${param.name}.unwrap()".render else param.name
+                val substitutions: Map[String, String] = Map.empty[String, String] + port.identifier ~> portRef
+                val rawBody = SlangExpUtil.rewriteExpH(
                   rexp = spec.exp,
                   owner = t.classifier,
                   optComponent = Some(t),
@@ -578,6 +601,7 @@ object VerusVCSerializer {
                   aadlTypes = aadlTypes,
                   store = store,
                   reporter = reporter)
+                val body: ST = if (isOpt) st"(${param.name}.is_some()) ==> ($rawBody)" else rawBody
                 val params = ISZ[GumboXRustUtil.GGParam](param)
                 spec match {
                   case a: ir.GclAssume =>
@@ -964,10 +988,11 @@ object VerusVCSerializer {
                          reporter: Reporter): ST = {
     var args: ISZ[ST] = ISZ()
     for (p <- f.params) {
-      if (p.isOptional) {
-        reporter.error(None(), toolName,
-          s"Event ports are not yet supported in system VCs: '${p.originName}' of ${f.fnName}")
-      }
+      // event / event-data ports are optional (Option<T>) params; the corresponding
+      // SystemState field is also Option<T> (see StateField.isOptional), so the field
+      // is passed through as-is. Integration-constraint fn bodies are guard-wrapped
+      // (None => true) at their definition; compute/initialize clauses guard via the
+      // user's HasEvent(...) predicates.
       val stateName: String =
         if (p.isInPort || p.kind == GumboXRustUtil.SymbolKind.StateVarPre) preName
         else postName
@@ -1103,7 +1128,11 @@ object VerusVCSerializer {
             contractsByPath.get(compPath) match {
               case Some(cc) =>
                 for (f <- cc.fns) {
-                  if (f.kind == ContractFnKind.ComputeAssume || f.kind == ContractFnKind.IntegrationAssume) {
+                  // Integration assumes are NOT re-proven here: they are assumed at the
+                  // consumer's Next-Assert premises and discharged once per connection
+                  // by the IntegrationVC (vc_integration.rs). Only compute assumes
+                  // remain as Pre-Assert obligations.
+                  if (f.kind == ContractFnKind.ComputeAssume) {
                     ens = ens :+ contractCall(cc.moduleName, f, compPath, ssm, "st", "st", reporter)
                   }
                 }
@@ -1111,7 +1140,7 @@ object VerusVCSerializer {
             }
           }
           val preDoc: ST =
-            if (preCovered) st"/** VC[$i]: Pre-Assert -- ${placeNames(t.inPlaces)} |- ${ops.StringOps(alias).toUpper} compute + integration assumes */"
+            if (preCovered) st"/** VC[$i]: Pre-Assert -- ${placeNames(t.inPlaces)} |- ${ops.StringOps(alias).toUpper} compute assumes */"
             else st"/** VC[$i]: Pre-Assert -- trivial: this property does not use ${ops.StringOps(alias).toUpper}'s contract (no bound out-place; contract projection) */"
           seqFns = seqFns :+ renderProofFn(
             doc = preDoc,
@@ -1141,8 +1170,13 @@ object VerusVCSerializer {
             contractsByPath.get(compPath) match {
               case Some(cc) =>
                 for (f <- cc.fns) {
+                  // Integration assumes are ASSUMED here (Next-Assert premises): the
+                  // component may rely on its in-port constraints when it dispatches;
+                  // producer/consumer compatibility is discharged once per connection
+                  // by the IntegrationVC. Integration assume params are in-ports, so
+                  // contractCall selects their pre-state value.
                   if (f.kind == ContractFnKind.ComputeGuarantee || f.kind == ContractFnKind.ComputeCase ||
-                    f.kind == ContractFnKind.IntegrationGuarantee) {
+                    f.kind == ContractFnKind.IntegrationGuarantee || f.kind == ContractFnKind.IntegrationAssume) {
                     req = req :+ contractCall(cc.moduleName, f, compPath, ssm, "pre", "post", reporter)
                   }
                 }
@@ -1218,7 +1252,9 @@ object VerusVCSerializer {
       val ivc = ivcs(i)
       val srcMod = moduleOf(ivc.srcCompPath)
       val dstMod = moduleOf(ivc.dstCompPath)
-      val wireType = GumboXRustUtil.portToParam(ivc.dstPort, crustTypeProvider).langType
+      // the connection's carried value; event/event-data ports carry an optional
+      // payload, so the wire (and both copied integration spec fns) are Option<T>.
+      val wireType = rustFieldType(isPortOptional(ivc.dstPort), GumboXRustUtil.portToParam(ivc.dstPort, crustTypeProvider).langType.render)
       val requiresClauses: ISZ[ST] = ivc.srcGuaranteeId match {
         case Some(gid) => ISZ(st"$srcMod::integration_spec_${gid}_guarantee(wire)")
         case _ => ISZ()
@@ -1399,9 +1435,10 @@ object VerusVCSerializer {
         for (w <- writes) {
           val actionFnName = s"${alias}_action_${w._1}"
           val paramDecls: ISZ[ST] =
-            for (r <- readScope) yield st"${r._1}: ${crustTypeProvider.getTypeNameProvider(r._2.aadlType).qualifiedRustName}"
+            for (r <- readScope) yield st"${r._1}: ${rustFieldType(r._2.isOptional, crustTypeProvider.getTypeNameProvider(r._2.aadlType).qualifiedRustName)}"
+          val wRet = rustFieldType(w._2.isOptional, crustTypeProvider.getTypeNameProvider(w._2.aadlType).qualifiedRustName)
           uninterpFns = uninterpFns :+
-            st"pub uninterp spec fn $actionFnName(${(paramDecls, ", ")}) -> ${crustTypeProvider.getTypeNameProvider(w._2.aadlType).qualifiedRustName};"
+            st"pub uninterp spec fn $actionFnName(${(paramDecls, ", ")}) -> $wRet;"
           fireClauses = fireClauses :+
             st"post.${w._2.fieldName} == $actionFnName(${(for (r <- readScope) yield st"pre.${r._2.fieldName}", ", ")})"
         }

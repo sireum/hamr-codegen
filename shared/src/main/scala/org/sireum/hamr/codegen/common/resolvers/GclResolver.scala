@@ -89,7 +89,12 @@ object GclResolver {
 
                              val stateVars: ISZ[GclStateVar],
                              val specFuncs: Map[ISZ[String], GclMethod],
-                             val symbolTable: SymbolTable) extends org.sireum.hamr.ir.MTransformer {
+                             val symbolTable: SymbolTable,
+                             // composition port-alias names backing an event/event-data
+                             // port; such aliases resolve to a payload-typed var, so a
+                             // value reference `alias(.field)` is rewritten to
+                             // `alias.get(.field)` and `HasEvent(alias)` to `alias.nonEmpty`.
+                             val optionalCompositionAliases: Set[String]) extends org.sireum.hamr.ir.MTransformer {
     var symbols: Set[SymbolHolder] = Set.empty
     var reporter: Reporter = ReporterImpl(ISZ())
     var apiReferences: Set[AadlPort] = Set.empty
@@ -224,6 +229,26 @@ object GclResolver {
 
       val emptyAttr = AST.Attr(posOpt = o.fullPosOpt)
       val emptyRAttr = AST.ResolvedAttr(posOpt = o.fullPosOpt, resOpt = None(), typedOpt = None())
+
+      // HasEvent(<composition port alias>) -> bare alias.nonEmpty. Handled first,
+      // independent of whether the call carries a receiver (the system-object uif
+      // registration may qualify it) and before the incoming-event-port api path.
+      if (o.ident.id.value == uif__HasEvent && o.args.size == 1) {
+        o.args(0) match {
+          case i: Exp.Ident if i.typedOpt.nonEmpty && optionalCompositionAliases.contains(i.id.value) =>
+            val nonEmptyRI = AST.ResolvedInfo.Method(
+              isInObject = F, mode = AST.MethodMode.Method, typeParams = ISZ(),
+              owner = ISZ("org", "sireum", "Option"), id = "nonEmpty",
+              paramNames = ISZ(), reads = IS(), writes = ISZ(),
+              tpeOpt = Some(AST.Typed.Fun(purity = AST.Purity.StrictPure, isByName = T, args = ISZ(), ret = AST.Typed.bOpt.get)),
+              defPosOpt = None())
+            val nonEmptyTyped = AST.Typed.Method(isInObject = nonEmptyRI.isInObject, mode = nonEmptyRI.mode, typeParams = nonEmptyRI.typeParams,
+              owner = nonEmptyRI.owner, name = nonEmptyRI.id, paramNames = nonEmptyRI.paramNames, tpe = nonEmptyRI.tpeOpt.get)
+            val nonEmptyRa = AST.ResolvedAttr(posOpt = o.posOpt, resOpt = Some(nonEmptyRI), typedOpt = Some(nonEmptyTyped))
+            return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(Exp.Select(receiverOpt = Some(i), id = AST.Id("nonEmpty", emptyAttr), targs = ISZ(), attr = nonEmptyRa)))
+          case _ =>
+        }
+      }
 
       if (o.receiverOpt.isEmpty) {
         if (!uifs.contains(o.ident.id.value)) {
@@ -706,6 +731,24 @@ object GclResolver {
 
     // TODO: why isn't this a pre order call?
     override def post_langastExpIdent(o: Exp.Ident): MOption[Exp] = {
+      // A composition port alias for an event/event-data port resolves to a
+      // payload-typed var, hiding the Option; a value reference unwraps it:
+      // `alias` -> `alias.get` (and `alias.field` becomes `alias.get.field`). The
+      // alias inside HasEvent(alias) is handled in pre (no descent), so it is not
+      // wrapped here.
+      if (o.typedOpt.nonEmpty && optionalCompositionAliases.contains(o.id.value)) {
+        val emptyAttr = AST.Attr(posOpt = o.fullPosOpt)
+        val getRI = AST.ResolvedInfo.Method(
+          isInObject = F, mode = AST.MethodMode.Method, typeParams = ISZ(),
+          owner = ISZ("org", "sireum", "Option"), id = "get",
+          paramNames = ISZ(), reads = IS(), writes = ISZ(),
+          tpeOpt = Some(AST.Typed.Fun(purity = AST.Purity.StrictPure, isByName = T, args = ISZ(), ret = o.typedOpt.get)),
+          defPosOpt = None())
+        val getTyped = AST.Typed.Method(isInObject = getRI.isInObject, mode = getRI.mode, typeParams = getRI.typeParams,
+          owner = getRI.owner, name = getRI.id, paramNames = getRI.paramNames, tpe = getRI.tpeOpt.get)
+        val getRa = AST.ResolvedAttr(posOpt = o.posOpt, resOpt = Some(getRI), typedOpt = Some(getTyped))
+        return MSome(Exp.Select(receiverOpt = Some(o), id = AST.Id("get", emptyAttr), targs = ISZ(), attr = getRa))
+      }
       processIdent(o) match {
         case Some(s) =>
           symbols = symbols + s
@@ -775,7 +818,7 @@ object GclResolver {
                      symbolTable: SymbolTable,
                      reporter: Reporter): (MOption[Exp], ISZ[SymbolHolder], ISZ[AadlPort]) = {
     return collectSymbolsH(exp, mode, context, isContextGeneralAssumeClause, F, indexingTypeFingerprints,
-      stateVars, methods, symbolTable, reporter)
+      stateVars, methods, symbolTable, Set.empty, reporter)
   }
 
   def collectSymbolsH(exp: Exp,
@@ -787,13 +830,14 @@ object GclResolver {
                       stateVars: ISZ[GclStateVar],
                       methods: Map[ISZ[String], GclMethod],
                       symbolTable: SymbolTable,
+                      optionalCompositionAliases: Set[String],
                       reporter: Reporter): (MOption[Exp], ISZ[SymbolHolder], ISZ[AadlPort]) = {
     if (reporter.hasError) {
       // already in an inconsistent state
       return (MNone(), ISZ(), ISZ())
     } else {
       val sf = SymbolFinder(mode, context, isContextGeneralAssumeClause, isIntegrationContext,
-        indexingTypeFingerprints, stateVars, methods, symbolTable)
+        indexingTypeFingerprints, stateVars, methods, symbolTable, optionalCompositionAliases)
       val rexp = sf.transform_langastExp(exp)
       reporter.reports(sf.reporter.messages)
       return (rexp, sf.symbols.elements, sf.apiReferences.elements)
@@ -837,6 +881,12 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
   var slangTypeToAadlType: Map[AST.Typed, TypeIdPath] = Map.empty
   var resolvedComponentAliasMap: Map[String, IdPath] = Map.empty
 
+  // composition port-alias names whose backing port is an event/event-data port
+  // (optional payload). Populated while declaring the alias scope (which resolves
+  // the port), consumed when resolving composition property bindings so that a
+  // bare payload reference `alias.field` is rewritten to `alias.get.field`.
+  var optionalCompositionAliases: Set[String] = Set.empty
+
   def reset: B = {
     apiReferences = Set.empty
     computeHandlerPortMap = Map.empty
@@ -850,6 +900,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
     indexingTypeFingerprints = Map.empty
     slangTypeToAadlType = Map.empty
     resolvedComponentAliasMap = Map.empty
+    optionalCompositionAliases = Set.empty
 
     return T
   }
@@ -1252,7 +1303,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           if (!reporter.hasError) {
             val (expTrans, symbols, apiRefs) =
               GclResolver.collectSymbolsH(expTipe, RewriteMode.Normal, component, F, T, indexingTypeFingerprints,
-            ISZ(), gclMethods, symbolTable, reporter)
+            ISZ(), gclMethods, symbolTable, Set.empty, reporter)
 
             val resolvedExpr: AST.Exp = expTrans match {
               case MSome(et2) => et2
@@ -1917,8 +1968,12 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         case Some((rexp, roptType)) =>
           roptType match {
             case Some(AST.Typed.Name(ISZ("org", "sireum", "B"), _, _)) =>
-              val (rexp2, _, _) = GclResolver.collectSymbols(rexp, RewriteMode.Normal, component, F, indexingTypeFingerprints,
-                ISZ(), libMethods, symbolTable, reporter)
+              // A composition port alias for an event/event-data port resolves to a
+              // payload-typed var, hiding the Option. Symbol collection makes it
+              // explicit (passing the optional-alias set): HasEvent(alias) ->
+              // alias.nonEmpty, and payload refs alias(.field) -> alias.get(.field).
+              val (rexp2, _, _) = GclResolver.collectSymbolsH(rexp, RewriteMode.Normal, component, F, F, indexingTypeFingerprints,
+                ISZ(), libMethods, symbolTable, optionalCompositionAliases, reporter)
               val resolvedExp: AST.Exp =
                 if (rexp2.isEmpty) rexp
                 else rexp2.get
@@ -3305,7 +3360,83 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
       val gclAnnexes = component.annexes.filter((ann: Annex) => ann.clause.isInstanceOf[GclSubclause]).map((ann: Annex) => ann.clause.asInstanceOf[GclSubclause])
 
       val methods: HashSMap[String, Info] = {
+        // Register the GUMBO uninterpreted predicates (HasEvent/MustSend/NoSend/...)
+        // in the system's scope too, so composition property bindings can reference
+        // them (e.g. HasEvent(<port alias>) as a presence guard). Mirrors the same
+        // registration done for threads in buildInfoObject.
+        val TYPE_VAR__STATE_VAR = "TYPE_VAR__STATE_VAR"
+
+        def sysToName(x: ISZ[String]): AST.Name = {
+          return AST.Name(
+            ids = x.map((m: String) => AST.Id(value = m, attr = AST.Attr(None()))),
+            attr = AST.Attr(None()))
+        }
+
+        val boolType = AST.Type.Named(
+          name = sysToName(ISZ("org", "sireum", "B")), rTypeOpt = None(), typeArgs = ISZ(),
+          attr = AST.TypedAttr(posOpt = None(),
+            typedOpt = Some(AST.Typed.Name(ids = ISZ("org", "sireum", "B"), rTypeOpt = AST.Typed.noRType, args = ISZ()))))
+
+        val expType = AST.Type.Named(
+          name = sysToName(ISZ("org", "sireum", "lang", "ast", "Exp")), rTypeOpt = None(), typeArgs = ISZ(),
+          attr = AST.TypedAttr(posOpt = None(),
+            typedOpt = Some(AST.Typed.Name(ids = ISZ("org", "sireum", "lang", "ast", "Exp"), rTypeOpt = AST.Typed.noRType, args = ISZ()))))
+
+        val portParam = AST.Param(isHidden = F, id = AST.Id("port", AST.Attr(None())), tipe = expType)
+
+        val genericType = AST.TypeParam(AST.Id(TYPE_VAR__STATE_VAR, AST.Attr(None())), AST.Typed.VarKind.Immutable)
+        val genericPortParam = AST.Param(isHidden = F, id = AST.Id("port", AST.Attr(None())),
+          tipe = AST.Type.Named(name = sysToName(ISZ(TYPE_VAR__STATE_VAR)), rTypeOpt = None(), typeArgs = ISZ(),
+            attr = AST.TypedAttr(posOpt = None(), typedOpt = Some(AST.Typed.TypeVar(id = TYPE_VAR__STATE_VAR, kind = AST.Typed.VarKind.Immutable)))))
+        val genericValueParam = AST.Param(isHidden = F, id = AST.Id("value", AST.Attr(None())),
+          tipe = AST.Type.Named(name = sysToName(ISZ(TYPE_VAR__STATE_VAR)), rTypeOpt = None(), typeArgs = ISZ(),
+            attr = AST.TypedAttr(posOpt = None(), typedOpt = Some(AST.Typed.TypeVar(id = TYPE_VAR__STATE_VAR, kind = AST.Typed.VarKind.Immutable)))))
+
+        def sysMkUif(methodName: String, typeParams: ISZ[AST.TypeParam], params: ISZ[AST.Param], returnType: AST.Type.Named, isInObject: B): Info.Method = {
+          val methodAst: AST.Stmt.Method = {
+            val methodSig = AST.MethodSig(
+              purity = AST.Purity.Pure, annotations = ISZ(), id = AST.Id(methodName, AST.Attr(None())),
+              rTypeParams = ISZ(), typeParams = typeParams, hasParams = params.nonEmpty, params = params, returnType = returnType)
+            val typedFun = AST.Typed.Fun(
+              purity = AST.Purity.Pure, isByName = F,
+              args = params.map((m: AST.Param) => {
+                val ids = m.tipe.asInstanceOf[AST.Type.Named].name.ids.map((i: AST.Id) => i.value)
+                if (ids == ISZ(TYPE_VAR__STATE_VAR)) AST.Typed.TypeVar(id = TYPE_VAR__STATE_VAR, kind = AST.Typed.VarKind.Immutable)
+                else AST.Typed.Name(ids = ids, rTypeOpt = AST.Typed.noRType, args = ISZ())
+              }),
+              ret = AST.Typed.Name(ids = returnType.name.ids.map((m: AST.Id) => m.value), rTypeOpt = AST.Typed.noRType, args = ISZ()))
+            val rInfoMethod = AST.ResolvedInfo.Method(
+              isInObject = isInObject, mode = AST.MethodMode.Method,
+              typeParams = typeParams.map((t: AST.TypeParam) => t.id.value),
+              owner = sysName, id = methodName, paramNames = params.map((m: AST.Param) => m.id.value),
+              tpeOpt = Some(typedFun), reads = ISZ(), writes = ISZ(), defPosOpt = None())
+            val typedMethod = AST.Typed.Method(
+              isInObject = isInObject, mode = AST.MethodMode.Method,
+              typeParams = typeParams.map((t: AST.TypeParam) => t.id.value),
+              owner = sysName, name = methodName, paramNames = params.map((m: AST.Param) => m.id.value), tpe = typedFun)
+            AST.Stmt.Method(
+              typeChecked = F, purity = AST.Purity.Pure, modifiers = ISZ(), sig = methodSig,
+              mcontract = AST.MethodContract.Simple.empty, bodyOpt = None(),
+              attr = AST.ResolvedAttr(posOpt = None(), resOpt = Some(rInfoMethod), typedOpt = Some(typedMethod)))
+          }
+          return Info.Method(
+            owner = sysName, isInObject = isInObject,
+            scope = scope(packageName = sysOwner, imports = sysScope.imports, enclosingName = sysName),
+            hasBody = F, ast = methodAst)
+        }
+
         var _methods: HashSMap[String, Info] = HashSMap.empty
+        val sigs = ISZ[(String, ISZ[AST.TypeParam], ISZ[AST.Param], AST.Type.Named)](
+          (uif__HasEvent, ISZ(genericType), ISZ[AST.Param](genericPortParam), boolType),
+          (uif__MaySend, ISZ(), ISZ[AST.Param](portParam), boolType),
+          (uif__NoSend, ISZ(genericType), ISZ[AST.Param](genericPortParam), boolType),
+          (uif__MustSend, ISZ(genericType), ISZ[AST.Param](genericPortParam), boolType),
+          (uif__MustSendWithExpectedValue, ISZ(genericType), ISZ[AST.Param](genericPortParam, genericValueParam), boolType),
+        )
+        for (sig <- sigs) {
+          _methods = _methods + sig._1 ~> sysMkUif(
+            methodName = sig._1, typeParams = sig._2, params = sig._3, returnType = sig._4, isInObject = T)
+        }
 
         val specDefs: ISZ[(String, Info)] = gclAnnexes.flatMap((g: GclSubclause) =>
           g.methods.map((gclMethod: GclMethod) => {
@@ -3389,6 +3520,11 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                 checkCrossCompositionAlias(pa.name, comp.id, fullFeaturePath, pa.posOpt)
                 symbolTable.featureMap.get(fullFeaturePath) match {
                   case Some(port: AadlPort) =>
+                    // event / event-data ports carry an optional payload; record the
+                    // alias so property bindings unwrap bare payload references (.get)
+                    if (port.isInstanceOf[AadlEventPort] || port.isInstanceOf[AadlEventDataPort]) {
+                      optionalCompositionAliases = optionalCompositionAliases + pa.name
+                    }
                     val fieldAadlType: AadlType = port match {
                       case afd: AadlFeatureData => afd.aadlType
                       case _ => TypeUtil.EmptyType
