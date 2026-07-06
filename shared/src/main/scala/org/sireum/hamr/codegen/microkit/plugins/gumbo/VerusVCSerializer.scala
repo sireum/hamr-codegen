@@ -1124,6 +1124,7 @@ object VerusVCSerializer {
           }
           val preCovered = coversTransition(t)
           var ens: ISZ[ST] = ISZ()
+          var hasIntegrationAssume: B = F
           if (preCovered) {
             contractsByPath.get(compPath) match {
               case Some(cc) =>
@@ -1135,13 +1136,27 @@ object VerusVCSerializer {
                   if (f.kind == ContractFnKind.ComputeAssume) {
                     ens = ens :+ contractCall(cc.moduleName, f, compPath, ssm, "st", "st", reporter)
                   }
+                  if (f.kind == ContractFnKind.IntegrationAssume) {
+                    hasIntegrationAssume = T
+                  }
                 }
               case _ =>
             }
           }
+          val aliasU = ops.StringOps(alias).toUpper
+          // When the component has integration assumes, the sequent's obligations are the
+          // compute assumes ONLY; call out that the integration assumes are intentionally
+          // absent (discharged per-connection in vc_integration.rs) so an auditor does not
+          // read the omission as a gap.
           val preDoc: ST =
-            if (preCovered) st"/** VC[$i]: Pre-Assert -- ${placeNames(t.inPlaces)} |- ${ops.StringOps(alias).toUpper} compute assumes */"
-            else st"/** VC[$i]: Pre-Assert -- trivial: this property does not use ${ops.StringOps(alias).toUpper}'s contract (no bound out-place; contract projection) */"
+            if (!preCovered)
+              st"/** VC[$i]: Pre-Assert -- trivial: this property does not use $aliasU's contract (no bound out-place; contract projection) */"
+            else if (hasIntegrationAssume)
+              st"""/** VC[$i]: Pre-Assert -- ${placeNames(t.inPlaces)} |- $aliasU compute assumes.
+                  |  * $aliasU's integration assumes are not obligations here; they are discharged
+                  |  * per-connection in vc_integration.rs (upstream guarantee => assume). */"""
+            else
+              st"/** VC[$i]: Pre-Assert -- ${placeNames(t.inPlaces)} |- $aliasU compute assumes */"
           seqFns = seqFns :+ renderProofFn(
             doc = preDoc,
             fnName = s"vc_pre_assert_${occurrenceOf(t, transIdx)}",
@@ -1166,6 +1181,8 @@ object VerusVCSerializer {
               reporter.error(None(), toolName,
                 st"No write frame for component ${(compPath, ".")}".render)
           }
+          var hasIntegrationGuarantee: B = F
+          var hasIntegrationAssume: B = F
           if (coversTransition(t)) {
             contractsByPath.get(compPath) match {
               case Some(cc) =>
@@ -1178,13 +1195,40 @@ object VerusVCSerializer {
                   if (f.kind == ContractFnKind.ComputeGuarantee || f.kind == ContractFnKind.ComputeCase ||
                     f.kind == ContractFnKind.IntegrationGuarantee || f.kind == ContractFnKind.IntegrationAssume) {
                     req = req :+ contractCall(cc.moduleName, f, compPath, ssm, "pre", "post", reporter)
+                    if (f.kind == ContractFnKind.IntegrationGuarantee) {
+                      hasIntegrationGuarantee = T
+                    }
+                    if (f.kind == ContractFnKind.IntegrationAssume) {
+                      hasIntegrationAssume = T
+                    }
                   }
                 }
               case _ =>
             }
           }
+          val aliasU = ops.StringOps(alias).toUpper
+          // Integration clauses also enter the premises. List each present kind in the
+          // sequent, and note where its validity is discharged: guarantees by the firing
+          // component's own contract proof, assumes per-connection by vc_integration.rs.
+          val gNote: Option[ST] = if (hasIntegrationGuarantee) Some(st" + $aliasU's integration guarantees") else None()
+          val aNote: Option[ST] = if (hasIntegrationAssume) Some(st" + $aliasU's integration assumes") else None()
+          val dischargeOpt: Option[ST] =
+            if (hasIntegrationGuarantee && hasIntegrationAssume)
+              Some(st"The integration guarantees hold by $aliasU's own contract proof (its component crate); the integration assumes are discharged per-connection in vc_integration.rs (upstream guarantee => assume).")
+            else if (hasIntegrationGuarantee)
+              Some(st"The integration guarantees hold by $aliasU's own contract proof (its component crate).")
+            else if (hasIntegrationAssume)
+              Some(st"The integration assumes are discharged per-connection in vc_integration.rs (upstream guarantee => assume).")
+            else None()
+          val sequent = st"VC[$i]: Next-Assert (task) -- ${placeNames(t.inPlaces)} + frames + $aliasU postcondition$gNote$aNote |- ${placeNames(t.outPlaces)}"
+          val nextAssertDoc: ST = dischargeOpt match {
+            case Some(d) =>
+              st"""/** $sequent.
+                  |  * $d */"""
+            case _ => st"/** $sequent */"
+          }
           seqFns = seqFns :+ renderProofFn(
-            doc = st"/** VC[$i]: Next-Assert (task) -- ${placeNames(t.inPlaces)} + frames + ${ops.StringOps(alias).toUpper} postcondition |- ${placeNames(t.outPlaces)} */",
+            doc = nextAssertDoc,
             fnName = s"vc_next_assert_task_${occurrenceOf(t, transIdx)}",
             paramsDecl = "pre: SystemState, post: SystemState",
             requiresClauses = req,
@@ -1497,10 +1541,11 @@ object VerusVCSerializer {
           |""")
   }
 
-  // Serializes one property's Non-Blocking and Preservation VCs. Both
-  // over-approximate the firing component's actual action by its global write
-  // frame (sound: the real action satisfies the frame). Commutativity is
-  // property-independent and serialized once per composition by
+  // Serializes one property's non-disabling VCs -- pre-assertions preservation and
+  // post-assertions preservation -- which together with Commutativity form the
+  // independence proof. Both over-approximate the firing component's actual action
+  // by its global write frame (sound: the real action satisfies the frame).
+  // Commutativity is property-independent and serialized once per composition by
   // `genCommutativityVCs`.
   @pure def genPropertyIndependenceVCs(propertyId: String,
                                        vcs: ISZ[VC],
@@ -1592,8 +1637,8 @@ object VerusVCSerializer {
           var req = assertCalls(t1.inPlaces, assertByPlace, "pre") ++ assertCalls(t2.inPlaces, assertByPlace, "pre")
           req = req :+ st"${framesByPath.get(firingPath).get.globalFnName}(pre, post)"
           fns = fns :+ renderProofFn(
-            doc = st"/** VC[$i]: Non-Blocking -- ${ops.StringOps(firingAlias).toUpper} firing does not block ${ops.StringOps(otherLabel).toUpper} (MHIP pair t${pair._1}/t${pair._2}) */",
-            fnName = uniqueName(s"vc_non_blocking_${firingAlias}_$otherLabel", i),
+            doc = st"/** VC[$i]: Pre-Assertions Preservation -- ${ops.StringOps(firingAlias).toUpper} firing does not disable ${ops.StringOps(otherLabel).toUpper} (preserves its pre-assertions; MHIP pair t${pair._1}/t${pair._2}) */",
+            fnName = uniqueName(s"vc_pre_assertions_preservation_${firingAlias}_$otherLabel", i),
             paramsDecl = "pre: SystemState, post: SystemState",
             requiresClauses = req,
             ensuresClauses = assertCalls(other.inPlaces, assertByPlace, "post"))
@@ -1614,8 +1659,8 @@ object VerusVCSerializer {
           var req = assertCalls(firing.inPlaces, assertByPlace, "pre") ++ assertCalls(other.outPlaces, assertByPlace, "pre")
           req = req :+ st"${framesByPath.get(firingPath).get.globalFnName}(pre, post)"
           fns = fns :+ renderProofFn(
-            doc = st"/** VC[$i]: Preservation -- ${ops.StringOps(firingAlias).toUpper} firing preserves ${ops.StringOps(otherLabel).toUpper}'s post-assertions (MHIP pair t${pair._1}/t${pair._2}) */",
-            fnName = uniqueName(s"vc_preservation_${firingAlias}_$otherLabel", i),
+            doc = st"/** VC[$i]: Post-Assertions Preservation -- ${ops.StringOps(firingAlias).toUpper} firing preserves ${ops.StringOps(otherLabel).toUpper}'s post-assertions (MHIP pair t${pair._1}/t${pair._2}) */",
+            fnName = uniqueName(s"vc_post_assertions_preservation_${firingAlias}_$otherLabel", i),
             paramsDecl = "pre: SystemState, post: SystemState",
             requiresClauses = req,
             ensuresClauses = assertCalls(other.outPlaces, assertByPlace, "post"))
@@ -1627,8 +1672,13 @@ object VerusVCSerializer {
     return (
       st"""${CommentTemplate.doNotEditComment_slash}
           |
-          |//! Property $propertyId -- Non-Blocking and Preservation VCs for every
-          |//! MHIP transition pair (per direction whose firing member is a component).
+          |//! Property $propertyId -- non-disabling VCs, part of the independence proof,
+          |//! for every MHIP transition pair (per direction whose firing member is a
+          |//! component): pre-assertions preservation (the firing does not disable another
+          |//! transition -- its pre-assertions still hold) and post-assertions preservation
+          |//! (the firing preserves another transition's established post-assertions).
+          |//! Together with the property-independent Commutativity VCs, these establish
+          |//! that concurrently-enabled transitions do not interfere.
           |//! Each proof fn has an empty body: Verus discharges `requires ==> ensures`
           |//! via SMT; add proof hints in the body if a VC does not discharge.
           |
@@ -1733,8 +1783,12 @@ object VerusVCSerializer {
       st"""${CommentTemplate.doNotEditComment_slash}
           |
           |//! Commutativity VCs (execIndependent), one per component-component MHIP
-          |//! pair. Assertion-free state equalities over the action abstractions --
-          |//! shared by all of the composition's properties.
+          |//! pair -- part of the independence proof: together with each property's
+          |//! non-disabling VCs (pre-/post-assertions preservation), they establish that
+          |//! concurrently-enabled transitions do not interfere. These are assertion-free
+          |//! state equalities over the action abstractions, so unlike the non-disabling
+          |//! VCs they are property-independent and shared by all of the composition's
+          |//! properties.
           |//! Each proof fn has an empty body: Verus discharges `requires ==> ensures`
           |//! via SMT; add proof hints in the body if a VC does not discharge.
           |
@@ -1765,7 +1819,7 @@ object VerusVCSerializer {
       st"""${CommentTemplate.doNotEditComment_slash}
           |
           |pub mod assertions;
-          |pub mod vc_independence;
+          |pub mod vc_non_disabling;
           |pub mod vc_init;
           |pub mod vc_post_pre;
           |pub mod vc_sequential;
@@ -1853,7 +1907,7 @@ object VerusVCSerializer {
   // also no_std and built for aarch64 with build-std).
   @pure def genSysProofMakefile(propertyModIds: ISZ[String]): ST = {
     // the per-property vc_* submodules declared by genPropertyModRs, in VC order
-    val vcModules: ISZ[String] = ISZ("vc_init", "vc_sequential", "vc_post_pre", "vc_independence")
+    val vcModules: ISZ[String] = ISZ("vc_init", "vc_sequential", "vc_post_pre", "vc_non_disabling")
 
     val propTargets: ISZ[ST] =
       for (p <- propertyModIds) yield
@@ -1869,7 +1923,7 @@ object VerusVCSerializer {
           |# shared, property-independent Commutativity VCs -- in one `cargo-verus
           |# verify`. `make <property>` runs `cargo-verus verify` on just that
           |# property's generated VCs (its vc_init / vc_sequential / vc_post_pre /
-          |# vc_independence modules).
+          |# vc_non_disabling modules).
           |
           |ENV_VARS = RUSTC_BOOTSTRAP=1
           |

@@ -128,7 +128,7 @@ import org.sireum.message.Reporter
         add(rootDir, s"$propDir/vc_init.rs", seqVCs.vcInitRs)
         add(rootDir, s"$propDir/vc_sequential.rs", seqVCs.vcSequentialRs)
         add(rootDir, s"$propDir/vc_post_pre.rs", seqVCs.vcPostPreRs)
-        add(rootDir, s"$propDir/vc_independence.rs", indVCs)
+        add(rootDir, s"$propDir/vc_non_disabling.rs", indVCs)
       }
 
       if (reporter.hasError) {
