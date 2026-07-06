@@ -371,6 +371,143 @@ object VerusVCSerializer {
                                      val methodFns: ISZ[ST],
                                      val fns: ISZ[ContractFn])
 
+  // A schema component whose GUMBO contract the system proof trusts WITHOUT a Verus
+  // discharge, because the component is not implemented in Rust. `guaranteeClauses`
+  // are the module-qualified guarantee spec fns the VCs use as premises (what the
+  // proof actually relies on the component to establish).
+  @datatype class TrustedComponent(val componentPath: IdPath,
+                                   val alias: String,
+                                   val moduleName: String,
+                                   val guaranteeClauses: ISZ[String])
+
+  // Schema components (those with a write frame) that have a GUMBO contract with at
+  // least one guarantee but are NOT implemented in Rust: Verus cannot discharge their
+  // contracts, so the system proof trusts them. Empty when every contracted, guarantee-
+  // bearing schema component is Rust.
+  @pure def findTrustedComponents(contracts: ISZ[ComponentContracts],
+                                  frames: ISZ[WriteFrameFn],
+                                  symbolTable: SymbolTable): ISZ[TrustedComponent] = {
+    var threadByPath: Map[IdPath, AadlThread] = Map.empty
+    for (t <- symbolTable.getThreads()) {
+      threadByPath = threadByPath + t.path ~> t
+    }
+    var aliasByPath: Map[IdPath, String] = Map.empty
+    for (fr <- frames) {
+      aliasByPath = aliasByPath + fr.componentPath ~> fr.componentAlias
+    }
+    var result: ISZ[TrustedComponent] = ISZ()
+    for (cc <- contracts) {
+      // only components that actually fire in the schema (have a write frame) matter
+      aliasByPath.get(cc.componentPath) match {
+        case Some(alias) =>
+          threadByPath.get(cc.componentPath) match {
+            case Some(t) if !org.sireum.hamr.codegen.microkit.util.MicrokitUtil.isRusty(t) =>
+              var clauses: ISZ[String] = ISZ()
+              for (f <- cc.fns) {
+                if (f.kind == ContractFnKind.InitializeGuarantee || f.kind == ContractFnKind.ComputeGuarantee ||
+                  f.kind == ContractFnKind.ComputeCase || f.kind == ContractFnKind.IntegrationGuarantee) {
+                  clauses = clauses :+ s"${cc.moduleName}::${f.fnName}"
+                }
+              }
+              // a non-Rust component with no guarantees contributes no trusted premise
+              if (clauses.nonEmpty) {
+                result = result :+ TrustedComponent(cc.componentPath, alias, cc.moduleName, clauses)
+              }
+            case _ =>
+          }
+        case _ =>
+      }
+    }
+    return result
+  }
+
+  // Renders src/trusted_assumptions.rs: one greppable marker per non-Rust schema
+  // component recording that the system proof relies on its GUMBO contract without a
+  // Verus discharge. Audit the trust base by grepping `assumed_` in the proof crate.
+  @pure def genTrustedAssumptionsRs(compositionId: String, trusted: ISZ[TrustedComponent]): ST = {
+    var items: ISZ[ST] = ISZ()
+    for (tc <- trusted) {
+      val clauseLines: ISZ[ST] = for (c <- tc.guaranteeClauses) yield st"  *   - $c"
+      items = items :+
+        st"""/** TRUSTED -- component `${tc.alias}` (${(tc.componentPath, "::")}) is not implemented in
+            |  * Rust, so Verus does not discharge its GUMBO contract. Every system VC that uses
+            |  * ${tc.alias}'s guarantees as a premise relies on ${tc.alias} having been verified by
+            |  * other means (e.g., testing). Trusted guarantee clauses (defined in contracts.rs):
+            |${(clauseLines, "\n")}
+            |  */
+            |pub proof fn assumed_${tc.moduleName}_contract_holds() {}"""
+    }
+    return (
+      st"""${CommentTemplate.doNotEditComment_slash}
+          |
+          |//! TRUSTED ASSUMPTIONS for the system proof of composition `$compositionId`.
+          |//!
+          |//! The system VCs use each schema component's GUMBO guarantees as premises. For a
+          |//! Rust component that premise is discharged by the component's own Verus crate; for
+          |//! the components below -- which are NOT implemented in Rust -- it is discharged
+          |//! nowhere by Verus, so the system proof is only as strong as their contracts being
+          |//! established by other means (e.g., testing). Each `assumed_*_contract_holds` marker
+          |//! records one such trusted component; grep `assumed_` to enumerate the trust base.
+          |
+          |#![allow(non_snake_case)]
+          |
+          |use vstd::prelude::*;
+          |
+          |verus! {
+          |
+          |${(items, "\n\n")}
+          |
+          |} // verus!
+          |""")
+  }
+
+  // Renders TRUSTED_ASSUMPTIONS.md: the human-readable companion to trusted_assumptions.rs.
+  @pure def genTrustedAssumptionsMd(compositionId: String, trusted: ISZ[TrustedComponent]): ST = {
+    val rows: ISZ[ST] =
+      for (tc <- trusted) yield
+        st"""### `${tc.alias}` (${(tc.componentPath, ".")})
+            |
+            |Not implemented in Rust; its GUMBO contract is **not** discharged by Verus. The
+            |system proof trusts the following guarantee clauses (verify by other means, e.g. testing):
+            |
+            |${(for (c <- tc.guaranteeClauses) yield st"- `$c`", "\n")}"""
+    return (
+      st"""${CommentTemplate.doNotEditComment_xml}
+          |
+          |# Trusted assumptions -- system proof of composition `$compositionId`
+          |
+          |This crate's system VCs assume each schema component satisfies its GUMBO contract.
+          |For Rust components this is discharged by the component's own Verus crate. The
+          |components below are **not** implemented in Rust, so their contracts are trusted --
+          |the system proof is only as strong as these being established by other means
+          |(e.g., testing). See `src/trusted_assumptions.rs` (grep `assumed_`) and
+          |`trusted_assumptions.json`.
+          |
+          |${(rows, "\n\n")}
+          |""")
+  }
+
+  // Renders trusted_assumptions.json: the machine-readable trust ledger (diffable in PRs).
+  @pure def genTrustedAssumptionsJson(compositionId: String, trusted: ISZ[TrustedComponent]): ST = {
+    val entries: ISZ[ST] =
+      for (tc <- trusted) yield
+        st"""{
+            |  "component": "${(tc.componentPath, ".")}",
+            |  "alias": "${tc.alias}",
+            |  "module": "${tc.moduleName}",
+            |  "trustedGuaranteeClauses": [${(for (c <- tc.guaranteeClauses) yield st"\"$c\"", ", ")}]
+            |}"""
+    return (
+      st"""{
+          |  "_comment": "${CommentTemplate.doNotEditComment}",
+          |  "composition": "$compositionId",
+          |  "note": "Components whose GUMBO contract the system proof trusts without a Verus discharge (not implemented in Rust); verify by other means.",
+          |  "trustedComponents": [
+          |    ${(entries, ",\n")}
+          |  ]
+          |}""")
+  }
+
   // Renders a component GUMBO spec method (developer-defined UIF) as an
   // uninterpreted spec fn for the proof crate.
   @pure def renderUninterpSpecMethod(m: ir.GclSpecMethod,
@@ -1827,12 +1964,21 @@ object VerusVCSerializer {
   }
 
   // Shared modules first, then per-property modules in declaration order.
-  @pure def genLibRs(compositionId: String, propertyModIds: ISZ[String]): ST = {
+  // `emitTrusted` adds the trusted_assumptions module (present only when some schema
+  // component has a trusted, non-Rust GUMBO contract).
+  @pure def genLibRs(compositionId: String, propertyModIds: ISZ[String], emitTrusted: B): ST = {
     // each property's assertions + VC modules live in its own folder src/<p>/,
     // declared as a single module here (see genPropertyModRs for the folder's mod.rs)
     var propertyMods: ISZ[ST] = ISZ()
     for (p <- propertyModIds) {
       propertyMods = propertyMods :+ st"""pub mod $p;"""
+    }
+    var sharedMods: ISZ[ST] = ISZ(
+      st"pub mod actions;", st"pub mod assertions;", st"pub mod contracts;",
+      st"pub mod system_state;", st"pub mod vc_commutativity;", st"pub mod vc_integration;",
+      st"pub mod write_frames;")
+    if (emitTrusted) {
+      sharedMods = sharedMods :+ st"pub mod trusted_assumptions;"
     }
     return (
       st"""#![cfg_attr(not(test), no_std)]
@@ -1847,13 +1993,7 @@ object VerusVCSerializer {
           |//! property. See the proof-fn doc comments for the VC indices tying each
           |//! obligation back to the generator output.
           |
-          |pub mod actions;
-          |pub mod assertions;
-          |pub mod contracts;
-          |pub mod system_state;
-          |pub mod vc_commutativity;
-          |pub mod vc_integration;
-          |pub mod write_frames;
+          |${(sharedMods, "\n")}
           |
           |${(propertyMods, "\n")}
           |""")
@@ -1905,7 +2045,7 @@ object VerusVCSerializer {
   //
   // ENV_VARS/CARGO_FLAGS mirror the component crates' Makefile (the proof crate is
   // also no_std and built for aarch64 with build-std).
-  @pure def genSysProofMakefile(propertyModIds: ISZ[String]): ST = {
+  @pure def genSysProofMakefile(propertyModIds: ISZ[String], trusted: ISZ[TrustedComponent]): ST = {
     // the per-property vc_* submodules declared by genPropertyModRs, in VC order
     val vcModules: ISZ[String] = ISZ("vc_init", "vc_sequential", "vc_post_pre", "vc_non_disabling")
 
@@ -1915,6 +2055,32 @@ object VerusVCSerializer {
             |.PHONY: $p
             |$p: warm-deps
             |${TAB}$$(ENV_VARS) cargo-verus verify $$(CARGO_FLAGS) -- ${(for (m <- vcModules) yield st"--verify-module $p::$m", " ")}"""
+
+    // re-surface the trusted (non-Rust) component contracts on every `make`/`make all`
+    // so the assumption is not overlooked (single quotes: no shell/Make expansion needed)
+    val hasTrusted: B = trusted.nonEmpty
+    val allDeps: String = if (hasTrusted) " trust-notice" else ""
+    val trustNoticeLines: ISZ[ST] =
+      for (tc <- trusted) yield
+        st"${TAB}@echo '  - ${tc.alias} (${(tc.componentPath, ".")}): not Rust; GUMBO contract assumed, not verified by Verus'"
+    val trustNoticeTarget: Option[ST] =
+      if (hasTrusted)
+        Some(
+          st"""# Announce the non-Rust component contracts this proof trusts (see
+              |# TRUSTED_ASSUMPTIONS.md / src/trusted_assumptions.rs). `all` depends on this.
+              |.PHONY: trust-notice
+              |trust-notice:
+              |${TAB}@echo 'WARNING: this system proof TRUSTS ${trusted.size} non-Rust component contract(s) --'
+              |${TAB}@echo 'valid only if these are verified by other means (e.g. testing):'
+              |${(trustNoticeLines, "\n")}""")
+      else None()
+
+    // fold the notice target in with the property targets so its absence adds no
+    // whitespace (keeps all-Rust proof crates' Makefiles byte-identical)
+    val allTargets: ISZ[ST] = trustNoticeTarget match {
+      case Some(tn) => propTargets :+ tn
+      case _ => propTargets
+    }
 
     return (
       st"""${CommentTemplate.doNotEditComment_hash}
@@ -1933,7 +2099,7 @@ object VerusVCSerializer {
           |
           |# verify the entire crate (every property plus the shared Commutativity VCs)
           |.PHONY: all
-          |all:
+          |all:$allDeps
           |${TAB}$$(ENV_VARS) cargo-verus verify $$(CARGO_FLAGS)
           |
           |# Compile every crate WITHOUT verification so the dependency crates (vstd,
@@ -1944,7 +2110,7 @@ object VerusVCSerializer {
           |warm-deps:
           |${TAB}$$(ENV_VARS) cargo-verus verify $$(CARGO_FLAGS) -- --no-verify
           |
-          |${(propTargets, "\n\n")}
+          |${(allTargets, "\n\n")}
           |
           |.PHONY: clean
           |clean:

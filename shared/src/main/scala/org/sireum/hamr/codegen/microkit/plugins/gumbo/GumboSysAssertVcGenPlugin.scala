@@ -93,6 +93,21 @@ import org.sireum.message.Reporter
       val commutativityVCs = VCGenerator.generateCommutativityVCs(nextRel, mhipPairs, resolvedAliasMap, symbolTable)
       val commVCsRs = VerusVCSerializer.genCommutativityVCs(commutativityVCs, nextRel, actions, resolvedAliasMap, reporter)
 
+      // Schema components with a GUMBO contract that are NOT implemented in Rust: the
+      // system proof uses their guarantees as premises but Verus cannot discharge those
+      // contracts, so they are TRUSTED. Alert via the reporter (can be overlooked) AND
+      // emit durable, greppable trust records (trusted_assumptions.rs/.md/.json + a
+      // Makefile notice on every verify run).
+      val trusted = VerusVCSerializer.findTrustedComponents(contracts, frames, symbolTable)
+      if (trusted.nonEmpty) {
+        val names: ISZ[String] = for (tc <- trusted) yield tc.alias
+        reporter.warn(None(), name,
+          st"System proof for composition '${composition.id}' TRUSTS the GUMBO contract(s) of ${trusted.size} non-Rust component(s) (${(names, ", ")}): Verus does not discharge these, so they must be verified by other means (e.g., testing). See $rootDir/TRUSTED_ASSUMPTIONS.md".render)
+        add(rootDir, "src/trusted_assumptions.rs", VerusVCSerializer.genTrustedAssumptionsRs(composition.id, trusted))
+        add(rootDir, "TRUSTED_ASSUMPTIONS.md", VerusVCSerializer.genTrustedAssumptionsMd(composition.id, trusted))
+        add(rootDir, "TRUSTED_ASSUMPTIONS.json", VerusVCSerializer.genTrustedAssumptionsJson(composition.id, trusted))
+      }
+
       // integration-constraint VCs: per connected port pair whose destination
       // in-port has an integration assume, prove the sender's out-port guarantee
       // (or `true`) implies it. Static -- shared by the composition, like commutativity.
@@ -142,7 +157,7 @@ import org.sireum.message.Reporter
         path = s"$rootDir/rust-toolchain.toml",
         content = RustUtil.defaultRustToolChainToml(store),
         overwrite = F)
-      add(rootDir, "src/lib.rs", VerusVCSerializer.genLibRs(composition.id, propertyModIds))
+      add(rootDir, "src/lib.rs", VerusVCSerializer.genLibRs(composition.id, propertyModIds, trusted.nonEmpty))
       add(rootDir, "src/system_state.rs", VerusVCSerializer.genSystemStateRs(ssm, tp))
       add(rootDir, "src/contracts.rs", VerusVCSerializer.genContractsRs(contracts))
       add(rootDir, "src/assertions.rs", VerusVCSerializer.genSysFnsRs(sysFns))
@@ -152,7 +167,7 @@ import org.sireum.message.Reporter
       add(rootDir, "src/vc_integration.rs", integrationVCsRs)
 
       // per-property `make <property>` targets that verify only that property's VCs
-      add(rootDir, "Makefile", VerusVCSerializer.genSysProofMakefile(propertyModIds))
+      add(rootDir, "Makefile", VerusVCSerializer.genSysProofMakefile(propertyModIds, trusted))
 
       reporter.info(None(), name,
         s"Generated $totalVCs system VCs (${propertyModIds.size} properties) in $rootDir")
