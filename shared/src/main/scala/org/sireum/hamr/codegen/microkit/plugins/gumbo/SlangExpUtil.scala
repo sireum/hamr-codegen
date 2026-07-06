@@ -66,7 +66,28 @@ object SlangExpUtil {
                         aadlTypes: AadlTypes,
                         store: Store,
                         reporter: Reporter): ST = {
-    return rewriteExpHL(rexp, owner, optComponent, context, substitutions, inRequires, inVerus, F, F, tp, aadlTypes, store, reporter)
+    return rewriteExpHL(rexp, owner, optComponent, context, substitutions, inRequires, inVerus, F, F, None(), tp, aadlTypes, store, reporter)
+  }
+
+  // Like rewriteExp, but coerces the top-level result back to `coerceToType` when Verus would
+  // otherwise leave it as `int` (widened arithmetic) -- e.g. a spec-function return expression
+  // whose declared return type is a fixed-width machine type. Handled identically to call
+  // arguments (both funnel through castExpToType), including the if-branch push-down.
+  @pure def rewriteExpCoerce(rexp: Exp,
+                             coerceToType: SAST.Typed,
+
+                             owner: IdPath,
+                             optComponent: Option[AadlComponent],
+                             context: Context.Type,
+
+                             inRequires: B,
+                             inVerus: B,
+
+                             tp: CRustTypeProvider,
+                             aadlTypes: AadlTypes,
+                             store: Store,
+                             reporter: Reporter): ST = {
+    return rewriteExpHL(rexp, owner, optComponent, context, Map.empty, inRequires, inVerus, F, F, Some(coerceToType), tp, aadlTypes, store, reporter)
   }
 
   @pure def rewriteExpHL(rexp: Exp,
@@ -82,6 +103,10 @@ object SlangExpUtil {
 
                          alwaysOneLine: B, // don't add newlines, useful when testing
                          isTesting: B, // true when invoking from testing context
+
+                         // when non-empty, coerce the top-level result back to this declared
+                         // machine type (return-expression coercion); see castExpToType
+                         coerceToTypeOpt: Option[SAST.Typed],
 
                          tp: CRustTypeProvider,
                          aadlTypes: AadlTypes,
@@ -104,6 +129,96 @@ object SlangExpUtil {
         return st"#[trigger] $rewrittenExp"
       } else {
         return rewrittenExp
+      }
+    }
+
+    // Verus evaluates fixed-width arithmetic (binary + - * / %, and unary negation) in the
+    // mathematical integer type `int` and does not auto-coerce the result back to the machine
+    // type. Detect expressions whose Verus type is therefore `int`, so a cast can be inserted
+    // where a machine type is required (function bodies already do this; call args need it too).
+    @pure def yieldsVerusInt(e: Exp): B = {
+      e match {
+        case b: Exp.Binary =>
+          return b.op == SAST.Exp.BinaryOp.Add || b.op == SAST.Exp.BinaryOp.Sub ||
+            b.op == SAST.Exp.BinaryOp.Mul || b.op == SAST.Exp.BinaryOp.Div ||
+            b.op == SAST.Exp.BinaryOp.Rem
+        // Unary negation (`-x`) also widens to `int`, as do the other arithmetic/bitwise unary
+        // ops; only boolean `!` (Not) stays non-`int` (and never appears in a numeric position).
+        case u: Exp.Unary => return u.op != SAST.Exp.UnaryOp.Not
+        // An if-expression unifies to `int` if EITHER branch is `int`: Verus widens the
+        // machine-typed branch to `int` to match (widening is automatic; narrowing is not).
+        // Recursing on elseExp also covers else-if chains.
+        case i: Exp.If => return yieldsVerusInt(i.thenExp) || yieldsVerusInt(i.elseExp)
+        case _ => return F
+      }
+    }
+
+    // A fixed-width machine numeric type -- one that Verus arithmetic widens away from
+    // and so must be cast back to. Recognized in BOTH the Base_Types alias form and the
+    // resolved org.sireum form (a resolved param type is the latter). Unbounded
+    // Integer/Real (org.sireum.Z/R) map to Verus int/real and need no cast, so excluded.
+    @pure def isFixedWidthNumeric(t: SAST.Typed): B = {
+      t match {
+        case tn: SAST.Typed.Name =>
+          tn.ids match {
+            case ISZ("Base_Types", "Integer_8") => return T
+            case ISZ("Base_Types", "Integer_16") => return T
+            case ISZ("Base_Types", "Integer_32") => return T
+            case ISZ("Base_Types", "Integer_64") => return T
+            case ISZ("Base_Types", "Unsigned_8") => return T
+            case ISZ("Base_Types", "Unsigned_16") => return T
+            case ISZ("Base_Types", "Unsigned_32") => return T
+            case ISZ("Base_Types", "Unsigned_64") => return T
+            case ISZ("Base_Types", "Float_32") => return T
+            case ISZ("Base_Types", "Float_64") => return T
+            case ISZ("org", "sireum", "S8") => return T
+            case ISZ("org", "sireum", "S16") => return T
+            case ISZ("org", "sireum", "S32") => return T
+            case ISZ("org", "sireum", "S64") => return T
+            case ISZ("org", "sireum", "U8") => return T
+            case ISZ("org", "sireum", "U16") => return T
+            case ISZ("org", "sireum", "U32") => return T
+            case ISZ("org", "sireum", "U64") => return T
+            case ISZ("org", "sireum", "F32") => return T
+            case ISZ("org", "sireum", "F64") => return T
+            case _ => return F
+          }
+        case _ => return F
+      }
+    }
+
+    // Coerces a rendered expression back to a declared machine type only when a cast is
+    // actually needed: emitting Verus, the declared type is a fixed-width numeric machine
+    // type, and the expression's Verus type is `int` (widened arithmetic). Used for BOTH
+    // spec-function CALL ARGUMENTS (declaredType = parameter type) and function RETURN
+    // EXPRESSIONS (declaredType = return type) so the two are handled identically. Otherwise
+    // returns the expression unchanged (no redundant `as`).
+    @pure def castExpToType(e: Exp, rendered: ST, declaredType: SAST.Typed): ST = {
+      declaredType match {
+        case pt: SAST.Typed.Name if inVerus && isFixedWidthNumeric(pt) && yieldsVerusInt(e) =>
+          val aadlType = MicrokitTypeUtil.getAadlTypeFromSlangTypeH(pt, aadlTypes)
+          val np = tp.getTypeNameProvider(aadlType)
+          return castToMachine(e, rendered, np.qualifiedRustNameS)
+        case _ => return rendered
+      }
+    }
+
+    // Emits `argExp` at the given fixed-width machine type. For an if-expression the cast is
+    // pushed into EACH branch (a branch already at the machine type is left unchanged) rather
+    // than wrapping the whole `if`: Verus does not widen a machine-typed branch to `int` to
+    // match an `int`-typed sibling, so an if whose branches disagree (one `int`, one machine)
+    // is itself ill-typed and an outer `as` cannot repair it. Casting each branch instead makes
+    // both branches the machine type so the `if` unifies. Non-if `int` expressions are wrapped
+    // directly.
+    @pure def castToMachine(e: Exp, rendered: ST, machineName: ISZ[String]): ST = {
+      e match {
+        case i: Exp.If =>
+          return st"""if (${nestedRewriteExp(i.cond, None())}) {
+                     |  ${castToMachine(i.thenExp, nestedRewriteExp(i.thenExp, None()), machineName)}
+                     |} else {
+                     |  ${castToMachine(i.elseExp, nestedRewriteExp(i.elseExp, None()), machineName)}
+                     |}"""
+        case _ => return if (yieldsVerusInt(e)) st"(${rendered}) as ${(machineName, "::")}" else rendered
       }
     }
 
@@ -217,6 +332,14 @@ object SlangExpUtil {
                 @pure def genMethodCall(): ST = {
                   exp.attr match {
                     case SAST.ResolvedAttr(Some(m: SAST.ResolvedInfo.Method), Some(t)) =>
+                      // Cast each argument back to the callee's declared machine type where
+                      // Verus would have widened it to `int` (see castExpToType).
+                      val paramTypes: ISZ[SAST.Typed] = m.tpeOpt match {
+                        case Some(f) => f.args
+                        case _ => ISZ()
+                      }
+                      val cargs: ISZ[ST] = for (k <- z"0" until args.size) yield
+                        (if (k < paramTypes.size) castExpToType(exp.args(k), args(k), paramTypes(k)) else args(k))
                       m.owner match {
                         case ISZ(aadlPackageName, "GUMBO__Library") =>
                           // making a call to a gumbo library annex function
@@ -224,10 +347,10 @@ object SlangExpUtil {
                           val id: String = s"${exp.ident.id.value}${if (inVerus) "_spec" else ""}"
 
                           if (m.owner == owner) {
-                            return st"$id(${(args, ", ")})"
+                            return st"$id(${(cargs, ", ")})"
                           } else {
                             val crate = s"$aadlPackageName::"
-                            return st"$crate$id(${(args, ", ")})"
+                            return st"$crate$id(${(cargs, ", ")})"
                           }
                         case _ =>
                           val id = exp.ident.id.value
@@ -237,18 +360,18 @@ object SlangExpUtil {
                               if (component.classifier == m.owner) {
                                 if(!inVerus) {
                                   // emitting GUMBOX, call local GUMBOX function
-                                  return st"$id(${(args, ", ")})"
+                                  return st"$id(${(cargs, ", ")})"
                                 } else {
                                   // emitting Verus
                                   context match {
                                     case Context.integration_constraint =>
                                       // emitting Verus in bridge/api so use fully qualified name to components crate
-                                      return st"crate::component::${CRustComponentPlugin.appModuleName(component)}::$id(${(args, ", ")})"
+                                      return st"crate::component::${CRustComponentPlugin.appModuleName(component)}::$id(${(cargs, ", ")})"
                                     case Context.datatype_invariant =>
                                       // datatype invariants should only be calling library functions
                                       halt("Probably infeasible: datatype invariant calling a subclause function")
                                     case _ =>
-                                      return st"$id(${(args, ", ")})"
+                                      return st"$id(${(cargs, ", ")})"
                                   }
                                 }
                               } else {
@@ -764,7 +887,11 @@ object SlangExpUtil {
       }
     }
 
-    return nestedRewriteExp(rexp, None())
+    val topLevel = nestedRewriteExp(rexp, None())
+    coerceToTypeOpt match {
+      case Some(t) => return castExpToType(rexp, topLevel, t)
+      case _ => return topLevel
+    }
   }
 
   @pure def isUnitConversionOperation(e: Exp.Invoke): B = {
