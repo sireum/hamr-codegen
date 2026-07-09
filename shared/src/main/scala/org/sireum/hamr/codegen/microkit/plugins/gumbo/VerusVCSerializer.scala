@@ -25,9 +25,11 @@ object VerusVCSerializer {
 
   val toolName: String = "VerusVCSerializer"
 
-  // The proof crate name for a composition: sys_proof_<composition id>. Used both to
-  // emit the crate directory and to reference it from the generated makefiles.
-  @strictpure def sysProofCrateName(compositionId: String): String = s"sys_proof_$compositionId"
+  // The proof crate name for a composition: sys_<composition id>_proof -- composition-first
+  // so a composition's artifacts (sys_<id>_proof, sys_<id>_monitor) group together under
+  // crates/. Used both to emit the crate directory and to reference it from the generated
+  // makefiles.
+  @strictpure def sysProofCrateName(compositionId: String): String = s"sys_${compositionId}_proof"
 
   @enum object StateFieldKind {
     "Channel" // an AADL connection's shared substrate storage, owned by the source

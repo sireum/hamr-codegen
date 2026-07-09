@@ -65,6 +65,11 @@ object DomainMonitorPlugin {
     val monitorProcessorPath = DomainMonitorPlugin.monitorProcessPath(sysPath)
     val monitorThreadPath = DomainMonitorPlugin.monitorThreadPath(sysPath)
 
+    // there is only one domain monitor, so its crate drops the thread id's
+    // <..>_process_<..>_thread suffix (crates/domain_monitor); only crate-level
+    // names (crates/ dir, Cargo package, staticlib) are affected
+    localStore = StoreUtil.putCrateNameOverride(monitorThreadPath, DomainMonitorPlugin.monitorName, localStore)
+
     val s = DefaultMonitorInjector().inject(
       model,
       monitorProcessorPath,
@@ -234,7 +239,9 @@ object DomainMonitorPlugin {
         localStore = SystemDescriptionProviderPlugin.putMSD("monitor", SystemDescription(
           name = "monitor",
           schedulingDomains = monitorScheds,
-          protectionDomains = rawSd.protectionDomains,
+          // re-key the monitor's observed-unconnected-input maps to the consumers'
+          // existing regions (see MonitorInjector.rekeyObservedUnconnectedInputMaps)
+          protectionDomains = MonitorInjector.rekeyObservedUnconnectedInputMaps(rawSd.protectionDomains, localStore),
           memoryRegions = rawSd.memoryRegions,
           channels = rawSd.channels,
           templateContributions = ISZ()), localStore)

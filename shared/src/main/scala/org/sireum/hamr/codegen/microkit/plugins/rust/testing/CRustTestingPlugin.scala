@@ -532,7 +532,7 @@ object CRustTestingPlugin {
       val thread = symbolTable.componentMap.get(e._1).get.asInstanceOf[AadlThread]
       val threadId = MicrokitUtil.getComponentIdPath(thread)
 
-      val componentCrateDir = CRustComponentPlugin.componentCrateDirectory(thread, options)
+      val componentCrateDir = CRustComponentPlugin.componentCrateDirectory(thread, options, store)
       val componentSrcDir = s"$componentCrateDir/src"
       val componentTestDir = s"$componentSrcDir/test"
       val componentTestUtilDir = s"$componentTestDir/util"

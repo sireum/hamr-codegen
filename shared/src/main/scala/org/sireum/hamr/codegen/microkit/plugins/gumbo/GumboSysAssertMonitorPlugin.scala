@@ -29,12 +29,16 @@ object GumboSysAssertMonitorPlugin {
   @strictpure def getCompositions(symbolTable: SymbolTable): ISZ[GclComposition] =
     VCGenerator.getCompositions(symbolTable)
 
-  // The per-composition monitor name. Each composition gets its own monitor
-  // component/crate (design D8, approach (i)); the id-derived name feeds the PD
-  // process/thread paths, the sys_assert_<id>_monitor.{meta.py,scheduler.c,mk}
-  // bundle, and the per-composition store sub-keys.
+  // The per-composition monitor name: sys_<id>_monitor -- composition-first so a
+  // composition's artifacts (sys_<id>_proof, sys_<id>_monitor) group together. Each
+  // composition gets its own monitor component/crate (design D8, approach (i)); the
+  // id-derived name feeds the PD process/thread paths, the sys_<id>_monitor.{meta.py,mk}
+  // bundle, the per-composition store sub-keys, and (via the crate-name override
+  // registered at model transform) the monitor's crates/sys_<id>_monitor crate -- the
+  // name is unique per composition, so the crate does not need the thread id's longer
+  // <..>_process_<..>_thread suffix.
   @strictpure def monitorNameForComposition(id: String): String =
-    s"sys_assert_${id}_monitor"
+    s"sys_${id}_monitor"
 
 }
 
@@ -636,7 +640,7 @@ object GumboSysAssertMonitorPlugin {
 
         val monitorThread = symbolTable.componentMap.get(
           monitorThreadPath).get.asInstanceOf[AadlThread]
-        val componentDir = CRustComponentPlugin.componentDirectory(monitorThread, options)
+        val componentDir = CRustComponentPlugin.componentDirectory(monitorThread, options, store)
 
         val moduleContent: ST =
           st"""${CommentTemplate.doNotEditComment_slash}

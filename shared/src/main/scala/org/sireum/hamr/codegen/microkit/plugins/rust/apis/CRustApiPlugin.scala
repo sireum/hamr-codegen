@@ -27,8 +27,8 @@ object CRustApiPlugin {
 
 
   // TODO: maybe move everything below into the Store
-  @strictpure def apiDirectory(thread: AadlThread, options: HamrCli.CodegenOption): String =
-    s"${CRustComponentPlugin.componentCrateDirectory(thread, options)}/src/bridge"
+  @strictpure def apiDirectory(thread: AadlThread, options: HamrCli.CodegenOption, store: Store): String =
+    s"${CRustComponentPlugin.componentCrateDirectory(thread, options, store)}/src/bridge"
 
   val apiParameterName: String = "value"
 
@@ -177,7 +177,7 @@ object ComponentApiContributions {
     for (c <- contributions.apiContributions.entries) {
       val thread = symbolTable.componentMap.get(c._1).get.asInstanceOf[AadlThread]
       val threadId = MicrokitUtil.getComponentIdPath(thread)
-      val bridgeDir = CRustApiPlugin.apiDirectory(thread, options)
+      val bridgeDir = CRustApiPlugin.apiDirectory(thread, options, store)
 
       val reset_test_globals: ISZ[ST] = for(v <- c._2.externApiTestMockVariables) yield
         st"*${v.asInstanceOf[RAST.ItemStatic].ident.string}.lock().unwrap_or_else(|e| e.into_inner()) = None;"

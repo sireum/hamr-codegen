@@ -5,6 +5,10 @@ import org.sireum._
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
 
 @datatype class MakefileContainer(val resourceSuffix: String,
+                                  // the Rust crate name (crates/ dir, Cargo package, staticlib);
+                                  // defaults to resourceSuffix unless an injector registered a
+                                  // shorter name (see CRustComponentPlugin.componentCrateName)
+                                  val crateName: String,
                                   val relativePath: Option[String],
                                   val hasHeader: B,
                                   val isVM: B,
@@ -78,7 +82,7 @@ import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
     assert (hasUserContent && isRustic)
     return st"""# user code
         |$userRusticName:
-        |${TAB}make -C $${CRATES_DIR}/$resourceSuffix $$(RUST_MAKE_TARGET)"""
+        |${TAB}make -C $${CRATES_DIR}/$crateName $$(RUST_MAKE_TARGET)"""
   }
 
   @pure def buildEntry: ST = {
@@ -133,7 +137,7 @@ import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
       val elfEntry: ST =
         if (isRustic) {
           st"""$elfName: $$(${MicrokitUtil.make_UTIL_OBJS}) $$(${MicrokitTypeUtil.make_TYPE_OBJS}) $userRusticName $objName
-              |${TAB}$$(LD) $$(LDFLAGS) -L $${CRATES_DIR}/$resourceSuffix/target/aarch64-unknown-none/release $$(filter %.o, $$^) $$(LIBS) -l$resourceSuffix -o $$@"""
+              |${TAB}$$(LD) $$(LDFLAGS) -L $${CRATES_DIR}/$crateName/target/aarch64-unknown-none/release $$(filter %.o, $$^) $$(LIBS) -l$crateName -o $$@"""
         } else {
           st"""$elfName: $$(${MicrokitUtil.make_UTIL_OBJS}) $$(${MicrokitTypeUtil.make_TYPE_OBJS}) $userObjName $objName
               |${TAB}$$(LD) $$(LDFLAGS) $$^ $$(LIBS) -o $$@"""

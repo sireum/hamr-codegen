@@ -4,15 +4,74 @@ package org.sireum.hamr.codegen.microkit.plugins.monitors
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil
-import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, Store}
-import org.sireum.hamr.codegen.common.symbols.{AadlPortConnection, AadlThread, SymbolTable}
-import org.sireum.hamr.codegen.microkit.util.MicrokitUtil
+import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, MapValue, Store}
+import org.sireum.hamr.codegen.common.symbols.{AadlFeatureEvent, AadlPort, AadlPortConnection, AadlThread, SymbolTable}
+import org.sireum.hamr.codegen.microkit.plugins.StoreUtil
+import org.sireum.hamr.codegen.microkit.util.{MemoryMap, MicrokitDomain, MicrokitUtil, ProtectionDomain}
 import org.sireum.hamr.ir
 import org.sireum.message.Reporter
 import MonitorInjector._
 
 object MonitorInjector {
   val toolName: String = "Monitor Injector"
+
+  // Registry for the monitor's observation of UNCONNECTED input ports. An unconnected
+  // input still gets its own shared memory region (created by CConnectionProviderPlugin's
+  // unconnected-port handling and mapped read-only into the consumer); the monitor
+  // observes it by mapping that SAME region. The monitor's observation port is itself
+  // unconnected, so the generic unconnected-port machinery keys its MemoryMap to a region
+  // named after the monitor's port -- a region that is never created (region creation is
+  // suppressed for synthetic threads). This registry maps that bogus region name to the
+  // consumer's existing region name so the monitor plugins can re-key the MemoryMap when
+  // they assemble their system-description variants (see rekeyObservedUnconnectedInputMaps).
+  val KEY_ObservedUnconnectedInputRegions: String = "KEY_MonitorObservedUnconnectedInputRegions"
+
+  @strictpure def getObservedUnconnectedInputRegions(store: Store): Map[String, String] =
+    store.getOrElse(KEY_ObservedUnconnectedInputRegions, MapValue[String, String](Map.empty)).asInstanceOf[MapValue[String, String]].map
+
+  @strictpure def addObservedUnconnectedInputRegion(monitorPortRegionName: String, observedRegionName: String, store: Store): Store =
+    store + KEY_ObservedUnconnectedInputRegions ~> MapValue(
+      getObservedUnconnectedInputRegions(store) + monitorPortRegionName ~> observedRegionName)
+
+  // Mirrors PortSharedMemoryRegion.name (util/SystemDescription.scala): the shared memory
+  // region created for a port is named <port path joined by '_'>_<queueSize>_Memory_Region.
+  @strictpure def portRegionName(portPath: IdPath, queueSize: Z): String =
+    st"${(portPath, "_")}_${queueSize}_Memory_Region".render
+
+  @strictpure def queueSizeOf(port: AadlPort): Z =
+    port match {
+      case e: AadlFeatureEvent => e.queueSize
+      case _ => 1
+    }
+
+  @pure def rekeyObservedUnconnectedInputMap(m: MemoryMap, registry: Map[String, String]): MemoryMap = {
+    registry.get(m.memoryRegion) match {
+      case Some(observedRegion) => return m(memoryRegion = observedRegion)
+      case _ => return m
+    }
+  }
+
+  @pure def rekeyObservedUnconnectedInputDomain(d: MicrokitDomain, registry: Map[String, String]): MicrokitDomain = {
+    d match {
+      case pd: ProtectionDomain =>
+        return pd(
+          memMaps = for (m <- pd.memMaps) yield rekeyObservedUnconnectedInputMap(m, registry),
+          children = for (c <- pd.children) yield rekeyObservedUnconnectedInputDomain(c, registry))
+      case x => return x
+    }
+  }
+
+  // Re-keys monitor MemoryMaps for observed unconnected inputs: replaces references to
+  // the (never created) monitor-port-keyed region with the observed input's existing
+  // region. No-op when no unconnected inputs were observed. Recurses into child PDs
+  // (the monitor user PD is a child of its _MON companion).
+  @pure def rekeyObservedUnconnectedInputMaps(pds: ISZ[ProtectionDomain], store: Store): ISZ[ProtectionDomain] = {
+    val registry = getObservedUnconnectedInputRegions(store)
+    if (registry.isEmpty) {
+      return pds
+    }
+    return for (pd <- pds) yield rekeyObservedUnconnectedInputDomain(pd, registry).asInstanceOf[ProtectionDomain]
+  }
 }
 
 @datatype class DefaultMonitorInjector extends MonitorInjector
@@ -171,6 +230,45 @@ object MonitorInjector {
           }
 
         case _ =>
+      }
+    }
+
+    // Observe UNCONNECTED input ports: an input with no incoming connection still has its
+    // own shared memory region (created by CConnectionProviderPlugin's unconnected-port
+    // handling and mapped read-only into the consuming thread), so the monitor can retrieve
+    // exactly what the consumer sees by mapping that same region. Mirror the fan-out
+    // observation's naming (<threadId>_<portId>) but leave the monitor port unconnected --
+    // there is no producer to fan out from; the unconnected-port machinery generates its
+    // C/Rust getters, and the monitor plugins later re-key the resulting MemoryMap to the
+    // consumer's existing region via the registry recorded here (see
+    // rekeyObservedUnconnectedInputMaps). The observed port's Queue_Size property is copied
+    // so the monitor's queue layout matches the region's actual layout.
+    for (t <- symbolTable.getThreads() if !StoreUtil.isSynthetic(t.path, localStore)) {
+      for (p <- t.getPorts()
+           if p.direction == ir.Direction.In &&
+             !symbolTable.inConnections.contains(p.path) &&
+             !StoreUtil.isSynthetic(p.path, localStore)) {
+
+        val monitorPortName: String = s"${MicrokitUtil.getComponentIdPath(t)}_${p.identifier}"
+        val monitorThreadPortPath: ISZ[String] = monitorThreadPath :+ monitorPortName
+        val observedFeatureEnd: ir.FeatureEnd = p.feature
+
+        val queueSizeProps: ISZ[ir.Property] = observedFeatureEnd.properties.filter((pr: ir.Property) =>
+          pr.name.name.nonEmpty && ops.StringOps(pr.name.name(pr.name.name.lastIndex)).endsWith("Queue_Size"))
+
+        monitorThreadFeatures = monitorThreadFeatures :+ ir.FeatureEnd(
+          identifier = ir.Name(name = monitorThreadPortPath, pos = None()),
+          direction = ir.Direction.In,
+          category = observedFeatureEnd.category,
+          classifier = observedFeatureEnd.classifier,
+          properties = queueSizeProps,
+          uriFrag = "")
+
+        val queueSize = queueSizeOf(p)
+        localStore = addObservedUnconnectedInputRegion(
+          monitorPortRegionName = portRegionName(monitorThreadPortPath, queueSize),
+          observedRegionName = portRegionName(p.path, queueSize),
+          store = localStore)
       }
     }
 

@@ -28,9 +28,19 @@ object CRustComponentPlugin {
   @strictpure def putComponentContributions(contributions: CRustComponentContributions, store: Store): Store = store + KEY_CrustComponentPlugin ~> contributions
 
 
-  @strictpure def componentCrateDirectory(thread: AadlThread, options: HamrCli.CodegenOption): String = s"${options.sel4OutputDir.get}/crates/${MicrokitUtil.getComponentIdPath(thread)}"
+  // The thread's Rust crate name (directory under crates/, Cargo package name, and thus
+  // the staticlib the linker consumes). Defaults to the thread's id path; an injector may
+  // register a shorter unique name via StoreUtil.putCrateNameOverride (e.g. the sys-assert
+  // monitor's crate is sys_<composition>_monitor rather than its full <..>_process_<..>_thread id).
+  @strictpure def componentCrateName(thread: AadlThread, store: Store): String =
+    StoreUtil.getCrateNameOverride(thread.path, store) match {
+      case Some(n) => n
+      case _ => MicrokitUtil.getComponentIdPath(thread)
+    }
 
-  @strictpure def componentDirectory(thread: AadlThread, options: HamrCli.CodegenOption): String = s"${componentCrateDirectory(thread, options)}/src/component"
+  @strictpure def componentCrateDirectory(thread: AadlThread, options: HamrCli.CodegenOption, store: Store): String = s"${options.sel4OutputDir.get}/crates/${componentCrateName(thread, store)}"
+
+  @strictpure def componentDirectory(thread: AadlThread, options: HamrCli.CodegenOption, store: Store): String = s"${componentCrateDirectory(thread, options, store)}/src/component"
 
   @strictpure def appModuleName(component: AadlComponent): String = s"${MicrokitUtil.getComponentIdPath(component)}_app"
 }
@@ -240,10 +250,10 @@ object ComponentContributions {}
           crateDependencies = ISZ())
 
       if (genProfile.emitTestHarness) {
-        makefileTestEntries = makefileTestEntries :+ st"make -C $${CRATES_DIR}/$threadId test"
+        makefileTestEntries = makefileTestEntries :+ st"make -C $${CRATES_DIR}/${CRustComponentPlugin.componentCrateName(thread, localStore)} test"
       }
 
-      makefileCleanEntries = makefileCleanEntries :+ st"make -C $${CRATES_DIR}/$threadId clean"
+      makefileCleanEntries = makefileCleanEntries :+ st"make -C $${CRATES_DIR}/${CRustComponentPlugin.componentCrateName(thread, localStore)} clean"
     } // end handling crusty components
 
     localStore = MakefileUtil.addMakefileTargets(
@@ -275,9 +285,10 @@ object ComponentContributions {}
 
       val modName = CRustComponentPlugin.appModuleName(thread)
 
-      val componentCrateDir = CRustComponentPlugin.componentCrateDirectory(thread, options)
+      val crateName = CRustComponentPlugin.componentCrateName(thread, store)
+      val componentCrateDir = CRustComponentPlugin.componentCrateDirectory(thread, options, store)
       val componentSrcDir = s"$componentCrateDir/src"
-      val componentDir = CRustComponentPlugin.componentDirectory(thread, options)
+      val componentDir = CRustComponentPlugin.componentDirectory(thread, options, store)
 
       { // for now just emit src/lib.rs as a resource
 
@@ -484,7 +495,7 @@ object ComponentContributions {}
           st"""${CommentTemplate.safeToEditComment_hash}
               |
               |[package]
-              |name = "$threadId"
+              |name = "$crateName"
               |version = "0.1.0"
               |edition = "2021"
               |

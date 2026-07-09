@@ -140,6 +140,12 @@ object GumboMonitorPlugin {
       val mProcessPath = monitorProcessPathNamed(sysPath, mName)
       val mThreadPath = monitorThreadPathNamed(sysPath, mName)
 
+      // monitor names are unique (gumbo_monitor; sys_<composition id>_monitor per
+      // composition), so each monitor's crate drops the thread id's
+      // <..>_process_<..>_thread suffix (crates/<monitorName>); only crate-level
+      // names (crates/ dir, Cargo package, staticlib) are affected
+      localStore = StoreUtil.putCrateNameOverride(mThreadPath, mName, localStore)
+
       injectMonitorPDNamed(curModel, mProcessPath, mThreadPath, options, curSymbolTable, localStore, reporter) match {
         case Some((s, m, t, st)) =>
           localStore = s
@@ -716,6 +722,19 @@ object GumboMonitorPlugin {
           case _ =>
         }
       }
+      // UNCONNECTED inputs are observed directly (the monitor maps the consumer's own
+      // input region -- see MonitorInjector); their monitor port follows the same
+      // <threadId>_<portId> naming, keyed here by the consumer's port so contract
+      // parameters over such inputs resolve to a getter instead of get_UNKNOWN_*.
+      for (t <- symbolTable.getThreads() if !StoreUtil.isSynthetic(t.path, localStore)) {
+        for (p <- t.getPorts()
+             if p.direction == ir.Direction.In &&
+               !symbolTable.inConnections.contains(p.path) &&
+               !StoreUtil.isSynthetic(p.path, localStore)) {
+          dstPortToMonitorPortName = dstPortToMonitorPortName + p.path ~>
+            s"${MicrokitUtil.getComponentIdPath(t)}_${p.identifier}"
+        }
+      }
 
       // One monitor component per name: size-1 for the gumbo monitor, one per
       // composition for the sys-assert monitor (design D8, approach (i)).
@@ -1048,7 +1067,7 @@ object GumboMonitorPlugin {
         case Some(svInfos) =>
           val thread = symbolTable.componentMap.get(e._1).get.asInstanceOf[AadlThread]
           val threadId = MicrokitUtil.getComponentIdPath(thread)
-          val componentCrateDir = CRustComponentPlugin.componentCrateDirectory(thread, options)
+          val componentCrateDir = CRustComponentPlugin.componentCrateDirectory(thread, options, store)
           val componentSrcDir = s"$componentCrateDir/src"
 
           val initPuts: ISZ[ST] = for (sv <- svInfos) yield
@@ -1162,7 +1181,7 @@ object GumboMonitorPlugin {
       symbolTable.componentMap.get(monitorThreadPath) match {
         case Some(monitorComp) =>
           val monitorThread = monitorComp.asInstanceOf[AadlThread]
-          val monitorCrateDir = CRustComponentPlugin.componentCrateDirectory(monitorThread, options)
+          val monitorCrateDir = CRustComponentPlugin.componentCrateDirectory(monitorThread, options, store)
           val gumboxDir = s"$monitorCrateDir/src/gumbox"
 
           var modDecls: ISZ[String] = ISZ()

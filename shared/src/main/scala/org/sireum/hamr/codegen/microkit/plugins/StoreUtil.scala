@@ -57,6 +57,24 @@ object StoreUtil {
   }
 
 
+  // Overrides the name (and thus directory, Cargo package, and staticlib name) of the
+  // Rust crate generated for a thread. By default a thread's crate is named by its id
+  // path (e.g. sys_nominal_monitor_process_sys_nominal_monitor_thread); an injector may
+  // register a shorter unique name (e.g. sys_nominal_monitor) here. Only the crate-level
+  // names are affected -- the thread's id path (PD name, component dir, module names
+  // inside the crate) is unchanged.
+  val KEY_CrateNameOverrides: String = "KEY_CrateNameOverrides"
+
+  @strictpure def getCrateNameOverrides(store: Store): Map[IdPath, String] =
+    store.getOrElse(KEY_CrateNameOverrides, MapValue[IdPath, String](Map.empty)).asInstanceOf[MapValue[IdPath, String]].map
+
+  @strictpure def getCrateNameOverride(id: IdPath, store: Store): Option[String] =
+    getCrateNameOverrides(store).get(id)
+
+  @strictpure def putCrateNameOverride(id: IdPath, crateName: String, store: Store): Store =
+    store + KEY_CrateNameOverrides ~> MapValue(getCrateNameOverrides(store) + id ~> crateName)
+
+
   val KEY_ComponentGenProfiles: String = "KEY_ComponentGenProfiles"
 
   @strictpure def getComponentGenProfiles(store: Store): Map[IdPath, ComponentGenProfile] =

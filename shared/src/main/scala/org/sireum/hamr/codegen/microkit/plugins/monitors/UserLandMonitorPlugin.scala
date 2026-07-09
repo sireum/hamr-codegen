@@ -100,8 +100,12 @@ object UserLandMonitorPlugin {
                                     symbolTable: SymbolTable,
                                     store: Store,
                                     reporter: Reporter): Option[(Store, Aadl, AadlTypes, SymbolTable)] = {
-    val localStore = store + UserLandMonitorPlugin.KEY_UserLandMonitorPlugin_Model_Transformed ~> BoolValue(T)
+    var localStore = store + UserLandMonitorPlugin.KEY_UserLandMonitorPlugin_Model_Transformed ~> BoolValue(T)
     val sysPath = model.components(0).identifier.name
+    // there is only one monitor per name, so the monitor's crate drops the thread id's
+    // <..>_process_<..>_thread suffix (crates/<monitorName>); only crate-level names
+    // (crates/ dir, Cargo package, staticlib) are affected
+    localStore = StoreUtil.putCrateNameOverride(getMonitorThreadPath(sysPath), getMonitorName, localStore)
     return injectMonitorPDNamed(model, getMonitorProcessPath(sysPath), getMonitorThreadPath(sysPath),
       options, symbolTable, localStore, reporter)
   }
@@ -444,6 +448,11 @@ object UserLandMonitorPlugin {
         val monitorPdsWithSchedMaps: ISZ[ProtectionDomain] = for (pd <- monitorVariantPdsCompacted) yield
           addSchedMaps(pd)
 
+        // Re-key the monitor's observed-unconnected-input maps to the consumers' existing
+        // regions (same bogus-region-name pattern as the sched maps above; see MonitorInjector)
+        val monitorPdsRekeyed: ISZ[ProtectionDomain] =
+          MonitorInjector.rekeyObservedUnconnectedInputMaps(monitorPdsWithSchedMaps, localStore)
+
         val schedTemplateContributions: ISZ[ST] = ISZ(
           st"""#######################################
               |# SCHEDULE STATE
@@ -479,7 +488,7 @@ object UserLandMonitorPlugin {
         localStore = SystemDescriptionProviderPlugin.putMSD(monitorName, SystemDescription(
           name = monitorName,
           schedulingDomains = monitorScheds,
-          protectionDomains = monitorPdsWithSchedMaps,
+          protectionDomains = monitorPdsRekeyed,
           memoryRegions = monitorMemoryRegions,
           channels = rawSd.channels.filter(c =>
             !otherNonModelPdNames.contains(c.firstPD) && !otherNonModelPdNames.contains(c.secondPD)),

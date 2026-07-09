@@ -15,6 +15,7 @@ import org.sireum.hamr.codegen.microkit.connections.{ConnectionStore, VMRamVaddr
 import org.sireum.hamr.codegen.microkit.plugins.StoreUtil
 import org.sireum.hamr.codegen.microkit.plugins.c.connections.CConnectionProviderPlugin
 import org.sireum.hamr.codegen.microkit.plugins.msd.SystemDescriptionProviderPlugin
+import org.sireum.hamr.codegen.microkit.plugins.rust.component.CRustComponentPlugin
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
 import org.sireum.hamr.codegen.microkit.util._
 import org.sireum.hamr.codegen.microkit.vm.{VmMakefileTemplate, VmUser, VmUtil}
@@ -90,6 +91,7 @@ import org.sireum.message.Reporter
 
       val mk = MakefileContainer(
         resourceSuffix = pacerName,
+        crateName = pacerName,
         relativePath = Some(s"${MicrokitCodegen.dirComponents}/${ops.StringOps(pacerName).toLower}"),
         hasHeader = F,
         isVM = F,
@@ -155,6 +157,7 @@ import org.sireum.message.Reporter
 
       val mk = MakefileContainer(
         resourceSuffix = threadId,
+        crateName = CRustComponentPlugin.componentCrateName(t, localStore),
         relativePath = Some(s"${MicrokitCodegen.dirComponents}/$threadId"),
         hasHeader = T,
         isVM = isVM,

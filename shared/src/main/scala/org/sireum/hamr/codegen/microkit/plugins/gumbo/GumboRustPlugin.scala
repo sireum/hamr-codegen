@@ -512,7 +512,7 @@ object GumboRustPlugin {
               crateDependencies = crateDependencies)),
         localStore)
 
-      makefileVerusItems = makefileVerusItems :+ st"make -C $${CRATES_DIR}/${MicrokitUtil.getComponentIdPath(thread)} verus"
+      makefileVerusItems = makefileVerusItems :+ st"make -C $${CRATES_DIR}/${CRustComponentPlugin.componentCrateName(thread, localStore)} verus"
     } // end processing thread's contracts
 
     localStore = MakefileUtil.addMakefileTargets(ISZ("system.mk"), ISZ(MakefileTarget(name = "verus", allowMultiple = F, dependencies = ISZ(), body = makefileVerusItems)), localStore)

@@ -69,8 +69,12 @@ object GumboXRustPlugin {
       contribs.computeContributions.CEP_Post_Params.filter(p =>
         p.kind == GumboXRustUtil.SymbolKind.StateVar || p.isOutPort))
 
-    val preFields: ISZ[ST] = for (p <- preParams) yield st"pub ${p.name}: ${p.langType},"
-    val postFields: ISZ[ST] = for (p <- postParams) yield st"pub ${p.name}: ${p.langType},"
+    // event/event-data port params are optional (Option<T>) -- matching the getters and the
+    // GUMBOX CEP_Pre/Post signatures; state-var params are plain
+    val preFields: ISZ[ST] = for (p <- preParams) yield
+      st"pub ${p.name}: ${if (p.isOptional) st"Option<${p.langType}>" else st"${p.langType}"},"
+    val postFields: ISZ[ST] = for (p <- postParams) yield
+      st"pub ${p.name}: ${if (p.isOptional) st"Option<${p.langType}>" else st"${p.langType}"},"
 
     return st"""${CommentTemplate.doNotEditComment_slash}
                |
@@ -1829,11 +1833,11 @@ object GumboXComputeContributions {
       val thread = symbolTable.componentMap.get(entry._1).get.asInstanceOf[AadlThread]
       val threadId = MicrokitUtil.getComponentIdPath(thread)
 
-      val testDir = s"${options.sel4OutputDir.get}/crates/${threadId}/src/test"
+      val testDir = s"${CRustComponentPlugin.componentCrateDirectory(thread, options, store)}/src/test"
       val testUtilDir = s"$testDir/util"
 
       { // the gumbox module
-        val apiDirectory = CRustApiPlugin.apiDirectory(thread, options)
+        val apiDirectory = CRustApiPlugin.apiDirectory(thread, options, store)
         val content = GumboXRustPlugin.generateGumboxModuleContent(entry._2)
         val path = s"$apiDirectory/${threadId}_GUMBOX.rs"
         resources = resources :+ ResourceUtil.createResource(path, content, T)
