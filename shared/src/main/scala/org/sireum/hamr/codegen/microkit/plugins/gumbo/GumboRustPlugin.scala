@@ -587,15 +587,16 @@ object GumboRustPlugin {
     var ensures: Map[String, RAST.Expr] = Map.empty
 
     for (p <- thread.getPorts()) {
-      val (aadlType, isEvent, isData): (AadlType, B, B) = p match {
-        case i: AadlEventDataPort => (i.aadlType, T, T)
-        case i: AadlDataPort => (i.aadlType, F, T)
-        case i: AadlEventPort => halt("Need to handle event ports")
-        case x => halt("Unexpected port type: $x")
-      }
-
       subclauseInfo.gclSymbolTable.integrationMap.get(p) match {
         case Some(spec) =>
+          // integration constraints restrict a port's payload, so GclResolver only
+          // allows them on payload-carrying ports; pure event ports the thread owns
+          // never appear in integrationMap and are simply skipped by this loop
+          val isEvent: B = p match {
+            case i: AadlEventDataPort => T
+            case i: AadlDataPort => F
+            case x => halt(s"Infeasible: integration constraints cannot be applied to ${x.identifier} which is not a data or event data port")
+          }
           spec match {
             case a: GclAssume =>
               // assume integration clauses can only be applied to incoming ports.  The api therefore
