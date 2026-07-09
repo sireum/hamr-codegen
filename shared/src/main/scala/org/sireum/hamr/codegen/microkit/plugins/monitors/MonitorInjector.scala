@@ -309,6 +309,21 @@ object MonitorInjector {
       propertyValues = ISZ(ir.UnitProp(value = defaultMonitorPeriodMs.string, unit = Some("ms"))),
       appliesTo = ISZ())
 
+    // Default stack size for the monitor thread. The generated contract-checking
+    // dispatch captures observed port/state values into container structs passed BY
+    // VALUE through the sys-assert/GUMBOX call chain, plus core::fmt frames for
+    // violation reporting -- far more than Microkit's default 4 KiB PD stack. The
+    // measured deepest call path on the largest current model (the Isolette sys
+    // monitor, 27 observed values) is ~14 KiB (timeTriggered ~4.2 KiB +
+    // sys-assert dispatch ~7.7 KiB + fmt leaves); 64 KiB gives >4x headroom for
+    // larger models. A future config option should allow the user to override this.
+    val defaultMonitorStackSizeKiBytes: Z = z"64"
+
+    val stackSizeProp = ir.Property(
+      name = ir.Name(name = ISZ("Memory_Properties::Stack_Size"), pos = None()),
+      propertyValues = ISZ(ir.UnitProp(value = defaultMonitorStackSizeKiBytes.string, unit = Some("KiByte"))),
+      appliesTo = ISZ())
+
     // The monitor thread is always implemented in Rust so that verification tooling
     // (Verus) can be applied to it.  Setting HAMR::Microkit_Language = "Rust" makes
     // MicrokitUtil.isRusty return T for the synthetic thread, which causes all Rust
@@ -329,7 +344,7 @@ object MonitorInjector {
       subComponents = ISZ(),
       connections = ISZ(),
       connectionInstances = ISZ(),
-      properties = ISZ(dispatchProtocolProp, periodProp, rustLangProp),
+      properties = ISZ(dispatchProtocolProp, periodProp, rustLangProp, stackSizeProp),
       flows = ISZ(),
       modes = ISZ(),
       annexes = ISZ(),

@@ -325,6 +325,51 @@ import org.sireum.message.Reporter
             |      break;
             |  }
             |}
+            |
+            |static const char *fault_name(seL4_Word label) {
+            |  switch (label) {
+            |    case seL4_Fault_VMFault:        return "VM fault";
+            |    case seL4_Fault_UserException:  return "user exception";
+            |    case seL4_Fault_CapFault:       return "cap fault";
+            |    case seL4_Fault_UnknownSyscall: return "unknown syscall";
+            |    default:                        return "unrecognized fault";
+            |  }
+            |}
+            |
+            |// This monitor is the parent protection domain of its user partition, so the kernel
+            |// delivers the partition's faults here. Report the fault with this monitor's name
+            |// (which identifies the wrapped thread) and decoded fault details, then leave the
+            |// partition suspended: returning seL4_False does not reply to the fault, so the
+            |// faulted thread stays stopped while the rest of the schedule keeps running (the
+            |// scheduler handshake above is a non-blocking signal).
+            |seL4_Bool fault(microkit_child child, microkit_msginfo msginfo, microkit_msginfo *reply_msginfo) {
+            |  (void) reply_msginfo;
+            |  seL4_Word label = microkit_msginfo_get_label(msginfo);
+            |  printf("%s | FAULT in user PD (child %d): %s\n", microkit_name, child, fault_name(label));
+            |  switch (label) {
+            |    case seL4_Fault_VMFault:
+            |      printf("%s |   ip=0x%lx addr=0x%lx (%s) fsr=0x%lx\n", microkit_name,
+            |             seL4_GetMR(seL4_VMFault_IP), seL4_GetMR(seL4_VMFault_Addr),
+            |             seL4_GetMR(seL4_VMFault_PrefetchFault) ? "instruction" : "data",
+            |             seL4_GetMR(seL4_VMFault_FSR));
+            |      break;
+            |    case seL4_Fault_UserException:
+            |      printf("%s |   ip=0x%lx sp=0x%lx number=0x%lx code=0x%lx\n", microkit_name,
+            |             seL4_GetMR(seL4_UserException_FaultIP), seL4_GetMR(seL4_UserException_SP),
+            |             seL4_GetMR(seL4_UserException_Number), seL4_GetMR(seL4_UserException_Code));
+            |      break;
+            |    case seL4_Fault_CapFault:
+            |      printf("%s |   ip=0x%lx addr=0x%lx in_recv=%lu\n", microkit_name,
+            |             seL4_GetMR(seL4_CapFault_IP), seL4_GetMR(seL4_CapFault_Addr),
+            |             seL4_GetMR(seL4_CapFault_InRecvPhase));
+            |      break;
+            |    case seL4_Fault_UnknownSyscall:
+            |      printf("%s |   ip=0x%lx syscall=%ld\n", microkit_name,
+            |             seL4_GetMR(seL4_UnknownSyscall_FaultIP), seL4_GetMR(seL4_UnknownSyscall_Syscall));
+            |      break;
+            |  }
+            |  return seL4_False;
+            |}
             |"""
 
       val cMonitorPath = s"${options.sel4OutputDir.get}/${mk.relativePathSrcDir}/${mk.monImplFilename}"
