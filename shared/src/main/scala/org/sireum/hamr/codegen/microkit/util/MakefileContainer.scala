@@ -131,15 +131,22 @@ import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
       }
   }
 
-  @pure def elfEntry: ST = {
+  // includeAuxObjs: when T, $(AUX_OBJS) (objects built from --sel4-aux-code-dirs sources) is
+  // added to the link line of ELFs containing user-provided C code (C components and monitor
+  // companions). Rust components manage their own dependencies via cargo, and VM ELFs link
+  // their own archive, so neither links the aux objects
+  @pure def elfEntry(includeAuxObjs: B): ST = {
     val TAB: String = "\t"
+    val auxObjs: Option[String] =
+      if (includeAuxObjs) Some(s" $$(${MicrokitUtil.make_AUX_OBJS})")
+      else None()
     if (hasUserContent) {
       val elfEntry: ST =
         if (isRustic) {
           st"""$elfName: $$(${MicrokitUtil.make_UTIL_OBJS}) $$(${MicrokitTypeUtil.make_TYPE_OBJS}) $userRusticName $objName
               |${TAB}$$(LD) $$(LDFLAGS) -L $${CRATES_DIR}/$crateName/target/aarch64-unknown-none/release $$(filter %.o, $$^) $$(LIBS) -l$crateName -o $$@"""
         } else {
-          st"""$elfName: $$(${MicrokitUtil.make_UTIL_OBJS}) $$(${MicrokitTypeUtil.make_TYPE_OBJS}) $userObjName $objName
+          st"""$elfName: $$(${MicrokitUtil.make_UTIL_OBJS}) $$(${MicrokitTypeUtil.make_TYPE_OBJS})$auxObjs $userObjName $objName
               |${TAB}$$(LD) $$(LDFLAGS) $$^ $$(LIBS) -o $$@"""
         }
 
@@ -147,8 +154,12 @@ import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
         if (hasMonitorCompanion) Some(s"$userMonObjName ")
         else None()
 
+      val monAuxObjs: Option[String] =
+        if (hasMonitorCompanion) auxObjs
+        else None()
+
       val ret =
-        st"""$monElfName: $monCompanion$monObjName
+        st"""$monElfName: $monCompanion$monObjName$monAuxObjs
             |${TAB}$$(LD) $$(LDFLAGS) $$^ $$(LIBS) -o $$@
             |
             |$elfEntry"""
@@ -157,8 +168,11 @@ import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
       val monCompanion: Option[String] =
         if (hasMonitorCompanion) Some(s"$userMonObjName ")
         else None()
+      val monAuxObjs: Option[String] =
+        if (hasMonitorCompanion) auxObjs
+        else None()
       val ret =
-        st"""$monElfName: $monCompanion$monObjName
+        st"""$monElfName: $monCompanion$monObjName$monAuxObjs
             |${TAB}$$(LD) $$(LDFLAGS) $$^ $$(LIBS) -o $$@
             |
             |$elfName: $$(${MicrokitTypeUtil.make_TYPE_OBJS}) $vmArchive

@@ -207,7 +207,9 @@ object CodeGen {
     if (!reporter.hasError && runMicrokit) {
       reporter.info(None(), toolName, "Generating Microkit artifacts...")
       val results = MicrokitCodegen().run(rmodel, modOptions, aadlTypes, symbolTable, plugins,
-        MicrokitUtil.putMicrokitVersions(localStore, JvmMicrokitUtil.getMicrokitVersions), reporter)
+        MicrokitUtil.putAuxCode(
+          store = MicrokitUtil.putMicrokitVersions(localStore, JvmMicrokitUtil.getMicrokitVersions),
+          auxCode = getAuxFiles(modOptions.sel4AuxCodeDirs, F, reporter)), reporter)
       localStore = results._2
       if (!reporter.hasError) {
         writeOutResources(results._1.resources, reporter)

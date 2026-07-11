@@ -102,8 +102,13 @@ object MakefileTemplate {
     return content
   }
 
+  // auxObjectNames/auxIncludeFlags stem from --sel4-aux-code-dirs: object files built from the
+  // aux .c files and -I flags for the directories containing the aux headers. When both are
+  // empty (i.e. the option was not used) the generated makefile is unchanged
   @pure def systemMakefileDomainScheduler(elfFiles: ISZ[String],
                                           typeObjectNames: ISZ[String],
+                                          auxObjectNames: ISZ[String],
+                                          auxIncludeFlags: ISZ[String],
                                           buildEntries: ISZ[ST],
                                           elfEntries: ISZ[String],
                                           miscTargets: ISZ[MakefileTarget]): ST = {
@@ -112,6 +117,19 @@ object MakefileTemplate {
 
     val miscTargetsOpt: Option[ST] =
       if (miscTargets.nonEmpty) Some(st"""${(for(t <- miscTargets) yield t.prettyST, "\n\n")}""")
+      else None()
+
+    var objVarLines: ISZ[ST] = ISZ(st"UTIL_OBJS = printf.o util.o")
+    if (auxObjectNames.nonEmpty) {
+      objVarLines = objVarLines :+ st"${MicrokitUtil.make_AUX_OBJS} = ${(auxObjectNames, " ")}"
+    }
+    if (auxIncludeFlags.nonEmpty) {
+      objVarLines = objVarLines :+ st"${MicrokitUtil.make_AUX_INCLUDES} = ${(auxIncludeFlags, " ")}"
+    }
+    val objVars: ST = st"${(objVarLines, "\n")}"
+
+    val auxIncludesRef: Option[String] =
+      if (auxIncludeFlags.nonEmpty) Some(s" $$(${MicrokitUtil.make_AUX_INCLUDES})")
       else None()
 
     val content =
@@ -138,7 +156,7 @@ object MakefileTemplate {
           |IMAGE_FILE = loader.img
           |REPORT_FILE = report.txt
           |
-          |UTIL_OBJS = printf.o util.o
+          |$objVars
           |
           |TYPES_DIR = $$(TOP_DIR)/types
           |TYPE_OBJS := ${(typeObjectNames, " ")}
@@ -146,7 +164,7 @@ object MakefileTemplate {
           |# exporting TOP_TYPES_INCLUDE in case other makefiles need it
           |export TOP_TYPES_INCLUDE = -I$$(TYPES_DIR)/include
           |
-          |TOP_INCLUDE = $$(TOP_TYPES_INCLUDE) -I$$(TOP_DIR)/util/include
+          |TOP_INCLUDE = $$(TOP_TYPES_INCLUDE) -I$$(TOP_DIR)/util/include$auxIncludesRef
           |
           |all: $$(IMAGE_FILE)
           |${TAB}CHECK_FLAGS_BOARD_MD5:=.board_cflags-$$(shell echo -- $${CFLAGS} $${MICROKIT_BOARD} $${MICROKIT_CONFIG}| shasum | sed 's/ *-//')
@@ -184,16 +202,31 @@ object MakefileTemplate {
   }
 
 
+  // auxObjectNames stems from --sel4-aux-code-dirs: object files built from the aux .c files
+  // (compiled via the %.o: %.c pattern rule; the caller adds the aux source dirs to sourcePaths
+  // and the aux header dirs to includePaths). When empty the generated makefile is unchanged
   @pure def systemMakefileMCS(elfFiles: ISZ[String],
                               includePaths: ISZ[String],
                               sourcePaths: ISZ[String],
                               typeObjectNames: ISZ[String],
+                              auxObjectNames: ISZ[String],
                               buildEntries: ISZ[ST],
                               elfEntries: ISZ[String],
                               miscTargets: ISZ[MakefileTarget]): ST = {
     val miscTargetsOpt: Option[ST] =
       if (miscTargets.nonEmpty) Some(st"""${(for(t <- miscTargets) yield t.prettyST, "\n\n")}""")
       else None()
+
+    val typeObjsSection: ST =
+      if (auxObjectNames.nonEmpty)
+        st"""TYPE_OBJS := \
+            |${TAB}${(typeObjectNames, s" \\\n${TAB}")}
+            |
+            |${MicrokitUtil.make_AUX_OBJS} := \
+            |${TAB}${(auxObjectNames, s" \\\n${TAB}")}"""
+      else
+        st"""TYPE_OBJS := \
+            |${TAB}${(typeObjectNames, s" \\\n${TAB}")}"""
 
     val buildEntriesOpt: Option[ST] =
       if(buildEntries.isEmpty) None()
@@ -273,8 +306,7 @@ object MakefileTemplate {
           |
           |UTIL_OBJS :=
           |
-          |TYPE_OBJS := \
-          |${TAB}${(typeObjectNames, s" \\\n${TAB}")}
+          |$typeObjsSection
           |
           |
           |all: cache.o

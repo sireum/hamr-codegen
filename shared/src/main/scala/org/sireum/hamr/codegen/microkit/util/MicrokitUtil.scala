@@ -18,11 +18,17 @@ object MicrokitUtil {
 
   val make_UTIL_OBJS: String = "UTIL_OBJS"
 
+  val make_AUX_OBJS: String = "AUX_OBJS"
+
+  val make_AUX_INCLUDES: String = "AUX_INCLUDES"
+
   val defaultMemoryRegionSizeInKiBytes: Z = 4
 
   val MemAlignmentInKiBytes: Z = 4
 
   val KEY_MICROKIT_VERSIONS: String = "KEY_MICROKIT_VERSISION"
+
+  val KEY_MICROKIT_AUX_CODE: String = "KEY_MICROKIT_AUX_CODE"
 
   @pure def isDomainScheduling(options: HamrCli.CodegenOption, aadl: AadlSystem): B = {
     return !isMCS(options, aadl)
@@ -48,6 +54,17 @@ object MicrokitUtil {
 
   @strictpure def putMicrokitVersions(store: Store, versions: Map[String, String]): Store =
     store + KEY_MICROKIT_VERSIONS ~> MapValue(versions)
+
+  // aux code (--sel4-aux-code-dirs): map from paths relative to the aux root dirs
+  // to the .c/.h file contents. Read from disk on the JVM side and passed in via the store
+  @strictpure def getAuxCode(store: Store): Map[String, String] =
+    store.get(KEY_MICROKIT_AUX_CODE) match {
+      case Some(m) => m.asInstanceOf[MapValue[String, String]].map
+      case _ => Map.empty[String, String]
+    }
+
+  @strictpure def putAuxCode(store: Store, auxCode: Map[String, String]): Store =
+    store + KEY_MICROKIT_AUX_CODE ~> MapValue(auxCode)
 
   @strictpure def brand(s:String):String = s"sb_$s"
 
