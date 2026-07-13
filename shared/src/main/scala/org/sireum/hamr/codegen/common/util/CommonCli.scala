@@ -108,6 +108,9 @@ object CommonCli {
       Opt(name = "sel4AuxCodeDirs", longKey = "sel4-aux-code-dirs", shortKey = None(),
         tpe = Type.Path(multiple = T, default = None()),
         description = "Directories containing C files to be included in CAmkES/Microkit build"),
+      Opt(name = "sel4AuxCodeSymlink", longKey = "sel4-aux-code-symlink", shortKey = None(),
+        tpe = Type.Flag(F),
+        description = "Symlink the aux code directories into the Microkit build rather than copying their C files"),
       Opt(name = "workspaceRootDir", longKey = "workspace-root-dir", shortKey = Some('r'),
         tpe = Type.Path(multiple = F, default = None()),
         description = "Root directory containing the architectural model project")

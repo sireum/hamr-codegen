@@ -93,8 +93,11 @@ object MicrokitReporterPlugin {
                   path = ReportUtil.deWin(sel4OutputDir.relativize(Os.path(i.dstPath)).value),
                   overwrittenIfExists = i.overwrite)
               case e: EResource =>
-                halt("Not expecting $e")
-              case e => halt("Not expecting $e")
+                // external resources (e.g. symlinked aux code dirs) are always refreshed
+                r = r :+ ResourceReport(
+                  path = ReportUtil.deWin(sel4OutputDir.relativize(Os.path(e.dstPath)).value),
+                  overwrittenIfExists = T)
+              case e => halt(s"Not expecting $e")
             }
           }
           r

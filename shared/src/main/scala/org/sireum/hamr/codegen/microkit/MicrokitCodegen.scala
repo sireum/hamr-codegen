@@ -114,6 +114,15 @@ object MicrokitCodegen {
     // supplied roots) and collect the object names, header include flags, and explicit build
     // rules needed to wire the aux code into the generated makefiles
     val auxCode = MicrokitUtil.getAuxCode(localStore)
+    // in symlink mode (--sel4-aux-code-symlink) each user-supplied aux directory is
+    // symlinked into aux_code by name instead of having its files copied; the makefile
+    // wiring below is the same in both modes (in symlink mode the aux file map's keys
+    // already carry the root directory name as their first segment)
+    val auxCodeLinks = MicrokitUtil.getAuxCodeLinks(localStore)
+    for (l <- auxCodeLinks.entries) {
+      resources = resources :+ ResourceUtil.createExternalResource(
+        srcPath = l._2, dstPath = s"${options.sel4OutputDir.get}/${MicrokitCodegen.dirAuxCode}/${l._1}", symLink = T)
+    }
     var auxObjectNames: ISZ[String] = ISZ()
     var auxBuildEntries: ISZ[ST] = ISZ()
     var auxHeaderDirs: Set[String] = Set.empty[String]
@@ -124,11 +133,13 @@ object MicrokitCodegen {
     for (entry <- auxCode.entries) {
       val rel = ops.StringOps(entry._1).replaceAllChars('\\', '/')
       val relPath = s"${MicrokitCodegen.dirAuxCode}/$rel"
-      // overwrite the copy on regen since the user's aux dir is the source of truth; the
-      // consistency check is skipped as it requires markers inside user-provided content
-      resources = resources :+ ResourceUtil.createStringResourceI(
-        path = s"${options.sel4OutputDir.get}/$relPath", content = entry._2, overwrite = T, isDatatype = F,
-        skipConsistencyChecks = T)
+      if (auxCodeLinks.isEmpty) {
+        // overwrite the copy on regen since the user's aux dir is the source of truth; the
+        // consistency check is skipped as it requires markers inside user-provided content
+        resources = resources :+ ResourceUtil.createStringResourceI(
+          path = s"${options.sel4OutputDir.get}/$relPath", content = entry._2, overwrite = T, isDatatype = F,
+          skipConsistencyChecks = T)
+      }
 
       val relPathOps = ops.StringOps(relPath)
       if (relPathOps.endsWith(".c")) {

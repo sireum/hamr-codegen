@@ -30,6 +30,8 @@ object MicrokitUtil {
 
   val KEY_MICROKIT_AUX_CODE: String = "KEY_MICROKIT_AUX_CODE"
 
+  val KEY_MICROKIT_AUX_CODE_LINKS: String = "KEY_MICROKIT_AUX_CODE_LINKS"
+
   @pure def isDomainScheduling(options: HamrCli.CodegenOption, aadl: AadlSystem): B = {
     return !isMCS(options, aadl)
   }
@@ -65,6 +67,19 @@ object MicrokitUtil {
 
   @strictpure def putAuxCode(store: Store, auxCode: Map[String, String]): Store =
     store + KEY_MICROKIT_AUX_CODE ~> MapValue(auxCode)
+
+  // aux code symlink mode (--sel4-aux-code-symlink): map from each aux root directory's
+  // name to its absolute path. When non-empty, the aux directories are symlinked into
+  // aux_code rather than having their .c/.h files copied (the aux code map's keys are
+  // then prefixed with the root directory names)
+  @strictpure def getAuxCodeLinks(store: Store): Map[String, String] =
+    store.get(KEY_MICROKIT_AUX_CODE_LINKS) match {
+      case Some(m) => m.asInstanceOf[MapValue[String, String]].map
+      case _ => Map.empty[String, String]
+    }
+
+  @strictpure def putAuxCodeLinks(store: Store, auxCodeLinks: Map[String, String]): Store =
+    store + KEY_MICROKIT_AUX_CODE_LINKS ~> MapValue(auxCodeLinks)
 
   @strictpure def brand(s:String):String = s"sb_$s"
 

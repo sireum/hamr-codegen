@@ -31,6 +31,7 @@ object LongKeys {
   val CAmkES_Microkit_verusAttributeSyntax: String = "--verus-attribute-syntax"
   val CAmkES_Microkit_sel4OutputDir: String = "--sel4-output-dir"
   val CAmkES_Microkit_sel4AuxCodeDirs: String = "--sel4-aux-code-dirs"
+  val CAmkES_Microkit_sel4AuxCodeSymlink: String = "--sel4-aux-code-symlink"
   val CAmkES_Microkit_workspaceRootDir: String = "--workspace-root-dir"
   val ROS2_strictAadlMode: String = "--strict-aadl-mode"
   val ROS2_ros2OutputWorkspaceDir: String = "--ros2-output-workspace-dir"
@@ -40,7 +41,7 @@ object LongKeys {
   val ROS2_invertTopicBinding: String = "--invert-topic-binding"
   val Experimental_experimentalOptions: String = "--experimental-options"
 
-  val allKeys: Set[String] = Set.empty[String] ++ ISZ(msgpack, verbose, runtimeMonitoring, platform, outputDir, parseableMessages, Slang_slangOutputDir, Slang_packageName, Slang_noProyekIve, Slang_noEmbedArt, Slang_devicesAsThreads, Slang_genSbtMill, Transpiler_slangAuxCodeDirs, Transpiler_slangOutputCDir, Transpiler_excludeComponentImpl, Transpiler_bitWidth, Transpiler_maxStringSize, Transpiler_maxArraySize, Transpiler_runTranspiler, CAmkES_Microkit_scheduling, CAmkES_Microkit_verusAttributeSyntax, CAmkES_Microkit_sel4OutputDir, CAmkES_Microkit_sel4AuxCodeDirs, CAmkES_Microkit_workspaceRootDir, ROS2_strictAadlMode, ROS2_ros2OutputWorkspaceDir, ROS2_ros2Dir, ROS2_ros2NodesLanguage, ROS2_ros2LaunchLanguage, ROS2_invertTopicBinding, Experimental_experimentalOptions)
+  val allKeys: Set[String] = Set.empty[String] ++ ISZ(msgpack, verbose, runtimeMonitoring, platform, outputDir, parseableMessages, Slang_slangOutputDir, Slang_packageName, Slang_noProyekIve, Slang_noEmbedArt, Slang_devicesAsThreads, Slang_genSbtMill, Transpiler_slangAuxCodeDirs, Transpiler_slangOutputCDir, Transpiler_excludeComponentImpl, Transpiler_bitWidth, Transpiler_maxStringSize, Transpiler_maxArraySize, Transpiler_runTranspiler, CAmkES_Microkit_scheduling, CAmkES_Microkit_verusAttributeSyntax, CAmkES_Microkit_sel4OutputDir, CAmkES_Microkit_sel4AuxCodeDirs, CAmkES_Microkit_sel4AuxCodeSymlink, CAmkES_Microkit_workspaceRootDir, ROS2_strictAadlMode, ROS2_ros2OutputWorkspaceDir, ROS2_ros2Dir, ROS2_ros2NodesLanguage, ROS2_ros2LaunchLanguage, ROS2_invertTopicBinding, Experimental_experimentalOptions)
 
   @strictpure def sameKeys(keys: ISZ[String]): B = allKeys.elements == keys
 

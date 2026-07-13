@@ -206,10 +206,27 @@ object CodeGen {
 
     if (!reporter.hasError && runMicrokit) {
       reporter.info(None(), toolName, "Generating Microkit artifacts...")
-      val results = MicrokitCodegen().run(rmodel, modOptions, aadlTypes, symbolTable, plugins,
-        MicrokitUtil.putAuxCode(
-          store = MicrokitUtil.putMicrokitVersions(localStore, JvmMicrokitUtil.getMicrokitVersions),
-          auxCode = getAuxFiles(modOptions.sel4AuxCodeDirs, F, reporter)), reporter)
+      var microkitStore = MicrokitUtil.putMicrokitVersions(localStore, JvmMicrokitUtil.getMicrokitVersions)
+      if (modOptions.sel4AuxCodeSymlink) {
+        // symlink mode: each aux root directory is symlinked into aux_code by name, so the
+        // aux file map's keys must include the root directory names (includeParentDir = T)
+        var links = Map.empty[String, String]
+        for (d <- modOptions.sel4AuxCodeDirs) {
+          val dir = Os.path(d)
+          if (!dir.exists || !dir.isDir) {
+            reporter.error(None(), toolName, s"Aux code directory '$d' does not exist so it cannot be symlinked")
+          } else if (links.contains(dir.name)) {
+            reporter.error(None(), toolName, s"Aux code directories must have unique names when they are symlinked, but '${dir.name}' is used more than once")
+          } else {
+            links = links + dir.name ~> dir.canon.value
+          }
+        }
+        microkitStore = MicrokitUtil.putAuxCodeLinks(microkitStore, links)
+        microkitStore = MicrokitUtil.putAuxCode(microkitStore, getAuxFiles(modOptions.sel4AuxCodeDirs, T, reporter))
+      } else {
+        microkitStore = MicrokitUtil.putAuxCode(microkitStore, getAuxFiles(modOptions.sel4AuxCodeDirs, F, reporter))
+      }
+      val results = MicrokitCodegen().run(rmodel, modOptions, aadlTypes, symbolTable, plugins, microkitStore, reporter)
       localStore = results._2
       if (!reporter.hasError) {
         writeOutResources(results._1.resources, reporter)
@@ -599,7 +616,16 @@ object CodeGen {
               }
             case e: EResource =>
               if (e.symLink) {
-                halt("sym linking not yet supported")
+                val src = Os.path(e.srcPath)
+                if (!src.exists) {
+                  reporter.error(None(), toolName, s"Cannot create symlink to non-existent target: ${e.srcPath}")
+                } else {
+                  p.up.mkdirAll()
+                  // mklink relativizes the target against the link's parent directory (and
+                  // falls back to copying on Windows when linking is not permitted)
+                  p.mklink(src)
+                  reporter.info(None(), toolName, s"Created symlink: ${p} -> ${e.srcPath}")
+                }
               } else {
                 Os.path(e.srcPath).copyOverTo(p)
                 reporter.info(None(), toolName, s"Copied: ${e.srcPath} to ${p}")

@@ -66,6 +66,7 @@ object HamrCli {
     val verusAttributeSyntax: B,
     val sel4OutputDir: Option[String],
     val sel4AuxCodeDirs: ISZ[String],
+    val sel4AuxCodeSymlink: B,
     val workspaceRootDir: Option[String],
     val strictAadlMode: B,
     val ros2OutputWorkspaceDir: Option[String],
@@ -220,6 +221,9 @@ import HamrCli._
           |                           project files (expects a path)
           |    --sel4-aux-code-dirs Directories containing C files to be included in
           |                           CAmkES/Microkit build (expects path strings)
+          |    --sel4-aux-code-symlink
+          |                          Symlink the aux code directories into the Microkit
+          |                           build rather than copying their C files
           |-r, --workspace-root-dir    
           |                          Root directory containing the architectural model
           |                           project (expects a path)
@@ -270,6 +274,7 @@ import HamrCli._
     var verusAttributeSyntax: B = false
     var sel4OutputDir: Option[String] = None[String]()
     var sel4AuxCodeDirs: ISZ[String] = ISZ[String]()
+    var sel4AuxCodeSymlink: B = false
     var workspaceRootDir: Option[String] = None[String]()
     var strictAadlMode: B = false
     var ros2OutputWorkspaceDir: Option[String] = None[String]()
@@ -424,6 +429,12 @@ import HamrCli._
              case Some(v) => sel4AuxCodeDirs = v
              case _ => return None()
            }
+         } else if (arg == "--sel4-aux-code-symlink") {
+           val o: Option[B] = { j = j - 1; Some(!sel4AuxCodeSymlink) }
+           o match {
+             case Some(v) => sel4AuxCodeSymlink = v
+             case _ => return None()
+           }
          } else if (arg == "-r" || arg == "--workspace-root-dir") {
            val o: Option[Option[String]] = parsePath(args, j + 1)
            o match {
@@ -481,7 +492,7 @@ import HamrCli._
         isOption = F
       }
     }
-    return Some(CodegenOption(help, parseArguments(args, j), msgpack, verbose, runtimeMonitoring, platform, outputDir, parseableMessages, slangOutputDir, packageName, noProyekIve, noEmbedArt, devicesAsThreads, genSbtMill, slangAuxCodeDirs, slangOutputCDir, excludeComponentImpl, bitWidth, maxStringSize, maxArraySize, runTranspiler, scheduling, verusAttributeSyntax, sel4OutputDir, sel4AuxCodeDirs, workspaceRootDir, strictAadlMode, ros2OutputWorkspaceDir, ros2Dir, ros2NodesLanguage, ros2LaunchLanguage, invertTopicBinding, experimentalOptions))
+    return Some(CodegenOption(help, parseArguments(args, j), msgpack, verbose, runtimeMonitoring, platform, outputDir, parseableMessages, slangOutputDir, packageName, noProyekIve, noEmbedArt, devicesAsThreads, genSbtMill, slangAuxCodeDirs, slangOutputCDir, excludeComponentImpl, bitWidth, maxStringSize, maxArraySize, runTranspiler, scheduling, verusAttributeSyntax, sel4OutputDir, sel4AuxCodeDirs, sel4AuxCodeSymlink, workspaceRootDir, strictAadlMode, ros2OutputWorkspaceDir, ros2Dir, ros2NodesLanguage, ros2LaunchLanguage, invertTopicBinding, experimentalOptions))
   }
 
   def parseArguments(args: ISZ[String], i: Z): ISZ[String] = {
