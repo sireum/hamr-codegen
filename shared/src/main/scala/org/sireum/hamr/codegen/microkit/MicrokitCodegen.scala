@@ -111,12 +111,11 @@ object MicrokitCodegen {
 
     // process user-supplied C libraries provided via --sel4-aux-code-dirs: copy each .c/.h
     // file into <sel4OutputDir>/aux_code (preserving the directory structure relative to the
-    // supplied roots) and collect the object names, source dirs, header include flags, and
-    // build rules needed to wire the aux code into the generated makefiles
+    // supplied roots) and collect the object names, header include flags, and explicit build
+    // rules needed to wire the aux code into the generated makefiles
     val auxCode = MicrokitUtil.getAuxCode(localStore)
     var auxObjectNames: ISZ[String] = ISZ()
     var auxBuildEntries: ISZ[ST] = ISZ()
-    var auxSrcDirs: Set[String] = Set.empty[String]
     var auxHeaderDirs: Set[String] = Set.empty[String]
     var claimedObjNames: Set[String] = Set.empty[String] + "printf.o" + "util.o"
     for (mk <- makefileContainers) {
@@ -132,23 +131,26 @@ object MicrokitCodegen {
         skipConsistencyChecks = T)
 
       val relPathOps = ops.StringOps(relPath)
-      val parentDir = relPathOps.substring(0, relPathOps.lastIndexOf('/'))
       if (relPathOps.endsWith(".c")) {
-        val objName = s"${relPathOps.substring(relPathOps.lastIndexOf('/') + 1, relPath.size - 2)}.o"
+        // flatten the relative path into the object name so libraries containing files with
+        // the same basename in different directories (e.g. R2U2's engines/mltl.c and
+        // instructions/mltl.c) do not clash
+        val objName = s"aux_${ops.StringOps(ops.StringOps(rel).substring(0, rel.size - 2)).replaceAllChars('/', '_')}.o"
         if (claimedObjNames.contains(objName)) {
           reporter.error(None(), MicrokitCodegen.toolName,
             s"Aux code file '$relPath' would produce object file '$objName' whose name clashes with that of another object file. Please rename the file.")
         } else {
           claimedObjNames = claimedObjNames + objName
           auxObjectNames = auxObjectNames :+ objName
-          auxSrcDirs = auxSrcDirs + parentDir
+          // $(TOP_INCLUDE) is only defined for the domain scheduler; under MCS it expands to
+          // nothing and the aux include dirs are supplied via $(CFLAGS) instead
           auxBuildEntries = auxBuildEntries :+
             st"""# aux code
                 |$objName: $$(TOP_DIR)/$relPath Makefile
                 |${MicrokitUtil.TAB}$$(CC) -c $$(CFLAGS) $$< -o $$@ $$(TOP_INCLUDE)"""
         }
       } else if (relPathOps.endsWith(".h")) {
-        auxHeaderDirs = auxHeaderDirs + parentDir
+        auxHeaderDirs = auxHeaderDirs + relPathOps.substring(0, relPathOps.lastIndexOf('/'))
       }
     }
     val auxIncludeFlags: ISZ[String] = for (d <- auxHeaderDirs.elements) yield s"-I$$(TOP_DIR)/$d"
@@ -167,10 +169,9 @@ object MicrokitCodegen {
       if (isMCS) {
         val includesPaths: ISZ[String] = (for (mk <- makefileContainers) yield s"-I$$(TOP_DIR)/${mk.relativePathIncludeDir}") ++ auxIncludeFlags
 
-        val sourcePaths: ISZ[String] = (for (mk <- makefileContainers) yield s"$$(TOP_DIR)/${mk.relativePathSrcDir}") ++
-          (for (d <- auxSrcDirs.elements) yield s"$$(TOP_DIR)/$d")
+        val sourcePaths: ISZ[String] = for (mk <- makefileContainers) yield s"$$(TOP_DIR)/${mk.relativePathSrcDir}"
 
-        var mcsBuildEntries: ISZ[ST] = ISZ()
+        var mcsBuildEntries: ISZ[ST] = auxBuildEntries
         for (mk <- makefileContainers if (mk.isRustic && mk.hasUserContent)) {
           mcsBuildEntries = mcsBuildEntries :+ mk.rustBuildEntry
         }

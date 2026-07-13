@@ -203,8 +203,8 @@ object MakefileTemplate {
 
 
   // auxObjectNames stems from --sel4-aux-code-dirs: object files built from the aux .c files
-  // (compiled via the %.o: %.c pattern rule; the caller adds the aux source dirs to sourcePaths
-  // and the aux header dirs to includePaths). When empty the generated makefile is unchanged
+  // (compiled via explicit rules the caller passes in buildEntries; the caller adds the aux
+  // header dirs to includePaths). When empty the generated makefile is unchanged
   @pure def systemMakefileMCS(elfFiles: ISZ[String],
                               includePaths: ISZ[String],
                               sourcePaths: ISZ[String],
