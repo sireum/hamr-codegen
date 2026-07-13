@@ -563,10 +563,14 @@ object CodeGen {
         case r: FileResource =>
           val _p = Os.path(r.dstPath).canon
           val p = _p.canon
-          assert(!p.exists || p.isFile)
-          p.up.mkdirAll()
+
           r match {
             case i: IResource =>
+              p.up.mkdirAll()
+
+              assert(!p.exists || p.isFile,
+                s"$p ${if (p.exists) "exists " else ""} and it is ${if (!p.isFile) "not " else ""} a file")
+
               if (!p.exists || (!i.invertMarkers && i.overwrite)) {
                 val content = render(i)
                 p.writeOver(content)
@@ -615,20 +619,32 @@ object CodeGen {
                 reporter.info(None(), toolName, s"File exists, will not overwrite: ${p}")
               }
             case e: EResource =>
+              // do NOT use the canonicalized `p` here: when the destination is an existing
+              // symlink from a previous run, canon resolves THROUGH it, so the operation
+              // would be applied to the link's target instead of the link itself (e.g.
+              // destroying a symlinked source directory on regeneration). Canonicalize
+              // only the parent and keep the leaf name unresolved
+              val dstPath = Os.path(e.dstPath)
+              val dst = dstPath.up.canon / dstPath.name
               if (e.symLink) {
                 val src = Os.path(e.srcPath)
                 if (!src.exists) {
                   reporter.error(None(), toolName, s"Cannot create symlink to non-existent target: ${e.srcPath}")
                 } else {
-                  p.up.mkdirAll()
+                  dst.up.mkdirAll()
+                  if (dst.isSymLink) {
+                    // remove the existing link itself (never its target); this also handles
+                    // dangling links, which mklink's internal existence check would miss
+                    dst.remove()
+                  }
                   // mklink relativizes the target against the link's parent directory (and
                   // falls back to copying on Windows when linking is not permitted)
-                  p.mklink(src)
-                  reporter.info(None(), toolName, s"Created symlink: ${p} -> ${e.srcPath}")
+                  dst.mklink(src)
+                  reporter.info(None(), toolName, s"Created symlink: ${dst} -> ${e.srcPath}")
                 }
               } else {
-                Os.path(e.srcPath).copyOverTo(p)
-                reporter.info(None(), toolName, s"Copied: ${e.srcPath} to ${p}")
+                Os.path(e.srcPath).copyOverTo(dst)
+                reporter.info(None(), toolName, s"Copied: ${e.srcPath} to ${dst}")
               }
           }
         case _ =>
