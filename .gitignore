@@ -12,6 +12,7 @@ bin/sireum.jar
 bin/sireum-mcp.bat
 bin/slang-run.*
 bin/.sireum-win.jar
+bin/.aot/
 bin/linux
 bin/mac
 bin/win
