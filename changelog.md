@@ -1,7 +1,11 @@
-*Last Updated 2025-10-20*
+*Last Updated 2026-07-15*
 
 <!-- begin pre-release -->
 # Pre-Release
+
+**General**
+
+  * The CLI long/short key objects (``CliKeys.scala``) and kekinian's ``HAMR.mergeOptionsM`` file-option merging method are now generated via ``build.cmd regen-cli``, keeping them in sync with codegen's CLI options (the hand-maintained merge method had drifted -- e.g. the ROS2 short keys were not handled)
 
 <details><summary>How to build</summary>
 
@@ -15,20 +19,77 @@ cd kekinian
 
 <details><summary>Commits</summary>
 
+* [13d1356](https://github.com/sireum/hamr-codegen/commit/13d1356) generate cli keys merge option method
 </details>
 <br>
 <!-- end pre-release -->
 
 <!-- begin dev -->
-# [dev](https://github.com/sireum/kekinian/releases/tag/dev)  <font size=3>as of 2025-10-20</font>
+# [dev](https://github.com/sireum/kekinian/releases/tag/dev)  <font size=3>as of 2026-07-14</font>
 
 **Microkit**
 
-  * Updated verus dependencies to 0.2025.09.25.04e8687
+  * Added system-property verification: GUMBO system properties/assertions are translated to Verus verification conditions over component contracts, with support for compositions (including multiple compositions, abstract system properties with specializations, and multi-inheritance), per-composition proof crates with make targets, and property VCs organized into separate directories
 
-  * Remove dependency on microkit for verus and testing targets
+  * System VCs cover connected ports having integration constraints, event and event-data ports, and the contracts of trusted (non-Rust) components; int-widened GUMBO expressions are coerced to their machine types in Verus
 
-  * Add C api artifacts to codegen report
+  * Added system-assertion and GUMBO runtime-monitor components along with a generic user-land monitor; the monitor reports user-partition faults
+
+  * Added per-component generation profiles controlling three independent axes (verusVerified, userEditable, emitTestHarness) so, e.g., generated monitors can be emitted as fully-generated plain Rust without Verus annotations or test harnesses
+
+  * Added user-land scheduling with runtime-monitoring support, a ``--scheduling`` CLI option, system schedule nodes, comments identifying scheduling domains, and a 30ms default pacer period; MCS scheduler queue types are now generated even when runtime monitoring is disabled
+
+  * Added ``--sel4-aux-code-dirs`` and ``--sel4-aux-code-symlink`` options for compiling and linking auxiliary C code into component builds (aux objects get flattened names with explicit make rules; aux directories can be symlinked into ``aux_code/`` rather than copied)
+
+  * Added virtual machine + user-land support (guest VM RAM physical addresses, optional memory-region page size, ``linux.dts``/``overlay.dts`` no longer overwritten, removed ``loader.img`` circular dependency)
+
+  * Verus crate dependencies are now obtained from crates.io (Verus 0.0.0-2026-01-25-0057, Rust toolchain pinned to nightly-2026-01-25); added a ``--verus-attribute-syntax`` option to emit Verus attribute syntax instead of the default Verus macro syntax
+
+  * Integration constraints: added spec nodes and reporting artifacts, Logika/Verus/GumboX support for event data port integration constraints, rejection of uninterpreted function uses, and an error report (instead of an internal assertion failure) when connected port datatypes don't match
+
+  * Added composition lints, including a rule rejecting data port fan-ins
+
+  * Fixes: pure event ports on threads with GUMBO integration constraints no longer halt codegen, ``TYPE_OBJS`` are deduplicated to avoid duplicate-symbol linker errors, ``Eq`` is not derived for datatypes containing floats, enum values are emitted fully qualified, port queue sizes greater than 1 are rejected for Rust/GUMBO threads, and the test bridge recovers from poisoned mutexes
+
+**JVM**
+
+  * Added ``update_`` methods to generated SlangCheck profile traits and records
+
+  * Generated GumboX conjunctions use val bindings to enable clause-level failure diagnosis; fixed handler conjunctions
+
+  * Refined GUMBO-to-Slang array handling and the typing of rewritten api expressions
+
+**ROS2**
+
+  * Added microROS support
+
+  * Only types referenced by the model are emitted; added Python ament dependencies
+
+**Attestation**
+
+  * Added a simplified attestation report
+
+**Phantom**
+
+  * Updated Sireum OSATE plugins to 1.2026.07131214.177108b3 and GUMBO plugins to 1.2026.06240925.18efbba7
+
+**General**
+
+  * Added support for GUMBO spec methods in the Microkit and Slang backends
+
+  * All codegen resources are now created via a factory, and file markers are validated against the overwrite flag
+
+**Backward Incompatibilities**
+
+  * **Microkit**
+
+    * Verus crate dependencies moved to crates.io and the Rust toolchain is pinned to nightly-2026-01-25; existing projects should regenerate (or manually update) their ``Cargo.toml`` and toolchain files
+
+    * Independence VCs were renamed and per-composition monitor crates now use composition-first names; update any references to the old names
+
+    * The default pacer period is now 30ms
+
+    * Models containing data port fan-ins, or Rust/GUMBO threads whose ports have queue sizes greater than 1, are now rejected
 
 <details><summary>How to build</summary>
 
@@ -41,6 +102,553 @@ cd kekinian
 </details>
 
 <details><summary>Commits</summary>
+
+* [4edde2e](https://github.com/sireum/hamr-codegen/commit/4edde2e) update submodule
+
+* [2f6c535](https://github.com/sireum/hamr-codegen/commit/2f6c535) update phantom options
+
+* [71875c1](https://github.com/sireum/hamr-codegen/commit/71875c1) update submodule
+
+* [7bc2040](https://github.com/sireum/hamr-codegen/commit/7bc2040) microkit/codegen: don't resolve through an existing symlink when writing resources
+
+* [5f0072a](https://github.com/sireum/hamr-codegen/commit/5f0072a) microkit: add --sel4-aux-code-symlink option
+
+* [7da5ef4](https://github.com/sireum/hamr-codegen/commit/7da5ef4) microkit: flatten aux-code object names and emit explicit build rules
+
+* [e74ea77](https://github.com/sireum/hamr-codegen/commit/e74ea77) Implement --sel4-aux-code-dirs support for Microkit codegen
+
+* [e03df9c](https://github.com/sireum/hamr-codegen/commit/e03df9c) update submodule
+
+* [bee830c](https://github.com/sireum/hamr-codegen/commit/bee830c) update submodule
+
+* [14cae86](https://github.com/sireum/hamr-codegen/commit/14cae86) Fix Microkit codegen halt for pure event ports owned by threads with GUMBO integration constraints (hamr-tutorials BR-02)
+
+* [d774cee](https://github.com/sireum/hamr-codegen/commit/d774cee) microkit: report user-partition faults in the monitor and enlarge its stack
+
+* [82babb2](https://github.com/sireum/hamr-codegen/commit/82babb2) microkit: composition-first crate names for per-composition monitors
+
+* [5d05c7d](https://github.com/sireum/hamr-codegen/commit/5d05c7d) microkit: surface trusted (non-Rust) component contracts in sys proof
+
+* [fb54787](https://github.com/sireum/hamr-codegen/commit/fb54787) microkit: rename independence VCs and document integration-constraint handling
+
+* [4e47fcb](https://github.com/sireum/hamr-codegen/commit/4e47fcb) microkit: coerce int-widened GUMBO exprs to machine types in Verus
+
+* [da2ec12](https://github.com/sireum/hamr-codegen/commit/da2ec12) update submodule
+
+* [489948f](https://github.com/sireum/hamr-codegen/commit/489948f) microkit: support event/event-data ports in system VC generation
+
+* [e253038](https://github.com/sireum/hamr-codegen/commit/e253038) add lint rule to reject data port fan ins
+
+* [423d360](https://github.com/sireum/hamr-codegen/commit/423d360) add composition lints
+
+* [0c2c3e3](https://github.com/sireum/hamr-codegen/commit/0c2c3e3) update submodule
+
+* [dc3d86a](https://github.com/sireum/hamr-codegen/commit/dc3d86a) microkit: generated VCs for connected ports that have integration constraints
+
+* [90521ed](https://github.com/sireum/hamr-codegen/commit/90521ed) update submodule
+
+* [57c3a15](https://github.com/sireum/hamr-codegen/commit/57c3a15) update submdoule
+
+* [f7bb3cc](https://github.com/sireum/hamr-codegen/commit/f7bb3cc) update submodule
+
+* [475f14a](https://github.com/sireum/hamr-codegen/commit/475f14a) remove verus attributes
+
+* [2532453](https://github.com/sireum/hamr-codegen/commit/2532453) update phantom versions
+
+* [eff9bda](https://github.com/sireum/hamr-codegen/commit/eff9bda) update submodule
+
+* [462eeb0](https://github.com/sireum/hamr-codegen/commit/462eeb0) add support for sys prop multi inheritance
+
+* [93738f0](https://github.com/sireum/hamr-codegen/commit/93738f0) update gumbo version script
+
+* [25982c9](https://github.com/sireum/hamr-codegen/commit/25982c9) add support for abstract sys properties and specializations
+
+* [6f5f089](https://github.com/sireum/hamr-codegen/commit/6f5f089) update submodule
+
+* [29fc93e](https://github.com/sireum/hamr-codegen/commit/29fc93e) Add per-component ComponentGenProfile controlling three independent code-generation axes (verusVerified, userEditable, emitTestHarness), seeded from provenance and set per-injector, and rename the provenance flag NonModelElement -> isSynthetic so provenance seeds policy rather than standing in for it. Each monitor injector now picks its profile: the generic userland monitor stays editable/Verus-verified/tested while the gumbo and sys-assert monitors are emitted as fully-generated plain Rust (no Verus, no test harness), with the profile consumed across CRustComponentPlugin, CRustTestingPlugin, GumboRustPlugin, and the monitor plugins. Also fix SlangExpUtil to apply composition port/state-var alias substitutions in the exec/GUMBOX context (not only under Verus) so the exec sys-assert monitor resolves its aliases to api.get_*() calls.
+
+* [df29ad0](https://github.com/sireum/hamr-codegen/commit/df29ad0) reset alias map
+
+* [a6df3dd](https://github.com/sireum/hamr-codegen/commit/a6df3dd) update submodules
+
+* [5dac9ce](https://github.com/sireum/hamr-codegen/commit/5dac9ce) update build props
+
+* [9bfa4e9](https://github.com/sireum/hamr-codegen/commit/9bfa4e9) update submodule
+
+* [9615624](https://github.com/sireum/hamr-codegen/commit/9615624) update cis
+
+* [043a5a5](https://github.com/sireum/hamr-codegen/commit/043a5a5) update submodule
+
+* [ca4656f](https://github.com/sireum/hamr-codegen/commit/ca4656f) microkit: add make artifacts for the composition crates
+
+* [325c1b0](https://github.com/sireum/hamr-codegen/commit/325c1b0) microkit: move property vc into separate directories
+
+* [cc2efd9](https://github.com/sireum/hamr-codegen/commit/cc2efd9) update build props
+
+* [0e4f66f](https://github.com/sireum/hamr-codegen/commit/0e4f66f) update submodule
+
+* [f258f02](https://github.com/sireum/hamr-codegen/commit/f258f02) microkit: add support for multiple compositions
+
+* [a6379d9](https://github.com/sireum/hamr-codegen/commit/a6379d9) update submodule
+
+* [109bb48](https://github.com/sireum/hamr-codegen/commit/109bb48) update phantom versions
+
+* [e6171f5](https://github.com/sireum/hamr-codegen/commit/e6171f5) add sys assert composition support
+
+* [748ceba](https://github.com/sireum/hamr-codegen/commit/748ceba) update submodule
+
+* [b60536e](https://github.com/sireum/hamr-codegen/commit/b60536e) sys assert vc gen checkpoint
+
+* [3eca098](https://github.com/sireum/hamr-codegen/commit/3eca098) sys assert vc gen checkpoint
+
+* [88e55fa](https://github.com/sireum/hamr-codegen/commit/88e55fa) sys asssert vc gen checkpoint
+
+* [2516d5c](https://github.com/sireum/hamr-codegen/commit/2516d5c) update submodule
+
+* [de27683](https://github.com/sireum/hamr-codegen/commit/de27683) update submodule
+
+* [74f6d78](https://github.com/sireum/hamr-codegen/commit/74f6d78) microkit: add vm + userland support
+
+* [cbb556f](https://github.com/sireum/hamr-codegen/commit/cbb556f) update submodule
+
+* [1426bec](https://github.com/sireum/hamr-codegen/commit/1426bec) update build props tipe fix
+
+* [315c947](https://github.com/sireum/hamr-codegen/commit/315c947) sys assert checkpoint
+
+* [c6d91c9](https://github.com/sireum/hamr-codegen/commit/c6d91c9) microkit: sys assert monitor plugin checkpoint
+
+* [f84a270](https://github.com/sireum/hamr-codegen/commit/f84a270) sys assertion checkpoint
+
+* [2d8476a](https://github.com/sireum/hamr-codegen/commit/2d8476a) overflow fix
+
+* [b603cdc](https://github.com/sireum/hamr-codegen/commit/b603cdc) add system schedule nodes
+
+* [8cc8345](https://github.com/sireum/hamr-codegen/commit/8cc8345) update submodule
+
+* [430866b](https://github.com/sireum/hamr-codegen/commit/430866b) update versions
+
+* [bd48dca](https://github.com/sireum/hamr-codegen/commit/bd48dca) update versions
+
+* [4ffcb8e](https://github.com/sireum/hamr-codegen/commit/4ffcb8e) update submodule
+
+* [7eff835](https://github.com/sireum/hamr-codegen/commit/7eff835) update submodule
+
+* [914346a](https://github.com/sireum/hamr-codegen/commit/914346a) microkit: monitor plugin refactoring
+
+* [cc6c776](https://github.com/sireum/hamr-codegen/commit/cc6c776) update submodule
+
+* [b57847a](https://github.com/sireum/hamr-codegen/commit/b57847a) microkit: add 'scheduling' cli option
+
+* [3e1dbcc](https://github.com/sireum/hamr-codegen/commit/3e1dbcc) update expected
+
+* [150aba7](https://github.com/sireum/hamr-codegen/commit/150aba7) microkit: filter out non model ports
+
+* [c87b02a](https://github.com/sireum/hamr-codegen/commit/c87b02a) update submodule
+
+* [56a33b3](https://github.com/sireum/hamr-codegen/commit/56a33b3) microkit: add verus attribute syntax support
+
+* [3bb8102](https://github.com/sireum/hamr-codegen/commit/3bb8102) update submodule
+
+* [abf5fc4](https://github.com/sireum/hamr-codegen/commit/abf5fc4) microkit: add gumbo monitor plugin
+
+* [b3cdc74](https://github.com/sireum/hamr-codegen/commit/b3cdc74) add AADL package name to name map for all AADL datatypes
+
+* [e51b2a1](https://github.com/sireum/hamr-codegen/commit/e51b2a1) update submodule
+
+* [fa0660b](https://github.com/sireum/hamr-codegen/commit/fa0660b) microkit: generate MCS scheduler queue types in the absence of runtime monitoring
+
+* [82f665f](https://github.com/sireum/hamr-codegen/commit/82f665f) microkit: write out mcs misc targets
+
+* [2451f01](https://github.com/sireum/hamr-codegen/commit/2451f01) add design docs
+
+* [439ca10](https://github.com/sireum/hamr-codegen/commit/439ca10) update submodule
+
+* [f92df99](https://github.com/sireum/hamr-codegen/commit/f92df99) fix handler conjunctions
+
+* [6fdef5b](https://github.com/sireum/hamr-codegen/commit/6fdef5b) update submodule
+
+* [4e620f1](https://github.com/sireum/hamr-codegen/commit/4e620f1) Use val bindings in generated GumboX conjunctions for clause-level failure diagnosis
+
+* [4aaf618](https://github.com/sireum/hamr-codegen/commit/4aaf618) slang: add update_ methods to generated SlangCheck profile traits and records
+
+* [7d538e7](https://github.com/sireum/hamr-codegen/commit/7d538e7) upadte submodule
+
+* [50553a7](https://github.com/sireum/hamr-codegen/commit/50553a7) reject uif uses in integration contracts
+
+* [b93d7b1](https://github.com/sireum/hamr-codegen/commit/b93d7b1) microkit: fix nightly toolchain version
+
+* [b9c46e2](https://github.com/sireum/hamr-codegen/commit/b9c46e2) update submodule
+
+* [596c17c](https://github.com/sireum/hamr-codegen/commit/596c17c) ros: readme tweaks
+
+* [9e2cad7](https://github.com/sireum/hamr-codegen/commit/9e2cad7) Bump actions/checkout and actions/cache from v4 to v5 (Node.js 24)
+
+* [95999de](https://github.com/sireum/hamr-codegen/commit/95999de) Fix CI-camkes: remove X11-dependent emacs variants that fail due to debianutils/x11-common version conflict
+
+* [e2de7f6](https://github.com/sireum/hamr-codegen/commit/e2de7f6) update submodule
+
+* [f594661](https://github.com/sireum/hamr-codegen/commit/f594661) refine user-land scheduler
+
+* [762d599](https://github.com/sireum/hamr-codegen/commit/762d599) update submodule
+
+* [538cdff](https://github.com/sireum/hamr-codegen/commit/538cdff) microkit: add user-land scheduling + runtime monitoring support
+
+* [2ef42e9](https://github.com/sireum/hamr-codegen/commit/2ef42e9) update gitignore
+
+* [ff768c6](https://github.com/sireum/hamr-codegen/commit/ff768c6) update ci yml
+
+* [e051a6f](https://github.com/sireum/hamr-codegen/commit/e051a6f) update submodule
+
+* [584547b](https://github.com/sireum/hamr-codegen/commit/584547b) update submodule
+
+* [18c5009](https://github.com/sireum/hamr-codegen/commit/18c5009) update microros gh action
+
+* [63b660a](https://github.com/sireum/hamr-codegen/commit/63b660a) update microros gh action
+
+* [9759868](https://github.com/sireum/hamr-codegen/commit/9759868) update submodule
+
+* [7fe9861](https://github.com/sireum/hamr-codegen/commit/7fe9861) ros: add microros support
+
+* [4b667a7](https://github.com/sireum/hamr-codegen/commit/4b667a7) create all resources via factory
+
+* [c5d2b2b](https://github.com/sireum/hamr-codegen/commit/c5d2b2b) update submodule
+
+* [79fa7e3](https://github.com/sireum/hamr-codegen/commit/79fa7e3) microkit: add 'do not edit' comment to merged msd
+
+* [b36f461](https://github.com/sireum/hamr-codegen/commit/b36f461) update submodule
+
+* [cae2956](https://github.com/sireum/hamr-codegen/commit/cae2956) add validity check of file comments aginst the overwrite flag
+
+* [076dd55](https://github.com/sireum/hamr-codegen/commit/076dd55) update submodule
+
+* [6c0ae4b](https://github.com/sireum/hamr-codegen/commit/6c0ae4b) microkit: proptest fix
+
+* [f10dfaf](https://github.com/sireum/hamr-codegen/commit/f10dfaf) update submoule
+
+* [d94e5e8](https://github.com/sireum/hamr-codegen/commit/d94e5e8) microkit: add runtime monitor component
+
+* [59ff2af](https://github.com/sireum/hamr-codegen/commit/59ff2af) update submodule
+
+* [1e444a0](https://github.com/sireum/hamr-codegen/commit/1e444a0) ros: only emit types that are touched in the model
+
+* [88bcad6](https://github.com/sireum/hamr-codegen/commit/88bcad6) update submodule
+
+* [6f08b7b](https://github.com/sireum/hamr-codegen/commit/6f08b7b) microkit: add comments identifying scheduling domains
+
+* [21954e0](https://github.com/sireum/hamr-codegen/commit/21954e0) update submodule
+
+* [a35368f](https://github.com/sireum/hamr-codegen/commit/a35368f) microkit: add opt page size to memory region, set physical address of guest vm ram
+
+* [0cafdc1](https://github.com/sireum/hamr-codegen/commit/0cafdc1) microkit: emit enum values as fully qualified
+
+* [393a43c](https://github.com/sireum/hamr-codegen/commit/393a43c) microkit: don't build type poset when reporter has errors
+
+* [1917436](https://github.com/sireum/hamr-codegen/commit/1917436) update submodule
+
+* [c1d04fb](https://github.com/sireum/hamr-codegen/commit/c1d04fb) update gumbo phantom version
+
+* [61d1836](https://github.com/sireum/hamr-codegen/commit/61d1836) Adapted to Slang changes.
+
+* [da6d3e8](https://github.com/sireum/hamr-codegen/commit/da6d3e8) Adapted to Slang changes.
+
+* [59899d4](https://github.com/sireum/hamr-codegen/commit/59899d4) update submdoule
+
+* [ba11e84](https://github.com/sireum/hamr-codegen/commit/ba11e84) microkit: remove loader.img circular dep
+
+* [efb88f1](https://github.com/sireum/hamr-codegen/commit/efb88f1) update submodule
+
+* [2b9d3ec](https://github.com/sireum/hamr-codegen/commit/2b9d3ec) microkit: add content marker to vm protection domains
+
+* [fb67a0b](https://github.com/sireum/hamr-codegen/commit/fb67a0b) update submodules
+
+* [190b9a7](https://github.com/sireum/hamr-codegen/commit/190b9a7) microkit: remove circular dependency on loader.img, remove qemu loader.img dependency in system make
+
+* [6320623](https://github.com/sireum/hamr-codegen/commit/6320623) update submodule
+
+* [39ced0e](https://github.com/sireum/hamr-codegen/commit/39ced0e) microkit: don't overwrite linux.dts/overlay.dts
+
+* [8aed500](https://github.com/sireum/hamr-codegen/commit/8aed500) update submdodule
+
+* [1ddb33d](https://github.com/sireum/hamr-codegen/commit/1ddb33d) microkit: Deduplicate TYPE_OBJS to avoid duplicate symbol linker errors
+
+* [57c5ca5](https://github.com/sireum/hamr-codegen/commit/57c5ca5) update submodule
+
+* [741d099](https://github.com/sireum/hamr-codegen/commit/741d099) update submodule
+
+* [5c296c5](https://github.com/sireum/hamr-codegen/commit/5c296c5) microkit: update vmm support
+
+* [8e0c17d](https://github.com/sireum/hamr-codegen/commit/8e0c17d) move plugin to linters
+
+* [b490162](https://github.com/sireum/hamr-codegen/commit/b490162) update submodule
+
+* [e533c2f](https://github.com/sireum/hamr-codegen/commit/e533c2f) microkit: disallow port queues > 1 for rust + gumbo threads
+
+* [b3c4e3a](https://github.com/sireum/hamr-codegen/commit/b3c4e3a) set default pacer time to 30ms
+
+* [a66b223](https://github.com/sireum/hamr-codegen/commit/a66b223) don't overwrite meta program
+
+* [4549d4b](https://github.com/sireum/hamr-codegen/commit/4549d4b) update submodule
+
+* [2250a33](https://github.com/sireum/hamr-codegen/commit/2250a33) microkit: don't derive Eq when datatype contains floats
+
+* [3409616](https://github.com/sireum/hamr-codegen/commit/3409616) checkpoint
+
+* [f879390](https://github.com/sireum/hamr-codegen/commit/f879390) checkpoint
+
+* [8d264fa](https://github.com/sireum/hamr-codegen/commit/8d264fa) update submodule
+
+* [cb24ae0](https://github.com/sireum/hamr-codegen/commit/cb24ae0) checkpoint
+
+* [c6c3c64](https://github.com/sireum/hamr-codegen/commit/c6c3c64) checkpoint
+
+* [e46166d](https://github.com/sireum/hamr-codegen/commit/e46166d) microkit: move c connection and thread processing to plugins
+
+* [27f80b1](https://github.com/sireum/hamr-codegen/commit/27f80b1) resolve method names when called from gumbo lib context
+
+* [0fda88c](https://github.com/sireum/hamr-codegen/commit/0fda88c) update submodule
+
+* [d941864](https://github.com/sireum/hamr-codegen/commit/d941864) microkit: fix verus crate dependencies
+
+* [8d00134](https://github.com/sireum/hamr-codegen/commit/8d00134) microkit: guard against ill formed content
+
+* [d07b10f](https://github.com/sireum/hamr-codegen/commit/d07b10f) fix spelling
+
+* [6941375](https://github.com/sireum/hamr-codegen/commit/6941375) Adapted to ParseTree changes.
+
+* [c4bc5fe](https://github.com/sireum/hamr-codegen/commit/c4bc5fe) add integration constraint spec node
+
+* [cb03607](https://github.com/sireum/hamr-codegen/commit/cb03607) update submodule
+
+* [2eff682](https://github.com/sireum/hamr-codegen/commit/2eff682) add integration constraint reporting artifacts
+
+* [95e1f4b](https://github.com/sireum/hamr-codegen/commit/95e1f4b) update gumbo plugin version
+
+* [9e807de](https://github.com/sireum/hamr-codegen/commit/9e807de) update submodule
+
+* [eb0c93b](https://github.com/sireum/hamr-codegen/commit/eb0c93b) microkit: add logika/verus/gumbox support for event data port integration constraints, type and resolve array indexing type helper methods
+
+* [9b83311](https://github.com/sireum/hamr-codegen/commit/9b83311) add pos opts
+
+* [26389e0](https://github.com/sireum/hamr-codegen/commit/26389e0) add error report instead of assert error when connected port datatypes don't match
+
+* [2219dfa](https://github.com/sireum/hamr-codegen/commit/2219dfa) update submodule
+
+* [74a8850](https://github.com/sireum/hamr-codegen/commit/74a8850) microkit: Recover from poisoned mutexes in test bridge to prevent cascading failures across tests
+
+* [e5debf3](https://github.com/sireum/hamr-codegen/commit/e5debf3) update submodule
+
+* [f78da3e](https://github.com/sireum/hamr-codegen/commit/f78da3e) update gumbo
+
+* [7d6208e](https://github.com/sireum/hamr-codegen/commit/7d6208e) microkit/slang: add spec methods
+
+* [ff7de31](https://github.com/sireum/hamr-codegen/commit/ff7de31) Updated copyright years.
+
+* [cb205fe](https://github.com/sireum/hamr-codegen/commit/cb205fe) update submodule
+
+* [9d8e934](https://github.com/sireum/hamr-codegen/commit/9d8e934) slang: refine array handling
+
+* [7cba603](https://github.com/sireum/hamr-codegen/commit/7cba603) microkit: switch to crate.io for verus crate dependencies, update verus to 0.0.0-2026-01-25-0057
+
+* [7401f76](https://github.com/sireum/hamr-codegen/commit/7401f76) slang: don't add 'value' to option opts
+
+* [c11d192](https://github.com/sireum/hamr-codegen/commit/c11d192) update submodule
+
+* [7686840](https://github.com/sireum/hamr-codegen/commit/7686840) use fully qualified name when looking up gumbo methods
+
+* [6f9d8ca](https://github.com/sireum/hamr-codegen/commit/6f9d8ca) ensure array base type are resolved
+
+* [ce74a2f](https://github.com/sireum/hamr-codegen/commit/ce74a2f) update submodule
+
+* [e4c5525](https://github.com/sireum/hamr-codegen/commit/e4c5525) add simplified attestation report
+
+* [3e67190](https://github.com/sireum/hamr-codegen/commit/3e67190) switch to docker image of ubuntu-24.04 for ci
+
+* [6c3f313](https://github.com/sireum/hamr-codegen/commit/6c3f313) fix typing for rewritten api expressions
+
+* [85ba9fc](https://github.com/sireum/hamr-codegen/commit/85ba9fc) update submodule
+
+* [bfbac77](https://github.com/sireum/hamr-codegen/commit/bfbac77) update ros2 tests
+
+* [77e0899](https://github.com/sireum/hamr-codegen/commit/77e0899) add ros2 python ament deps
+
+* [114f887](https://github.com/sireum/hamr-codegen/commit/114f887) add ros2 python ament deps
+
+* [9528471](https://github.com/sireum/hamr-codegen/commit/9528471) add ros2 python ament deps
+</details>
+<br>
+<!-- end dev -->
+
+<!-- released -->
+<!-- begin 4.20260115.7c92e7f9 -->
+# [4.20260115.7c92e7f9](https://github.com/sireum/kekinian/releases/tag/4.20260115.7c92e7f9) 
+
+**Microkit**
+
+  * Added Verus/Rust support for GUMBO library annexes; generated GUMBO library functions are placed at the crate level
+
+  * Added support for array expressions in SysMLv2 GUMBO contracts, fixed the rewriting of structs containing arrays, and quantified spec expressions now use the implication operator with an 'inferred' trigger for the first indexed use of a quantified variable
+
+  * Verus spec methods returning numeric types now explicitly cast their return value to the expected type
+
+  * The static schedule is now emitted to a separate user-editable ``microkit.schedule.xml`` file that is referenced from the system description
+
+  * Generated component unit tests moved into the crate-internal ``src/test`` module, and the test apis moved from ``bridge/test_api.rs`` to ``test_util/test_apis.rs``
+
+  * The Verus and testing make targets no longer depend on the microkit target; added clean targets for Rust components; seL4 include directories are no longer passed when verifying
+
+  * seL4 crate dependencies are now tied to a GitHub release and Microkit dependency versions are centralized in ``microkit_versions.properties``; updated Verus dependencies to 0.2026.01.02.6f52890
+
+  * Added C API artifacts and Rust consts to the codegen report
+
+  * Added support for the ``Implementation_Language`` property (in addition to ``Microkit_Language``)
+
+  * Domain 0 is no longer scheduled when its budget is exhausted
+
+  * Added lint rejecting Z string interpolations in GUMBO contracts
+
+**JVM**
+
+  * Only datatypes referenced by the model are emitted; sergen/slangcheck file arguments are sorted for deterministic output
+
+  * Empty Logika contracts are no longer generated
+
+**Phantom**
+
+  * Updated GUMBO OSATE plugins to 1.2025.11101714.aaeb57a0 (OSATE remains at 2.17)
+
+**General**
+
+  * Added placeholder markers (in addition to begin/end block markers) for preserving user-provided content in generated files
+
+  * GUMBO library functions residing in the same package as a component are now imported automatically
+
+  * Added recognition of additional OMG base-type prefixes for AADL/SysMLv2
+
+  * Codegen plugins are no longer finalized when the reporter contains errors
+
+  * Added the changelog generation script (``bin/scripts/updateChangelog.cmd``)
+
+**Backward Incompatibilities**
+
+  * **Microkit**
+
+    * Generated test locations changed: component unit tests now live in the crate-internal ``src/test`` module (previously ``src/tests.rs``) and the test apis in ``test_util/test_apis.rs`` (previously ``bridge/test_api.rs``).  Existing projects should delete the old files and rerun codegen, updating any ``mod``/``use`` declarations that referenced the old locations.
+
+    * The static schedule now resides in the user-editable ``microkit.schedule.xml``; custom schedules previously maintained in the system description file should be moved there.
+
+<details><summary>How to build</summary>
+
+```
+git clone --rec --depth 1 --branch 4.20260115.7c92e7f9 https://github.com/sireum/kekinian.git
+cd kekinian
+./bin/build.cmd
+```
+
+</details>
+
+<details><summary>Commits</summary>
+
+* [78404c9](https://github.com/sireum/hamr-codegen/commit/78404c9) update submodule
+
+* [5afea82](https://github.com/sireum/hamr-codegen/commit/5afea82) update submodule
+
+* [209bb65](https://github.com/sireum/hamr-codegen/commit/209bb65) microkit: support array expressions in sysmlv2 GUMBO contracts
+
+* [e4fdbc0](https://github.com/sireum/hamr-codegen/commit/e4fdbc0) update submodule
+
+* [dd97db9](https://github.com/sireum/hamr-codegen/commit/dd97db9) slang: remove arsit fields
+
+* [d3a48d3](https://github.com/sireum/hamr-codegen/commit/d3a48d3) update submdoule
+
+* [1ebfe5e](https://github.com/sireum/hamr-codegen/commit/1ebfe5e) slang: only emit types touched by the model, sort sergen/slangcheck file args
+
+* [c8fcd64](https://github.com/sireum/hamr-codegen/commit/c8fcd64) remove gumbo resolved expression map
+
+* [c648814](https://github.com/sireum/hamr-codegen/commit/c648814) add placeholder marker support
+
+* [69f4122](https://github.com/sireum/hamr-codegen/commit/69f4122) microkit: support Implementation_Language rather than Mickrokit_Language
+
+* [613d482](https://github.com/sireum/hamr-codegen/commit/613d482) tweak error message
+
+* [1277bd0](https://github.com/sireum/hamr-codegen/commit/1277bd0) update submodule
+
+* [600cd4b](https://github.com/sireum/hamr-codegen/commit/600cd4b) microkit: explicitly cast return value to expected type for verus spec methods that return a numeric type
+
+* [8e4b0ac](https://github.com/sireum/hamr-codegen/commit/8e4b0ac) microkit: add consts to report
+
+* [6c12557](https://github.com/sireum/hamr-codegen/commit/6c12557) update submodule
+
+* [1f447db](https://github.com/sireum/hamr-codegen/commit/1f447db) microkit: add verus/rust support for GUMBO library annexes
+
+* [ed6778a](https://github.com/sireum/hamr-codegen/commit/ed6778a) update submodule
+
+* [12cf6a2](https://github.com/sireum/hamr-codegen/commit/12cf6a2) microkit: update verus crate dependencies to 0.2025.11.23.41c5885
+
+* [4421ce5](https://github.com/sireum/hamr-codegen/commit/4421ce5) microkit: move verus gumbo functions to crate level
+
+* [cf9da1e](https://github.com/sireum/hamr-codegen/commit/cf9da1e) microkit: tie sel4 crate dependencies to github release
+
+* [4f29a72](https://github.com/sireum/hamr-codegen/commit/4f29a72) microkit: clarify provisioning message
+
+* [c551cb7](https://github.com/sireum/hamr-codegen/commit/c551cb7) microkit: fix gumbox pre cond template, ignore case when matching aadl names
+
+* [86e5fbe](https://github.com/sireum/hamr-codegen/commit/86e5fbe) remove native build option for standalone
+
+* [8e260cd](https://github.com/sireum/hamr-codegen/commit/8e260cd) logika: prevent generation of empty contracts
+
+* [57e57bd](https://github.com/sireum/hamr-codegen/commit/57e57bd) update submodule
+
+* [ffc486c](https://github.com/sireum/hamr-codegen/commit/ffc486c) microkit: update verus crate deps to 0.2025.11.15.db81a74
+
+* [8ec7ff1](https://github.com/sireum/hamr-codegen/commit/8ec7ff1) don't finalize plugins if reporter has errors
+
+* [49c0c61](https://github.com/sireum/hamr-codegen/commit/49c0c61) add new aadl/smsmlv2 omg base type prefixes
+
+* [ab17d6d](https://github.com/sireum/hamr-codegen/commit/ab17d6d) add alias to type map
+
+* [ce0ff5f](https://github.com/sireum/hamr-codegen/commit/ce0ff5f) microkit: add comments to test apis
+
+* [9b48d21](https://github.com/sireum/hamr-codegen/commit/9b48d21) update phantom props
+
+* [4815221](https://github.com/sireum/hamr-codegen/commit/4815221) update submodule
+
+* [7cceb62](https://github.com/sireum/hamr-codegen/commit/7cceb62) microkit: 'infer' trigger for the first indexed use of a quantified variable in an indexing expression
+
+* [bb677f1](https://github.com/sireum/hamr-codegen/commit/bb677f1) microkit: place schedule in editable xml file, disallow Z string interpolates
+
+* [2f0e5bc](https://github.com/sireum/hamr-codegen/commit/2f0e5bc) update submodule
+
+* [d144202](https://github.com/sireum/hamr-codegen/commit/d144202) update build props
+
+* [5e0b12c](https://github.com/sireum/hamr-codegen/commit/5e0b12c) microkit: update verus deps to 0.2025.10.24.ea096f2, update linux-raw-sys def to 0.12.0
+
+* [f515f77](https://github.com/sireum/hamr-codegen/commit/f515f77) install hamr tools to codegen/bin
+
+* [23335db](https://github.com/sireum/hamr-codegen/commit/23335db) microkit: reject (for now) models containing gumbo library annexes
+
+* [9168139](https://github.com/sireum/hamr-codegen/commit/9168139) gumbo: import gumbo library functions that are in the same package as a component
+
+* [528d3b2](https://github.com/sireum/hamr-codegen/commit/528d3b2) gumbo: import gumbo library functions that are in the same package as a component
+
+* [b9107e8](https://github.com/sireum/hamr-codegen/commit/b9107e8) microkit: fix rewriting of structs with arrays, use implication operator for spec forall
+
+* [d28fa50](https://github.com/sireum/hamr-codegen/commit/d28fa50) microkit: correct test resources attributes
+
+* [d469551](https://github.com/sireum/hamr-codegen/commit/d469551) update changelog
+
+* [a892bc2](https://github.com/sireum/hamr-codegen/commit/a892bc2) update submodule
+
+* [70d52c5](https://github.com/sireum/hamr-codegen/commit/70d52c5) microkit: update verus dependencies to 0.2025.10.17.709c482
+
+* [870f8fd](https://github.com/sireum/hamr-codegen/commit/870f8fd) microkit: don't schedule domain 0 if budget is exhausted, add MSD marker to resource
+
+* [eb6992f](https://github.com/sireum/hamr-codegen/commit/eb6992f) update submodule
+
+* [3ca62d3](https://github.com/sireum/hamr-codegen/commit/3ca62d3) microkit: move unit test to internal src/test module
+
+* [cf12ef5](https://github.com/sireum/hamr-codegen/commit/cf12ef5) fix tag name
+
+* [6198ed0](https://github.com/sireum/hamr-codegen/commit/6198ed0) update changelog
 
 * [85c6bcf](https://github.com/sireum/hamr-codegen/commit/85c6bcf) update submodule
 
@@ -67,9 +675,9 @@ cd kekinian
 * [9e82bc0](https://github.com/sireum/hamr-codegen/commit/9e82bc0) update changelog
 </details>
 <br>
-<!-- end dev -->
+<!-- end 4.20260115.7c92e7f9 -->
 
-<!-- released -->
+
 <!-- begin 4.20250924.c877daf -->
 # [4.20250924.c877daf](https://github.com/sireum/kekinian/releases/tag/4.20250924.c877daf) 
 
@@ -96,7 +704,7 @@ cd kekinian
 **Backward Incompatibilities**
 
   * **Microkit**
-  
+
     * ``lib.rs`` now calls a new ``logging::init_logging`` method introduced in this release.  This adds supporting infrastructure for improved logging setup.  Codegen does not overwrite ``src/logging.rs`` so developers must manually update this file to match the current version (e.g. [diff](https://github.com/loonwerks/INSPECTA-models/compare/ed1f7d4f37a265d8acec08869a272a0766f4ead8..8787ed906601c7365f2a6fabe769b4cea6e65014?path=isolette/hamr/microkit/crates/thermostat_rt_mhs_mhs/src/logging.rs#diff-77db27613bbbe4a3713275fe6f6c87566f2db95c6f997bed59f46f8864e9bcef)), or delete the file and rerun codegen to regenerate it.
 
       To remove all ``src/logging.rs`` files recursively from the project:
