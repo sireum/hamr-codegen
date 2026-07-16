@@ -213,17 +213,25 @@ def regenClis(): Unit = {
     var shorts: ISZ[ST] = ISZ()
     var longs: ISZ[ST] = ISZ()
     var allLongs: ISZ[ST] = ISZ()
+    var allLongsUnique: Set[String] = Set.empty
     var allShorts: ISZ[ST] = ISZ()
+    var allShortsUnique: Set[C] = Set.empty
     var toStrings: ISZ[ST] = ISZ()
     var mergeCases: ISZ[ST] = ISZ()
 
     def addOptions(opts: ISZ[org.sireum.cli.CliOpt.Opt], optGroup: String): Unit = {
       for (o <- opts) {
         val longKey = s"--${o.longKey}"
+
         @strictpure def sanitize(s: String): ST =
           st"${ops.StringOps(s).replaceAllLiterally("/", "_")}"
+
         val id = sanitize(s"$optGroup${o.name}")
         longs = longs :+ st"""val $id: String = "$longKey""""
+        if (allLongsUnique.contains(o.longKey)) {
+          halt(s"Long keys already contains '${o.longKey}'. Duplicated in ${o.name}")
+        }
+        allLongsUnique = allLongsUnique + o.longKey
         allLongs = allLongs :+ id
 
         val keyCond: ST =
@@ -294,6 +302,10 @@ def regenClis(): Unit = {
         }
         if (o.shortKey.nonEmpty) {
           shorts = shorts :+ st"""val $id: String = "-${o.shortKey.get}""""
+          if (allShortsUnique.contains(o.shortKey.get)) {
+            halt(s"Short keys already contains '${o.shortKey.get}'.  Duplicated in ${o.name}")
+          }
+          allShortsUnique = allShortsUnique + o.shortKey.get
           allShorts = allShorts :+ id
         }
       }
@@ -319,7 +331,8 @@ def regenClis(): Unit = {
           |object LongKeys {
           |  ${(longs, "\n")}
           |
-          |  val allKeys: Set[String] = Set.empty[String] ++ ISZ(${(allLongs, ", ")})
+          |  val allKeys: Set[String] = Set.empty[String] ++ ISZ(
+          |    ${(allLongs, ",\n")})
           |
           |  @strictpure def sameKeys(keys: ISZ[String]): B = allKeys.elements == keys
           |
@@ -338,7 +351,8 @@ def regenClis(): Unit = {
           |object ShortKeys {
           |  ${(shorts, "\n")}
           |
-          |  val allKeys: Set[String] = Set.empty[String] ++ ISZ(${(allShorts, ", ")})
+          |  val allKeys: Set[String] = Set.empty[String] ++ ISZ(
+          |    ${(allShorts, ",\n")})
           |
           |  @strictpure def sameKeys(keys: ISZ[String]): B = allKeys.elements == keys
           |

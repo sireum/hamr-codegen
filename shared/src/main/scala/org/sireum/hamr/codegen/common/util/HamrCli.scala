@@ -234,12 +234,12 @@ import HamrCli._
           |    --ros2-output-workspace-dir
           |                          The path to the ROS2 workspace to generate the
           |                           packages into (expects a path)
-          |-r, --ros2-dir           The path to your ROS2 installation, including the
+          |    --ros2-dir           The path to your ROS2 installation, including the
           |                           version (../ros/humble) (expects a path)
-          |-p, --ros2-nodes-language    
+          |    --ros2-nodes-language
           |                          The programming language for the generated node files
           |                           (expects one of { Python, Cpp }; default: Python)
-          |-p, --ros2-launch-language    
+          |    --ros2-launch-language
           |                          The programming language for the launch file (expects
           |                           one of { Python, Xml }; default: Python)
           |    --invert-topic-binding
@@ -453,19 +453,19 @@ import HamrCli._
              case Some(v) => ros2OutputWorkspaceDir = v
              case _ => return None()
            }
-         } else if (arg == "-r" || arg == "--ros2-dir") {
+         } else if (arg == "--ros2-dir") {
            val o: Option[Option[String]] = parsePath(args, j + 1)
            o match {
              case Some(v) => ros2Dir = v
              case _ => return None()
            }
-         } else if (arg == "-p" || arg == "--ros2-nodes-language") {
+         } else if (arg == "--ros2-nodes-language") {
            val o: Option[CodegenNodesCodeLanguage.Type] = parseCodegenNodesCodeLanguage(args, j + 1)
            o match {
              case Some(v) => ros2NodesLanguage = v
              case _ => return None()
            }
-         } else if (arg == "-p" || arg == "--ros2-launch-language") {
+         } else if (arg == "--ros2-launch-language") {
            val o: Option[CodegenLaunchCodeLanguage.Type] = parseCodegenLaunchCodeLanguage(args, j + 1)
            o match {
              case Some(v) => ros2LaunchLanguage = v

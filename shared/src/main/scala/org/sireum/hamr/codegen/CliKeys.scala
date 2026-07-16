@@ -41,7 +41,39 @@ object LongKeys {
   val ROS2_invertTopicBinding: String = "--invert-topic-binding"
   val Experimental_experimentalOptions: String = "--experimental-options"
 
-  val allKeys: Set[String] = Set.empty[String] ++ ISZ(msgpack, verbose, runtimeMonitoring, platform, outputDir, parseableMessages, Slang_slangOutputDir, Slang_packageName, Slang_noProyekIve, Slang_noEmbedArt, Slang_devicesAsThreads, Slang_genSbtMill, Transpiler_slangAuxCodeDirs, Transpiler_slangOutputCDir, Transpiler_excludeComponentImpl, Transpiler_bitWidth, Transpiler_maxStringSize, Transpiler_maxArraySize, Transpiler_runTranspiler, CAmkES_Microkit_scheduling, CAmkES_Microkit_verusAttributeSyntax, CAmkES_Microkit_sel4OutputDir, CAmkES_Microkit_sel4AuxCodeDirs, CAmkES_Microkit_sel4AuxCodeSymlink, CAmkES_Microkit_workspaceRootDir, ROS2_strictAadlMode, ROS2_ros2OutputWorkspaceDir, ROS2_ros2Dir, ROS2_ros2NodesLanguage, ROS2_ros2LaunchLanguage, ROS2_invertTopicBinding, Experimental_experimentalOptions)
+  val allKeys: Set[String] = Set.empty[String] ++ ISZ(
+    msgpack,
+    verbose,
+    runtimeMonitoring,
+    platform,
+    outputDir,
+    parseableMessages,
+    Slang_slangOutputDir,
+    Slang_packageName,
+    Slang_noProyekIve,
+    Slang_noEmbedArt,
+    Slang_devicesAsThreads,
+    Slang_genSbtMill,
+    Transpiler_slangAuxCodeDirs,
+    Transpiler_slangOutputCDir,
+    Transpiler_excludeComponentImpl,
+    Transpiler_bitWidth,
+    Transpiler_maxStringSize,
+    Transpiler_maxArraySize,
+    Transpiler_runTranspiler,
+    CAmkES_Microkit_scheduling,
+    CAmkES_Microkit_verusAttributeSyntax,
+    CAmkES_Microkit_sel4OutputDir,
+    CAmkES_Microkit_sel4AuxCodeDirs,
+    CAmkES_Microkit_sel4AuxCodeSymlink,
+    CAmkES_Microkit_workspaceRootDir,
+    ROS2_strictAadlMode,
+    ROS2_ros2OutputWorkspaceDir,
+    ROS2_ros2Dir,
+    ROS2_ros2NodesLanguage,
+    ROS2_ros2LaunchLanguage,
+    ROS2_invertTopicBinding,
+    Experimental_experimentalOptions)
 
   @strictpure def sameKeys(keys: ISZ[String]): B = allKeys.elements == keys
 
@@ -69,12 +101,21 @@ object ShortKeys {
   val Transpiler_maxArraySize: String = "-a"
   val Transpiler_runTranspiler: String = "-t"
   val CAmkES_Microkit_workspaceRootDir: String = "-r"
-  val ROS2_ros2Dir: String = "-r"
-  val ROS2_ros2NodesLanguage: String = "-p"
-  val ROS2_ros2LaunchLanguage: String = "-p"
   val Experimental_experimentalOptions: String = "-x"
 
-  val allKeys: Set[String] = Set.empty[String] ++ ISZ(verbose, runtimeMonitoring, platform, outputDir, Slang_packageName, Transpiler_excludeComponentImpl, Transpiler_bitWidth, Transpiler_maxStringSize, Transpiler_maxArraySize, Transpiler_runTranspiler, CAmkES_Microkit_workspaceRootDir, ROS2_ros2Dir, ROS2_ros2NodesLanguage, ROS2_ros2LaunchLanguage, Experimental_experimentalOptions)
+  val allKeys: Set[String] = Set.empty[String] ++ ISZ(
+    verbose,
+    runtimeMonitoring,
+    platform,
+    outputDir,
+    Slang_packageName,
+    Transpiler_excludeComponentImpl,
+    Transpiler_bitWidth,
+    Transpiler_maxStringSize,
+    Transpiler_maxArraySize,
+    Transpiler_runTranspiler,
+    CAmkES_Microkit_workspaceRootDir,
+    Experimental_experimentalOptions)
 
   @strictpure def sameKeys(keys: ISZ[String]): B = allKeys.elements == keys
 
@@ -85,6 +126,6 @@ object ShortKeys {
 
   // scala.collection.Seq<org.sireum.String> seq = scala.jdk.javaapi.CollectionConverters.asScala(new java.util.ArrayList<org.sireum.String>());
   // scala.collection.immutable.Seq<org.sireum.String> iseq = ((scala.collection.IterableOnceOps<org.sireum.String, ?, ?>) seq).toSeq();
-  // org.sireum.IS<org.sireum.Z, org.sireum.String> knownKeys = org.sireum.IS$.MODULE$.apply(iseq, org.sireum.Z$.MODULE$).$colon$plus(new org.sireum.String(org.sireum.hamr.codegen.ShortKeys.verbose())).$colon$plus(new org.sireum.String(org.sireum.hamr.codegen.ShortKeys.runtimeMonitoring())).$colon$plus(new org.sireum.String(org.sireum.hamr.codegen.ShortKeys.platform())).$colon$plus(new org.sireum.String(org.sireum.hamr.codegen.ShortKeys.outputDir())).$colon$plus(new org.sireum.String(org.sireum.hamr.codegen.ShortKeys.Slang_packageName())).$colon$plus(new org.sireum.String(org.sireum.hamr.codegen.ShortKeys.Transpiler_excludeComponentImpl())).$colon$plus(new org.sireum.String(org.sireum.hamr.codegen.ShortKeys.Transpiler_bitWidth())).$colon$plus(new org.sireum.String(org.sireum.hamr.codegen.ShortKeys.Transpiler_maxStringSize())).$colon$plus(new org.sireum.String(org.sireum.hamr.codegen.ShortKeys.Transpiler_maxArraySize())).$colon$plus(new org.sireum.String(org.sireum.hamr.codegen.ShortKeys.Transpiler_runTranspiler())).$colon$plus(new org.sireum.String(org.sireum.hamr.codegen.ShortKeys.CAmkES_Microkit_workspaceRootDir())).$colon$plus(new org.sireum.String(org.sireum.hamr.codegen.ShortKeys.ROS2_ros2Dir())).$colon$plus(new org.sireum.String(org.sireum.hamr.codegen.ShortKeys.ROS2_ros2NodesLanguage())).$colon$plus(new org.sireum.String(org.sireum.hamr.codegen.ShortKeys.ROS2_ros2LaunchLanguage())).$colon$plus(new org.sireum.String(org.sireum.hamr.codegen.ShortKeys.Experimental_experimentalOptions()));
+  // org.sireum.IS<org.sireum.Z, org.sireum.String> knownKeys = org.sireum.IS$.MODULE$.apply(iseq, org.sireum.Z$.MODULE$).$colon$plus(new org.sireum.String(org.sireum.hamr.codegen.ShortKeys.verbose())).$colon$plus(new org.sireum.String(org.sireum.hamr.codegen.ShortKeys.runtimeMonitoring())).$colon$plus(new org.sireum.String(org.sireum.hamr.codegen.ShortKeys.platform())).$colon$plus(new org.sireum.String(org.sireum.hamr.codegen.ShortKeys.outputDir())).$colon$plus(new org.sireum.String(org.sireum.hamr.codegen.ShortKeys.Slang_packageName())).$colon$plus(new org.sireum.String(org.sireum.hamr.codegen.ShortKeys.Transpiler_excludeComponentImpl())).$colon$plus(new org.sireum.String(org.sireum.hamr.codegen.ShortKeys.Transpiler_bitWidth())).$colon$plus(new org.sireum.String(org.sireum.hamr.codegen.ShortKeys.Transpiler_maxStringSize())).$colon$plus(new org.sireum.String(org.sireum.hamr.codegen.ShortKeys.Transpiler_maxArraySize())).$colon$plus(new org.sireum.String(org.sireum.hamr.codegen.ShortKeys.Transpiler_runTranspiler())).$colon$plus(new org.sireum.String(org.sireum.hamr.codegen.ShortKeys.CAmkES_Microkit_workspaceRootDir())).$colon$plus(new org.sireum.String(org.sireum.hamr.codegen.ShortKeys.Experimental_experimentalOptions()));
   // boolean sameKeys = org.sireum.hamr.codegen.ShortKeys.sameKeys(knownKeys);
 }
