@@ -11,7 +11,7 @@ import org.sireum.hamr.codegen.microkit.rust.Param
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
 import org.sireum.hamr.codegen.microkit.{rust => RAST}
 import org.sireum.hamr.ir
-import org.sireum.hamr.ir.{Direction, GclStateVar, GclSubclause}
+import org.sireum.hamr.ir.{Direction, GclAssume, GclStateVar, GclSubclause}
 import org.sireum.lang.ast.Exp
 import org.sireum.lang.{ast => SAST}
 
@@ -293,6 +293,209 @@ object GumboXRustUtil {
       case MSome(x) => return GGExpParamHolder(e.params, x)
       case _ => return GGExpParamHolder(e.params, exp)
     }
+  }
+
+  // Inclusive integer interval derived from GUMBO assume clauses; None means unbounded on that side
+  @datatype class AssumeInterval(val lo: Option[Z], val hi: Option[Z])
+
+  @strictpure def isRustIntPrimitive(rustName: String): B =
+    rustName == "i8" || rustName == "i16" || rustName == "i32" || rustName == "i64" ||
+      rustName == "u8" || rustName == "u16" || rustName == "u32" || rustName == "u64" ||
+      rustName == "usize"
+
+  /** Splits a conjunction (& / &&) into its conjuncts */
+  @pure def collectConjuncts(exp: Exp): ISZ[Exp] = {
+    exp match {
+      case b: Exp.Binary =>
+        if (b.op == Exp.BinaryOp.And || b.op == Exp.BinaryOp.CondAnd) {
+          return collectConjuncts(b.left) ++ collectConjuncts(b.right)
+        } else {
+          return ISZ(exp)
+        }
+      case _ => return ISZ(exp)
+    }
+  }
+
+  /** Evaluates an integer literal expression (LitZ, an integer string interpolate such as s32"...",
+    * or a unary minus applied to either), returning None for anything else */
+  @pure def evalIntLit(exp: Exp): Option[Z] = {
+    exp match {
+      case lit: Exp.LitZ => return Some(lit.value)
+      case si: Exp.StringInterpolate =>
+        if (si.lits.size != 1) {
+          return None()
+        }
+        val text = ops.StringOps(si.lits(0).value).replaceAllLiterally("\"", "")
+        si.prefix match {
+          case "z" => return Z(text)
+          case "s8" => return Z(text)
+          case "s16" => return Z(text)
+          case "s32" => return Z(text)
+          case "s64" => return Z(text)
+          case "u8" => return Z(text)
+          case "u16" => return Z(text)
+          case "u32" => return Z(text)
+          case "u64" => return Z(text)
+          case _ => return None()
+        }
+      case u: Exp.Unary =>
+        if (u.op == SAST.Exp.UnaryOp.Minus) {
+          evalIntLit(u.exp) match {
+            case Some(v) => return Some(-v)
+            case _ => return None()
+          }
+        }
+        return None()
+      case _ => return None()
+    }
+  }
+
+  /** Tightens name's lower bound to lo if it is more restrictive than the current one */
+  @pure def refineLo(intervals: HashSMap[String, AssumeInterval], name: String, lo: Z): HashSMap[String, AssumeInterval] = {
+    val cur = intervals.get(name).getOrElse(AssumeInterval(lo = None(), hi = None()))
+    if (cur.lo.isEmpty || lo > cur.lo.get) {
+      return intervals + name ~> AssumeInterval(lo = Some(lo), hi = cur.hi)
+    }
+    return intervals
+  }
+
+  /** Tightens name's upper bound to hi if it is more restrictive than the current one */
+  @pure def refineHi(intervals: HashSMap[String, AssumeInterval], name: String, hi: Z): HashSMap[String, AssumeInterval] = {
+    val cur = intervals.get(name).getOrElse(AssumeInterval(lo = None(), hi = None()))
+    if (cur.hi.isEmpty || hi < cur.hi.get) {
+      return intervals + name ~> AssumeInterval(lo = cur.lo, hi = Some(hi))
+    }
+    return intervals
+  }
+
+  /** Name of an interval-constraint target: a plain identifier yields the identifier's name and
+    * a single field selection on an identifier yields &lt;identifier&gt;.&lt;field&gt; */
+  @pure def constraintTargetName(e: Exp): Option[String] = {
+    e match {
+      case id: Exp.Ident => return Some(id.id.value)
+      case sel: Exp.Select =>
+        sel.receiverOpt match {
+          case Some(id: Exp.Ident) => return Some(s"${id.id.value}.${sel.id.value}")
+          case _ => return None()
+        }
+      case _ => return None()
+    }
+  }
+
+  /** Refines intervals with every conjunct of exp that is an interval constraint, i.e., a
+    * comparison (<=, <, >=, >, ==) between an identifier (or a field selection on an
+    * identifier) and an integer literal */
+  @pure def refineIntervalsFromExp(intervals: HashSMap[String, AssumeInterval], exp: Exp): HashSMap[String, AssumeInterval] = {
+    var ret = intervals
+    for (conjunct <- collectConjuncts(exp)) {
+      conjunct match {
+        case b: Exp.Binary =>
+          (constraintTargetName(b.left), evalIntLit(b.right)) match {
+            case (Some(name), Some(v)) =>
+              if (b.op == Exp.BinaryOp.Le) { // name <= v
+                ret = refineHi(ret, name, v)
+              } else if (b.op == Exp.BinaryOp.Lt) { // name < v
+                ret = refineHi(ret, name, v - 1)
+              } else if (b.op == Exp.BinaryOp.Ge) { // name >= v
+                ret = refineLo(ret, name, v)
+              } else if (b.op == Exp.BinaryOp.Gt) { // name > v
+                ret = refineLo(ret, name, v + 1)
+              } else if (b.op == Exp.BinaryOp.Eq) { // name == v
+                ret = refineLo(refineHi(ret, name, v), name, v)
+              }
+            case _ =>
+              (evalIntLit(b.left), constraintTargetName(b.right)) match {
+                case (Some(v), Some(name)) =>
+                  if (b.op == Exp.BinaryOp.Le) { // v <= name
+                    ret = refineLo(ret, name, v)
+                  } else if (b.op == Exp.BinaryOp.Lt) { // v < name
+                    ret = refineLo(ret, name, v + 1)
+                  } else if (b.op == Exp.BinaryOp.Ge) { // v >= name
+                    ret = refineHi(ret, name, v)
+                  } else if (b.op == Exp.BinaryOp.Gt) { // v > name
+                    ret = refineHi(ret, name, v - 1)
+                  } else if (b.op == Exp.BinaryOp.Eq) { // v == name
+                    ret = refineLo(refineHi(ret, name, v), name, v)
+                  }
+                case _ =>
+              }
+          }
+        case _ =>
+      }
+    }
+    return ret
+  }
+
+  /** Merges iv into the interval recorded under name (intersecting with an existing one) */
+  @pure def mergeInterval(intervals: HashSMap[String, AssumeInterval], name: String, iv: AssumeInterval): HashSMap[String, AssumeInterval] = {
+    var ret = intervals
+    iv.lo match {
+      case Some(lo) => ret = refineLo(ret, name, lo)
+      case _ =>
+    }
+    iv.hi match {
+      case Some(hi) => ret = refineHi(ret, name, hi)
+      case _ =>
+    }
+    return ret
+  }
+
+  /** Derives inclusive integer intervals for the GUMBOX test-harness parameters of thread from its
+    * GUMBO integration assumes (incoming ports) and top-level compute assumes (ports and state
+    * variables). The result is keyed by harness parameter name (api_&lt;port&gt;, In_&lt;statevar&gt;).
+    * Only single-variable interval constraints are recognized; anything else is ignored, so the
+    * result under-approximates the constraints (callers fall back to full-range generators). */
+  @pure def deriveAssumeIntervals(thread: AadlThread,
+                                  subclauseInfoOpt: Option[GclAnnexClauseInfo],
+                                  types: AadlTypes,
+                                  slangTypesToAadlTypes: Map[SAST.Typed, TypeIdPath],
+                                  crustTypeProvider: CRustTypeProvider): HashSMap[String, AssumeInterval] = {
+    var ret = HashSMap.empty[String, AssumeInterval]
+    subclauseInfoOpt match {
+      case Some(GclAnnexClauseInfo(subclause, gclSymbolTable)) =>
+        // integration assumes on incoming ports: the expression references the raw port name,
+        // whereas the corresponding harness parameter is named api_<port>
+        for (port <- thread.getPorts() if gclSymbolTable.integrationMap.contains(port)) {
+          gclSymbolTable.integrationMap.get(port).get match {
+            case a: GclAssume =>
+              val portIntervals = refineIntervalsFromExp(HashSMap.empty[String, AssumeInterval], a.exp)
+              for (entry <- portIntervals.entries) {
+                val key = entry._1
+                if (key == port.identifier || ops.StringOps(key).startsWith(s"${port.identifier}.")) {
+                  ret = mergeInterval(ret, s"api_$key", entry._2)
+                }
+              }
+            case _ =>
+          }
+        }
+        // top-level compute assumes: rewrite so port/state-var references use the harness
+        // parameter names (api_<port>, In_<statevar>) before extracting intervals
+        subclause.compute match {
+          case Some(compute) =>
+            for (g <- compute.assumes) {
+              val gg = rewriteToExpX(
+                exp = g.exp,
+                thread = thread,
+                types = types,
+                stateVars = subclause.state,
+                slangTypesToAadlTypes = slangTypesToAadlTypes,
+                crustTypeProvider = crustTypeProvider)
+              ret = refineIntervalsFromExp(ret, gg.exp)
+            }
+          case _ =>
+        }
+        // an assume may reference a state variable's pre-state without an explicit In(..) wrapper,
+        // in which case the reference keeps the state variable's plain name; re-key such entries
+        // (including field selections) to the harness's pre-state parameter name In_<statevar>
+        for (sv <- subclause.state; entry <- ret.entries) {
+          val key = entry._1
+          if (key == sv.name || ops.StringOps(key).startsWith(s"${sv.name}.")) {
+            ret = mergeInterval(ret, s"In_$key", entry._2)
+          }
+        }
+      case _ =>
+    }
+    return ret
   }
 
   @datatype class GGPortParam(val port: AadlPort,

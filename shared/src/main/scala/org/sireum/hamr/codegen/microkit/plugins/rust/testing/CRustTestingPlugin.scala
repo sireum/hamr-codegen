@@ -303,6 +303,9 @@ object CRustTestingPlugin {
                                   model: Aadl, options: HamrCli.CodegenOption,
                                   types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): ISZ[RAST.Item] = {
     var ret: ISZ[RAST.Item] = propTestOptionMethod(options)
+    // multiple AADL base types can map to the same Rust primitive (e.g. Character and
+    // Unsigned_8 both map to u8), so track which primitives have been emitted
+    var emittedPrimitives: Set[String] = Set.empty
     for (t <- touchedTypes.orderedDependencies) {
       val o = types.typeMap.get(t).get
       val rep = cRustTypeProvider.getRepresentativeType(o)
@@ -322,7 +325,45 @@ object CRustTestingPlugin {
       }
 
       rep match {
-        case b: BaseType => // do nothing
+        case b: BaseType =>
+          val rustName = st"${(np.qualifiedRustNameS, "::")}".render
+          if (!emittedPrimitives.contains(rustName)) {
+            emittedPrimitives = emittedPrimitives + rustName
+
+            val defaultStrategy = RAST.FnImpl(
+              comments = ISZ(RAST.CommentRustDoc(ISZ(st"default proptest strategy for $rustName: any value of the type"))),
+              visibility = RAST.Visibility.Public,
+              sig = RAST.FnSig(
+                ident = defaultIdent,
+                fnDecl = RAST.FnDecl(
+                  inputs = ISZ(),
+                  outputs = RAST.FnRetTyImpl(RAST.TyFixMe(st"impl Strategy<Value = $rustName>"))),
+                fnHeader = RAST.FnHeader(F), generics = None(), verusHeader = None()),
+              body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(st"any::<$rustName>()")))),
+              meta = ISZ(), attributes = ISZ(),
+              verusAttributeSyntax = options.verusAttributeSyntax, contract = None())
+
+            ret = ret :+ defaultStrategy
+
+            if (rustName != "bool") {
+              val custStrategy = RAST.FnImpl(
+                comments = ISZ(RAST.CommentRustDoc(ISZ(st"custom proptest strategy for $rustName restricted to an inclusive range"))),
+                visibility = RAST.Visibility.Public,
+                sig = RAST.FnSig(
+                  ident = RAST.IdentString(custName.render),
+                  fnDecl = RAST.FnDecl(
+                    inputs = ISZ(RAST.ParamImpl(
+                      ident = RAST.IdentString("range"),
+                      kind = RAST.TyFixMe(st"core::ops::RangeInclusive<$rustName>"))),
+                    outputs = RAST.FnRetTyImpl(RAST.TyFixMe(st"impl Strategy<Value = $rustName>"))),
+                  fnHeader = RAST.FnHeader(F), generics = None(), verusHeader = None()),
+                body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(st"range")))),
+                meta = ISZ(), attributes = ISZ(),
+                verusAttributeSyntax = options.verusAttributeSyntax, contract = None())
+
+              ret = ret :+ custStrategy
+            }
+          }
 
         case a: ArrayType =>
           val baseRep = cRustTypeProvider.getRepresentativeType(a.baseType)
@@ -512,7 +553,7 @@ object CRustTestingPlugin {
           |  #[serial]
           |  fn test_initialization() {
           |    crate::${threadId}_initialize();
-          |}
+          |  }
           |
           |  #[test]
           |  #[serial]
