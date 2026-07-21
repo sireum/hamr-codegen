@@ -555,6 +555,12 @@ import HamrCli._
     return Some(tokenizeH(arg, sep, removeWhitespace))
   }
 
+  // Separator handling: a doubled separator (two adjacent `sep`) decodes to one
+  // literal `sep`; a lone `sep` is an element boundary. This lets a value embed a
+  // literal separator, but the mapping is NOT an injective list codec -- a boundary
+  // adjacent to a leading/trailing literal separator is ambiguous (left-greedy decode
+  // wins) and a trailing empty element is suppressed. Callers that must embed literal
+  // separators should keep each value one self-delimiting token (as a `-D...=` option does).
   def tokenizeH(arg: String, sep: C, removeWhitespace: B): ISZ[String] = {
     val argCis = conversions.String.toCis(arg)
     var r = ISZ[String]()
@@ -563,8 +569,14 @@ import HamrCli._
     while (j < argCis.size) {
       val c = argCis(j)
       if (c == sep) {
-        r = r :+ conversions.String.fromCis(cis)
-        cis = ISZ[C]()
+        if (j + 1 < argCis.size && argCis(j + 1) == sep) {
+          cis = cis :+ sep
+          j = j + 2
+        } else {
+          r = r :+ conversions.String.fromCis(cis)
+          cis = ISZ[C]()
+          j = j + 1
+        }
       } else {
         val allowed: B = c match {
           case c"\n" => !removeWhitespace
@@ -576,8 +588,8 @@ import HamrCli._
         if (allowed) {
           cis = cis :+ c
         }
+        j = j + 1
       }
-      j = j + 1
     }
     if (cis.size > 0) {
       r = r :+ conversions.String.fromCis(cis)
