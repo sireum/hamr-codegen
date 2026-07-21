@@ -1,11 +1,7 @@
-*Last Updated 2026-07-15*
+*Last Updated 2026-07-21*
 
 <!-- begin pre-release -->
 # Pre-Release
-
-**General**
-
-  * The CLI long/short key objects (``CliKeys.scala``) and kekinian's ``HAMR.mergeOptionsM`` file-option merging method are now generated via ``build.cmd regen-cli``, keeping them in sync with codegen's CLI options (the hand-maintained merge method had drifted -- e.g. the ROS2 short keys were not handled)
 
 <details><summary>How to build</summary>
 
@@ -19,13 +15,14 @@ cd kekinian
 
 <details><summary>Commits</summary>
 
-* [13d1356](https://github.com/sireum/hamr-codegen/commit/13d1356) generate cli keys merge option method
 </details>
 <br>
 <!-- end pre-release -->
 
-<!-- begin dev -->
-# [dev](https://github.com/sireum/kekinian/releases/tag/dev)  <font size=3>as of 2026-07-14</font>
+
+<!-- released -->
+<!-- begin 4.20260720.6a05e505 -->
+# [4.20260720.6a05e505](https://github.com/sireum/kekinian/releases/tag/4.20260720.6a05e505) 
 
 **Microkit**
 
@@ -36,6 +33,8 @@ cd kekinian
   * Added system-assertion and GUMBO runtime-monitor components along with a generic user-land monitor; the monitor reports user-partition faults
 
   * Added per-component generation profiles controlling three independent axes (verusVerified, userEditable, emitTestHarness) so, e.g., generated monitors can be emitted as fully-generated plain Rust without Verus annotations or test harnesses
+
+  * Freshly generated Rust/seL4 Microkit PropTest test skeletons now compile and pass out of the box: primitive strategies (e.g. ``i32_strategy_default``/``i32_strategy_cust``) are emitted into ``generators.rs``, and each skeleton input strategy is derived from the component's GUMBO assume clauses -- scalar port/state-variable ranges from compute assumes and per-field struct ranges from integration assumes -- so the default generated tests neither fail to compile (previously they referenced generator functions that were never emitted) nor exhaust the proptest rejection budget
 
   * Added user-land scheduling with runtime-monitoring support, a ``--scheduling`` CLI option, system schedule nodes, comments identifying scheduling domains, and a 30ms default pacer period; MCS scheduler queue types are now generated even when runtime monitoring is disabled
 
@@ -79,6 +78,8 @@ cd kekinian
 
   * All codegen resources are now created via a factory, and file markers are validated against the overwrite flag
 
+  * The CLI long/short key objects (``CliKeys.scala``) and kekinian's ``HAMR.mergeOptionsM`` file-option merging method are now generated via ``build.cmd regen-cli``, keeping them in sync with codegen's CLI options (the hand-maintained merge method had drifted -- e.g. the ROS2 short keys were not handled); generated forms now include tooltips
+
 **Backward Incompatibilities**
 
   * **Microkit**
@@ -94,7 +95,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch dev https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20260720.6a05e505 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -102,6 +103,16 @@ cd kekinian
 </details>
 
 <details><summary>Commits</summary>
+
+* [a57e615](https://github.com/sireum/hamr-codegen/commit/a57e615) update submodule
+
+* [9c3b49d](https://github.com/sireum/hamr-codegen/commit/9c3b49d) Fix non-compiling Rust proptest skeletons; derive strategies from GUMBO assumes
+
+* [3bdd572](https://github.com/sireum/hamr-codegen/commit/3bdd572) cli/forms: generate option merging and form tooltips; drop ros2 short keys
+
+* [46bf800](https://github.com/sireum/hamr-codegen/commit/46bf800) update change log
+
+* [13d1356](https://github.com/sireum/hamr-codegen/commit/13d1356) generate cli keys merge option method
 
 * [4edde2e](https://github.com/sireum/hamr-codegen/commit/4edde2e) update submodule
 
@@ -476,9 +487,9 @@ cd kekinian
 * [9528471](https://github.com/sireum/hamr-codegen/commit/9528471) add ros2 python ament deps
 </details>
 <br>
-<!-- end dev -->
+<!-- end 4.20260720.6a05e505 -->
 
-<!-- released -->
+
 <!-- begin 4.20260115.7c92e7f9 -->
 # [4.20260115.7c92e7f9](https://github.com/sireum/kekinian/releases/tag/4.20260115.7c92e7f9) 
 

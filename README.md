@@ -9,3 +9,5 @@
   <a href="https://github.com/sireum/hamr-codegen/actions/workflows/CI-camkes.yml?query=branch%3Amaster"><img src="https://github.com/sireum/hamr-codegen/actions/workflows/CI-camkes.yml/badge.svg" alt="CAmkES"></a>
 </tr>
 </table>
+
+See the [changelog](changelog.md) for release notes.
