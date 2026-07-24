@@ -3653,13 +3653,19 @@ object Generator {
           |#include <rcl/rcl.h>
           |#include <rclc/rclc.h>
           |#include <rclc/executor.h>
+          |#include <rcutils/logging_macros.h>
           |${(msgIncludes, "\n")}
           |${enumConverterInclude}
           |${exampleTypesInclude}
           |
-          |#define PRINT_INFO(fmt, ...) printf("[INFO] [${nodeName}] " fmt "\n", ##__VA_ARGS__)
-          |#define PRINT_WARN(fmt, ...) printf("[WARN] [${nodeName}] " fmt "\n", ##__VA_ARGS__)
-          |#define PRINT_ERROR(fmt, ...) printf("[ERROR] [${nodeName}] " fmt "\n", ##__VA_ARGS__)
+          |// Logger name used by the PRINT_* macros.  It defaults to the node name and is
+          |// updated to the node's actual logger name (rcl_node_get_logger_name) during
+          |// ${nodeNameBase}_init.
+          |extern const char * ${nodeName}_logger_name;
+          |
+          |#define PRINT_INFO(fmt, ...) RCUTILS_LOG_INFO_NAMED(${nodeName}_logger_name, fmt, ##__VA_ARGS__)
+          |#define PRINT_WARN(fmt, ...) RCUTILS_LOG_WARN_NAMED(${nodeName}_logger_name, fmt, ##__VA_ARGS__)
+          |#define PRINT_ERROR(fmt, ...) RCUTILS_LOG_ERROR_NAMED(${nodeName}_logger_name, fmt, ##__VA_ARGS__)
           |${msgToStringSection}
           |
           |//=================================================
@@ -3833,6 +3839,10 @@ object Generator {
             |// Static instance pointer for subscription callback context (heap-free, MCU-compatible)
             |static ${nodeNameBase}_t * g_self = NULL;
             |
+            |// Logger name used by the PRINT_* macros; updated to the node's actual logger
+            |// name once the node has been initialized
+            |const char * ${nodeName}_logger_name = "${nodeName}";
+            |
             |//=================================================
             |//  S u b s c r i p t i o n   C a l l b a c k s
             |//=================================================
@@ -3851,6 +3861,12 @@ object Generator {
             |    rclc_support_init(&self->support, 0, NULL, &self->allocator);
             |
             |    rclc_node_init_default(&self->node, "${nodeName}", "", &self->support);
+            |
+            |    // Retrieve the node's registered logger name for use by the PRINT_* macros
+            |    const char * logger_name = rcl_node_get_logger_name(&self->node);
+            |    if (logger_name != NULL) {
+            |        ${nodeName}_logger_name = logger_name;
+            |    }
             |
             |    // Setting up connections
             |    ${(publisherInits, "\n")}
@@ -3883,6 +3899,10 @@ object Generator {
             |// Static instance pointer for timer callback context (heap-free, MCU-compatible)
             |static ${nodeNameBase}_t * g_self = NULL;
             |
+            |// Logger name used by the PRINT_* macros; updated to the node's actual logger
+            |// name once the node has been initialized
+            |const char * ${nodeName}_logger_name = "${nodeName}";
+            |
             |//=================================================
             |//  C a l l b a c k   a n d   T i m e r
             |//=================================================
@@ -3909,6 +3929,12 @@ object Generator {
             |    rclc_support_init(&self->support, 0, NULL, &self->allocator);
             |
             |    rclc_node_init_default(&self->node, "${nodeName}", "", &self->support);
+            |
+            |    // Retrieve the node's registered logger name for use by the PRINT_* macros
+            |    const char * logger_name = rcl_node_get_logger_name(&self->node);
+            |    if (logger_name != NULL) {
+            |        ${nodeName}_logger_name = logger_name;
+            |    }
             |
             |    // Setting up connections
             |    ${(publisherInits, "\n")}
@@ -4302,7 +4328,7 @@ object Generator {
       val execName = genExecutableFileName(nodeName)
       entryPointDecls = entryPointDecls :+
         st"""add_executable(${execName} ${(srcFiles, " ")})
-            |ament_target_dependencies(${execName} rclc ${interfacesPkg})"""
+            |ament_target_dependencies(${execName} rclc rcutils ${interfacesPkg})"""
       entryPointExecutables = entryPointExecutables :+ execName
     }
 
@@ -4325,6 +4351,7 @@ object Generator {
           |
           |find_package(ament_cmake REQUIRED)
           |find_package(rclc REQUIRED)
+          |find_package(rcutils REQUIRED)
           |find_package(${interfacesPkg} REQUIRED)
           |
           |${marker.beginMarker}
@@ -4375,6 +4402,7 @@ object Generator {
           |    <buildtool_depend>ament_cmake</buildtool_depend>
           |
           |    <depend>rclc</depend>
+          |    <depend>rcutils</depend>
           |    <depend>${interfacesPkg}</depend>
           |
           |    ${marker.beginMarker}

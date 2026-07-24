@@ -10,7 +10,7 @@ import org.sireum.message.{Position, Reporter}
 
 object RosUtil {
   @pure def isMicroRos(aadlThread: AadlThread): B = {
-    PropertyUtil.getDiscreetPropertyValue(aadlThread.properties, Hamr_Ros_Properties.HAMR_ROS__RosNodeKind) match {
+    PropertyUtil.getDiscreetPropertyValue(aadlThread.properties, Hamr_Ros_Properties.HAMR_ROS__Ros_Node_Kind) match {
       case Some(ir.ValueProp("microRos")) => return T
       case _ => return F
     }

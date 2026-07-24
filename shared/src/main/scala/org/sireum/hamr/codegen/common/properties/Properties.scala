@@ -59,7 +59,7 @@ object Hamr_Ros_Properties {
     "ros2"
   }
 
-  val HAMR_ROS__RosNodeKind: String = "HAMR_ROS::RosNodeKind"
+  val HAMR_ROS__Ros_Node_Kind: String = "HAMR_ROS::Ros_Node_Kind"
 }
 
 object Hamr_Microkit_Properties {
