@@ -51,6 +51,32 @@ object HamrProperties {
   val HAMR__BIT_CODEC_RAW_CONNECTIONS: String = "HAMR::Bit_Codec_Raw_Connections"
   val HAMR__MICROKIT_LANGUAGE: String = "HAMR::Microkit_Language"
   val HAMR__IMPLEMENTATION_LANGUAGE: String = "HAMR::Implementation_Language"
+
+  // Provenance family: who supplies the realization of a type/component/port
+  @enum object Provenances {
+    "Model"
+    "Platform_Provided"
+    "Infrastructure"
+  }
+
+  val HAMR__TYPE_PROVENANCE: String = "HAMR::Type_Provenance"
+
+  val HAMR__PORT_PROVENANCE: String = "HAMR::Port_Provenance"
+
+  val HAMR__COMPONENT_PROVENANCE: String = "HAMR::Component_Provenance"
+
+  // Escape hatch for the structural native-name convention of Platform_Provided elements
+  val HAMR__NATIVE_NAME: String = "HAMR::Native_Name"
+
+  // Returns the provenance of the element the given properties belong to, defaulting
+  // to Model (i.e. codegen emits the realization) when the property is not present
+  @pure def getProvenance(properties: ISZ[Property], key: String): Provenances.Type = {
+    PropertyUtil.getDiscreetPropertyValue(properties, key) match {
+      case Some(ValueProp("Platform_Provided")) => return Provenances.Platform_Provided
+      case Some(ValueProp("Infrastructure")) => return Provenances.Infrastructure
+      case _ => return Provenances.Model
+    }
+  }
 }
 
 object Hamr_Ros_Properties {
@@ -60,6 +86,10 @@ object Hamr_Ros_Properties {
   }
 
   val HAMR_ROS__Ros_Node_Kind: String = "HAMR_ROS::Ros_Node_Kind"
+
+  val HAMR_ROS__Ros_Namespace: String = "HAMR_ROS::Ros_Namespace"
+
+  val HAMR_ROS__Ros_Topic_Name: String = "HAMR_ROS::Ros_Topic_Name"
 }
 
 object Hamr_Microkit_Properties {

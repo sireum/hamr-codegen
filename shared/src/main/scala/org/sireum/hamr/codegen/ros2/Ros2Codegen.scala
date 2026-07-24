@@ -29,7 +29,7 @@ object Ros2Codegen {
   var threadComponents: ISZ[AadlThread] = ISZ()
   var systemComponents: ISZ[AadlSystem] = ISZ()
   var connectionMap: Map[ISZ[String], ISZ[ISZ[String]]] = Map.empty
-  var datatypeMap: Map[AadlType, (String, ISZ[String])] = Map.empty
+  var datatypeMap: Map[AadlType, Ros2Datatype] = Map.empty
 
   def run(model: Aadl, options: CodegenOption, aadlTypes: AadlTypes, symbolTable: SymbolTable, plugins: ISZ[Plugin], store: Store, reporter: Reporter): (Ros2Results, Store) = {
     assert(model.components.size == 1)
@@ -44,8 +44,33 @@ object Ros2Codegen {
 
     mapDatatypes(aadlTypes, symbolTable, reporter)
 
-    val microRosThreads: ISZ[AadlThread] = ISZOps(threadComponents).filter(t => RosUtil.isMicroRos(t))
-    val ros2Threads: ISZ[AadlThread] = ISZOps(threadComponents).filter(t => !RosUtil.isMicroRos(t))
+    // the reserved `rosout` port name must agree with the platform built-in it denotes
+    RosUtil.validateRosoutPorts(threadComponents, reporter)
+    RosUtil.validateRosNamespaces(threadComponents, reporter)
+
+    // topic names are resolved per edge, so this must happen before any node code is generated
+    Generator.topicBindings =
+      Generator.resolveTopicBindings(threadComponents, connectionMap, options.invertTopicBinding, reporter)
+
+    // the graph the resolved names induce is what ROS actually wires up, so check it before
+    // generating against it
+    Generator.validateTopicConsistency(threadComponents, connectionMap, options.invertTopicBinding,
+                                       datatypeMap, reporter)
+    RosUtil.validatePlatformProvidedComponents(threadComponents, reporter)
+    if (reporter.hasError) {
+      return (Ros2Results(ISZ()), store)
+    }
+
+    // A platform-provided component is realized by a stock executable, so it contributes a launch
+    // entry and an exec_depend but no code.  It stays in threadComponents, which is what the
+    // topic graph and the consistency checks above are computed over.
+    val generatedThreads: ISZ[AadlThread] = ISZOps(threadComponents).filter(t => !RosUtil.isPlatformProvidedComponent(t))
+    val microRosThreads: ISZ[AadlThread] = ISZOps(generatedThreads).filter(t => RosUtil.isMicroRos(t))
+    val ros2Threads: ISZ[AadlThread] = ISZOps(generatedThreads).filter(t => !RosUtil.isMicroRos(t))
+
+    // micro-ROS receive buffers are statically sized from the model, so report what could not be
+    // sized -- overflow of an unsized field is silent at runtime
+    Generator.validateMicroRosCapacities(microRosThreads, reporter)
 
     var files: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
 
@@ -64,8 +89,9 @@ object Ros2Codegen {
     }
 
     options.ros2LaunchLanguage.name match {
-      case "Xml" => files = files ++ Generator.genXmlLaunchPkg(modelName, ros2Threads, systemComponents, microRosThreads)
-      case "Python" => files = files ++ Generator.genPyLaunchPkg(modelName, ros2Threads)
+      // all threads, so platform-provided components get their launch entries and exec_depends
+      case "Xml" => files = files ++ Generator.genXmlLaunchPkg(modelName, threadComponents, systemComponents, microRosThreads, reporter)
+      case "Python" => files = files ++ Generator.genPyLaunchPkg(modelName, threadComponents, reporter)
       case _ => reporter.error(None(), toolName, s"Unknown code type: ${options.ros2NodesLanguage.name}")
     }
 
@@ -195,6 +221,10 @@ object Ros2Codegen {
       }
     }
 
+    if (RosUtil.isPlatformProvided(t)) {
+      return platformProvidedType(t, reporter)
+    }
+
     t match {
       case _: BaseType => return aadlToRosBaseType(t, reporter)
       case _: EnumType => return aadlToRosEnumType(t)
@@ -206,23 +236,35 @@ object Ros2Codegen {
     }
   }
 
+  // A platform-provided type's realization already exists on the target platform, so codegen
+  // emits no .msg file for it -- the native type flows through the ports/topics instead.  Any
+  // fields the model declares are mirrors (specification-level projections) and are ignored here.
+  def platformProvidedType(t: AadlType, reporter: Reporter): B = {
+    RosUtil.getNativeTypeName(t, reporter) match {
+      case Some((nativePackage, nativeName)) =>
+        datatypeMap = datatypeMap + (t ~> Ros2Datatype(name = nativeName, content = ISZ(), nativePackageOpt = Some(nativePackage)))
+        return true
+      case _ => return false
+    }
+  }
+
   def aadlToRosBaseType(t: AadlType, reporter: Reporter): B = {
     t.name match {
-      case "Base_Types::Boolean" => datatypeMap = datatypeMap + (t ~> ("Boolean", ISZ("bool data")))
-      case "Base_Types::Integer" => datatypeMap = datatypeMap + (t ~> ("Integer64", ISZ("int64 data")))
-      case "Base_Types::Float" => datatypeMap = datatypeMap + (t ~> ("Float64", ISZ("float64 data")))
-      case "Base_Types::Character" => datatypeMap = datatypeMap + (t ~> ("Character", ISZ("char data")))
-      case "Base_Types::String" => datatypeMap = datatypeMap + (t ~> ("String", ISZ("string data")))
-      case "Base_Types::Integer_8" => datatypeMap = datatypeMap + (t ~> ("Integer8", ISZ("int8 data")))
-      case "Base_Types::Integer_16" => datatypeMap = datatypeMap + (t ~> ("Integer16", ISZ("int16 data")))
-      case "Base_Types::Integer_32" => datatypeMap = datatypeMap + (t ~> ("Integer32", ISZ("int32 data")))
-      case "Base_Types::Integer_64" => datatypeMap = datatypeMap + (t ~> ("Integer64", ISZ("int64 data")))
-      case "Base_Types::Unsigned_8" => datatypeMap = datatypeMap + (t ~> ("Unsigned8", ISZ("uint8 data")))
-      case "Base_Types::Unsigned_16" => datatypeMap = datatypeMap + (t ~> ("Unsigned16", ISZ("uint16 data")))
-      case "Base_Types::Unsigned_32" => datatypeMap = datatypeMap + (t ~> ("Unsigned32", ISZ("uint32 data")))
-      case "Base_Types::Unsigned_64" => datatypeMap = datatypeMap + (t ~> ("Unsigned64", ISZ("uint64 data")))
-      case "Base_Types::Float_32" => datatypeMap = datatypeMap + (t ~> ("Float32", ISZ("float32 data")))
-      case "Base_Types::Float_64" => datatypeMap = datatypeMap + (t ~> ("Float64", ISZ("float64 data")))
+      case "Base_Types::Boolean" => datatypeMap = datatypeMap + (t ~> Ros2Datatype(name = "Boolean", content = ISZ("bool data"), nativePackageOpt = None()))
+      case "Base_Types::Integer" => datatypeMap = datatypeMap + (t ~> Ros2Datatype(name = "Integer64", content = ISZ("int64 data"), nativePackageOpt = None()))
+      case "Base_Types::Float" => datatypeMap = datatypeMap + (t ~> Ros2Datatype(name = "Float64", content = ISZ("float64 data"), nativePackageOpt = None()))
+      case "Base_Types::Character" => datatypeMap = datatypeMap + (t ~> Ros2Datatype(name = "Character", content = ISZ("char data"), nativePackageOpt = None()))
+      case "Base_Types::String" => datatypeMap = datatypeMap + (t ~> Ros2Datatype(name = "String", content = ISZ("string data"), nativePackageOpt = None()))
+      case "Base_Types::Integer_8" => datatypeMap = datatypeMap + (t ~> Ros2Datatype(name = "Integer8", content = ISZ("int8 data"), nativePackageOpt = None()))
+      case "Base_Types::Integer_16" => datatypeMap = datatypeMap + (t ~> Ros2Datatype(name = "Integer16", content = ISZ("int16 data"), nativePackageOpt = None()))
+      case "Base_Types::Integer_32" => datatypeMap = datatypeMap + (t ~> Ros2Datatype(name = "Integer32", content = ISZ("int32 data"), nativePackageOpt = None()))
+      case "Base_Types::Integer_64" => datatypeMap = datatypeMap + (t ~> Ros2Datatype(name = "Integer64", content = ISZ("int64 data"), nativePackageOpt = None()))
+      case "Base_Types::Unsigned_8" => datatypeMap = datatypeMap + (t ~> Ros2Datatype(name = "Unsigned8", content = ISZ("uint8 data"), nativePackageOpt = None()))
+      case "Base_Types::Unsigned_16" => datatypeMap = datatypeMap + (t ~> Ros2Datatype(name = "Unsigned16", content = ISZ("uint16 data"), nativePackageOpt = None()))
+      case "Base_Types::Unsigned_32" => datatypeMap = datatypeMap + (t ~> Ros2Datatype(name = "Unsigned32", content = ISZ("uint32 data"), nativePackageOpt = None()))
+      case "Base_Types::Unsigned_64" => datatypeMap = datatypeMap + (t ~> Ros2Datatype(name = "Unsigned64", content = ISZ("uint64 data"), nativePackageOpt = None()))
+      case "Base_Types::Float_32" => datatypeMap = datatypeMap + (t ~> Ros2Datatype(name = "Float32", content = ISZ("float32 data"), nativePackageOpt = None()))
+      case "Base_Types::Float_64" => datatypeMap = datatypeMap + (t ~> Ros2Datatype(name = "Float64", content = ISZ("float64 data"), nativePackageOpt = None()))
       case x =>
         reporter.error(None(), toolName, s"Unknown base type: ${x}")
         return false
@@ -243,7 +285,7 @@ object Ros2Codegen {
       i = i + 1
     }
 
-    datatypeMap = datatypeMap + (t ~> (getDatatypeName(t.name), msg))
+    datatypeMap = datatypeMap + (t ~> Ros2Datatype(name = getDatatypeName(t.name), content = msg, nativePackageOpt = None()))
 
     return true
   }
@@ -259,7 +301,7 @@ object Ros2Codegen {
       reporter.error(None(), toolName, s"Cannot handle array: ${t} due to unhandled type: ${arr.baseType}")
       return false
     }
-    val baseType: String = datatypeMap.get(arr.baseType).get._1
+    val baseType: String = datatypeMap.get(arr.baseType).get.name
 
     assert (arr.dimensions.nonEmpty)
 
@@ -280,7 +322,7 @@ object Ros2Codegen {
       msg = s"${msg}\n${baseType}[${length}] arr"
     }
 
-    datatypeMap = datatypeMap + (t ~> (s, ISZ(msg)))
+    datatypeMap = datatypeMap + (t ~> Ros2Datatype(name = s, content = ISZ(msg), nativePackageOpt = None()))
 
     return true
   }
@@ -306,11 +348,11 @@ object Ros2Codegen {
         }
       }
 
-      val ros2Datatype = datatypeMap.get(datatype).get._1
+      val ros2Datatype = datatypeMap.get(datatype).get.name
       msg = msg :+ s"${ros2Datatype} ${formatFieldName(key)}"
     }
 
-    datatypeMap = datatypeMap + (t ~> (s, msg))
+    datatypeMap = datatypeMap + (t ~> Ros2Datatype(name = s, content = msg, nativePackageOpt = None()))
 
     return true
   }
