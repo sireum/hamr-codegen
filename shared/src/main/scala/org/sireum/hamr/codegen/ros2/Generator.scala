@@ -942,18 +942,81 @@ object Generator {
   //  L a u n c h  File (XML Format)
   //================================================
 
+  // Every node entry carries a preserved block for <param>, <remap> and the like.  A parameter
+  // has to be a child of its <node>, so there is nowhere else it could go, and codegen cannot
+  // know which nodes a project will parameterize -- so every node gets one.
+  //
+  // Deliberately not modeled: simple constant parameters could have been properties, but
+  // launch-time dynamics (<arg> plus $(var ...) substitution) are launch-language features that
+  // should not be shadowed in the model.  This is the node_options philosophy applied to the
+  // launch layer.
+  // "--" is illegal inside an XML comment, and a marker id is rendered into one at both ends.
+  // Collapsing it here means a later edit to the prose cannot silently produce a launch file
+  // that no XML parser will accept -- the failure would otherwise surface only at `ros2 launch`.
+  @strictpure def xmlCommentSafe(text: String): String =
+    ops.StringOps(text).replaceAllLiterally("--", "-")
+
+  def launchNodeConfigMarker(thread: AadlThread): BlockMarker = {
+    return BlockMarker(
+      id = xmlCommentSafe(s"LAUNCH CONFIG ${genNodeName(thread)} -- additions within these tags will be preserved when re-running Codegen"),
+      beginPrefix = "<!--",
+      optBeginSuffix = Some("-->"),
+      endPrefix = "<!--",
+      optEndSuffix = Some("-->"))
+  }
+
+  // File-level block for <arg> declarations.  A <param> can reference $(var name) but cannot
+  // introduce the argument, so parameterizing a launch file needs somewhere above the nodes too.
+  val launchArgsMarker: BlockMarker = BlockMarker(
+    id = xmlCommentSafe("LAUNCH ARGUMENTS - additions within these tags will be preserved when re-running Codegen"),
+    beginPrefix = "<!--",
+    optBeginSuffix = Some("-->"),
+    endPrefix = "<!--",
+    optEndSuffix = Some("-->"))
+
+  def genXmlLaunchArgsBlock(): ST = {
+    return (
+      st"""${launchArgsMarker.beginMarker}
+          |<!-- Declare launch arguments here, then reference them from a node's parameters, e.g.
+          |         <arg name="log_file" default="uros-demo.txt"/>
+          |     with, inside that node's config block:
+          |         <param name="log_file_name" value="$$(var log_file)"/> -->
+          |${launchArgsMarker.endMarker}""")
+  }
+
   // Generate node launch code
   //   Example:
   //     <node pkg="tc_cpp_pkg" exec="tc_test_exe"></node>
   def genXmlFormatLaunchNodeDecl(top_level_package_nameT: String,
                                  thread: AadlThread): ST = {
     val node_executable_file_nameT = genExecutableFileName(genNodeName(thread))
+    val marker = launchNodeConfigMarker(thread)
     val s =
       st"""
           |<node pkg="${top_level_package_nameT}" exec="${node_executable_file_nameT}"${genXmlLaunchNamespaceAttr(thread)}>
+          |    ${marker.beginMarker}
+          |    ${marker.endMarker}
           |</node>
         """
     return s
+  }
+
+  // A micro-ROS executable is built against rmw_microxrcedds and has to run under it.  Without
+  // the pin the node loads the default RMW, whose C typesupport manages sequences dynamically:
+  // it calls free() on the statically allocated receive buffers, so the process aborts with
+  // "free(): invalid size" on the first message it receives -- with no diagnostic naming the
+  // middleware as the cause.  `ros2 run` sets nothing, so the launch entry must.
+  def genXmlFormatMicroRosLaunchNodeDecl(microrosPkgName: String, thread: AadlThread): ST = {
+    val node_executable_file_nameT = genExecutableFileName(genNodeName(thread))
+    val marker = launchNodeConfigMarker(thread)
+    return (
+      st"""
+          |<node pkg="${microrosPkgName}" exec="${node_executable_file_nameT}"${genXmlLaunchNamespaceAttr(thread)}>
+          |    <env name="RMW_IMPLEMENTATION" value="rmw_microxrcedds"/>
+          |    ${marker.beginMarker}
+          |    ${marker.endMarker}
+          |</node>
+        """)
   }
 
   @strictpure def genXmlLaunchNamespaceAttr(thread: AadlThread): String =
@@ -970,25 +1033,14 @@ object Generator {
   // constant parameters could have been model properties, but launch-time dynamics
   // (DeclareLaunchArgument and substitutions) are launch-language features that should not be
   // shadowed in the model -- the node_options philosophy applied to the launch layer.
-  // The preserved block inside a platform-provided component's launch entry.  Built here rather
-  // than inline so the decl and the file's registered marker list cannot drift apart -- an
-  // unregistered marker is emitted as text but silently not preserved.
-  @strictpure def platformProvidedLaunchMarker(thread: AadlThread): BlockMarker =
-    BlockMarker(
-      id = s"Launch configuration for ${thread.identifier} -- additions here will be preserved when re-running Codegen",
-      beginPrefix = "<!--",
-      optBeginSuffix = Some("-->"),
-      endPrefix = "<!--",
-      optEndSuffix = Some("-->"))
-
   def genXmlFormatPlatformProvidedNodeDecl(thread: AadlThread, reporter: Reporter): ST = {
     val nodeName = thread.identifier
     RosUtil.getNativeExecutable(thread, reporter) match {
       case Some((nativePackage, nativeExecutable)) =>
-        val marker = platformProvidedLaunchMarker(thread)
+        val marker = launchNodeConfigMarker(thread)
         return (
           st"""
-              |<!-- realized by `ros2 run ${nativePackage} ${nativeExecutable}` -- no code is generated for it -->
+              |<!-- realized by `ros2 run ${nativePackage} ${nativeExecutable}` - no code is generated for it -->
               |<node pkg="${nativePackage}" exec="${nativeExecutable}" name="${nodeName}"${genXmlLaunchNamespaceAttr(thread)}>
               |    ${marker.beginMarker}
               |    ${marker.endMarker}
@@ -1013,29 +1065,38 @@ object Generator {
 
   def genXmlFormatLaunchDecls(component: AadlComponent, ros2PkgName: String,
                              microrosPkgName: String, microRosThreadPaths: Set[ISZ[String]],
-                             reporter: Reporter): (ISZ[ST], ISZ[Marker]) = {
-    var launch_decls: ISZ[ST] = IS()
-    var markers: ISZ[Marker] = IS()
+                             reporter: Reporter): (ISZ[ST], ISZ[ST], ISZ[Marker], ISZ[Marker]) = {
+    var ros2Decls: ISZ[ST] = IS()
+    var microRosDecls: ISZ[ST] = IS()
+    var ros2Markers: ISZ[Marker] = IS()
+    var microRosMarkers: ISZ[Marker] = IS()
 
     for (comp <- component.subComponents) {
       comp match {
+        // a platform-provided component is a stock ROS 2 node, so it belongs with the ros2 half
+        // regardless of what else the model contains
         case thread: AadlThread if RosUtil.isPlatformProvidedComponent(thread) =>
-          launch_decls = launch_decls :+ genXmlFormatPlatformProvidedNodeDecl(thread, reporter)
-          markers = markers :+ platformProvidedLaunchMarker(thread)
+          ros2Decls = ros2Decls :+ genXmlFormatPlatformProvidedNodeDecl(thread, reporter)
+          ros2Markers = ros2Markers :+ launchNodeConfigMarker(thread)
+        case thread: AadlThread if microRosThreadPaths.contains(thread.path.toISZ) =>
+          microRosDecls = microRosDecls :+ genXmlFormatMicroRosLaunchNodeDecl(microrosPkgName, thread)
+          microRosMarkers = microRosMarkers :+ launchNodeConfigMarker(thread)
         case thread: AadlThread =>
-          val pkgName: String = if (microRosThreadPaths.contains(thread.path.toISZ)) microrosPkgName else ros2PkgName
-          launch_decls = launch_decls :+ genXmlFormatLaunchNodeDecl(pkgName, thread)
+          ros2Decls = ros2Decls :+ genXmlFormatLaunchNodeDecl(ros2PkgName, thread)
+          ros2Markers = ros2Markers :+ launchNodeConfigMarker(thread)
         case system: AadlSystem =>
-          launch_decls = launch_decls :+ genXmlFormatLaunchSystemDecl(ros2PkgName, system)
+          ros2Decls = ros2Decls :+ genXmlFormatLaunchSystemDecl(ros2PkgName, system)
         case process: AadlProcess =>
-          val (subDecls, subMarkers) = genXmlFormatLaunchDecls(process, ros2PkgName, microrosPkgName, microRosThreadPaths, reporter)
-          launch_decls = launch_decls ++ subDecls
-          markers = markers ++ subMarkers
+          val (subRos2, subMicroRos, subRos2Markers, subMicroRosMarkers) = genXmlFormatLaunchDecls(process, ros2PkgName, microrosPkgName, microRosThreadPaths, reporter)
+          ros2Decls = ros2Decls ++ subRos2
+          microRosDecls = microRosDecls ++ subMicroRos
+          ros2Markers = ros2Markers ++ subRos2Markers
+          microRosMarkers = microRosMarkers ++ subMicroRosMarkers
         case _ =>
       }
     }
 
-    return (launch_decls, markers)
+    return (ros2Decls, microRosDecls, ros2Markers, microRosMarkers)
   }
 
   // For example, see https://github.com/santoslab/ros-examples/blob/main/tempControl_ws/src/tc_bringup/launch/tc.launch.py
@@ -1056,38 +1117,86 @@ object Generator {
 
     for (system <- systemComponents) {
       val fileName = genXmlLaunchFileName(system.identifier)
+      val launchDir: ISZ[String] = IS("src", s"${ros2PkgName}_bringup", "launch")
 
-      val (launch_decls, launchMarkers) = genXmlFormatLaunchDecls(system, ros2PkgName, microrosPkgName, microRosThreadPaths, reporter)
+      val (ros2Decls, microRosDecls, ros2NodeMarkers, microRosNodeMarkers) = genXmlFormatLaunchDecls(system, ros2PkgName, microrosPkgName, microRosThreadPaths, reporter)
 
-      // A platform-provided component contributes a preserved block, which makes the whole file
-      // "regenerated except between markers" rather than wholly generated -- the resource writer
-      // requires the header to say so.
-      val header: String =
-        if (launchMarkers.nonEmpty) CommentTemplate.invertedMarkerComment_xml
-        else CommentTemplate.doNotEditComment_xml
+      // Every launch file now carries preserved blocks -- per node for parameters, and one for
+      // launch arguments -- so the header must say the file is regenerated except between
+      // markers rather than wholly generated.
+      val header: String = CommentTemplate.invertedMarkerComment_xml
 
-      val launchFileBody: ST =
-        if (microRosThreads.nonEmpty)
+      if (microRosDecls.isEmpty) {
+        // no micro-ROS nodes: one launch file, nothing to separate
+        val body: ST =
           st"""${header}
               |
               |<launch>
-              |    <!-- micro-ROS agent: bridges rmw_microxrcedds nodes to the ROS2 DDS world -->
-              |    <executable cmd="micro_ros_agent udp4 --port 8888" output="screen"/>
+              |    ${genXmlLaunchArgsBlock()}
               |
-              |    ${(launch_decls, "\n")}
+              |    ${(ros2Decls, "\n")}
               |</launch>
           """
-        else
+        launchFiles = launchFiles :+ (launchDir :+ fileName, body, T, ros2NodeMarkers :+ launchArgsMarker)
+      } else {
+        // A micro-ROS node runs on a microcontroller in a real deployment, where it is flashed
+        // rather than launched by ROS, and the agent is infrastructure that must already be up.
+        // Emitting one file for everything would bake in the host-simulation assumption and leave
+        // no way to launch just the ROS 2 half once the micro-ROS node is on hardware.  So the
+        // two halves are separate files and the top level includes both.
+        val ros2FileName = genXmlLaunchFileName(s"${system.identifier}_ros2")
+        val microRosFileName = genXmlLaunchFileName(s"${system.identifier}_microros")
+
+        val ros2Body: ST =
           st"""${header}
               |
               |<launch>
-              |    ${(launch_decls, "\n")}
+              |    ${genXmlLaunchArgsBlock()}
+              |
+              |    ${(ros2Decls, "\n")}
               |</launch>
           """
+        launchFiles = launchFiles :+ (launchDir :+ ros2FileName, ros2Body, T, ros2NodeMarkers :+ launchArgsMarker)
 
-      val filePath: ISZ[String] = IS("src", s"${ros2PkgName}_bringup", "launch", fileName)
+        val microRosBody: ST =
+          st"""${header}
+              |
+              |<!-- The micro-ROS half of the system, valid for a host deployment only.  On an
+              |     embedded target these nodes are flashed rather than launched, and the agent
+              |     may run elsewhere; in that case launch ${ros2FileName} alone.
+              |
+              |     The agent's transport must agree with RMW_UXRCE_TRANSPORT and the
+              |     RMW_UXRCE_DEFAULT_UDP_* settings in microros_apps/colcon.meta.  Those live in
+              |     a preserved block there, so changing them does not update the line below. -->
+              |
+              |<launch>
+              |    <!-- micro-ROS agent: bridges rmw_microxrcedds nodes to the ROS2 DDS world.
+              |         Invoked through `ros2 run` because the binary lives in the package's lib
+              |         directory rather than on PATH. -->
+              |    <executable cmd="ros2 run micro_ros_agent micro_ros_agent udp4 --port 8888" output="screen"/>
+              |
+              |    ${genXmlLaunchArgsBlock()}
+              |
+              |    ${(microRosDecls, "\n")}
+              |</launch>
+          """
+        launchFiles = launchFiles :+ (launchDir :+ microRosFileName, microRosBody, T, microRosNodeMarkers :+ launchArgsMarker)
 
-      launchFiles = launchFiles :+ (filePath, launchFileBody, T, launchMarkers)
+        val topBody: ST =
+          st"""${header}
+              |
+              |<!-- Brings up the whole system on a host.  Launch ${ros2FileName} on its own when
+              |     the micro-ROS nodes run on hardware rather than on this machine. -->
+              |
+              |<launch>
+              |    ${genXmlLaunchArgsBlock()}
+              |
+              |    <include file="$$(find-pkg-share ${ros2PkgName}_bringup)/launch/${ros2FileName}"/>
+              |    <include file="$$(find-pkg-share ${ros2PkgName}_bringup)/launch/${microRosFileName}"/>
+              |</launch>
+          """
+        launchFiles = launchFiles :+ (launchDir :+ fileName, topBody, T, IS(launchArgsMarker))
+      }
     }
 
     return launchFiles
@@ -3923,11 +4032,11 @@ object Generator {
           getPortNames(IS(p.path.toISZ))(0)
       val topicName: String = subscriptionTopicNames(p, ISZ(derivedTopicName))(0)
       inits = inits :+
-        st"""rclc_subscription_init_default(
+        st"""RCL_CHECK(rclc_subscription_init_default(
             |    &self->${portName}_subscription,
             |    &self->node,
             |    ${rosidlSupport},
-            |    "${topicName}");
+            |    "${topicName}"));
           """
     }
     return inits
@@ -4002,7 +4111,7 @@ object Generator {
     for (p <- inPorts) {
       val portName = genPortName(p)
       adds = adds :+
-        st"rclc_executor_add_subscription(&self->executor, &self->${portName}_subscription, &self->${portName}_msg, ${portName}_subscription_callback, ON_NEW_DATA);"
+        st"RCL_CHECK(rclc_executor_add_subscription(&self->executor, &self->${portName}_subscription, &self->${portName}_msg, ${portName}_subscription_callback, ON_NEW_DATA));"
     }
     return adds
   }
@@ -4129,6 +4238,14 @@ object Generator {
           |#define PRINT_INFO(fmt, ...) RCUTILS_LOG_INFO_NAMED(${nodeName}_logger_name, fmt, ##__VA_ARGS__)
           |#define PRINT_WARN(fmt, ...) RCUTILS_LOG_WARN_NAMED(${nodeName}_logger_name, fmt, ##__VA_ARGS__)
           |#define PRINT_ERROR(fmt, ...) RCUTILS_LOG_ERROR_NAMED(${nodeName}_logger_name, fmt, ##__VA_ARGS__)
+          |
+          |// rcl/rclc report entity-creation failures by return code rather than by trapping,
+          |// and on an MCU the usual causes -- an exhausted RMW_UXRCE_MAX_* pool, an
+          |// unreachable agent -- are exactly the ones worth seeing.  Running on past one
+          |// leaves a node that spins normally but silently never publishes or receives, so
+          |// ${nodeNameBase}_init stops at the first failure and hands the status back.
+          |// Expands to a return, so it is usable only in a function returning rcl_ret_t.
+          |#define RCL_CHECK(fn) do { rcl_ret_t rc_ = (fn); if (rc_ != RCL_RET_OK) { PRINT_ERROR("rcl call failed at %s:%d with status %d", __FILE__, __LINE__, (int) rc_); return rc_; } } while (0)
           |${msgToStringSection}
           |
           |//=================================================
@@ -4148,7 +4265,8 @@ object Generator {
           |${callbackAndTimerSection}
           |} ${nodeNameBase}_t;
           |
-          |void ${nodeNameBase}_init(${nodeNameBase}_t * self);
+          |// Returns RCL_RET_OK, or the status of the first rcl/rclc call that failed.
+          |rcl_ret_t ${nodeNameBase}_init(${nodeNameBase}_t * self);
           |void ${nodeNameBase}_spin(${nodeNameBase}_t * self);
           |
           |//=================================================
@@ -4183,22 +4301,22 @@ object Generator {
 
       if (topicNames.size == 1) {
         inits = inits :+
-          st"""rclc_publisher_init_default(
+          st"""RCL_CHECK(rclc_publisher_init_default(
               |    &self->${portName}_publisher,
               |    &self->node,
               |    ${rosidlSupport},
-              |    "${topicNames(0)}");
+              |    "${topicNames(0)}"));
             """
       } else {
         var i: Z = 1
         while (i <= topicNames.size) {
           val topic = topicNames(i - 1)
           inits = inits :+
-            st"""rclc_publisher_init_default(
+            st"""RCL_CHECK(rclc_publisher_init_default(
                 |    &self->${portName}_publisher_${i},
                 |    &self->node,
                 |    ${rosidlSupport},
-                |    "${topic}");
+                |    "${topic}"));
               """
           i = i + 1
         }
@@ -4267,11 +4385,55 @@ object Generator {
   // array -- rather than argc/argv -- is how arguments reach rcl, identically on host-Linux
   // and on an MCU.
   val nodeOptionsMarker: BlockMarker = BlockMarker(
-    id = "NODE OPTIONS -- additions within these tags will be preserved when re-running Codegen",
+    id = "NODE OPTIONS - additions within these tags will be preserved when re-running Codegen",
     beginPrefix = "//",
     optBeginSuffix = None(),
     endPrefix = "//",
     optEndSuffix = None())
+
+  // File-scope escape hatch for storage codegen cannot derive from the model.  Kept separate
+  // from the node_options block so that block stays purely about rcl arguments -- the codegen
+  // report treats an edited node_options as "this node carries remap rules the model-level
+  // consistency checks cannot see", which stops being a meaningful signal if unrelated globals
+  // live there too.
+  val userDeclarationsMarker: BlockMarker = BlockMarker(
+    id = "USER DECLARATIONS - additions within these tags will be preserved when re-running Codegen",
+    beginPrefix = "//",
+    optBeginSuffix = None(),
+    endPrefix = "//",
+    optEndSuffix = None())
+
+  // Init-time counterpart, emitted after any model-derived buffer attachments so a user rule
+  // overrides rather than races the generated one, and before the executor is initialized so
+  // storage is in place before a message can be delivered.
+  val userInitMarker: BlockMarker = BlockMarker(
+    id = "USER INIT - additions within these tags will be preserved when re-running Codegen",
+    beginPrefix = "//",
+    optBeginSuffix = None(),
+    endPrefix = "//",
+    optEndSuffix = None())
+
+  // Both are emitted unconditionally.  The generated buffer section renders to nothing when a
+  // payload has no bounded mirror fields, which is precisely the case -- an opaque mirror, as in
+  // the structure and naming mockups -- where the user has the most need of somewhere to write.
+  def genMicroRosUserDeclarations(): ST = {
+    return (
+      st"""${userDeclarationsMarker.beginMarker}
+          |// Storage for message fields codegen could not size from the model, e.g. a sequence
+          |// or string field of a platform-provided type whose mirror declares no dimensions:
+          |//     static float joy_axes_buf[8];
+          |${userDeclarationsMarker.endMarker}""")
+  }
+
+  def genMicroRosUserInit(): ST = {
+    return (
+      st"""${userInitMarker.beginMarker}
+          |// Attach storage declared above to the corresponding message fields, e.g.:
+          |//     self->proc_ttj_joy_msg.axes.data = joy_axes_buf;
+          |//     self->proc_ttj_joy_msg.axes.capacity = 8;
+          |//     self->proc_ttj_joy_msg.axes.size = 0;
+          |${userInitMarker.endMarker}""")
+  }
 
   // The seed content is behaviorally inert: rcl accepts an empty "--ros-args" section, and
   // keeping the array non-empty makes the initializer valid ISO C (T a[] = {} is not).
@@ -4405,12 +4567,12 @@ object Generator {
   def genMicroRosSupportInit(component: AadlThread): ST = {
     val supportInit: ST =
       st"""rcl_init_options_t init_options = rcl_get_zero_initialized_init_options();
-          |rcl_init_options_init(&init_options, self->allocator);
+          |RCL_CHECK(rcl_init_options_init(&init_options, self->allocator));
           |
-          |rclc_support_init_with_options(
+          |RCL_CHECK(rclc_support_init_with_options(
           |    &self->support,
           |    (int) (sizeof(node_options) / sizeof(node_options[0])), node_options,
-          |    &init_options, &self->allocator);"""
+          |    &init_options, &self->allocator));"""
 
     if (!RosUtil.producesRosout(component)) {
       // no rosout out port: logging stays console-only (rcutils to stderr)
@@ -4425,7 +4587,9 @@ object Generator {
           |
           |// Route this node's own log records to /rosout.  Requires the firmware to be built
           |// with RCL_LOGGING_ENABLED=ON plus a backend; see microros_apps/colcon.meta.
-          |rcl_logging_configure(&self->support.context.global_arguments, &self->allocator);""")
+          |// Checked because the failure mode is invisible otherwise: the node runs, but its
+          |// log records never reach /rosout and any node subscribed to them just sees silence.
+          |RCL_CHECK(rcl_logging_configure(&self->support.context.global_arguments, &self->allocator));""")
   }
 
   def genMicroRosBaseNodeCFile(microrosPkgName: String, cppPkgName: String, component: AadlThread,
@@ -4476,6 +4640,8 @@ object Generator {
             |
             |${genMicroRosNodeOptions()}
             |${genMicroRosSequenceBufferSection(inPorts)}
+            |${genMicroRosUserDeclarations()}
+            |
             |//=================================================
             |//  S u b s c r i p t i o n   C a l l b a c k s
             |//=================================================
@@ -4485,7 +4651,7 @@ object Generator {
             |//  I n i t i a l i z a t i o n
             |//=================================================
             |
-            |void ${nodeNameBase}_init(${nodeNameBase}_t * self)
+            |rcl_ret_t ${nodeNameBase}_init(${nodeNameBase}_t * self)
             |{
             |    g_self = self;
             |
@@ -4493,7 +4659,7 @@ object Generator {
             |
             |    ${genMicroRosSupportInit(component)}
             |
-            |    rclc_node_init_default(&self->node, "${nodeName}", "${RosUtil.getRosNamespace(component)}", &self->support);
+            |    RCL_CHECK(rclc_node_init_default(&self->node, "${nodeName}", "${RosUtil.getRosNamespace(component)}", &self->support));
             |
             |    // Retrieve the node's registered logger name for use by the PRINT_* macros
             |    const char * logger_name = rcl_node_get_logger_name(&self->node);
@@ -4505,8 +4671,13 @@ object Generator {
             |    ${(publisherInits, "\n")}
             |    // Setting up subscriptions
             |    ${(subscriptionInits, "\n")}${genMicroRosSequenceInitSection(inPorts)}
-            |    rclc_executor_init(&self->executor, &self->support.context, ${numHandles}, &self->allocator);
+            |
+            |    ${genMicroRosUserInit()}
+            |
+            |    RCL_CHECK(rclc_executor_init(&self->executor, &self->support.context, ${numHandles}, &self->allocator));
             |    ${(executorAdds, "\n")}
+            |
+            |    return RCL_RET_OK;
             |}
             |
             |void ${nodeNameBase}_spin(${nodeNameBase}_t * self)
@@ -4538,6 +4709,8 @@ object Generator {
             |
             |${genMicroRosNodeOptions()}
             |
+            |${genMicroRosUserDeclarations()}
+            |
             |//=================================================
             |//  C a l l b a c k   a n d   T i m e r
             |//=================================================
@@ -4555,7 +4728,7 @@ object Generator {
             |//  I n i t i a l i z a t i o n
             |//=================================================
             |
-            |void ${nodeNameBase}_init(${nodeNameBase}_t * self)
+            |rcl_ret_t ${nodeNameBase}_init(${nodeNameBase}_t * self)
             |{
             |    g_self = self;
             |
@@ -4563,7 +4736,7 @@ object Generator {
             |
             |    ${genMicroRosSupportInit(component)}
             |
-            |    rclc_node_init_default(&self->node, "${nodeName}", "${RosUtil.getRosNamespace(component)}", &self->support);
+            |    RCL_CHECK(rclc_node_init_default(&self->node, "${nodeName}", "${RosUtil.getRosNamespace(component)}", &self->support));
             |
             |    // Retrieve the node's registered logger name for use by the PRINT_* macros
             |    const char * logger_name = rcl_node_get_logger_name(&self->node);
@@ -4574,14 +4747,18 @@ object Generator {
             |    // Setting up connections
             |    ${(publisherInits, "\n")}
             |    // timeTriggered callback timer
-            |    rclc_timer_init_default(
+            |    RCL_CHECK(rclc_timer_init_default(
             |        &self->period_timer,
             |        &self->support,
             |        RCL_MS_TO_NS(${period}),
-            |        period_timer_callback);
+            |        period_timer_callback));
             |
-            |    rclc_executor_init(&self->executor, &self->support.context, 1, &self->allocator);
-            |    rclc_executor_add_timer(&self->executor, &self->period_timer);
+            |    ${genMicroRosUserInit()}
+            |
+            |    RCL_CHECK(rclc_executor_init(&self->executor, &self->support.context, 1, &self->allocator));
+            |    RCL_CHECK(rclc_executor_add_timer(&self->executor, &self->period_timer));
+            |
+            |    return RCL_RET_OK;
             |}
             |
             |void ${nodeNameBase}_spin(${nodeNameBase}_t * self)
@@ -4598,7 +4775,7 @@ object Generator {
       }
 
     val filePath: ISZ[String] = IS("microros_apps", microrosPkgName, "src", "base_code", fileName)
-    return (filePath, fileBody, T, IS(nodeOptionsMarker))
+    return (filePath, fileBody, T, IS(nodeOptionsMarker, userDeclarationsMarker, userInitMarker))
   }
 
   //================================================
@@ -4622,7 +4799,14 @@ object Generator {
           |    (void)argc;
           |    (void)argv;
           |
-          |    ${nodeNameBase}_init(&node);
+          |    // A failure here means the node could not create the entities it needs, so
+          |    // spinning would busy-wait forever on a node that can never publish or
+          |    // receive.  Exiting non-zero instead lets the launching layer notice.
+          |    rcl_ret_t init_status = ${nodeNameBase}_init(&node);
+          |    if (init_status != RCL_RET_OK) {
+          |        PRINT_ERROR("${nodeName} initialization failed with status %d; aborting", (int) init_status);
+          |        return 1;
+          |    }
           |
           |    // Invoke initialize entry point
           |    ${nodeName}_initialize(&node);
@@ -5063,14 +5247,14 @@ object Generator {
     val loggingEnabled: String = if (hasRosoutProducer) "ON" else "OFF"
     val loggingImpl: String = if (hasRosoutProducer) "rcl_logging_spdlog" else "rcl_logging_noop"
     val buildProfileMarker = BlockMarker(
-      id = "BUILD PROFILE -- additions within these tags will be preserved when re-running Codegen",
+      id = "BUILD PROFILE - additions within these tags will be preserved when re-running Codegen",
       beginPrefix = "#",
       optBeginSuffix = None(),
       endPrefix = "#",
       optEndSuffix = None())
 
     val transportMarker = BlockMarker(
-      id = "TRANSPORT AND TUNING -- additions within these tags will be preserved when re-running Codegen",
+      id = "TRANSPORT AND TUNING - additions within these tags will be preserved when re-running Codegen",
       beginPrefix = "#",
       optBeginSuffix = None(),
       endPrefix = "#",
@@ -5407,6 +5591,29 @@ object Generator {
             |`colcon.meta` already there to `colcon.meta.bak`.  If you maintain your own firmware
             |configuration, merge the two rather than letting one replace the other.
             |
+            |### On a host workspace this step is effectively a no-op
+            |
+            |A firmware workspace created for the **host** platform
+            |(`create_firmware_ws.sh host generic`) does not check out `rcl` at all -- on host,
+            |micro-ROS is `rmw_microxrcedds` and `rclc` layered over the ROS 2 distribution's own
+            |`rcl`, so there is no micro-ROS `rcl` to configure.  `make microros-config` will copy
+            |`colcon.meta` into place and rebuild successfully, but the `rcl` entry matches no
+            |package and is silently inert; `find_package(rcl)` keeps resolving to
+            |`/opt/ros/$$ROS_DISTRO`.
+            |
+            |This is usually invisible, because the distribution's `rcl` is built with both
+            |argument parsing and logging enabled -- the very things the flags above turn on.  So
+            |remap rules and `/rosout` routing work on host whether or not this step is ever run.
+            |They stop working the moment the same model is deployed to an embedded target, where
+            |the micro-ROS `rcl` fork is used and ships with both features off.  Applying the
+            |configuration matters there, and an embedded workspace
+            |(`create_firmware_ws.sh <rtos> <board>`) does check `rcl` out, under
+            |`firmware/mcu_ws`.
+            |
+            |One setting to revisit when moving off host: `RCL_LOGGING_IMPLEMENTATION` is emitted
+            |as `rcl_logging_spdlog`, which suits a host build.  Embedded targets generally want
+            |`rcl_logging_noop`.
+            |
             |## Manual Steps
             |
             |The Makefile targets automate the following steps.
@@ -5528,9 +5735,9 @@ object Generator {
             st"${tab}sleep 2"
           ) ++
           (for (t <- microRosThreads) yield
-            st"""${tab}gnome-terminal --title="[microROS] ${genExecutableFileName(genNodeName(t))}" -- bash -c "$$(SOURCE_BASE); RMW_IMPLEMENTATION=rmw_microxrcedds ros2 run $$(MICROROS_PKG) ${genExecutableFileName(genNodeName(t))}; exec bash"""") ++
+            st"""${tab}gnome-terminal --title="[microROS] ${genExecutableFileName(genNodeName(t))}" -- bash -c "$$(SOURCE_BASE); RMW_IMPLEMENTATION=rmw_microxrcedds ros2 run $$(MICROROS_PKG) ${genExecutableFileName(genNodeName(t))} $$(ROS_ARGS); exec bash"""") ++
           (for (t <- ros2Threads) yield
-            st"""${tab}gnome-terminal --title="[ROS2] ${genExecutableFileName(genNodeName(t))}" -- bash -c "$$(SOURCE_BASE); $$(SOURCE_LOCAL); ros2 run $$(ROS2_PKG) ${genExecutableFileName(genNodeName(t))}; exec bash"""")
+            st"""${tab}gnome-terminal --title="[ROS2] ${genExecutableFileName(genNodeName(t))}" -- bash -c "$$(SOURCE_BASE); $$(SOURCE_LOCAL); ros2 run $$(ROS2_PKG) ${genExecutableFileName(genNodeName(t))} $$(ROS_ARGS); exec bash"""")
 
         val stopLines: ISZ[ST] =
           ISZ[ST](st"${tab}-pkill -f 'micro_ros_agent udp4' 2>/dev/null || true") ++
@@ -5545,6 +5752,11 @@ object Generator {
             |ROS2_PKG       := ${ros2PkgName}
             |INTERFACES_PKG := ${ros2PkgName}_interfaces
             |MICROROS_PKG   := ${microrosPkgName}
+            |
+            |# Extra rcl arguments appended to every `ros2 run` below, e.g.
+            |#   make run ROS_ARGS="--ros-args -p log_file_name:=uros-demo.txt"
+            |# Node parameters must be declared by the node before a value here takes effect.
+            |ROS_ARGS ?=
             |
             |SOURCE_BASE  := source /opt/ros/$$$${ROS_DISTRO}/setup.bash && source $$(MICROROS_WS)/install/setup.bash
             |SOURCE_LOCAL := source $$(CURDIR)/install/setup.bash
@@ -5600,7 +5812,7 @@ object Generator {
             """
       } else {
         val runLines: ISZ[ST] = for (t <- ros2Threads) yield
-          st"""${tab}gnome-terminal --title="[ROS2] ${genExecutableFileName(genNodeName(t))}" -- bash -c "source /opt/ros/$$$${ROS_DISTRO}/setup.bash && source $$(CURDIR)/install/setup.bash && ros2 run $$(ROS2_PKG) ${genExecutableFileName(genNodeName(t))}; exec bash""""
+          st"""${tab}gnome-terminal --title="[ROS2] ${genExecutableFileName(genNodeName(t))}" -- bash -c "source /opt/ros/$$$${ROS_DISTRO}/setup.bash && source $$(CURDIR)/install/setup.bash && ros2 run $$(ROS2_PKG) ${genExecutableFileName(genNodeName(t))} $$(ROS_ARGS); exec bash""""
 
         val stopLines: ISZ[ST] = for (t <- ros2Threads) yield
           st"${tab}-pkill -f 'ros2 run $$(ROS2_PKG) ${genExecutableFileName(genNodeName(t))}' 2>/dev/null || true"
@@ -5610,6 +5822,11 @@ object Generator {
             |ROS2_PKG     := ${ros2PkgName}
             |SOURCE_ROS   := source /opt/ros/$$$${ROS_DISTRO}/setup.bash
             |SOURCE_LOCAL := source $$(CURDIR)/install/setup.bash
+            |
+            |# Extra rcl arguments appended to every `ros2 run` below, e.g.
+            |#   make run ROS_ARGS="--ros-args -p log_file_name:=uros-demo.txt"
+            |# Node parameters must be declared by the node before a value here takes effect.
+            |ROS_ARGS ?=
             |
             |.PHONY: all build run stop clean check-ros2
             |
