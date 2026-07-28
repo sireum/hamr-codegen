@@ -84,7 +84,17 @@ import org.sireum.{B, strictpure}
           if (i.overwrite || (i.markers.nonEmpty && i.invertMarkers)) {
             codegenFiles = codegenFiles :+ path
           }
-        case e: ExternalResource => halt(s"Not expecting $e")
+        case e: ExternalResource =>
+          val path = Os.path(e.dstPath)
+          assert(path.exists, path.value)
+
+          if (path.isDir) {
+            // e.g. symlinked aux code directories: attest the C files they contribute to
+            // the build, mirroring what copy mode would have attested
+            codegenFiles = codegenFiles ++ Os.Path.walk(path, T, F, p => p.isFile && (p.ext == string"c" || p.ext == string"h"))
+          } else {
+            codegenFiles = codegenFiles :+ path
+          }
         case e => halt(s"Not expecting $e")
       }
     }

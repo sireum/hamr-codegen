@@ -6,7 +6,7 @@ import org.sireum.hamr.codegen.common.CommonUtil._
 import org.sireum.hamr.codegen.common.containers.Resource
 import org.sireum.hamr.codegen.common.resolvers.GclResolver
 import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlThread, GclAnnexClauseInfo, GclAnnexLibInfo, SymbolTable}
-import org.sireum.hamr.codegen.common.types.AadlTypes
+import org.sireum.hamr.codegen.common.types.{AadlTypes, RecordType}
 import org.sireum.hamr.codegen.common.util.HamrCli.CodegenHamrPlatform
 import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
 import GumboXRustUtil._
@@ -69,8 +69,12 @@ object GumboXRustPlugin {
       contribs.computeContributions.CEP_Post_Params.filter(p =>
         p.kind == GumboXRustUtil.SymbolKind.StateVar || p.isOutPort))
 
-    val preFields: ISZ[ST] = for (p <- preParams) yield st"pub ${p.name}: ${p.langType},"
-    val postFields: ISZ[ST] = for (p <- postParams) yield st"pub ${p.name}: ${p.langType},"
+    // event/event-data port params are optional (Option<T>) -- matching the getters and the
+    // GUMBOX CEP_Pre/Post signatures; state-var params are plain
+    val preFields: ISZ[ST] = for (p <- preParams) yield
+      st"pub ${p.name}: ${if (p.isOptional) st"Option<${p.langType}>" else st"${p.langType}"},"
+    val postFields: ISZ[ST] = for (p <- postParams) yield
+      st"pub ${p.name}: ${if (p.isOptional) st"Option<${p.langType}>" else st"${p.langType}"},"
 
     return st"""${CommentTemplate.doNotEditComment_slash}
                |
@@ -237,7 +241,7 @@ object GumboXComputeContributions {
     }
 
     for (thread <- symbolTable.getThreads()
-         if MicrokitUtil.isRusty(thread) && !StoreUtil.isNonModelElement(thread.path, localStore)) {
+         if MicrokitUtil.isRusty(thread) && !StoreUtil.isSynthetic(thread.path, localStore)) {
 
       assert(!items.contains(thread.path), "Not expecting anyone else to have made gumbox contributions up to this point")
 
@@ -1452,6 +1456,87 @@ object GumboXComputeContributions {
     val sorted_Pre_State_Params = GumboXRustUtil.sortParams(computeContributions.CEP_Pre_Params)
     val sorted_Post_State_Params = GumboXRustUtil.sortParams(computeContributions.CEP_Post_Params)
 
+    val assumeIntervals: HashSMap[String, GumboXRustUtil.AssumeInterval] =
+      GumboXRustUtil.deriveAssumeIntervals(
+        thread = thread,
+        subclauseInfoOpt = subclauseInfoOpt,
+        types = types,
+        slangTypesToAadlTypes = GclResolver.getSlangTypeToAadlType(localStore),
+        crustTypeProvider = crustTypeProvider)
+
+    // skeleton proptest strategy for a harness parameter: a range derived from the component's
+    // GUMBO assume clauses when one is available, otherwise the type's default (full-range)
+    // generator, with a TODO note when the full range risks exhausting the rejection budget
+    def strategyEntry(p: GGParam): ST = {
+      val rustName: String = st"${(p.typeNameProvider.qualifiedRustNameS, "::")}".render
+      var commentOpt: Option[ST] = None()
+      var d: ST = st"generators::${(p.typeNameProvider.qualifiedRustNameS, "_")}_strategy_default()"
+      if (GumboXRustUtil.isRustIntPrimitive(rustName)) {
+        assumeIntervals.get(p.name) match {
+          case Some(iv) =>
+            if (!(iv.lo.nonEmpty && iv.hi.nonEmpty && iv.lo.get > iv.hi.get)) {
+              val lo: ST = if (iv.lo.nonEmpty) st"${iv.lo.get}$rustName" else st"$rustName::MIN"
+              val hi: ST = if (iv.hi.nonEmpty) st"${iv.hi.get}$rustName" else st"$rustName::MAX"
+              d = st"($lo..=$hi)"
+              commentOpt = Some(st"// range derived from GUMBO assume clause(s) constraining ${p.originName}")
+            }
+          case _ =>
+            if (computeContributions.CEP_Pre.nonEmpty) {
+              commentOpt = Some(
+                st"""// TODO: full-range default; if ${p.originName} is constrained by a GUMBO assume clause then
+                    |//       narrow this strategy (e.g. generators::${rustName}_strategy_cust(lo$rustName..=hi$rustName))
+                    |//       to avoid exhausting the proptest rejection budget""")
+            }
+        }
+      } else {
+        // record-typed parameter: derive per-field ranges from assume clauses constraining
+        // <param>.<field>, falling back to each field type's default generator
+        types.getTypeByPathOpt(p.aadlType) match {
+          case Some(paramType) =>
+            crustTypeProvider.getRepresentativeType(paramType) match {
+              case r: RecordType =>
+                var fieldStrategies: ISZ[ST] = ISZ()
+                var haveFieldInterval = F
+                for (f <- r.fields.entries) {
+                  val fieldNp = crustTypeProvider.getTypeNameProvider(crustTypeProvider.getRepresentativeType(f._2))
+                  val fieldRustName = st"${(fieldNp.qualifiedRustNameS, "::")}".render
+                  var fieldStrategy = st"generators::${(fieldNp.qualifiedRustNameS, "_")}_strategy_default()"
+                  if (GumboXRustUtil.isRustIntPrimitive(fieldRustName)) {
+                    assumeIntervals.get(s"${p.name}.${f._1}") match {
+                      case Some(iv) =>
+                        if (!(iv.lo.nonEmpty && iv.hi.nonEmpty && iv.lo.get > iv.hi.get)) {
+                          val lo: ST = if (iv.lo.nonEmpty) st"${iv.lo.get}$fieldRustName" else st"$fieldRustName::MIN"
+                          val hi: ST = if (iv.hi.nonEmpty) st"${iv.hi.get}$fieldRustName" else st"$fieldRustName::MAX"
+                          fieldStrategy = st"($lo..=$hi)"
+                          haveFieldInterval = T
+                        }
+                      case _ =>
+                    }
+                  }
+                  fieldStrategies = fieldStrategies :+ fieldStrategy
+                }
+                if (haveFieldInterval) {
+                  d = st"""generators::${(p.typeNameProvider.qualifiedRustNameS, "_")}_strategy_cust(
+                          |  ${(fieldStrategies, ",\n")})"""
+                  commentOpt = Some(st"// field range(s) derived from GUMBO assume clause(s) constraining ${p.originName}")
+                }
+              case _ =>
+            }
+          case _ =>
+        }
+      }
+      if (p.isOptional) {
+        d = st"generators::option_strategy_default($d)"
+      }
+      commentOpt match {
+        case Some(c) =>
+          return st"""$c
+                     |${p.name}: $d"""
+        case _ =>
+          return st"${p.name}: $d"
+      }
+    }
+
     val preOpt: Option[ST] =
       if (computeContributions.CEP_Pre.nonEmpty)
         Some(
@@ -1618,17 +1703,9 @@ object GumboXComputeContributions {
 
       val strategiesOpt: Option[ST] =
         if (sorted_pre_without_state_vars.nonEmpty) {
-          var strategies: ISZ[ST] = ISZ()
-          for (p <- sorted_pre_without_state_vars) {
-            var d = st"generators::${(p.typeNameProvider.qualifiedRustNameS, "_")}_strategy_default()"
-            if (p.isOptional) {
-              d = st"generators::option_strategy_default($d)"
-            }
-            strategies = strategies :+ st"${p.name}: $d"
-          }
           Some(
             st"""// strategies for generating each component input
-                |${(strategies, ",\n")}""")
+                |${(for (p <- sorted_pre_without_state_vars) yield strategyEntry(p), ",\n")}""")
         } else {
           None()
         }
@@ -1763,17 +1840,9 @@ object GumboXComputeContributions {
 
       val strategiesOpt: Option[ST] =
         if (sorted_Pre_State_Params.nonEmpty) {
-          var strategies: ISZ[ST] = ISZ()
-          for (p <- sorted_Pre_State_Params) {
-            var d = st"generators::${(p.typeNameProvider.qualifiedRustNameS, "_")}_strategy_default()"
-            if (p.isOptional) {
-              d = st"generators::option_strategy_default($d)"
-            }
-            strategies = strategies :+ st"${p.name}: $d"
-          }
           Some(
             st"""// strategies for generating each component input
-                |${(strategies, ",\n")}""")
+                |${(for (p <- sorted_Pre_State_Params) yield strategyEntry(p), ",\n")}""")
         } else {
           None()
         }
@@ -1829,11 +1898,11 @@ object GumboXComputeContributions {
       val thread = symbolTable.componentMap.get(entry._1).get.asInstanceOf[AadlThread]
       val threadId = MicrokitUtil.getComponentIdPath(thread)
 
-      val testDir = s"${options.sel4OutputDir.get}/crates/${threadId}/src/test"
+      val testDir = s"${CRustComponentPlugin.componentCrateDirectory(thread, options, store)}/src/test"
       val testUtilDir = s"$testDir/util"
 
       { // the gumbox module
-        val apiDirectory = CRustApiPlugin.apiDirectory(thread, options)
+        val apiDirectory = CRustApiPlugin.apiDirectory(thread, options, store)
         val content = GumboXRustPlugin.generateGumboxModuleContent(entry._2)
         val path = s"$apiDirectory/${threadId}_GUMBOX.rs"
         resources = resources :+ ResourceUtil.createResource(path, content, T)

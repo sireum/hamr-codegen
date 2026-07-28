@@ -246,8 +246,8 @@ object GeneratorPy {
     val s =
       st"""
           |${launch_node_decl_nameT} = Node(
-          |   package = ${top_level_package_nameT},
-          |   executable = ${node_executable_file_nameT}
+          |   package = "${top_level_package_nameT}",
+          |   executable = "${node_executable_file_nameT}"
           |   )
         """
     return s

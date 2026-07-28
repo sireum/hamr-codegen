@@ -3,7 +3,7 @@ package org.sireum.hamr.codegen.common.sysvc
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.IdPath
-import org.sireum.hamr.codegen.common.symbols.{AadlThread, GclAnnexClauseInfo, SymbolTable}
+import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlFeature, AadlPort, AadlPortConnection, AadlThread, GclAnnexClauseInfo, SymbolTable}
 import org.sireum.hamr.codegen.common.sysvc.ScheduleNextRel._
 import org.sireum.hamr.ir.{GclAssume, GclCaseStatement, GclComposition, GclCompositionProperty,
   GclGuarantee, GclPropertyBinding, GclSchemaComponentRef}
@@ -170,10 +170,17 @@ object VCGenerator {
   // Integration constraints are port invariants the component-level verification
   // already discharges: guarantees on out ports are checked at every entrypoint
   // exit (GUMBOX I-Guar, initialize included) and assumes on in ports are relied
-  // upon at every dispatch (I-Assm). They therefore contribute to the system-level
-  // task contracts -- guarantees join the component's postcondition (Next-Assert
-  // premises, Init-State premises) and assumes join its precondition (Pre-Assert
-  // obligations) -- without restating them as compute clauses in the model.
+  // upon at every dispatch (I-Assm). They contribute to the system-level task
+  // contracts as follows:
+  //   - guarantees join the component's postcondition (Next-Assert premises,
+  //     Init-State premises);
+  //   - assumes are ASSUMED at the consumer -- they join the consumer's
+  //     Next-Assert PREMISES rather than being re-proven as Pre-Assert
+  //     obligations, so they are not carried through the net to be re-shown.
+  //     Soundness is preserved by the per-connection IntegrationVC
+  //     (generateIntegrationVCs / vc_integration.rs), which statically discharges
+  //     producer-out-guarantee ==> consumer-in-assume once; given that discharge,
+  //     the consumer may assume its integration constraint whenever it dispatches.
   // Iterates the thread's ports against the symbol table's integrationMap (the
   // resolved clauses; the resolver enforces in port => assume, out port =>
   // guarantee) so the serializer can reconstruct the same clauses in the same
@@ -194,6 +201,70 @@ object VCGenerator {
       }
     }
     return exps
+  }
+
+  // Returns the component's resolved port matching feature `f` by identifier.
+  // The integrationMap is keyed by the component's own ports (as iterated by
+  // `getPorts()`), so a connection endpoint feature is matched back to that port
+  // before keying the map -- mirroring how `integrationExps` looks them up.
+  @pure def findPort(c: AadlComponent, f: AadlFeature): Option[AadlPort] = {
+    for (p <- c.getPorts()) {
+      if (p.identifier == f.identifier) {
+        return Some(p)
+      }
+    }
+    return None()
+  }
+
+  // Collects one IntegrationVC per port connection whose destination in-port has
+  // an integration assume (resolved into the destination component's
+  // integrationMap; the resolver enforces in port => assume, out port =>
+  // guarantee). The sender's matching out-port integration guarantee, when
+  // present, becomes the VC premise; otherwise the premise is `true` (the
+  // receiver's assume must hold unconditionally). These obligations are static --
+  // independent of schedule, property, and composition -- so the full model's
+  // connections are collected; the per-composition proof crates each carry every
+  // component's contract fns, so each can discharge them independently.
+  @pure def generateIntegrationVCs(symbolTable: SymbolTable): ISZ[IntegrationVC] = {
+    var result: ISZ[IntegrationVC] = ISZ()
+    for (conn <- symbolTable.aadlConnections) {
+      conn match {
+        case c: AadlPortConnection =>
+          getGclInfoOpt(c.dstComponent.path, symbolTable) match {
+            case Some(dstInfo) =>
+              findPort(c.dstComponent, c.dstFeature) match {
+                case Some(dstPort) =>
+                  dstInfo.gclSymbolTable.integrationMap.get(dstPort) match {
+                    case Some(a: GclAssume) =>
+                      // sender's integration guarantee on the source out-port, if declared
+                      val srcPortOpt = findPort(c.srcComponent, c.srcFeature)
+                      var srcGuaranteeId: Option[String] = None()
+                      (srcPortOpt, getGclInfoOpt(c.srcComponent.path, symbolTable)) match {
+                        case (Some(sp), Some(srcInfo)) =>
+                          srcInfo.gclSymbolTable.integrationMap.get(sp) match {
+                            case Some(g: GclGuarantee) => srcGuaranteeId = Some(g.id)
+                            case _ =>
+                          }
+                        case _ =>
+                      }
+                      result = result :+ IntegrationVC(
+                        connName = c.name,
+                        srcCompPath = c.srcComponent.path,
+                        srcPort = if (srcPortOpt.nonEmpty) srcPortOpt.get else dstPort,
+                        srcGuaranteeId = srcGuaranteeId,
+                        dstCompPath = c.dstComponent.path,
+                        dstPort = dstPort,
+                        dstAssumeId = a.id)
+                    case _ =>
+                  }
+                case _ =>
+              }
+            case _ =>
+          }
+        case _ =>
+      }
+    }
+    return result
   }
 
   @pure def generateInitStateVC(decoration: Map[PlaceId, GclPropertyBinding],
@@ -250,7 +321,10 @@ object VCGenerator {
               }
             case _ =>
           }
-          assumes = assumes ++ integrationExps(symbolTable.getThreadById(compPath), info, T)
+          // Integration assumes are NOT re-proven here: they are assumed at the
+          // consumer's Next-Assert premises and discharged once per connection by
+          // the IntegrationVC (see integrationExps doc and D7). Only compute
+          // assumes remain as Pre-Assert obligations.
         case _ =>
       }
     }
@@ -299,6 +373,11 @@ object VCGenerator {
     val preAsserts = collectPlaceAsserts(t.inPlaces, decoration)
 
     var postConditions: ISZ[org.sireum.lang.ast.Exp] = ISZ()
+    // Integration assumes are assumed (not proven through the net): the component
+    // may rely on its in-port constraints whenever it dispatches. They join the
+    // Next-Assert premises; producer/consumer compatibility is discharged once per
+    // connection by the IntegrationVC (vc_integration.rs). See integrationExps / D7.
+    var integrationAssumes: ISZ[org.sireum.lang.ast.Exp] = ISZ()
     if (covered) {
       getGclInfoOpt(compPath, symbolTable) match {
         case Some(info) =>
@@ -313,6 +392,7 @@ object VCGenerator {
             case _ =>
           }
           postConditions = postConditions ++ integrationExps(symbolTable.getThreadById(compPath), info, F)
+          integrationAssumes = integrationExps(symbolTable.getThreadById(compPath), info, T)
         case _ =>
       }
     }
@@ -321,7 +401,7 @@ object VCGenerator {
 
     return VC(
       kind = VCKind.NextAssertTask,
-      premises = preAsserts ++ postConditions,
+      premises = preAsserts ++ postConditions ++ integrationAssumes,
       conclusion = postAsserts,
       writeSetOpt = writeSets.get(compPath),
       source = VCSource(

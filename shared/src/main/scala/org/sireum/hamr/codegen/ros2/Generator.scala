@@ -4,11 +4,12 @@ package org.sireum.hamr.codegen.ros2
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.containers.{BlockMarker, Marker}
+import org.sireum.hamr.codegen.common.properties.Hamr_Ros_Properties
 import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlDataPort, AadlEventDataPort, AadlPort, AadlProcess, AadlSystem, AadlThread, Dispatch_Protocol}
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
-import org.sireum.hamr.codegen.common.types.{AadlType, BaseType, EnumType, RecordType}
+import org.sireum.hamr.codegen.common.types.{AadlType, ArrayType, BaseType, EnumType, RecordType}
 import org.sireum.hamr.ir.Direction
-import org.sireum.message.Reporter
+import org.sireum.message.{Position, Reporter}
 import org.sireum.ops.{ISZOps, StringOps}
 
 object Generator {
@@ -136,29 +137,386 @@ object Generator {
     return names
   }
 
-  def genPortDatatype(port: AadlPort, packageName: String, datatypeMap: Map[AadlType, (String, ISZ[String])], reporter: Reporter): String = {
+  // Returns the C++ type a port's messages are carried in.  For a generated type this is the
+  // type in the model's interfaces package; for a platform-provided type it is the native ROS
+  // type itself (e.g. "sensor_msgs::msg::Joy"), which is what makes generated nodes able to
+  // exchange messages with preexisting ROS nodes.
+  def genPortDatatype(port: AadlPort, packageName: String, datatypeMap: Map[AadlType, Ros2Datatype], reporter: Reporter): String = {
+    val interfacesPackageName: String = s"${packageName}_interfaces"
+
+    def resolve(aadlType: AadlType): String = {
+      datatypeMap.get(aadlType) match {
+        case Some(dtype) => return dtype.cppType(interfacesPackageName)
+        case _ =>
+          reporter.error(None(), toolName, s"Port ${port.identifier}: datatype unknown, setting datatype to Empty")
+          return s"${interfacesPackageName}::msg::Empty"
+      }
+    }
+
     val s: String = port match {
-      case dp: AadlDataPort =>
-        val dtype = datatypeMap.get(dp.aadlType)
-        if (dtype.nonEmpty) {
-          s"${packageName}_interfaces::msg::${dtype.get._1}"
-        }
-        else {
-          reporter.error(None(), toolName, s"Port ${port.identifier}: datatype unknown, setting datatype to Empty")
-          s"${packageName}_interfaces::msg::Empty"
-        }
-      case edp: AadlEventDataPort =>
-        val dtype = datatypeMap.get(edp.aadlType)
-        if (dtype.nonEmpty) {
-          s"${packageName}_interfaces::msg::${dtype.get._1}"
-        }
-        else {
-          reporter.error(None(), toolName, s"Port ${port.identifier}: datatype unknown, setting datatype to Empty")
-          s"${packageName}_interfaces::msg::Empty"
-        }
-      case _ => s"${packageName}_interfaces::msg::Empty"
+      case dp: AadlDataPort => resolve(dp.aadlType)
+      case edp: AadlEventDataPort => resolve(edp.aadlType)
+      case _ => s"${interfacesPackageName}::msg::Empty"
     }
     return s
+  }
+
+  // The ports codegen emits data-plane code for.  Infrastructure-realized ports (an out `rosout`,
+  // whose publisher is created and driven by rcl logging rather than by application code) are
+  // excluded: no publisher, no put_ API, no queue, and no executor handle is generated for them.
+  @strictpure def generatedPorts(component: AadlThread): ISZ[AadlPort] =
+    ISZOps(component.getPorts()).filter(p => !RosUtil.isInfrastructureRealized(p))
+
+  // Arguments to the rclcpp Node base constructor.  The two-argument (name, namespace) form is
+  // used only when the model assigns a namespace, so unnamespaced nodes keep the plain form.
+  def genCppNodeCtorArgs(component: AadlThread): ST = {
+    val nodeName = genNodeName(component)
+    RosUtil.getRosNamespace(component) match {
+      case string"" => return st""""${nodeName}""""
+      case ns => return st""""${nodeName}", "${ns}""""
+    }
+  }
+
+  // Topic bindings for every port, resolved once per run: port path -> the topics that port's
+  // publishers/subscriptions bind to (one per edge for a fan-out out port, otherwise one).
+  // Populated by resolveTopicBindings; a port absent from the map keeps the path-derived default.
+  var topicBindings: Map[ISZ[String], ISZ[String]] = Map.empty
+
+  // The topics an in port subscribes to.  The platform pins the reserved `rosout` port to
+  // /rosout; otherwise a resolved binding wins over the path-derived default.
+  def subscriptionTopicNames(inPort: AadlPort, derived: ISZ[String]): ISZ[String] = {
+    if (RosUtil.isRosoutPort(inPort)) {
+      return ISZ(RosUtil.ROSOUT_TOPIC)
+    }
+    topicBindings.get(inPort.path.toISZ) match {
+      case Some(topics) if topics.nonEmpty => return topics
+      case _ => return derived
+    }
+  }
+
+  // The topics an out port publishes to, one per edge (or one when explicitly named/unconnected).
+  def publisherTopicNames(outPort: AadlPort, derived: ISZ[String]): ISZ[String] = {
+    topicBindings.get(outPort.path.toISZ) match {
+      case Some(topics) if topics.nonEmpty => return topics
+      case _ => return derived
+    }
+  }
+
+  // Checks the communication graph that topic *names* induce, which is what ROS actually wires up
+  // -- ROS has no connections, its graph emerges from (topic, type) matching.  Where that graph
+  // contradicts itself or the modeled one, say so at generation time rather than leaving it to
+  // surface at runtime as endpoints that silently never talk.
+  //
+  // Ports are grouped by the fully-qualified topic they bind to, since a relative "joy" under
+  // namespace uros_demo and an absolute "/uros_demo/joy" name the same topic.
+  def validateTopicConsistency(threads: ISZ[AadlThread],
+                               connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
+                               invertTopicBinding: B,
+                               datatypeMap: Map[AadlType, Ros2Datatype],
+                               reporter: Reporter): Unit = {
+    var portOf: Map[ISZ[String], AadlPort] = Map.empty
+    var namespaceOf: Map[ISZ[String], String] = Map.empty
+    for (thread <- threads;
+         port <- generatedPorts(thread)) {
+      portOf = portOf + (port.path.toISZ ~> port)
+      namespaceOf = namespaceOf + (port.path.toISZ ~> RosUtil.getRosNamespace(thread))
+    }
+
+    // topic -> the ports bound to it
+    var groups: Map[String, ISZ[ISZ[String]]] = Map.empty
+    for (entry <- portOf.entries) {
+      val portPath = entry._1
+      val derived: ISZ[String] = ISZ(getPortNames(ISZ(portPath))(0))
+      for (binding <- subscriptionTopicNames(entry._2, derived)) {
+        val topic = RosUtil.absolutizeTopicName(binding, namespaceOf.get(portPath).get)
+        val members: ISZ[ISZ[String]] = groups.get(topic) match {
+          case Some(ms) => ms
+          case _ => ISZ()
+        }
+        if (!ISZOps(members).contains(portPath)) {
+          groups = groups + (topic ~> (members :+ portPath))
+        }
+      }
+    }
+
+    var modeled: Set[(ISZ[String], ISZ[String])] = Set.empty
+    for (edge <- normalizedEdges(connectionMap, invertTopicBinding)) {
+      modeled = modeled + edge
+    }
+
+    for (entry <- groups.entries) {
+      val topic = entry._1
+      val members = entry._2
+      val ports: ISZ[AadlPort] = for (m <- members) yield portOf.get(m).get
+
+      // 1. type disagreement -- ROS surfaces this only at runtime as incompatible endpoints
+      var wireTypes: ISZ[String] = ISZ()
+      for (p <- ports) {
+        val wt = wireTypeOf(p, datatypeMap)
+        if (!ISZOps(wireTypes).contains(wt)) {
+          wireTypes = wireTypes :+ wt
+        }
+      }
+      if (wireTypes.size > 1) {
+        reporter.error(ports(0).posOpt, RosUtil.toolName,
+          st"""Ports bound to topic '${topic}' disagree on message type: ${(wireTypes, ", ")}.
+              |ROS matches endpoints by (topic, type), so these would never communicate.""".render)
+      }
+
+      val writers: ISZ[ISZ[String]] = ISZOps(members).filter(m => portOf.get(m).get.direction == Direction.Out)
+
+      // 2. data-port fan-in -- several writers over a single logical value is nondeterministic
+      // last-write-wins.  Event and event-data topics are multi-writer by design, so they are fine.
+      if (writers.size > 1 && ISZOps(ports).exists(p => p.isInstanceOf[AadlDataPort])) {
+        reporter.error(ports(0).posOpt, RosUtil.toolName,
+          st"""Topic '${topic}' has ${writers.size} writers with data port semantics:
+              |${(for (w <- writers) yield st"  ${(w, ".")}", "\n")}
+              |A data port holds one logical value, so multiple writers make its value
+              |nondeterministic (last write wins).""".render)
+      }
+
+      // 3. informational: the effective graph exceeding the intended one is legitimate (that is
+      // how generated nodes join stock ones), so report the derived edges rather than flagging
+      for (w <- writers;
+           r <- members if portOf.get(r).get.direction == Direction.In && !modeled.contains((w, r))) {
+        reporter.info(portOf.get(w).get.posOpt, RosUtil.toolName,
+          st"""Topic '${topic}' induces a connection not declared in the model:
+              |${(w, ".")} -> ${(r, ".")}.  Declaring it would let the static checks and
+              |contract composition see this edge.""".render)
+      }
+    }
+  }
+
+  // connectionMap is keyed by the anchor end, which invertTopicBinding flips; normalize to
+  // (out port path, in port path) pairs so callers do not have to care which way it is keyed
+  def normalizedEdges(connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
+                      invertTopicBinding: B): ISZ[(ISZ[String], ISZ[String])] = {
+    var edges: ISZ[(ISZ[String], ISZ[String])] = ISZ()
+    for (entry <- connectionMap.entries;
+         peer <- entry._2) {
+      edges = edges :+ (if (invertTopicBinding) (peer, entry._1) else (entry._1, peer))
+    }
+    return edges
+  }
+
+  // The C type rosidl generates for a sequence of this element type, or None() when codegen has
+  // no name for it (a nested message or an enum, which needs its own struct rather than a scalar
+  // backing array).
+  def cSequenceElementType(baseType: AadlType): Option[String] = {
+    baseType.name match {
+      case "Base_Types::Boolean" => return Some("bool")
+      case "Base_Types::Character" => return Some("signed char")
+      case "Base_Types::Integer_8" => return Some("int8_t")
+      case "Base_Types::Integer_16" => return Some("int16_t")
+      case "Base_Types::Integer_32" => return Some("int32_t")
+      case "Base_Types::Integer_64" => return Some("int64_t")
+      case "Base_Types::Integer" => return Some("int64_t")
+      case "Base_Types::Unsigned_8" => return Some("uint8_t")
+      case "Base_Types::Unsigned_16" => return Some("uint16_t")
+      case "Base_Types::Unsigned_32" => return Some("uint32_t")
+      case "Base_Types::Unsigned_64" => return Some("uint64_t")
+      case "Base_Types::Float_32" => return Some("float")
+      case "Base_Types::Float" => return Some("double")
+      case "Base_Types::Float_64" => return Some("double")
+      case _ => return None()
+    }
+  }
+
+  // The mirror's bounded array fields of a message type, as (field name, C element type,
+  // capacity).  These are the numbers micro-ROS needs: the mirror's size projection ("the model
+  // assumes at most 8 axes") and the receive buffer's capacity must be the same value, or
+  // contracts touching the tail elements are vacuous.
+  //
+  // Only top-level fields are walked.  Nested messages would need their own storage, and an
+  // opaque mirror has no fields to derive anything from -- both are reported by
+  // validateMicroRosCapacities rather than guessed at.
+  def mirrorSequenceFields(aadlType: AadlType): ISZ[(String, String, Z)] = {
+    var fields: ISZ[(String, String, Z)] = ISZ()
+    aadlType match {
+      case r: RecordType =>
+        for (entry <- r.fields.entries) {
+          entry._2 match {
+            case a: ArrayType if a.dimensions.size == 1 && a.dimensions(0) > 0 =>
+              cSequenceElementType(a.baseType) match {
+                case Some(cType) => fields = fields :+ ((entry._1, cType, a.dimensions(0)))
+                case _ =>
+              }
+            case _ =>
+          }
+        }
+      case _ =>
+    }
+    return fields
+  }
+
+  // The type a port's messages appear as on the wire.  Comparing these rather than AadlTypes is
+  // what matters for topic compatibility: distinct model types can map onto the same ROS message.
+  def wireTypeOf(port: AadlPort, datatypeMap: Map[AadlType, Ros2Datatype]): String = {
+    portAadlTypeOpt(port) match {
+      case Some(aadlType) =>
+        datatypeMap.get(aadlType) match {
+          case Some(dtype) =>
+            dtype.nativePackageOpt match {
+              case Some(nativePackage) => return s"${nativePackage}/msg/${dtype.name}"
+              case _ => return dtype.name
+            }
+          case _ => return aadlType.name
+        }
+      // event ports carry no payload; they all ride the generated Empty message
+      case _ => return "<event>"
+    }
+  }
+
+  // Resolves every port's topic bindings from the model, replacing the path-derived default
+  // wherever Ros_Topic_Name is modeled.
+  //
+  // A topic is a property of the *edge*, not of one port: an explicit name on either endpoint
+  // governs both ends, so a connected peer that declares nothing still follows its partner rather
+  // than falling back to its own path-derived name (which would silently sever the edge).  The
+  // declaring end keeps its literal string -- rcl expands a relative name against that node's own
+  // namespace -- while the peer is bound to the resolved absolute form, since the same relative
+  // string under the peer's namespace would name a different topic.
+  def resolveTopicBindings(threads: ISZ[AadlThread],
+                           connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
+                           invertTopicBinding: B,
+                           reporter: Reporter): Map[ISZ[String], ISZ[String]] = {
+    var portOf: Map[ISZ[String], AadlPort] = Map.empty
+    var namespaceOf: Map[ISZ[String], String] = Map.empty
+    for (thread <- threads;
+         port <- thread.getPorts()) {
+      portOf = portOf + (port.path.toISZ ~> port)
+      namespaceOf = namespaceOf + (port.path.toISZ ~> RosUtil.getRosNamespace(thread))
+    }
+
+    val edges = normalizedEdges(connectionMap, invertTopicBinding)
+
+    var bindings: Map[ISZ[String], ISZ[String]] = Map.empty
+
+    def bind(portPath: ISZ[String], topic: String): Unit = {
+      val existing: ISZ[String] = bindings.get(portPath) match {
+        case Some(ts) => ts
+        case _ => ISZ()
+      }
+      if (!ISZOps(existing).contains(topic)) {
+        bindings = bindings + (portPath ~> (existing :+ topic))
+      }
+    }
+
+    var connected: Set[ISZ[String]] = Set.empty
+
+    for (edge <- edges) {
+      val (outPath, inPath) = edge
+      connected = connected + outPath + inPath
+
+      val explicitOut: Option[String] = portOf.get(outPath) match {
+        case Some(p) => RosUtil.getExplicitTopicName(p)
+        case _ => None()
+      }
+      val explicitIn: Option[String] = portOf.get(inPath) match {
+        case Some(p) => RosUtil.getExplicitTopicName(p)
+        case _ => None()
+      }
+
+      (explicitOut, explicitIn) match {
+        case (Some(outName), Some(inName)) =>
+          // the model asserts these ports communicate and simultaneously configures them not to
+          if (RosUtil.absolutizeTopicName(outName, namespaceOf.get(outPath).get) !=
+              RosUtil.absolutizeTopicName(inName, namespaceOf.get(inPath).get)) {
+            val posOpt: Option[Position] = portOf.get(outPath) match {
+              case Some(p) => p.posOpt
+              case _ => None()
+            }
+            reporter.error(posOpt, RosUtil.toolName,
+              st"""Connected ports declare different ${Hamr_Ros_Properties.HAMR_ROS__Ros_Topic_Name} values,
+                  |so the model both asserts they communicate and configures them not to:
+                  |  ${(outPath, ".")} publishes to '${outName}'
+                  |  ${(inPath, ".")} subscribes to '${inName}'""".render)
+          }
+          bind(outPath, outName)
+          bind(inPath, inName)
+        case (Some(outName), _) =>
+          bind(outPath, outName)
+          bind(inPath, RosUtil.absolutizeTopicName(outName, namespaceOf.get(outPath).get))
+        case (_, Some(inName)) =>
+          bind(inPath, inName)
+          bind(outPath, RosUtil.absolutizeTopicName(inName, namespaceOf.get(inPath).get))
+        case _ =>
+          // no explicit name anywhere on the edge: today's path-derived default, which already
+          // unifies the edge by anchoring on one end
+          val defaultTopic: String =
+            if (invertTopicBinding) getPortNames(ISZ(outPath))(0) else getPortNames(ISZ(inPath))(0)
+          bind(outPath, defaultTopic)
+          bind(inPath, defaultTopic)
+      }
+    }
+
+    // unconnected ports still get a topic -- that is what lets non-generated components join
+    for (thread <- threads;
+         port <- thread.getPorts() if !connected.contains(port.path.toISZ)) {
+      RosUtil.getExplicitTopicName(port) match {
+        case Some(name) => bind(port.path.toISZ, name)
+        case _ =>
+      }
+    }
+
+    return bindings
+  }
+
+  // The payload type carried by the given port, or None() for ports that carry no data
+  @strictpure def portAadlTypeOpt(port: AadlPort): Option[AadlType] =
+    port match {
+      case dp: AadlDataPort => Some(dp.aadlType)
+      case edp: AadlEventDataPort => Some(edp.aadlType)
+      case _ => None()
+    }
+
+  // True when the port's payload is a platform-provided type.  Codegen generates no
+  // MESSAGE_TO_STRING printer for such a payload (the model's mirror fields are projections
+  // rather than the native type's layout), so generated example code must not try to render it.
+  @strictpure def isPlatformProvidedPayload(port: AadlPort): B =
+    portAadlTypeOpt(port) match {
+      case Some(aadlType) => RosUtil.isPlatformProvided(aadlType)
+      case _ => F
+    }
+
+  // The example "Received <port>" log line emitted into generated user code.  msgExpr is the
+  // C++ expression holding the message; a platform-provided payload has no printer, so only
+  // the port name is logged.
+  @strictpure def genCppReceivedLog(port: AadlPort, msgExpr: String): ST =
+    if (isPlatformProvidedPayload(port)) st"""PRINT_INFO("Received ${port.identifier}");"""
+    else st"""PRINT_INFO("Received ${port.identifier}: %s", MESSAGE_TO_STRING(${msgExpr}));"""
+
+  // The example "Sent <port>" log line emitted into generated micro-ROS user code; as with
+  // genCppReceivedLog, a platform-provided payload is logged by port name only.
+  @strictpure def genCSentLog(port: AadlPort): ST =
+    if (isPlatformProvidedPayload(port)) st"""PRINT_INFO("Sent ${port.identifier}");"""
+    else st"""PRINT_INFO("Sent ${port.identifier}: %s", MESSAGE_TO_STRING(&${port.identifier}));"""
+
+  // The native ROS packages that the given threads' ports depend on -- i.e. the packages
+  // supplying their platform-provided payload types.  These become build/runtime dependencies
+  // of the generated node packages, so the walk follows generated code: an infrastructure-
+  // realized port contributes nothing, since no generated code names its payload type.
+  def getNativePackages(threadComponents: ISZ[AadlThread], datatypeMap: Map[AadlType, Ros2Datatype]): ISZ[String] = {
+    var packages: ISZ[String] = IS()
+    for (comp <- threadComponents;
+         port <- generatedPorts(comp)) {
+      portAadlTypeOpt(port) match {
+        case Some(aadlType) =>
+          datatypeMap.get(aadlType) match {
+            case Some(dtype) =>
+              dtype.nativePackageOpt match {
+                case Some(nativePackage) =>
+                  if (!ISZOps(packages).contains(nativePackage)) {
+                    packages = packages :+ nativePackage
+                  }
+                case _ =>
+              }
+            case _ =>
+          }
+        case _ =>
+      }
+    }
+    return packages
   }
 
   def formatDatatypeForInclude(datatype: String): String = {
@@ -273,8 +631,8 @@ object Generator {
   //             https://github.com/santoslab/ros-examples/blob/main/tempControlcpp_ws/src/tc_cpp_pkg/package.xml
   //================================================
 
-  def genCppCMakeListsEntryPointDecl(modelName: String,
-                                     componentName: String, hasEnumConverter: B): ST = {
+  def genCppCMakeListsEntryPointDecl(modelName: String, componentName: String, hasEnumConverter: B,
+                                     nativePackages: ISZ[String]): ST = {
     val node_executable_file_nameT = genExecutableFileName(componentName)
 
     var source_files: ISZ[String] = IS()
@@ -286,7 +644,7 @@ object Generator {
       source_files = source_files :+s"src/base_code/enum_converter.cpp"
     }
 
-    val packages: ISZ[String] = IS(s"${genCppPackageName(modelName)}_interfaces")
+    val packages: ISZ[String] = ISZ[String](s"${genCppPackageName(modelName)}_interfaces") ++ nativePackages
 
     val entryPointDecl: ST =
       st"""add_executable(${node_executable_file_nameT} ${(source_files, " ")})
@@ -296,7 +654,8 @@ object Generator {
 
   //  Setup file for node source package
   //    Example: https://github.com/santoslab/ros-examples/blob/main/tempControlcpp_ws/src/tc_cpp_pkg/CMakeLists.txt
-  def genCppCMakeListsFile(modelName: String, threadComponents: ISZ[AadlThread], hasEnumConverter: B): (ISZ[String], ST, B, ISZ[Marker]) = {
+  def genCppCMakeListsFile(modelName: String, threadComponents: ISZ[AadlThread], hasEnumConverter: B,
+                           nativePackages: ISZ[String]): (ISZ[String], ST, B, ISZ[Marker]) = {
     val top_level_package_nameT: String = genCppPackageName(modelName)
     val fileName: String = "CMakeLists.txt"
 
@@ -305,12 +664,12 @@ object Generator {
     var entry_point_executables: ISZ[String] = IS()
     for (comp <- threadComponents) {
       entry_point_decls =
-        entry_point_decls :+ genCppCMakeListsEntryPointDecl(modelName, genNodeName(comp), hasEnumConverter)
+        entry_point_decls :+ genCppCMakeListsEntryPointDecl(modelName, genNodeName(comp), hasEnumConverter, nativePackages)
       entry_point_executables =
         entry_point_executables :+ genExecutableFileName(genNodeName(comp))
     }
 
-    val packages: ISZ[String] = IS(s"${top_level_package_nameT}_interfaces")
+    val packages: ISZ[String] = ISZ[String](s"${top_level_package_nameT}_interfaces") ++ nativePackages
     val pkgRequirements: ISZ[ST] = genCMakeListsPkgRequirements(packages)
 
     val marker = BlockMarker(
@@ -357,7 +716,7 @@ object Generator {
 
   //  Setup file for node source package
   //    Example: https://github.com/santoslab/ros-examples/blob/main/tempControlcpp_ws/src/tc_cpp_pkg/package.xml
-  def genCppPackageFile(modelName: String): (ISZ[String], ST, B, ISZ[Marker]) = {
+  def genCppPackageFile(modelName: String, nativePackages: ISZ[String]): (ISZ[String], ST, B, ISZ[Marker]) = {
     val top_level_package_nameT: String = genCppPackageName(modelName)
     val fileName: String = "package.xml"
 
@@ -369,7 +728,7 @@ object Generator {
       optEndSuffix = Some("-->")
     )
 
-    val packages: ISZ[String] = IS(s"${top_level_package_nameT}_interfaces")
+    val packages: ISZ[String] = ISZ[String](s"${top_level_package_nameT}_interfaces") ++ nativePackages
     val pkgDependencies: ISZ[ST] = genPackageFilePkgDependencies(packages)
 
     val setupFileBody =
@@ -442,9 +801,16 @@ object Generator {
     return (filePath, setupFileBody, T, IS())
   }
 
-  def genLaunchPackageFile(modelName: String): (ISZ[String], ST, B, ISZ[Marker]) = {
+  // execDepends are the ROS packages supplying platform-provided components, so that
+  // `rosdep install` pulls the stock nodes the launch file starts -- the component-level analog
+  // of the interfaces-package dependency for platform-provided types.
+  def genLaunchPackageFile(modelName: String, execDepends: ISZ[String]): (ISZ[String], ST, B, ISZ[Marker]) = {
     val top_level_package_nameT: String = genCppPackageName(modelName)
     val fileName: String = "package.xml"
+    val nativeExecDepends: ST =
+      if (execDepends.isEmpty) st""
+      else st"""
+               |${(for (d <- execDepends) yield st"<exec_depend>${d}</exec_depend>", "\n")}"""
 
     val marker = BlockMarker(
       id = "Additions within these tags will be preserved when re-running Codegen",
@@ -468,7 +834,7 @@ object Generator {
           |
           |    <buildtool_depend>ament_cmake</buildtool_depend>
           |
-          |    <exec_depend>${top_level_package_nameT}</exec_depend>
+          |    <exec_depend>${top_level_package_nameT}</exec_depend>${nativeExecDepends}
           |
           |    ${marker.beginMarker}
           |
@@ -514,11 +880,17 @@ object Generator {
                                 top_level_package_nameT: String,
                                 component: AadlThread): ST = {
     val node_executable_file_nameT = genExecutableFileName(genNodeName(component))
+    var args: ISZ[ST] = ISZ(
+      st"""package = "${top_level_package_nameT}"""",
+      st"""executable = "${node_executable_file_nameT}"""")
+    RosUtil.getRosNamespace(component) match {
+      case string"" =>
+      case ns => args = args :+ st"""namespace = "${ns}""""
+    }
     val s =
       st"""
           |${launch_node_decl_nameT} = Node(
-          |   package = ${top_level_package_nameT},
-          |   executable = ${node_executable_file_nameT}
+          |   ${(args, ",\n")}
           |   )
         """
     return s
@@ -578,10 +950,52 @@ object Generator {
     val node_executable_file_nameT = genExecutableFileName(genNodeName(thread))
     val s =
       st"""
-          |<node pkg="${top_level_package_nameT}" exec="${node_executable_file_nameT}">
+          |<node pkg="${top_level_package_nameT}" exec="${node_executable_file_nameT}"${genXmlLaunchNamespaceAttr(thread)}>
           |</node>
         """
     return s
+  }
+
+  @strictpure def genXmlLaunchNamespaceAttr(thread: AadlThread): String =
+    RosUtil.getRosNamespace(thread) match {
+      case string"" => ""
+      case ns => s" namespace=\"${ns}\""
+    }
+
+  // The launch entry for a platform-provided component.  Nothing else is generated for it, so
+  // every field is derived from the model: package/executable from the classifier (or
+  // Native_Name), node name from the subcomponent usage name, namespace from Ros_Namespace.
+  //
+  // The body carries a preserved block for parameters, remappings and launch arguments.  Simple
+  // constant parameters could have been model properties, but launch-time dynamics
+  // (DeclareLaunchArgument and substitutions) are launch-language features that should not be
+  // shadowed in the model -- the node_options philosophy applied to the launch layer.
+  // The preserved block inside a platform-provided component's launch entry.  Built here rather
+  // than inline so the decl and the file's registered marker list cannot drift apart -- an
+  // unregistered marker is emitted as text but silently not preserved.
+  @strictpure def platformProvidedLaunchMarker(thread: AadlThread): BlockMarker =
+    BlockMarker(
+      id = s"Launch configuration for ${thread.identifier} -- additions here will be preserved when re-running Codegen",
+      beginPrefix = "<!--",
+      optBeginSuffix = Some("-->"),
+      endPrefix = "<!--",
+      optEndSuffix = Some("-->"))
+
+  def genXmlFormatPlatformProvidedNodeDecl(thread: AadlThread, reporter: Reporter): ST = {
+    val nodeName = thread.identifier
+    RosUtil.getNativeExecutable(thread, reporter) match {
+      case Some((nativePackage, nativeExecutable)) =>
+        val marker = platformProvidedLaunchMarker(thread)
+        return (
+          st"""
+              |<!-- realized by `ros2 run ${nativePackage} ${nativeExecutable}` -- no code is generated for it -->
+              |<node pkg="${nativePackage}" exec="${nativeExecutable}" name="${nodeName}"${genXmlLaunchNamespaceAttr(thread)}>
+              |    ${marker.beginMarker}
+              |    ${marker.endMarker}
+              |</node>
+            """)
+      case _ => return st""
+    }
   }
 
   // Generate system launch code (including a system launch file)
@@ -598,30 +1012,38 @@ object Generator {
   }
 
   def genXmlFormatLaunchDecls(component: AadlComponent, ros2PkgName: String,
-                             microrosPkgName: String, microRosThreadPaths: Set[ISZ[String]]): ISZ[ST] = {
+                             microrosPkgName: String, microRosThreadPaths: Set[ISZ[String]],
+                             reporter: Reporter): (ISZ[ST], ISZ[Marker]) = {
     var launch_decls: ISZ[ST] = IS()
+    var markers: ISZ[Marker] = IS()
 
     for (comp <- component.subComponents) {
       comp match {
+        case thread: AadlThread if RosUtil.isPlatformProvidedComponent(thread) =>
+          launch_decls = launch_decls :+ genXmlFormatPlatformProvidedNodeDecl(thread, reporter)
+          markers = markers :+ platformProvidedLaunchMarker(thread)
         case thread: AadlThread =>
           val pkgName: String = if (microRosThreadPaths.contains(thread.path.toISZ)) microrosPkgName else ros2PkgName
           launch_decls = launch_decls :+ genXmlFormatLaunchNodeDecl(pkgName, thread)
         case system: AadlSystem =>
           launch_decls = launch_decls :+ genXmlFormatLaunchSystemDecl(ros2PkgName, system)
         case process: AadlProcess =>
-          launch_decls = launch_decls ++ genXmlFormatLaunchDecls(process, ros2PkgName, microrosPkgName, microRosThreadPaths)
+          val (subDecls, subMarkers) = genXmlFormatLaunchDecls(process, ros2PkgName, microrosPkgName, microRosThreadPaths, reporter)
+          launch_decls = launch_decls ++ subDecls
+          markers = markers ++ subMarkers
         case _ =>
       }
     }
 
-    return launch_decls
+    return (launch_decls, markers)
   }
 
   // For example, see https://github.com/santoslab/ros-examples/blob/main/tempControl_ws/src/tc_bringup/launch/tc.launch.py
   // Creates a launch file for each system component in the model
   def genXmlFormatLaunchFiles(modelName: String, threadComponents: ISZ[AadlThread],
                               systemComponents: ISZ[AadlSystem],
-                              microRosThreads: ISZ[AadlThread]): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
+                              microRosThreads: ISZ[AadlThread],
+                              reporter: Reporter): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
     val ros2PkgName: String = genCppPackageName(modelName)
     val microrosPkgName: String = genMicroRosPackageName(modelName)
 
@@ -635,11 +1057,18 @@ object Generator {
     for (system <- systemComponents) {
       val fileName = genXmlLaunchFileName(system.identifier)
 
-      val launch_decls: ISZ[ST] = genXmlFormatLaunchDecls(system, ros2PkgName, microrosPkgName, microRosThreadPaths)
+      val (launch_decls, launchMarkers) = genXmlFormatLaunchDecls(system, ros2PkgName, microrosPkgName, microRosThreadPaths, reporter)
+
+      // A platform-provided component contributes a preserved block, which makes the whole file
+      // "regenerated except between markers" rather than wholly generated -- the resource writer
+      // requires the header to say so.
+      val header: String =
+        if (launchMarkers.nonEmpty) CommentTemplate.invertedMarkerComment_xml
+        else CommentTemplate.doNotEditComment_xml
 
       val launchFileBody: ST =
         if (microRosThreads.nonEmpty)
-          st"""${CommentTemplate.doNotEditComment_xml}
+          st"""${header}
               |
               |<launch>
               |    <!-- micro-ROS agent: bridges rmw_microxrcedds nodes to the ROS2 DDS world -->
@@ -649,7 +1078,7 @@ object Generator {
               |</launch>
           """
         else
-          st"""${CommentTemplate.doNotEditComment_xml}
+          st"""${header}
               |
               |<launch>
               |    ${(launch_decls, "\n")}
@@ -658,7 +1087,7 @@ object Generator {
 
       val filePath: ISZ[String] = IS("src", s"${ros2PkgName}_bringup", "launch", fileName)
 
-      launchFiles = launchFiles :+ (filePath, launchFileBody, T, IS())
+      launchFiles = launchFiles :+ (filePath, launchFileBody, T, launchMarkers)
     }
 
     return launchFiles
@@ -671,10 +1100,11 @@ object Generator {
   // ROS2 data/message types are defined in a "{package_name}_interfaces" package according to convention
   // The "Empty" datatype, which has no data fields, is used for event ports
 
-  def genMsgFiles(modelName: String, datatypeMap: Map[AadlType, (String, ISZ[String])]): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
+  def genMsgFiles(modelName: String, datatypeMap: Map[AadlType, Ros2Datatype]): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
     var msg_files: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
-    for (datatype <- datatypeMap.entries) {
-      msg_files = msg_files :+ genMsgFile(modelName, datatype._2._1, datatype._2._2)
+    // platform-provided types already exist on the target platform, so no .msg file is emitted
+    for (datatype <- datatypeMap.values if !datatype.isPlatformProvided) {
+      msg_files = msg_files :+ genMsgFile(modelName, datatype.name, datatype.content)
     }
     msg_files = msg_files :+ (ISZ("src", s"${genCppPackageName(modelName)}_interfaces", "msg", "Empty.msg"), st"${CommentTemplate.doNotEditComment_hash}", T, IS())
     return msg_files
@@ -693,12 +1123,12 @@ object Generator {
     return (filePath, fileBody, T, IS())
   }
 
-  def genInterfacesCMakeListsFile(modelName: String, datatypeMap: Map[AadlType, (String, ISZ[String])]): (ISZ[String], ST, B, ISZ[Marker]) = {
+  def genInterfacesCMakeListsFile(modelName: String, datatypeMap: Map[AadlType, Ros2Datatype]): (ISZ[String], ST, B, ISZ[Marker]) = {
     val top_level_package_nameT: String = genCppPackageName(modelName)
     val fileName: String = "CMakeLists.txt"
     var msgTypes: ISZ[String] = IS()
-    for (msg <- datatypeMap.valueSet.elements) {
-      msgTypes = msgTypes :+ s"msg/${msg._1}.msg"
+    for (msg <- datatypeMap.valueSet.elements if !msg.isPlatformProvided) {
+      msgTypes = msgTypes :+ s"msg/${msg.name}.msg"
     }
     msgTypes = msgTypes :+ s"msg/Empty.msg"
 
@@ -849,9 +1279,10 @@ object Generator {
   //    "temp_control_currentTemp",
   //     1,
   //     std::bind(&TempControl::handle_currentTemp, this, std::placeholders::_1));
-  def genCppTopicSubscription(inPort: AadlPort, nodeName: String, portType: String, outPortNames: ISZ[String]): ST = {
+  def genCppTopicSubscription(inPort: AadlPort, nodeName: String, portType: String, derivedTopicNames: ISZ[String]): ST = {
     val portName = genPortName(inPort)
     val handlerName = inPort.identifier
+    val outPortNames = subscriptionTopicNames(inPort, derivedTopicNames)
 
     var handler: ST = st""
     if (isEventPort(portType)) {
@@ -894,9 +1325,10 @@ object Generator {
     return fanPortCode
   }
 
-  def genCppTopicSubscriptionStrict(inPort: AadlPort, nodeName: String, portType: String, outPortNames: ISZ[String]): ST = {
+  def genCppTopicSubscriptionStrict(inPort: AadlPort, nodeName: String, portType: String, derivedTopicNames: ISZ[String]): ST = {
     val portName = genPortName(inPort)
     val handlerName = inPort.identifier
+    val outPortNames = subscriptionTopicNames(inPort, derivedTopicNames)
 
     val handler: ST = st"${nodeName}::accept_${handlerName}"
 
@@ -1008,8 +1440,9 @@ object Generator {
   //  temp_control_currentTemp_publisher_ = this->create_publisher<example_interfaces::msg::Int32>(
   //    "operator_interface_currentTemp",
   //     1);
-  def genCppTopicPublisher(outPort: AadlPort, portType: String, inPortNames: ISZ[String]): ST = {
+  def genCppTopicPublisher(outPort: AadlPort, portType: String, derivedTopicNames: ISZ[String]): ST = {
     val portName = genPortName(outPort)
+    val inPortNames = publisherTopicNames(outPort, derivedTopicNames)
 
     if (inPortNames.size == 1) {
       val inPortName = inPortNames.apply(0)
@@ -1212,7 +1645,7 @@ object Generator {
 
   def genCppSubscriptionHandlerSporadicWithExamples(inPort: AadlPort, nodeName: String, portType: String,
                                                     inDataPorts: ISZ[AadlPort], packageName: String,
-                                                    datatypeMap: Map[AadlType, (String, ISZ[String])],
+                                                    datatypeMap: Map[AadlType, Ros2Datatype],
                                                     reporter: Reporter): ST = {
     val handlerName = inPort.identifier
 
@@ -1224,7 +1657,7 @@ object Generator {
         exampleUsage =
           st"""${exampleUsage}
               |${dataPortType}::SharedPtr ${inDataPort.identifier} = get_${inDataPort.identifier}();
-              |PRINT_INFO("Received ${inDataPort.identifier}: %s", MESSAGE_TO_STRING(${inDataPort.identifier}));"""
+              |${genCppReceivedLog(inDataPort, inDataPort.identifier)}"""
       }
     }
 
@@ -1240,7 +1673,7 @@ object Generator {
       subscriptionHandlerHeader = st"""void ${nodeName}::handle_${handlerName}(const ${portType}::SharedPtr msg)
                                       |{
                                       |    // Handle ${handlerName} msg
-                                      |    PRINT_INFO("Received ${handlerName}: %s", MESSAGE_TO_STRING(msg));"""
+                                      |    ${genCppReceivedLog(inPort, "msg")}"""
     }
 
     if (inDataPorts.size > 0) {
@@ -1276,7 +1709,7 @@ object Generator {
       subscriptionHandlerHeader = st"""void ${nodeName}::handle_${handlerName}(const ${portType}::SharedPtr msg)
                                       |{
                                       |    // Handle ${handlerName} msg
-                                      |    PRINT_INFO("Received ${handlerName}: %s", MESSAGE_TO_STRING(msg));
+                                      |    ${genCppReceivedLog(inPort, "msg")}
                                       |}
                                     """
     }
@@ -1286,7 +1719,7 @@ object Generator {
 
   def genCppSubscriptionHandlerSporadicStrictWithExamples(inPort: AadlPort, nodeName: String, portType: String,
                                                           inDataPorts: ISZ[AadlPort], packageName: String,
-                                                          datatypeMap: Map[AadlType, (String, ISZ[String])],
+                                                          datatypeMap: Map[AadlType, Ros2Datatype],
                                                           reporter: Reporter): ST = {
     val handlerName = inPort.identifier
 
@@ -1298,7 +1731,7 @@ object Generator {
         exampleUsage =
           st"""${exampleUsage}
               |${dataPortType} ${inDataPort.identifier} = get_${inDataPort.identifier}();
-              |PRINT_INFO("Received ${inDataPort.identifier}: %s", MESSAGE_TO_STRING(${inDataPort.identifier}));"""
+              |${genCppReceivedLog(inDataPort, inDataPort.identifier)}"""
       }
     }
 
@@ -1313,7 +1746,7 @@ object Generator {
       subscriptionHandlerHeader = st"""void ${nodeName}::handle_${handlerName}(const ${portType} msg)
                                       |{
                                       |    // Handle ${handlerName} msg
-                                      |    PRINT_INFO("Received ${handlerName}: %s", MESSAGE_TO_STRING(msg));"""
+                                      |    ${genCppReceivedLog(inPort, "msg")}"""
     }
 
     if (inDataPorts.size > 0) {
@@ -1347,7 +1780,7 @@ object Generator {
       subscriptionHandlerHeader = st"""void ${nodeName}::handle_${handlerName}(const ${portType} msg)
                                       |{
                                       |    // Handle ${handlerName} msg
-                                      |    PRINT_INFO("Received ${handlerName}: %s", MESSAGE_TO_STRING(msg));
+                                      |    ${genCppReceivedLog(inPort, "msg")}
                                       |}
                                     """
     }
@@ -1366,7 +1799,7 @@ object Generator {
   }
 
   def genCppExamplePublisher(outPort: AadlPort, packageName: String,
-                                   datatypeMap: Map[AadlType, (String, ISZ[String])],
+                                   datatypeMap: Map[AadlType, Ros2Datatype],
                                    reporter: Reporter): ST = {
     val handlerName = outPort.identifier
     val dataPortType: String = genPortDatatype(outPort, packageName, datatypeMap, reporter)
@@ -1688,7 +2121,7 @@ object Generator {
   }
 
   def genCppTimeTriggeredMethod(nodeName: String, inDataPorts: ISZ[AadlPort], examplePublishers: ISZ[ST],
-                                packageName: String, datatypeMap: Map[AadlType, (String, ISZ[String])],
+                                packageName: String, datatypeMap: Map[AadlType, Ros2Datatype],
                                 strictAADLMode: B, reporter: Reporter): ST = {
     var exampleUsage: ST = st""
     if (inDataPorts.size > 0) {
@@ -1700,13 +2133,13 @@ object Generator {
           exampleUsage =
             st"""${exampleUsage}
                 |${dataPortType} ${inDataPort.identifier} = get_${inDataPort.identifier}();
-                |PRINT_INFO("Received ${inDataPort.identifier}: %s", MESSAGE_TO_STRING(${inDataPort.identifier}));"""
+                |${genCppReceivedLog(inDataPort, inDataPort.identifier)}"""
         }
         else {
           exampleUsage =
             st"""${exampleUsage}
                 |${dataPortType}::SharedPtr ${inDataPort.identifier} = get_${inDataPort.identifier}();
-                |PRINT_INFO("Received ${inDataPort.identifier}: %s", MESSAGE_TO_STRING(${inDataPort.identifier}));"""
+                |${genCppReceivedLog(inDataPort, inDataPort.identifier)}"""
         }
       }
     }
@@ -1852,7 +2285,7 @@ object Generator {
 
 
   def genCppBaseNodeHeaderFile(packageName: String, component: AadlThread, connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
-                               datatypeMap: Map[AadlType, (String, ISZ[String])], hasEnumConverter: B,
+                               datatypeMap: Map[AadlType, Ros2Datatype], hasEnumConverter: B,
                                strictAADLMode: B, invertTopicBinding: B,
                                reporter: Reporter): (ISZ[String], ST, B, ISZ[Marker]) = {
     val nodeName = s"${genNodeName(component)}_base"
@@ -1871,7 +2304,7 @@ object Generator {
     var dataPortInitializerHeaders: ISZ[ST] = IS()
     var msgToStringMacro: ST = st""
 
-    for (p <- component.getPorts()) {
+    for (p <- generatedPorts(component)) {
       val portDatatype: String = genPortDatatype(p, packageName, datatypeMap, reporter)
       if (!ISZOps(msgTypes).contains(portDatatype)) {
         msgTypes = msgTypes :+ portDatatype
@@ -2195,7 +2628,7 @@ object Generator {
   }
 
   def genCppBaseNodeCppFile(packageName: String, component: AadlThread, connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
-                            datatypeMap: Map[AadlType, (String, ISZ[String])], strictAADLMode: B,
+                            datatypeMap: Map[AadlType, Ros2Datatype], strictAADLMode: B,
                             invertTopicBinding: B, reporter: Reporter): (ISZ[String], ST, B, ISZ[Marker]) = {
     val nodeName = s"${genNodeName(component)}_base"
     val fileName = genCppNodeSourceName(nodeName)
@@ -2215,7 +2648,7 @@ object Generator {
     var strictSubscriptionHandlerBaseMethods: ISZ[ST] = IS()
 
     var hasInPorts = F
-    for (p <- component.getPorts()) {
+    for (p <- generatedPorts(component)) {
       val portDatatype: String = genPortDatatype(p, packageName, datatypeMap, reporter)
       if (strictAADLMode) {
         if (p.direction == Direction.In) {
@@ -2344,7 +2777,7 @@ object Generator {
           |
           |${CommentTemplate.doNotEditComment_slash}
           |
-          |${nodeName}::${nodeName}() : Node("${genNodeName(component)}")
+          |${nodeName}::${nodeName}() : Node(${genCppNodeCtorArgs(component)})
           |{
           |    ${genCppCallbackGroupVar()}"""
 
@@ -2476,14 +2909,14 @@ object Generator {
     return (filePath, fileBody, T, IS())
   }
 
-  def genCppUserNodeHeaderFile(packageName: String, component: AadlThread, datatypeMap: Map[AadlType, (String, ISZ[String])],
+  def genCppUserNodeHeaderFile(packageName: String, component: AadlThread, datatypeMap: Map[AadlType, Ros2Datatype],
                                strictAADLMode: B, reporter: Reporter): (ISZ[String], ST, B, ISZ[Marker]) = {
     val nodeName = genNodeName(component)
     val fileName = genCppNodeSourceHeaderName(nodeName)
 
     var subscriptionHandlers: ISZ[ST] = IS()
     if (isSporadic(component)) {
-      for (p <- component.getPorts()) {
+      for (p <- generatedPorts(component)) {
         val portDatatype: String = genPortDatatype(p, packageName, datatypeMap, reporter)
         if (p.direction == Direction.In && !p.isInstanceOf[AadlDataPort]) {
           if (strictAADLMode) {
@@ -2549,14 +2982,14 @@ object Generator {
     return (filePath, fileBody, T, IS(marker))
   }
 
-  def genCppUserNodeCppFile(packageName: String, component: AadlThread, datatypeMap: Map[AadlType, (String, ISZ[String])],
+  def genCppUserNodeCppFile(packageName: String, component: AadlThread, datatypeMap: Map[AadlType, Ros2Datatype],
                             hasConverterFiles: B, strictAADLMode: B, reporter: Reporter): (ISZ[String], ST, B, ISZ[Marker]) = {
     val nodeName = genNodeName(component)
     val fileName = genCppNodeSourceName(nodeName)
     var examplePublishers: ISZ[ST] = IS()
     var inDataPorts: ISZ[AadlPort] = IS()
 
-    for (p <- component.getPorts()) {
+    for (p <- generatedPorts(component)) {
       if (p.direction == Direction.Out) {
         examplePublishers = examplePublishers :+ genCppExamplePublisher(p, packageName, datatypeMap, reporter)
       }
@@ -2569,7 +3002,7 @@ object Generator {
     if (isSporadic(component)) {
       var firstSubscriptionHandler: B = true
 
-      for (p <- component.getPorts()) {
+      for (p <- generatedPorts(component)) {
         val portDatatype: String = genPortDatatype(p, packageName, datatypeMap, reporter)
         if (p.direction == Direction.In && !p.isInstanceOf[AadlDataPort]) {
           if (strictAADLMode) {
@@ -2649,7 +3082,7 @@ object Generator {
   }
 
   def genCppUserDataPortInitializers(inDataPorts: ISZ[AadlPort], packageName: String,
-                                           datatypeMap: Map[AadlType, (String, ISZ[String])], reporter: Reporter): ISZ[ST] = {
+                                           datatypeMap: Map[AadlType, Ros2Datatype], reporter: Reporter): ISZ[ST] = {
     var initializers: ISZ[ST] = IS()
 
     for (p <- inDataPorts) {
@@ -2701,7 +3134,7 @@ object Generator {
   }
 
   def genCppNodeFiles(modelName: String, threadComponents: ISZ[AadlThread], connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
-                      datatypeMap: Map[AadlType, (String, ISZ[String])], hasConverterFiles: B, strictAADLMode: B,
+                      datatypeMap: Map[AadlType, Ros2Datatype], hasConverterFiles: B, strictAADLMode: B,
                       invertTopicBinding: B, reporter: Reporter): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
     val top_level_package_nameT: String = genCppPackageName(modelName)
 
@@ -2800,14 +3233,14 @@ object Generator {
     return (filePath, fileBody, T, IS())
   }
 
-  def genCppEnumConverterFiles(modelName: String, datatypeMap: Map[AadlType, (String, ISZ[String])],
+  def genCppEnumConverterFiles(modelName: String, datatypeMap: Map[AadlType, Ros2Datatype],
                                strictAADLMode: B): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
     var enumTypes: ISZ[(String, AadlType)] = IS()
 
-    for (key <- datatypeMap.keys) {
+    for (key <- datatypeMap.keys if !datatypeMap.get(key).get.isPlatformProvided) {
       key match {
         case _: EnumType =>
-          val datatype: String = datatypeMap.get(key).get._2.apply(0)
+          val datatype: String = datatypeMap.get(key).get.content.apply(0)
           val datatypeName: String = StringOps(datatype).substring(StringOps(datatype).indexOf(' ') + 1, datatype.size)
           enumTypes = enumTypes :+ (datatypeName, key)
         case x =>
@@ -2842,18 +3275,34 @@ object Generator {
     return files
   }
 
-  def genPyLaunchPkg(modelName: String, threadComponents: ISZ[AadlThread]): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
+  // KNOWN GAP: this emits the bringup package but no launch file, so selecting the Python launch
+  // language yields a bringup package with nothing to launch -- and Python is the codegen CLI's
+  // default (HamrCli's ros2LaunchLanguage), so that is what an unqualified invocation produces.
+  // The XML path (genXmlFormatLaunchFiles) is the working one.
+  //
+  // Wiring genPyFormatLaunchFile in below is not sufficient on its own.  It is currently dead
+  // code -- its only other caller, genPyNodePkg, is unreachable because Ros2Codegen handles only
+  // ros2NodesLanguage == Cpp -- and it needs three fixes first:
+  //   - its output path is src/<modelName>_bringup/... whereas the bringup package files above
+  //     land in src/<cppPkgName>_bringup/..., so the launch file would not be inside its package;
+  //   - micro-ROS threads are not passed in (Ros2Codegen calls this with ros2Threads only), and
+  //     the XML version additionally emits the micro_ros_agent <executable> entry a mixed model
+  //     needs to run at all;
+  //   - Ros_Namespace is honored by genPyFormatLaunchNodeDecl but not by GeneratorPy's copy.
+  // Ros2TestUtil no longer pins the launch language, so a test can select Python once this works.
+  def genPyLaunchPkg(modelName: String, threadComponents: ISZ[AadlThread],
+                     reporter: Reporter): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
     var files: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
 
-    //files = files :+ genXmlFormatLaunchFile(modelName, threadComponents)
     files = files :+ genLaunchCMakeListsFile(modelName)
-    files = files :+ genLaunchPackageFile(modelName)
+    // the bringup package declares its stock-node dependencies regardless of launch format
+    files = files :+ genLaunchPackageFile(modelName, getNativeExecPackages(threadComponents, reporter))
 
     return files
   }
 
   def genCppNodePkg(modelName: String, threadComponents: ISZ[AadlThread], connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
-                    datatypeMap: Map[AadlType, (String, ISZ[String])], strictAADLMode: B, invertTopicBinding: B,
+                    datatypeMap: Map[AadlType, Ros2Datatype], strictAADLMode: B, invertTopicBinding: B,
                     reporter: Reporter): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
     var files: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = ISZ()
 
@@ -2865,19 +3314,37 @@ object Generator {
                       invertTopicBinding, reporter)
     files = files ++ converterFiles
     files = files :+ genCppExampleTypesFile(modelName, datatypeMap)
-    files = files :+ genCppCMakeListsFile(modelName, threadComponents, hasConverterFiles)
-    files = files :+ genCppPackageFile(modelName)
+
+    // the packages supplying the platform-provided payload types the nodes use
+    val nativePackages: ISZ[String] = getNativePackages(threadComponents, datatypeMap)
+    files = files :+ genCppCMakeListsFile(modelName, threadComponents, hasConverterFiles, nativePackages)
+    files = files :+ genCppPackageFile(modelName, nativePackages)
 
     return files
   }
 
+  // The distinct ROS packages supplying the platform-provided components among the given threads
+  def getNativeExecPackages(threadComponents: ISZ[AadlThread], reporter: Reporter): ISZ[String] = {
+    var packages: ISZ[String] = ISZ()
+    for (thread <- threadComponents if RosUtil.isPlatformProvidedComponent(thread)) {
+      RosUtil.getNativeExecutable(thread, reporter) match {
+        case Some((nativePackage, _)) =>
+          if (!ISZOps(packages).contains(nativePackage)) {
+            packages = packages :+ nativePackage
+          }
+        case _ =>
+      }
+    }
+    return packages
+  }
+
   def genXmlLaunchPkg(modelName: String, threadComponents: ISZ[AadlThread], systemComponents: ISZ[AadlSystem],
-                     microRosThreads: ISZ[AadlThread]): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
+                     microRosThreads: ISZ[AadlThread], reporter: Reporter): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
     var files: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
 
-    files = files ++ genXmlFormatLaunchFiles(modelName, threadComponents, systemComponents, microRosThreads)
+    files = files ++ genXmlFormatLaunchFiles(modelName, threadComponents, systemComponents, microRosThreads, reporter)
     files = files :+ genLaunchCMakeListsFile(modelName)
-    files = files :+ genLaunchPackageFile(modelName)
+    files = files :+ genLaunchPackageFile(modelName, getNativeExecPackages(threadComponents, reporter))
 
     return files
   }
@@ -2934,18 +3401,15 @@ object Generator {
   // Returns "example_TypeName()" for RecordType ports, fallback otherwise.
   // fallback is e.g. "DataType()" for C++ or "{0}" for C.
   def portExampleInit(port: AadlPort, fallback: String,
-      datatypeMap: Map[AadlType, (String, ISZ[String])]): String = {
-    val aadlTypeOpt: Option[AadlType] = port match {
-      case dp: AadlDataPort => Some(dp.aadlType)
-      case edp: AadlEventDataPort => Some(edp.aadlType)
-      case _ => None()
-    }
-    aadlTypeOpt match {
+      datatypeMap: Map[AadlType, Ros2Datatype]): String = {
+    portAadlTypeOpt(port) match {
       case Some(aadlType) =>
         aadlType match {
           case _: RecordType =>
             datatypeMap.get(aadlType) match {
-              case Some((typeName, _)) => return s"example_${typeName}()"
+              // no example builder is generated for a platform-provided type: its fields are
+              // mirrors rather than a layout claim, so codegen cannot construct one
+              case Some(dtype) if !dtype.isPlatformProvided => return s"example_${dtype.name}()"
               case _ =>
             }
           case _ =>
@@ -2970,8 +3434,8 @@ object Generator {
   // Returns C field-init statements for a RecordType's fields, setting all to zero/first-enum-value.
   // accessPrefix ends with ".", e.g. "msg." or "msg.low."
   def genCExampleFieldInits(aadlType: AadlType, accessPrefix: String,
-      cppPkgName: String, datatypeMap: Map[AadlType, (String, ISZ[String])]): ISZ[ST] = {
-    val content: ISZ[String] = datatypeMap.get(aadlType).get._2
+      cppPkgName: String, datatypeMap: Map[AadlType, Ros2Datatype]): ISZ[ST] = {
+    val content: ISZ[String] = datatypeMap.get(aadlType).get.content
     val fieldLines: ISZ[String] = ISZOps(content).filter(line => !ops.StringOps(line).contains("="))
     var stmts: ISZ[ST] = IS()
     for (line <- fieldLines) {
@@ -2983,7 +3447,7 @@ object Generator {
         case Some(nestedType) =>
           nestedType match {
             case _: BaseType =>
-              val ros2Type = ops.StringOps(datatypeMap.get(nestedType).get._2(0)).split(c => c == ' ')(0)
+              val ros2Type = ops.StringOps(datatypeMap.get(nestedType).get.content(0)).split(c => c == ' ')(0)
               if (ros2Type == "string") {
                 // TODO: investigate replacing the default heap allocator with a static memory pool allocator
                 //       (e.g. via rcutils_allocator_t / micro_ros_utilities) to avoid malloc on embedded targets
@@ -2992,7 +3456,7 @@ object Generator {
                 stmts = stmts :+ st"${fieldAccess}.data = ${cBaseTypeZeroLiteral(ros2Type)};"
               }
             case et: EnumType =>
-              val enumContent = datatypeMap.get(nestedType).get._2
+              val enumContent = datatypeMap.get(nestedType).get.content
               val enumFieldLine = ISZOps(enumContent).filter(l => !ops.StringOps(l).contains("="))(0)
               val enumFieldName = ops.StringOps(enumFieldLine).split(c => c == ' ')(1)
               val firstConstLine = ISZOps(enumContent).filter(l => ops.StringOps(l).contains("="))(0)
@@ -3000,7 +3464,7 @@ object Generator {
               val enumCStructName = cppTypeToCStructName(st"${cppPkgName}_interfaces::msg::${et.simpleName}".render)
               stmts = stmts :+ st"${fieldAccess}.${enumFieldName} = ${enumCStructName}__${firstConst};"
             case _: RecordType =>
-              val simpleTypeName = datatypeMap.get(nestedType).get._1
+              val simpleTypeName = datatypeMap.get(nestedType).get.name
               stmts = stmts :+ st"${fieldAccess} = example_${simpleTypeName}();"
             case _ =>
           }
@@ -3012,8 +3476,8 @@ object Generator {
 
   // Returns C++ field-init statements for a RecordType's fields.
   def genCppExampleFieldInits(aadlType: AadlType, accessPrefix: String,
-      cppPkgName: String, datatypeMap: Map[AadlType, (String, ISZ[String])]): ISZ[ST] = {
-    val content: ISZ[String] = datatypeMap.get(aadlType).get._2
+      cppPkgName: String, datatypeMap: Map[AadlType, Ros2Datatype]): ISZ[ST] = {
+    val content: ISZ[String] = datatypeMap.get(aadlType).get.content
     val fieldLines: ISZ[String] = ISZOps(content).filter(line => !ops.StringOps(line).contains("="))
     var stmts: ISZ[ST] = IS()
     for (line <- fieldLines) {
@@ -3025,14 +3489,14 @@ object Generator {
         case Some(nestedType) =>
           nestedType match {
             case _: BaseType =>
-              val ros2Type = ops.StringOps(datatypeMap.get(nestedType).get._2(0)).split(c => c == ' ')(0)
+              val ros2Type = ops.StringOps(datatypeMap.get(nestedType).get.content(0)).split(c => c == ' ')(0)
               if (ros2Type == "string") {
                 stmts = stmts :+ st"""${fieldAccess}.data = "";"""
               } else {
                 stmts = stmts :+ st"${fieldAccess}.data = ${cBaseTypeZeroLiteral(ros2Type)};"
               }
             case et: EnumType =>
-              val enumContent = datatypeMap.get(nestedType).get._2
+              val enumContent = datatypeMap.get(nestedType).get.content
               val enumFieldLine = ISZOps(enumContent).filter(l => !ops.StringOps(l).contains("="))(0)
               val enumFieldName = ops.StringOps(enumFieldLine).split(c => c == ' ')(1)
               val firstConstLine = ISZOps(enumContent).filter(l => ops.StringOps(l).contains("="))(0)
@@ -3040,7 +3504,7 @@ object Generator {
               val enumCppType = st"${cppPkgName}_interfaces::msg::${et.simpleName}".render
               stmts = stmts :+ st"${fieldAccess}.${enumFieldName} = ${enumCppType}::${firstConst};"
             case _: RecordType =>
-              val simpleTypeName = datatypeMap.get(nestedType).get._1
+              val simpleTypeName = datatypeMap.get(nestedType).get.name
               stmts = stmts :+ st"${fieldAccess} = example_${simpleTypeName}();"
             case _ =>
           }
@@ -3051,7 +3515,7 @@ object Generator {
   }
 
   def genMicroRosExampleTypesFile(modelName: String, cppPkgName: String,
-      datatypeMap: Map[AadlType, (String, ISZ[String])]): (ISZ[String], ST, B, ISZ[Marker]) = {
+      datatypeMap: Map[AadlType, Ros2Datatype]): (ISZ[String], ST, B, ISZ[Marker]) = {
     val microrosPkgName = genMicroRosPackageName(modelName)
     val interfacesPkg = st"${cppPkgName}_interfaces".render
 
@@ -3059,10 +3523,12 @@ object Generator {
     var forwardDecls: ISZ[ST] = IS()
     var definitions: ISZ[ST] = IS()
 
-    for (key <- datatypeMap.keys) {
+    // platform-provided types are skipped: their fields are specification-level mirrors,
+    // so codegen cannot construct an example value of the native type
+    for (key <- datatypeMap.keys if !datatypeMap.get(key).get.isPlatformProvided) {
       key match {
         case _: RecordType =>
-          val typeName = datatypeMap.get(key).get._1
+          val typeName = datatypeMap.get(key).get.name
           val cppType = st"${interfacesPkg}::msg::${typeName}".render
           val cStructName = cppTypeToCStructName(cppType)
           includes = includes :+ st"#include \"${cppTypeToCHeaderPath(cppType)}\""
@@ -3100,7 +3566,7 @@ object Generator {
     return (filePath, fileBody, T, IS())
   }
 
-  def genCppExampleTypesFile(modelName: String, datatypeMap: Map[AadlType, (String, ISZ[String])]): (ISZ[String], ST, B, ISZ[Marker]) = {
+  def genCppExampleTypesFile(modelName: String, datatypeMap: Map[AadlType, Ros2Datatype]): (ISZ[String], ST, B, ISZ[Marker]) = {
     val packageName = genCppPackageName(modelName)
     val interfacesPkg = st"${packageName}_interfaces".render
 
@@ -3108,10 +3574,12 @@ object Generator {
     var forwardDecls: ISZ[ST] = IS()
     var definitions: ISZ[ST] = IS()
 
-    for (key <- datatypeMap.keys) {
+    // platform-provided types are skipped: their fields are specification-level mirrors,
+    // so codegen cannot construct an example value of the native type
+    for (key <- datatypeMap.keys if !datatypeMap.get(key).get.isPlatformProvided) {
       key match {
         case _: RecordType =>
-          val typeName = datatypeMap.get(key).get._1
+          val typeName = datatypeMap.get(key).get.name
           val cppType = st"${interfacesPkg}::msg::${typeName}".render
           includes = includes :+ st"#include \"${formatDatatypeForInclude(cppType)}.hpp\""
           forwardDecls = forwardDecls :+ st"static inline ${cppType} example_${typeName}();"
@@ -3153,8 +3621,8 @@ object Generator {
   // For EnumType: "enumToString(accessExpr)"
   // For RecordType: "\"TypeName{field1: \" << val1 << \", field2: \" << val2 << \"}\""
   def genCppOssChain(aadlType: AadlType, accessExpr: String, simpleTypeName: String,
-      datatypeMap: Map[AadlType, (String, ISZ[String])], hasEnumConverter: B): ST = {
-    val content: ISZ[String] = datatypeMap.get(aadlType).get._2
+      datatypeMap: Map[AadlType, Ros2Datatype], hasEnumConverter: B): ST = {
+    val content: ISZ[String] = datatypeMap.get(aadlType).get.content
     val fieldLines: ISZ[String] = ISZOps(content).filter(line => !ops.StringOps(line).contains("="))
     val r: ST = aadlType match {
       case _: BaseType =>
@@ -3194,24 +3662,21 @@ object Generator {
   // Generate inline _messageToString overloads for all data port types of the component.
   // Returns None if there are no data ports.
   def genCppMsgToStringBlock(component: AadlThread, packageName: String,
-      datatypeMap: Map[AadlType, (String, ISZ[String])], hasEnumConverter: B,
+      datatypeMap: Map[AadlType, Ros2Datatype], hasEnumConverter: B,
       reporter: Reporter): Option[ST] = {
     var seen: ISZ[String] = IS()
     var helpers: ISZ[ST] = IS()
-    for (p <- component.getPorts()) {
+    for (p <- generatedPorts(component)) {
       val portDatatype = genPortDatatype(p, packageName, datatypeMap, reporter)
       if (!isEventPort(portDatatype)) {
         if (!ISZOps(seen).contains(portDatatype)) {
           seen = seen :+ portDatatype
           val parts = cppTypeParts(portDatatype)
           val simpleTypeName = parts(parts.size - 1)
-          val aadlTypeOpt: Option[AadlType] = p match {
-            case dp: AadlDataPort => Some(dp.aadlType)
-            case edp: AadlEventDataPort => Some(edp.aadlType)
-            case _ => None()
-          }
-          aadlTypeOpt match {
-            case Some(rawType) =>
+          portAadlTypeOpt(p) match {
+            // no printer is generated for a platform-provided payload: the model's mirror
+            // fields (if any) are projections, not the native type's layout
+            case Some(rawType) if !RosUtil.isPlatformProvided(rawType) =>
               var aadlType = rawType
               for (key <- datatypeMap.keys) {
                 if (key.name == rawType.name) {
@@ -3270,9 +3735,9 @@ object Generator {
     }
   }
 
-  def lookupAadlTypeByRos2Name(name: String, datatypeMap: Map[AadlType, (String, ISZ[String])]): Option[AadlType] = {
+  def lookupAadlTypeByRos2Name(name: String, datatypeMap: Map[AadlType, Ros2Datatype]): Option[AadlType] = {
     for (entry <- datatypeMap.entries) {
-      if (entry._2._1 == name) {
+      if (entry._2.name == name) {
         return Some(entry._1)
       }
     }
@@ -3282,8 +3747,8 @@ object Generator {
   // Returns (printf format pattern, snprintf args) for the given AadlType.
   // accessPath ends with "->" (top-level pointer) or "." (nested struct value), e.g. "msg->" or "msg->degrees."
   def genCMsgFmtArgs(aadlType: AadlType, accessPath: String,
-      datatypeMap: Map[AadlType, (String, ISZ[String])], hasEnumConverter: B): (String, ISZ[String]) = {
-    val content: ISZ[String] = datatypeMap.get(aadlType).get._2
+      datatypeMap: Map[AadlType, Ros2Datatype], hasEnumConverter: B): (String, ISZ[String]) = {
+    val content: ISZ[String] = datatypeMap.get(aadlType).get.content
     val fieldLines: ISZ[String] = ISZOps(content).filter(line => !ops.StringOps(line).contains("="))
     val r: (String, ISZ[String]) = aadlType match {
       case _: BaseType =>
@@ -3330,7 +3795,7 @@ object Generator {
   // Generate a MESSAGE_TO_STRING macro block for the given out data ports.
   // Returns None if there are no data out ports.
   def genCMsgToStringBlock(outPorts: ISZ[AadlPort], cppPkgName: String,
-      datatypeMap: Map[AadlType, (String, ISZ[String])], hasEnumConverter: B,
+      datatypeMap: Map[AadlType, Ros2Datatype], hasEnumConverter: B,
       reporter: Reporter): Option[ST] = {
     var seen: ISZ[String] = IS()
     var helpers: ISZ[ST] = IS()
@@ -3344,13 +3809,10 @@ object Generator {
           val parts = cppTypeParts(portDatatype)
           val simpleTypeName = parts(parts.size - 1)
           val helperName = st"_MESSAGE_TO_STRING_${simpleTypeName}".render
-          val aadlTypeOpt: Option[AadlType] = p match {
-            case dp: AadlDataPort => Some(dp.aadlType)
-            case edp: AadlEventDataPort => Some(edp.aadlType)
-            case _ => None()
-          }
-          aadlTypeOpt match {
-            case Some(rawType) =>
+          portAadlTypeOpt(p) match {
+            // no printer is generated for a platform-provided payload: the model's mirror
+            // fields (if any) are projections, not the native type's layout
+            case Some(rawType) if !RosUtil.isPlatformProvided(rawType) =>
               var aadlType = rawType
               for (key <- datatypeMap.keys) {
                 if (key.name == rawType.name) {
@@ -3392,7 +3854,7 @@ object Generator {
   //================================================
 
   def genMicroRosPublisherStructFields(outPorts: ISZ[AadlPort], cppPkgName: String,
-                                      datatypeMap: Map[AadlType, (String, ISZ[String])],
+                                      datatypeMap: Map[AadlType, Ros2Datatype],
                                       connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
                                       invertTopicBinding: B, reporter: Reporter): ISZ[ST] = {
     var fields: ISZ[ST] = IS()
@@ -3414,7 +3876,7 @@ object Generator {
   }
 
   def genMicroRosPutFunctionDecls(outPorts: ISZ[AadlPort], nodeName: String, cppPkgName: String,
-                                  datatypeMap: Map[AadlType, (String, ISZ[String])],
+                                  datatypeMap: Map[AadlType, Ros2Datatype],
                                   reporter: Reporter): ISZ[ST] = {
     var decls: ISZ[ST] = IS()
     for (p <- outPorts) {
@@ -3431,7 +3893,7 @@ object Generator {
   }
 
   def genMicroRosSubscriberStructFields(inPorts: ISZ[AadlPort], cppPkgName: String,
-                                        datatypeMap: Map[AadlType, (String, ISZ[String])],
+                                        datatypeMap: Map[AadlType, Ros2Datatype],
                                         reporter: Reporter): ISZ[ST] = {
     var fields: ISZ[ST] = IS()
     for (p <- inPorts) {
@@ -3445,7 +3907,7 @@ object Generator {
   }
 
   def genMicroRosSubscriptionInits(inPorts: ISZ[AadlPort], cppPkgName: String,
-                                    datatypeMap: Map[AadlType, (String, ISZ[String])],
+                                    datatypeMap: Map[AadlType, Ros2Datatype],
                                     invertTopicBinding: B,
                                     connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
                                     reporter: Reporter): ISZ[ST] = {
@@ -3454,11 +3916,12 @@ object Generator {
       val portName = genPortName(p)
       val portDatatype = genPortDatatype(p, cppPkgName, datatypeMap, reporter)
       val rosidlSupport = cppTypeToROSIDLSupport(portDatatype)
-      val topicName: String =
+      val derivedTopicName: String =
         if (invertTopicBinding && connectionMap.get(p.path).nonEmpty)
           getPortNames(connectionMap.get(p.path).get)(0)
         else
           getPortNames(IS(p.path.toISZ))(0)
+      val topicName: String = subscriptionTopicNames(p, ISZ(derivedTopicName))(0)
       inits = inits :+
         st"""rclc_subscription_init_default(
             |    &self->${portName}_subscription,
@@ -3471,7 +3934,7 @@ object Generator {
   }
 
   def genMicroRosHandleForwardDecls(inPorts: ISZ[AadlPort], nodeName: String, cppPkgName: String,
-                                     datatypeMap: Map[AadlType, (String, ISZ[String])],
+                                     datatypeMap: Map[AadlType, Ros2Datatype],
                                      reporter: Reporter): ISZ[ST] = {
     val nodeNameBase = s"${nodeName}_base"
     var decls: ISZ[ST] = IS()
@@ -3491,7 +3954,7 @@ object Generator {
   }
 
   def genMicroRosSubscriptionCallbacks(inPorts: ISZ[AadlPort], nodeName: String, cppPkgName: String,
-                                        datatypeMap: Map[AadlType, (String, ISZ[String])],
+                                        datatypeMap: Map[AadlType, Ros2Datatype],
                                         reporter: Reporter): ISZ[ST] = {
     var callbacks: ISZ[ST] = IS()
     for (p <- inPorts) {
@@ -3545,7 +4008,7 @@ object Generator {
   }
 
   def genMicroRosGetFunctionDecls(dataInPorts: ISZ[AadlPort], nodeName: String, cppPkgName: String,
-                                   datatypeMap: Map[AadlType, (String, ISZ[String])],
+                                   datatypeMap: Map[AadlType, Ros2Datatype],
                                    reporter: Reporter): ISZ[ST] = {
     val nodeNameBase = s"${nodeName}_base"
     var decls: ISZ[ST] = IS()
@@ -3559,7 +4022,7 @@ object Generator {
   }
 
   def genMicroRosGetFunctionImpls(dataInPorts: ISZ[AadlPort], nodeName: String, cppPkgName: String,
-                                   datatypeMap: Map[AadlType, (String, ISZ[String])],
+                                   datatypeMap: Map[AadlType, Ros2Datatype],
                                    reporter: Reporter): ISZ[ST] = {
     val nodeNameBase = s"${nodeName}_base"
     var impls: ISZ[ST] = IS()
@@ -3580,7 +4043,7 @@ object Generator {
 
   def genMicroRosBaseNodeHeaderFile(microrosPkgName: String, cppPkgName: String, component: AadlThread,
                                     connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
-                                    datatypeMap: Map[AadlType, (String, ISZ[String])],
+                                    datatypeMap: Map[AadlType, Ros2Datatype],
                                     hasEnumConverter: B, invertTopicBinding: B,
                                     reporter: Reporter): (ISZ[String], ST, B, ISZ[Marker]) = {
     val nodeName = genNodeName(component)
@@ -3588,12 +4051,12 @@ object Generator {
     val fileName = s"${nodeNameBase}${c_src_node_header_name_suffix}"
     val guardName = ops.StringOps(s"${nodeNameBase}_h").toUpper
 
-    val outPorts = ISZOps(component.getPorts()).filter(p => p.direction == Direction.Out)
-    val inPorts = ISZOps(component.getPorts()).filter(p => p.direction == Direction.In)
+    val outPorts = ISZOps(generatedPorts(component)).filter(p => p.direction == Direction.Out)
+    val inPorts = ISZOps(generatedPorts(component)).filter(p => p.direction == Direction.In)
     val dataInPorts = ISZOps(inPorts).filter(p => p.isInstanceOf[AadlDataPort])
 
     var msgTypes: ISZ[String] = IS()
-    for (p <- component.getPorts()) {
+    for (p <- generatedPorts(component)) {
       val portDatatype = genPortDatatype(p, cppPkgName, datatypeMap, reporter)
       if (!ISZOps(msgTypes).contains(portDatatype)) {
         msgTypes = msgTypes :+ portDatatype
@@ -3653,13 +4116,19 @@ object Generator {
           |#include <rcl/rcl.h>
           |#include <rclc/rclc.h>
           |#include <rclc/executor.h>
+          |#include <rcutils/logging_macros.h>
           |${(msgIncludes, "\n")}
           |${enumConverterInclude}
           |${exampleTypesInclude}
           |
-          |#define PRINT_INFO(fmt, ...) printf("[INFO] [${nodeName}] " fmt "\n", ##__VA_ARGS__)
-          |#define PRINT_WARN(fmt, ...) printf("[WARN] [${nodeName}] " fmt "\n", ##__VA_ARGS__)
-          |#define PRINT_ERROR(fmt, ...) printf("[ERROR] [${nodeName}] " fmt "\n", ##__VA_ARGS__)
+          |// Logger name used by the PRINT_* macros.  It defaults to the node name and is
+          |// updated to the node's actual logger name (rcl_node_get_logger_name) during
+          |// ${nodeNameBase}_init.
+          |extern const char * ${nodeName}_logger_name;
+          |
+          |#define PRINT_INFO(fmt, ...) RCUTILS_LOG_INFO_NAMED(${nodeName}_logger_name, fmt, ##__VA_ARGS__)
+          |#define PRINT_WARN(fmt, ...) RCUTILS_LOG_WARN_NAMED(${nodeName}_logger_name, fmt, ##__VA_ARGS__)
+          |#define PRINT_ERROR(fmt, ...) RCUTILS_LOG_ERROR_NAMED(${nodeName}_logger_name, fmt, ##__VA_ARGS__)
           |${msgToStringSection}
           |
           |//=================================================
@@ -3700,7 +4169,7 @@ object Generator {
   //================================================
 
   def genMicroRosPublisherInits(outPorts: ISZ[AadlPort], nodeName: String, cppPkgName: String,
-                                datatypeMap: Map[AadlType, (String, ISZ[String])],
+                                datatypeMap: Map[AadlType, Ros2Datatype],
                                 connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
                                 invertTopicBinding: B, reporter: Reporter): ISZ[ST] = {
     var inits: ISZ[ST] = IS()
@@ -3709,7 +4178,8 @@ object Generator {
       val portDatatype = genPortDatatype(p, cppPkgName, datatypeMap, reporter)
       val rosidlSupport = cppTypeToROSIDLSupport(portDatatype)
 
-      val topicNames: ISZ[String] = if (invertTopicBinding) getPortNames(IS(p.path.toISZ)) else if (connectionMap.get(p.path).nonEmpty) getPortNames(connectionMap.get(p.path).get) else getPortNames(IS(p.path.toISZ))
+      val derivedTopicNames: ISZ[String] = if (invertTopicBinding) getPortNames(IS(p.path.toISZ)) else if (connectionMap.get(p.path).nonEmpty) getPortNames(connectionMap.get(p.path).get) else getPortNames(IS(p.path.toISZ))
+      val topicNames: ISZ[String] = publisherTopicNames(p, derivedTopicNames)
 
       if (topicNames.size == 1) {
         inits = inits :+
@@ -3738,7 +4208,7 @@ object Generator {
   }
 
   def genMicroRosPutFunctionImpls(outPorts: ISZ[AadlPort], nodeName: String, cppPkgName: String,
-                                  datatypeMap: Map[AadlType, (String, ISZ[String])],
+                                  datatypeMap: Map[AadlType, Ros2Datatype],
                                   connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
                                   invertTopicBinding: B, reporter: Reporter): ISZ[ST] = {
     var impls: ISZ[ST] = IS()
@@ -3791,16 +4261,183 @@ object Generator {
     return impls
   }
 
+  // The user-editable block holding this node's rcl arguments.  Its contents are preserved
+  // across regeneration, so it is the deployment-time seam for remap rules, domain id,
+  // enclave, log levels, etc.  Embedded micro-ROS targets have no command line, so this
+  // array -- rather than argc/argv -- is how arguments reach rcl, identically on host-Linux
+  // and on an MCU.
+  val nodeOptionsMarker: BlockMarker = BlockMarker(
+    id = "NODE OPTIONS -- additions within these tags will be preserved when re-running Codegen",
+    beginPrefix = "//",
+    optBeginSuffix = None(),
+    endPrefix = "//",
+    optEndSuffix = None())
+
+  // The seed content is behaviorally inert: rcl accepts an empty "--ros-args" section, and
+  // keeping the array non-empty makes the initializer valid ISO C (T a[] = {} is not).
+  def genMicroRosNodeOptions(): ST = {
+    return (
+      st"""${nodeOptionsMarker.beginMarker}
+          |// Add rcl arguments after "--ros-args", e.g. a remap rule binding one of this
+          |// node's topics to a preexisting node's topic:
+          |//     "-r", "some_port:=/some/other/topic"
+          |// Write the match side of a remap rule relative (no leading '/') so that it keeps
+          |// matching if the node is later placed in a namespace.
+          |static const char * const node_options[] = {
+          |    "--ros-args"
+          |};
+          |${nodeOptionsMarker.endMarker}""")
+  }
+
+  // rcl parses node_options only when the micro-ROS firmware is built with
+  // RCL_COMMAND_LINE_ENABLED=ON (the micro-ROS fork of rcl strips the argument machinery by
+  // default), which is why the generated colcon.meta sets it unconditionally.
+  // Micro-ROS is static-memory: the rclc executor deserializes each received message into a
+  // pre-allocated struct the node supplies, and a sequence field arrives as a {data, size,
+  // capacity} triple whose storage the node must attach before the executor runs.  Capacities are
+  // compile-time constants from the mirror, so the storage is a static array -- no heap, no added
+  // dependency on micro_ros_utilities, and buffer sizes stay greppable back to the model.
+  //
+  // Undersizing is silent: ucdr sets an error flag and writes no elements, the typesupport
+  // recovers by delivering the field with size 0 (or, if it is the final member, fails the whole
+  // message so rmw_take reports "no data").  Neither reaches the application as a diagnostic.
+  def genMicroRosSequenceBuffers(inPorts: ISZ[AadlPort]): ISZ[ST] = {
+    var decls: ISZ[ST] = ISZ()
+    for (p <- inPorts) {
+      portAadlTypeOpt(p) match {
+        case Some(aadlType) =>
+          for (f <- mirrorSequenceFields(aadlType)) {
+            val (fieldName, cType, capacity) = f
+            decls = decls :+ st"static ${cType} ${genPortName(p)}_${fieldName}_buf[${capacity}];"
+          }
+        case _ =>
+      }
+    }
+    return decls
+  }
+
+  // Both sections render to nothing when no port has a bounded sequence field, so nodes without
+  // one keep byte-identical output.
+  def genMicroRosSequenceBufferSection(inPorts: ISZ[AadlPort]): ST = {
+    val decls = genMicroRosSequenceBuffers(inPorts)
+    if (decls.isEmpty) {
+      return st""
+    }
+    return (
+      st"""
+          |// Static receive buffers for the bounded sequence fields of subscription messages.
+          |// Capacities come from the model's mirror dimensions -- see the design doc's
+          |// Micro-ROS Memory Configuration.
+          |${(decls, "\n")}
+        """)
+  }
+
+  def genMicroRosSequenceInitSection(inPorts: ISZ[AadlPort]): ST = {
+    val inits = genMicroRosSequenceInits(inPorts)
+    if (inits.isEmpty) {
+      return st""
+    }
+    return (
+      st"""
+          |
+          |    // Attach the static receive buffers before the executor can deliver a message
+          |    ${(inits, "\n")}""")
+  }
+
+  def genMicroRosSequenceInits(inPorts: ISZ[AadlPort]): ISZ[ST] = {
+    var inits: ISZ[ST] = ISZ()
+    for (p <- inPorts) {
+      portAadlTypeOpt(p) match {
+        case Some(aadlType) =>
+          val portName = genPortName(p)
+          for (f <- mirrorSequenceFields(aadlType)) {
+            val (fieldName, _, capacity) = f
+            inits = inits :+
+              st"""self->${portName}_msg.${fieldName}.data = ${portName}_${fieldName}_buf;
+                  |self->${portName}_msg.${fieldName}.capacity = ${capacity};
+                  |self->${portName}_msg.${fieldName}.size = 0;"""
+          }
+        case _ =>
+      }
+    }
+    return inits
+  }
+
+  // A micro-ROS subscription whose payload codegen cannot fully size is a latent silent-drop:
+  // the native type may have unbounded fields the mirror says nothing about.  Codegen only knows
+  // the model, so it cannot confirm which native fields are unbounded -- it reports what it could
+  // not size and leaves the decision to the modeler.
+  def validateMicroRosCapacities(microRosThreads: ISZ[AadlThread], reporter: Reporter): Unit = {
+    for (thread <- microRosThreads;
+         p <- generatedPorts(thread) if p.direction == Direction.In) {
+      portAadlTypeOpt(p) match {
+        case Some(aadlType) if RosUtil.isPlatformProvided(aadlType) =>
+          val sized = mirrorSequenceFields(aadlType)
+          val mirrored: B = aadlType match {
+            case r: RecordType => r.fields.nonEmpty
+            case _ => F
+          }
+          if (!mirrored) {
+            reporter.warn(p.posOpt, RosUtil.toolName,
+              st"""${thread.identifier}.${p.identifier} receives the opaque platform-provided type ${aadlType.name},
+                  |so codegen cannot size its static receive buffer.  If the native type has unbounded fields
+                  |(sequences or strings), mirror them with dimensions or attach storage in the preserved block --
+                  |otherwise an oversized message is delivered with the field empty, or dropped without a diagnostic.""".render)
+          } else if (sized.isEmpty) {
+            reporter.warn(p.posOpt, RosUtil.toolName,
+              st"""${thread.identifier}.${p.identifier} receives ${aadlType.name}, whose mirror declares no bounded
+                  |sequence fields.  Any unbounded native field is unsized, and overflow of an unsized field is
+                  |silent -- the field arrives empty or the message is dropped with no diagnostic.""".render)
+          }
+        case _ =>
+      }
+    }
+  }
+
+  // rcl_logging_configure is declared in rcl/logging.h, which is pulled in only when a rosout
+  // out port makes the generated init call it
+  @strictpure def genMicroRosBaseNodeIncludes(microrosPkgName: String, nodeNameBase: String, component: AadlThread): ST =
+    if (RosUtil.producesRosout(component))
+      st"""#include "${microrosPkgName}/base_headers/${nodeNameBase}${c_src_node_header_name_suffix}"
+          |#include "rcl/logging.h""""
+    else st"""#include "${microrosPkgName}/base_headers/${nodeNameBase}${c_src_node_header_name_suffix}""""
+
+  def genMicroRosSupportInit(component: AadlThread): ST = {
+    val supportInit: ST =
+      st"""rcl_init_options_t init_options = rcl_get_zero_initialized_init_options();
+          |rcl_init_options_init(&init_options, self->allocator);
+          |
+          |rclc_support_init_with_options(
+          |    &self->support,
+          |    (int) (sizeof(node_options) / sizeof(node_options[0])), node_options,
+          |    &init_options, &self->allocator);"""
+
+    if (!RosUtil.producesRosout(component)) {
+      // no rosout out port: logging stays console-only (rcutils to stderr)
+      return supportInit
+    }
+
+    // A rosout out port is the micro-ROS enablement trigger.  The /rosout publisher is created
+    // and driven by rcl as a side effect of this call, never by application code -- which is why
+    // no publisher or put_ API is generated for the port.
+    return (
+      st"""${supportInit}
+          |
+          |// Route this node's own log records to /rosout.  Requires the firmware to be built
+          |// with RCL_LOGGING_ENABLED=ON plus a backend; see microros_apps/colcon.meta.
+          |rcl_logging_configure(&self->support.context.global_arguments, &self->allocator);""")
+  }
+
   def genMicroRosBaseNodeCFile(microrosPkgName: String, cppPkgName: String, component: AadlThread,
                                connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
-                               datatypeMap: Map[AadlType, (String, ISZ[String])],
+                               datatypeMap: Map[AadlType, Ros2Datatype],
                                invertTopicBinding: B, reporter: Reporter): (ISZ[String], ST, B, ISZ[Marker]) = {
     val nodeName = genNodeName(component)
     val nodeNameBase = s"${nodeName}_base"
     val fileName = s"${nodeNameBase}${c_src_node_name_suffix}"
 
-    val outPorts = ISZOps(component.getPorts()).filter(p => p.direction == Direction.Out)
-    val inPorts = ISZOps(component.getPorts()).filter(p => p.direction == Direction.In)
+    val outPorts = ISZOps(generatedPorts(component)).filter(p => p.direction == Direction.Out)
+    val inPorts = ISZOps(generatedPorts(component)).filter(p => p.direction == Direction.In)
     val dataInPorts = ISZOps(inPorts).filter(p => p.isInstanceOf[AadlDataPort])
 
     val publisherInits = genMicroRosPublisherInits(outPorts, nodeName, cppPkgName, datatypeMap, connectionMap, invertTopicBinding, reporter)
@@ -3823,9 +4460,9 @@ object Generator {
                 |
                 |${(getImpls, "\n")}"""
           else st""
-        st"""#include "${microrosPkgName}/base_headers/${nodeNameBase}${c_src_node_header_name_suffix}"
+        st"""${genMicroRosBaseNodeIncludes(microrosPkgName, nodeNameBase, component)}
             |
-            |${CommentTemplate.doNotEditComment_slash}
+            |${CommentTemplate.invertedMarkerComment_slash}
             |
             |// Forward declarations of user compute entry points
             |${(handleForwardDecls, "\n")}
@@ -3833,6 +4470,12 @@ object Generator {
             |// Static instance pointer for subscription callback context (heap-free, MCU-compatible)
             |static ${nodeNameBase}_t * g_self = NULL;
             |
+            |// Logger name used by the PRINT_* macros; updated to the node's actual logger
+            |// name once the node has been initialized
+            |const char * ${nodeName}_logger_name = "${nodeName}";
+            |
+            |${genMicroRosNodeOptions()}
+            |${genMicroRosSequenceBufferSection(inPorts)}
             |//=================================================
             |//  S u b s c r i p t i o n   C a l l b a c k s
             |//=================================================
@@ -3848,14 +4491,20 @@ object Generator {
             |
             |    self->allocator = rcl_get_default_allocator();
             |
-            |    rclc_support_init(&self->support, 0, NULL, &self->allocator);
+            |    ${genMicroRosSupportInit(component)}
             |
-            |    rclc_node_init_default(&self->node, "${nodeName}", "", &self->support);
+            |    rclc_node_init_default(&self->node, "${nodeName}", "${RosUtil.getRosNamespace(component)}", &self->support);
+            |
+            |    // Retrieve the node's registered logger name for use by the PRINT_* macros
+            |    const char * logger_name = rcl_node_get_logger_name(&self->node);
+            |    if (logger_name != NULL) {
+            |        ${nodeName}_logger_name = logger_name;
+            |    }
             |
             |    // Setting up connections
             |    ${(publisherInits, "\n")}
             |    // Setting up subscriptions
-            |    ${(subscriptionInits, "\n")}
+            |    ${(subscriptionInits, "\n")}${genMicroRosSequenceInitSection(inPorts)}
             |    rclc_executor_init(&self->executor, &self->support.context, ${numHandles}, &self->allocator);
             |    ${(executorAdds, "\n")}
             |}
@@ -3873,15 +4522,21 @@ object Generator {
           """
       } else {
         val period = component.period.get
-        st"""#include "${microrosPkgName}/base_headers/${nodeNameBase}${c_src_node_header_name_suffix}"
+        st"""${genMicroRosBaseNodeIncludes(microrosPkgName, nodeNameBase, component)}
             |
-            |${CommentTemplate.doNotEditComment_slash}
+            |${CommentTemplate.invertedMarkerComment_slash}
             |
             |// Forward declaration of user compute entry point
             |void ${nodeName}_timeTriggered(${nodeNameBase}_t * self);
             |
             |// Static instance pointer for timer callback context (heap-free, MCU-compatible)
             |static ${nodeNameBase}_t * g_self = NULL;
+            |
+            |// Logger name used by the PRINT_* macros; updated to the node's actual logger
+            |// name once the node has been initialized
+            |const char * ${nodeName}_logger_name = "${nodeName}";
+            |
+            |${genMicroRosNodeOptions()}
             |
             |//=================================================
             |//  C a l l b a c k   a n d   T i m e r
@@ -3906,9 +4561,15 @@ object Generator {
             |
             |    self->allocator = rcl_get_default_allocator();
             |
-            |    rclc_support_init(&self->support, 0, NULL, &self->allocator);
+            |    ${genMicroRosSupportInit(component)}
             |
-            |    rclc_node_init_default(&self->node, "${nodeName}", "", &self->support);
+            |    rclc_node_init_default(&self->node, "${nodeName}", "${RosUtil.getRosNamespace(component)}", &self->support);
+            |
+            |    // Retrieve the node's registered logger name for use by the PRINT_* macros
+            |    const char * logger_name = rcl_node_get_logger_name(&self->node);
+            |    if (logger_name != NULL) {
+            |        ${nodeName}_logger_name = logger_name;
+            |    }
             |
             |    // Setting up connections
             |    ${(publisherInits, "\n")}
@@ -3937,7 +4598,7 @@ object Generator {
       }
 
     val filePath: ISZ[String] = IS("microros_apps", microrosPkgName, "src", "base_code", fileName)
-    return (filePath, fileBody, T, IS())
+    return (filePath, fileBody, T, IS(nodeOptionsMarker))
   }
 
   //================================================
@@ -3983,7 +4644,7 @@ object Generator {
   //================================================
 
   def genMicroRosUserNodeHeaderFile(microrosPkgName: String, cppPkgName: String, component: AadlThread,
-                                     datatypeMap: Map[AadlType, (String, ISZ[String])],
+                                     datatypeMap: Map[AadlType, Ros2Datatype],
                                      reporter: Reporter): (ISZ[String], ST, B, ISZ[Marker]) = {
     val nodeName = genNodeName(component)
     val nodeNameBase = s"${nodeName}_base"
@@ -3992,7 +4653,7 @@ object Generator {
 
     val computeEntryPointDecls: ST =
       if (isSporadic(component)) {
-        val inPorts = ISZOps(component.getPorts()).filter(p => p.direction == Direction.In)
+        val inPorts = ISZOps(generatedPorts(component)).filter(p => p.direction == Direction.In)
         val handleDecls = genMicroRosHandleForwardDecls(inPorts, nodeName, cppPkgName, datatypeMap, reporter)
         st"${(handleDecls, "\n")}"
       } else {
@@ -4025,18 +4686,18 @@ object Generator {
   }
 
   def genMicroRosUserNodeCFile(microrosPkgName: String, cppPkgName: String, component: AadlThread,
-                               datatypeMap: Map[AadlType, (String, ISZ[String])],
+                               datatypeMap: Map[AadlType, Ros2Datatype],
                                hasEnumConverter: B, reporter: Reporter): (ISZ[String], ST, B, ISZ[Marker]) = {
     val nodeName = genNodeName(component)
     val nodeNameBase = s"${nodeName}_base"
     val fileName = s"${nodeName}${c_src_node_name_suffix}"
 
-    val outPorts = ISZOps(component.getPorts()).filter(p => p.direction == Direction.Out)
+    val outPorts = ISZOps(generatedPorts(component)).filter(p => p.direction == Direction.Out)
     val enumConverterInclude: ST = if (hasEnumConverter) st"""#include "${microrosPkgName}/base_headers/enum_converter.h"""" else st""
 
     val computeSection: ST =
       if (isSporadic(component)) {
-        val inPorts = ISZOps(component.getPorts()).filter(p => p.direction == Direction.In)
+        val inPorts = ISZOps(generatedPorts(component)).filter(p => p.direction == Direction.In)
         val dataInPorts = ISZOps(inPorts).filter(p => p.isInstanceOf[AadlDataPort])
         val eventInPorts = ISZOps(inPorts).filter(p => !p.isInstanceOf[AadlDataPort])
 
@@ -4061,7 +4722,7 @@ object Generator {
             examplePublishes = examplePublishes :+
               st"""${cType} ${portId} = ${initExpr};
                   |put_${portId}(self, &${portId});
-                  |PRINT_INFO("Sent ${portId}: %s", MESSAGE_TO_STRING(&${portId}));"""
+                  |${genCSentLog(p)}"""
           }
         }
 
@@ -4135,7 +4796,7 @@ object Generator {
             examplePublishes = examplePublishes :+
               st"""${cType} ${portId} = ${initExpr};
                   |put_${portId}(self, &${portId});
-                  |PRINT_INFO("Sent ${portId}: %s", MESSAGE_TO_STRING(&${portId}));"""
+                  |${genCSentLog(p)}"""
           }
         }
         st"""//=================================================
@@ -4251,13 +4912,13 @@ object Generator {
   }
 
   def genMicroRosEnumConverterFiles(modelName: String, cppPkgName: String,
-                                    datatypeMap: Map[AadlType, (String, ISZ[String])]): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
+                                    datatypeMap: Map[AadlType, Ros2Datatype]): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
     var enumTypes: ISZ[(String, AadlType)] = IS()
 
-    for (key <- datatypeMap.keys) {
+    for (key <- datatypeMap.keys if !datatypeMap.get(key).get.isPlatformProvided) {
       key match {
         case _: EnumType =>
-          val datatype: String = datatypeMap.get(key).get._2.apply(0)
+          val datatype: String = datatypeMap.get(key).get.content.apply(0)
           val datatypeName: String = StringOps(datatype).substring(StringOps(datatype).indexOf(' ') + 1, datatype.size)
           enumTypes = enumTypes :+ (datatypeName, key)
         case _ =>
@@ -4281,13 +4942,19 @@ object Generator {
   //================================================
 
   def genMicroRosCMakeListsFile(modelName: String, cppPkgName: String, microRosThreads: ISZ[AadlThread],
-                                hasEnumConverter: B): (ISZ[String], ST, B, ISZ[Marker]) = {
+                                hasEnumConverter: B, nativePackages: ISZ[String]): (ISZ[String], ST, B, ISZ[Marker]) = {
     val microrosPkgName: String = genMicroRosPackageName(modelName)
     val interfacesPkg: String = s"${cppPkgName}_interfaces"
     val fileName: String = "CMakeLists.txt"
 
     var entryPointDecls: ISZ[ST] = IS()
     var entryPointExecutables: ISZ[String] = IS()
+
+    val packages: ISZ[String] = ISZ[String]("rclc", "rcutils", interfacesPkg) ++ nativePackages
+    val pkgRequirements: ISZ[ST] = genCMakeListsPkgRequirements(packages)
+    // note: the sequence-with-separator form is an ST feature, so this must be st"..." rather
+    // than s"..." -- the latter would render the tuple's string representation
+    val nativePackagesSuffix: String = if (nativePackages.isEmpty) "" else st" ${(nativePackages, " ")}".render
 
     for (comp <- microRosThreads) {
       val nodeName = genNodeName(comp)
@@ -4302,7 +4969,7 @@ object Generator {
       val execName = genExecutableFileName(nodeName)
       entryPointDecls = entryPointDecls :+
         st"""add_executable(${execName} ${(srcFiles, " ")})
-            |ament_target_dependencies(${execName} rclc ${interfacesPkg})"""
+            |ament_target_dependencies(${execName} rclc rcutils ${interfacesPkg}${nativePackagesSuffix})"""
       entryPointExecutables = entryPointExecutables :+ execName
     }
 
@@ -4324,8 +4991,7 @@ object Generator {
           |endif()
           |
           |find_package(ament_cmake REQUIRED)
-          |find_package(rclc REQUIRED)
-          |find_package(${interfacesPkg} REQUIRED)
+          |${(pkgRequirements, "\n")}
           |
           |${marker.beginMarker}
           |
@@ -4347,10 +5013,165 @@ object Generator {
     return (filePath, fileBody, T, IS(marker))
   }
 
-  def genMicroRosPackageFile(modelName: String, cppPkgName: String): (ISZ[String], ST, B, ISZ[Marker]) = {
+  // The per-process entity counts the micro-ROS rmw layer's static pools must be sized for.
+  //
+  // Each generated node is its own executable, so the pools compiled into rmw_microxrcedds
+  // must hold the LARGEST node's entities rather than the sum over nodes.  The counts mirror
+  // what genMicroRosPublisherInits and genMicroRosSubscriptionInits actually emit: one
+  // publisher per connected in port (one for an unconnected out port), and one subscription
+  // per in port -- but only for sporadic nodes, since periodic nodes generate none.
+  def getMicroRosEntityCounts(microRosThreads: ISZ[AadlThread],
+                              connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
+                              invertTopicBinding: B): (Z, Z) = {
+    var maxPublishers: Z = 0
+    var maxSubscriptions: Z = 0
+
+    for (comp <- microRosThreads) {
+      var publishers: Z = 0
+      for (outPort <- ISZOps(generatedPorts(comp)).filter(port => port.direction == Direction.Out)) {
+        val fanOut: Z =
+          if (!invertTopicBinding && connectionMap.get(outPort.path).nonEmpty) connectionMap.get(outPort.path).get.size
+          else 1
+        publishers = publishers + fanOut
+      }
+
+      val subscriptions: Z =
+        if (isSporadic(comp)) ISZOps(generatedPorts(comp)).filter(port => port.direction == Direction.In).size
+        else 0
+
+      if (publishers > maxPublishers) {
+        maxPublishers = publishers
+      }
+      if (subscriptions > maxSubscriptions) {
+        maxSubscriptions = subscriptions
+      }
+    }
+
+    return (maxPublishers, maxSubscriptions)
+  }
+
+  // The micro-ROS firmware build's configuration.
+  //
+  // Entries outside the marked blocks are derived from the model and are regenerated on every
+  // run; the marked blocks hold deployment configuration and are preserved.  A derived value
+  // can be overridden by restating its -D flag inside a marked block: colcon passes cmake-args
+  // through in order and CMake takes the last occurrence of a flag.
+  def genMicroRosColconMetaFile(maxPublishers: Z, maxSubscriptions: Z, hasRosoutProducer: B): (ISZ[String], ST, B, ISZ[Marker]) = {
+    // The knobs are emitted either way so they stay discoverable; a rosout out port is what
+    // decides whether rcl logging is built in, and rcl_logging_spdlog is the host-side backend
+    // (embedded targets generally want rcl_logging_noop).
+    val loggingEnabled: String = if (hasRosoutProducer) "ON" else "OFF"
+    val loggingImpl: String = if (hasRosoutProducer) "rcl_logging_spdlog" else "rcl_logging_noop"
+    val buildProfileMarker = BlockMarker(
+      id = "BUILD PROFILE -- additions within these tags will be preserved when re-running Codegen",
+      beginPrefix = "#",
+      optBeginSuffix = None(),
+      endPrefix = "#",
+      optEndSuffix = None())
+
+    val transportMarker = BlockMarker(
+      id = "TRANSPORT AND TUNING -- additions within these tags will be preserved when re-running Codegen",
+      beginPrefix = "#",
+      optBeginSuffix = None(),
+      endPrefix = "#",
+      optEndSuffix = None())
+
+    // colcon.meta is YAML (the JSON-looking content is YAML flow style), so it can carry comments
+    val fileBody =
+      st"""${CommentTemplate.invertedMarkerComment_hash}
+          |#
+          |# Firmware configuration for the micro-ROS packages in this directory.
+          |{
+          |    "names": {
+          |        ${buildProfileMarker.beginMarker}
+          |        # Build profile -- seeded for a host-Linux micro-ROS build.  Embedded
+          |        # targets generally want -DBUILD_SHARED_LIBS=OFF throughout.
+          |        #
+          |        # The UCLIENT_PROFILE_* transport enabled here must agree with
+          |        # RMW_UXRCE_TRANSPORT below.
+          |        "microxrcedds_client": {
+          |            "cmake-args": [
+          |                "-DBUILD_SHARED_LIBS=ON",
+          |                "-DUCLIENT_PROFILE_UDP=ON"
+          |            ]
+          |        },
+          |        "microcdr": {
+          |            "cmake-args": [
+          |                "-DBUILD_SHARED_LIBS=ON"
+          |            ]
+          |        },
+          |        "rosidl_typesupport_microxrcedds_c": {
+          |            "cmake-args": [
+          |                "-DBUILD_SHARED_LIBS=ON"
+          |            ]
+          |        },
+          |        "rosidl_typesupport_microxrcedds_cpp": {
+          |            "cmake-args": [
+          |                "-DBUILD_SHARED_LIBS=ON"
+          |            ]
+          |        },
+          |        ${buildProfileMarker.endMarker}
+          |        "rcl": {
+          |            "cmake-args": [
+          |                "-DBUILD_TESTING=OFF",
+          |                # Required for the rcl arguments in each node's node_options block
+          |                # (topic remap rules in particular) to be parsed: the micro-ROS fork
+          |                # of rcl makes its argument machinery compile-time removable and
+          |                # strips it by default.
+          |                "-DRCL_COMMAND_LINE_ENABLED=ON",
+          |                # Generated nodes log through rcutils, which reaches stderr without
+          |                # rcl logging.  Routing a node's own records to /rosout additionally
+          |                # needs RCL_LOGGING_ENABLED=ON plus a backend -- rcl_logging_spdlog
+          |                # on host, rcl_logging_noop on embedded.  These follow the model:
+          |                # they are ON when some node declares a rosout out port.
+          |                "-DRCL_LOGGING_ENABLED=${loggingEnabled}",
+          |                "-DRCL_LOGGING_IMPLEMENTATION=${loggingImpl}"
+          |            ]
+          |        },
+          |        "rcutils": {
+          |            "cmake-args": [
+          |                "-DENABLE_TESTING=OFF"
+          |            ]
+          |        },
+          |        "rmw_microxrcedds": {
+          |            "cmake-args": [
+          |                # Static entity pools, sized from the model.  Each generated node is
+          |                # its own executable, so these hold the largest node's entities
+          |                # rather than the sum over nodes.  Generated nodes create no services
+          |                # or clients.  Undersizing them makes entity creation fail silently.
+          |                "-DRMW_UXRCE_MAX_NODES=1",
+          |                "-DRMW_UXRCE_MAX_PUBLISHERS=${maxPublishers}",
+          |                "-DRMW_UXRCE_MAX_SUBSCRIPTIONS=${maxSubscriptions}",
+          |                "-DRMW_UXRCE_MAX_SERVICES=0",
+          |                "-DRMW_UXRCE_MAX_CLIENTS=0",
+          |                ${transportMarker.beginMarker}
+          |                # Transport -- deployment configuration, seeded for a micro-ROS agent
+          |                # reachable over udp4 at 127.0.0.1:8888.
+          |                "-DRMW_UXRCE_TRANSPORT=udp",
+          |                "-DRMW_UXRCE_DEFAULT_UDP_IP=127.0.0.1",
+          |                "-DRMW_UXRCE_DEFAULT_UDP_PORT=8888",
+          |                # Stream and history depth bound how large a serialized message may be
+          |                # and how many may be in flight.  A message that does not fit is
+          |                # dropped without a diagnostic, so raise these if messages go missing.
+          |                "-DRMW_UXRCE_STREAM_HISTORY=32",
+          |                "-DRMW_UXRCE_MAX_HISTORY=10"
+          |                ${transportMarker.endMarker}
+          |            ]
+          |        }
+          |    }
+          |}"""
+
+    val filePath: ISZ[String] = IS("microros_apps", "colcon.meta")
+    return (filePath, fileBody, T, IS(buildProfileMarker, transportMarker))
+  }
+
+  def genMicroRosPackageFile(modelName: String, cppPkgName: String, nativePackages: ISZ[String]): (ISZ[String], ST, B, ISZ[Marker]) = {
     val microrosPkgName: String = genMicroRosPackageName(modelName)
     val interfacesPkg: String = s"${cppPkgName}_interfaces"
     val fileName: String = "package.xml"
+
+    val packages: ISZ[String] = ISZ[String]("rclc", "rcutils", interfacesPkg) ++ nativePackages
+    val pkgDependencies: ISZ[ST] = genPackageFilePkgDependencies(packages)
 
     val marker = BlockMarker(
       id = "Additions within these tags will be preserved when re-running Codegen",
@@ -4374,8 +5195,7 @@ object Generator {
           |
           |    <buildtool_depend>ament_cmake</buildtool_depend>
           |
-          |    <depend>rclc</depend>
-          |    <depend>${interfacesPkg}</depend>
+          |    ${(pkgDependencies, "\n")}
           |
           |    ${marker.beginMarker}
           |
@@ -4400,7 +5220,7 @@ object Generator {
 
   def genMicroRosNodeFiles(modelName: String, microRosThreads: ISZ[AadlThread],
                            connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
-                           datatypeMap: Map[AadlType, (String, ISZ[String])],
+                           datatypeMap: Map[AadlType, Ros2Datatype],
                            hasEnumConverter: B, invertTopicBinding: B,
                            reporter: Reporter): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
     val microrosPkgName: String = genMicroRosPackageName(modelName)
@@ -4421,7 +5241,7 @@ object Generator {
 
   def genMicroRosNodePkg(modelName: String, microRosThreads: ISZ[AadlThread],
                          connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
-                         datatypeMap: Map[AadlType, (String, ISZ[String])],
+                         datatypeMap: Map[AadlType, Ros2Datatype],
                          invertTopicBinding: B, reporter: Reporter): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
     val cppPkgName: String = genCppPackageName(modelName)
 
@@ -4432,14 +5252,21 @@ object Generator {
     files = files ++ genMicroRosNodeFiles(modelName, microRosThreads, connectionMap, datatypeMap, hasEnumConverter, invertTopicBinding, reporter)
     files = files ++ converterFiles
     files = files :+ genMicroRosExampleTypesFile(modelName, cppPkgName, datatypeMap)
-    files = files :+ genMicroRosCMakeListsFile(modelName, cppPkgName, microRosThreads, hasEnumConverter)
-    files = files :+ genMicroRosPackageFile(modelName, cppPkgName)
+
+    // the packages supplying the platform-provided payload types the nodes use
+    val nativePackages: ISZ[String] = getNativePackages(microRosThreads, datatypeMap)
+    files = files :+ genMicroRosCMakeListsFile(modelName, cppPkgName, microRosThreads, hasEnumConverter, nativePackages)
+    files = files :+ genMicroRosPackageFile(modelName, cppPkgName, nativePackages)
+    val (maxPublishers, maxSubscriptions) = getMicroRosEntityCounts(microRosThreads, connectionMap, invertTopicBinding)
+    // rcl logging is needed only if some node routes its own records to /rosout
+    val anyRosoutProducer: B = ISZOps(microRosThreads).exists(t => RosUtil.producesRosout(t))
+    files = files :+ genMicroRosColconMetaFile(maxPublishers, maxSubscriptions, anyRosoutProducer)
     return files
   }
 
   // The same datatype package will work regardless of other packages' types
   // ROS2 data/message types are defined in a "{package_name}_interfaces" package according to convention
-  def genInterfacesPkg(modelName: String, datatypeMap: Map[AadlType, (String, ISZ[String])]): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
+  def genInterfacesPkg(modelName: String, datatypeMap: Map[AadlType, Ros2Datatype]): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
     var files: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
 
     files = files ++ genMsgFiles(modelName, datatypeMap)
@@ -4546,6 +5373,39 @@ object Generator {
             || `make run` | Same as `make` |
             || `make stop` | Kill all running nodes |
             || `make clean` | Remove local build artifacts and copied packages from `MICROROS_WS` |
+            || `make microros-config` | Apply `microros_apps/colcon.meta` to `MICROROS_WS` and rebuild the micro-ROS stack (see below) |
+            |
+            |## Firmware Configuration
+            |
+            |`microros_apps/colcon.meta` holds the build configuration the generated nodes need
+            |from the micro-ROS middleware.  It is **not** consumed from where it sits: it
+            |configures packages such as `rcl` and `rmw_microxrcedds`, which live in the firmware
+            |workspace and are built by step 4 above -- not by `make build`, which builds only the
+            |application packages.  Applying it is therefore a separate step:
+            |
+            |```bash
+            |make microros-config
+            |```
+            |
+            |Run it once after generating, and again whenever `colcon.meta` changes.  Two of its
+            |settings matter in ways that fail quietly if it is never applied:
+            |
+            |- `RCL_COMMAND_LINE_ENABLED=ON` -- the micro-ROS fork of `rcl` strips its
+            |  argument-parsing machinery by default.  Without this flag, the rcl arguments in each
+            |  node's `node_options` block (topic remap rules in particular) are parsed by nothing.
+            |- `RMW_UXRCE_MAX_PUBLISHERS` / `RMW_UXRCE_MAX_SUBSCRIPTIONS` -- these are derived from
+            |  the model's port counts and regenerated on every codegen run.  If the firmware's
+            |  pools are smaller than the nodes need, entity creation fails without a diagnostic,
+            |  so re-apply after adding ports.
+            |
+            |Entries outside the marked blocks in `colcon.meta` are derived from the model and are
+            |overwritten on each run; the marked blocks (build profile, transport and tuning) are
+            |preserved.  To override a derived value, restate its `-D` flag inside a marked block --
+            |colcon passes `cmake-args` through in order and CMake takes the last occurrence.
+            |
+            |Because `MICROROS_WS` is shared across projects, `make microros-config` backs up any
+            |`colcon.meta` already there to `colcon.meta.bak`.  If you maintain your own firmware
+            |configuration, merge the two rather than letting one replace the other.
             |
             |## Manual Steps
             |
@@ -4689,11 +5549,29 @@ object Generator {
             |SOURCE_BASE  := source /opt/ros/$$$${ROS_DISTRO}/setup.bash && source $$(MICROROS_WS)/install/setup.bash
             |SOURCE_LOCAL := source $$(CURDIR)/install/setup.bash
             |
-            |.PHONY: all build build-microros build-ros2 run stop clean check-ros2
+            |.PHONY: all build build-microros build-ros2 microros-config run stop clean check-ros2
             |
             |all: run
             |
             |build: check-ros2 build-microros build-ros2
+            |
+            |# Applies microros_apps/colcon.meta to the firmware workspace and rebuilds the
+            |# micro-ROS stack with it.  This is NOT part of `make build`: colcon.meta configures
+            |# the micro-ROS middleware (rcl, rmw_microxrcedds, ...), which lives in MICROROS_WS
+            |# and is built once, not the application packages built from here.
+            |#
+            |# Run this once after generating, and again whenever colcon.meta changes -- notably
+            |# after adding ports, since the RMW_UXRCE_MAX_* pool sizes are derived from the model.
+            |# Until it is run, RCL_COMMAND_LINE_ENABLED is off in the firmware and the rcl
+            |# arguments in each node's node_options block are silently ignored.
+            |#
+            |# MICROROS_WS is shared across projects, so any existing colcon.meta there is backed
+            |# up rather than discarded.
+            |microros-config: check-ros2
+            |	@test -f "$$(MICROROS_WS)/colcon.meta" && cp "$$(MICROROS_WS)/colcon.meta" "$$(MICROROS_WS)/colcon.meta.bak" && echo "Backed up existing colcon.meta to colcon.meta.bak" || true
+            |	cp microros_apps/colcon.meta $$(MICROROS_WS)/colcon.meta
+            |	cd $$(MICROROS_WS) && bash -c "$$(SOURCE_BASE); ros2 run micro_ros_setup build_firmware.sh"
+            |	@echo "Firmware rebuilt with microros_apps/colcon.meta. Re-run 'make build' to rebuild the app packages against it."
             |
             |check-ros2:
             |	@test -n "$$$${ROS_DISTRO}" || { echo "ERROR: ROS_DISTRO is not set. Source a ROS2 installation first (e.g., source /opt/ros/jazzy/setup.bash)."; exit 1; }

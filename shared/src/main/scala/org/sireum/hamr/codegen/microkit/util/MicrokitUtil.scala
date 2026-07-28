@@ -18,11 +18,19 @@ object MicrokitUtil {
 
   val make_UTIL_OBJS: String = "UTIL_OBJS"
 
+  val make_AUX_OBJS: String = "AUX_OBJS"
+
+  val make_AUX_INCLUDES: String = "AUX_INCLUDES"
+
   val defaultMemoryRegionSizeInKiBytes: Z = 4
 
   val MemAlignmentInKiBytes: Z = 4
 
   val KEY_MICROKIT_VERSIONS: String = "KEY_MICROKIT_VERSISION"
+
+  val KEY_MICROKIT_AUX_CODE: String = "KEY_MICROKIT_AUX_CODE"
+
+  val KEY_MICROKIT_AUX_CODE_LINKS: String = "KEY_MICROKIT_AUX_CODE_LINKS"
 
   @pure def isDomainScheduling(options: HamrCli.CodegenOption, aadl: AadlSystem): B = {
     return !isMCS(options, aadl)
@@ -48,6 +56,30 @@ object MicrokitUtil {
 
   @strictpure def putMicrokitVersions(store: Store, versions: Map[String, String]): Store =
     store + KEY_MICROKIT_VERSIONS ~> MapValue(versions)
+
+  // aux code (--sel4-aux-code-dirs): map from paths relative to the aux root dirs
+  // to the .c/.h file contents. Read from disk on the JVM side and passed in via the store
+  @strictpure def getAuxCode(store: Store): Map[String, String] =
+    store.get(KEY_MICROKIT_AUX_CODE) match {
+      case Some(m) => m.asInstanceOf[MapValue[String, String]].map
+      case _ => Map.empty[String, String]
+    }
+
+  @strictpure def putAuxCode(store: Store, auxCode: Map[String, String]): Store =
+    store + KEY_MICROKIT_AUX_CODE ~> MapValue(auxCode)
+
+  // aux code symlink mode (--sel4-aux-code-symlink): map from each aux root directory's
+  // name to its absolute path. When non-empty, the aux directories are symlinked into
+  // aux_code rather than having their .c/.h files copied (the aux code map's keys are
+  // then prefixed with the root directory names)
+  @strictpure def getAuxCodeLinks(store: Store): Map[String, String] =
+    store.get(KEY_MICROKIT_AUX_CODE_LINKS) match {
+      case Some(m) => m.asInstanceOf[MapValue[String, String]].map
+      case _ => Map.empty[String, String]
+    }
+
+  @strictpure def putAuxCodeLinks(store: Store, auxCodeLinks: Map[String, String]): Store =
+    store + KEY_MICROKIT_AUX_CODE_LINKS ~> MapValue(auxCodeLinks)
 
   @strictpure def brand(s:String):String = s"sb_$s"
 

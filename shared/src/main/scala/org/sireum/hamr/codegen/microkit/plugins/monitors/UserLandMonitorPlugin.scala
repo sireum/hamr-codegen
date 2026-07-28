@@ -10,7 +10,7 @@ import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.HamrCli.CodegenHamrPlatform
 import org.sireum.hamr.codegen.common.util.{HamrCli, ModelUtil, ResourceUtil}
-import org.sireum.hamr.codegen.microkit.plugins.{MicrokitPlugin, StoreUtil}
+import org.sireum.hamr.codegen.microkit.plugins.{ComponentGenProfile, MicrokitPlugin, StoreUtil}
 import org.sireum.hamr.codegen.microkit.plugins.msd.SystemDescriptionProviderPlugin
 import org.sireum.hamr.codegen.microkit.plugins.rust.component.CRustComponentPlugin
 import org.sireum.hamr.codegen.microkit.util.{GenericMemoryRegion, MemoryMap, MemoryRegion, MicrokitDomain, MicrokitUtil, Perm, PortSharedMemoryRegion, ProtectionDomain, SchedulingDomain, SystemDescription, VirtualMachine}
@@ -62,6 +62,15 @@ object UserLandMonitorPlugin {
 
   @strictpure def getRetainedNonModelPorts(store: Store): ISZ[IdPath] = ISZ()
 
+  // The code-generation policy for the monitor component(s) this plugin injects.
+  // Default (the generic userland monitor): a normal editable, Verus-verified
+  // component with a test harness, since the user is expected to add their own
+  // monitoring/test code. Subtypes whose behavior is fully derived from GUMBO
+  // contracts (gumbo/sys-assert monitors) override this to a fully-generated,
+  // non-Verus, non-editable profile.
+  @strictpure def getMonitorGenProfile: ComponentGenProfile =
+    ComponentGenProfile(verusVerified = T, userEditable = T, emitTestHarness = T)
+
   @pure def canHandleModelTransformHelper(model: Aadl,
                                                 options: HamrCli.CodegenOption,
                                                 types: AadlTypes,
@@ -91,8 +100,12 @@ object UserLandMonitorPlugin {
                                     symbolTable: SymbolTable,
                                     store: Store,
                                     reporter: Reporter): Option[(Store, Aadl, AadlTypes, SymbolTable)] = {
-    val localStore = store + UserLandMonitorPlugin.KEY_UserLandMonitorPlugin_Model_Transformed ~> BoolValue(T)
+    var localStore = store + UserLandMonitorPlugin.KEY_UserLandMonitorPlugin_Model_Transformed ~> BoolValue(T)
     val sysPath = model.components(0).identifier.name
+    // there is only one monitor per name, so the monitor's crate drops the thread id's
+    // <..>_process_<..>_thread suffix (crates/<monitorName>); only crate-level names
+    // (crates/ dir, Cargo package, staticlib) are affected
+    localStore = StoreUtil.putCrateNameOverride(getMonitorThreadPath(sysPath), getMonitorName, localStore)
     return injectMonitorPDNamed(model, getMonitorProcessPath(sysPath), getMonitorThreadPath(sysPath),
       options, symbolTable, localStore, reporter)
   }
@@ -127,8 +140,13 @@ object UserLandMonitorPlugin {
 
     if (reResult._1.nonEmpty) {
 
-      localStore = StoreUtil.addNonModelElement(monitorProcessorPath,
-        StoreUtil.addNonModelElement(monitorThreadPath, localStore))
+      localStore = StoreUtil.addSyntheticElement(monitorProcessorPath,
+        StoreUtil.addSyntheticElement(monitorThreadPath, localStore))
+
+      // Record this injected monitor's code-generation policy so the emitter
+      // (CRustComponentPlugin) knows whether to Verus-wrap it, preserve user
+      // edits, and emit a test harness -- independent of its synthetic provenance.
+      localStore = StoreUtil.putComponentGenProfile(monitorThreadPath, getMonitorGenProfile, localStore)
 
       return Some((localStore, reResult._1.get.model, reResult._1.get.types, reResult._1.get.symbolTable))
     } else {
@@ -211,7 +229,7 @@ object UserLandMonitorPlugin {
     val monitorMonPdName = s"${monitorThreadId}_MON"
 
     var otherNonModelPdNames: Set[String] = Set.empty
-    for (id <- StoreUtil.getNonModelElements(localStore)) {
+    for (id <- StoreUtil.getSyntheticElements(localStore)) {
       val pdName = st"${(ops.ISZOps(id).drop(1), "_")}".render
       if (pdName != monitorThreadId) {
         otherNonModelPdNames = otherNonModelPdNames + pdName + s"${pdName}_MON"
@@ -275,7 +293,7 @@ object UserLandMonitorPlugin {
         for (mr <- rawSd.memoryRegions) {
           mrSizes = mrSizes + mr.name ~> mr.sizeInKiBytes
           mr match {
-            case p: PortSharedMemoryRegion if StoreUtil.isNonModelElement(p.outgoingPortPath, localStore) =>
+            case p: PortSharedMemoryRegion if StoreUtil.isSynthetic(p.outgoingPortPath, localStore) =>
               nonModelMrNames = nonModelMrNames + p.name
               if (ops.ISZOps(retainedPorts).contains(p.outgoingPortPath)) {
                 retainedMrNames = retainedMrNames + p.name
@@ -430,6 +448,11 @@ object UserLandMonitorPlugin {
         val monitorPdsWithSchedMaps: ISZ[ProtectionDomain] = for (pd <- monitorVariantPdsCompacted) yield
           addSchedMaps(pd)
 
+        // Re-key the monitor's observed-unconnected-input maps to the consumers' existing
+        // regions (same bogus-region-name pattern as the sched maps above; see MonitorInjector)
+        val monitorPdsRekeyed: ISZ[ProtectionDomain] =
+          MonitorInjector.rekeyObservedUnconnectedInputMaps(monitorPdsWithSchedMaps, localStore)
+
         val schedTemplateContributions: ISZ[ST] = ISZ(
           st"""#######################################
               |# SCHEDULE STATE
@@ -465,7 +488,7 @@ object UserLandMonitorPlugin {
         localStore = SystemDescriptionProviderPlugin.putMSD(monitorName, SystemDescription(
           name = monitorName,
           schedulingDomains = monitorScheds,
-          protectionDomains = monitorPdsWithSchedMaps,
+          protectionDomains = monitorPdsRekeyed,
           memoryRegions = monitorMemoryRegions,
           channels = rawSd.channels.filter(c =>
             !otherNonModelPdNames.contains(c.firstPD) && !otherNonModelPdNames.contains(c.secondPD)),

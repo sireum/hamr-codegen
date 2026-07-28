@@ -29,12 +29,16 @@ object GumboSysAssertMonitorPlugin {
   @strictpure def getCompositions(symbolTable: SymbolTable): ISZ[GclComposition] =
     VCGenerator.getCompositions(symbolTable)
 
-  // The per-composition monitor name. Each composition gets its own monitor
-  // component/crate (design D8, approach (i)); the id-derived name feeds the PD
-  // process/thread paths, the sys_assert_<id>_monitor.{meta.py,scheduler.c,mk}
-  // bundle, and the per-composition store sub-keys.
+  // The per-composition monitor name: sys_<id>_monitor -- composition-first so a
+  // composition's artifacts (sys_<id>_proof, sys_<id>_monitor) group together. Each
+  // composition gets its own monitor component/crate (design D8, approach (i)); the
+  // id-derived name feeds the PD process/thread paths, the sys_<id>_monitor.{meta.py,mk}
+  // bundle, the per-composition store sub-keys, and (via the crate-name override
+  // registered at model transform) the monitor's crates/sys_<id>_monitor crate -- the
+  // name is unique per composition, so the crate does not need the thread id's longer
+  // <..>_process_<..>_thread suffix.
   @strictpure def monitorNameForComposition(id: String): String =
-    s"sys_assert_${id}_monitor"
+    s"sys_${id}_monitor"
 
 }
 
@@ -259,7 +263,9 @@ object GumboSysAssertMonitorPlugin {
         // so a runtime violation maps onto the proof chain whose TCB assumptions
         // broke.
         var assertionChecks: ISZ[ST] = ISZ()
-        for (property <- composition.properties) {
+        // D9: abstract bases are not instantiated -- no runtime checks are emitted
+        // for them; their bindings are already folded into the concrete properties.
+        for (property <- composition.properties if !property.isAbstract) {
           val decoration = ScheduleNextRel.decorate(nextRel, property, reporter)
           for (e <- decoration.entries) {
             val placeId = e._1
@@ -273,7 +279,10 @@ object GumboSysAssertMonitorPlugin {
               context = SlangExpUtil.Context.compute_clause,
               substitutions = portSubstitutions,
               inRequires = F,
-              target = SlangExpUtil.TargetLanguage.verus,
+              // the monitor body is executable (GUMBOX) code, not verus spec, so
+              // implication must render via the implies!/impliesL! macros rather
+              // than the spec-only `==>` operator (which is invalid in exec context)
+              inVerus = F,
               tp = crustTypeProvider,
               aadlTypes = types,
               store = localStore,
@@ -288,8 +297,11 @@ object GumboSysAssertMonitorPlugin {
           }
         }
 
+        // Plain-Rust (non-Verus) monitors get no external_body attribute at all;
+        // it's a Verus-only directive.
         val externalBodyAttr: String =
-          if (options.verusAttributeSyntax) "#[verus_verify(external_body)]"
+          if (!getMonitorGenProfile.verusVerified) ""
+          else if (options.verusAttributeSyntax) "#[verus_verify(external_body)]"
           else "#[verifier::external_body]"
 
         // Build the cascade function as a module-level item
@@ -628,7 +640,7 @@ object GumboSysAssertMonitorPlugin {
 
         val monitorThread = symbolTable.componentMap.get(
           monitorThreadPath).get.asInstanceOf[AadlThread]
-        val componentDir = CRustComponentPlugin.componentDirectory(monitorThread, options)
+        val componentDir = CRustComponentPlugin.componentDirectory(monitorThread, options, store)
 
         val moduleContent: ST =
           st"""${CommentTemplate.doNotEditComment_slash}
@@ -646,8 +658,13 @@ object GumboSysAssertMonitorPlugin {
           overwrite = T)
 
         val modName = GumboSysAssertMonitorPlugin.sysAssertFunctionsModuleName
+        // #[macro_use] pulls the implies!/impliesL! macros (defined in the
+        // functions module) into the app module's scope so the sys_assert_monitor
+        // body can use them; they are plain macro_rules! (not #[macro_export]),
+        // so `use <mod>::*` alone would not bring them in.
         val modDirective: RAST.Item = RAST.ItemST(
-          st"""#[path = "$modName.rs"]
+          st"""#[macro_use]
+              |#[path = "$modName.rs"]
               |pub mod $modName;""")
         val useItem: RAST.Item = RAST.Use(ISZ(), RAST.IdentString(s"$modName::*"))
 

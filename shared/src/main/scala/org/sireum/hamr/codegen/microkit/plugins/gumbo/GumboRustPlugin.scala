@@ -15,7 +15,7 @@ import org.sireum.hamr.codegen.microkit.plugins.rust.apis.CRustApiPlugin
 import org.sireum.hamr.codegen.microkit.plugins.rust.component.CRustComponentPlugin
 import org.sireum.hamr.codegen.microkit.plugins.rust.testing.CRustTestingPlugin
 import org.sireum.hamr.codegen.microkit.plugins.rust.types.{CRustTypePlugin, CRustTypeProvider}
-import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, MicrokitInitPlugin, MicrokitPlugin}
+import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, MicrokitInitPlugin, MicrokitPlugin, StoreUtil}
 import org.sireum.hamr.codegen.microkit.util.{MakefileTarget, MakefileUtil, MicrokitUtil, RustUtil}
 import org.sireum.hamr.codegen.microkit.{MicrokitCodegen, rust => RAST}
 import org.sireum.hamr.ir._
@@ -178,6 +178,10 @@ object GumboRustPlugin {
     for (thread <- symbolTable.getThreads() if MicrokitUtil.isRusty(thread)) {
       var markers: ISZ[Marker] = ISZ()
       val threadPath = thread.path
+      // Components whose policy is non-Verus (e.g. fully-generated monitors) skip
+      // all Verus weaving here -- no struct/impl #[verus_verify], no entry-point
+      // requires/ensures contracts -- so the emitted app is plain Rust.
+      val genVerus: B = StoreUtil.getComponentGenProfile(threadPath, localStore).verusVerified
       val subclauseInfo = GumboRustUtil.getGumboSubclauseOrDummy(threadPath, symbolTable)
       val componentContributions = CRustComponentPlugin.getCRustComponentContributions(localStore)
       val threadContributions = componentContributions.componentContributions.get(threadPath).get
@@ -190,7 +194,9 @@ object GumboRustPlugin {
 
       appUses = appUses :+ RAST.Use(ISZ(), RAST.IdentString("vstd::prelude::*"))
 
-      if (options.verusAttributeSyntax) {
+      // Only Verus-decorate the struct/impl for components whose policy says so;
+      // fully-generated monitors (verusVerified=F) stay plain Rust.
+      if (options.verusAttributeSyntax && genVerus) {
         val verusVerify = RAST.AttributeST(inner = F, content = st"verus_verify")
         structDef = structDef(attributes = structDef.attributes :+ verusVerify)
         structImpl = structImpl(attributes = structImpl.attributes :+ verusVerify)
@@ -455,8 +461,7 @@ object GumboRustPlugin {
               }
               updatedImplItems = updatedImplItems :+ f(body = b)
             }
-            else if (f.ident.string == "initialize") {
-              var init: (Marker, RAST.FnImpl) = null
+            else if (f.ident.string == "initialize" && genVerus) {
               if (subclauseInfo.annex.initializes.nonEmpty) {
                 init = handleInitialize(
                   fn = f,
@@ -485,7 +490,7 @@ object GumboRustPlugin {
                 markers = markers :+ init._1
               }
               updatedImplItems = updatedImplItems :+ init._2
-            } else if (f.ident.string == "timeTriggered") {
+            } else if (f.ident.string == "timeTriggered" && genVerus) {
               var tt: (ISZ[Marker], RAST.FnImpl) = null
               if (subclauseInfo.annex.compute.nonEmpty) {
                 tt = handleCompute(
@@ -530,7 +535,7 @@ object GumboRustPlugin {
         else st"verifier::external_body"
       for (f <- moduleLevelEntries) {
         f match {
-          case (fi: RAST.FnImpl) if fi.ident.string == "log_info" || fi.ident.string == "log_warn_channel" =>
+          case (fi: RAST.FnImpl) if genVerus && (fi.ident.string == "log_info" || fi.ident.string == "log_warn_channel") =>
             val attrs = fi.attributes
             annotatedModuleLevelItems = annotatedModuleLevelItems :+ fi(
               attributes =  attrs :+ RAST.AttributeST(F, externalBodyAttr))
@@ -545,7 +550,7 @@ object GumboRustPlugin {
           componentContributions.componentContributions + threadPath ~>
             threadContributions(
               markers = markers,
-              requiresVerus = T,
+              requiresVerus = genVerus,
               requiresR2U2 = subclauseInfo.annex.monitor.nonEmpty,
               appUses = appUses,
               appStructDef = structDef,
@@ -555,7 +560,7 @@ object GumboRustPlugin {
               crateDependencies = crateDependencies)),
         localStore)
 
-      makefileVerusItems = makefileVerusItems :+ st"make -C $${CRATES_DIR}/${MicrokitUtil.getComponentIdPath(thread)} verus"
+      makefileVerusItems = makefileVerusItems :+ st"make -C $${CRATES_DIR}/${CRustComponentPlugin.componentCrateName(thread, localStore)} verus"
     } // end processing thread's contracts
 
     localStore = MakefileUtil.addMakefileTargets(ISZ("system.mk"), ISZ(MakefileTarget(name = "verus", allowMultiple = F, dependencies = ISZ(), body = makefileVerusItems)), localStore)
@@ -630,15 +635,16 @@ object GumboRustPlugin {
     var ensures: Map[String, RAST.Expr] = Map.empty
 
     for (p <- thread.getPorts()) {
-      val (aadlType, isEvent, isData): (AadlType, B, B) = p match {
-        case i: AadlEventDataPort => (i.aadlType, T, T)
-        case i: AadlDataPort => (i.aadlType, F, T)
-        case i: AadlEventPort => halt("Need to handle event ports")
-        case x => halt("Unexpected port type: $x")
-      }
-
       subclauseInfo.gclSymbolTable.integrationMap.get(p) match {
         case Some(spec) =>
+          // integration constraints restrict a port's payload, so GclResolver only
+          // allows them on payload-carrying ports; pure event ports the thread owns
+          // never appear in integrationMap and are simply skipped by this loop
+          val isEvent: B = p match {
+            case i: AadlEventDataPort => T
+            case i: AadlDataPort => F
+            case x => halt(s"Infeasible: integration constraints cannot be applied to ${x.identifier} which is not a data or event data port")
+          }
           spec match {
             case a: GclAssume =>
               // assume integration clauses can only be applied to incoming ports.  The api therefore

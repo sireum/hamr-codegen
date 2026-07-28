@@ -10,7 +10,7 @@ import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.plugins.rust.apis.CRustApiPlugin
 import org.sireum.hamr.codegen.microkit.plugins.rust.types.CRustTypePlugin
-import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, MicrokitPlugin}
+import org.sireum.hamr.codegen.microkit.plugins.{ComponentGenProfile, MicrokitFinalizePlugin, MicrokitPlugin, StoreUtil}
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.TAB
 import org.sireum.hamr.codegen.microkit.util.{MakefileTarget, MakefileUtil, MicrokitUtil, RustUtil}
 import org.sireum.hamr.codegen.microkit.{rust => RAST}
@@ -28,9 +28,19 @@ object CRustComponentPlugin {
   @strictpure def putComponentContributions(contributions: CRustComponentContributions, store: Store): Store = store + KEY_CrustComponentPlugin ~> contributions
 
 
-  @strictpure def componentCrateDirectory(thread: AadlThread, options: HamrCli.CodegenOption): String = s"${options.sel4OutputDir.get}/crates/${MicrokitUtil.getComponentIdPath(thread)}"
+  // The thread's Rust crate name (directory under crates/, Cargo package name, and thus
+  // the staticlib the linker consumes). Defaults to the thread's id path; an injector may
+  // register a shorter unique name via StoreUtil.putCrateNameOverride (e.g. the sys-assert
+  // monitor's crate is sys_<composition>_monitor rather than its full <..>_process_<..>_thread id).
+  @strictpure def componentCrateName(thread: AadlThread, store: Store): String =
+    StoreUtil.getCrateNameOverride(thread.path, store) match {
+      case Some(n) => n
+      case _ => MicrokitUtil.getComponentIdPath(thread)
+    }
 
-  @strictpure def componentDirectory(thread: AadlThread, options: HamrCli.CodegenOption): String = s"${componentCrateDirectory(thread, options)}/src/component"
+  @strictpure def componentCrateDirectory(thread: AadlThread, options: HamrCli.CodegenOption, store: Store): String = s"${options.sel4OutputDir.get}/crates/${componentCrateName(thread, store)}"
+
+  @strictpure def componentDirectory(thread: AadlThread, options: HamrCli.CodegenOption, store: Store): String = s"${componentCrateDirectory(thread, options, store)}/src/component"
 
   @strictpure def appModuleName(component: AadlComponent): String = s"${MicrokitUtil.getComponentIdPath(component)}_app"
 }
@@ -97,6 +107,10 @@ object ComponentContributions {}
     for (thread <- symbolTable.getThreads() if MicrokitUtil.isRusty(thread)) {
       val threadId = MicrokitUtil.getComponentIdPath(thread)
 
+      // Code-generation policy for this component (seeded from provenance, possibly
+      // set explicitly by an injector). Drives whether the app is Verus-verified.
+      val genProfile = StoreUtil.getComponentGenProfile(thread.path, store)
+
       val appApiType = CRustApiPlugin.applicationApiType(thread)
 
       val modDirectives: ISZ[RAST.Item] = ISZ()
@@ -116,7 +130,7 @@ object ComponentContributions {}
           fnDecl = RAST.FnDecl(inputs = ISZ(), outputs = RAST.FnRetTyImpl(RAST.TyPath(ISZ(ISZ("Self")), None()))),
           verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
         comments = ISZ(), attributes = ISZ(), visibility = RAST.Visibility.Public, meta = ISZ(),
-        verusAttributeSyntax = options.verusAttributeSyntax, contract = None(),
+        verusAttributeSyntax = options.verusAttributeSyntax && genProfile.verusVerified, contract = None(),
         body = Some(RAST.MethodBody(ISZ(RAST.BodyItemSelf(ISZ())))))
 
       val initFn = RAST.FnImpl(
@@ -137,7 +151,7 @@ object ComponentContributions {}
             outputs = RAST.FnRetTyDefault()),
           verusHeader = None(), fnHeader = RAST.FnHeader(F)),
         comments = ISZ(), attributes = ISZ(), visibility = RAST.Visibility.Public, meta = ISZ(),
-        verusAttributeSyntax = options.verusAttributeSyntax, contract = None(),
+        verusAttributeSyntax = options.verusAttributeSyntax && genProfile.verusVerified, contract = None(),
         body = Some(RAST.MethodBody(ISZ(
           RAST.BodyItemST(
             st"""log_info("initialize entrypoint invoked");""")))))
@@ -162,7 +176,7 @@ object ComponentContributions {}
                 outputs = RAST.FnRetTyDefault()),
               verusHeader = None(), fnHeader = RAST.FnHeader(F)),
             comments = ISZ(), attributes = ISZ(), visibility = RAST.Visibility.Public, meta = ISZ(),
-            verusAttributeSyntax = options.verusAttributeSyntax, contract = None(),
+            verusAttributeSyntax = options.verusAttributeSyntax && genProfile.verusVerified, contract = None(),
             body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
               st"""log_info("compute entrypoint invoked");"""))))))
         else ISZ(RAST.CommentNonDoc(ISZ(st"NOT YET FOR SPORADIC")))
@@ -179,7 +193,7 @@ object ComponentContributions {}
             outputs = RAST.FnRetTyDefault()),
           verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
         comments = ISZ(), visibility = RAST.Visibility.Public, attributes = ISZ(), meta = ISZ(),
-        verusAttributeSyntax = options.verusAttributeSyntax, contract = None(),
+        verusAttributeSyntax = options.verusAttributeSyntax && genProfile.verusVerified, contract = None(),
         body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
           st"""// this method is called when the monitor does not handle the passed in channel
               |match channel {
@@ -208,7 +222,7 @@ object ComponentContributions {}
             outputs = RAST.FnRetTyDefault()),
           verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
         comments = ISZ(), visibility = RAST.Visibility.Public, attributes = ISZ(), meta = ISZ(),
-        verusAttributeSyntax = options.verusAttributeSyntax, contract = None(),
+        verusAttributeSyntax = options.verusAttributeSyntax && genProfile.verusVerified, contract = None(),
         body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
           st"""log::info!("{0}", msg);""")))))
 
@@ -223,14 +237,14 @@ object ComponentContributions {}
             outputs = RAST.FnRetTyDefault()),
           verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
         comments = ISZ(), visibility = RAST.Visibility.Public, attributes = ISZ(), meta = ISZ(),
-        verusAttributeSyntax = options.verusAttributeSyntax, contract = None(),
+        verusAttributeSyntax = options.verusAttributeSyntax && genProfile.verusVerified, contract = None(),
         body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
           st"""log::warn!("Unexpected channel: {0}", channel);""")))))
 
       ret = ret + thread.path ~>
         ComponentContributions(
           markers = ISZ(),
-          requiresVerus = F,
+          requiresVerus = genProfile.verusVerified,
           requiresR2U2 = F,
           appModDirectives = modDirectives,
           appUses = uses,
@@ -240,9 +254,11 @@ object ComponentContributions {}
           moduleLevelEntries = funcs,
           crateDependencies = ISZ())
 
-      makefileTestEntries = makefileTestEntries :+ st"make -C $${CRATES_DIR}/$threadId test"
+      if (genProfile.emitTestHarness) {
+        makefileTestEntries = makefileTestEntries :+ st"make -C $${CRATES_DIR}/${CRustComponentPlugin.componentCrateName(thread, localStore)} test"
+      }
 
-      makefileCleanEntries = makefileCleanEntries :+ st"make -C $${CRATES_DIR}/$threadId clean"
+      makefileCleanEntries = makefileCleanEntries :+ st"make -C $${CRATES_DIR}/${CRustComponentPlugin.componentCrateName(thread, localStore)} clean"
     } // end handling crusty components
 
     localStore = MakefileUtil.addMakefileTargets(
@@ -270,11 +286,14 @@ object ComponentContributions {}
       val thread = symbolTable.componentMap.get(e._1).get.asInstanceOf[AadlThread]
       val threadId = MicrokitUtil.getComponentIdPath(thread)
 
+      val genProfile = StoreUtil.getComponentGenProfile(e._1, store)
+
       val modName = CRustComponentPlugin.appModuleName(thread)
 
-      val componentCrateDir = CRustComponentPlugin.componentCrateDirectory(thread, options)
+      val crateName = CRustComponentPlugin.componentCrateName(thread, store)
+      val componentCrateDir = CRustComponentPlugin.componentCrateDirectory(thread, options, store)
       val componentSrcDir = s"$componentCrateDir/src"
-      val componentDir = CRustComponentPlugin.componentDirectory(thread, options)
+      val componentDir = CRustComponentPlugin.componentDirectory(thread, options, store)
 
       { // for now just emit src/lib.rs as a resource
 
@@ -293,6 +312,13 @@ object ComponentContributions {}
                   |}""")
           else ISZ(st"NOT YET")
 
+        // Only declare the test module for components that get a test harness
+        // (see ComponentGenProfile.emitTestHarness); fully-generated monitors don't.
+        val testModDecl: Option[ST] =
+          if (genProfile.emitTestHarness) Some(st"""#[cfg(test)]
+                                                   |mod test;""")
+          else None()
+
         val content =
           st"""#![cfg_attr(not(test), no_std)]
               |
@@ -304,8 +330,7 @@ object ComponentContributions {}
               |mod component;
               |mod logging;
               |
-              |#[cfg(test)]
-              |mod test;
+              |$testModDecl
               |
               |use crate::bridge::${CRustApiPlugin.apiModuleName(thread)}::{self as api, *};
               |use crate::component::${CRustComponentPlugin.appModuleName(thread)}::*;
@@ -433,10 +458,18 @@ object ComponentContributions {}
             macName = "verus",
             items = ISZ(RAST.ItemST(body))).prettyST
         }
+
+        // userEditable components keep user edits across regen (markers +
+        // overwrite=F + "safe to edit"); fully-generated components (e.g. the
+        // gumbo/sys-assert monitors) are overwritten and marked "do not edit".
+        val editHeader: String =
+          if (genProfile.userEditable) CommentTemplate.safeToEditComment_slash
+          else CommentTemplate.doNotEditComment_slash
+
         val content =
           st"""${(for (d <- e._2.appModDirectives) yield d.prettyST, "\n")}
               |
-              |${CommentTemplate.safeToEditComment_slash}
+              |$editHeader
               |
               |${(for (u <- uses) yield u.prettyST, "\n")}
               |
@@ -446,9 +479,9 @@ object ComponentContributions {}
         resources = resources :+ ResourceUtil.createResourceWithMarkers(
           path = path,
           content = content,
-          markers= e._2.markers,
+          markers = if (genProfile.userEditable) e._2.markers else ISZ(),
           invertMarkers = F,
-          overwrite = F)
+          overwrite = !genProfile.userEditable)
       }
 
       { // src/component/mod.rs
@@ -489,7 +522,7 @@ object ComponentContributions {}
           st"""${CommentTemplate.safeToEditComment_hash}
               |
               |[package]
-              |name = "$threadId"
+              |name = "$crateName"
               |version = "0.1.0"
               |edition = "2021"
               |

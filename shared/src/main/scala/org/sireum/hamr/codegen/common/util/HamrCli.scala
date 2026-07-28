@@ -66,6 +66,7 @@ object HamrCli {
     val verusAttributeSyntax: B,
     val sel4OutputDir: Option[String],
     val sel4AuxCodeDirs: ISZ[String],
+    val sel4AuxCodeSymlink: B,
     val workspaceRootDir: Option[String],
     val strictAadlMode: B,
     val ros2OutputWorkspaceDir: Option[String],
@@ -220,6 +221,9 @@ import HamrCli._
           |                           project files (expects a path)
           |    --sel4-aux-code-dirs Directories containing C files to be included in
           |                           CAmkES/Microkit build (expects path strings)
+          |    --sel4-aux-code-symlink
+          |                          Symlink the aux code directories into the Microkit
+          |                           build rather than copying their C files
           |-r, --workspace-root-dir    
           |                          Root directory containing the architectural model
           |                           project (expects a path)
@@ -230,12 +234,12 @@ import HamrCli._
           |    --ros2-output-workspace-dir
           |                          The path to the ROS2 workspace to generate the
           |                           packages into (expects a path)
-          |-r, --ros2-dir           The path to your ROS2 installation, including the
+          |    --ros2-dir           The path to your ROS2 installation, including the
           |                           version (../ros/humble) (expects a path)
-          |-p, --ros2-nodes-language    
+          |    --ros2-nodes-language
           |                          The programming language for the generated node files
           |                           (expects one of { Python, Cpp }; default: Python)
-          |-p, --ros2-launch-language    
+          |    --ros2-launch-language
           |                          The programming language for the launch file (expects
           |                           one of { Python, Xml }; default: Python)
           |    --invert-topic-binding
@@ -270,6 +274,7 @@ import HamrCli._
     var verusAttributeSyntax: B = false
     var sel4OutputDir: Option[String] = None[String]()
     var sel4AuxCodeDirs: ISZ[String] = ISZ[String]()
+    var sel4AuxCodeSymlink: B = false
     var workspaceRootDir: Option[String] = None[String]()
     var strictAadlMode: B = false
     var ros2OutputWorkspaceDir: Option[String] = None[String]()
@@ -424,6 +429,12 @@ import HamrCli._
              case Some(v) => sel4AuxCodeDirs = v
              case _ => return None()
            }
+         } else if (arg == "--sel4-aux-code-symlink") {
+           val o: Option[B] = { j = j - 1; Some(!sel4AuxCodeSymlink) }
+           o match {
+             case Some(v) => sel4AuxCodeSymlink = v
+             case _ => return None()
+           }
          } else if (arg == "-r" || arg == "--workspace-root-dir") {
            val o: Option[Option[String]] = parsePath(args, j + 1)
            o match {
@@ -442,19 +453,19 @@ import HamrCli._
              case Some(v) => ros2OutputWorkspaceDir = v
              case _ => return None()
            }
-         } else if (arg == "-r" || arg == "--ros2-dir") {
+         } else if (arg == "--ros2-dir") {
            val o: Option[Option[String]] = parsePath(args, j + 1)
            o match {
              case Some(v) => ros2Dir = v
              case _ => return None()
            }
-         } else if (arg == "-p" || arg == "--ros2-nodes-language") {
+         } else if (arg == "--ros2-nodes-language") {
            val o: Option[CodegenNodesCodeLanguage.Type] = parseCodegenNodesCodeLanguage(args, j + 1)
            o match {
              case Some(v) => ros2NodesLanguage = v
              case _ => return None()
            }
-         } else if (arg == "-p" || arg == "--ros2-launch-language") {
+         } else if (arg == "--ros2-launch-language") {
            val o: Option[CodegenLaunchCodeLanguage.Type] = parseCodegenLaunchCodeLanguage(args, j + 1)
            o match {
              case Some(v) => ros2LaunchLanguage = v
@@ -481,7 +492,7 @@ import HamrCli._
         isOption = F
       }
     }
-    return Some(CodegenOption(help, parseArguments(args, j), msgpack, verbose, runtimeMonitoring, platform, outputDir, parseableMessages, slangOutputDir, packageName, noProyekIve, noEmbedArt, devicesAsThreads, genSbtMill, slangAuxCodeDirs, slangOutputCDir, excludeComponentImpl, bitWidth, maxStringSize, maxArraySize, runTranspiler, scheduling, verusAttributeSyntax, sel4OutputDir, sel4AuxCodeDirs, workspaceRootDir, strictAadlMode, ros2OutputWorkspaceDir, ros2Dir, ros2NodesLanguage, ros2LaunchLanguage, invertTopicBinding, experimentalOptions))
+    return Some(CodegenOption(help, parseArguments(args, j), msgpack, verbose, runtimeMonitoring, platform, outputDir, parseableMessages, slangOutputDir, packageName, noProyekIve, noEmbedArt, devicesAsThreads, genSbtMill, slangAuxCodeDirs, slangOutputCDir, excludeComponentImpl, bitWidth, maxStringSize, maxArraySize, runTranspiler, scheduling, verusAttributeSyntax, sel4OutputDir, sel4AuxCodeDirs, sel4AuxCodeSymlink, workspaceRootDir, strictAadlMode, ros2OutputWorkspaceDir, ros2Dir, ros2NodesLanguage, ros2LaunchLanguage, invertTopicBinding, experimentalOptions))
   }
 
   def parseArguments(args: ISZ[String], i: Z): ISZ[String] = {
@@ -544,6 +555,12 @@ import HamrCli._
     return Some(tokenizeH(arg, sep, removeWhitespace))
   }
 
+  // Separator handling: a doubled separator (two adjacent `sep`) decodes to one
+  // literal `sep`; a lone `sep` is an element boundary. This lets a value embed a
+  // literal separator, but the mapping is NOT an injective list codec -- a boundary
+  // adjacent to a leading/trailing literal separator is ambiguous (left-greedy decode
+  // wins) and a trailing empty element is suppressed. Callers that must embed literal
+  // separators should keep each value one self-delimiting token (as a `-D...=` option does).
   def tokenizeH(arg: String, sep: C, removeWhitespace: B): ISZ[String] = {
     val argCis = conversions.String.toCis(arg)
     var r = ISZ[String]()
@@ -552,8 +569,14 @@ import HamrCli._
     while (j < argCis.size) {
       val c = argCis(j)
       if (c == sep) {
-        r = r :+ conversions.String.fromCis(cis)
-        cis = ISZ[C]()
+        if (j + 1 < argCis.size && argCis(j + 1) == sep) {
+          cis = cis :+ sep
+          j = j + 2
+        } else {
+          r = r :+ conversions.String.fromCis(cis)
+          cis = ISZ[C]()
+          j = j + 1
+        }
       } else {
         val allowed: B = c match {
           case c"\n" => !removeWhitespace
@@ -565,8 +588,8 @@ import HamrCli._
         if (allowed) {
           cis = cis :+ c
         }
+        j = j + 1
       }
-      j = j + 1
     }
     if (cis.size > 0) {
       r = r :+ conversions.String.fromCis(cis)

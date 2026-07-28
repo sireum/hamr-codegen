@@ -5,7 +5,7 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, Store}
 import org.sireum.hamr.codegen.common.resolvers.GclResolver
 import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlPort, AadlThread, SymbolTable}
-import org.sireum.hamr.codegen.common.sysvc.{ScheduleNextRel, VC, VCKind, WriteFrameBuilder}
+import org.sireum.hamr.codegen.common.sysvc.{IntegrationVC, ScheduleNextRel, VC, VCKind, WriteFrameBuilder}
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes}
 import org.sireum.hamr.codegen.common.util.HamrCli
@@ -13,6 +13,7 @@ import SlangExpUtil.TargetLanguage
 import org.sireum.hamr.codegen.microkit.plugins.rust.types.CRustTypeProvider
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
 import org.sireum.hamr.codegen.microkit.util.RustUtil
+import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.TAB
 import org.sireum.hamr.ir
 import org.sireum.message.Reporter
 
@@ -24,6 +25,12 @@ import org.sireum.message.Reporter
 object VerusVCSerializer {
 
   val toolName: String = "VerusVCSerializer"
+
+  // The proof crate name for a composition: sys_<composition id>_proof -- composition-first
+  // so a composition's artifacts (sys_<id>_proof, sys_<id>_monitor) group together under
+  // crates/. Used both to emit the crate directory and to reference it from the generated
+  // makefiles.
+  @strictpure def sysProofCrateName(compositionId: String): String = s"sys_${compositionId}_proof"
 
   @enum object StateFieldKind {
     "Channel" // an AADL connection's shared substrate storage, owned by the source
@@ -39,6 +46,11 @@ object VerusVCSerializer {
                              val entryId: String,
                              val kind: StateFieldKind.Type,
                              val aadlType: AadlType,
+                             // channels backed by an event or event-data port carry an
+                             // optional payload (None when no event is present this
+                             // dispatch), so the field's Rust type is Option<aadlType>.
+                             // Data-port channels and state variables are always present.
+                             val isOptional: B,
                              val aliasOpt: Option[String])
 
   // `byComponentEntry` is keyed by (thread path, port-or-state-var name) and maps
@@ -57,6 +69,16 @@ object VerusVCSerializer {
       case _ => return MicrokitTypeUtil.eventPortType
     }
   }
+
+  // Event and event-data ports carry an optional payload at the system-state level
+  // (None when no event is present); data ports are always present. Mirrors the
+  // component-level GGParam.isOptional (GumboXRustUtil).
+  @strictpure def isPortOptional(p: AadlPort): B = !p.isInstanceOf[AadlDataPort]
+
+  // Wraps the base Rust type name in Option<...> for optional (event/event-data)
+  // channels; plain otherwise.
+  @strictpure def rustFieldType(isOptional: B, baseRustName: String): ST =
+    if (isOptional) st"Option<$baseRustName>" else st"$baseRustName"
 
   // Builds the flat system-state field map of one composition:
   //   1. canonicalize: each connected in port shares its source out port's channel
@@ -99,7 +121,7 @@ object VerusVCSerializer {
     }
 
     // enumerate canonical entries in deterministic (thread, declaration) order
-    var canonicalOrder: ISZ[(IdPath, String, StateFieldKind.Type, AadlType)] = ISZ()
+    var canonicalOrder: ISZ[(IdPath, String, StateFieldKind.Type, AadlType, B)] = ISZ()
     var seen: Set[(IdPath, String)] = Set.empty
     for (t <- threads) {
       for (p <- t.getPorts()) {
@@ -107,7 +129,7 @@ object VerusVCSerializer {
         // connected in ports are registered when their source thread is visited
         if (key == ((t.path, p.identifier)) && !seen.contains(key)) {
           seen = seen + key
-          canonicalOrder = canonicalOrder :+ ((t.path, p.identifier, StateFieldKind.Channel, getPortType(p)))
+          canonicalOrder = canonicalOrder :+ ((t.path, p.identifier, StateFieldKind.Channel, getPortType(p), isPortOptional(p)))
         }
       }
       WriteFrameBuilder.getGclInfoOpt(t.path, symbolTable) match {
@@ -121,7 +143,7 @@ object VerusVCSerializer {
               aadlTypes.typeMap.get(sv.classifier) match {
                 case Some(svType) =>
                   seen = seen + key
-                  canonicalOrder = canonicalOrder :+ ((t.path, sv.name, StateFieldKind.StateVar, svType))
+                  canonicalOrder = canonicalOrder :+ ((t.path, sv.name, StateFieldKind.StateVar, svType, F))
                 case _ =>
                   reporter.error(sv.posOpt, toolName,
                     s"Could not resolve the type '${sv.classifier}' of state variable '${sv.name}'")
@@ -238,6 +260,7 @@ object VerusVCSerializer {
         entryId = e._2,
         kind = e._3,
         aadlType = e._4,
+        isOptional = e._5,
         aliasOpt = aliasOpt)
       fields = fields :+ field
       fieldByKey = fieldByKey + key ~> field
@@ -293,8 +316,9 @@ object VerusVCSerializer {
         case StateFieldKind.Channel => "channel"
         case StateFieldKind.StateVar => "state variable"
       }
+      val fieldRustType = rustFieldType(f.isOptional, tp.getTypeNameProvider(f.aadlType).qualifiedRustName)
       sections = sections :+
-        st"pub ${f.fieldName}: ${tp.getTypeNameProvider(f.aadlType).qualifiedRustName}, // $kindComment"
+        st"pub ${f.fieldName}: $fieldRustType, // $kindComment"
     }
 
     return (
@@ -349,6 +373,143 @@ object VerusVCSerializer {
                                      val moduleName: String,
                                      val methodFns: ISZ[ST],
                                      val fns: ISZ[ContractFn])
+
+  // A schema component whose GUMBO contract the system proof trusts WITHOUT a Verus
+  // discharge, because the component is not implemented in Rust. `guaranteeClauses`
+  // are the module-qualified guarantee spec fns the VCs use as premises (what the
+  // proof actually relies on the component to establish).
+  @datatype class TrustedComponent(val componentPath: IdPath,
+                                   val alias: String,
+                                   val moduleName: String,
+                                   val guaranteeClauses: ISZ[String])
+
+  // Schema components (those with a write frame) that have a GUMBO contract with at
+  // least one guarantee but are NOT implemented in Rust: Verus cannot discharge their
+  // contracts, so the system proof trusts them. Empty when every contracted, guarantee-
+  // bearing schema component is Rust.
+  @pure def findTrustedComponents(contracts: ISZ[ComponentContracts],
+                                  frames: ISZ[WriteFrameFn],
+                                  symbolTable: SymbolTable): ISZ[TrustedComponent] = {
+    var threadByPath: Map[IdPath, AadlThread] = Map.empty
+    for (t <- symbolTable.getThreads()) {
+      threadByPath = threadByPath + t.path ~> t
+    }
+    var aliasByPath: Map[IdPath, String] = Map.empty
+    for (fr <- frames) {
+      aliasByPath = aliasByPath + fr.componentPath ~> fr.componentAlias
+    }
+    var result: ISZ[TrustedComponent] = ISZ()
+    for (cc <- contracts) {
+      // only components that actually fire in the schema (have a write frame) matter
+      aliasByPath.get(cc.componentPath) match {
+        case Some(alias) =>
+          threadByPath.get(cc.componentPath) match {
+            case Some(t) if !org.sireum.hamr.codegen.microkit.util.MicrokitUtil.isRusty(t) =>
+              var clauses: ISZ[String] = ISZ()
+              for (f <- cc.fns) {
+                if (f.kind == ContractFnKind.InitializeGuarantee || f.kind == ContractFnKind.ComputeGuarantee ||
+                  f.kind == ContractFnKind.ComputeCase || f.kind == ContractFnKind.IntegrationGuarantee) {
+                  clauses = clauses :+ s"${cc.moduleName}::${f.fnName}"
+                }
+              }
+              // a non-Rust component with no guarantees contributes no trusted premise
+              if (clauses.nonEmpty) {
+                result = result :+ TrustedComponent(cc.componentPath, alias, cc.moduleName, clauses)
+              }
+            case _ =>
+          }
+        case _ =>
+      }
+    }
+    return result
+  }
+
+  // Renders src/trusted_assumptions.rs: one greppable marker per non-Rust schema
+  // component recording that the system proof relies on its GUMBO contract without a
+  // Verus discharge. Audit the trust base by grepping `assumed_` in the proof crate.
+  @pure def genTrustedAssumptionsRs(compositionId: String, trusted: ISZ[TrustedComponent]): ST = {
+    var items: ISZ[ST] = ISZ()
+    for (tc <- trusted) {
+      val clauseLines: ISZ[ST] = for (c <- tc.guaranteeClauses) yield st"  *   - $c"
+      items = items :+
+        st"""/** TRUSTED -- component `${tc.alias}` (${(tc.componentPath, "::")}) is not implemented in
+            |  * Rust, so Verus does not discharge its GUMBO contract. Every system VC that uses
+            |  * ${tc.alias}'s guarantees as a premise relies on ${tc.alias} having been verified by
+            |  * other means (e.g., testing). Trusted guarantee clauses (defined in contracts.rs):
+            |${(clauseLines, "\n")}
+            |  */
+            |pub proof fn assumed_${tc.moduleName}_contract_holds() {}"""
+    }
+    return (
+      st"""${CommentTemplate.doNotEditComment_slash}
+          |
+          |//! TRUSTED ASSUMPTIONS for the system proof of composition `$compositionId`.
+          |//!
+          |//! The system VCs use each schema component's GUMBO guarantees as premises. For a
+          |//! Rust component that premise is discharged by the component's own Verus crate; for
+          |//! the components below -- which are NOT implemented in Rust -- it is discharged
+          |//! nowhere by Verus, so the system proof is only as strong as their contracts being
+          |//! established by other means (e.g., testing). Each `assumed_*_contract_holds` marker
+          |//! records one such trusted component; grep `assumed_` to enumerate the trust base.
+          |
+          |#![allow(non_snake_case)]
+          |
+          |use vstd::prelude::*;
+          |
+          |verus! {
+          |
+          |${(items, "\n\n")}
+          |
+          |} // verus!
+          |""")
+  }
+
+  // Renders TRUSTED_ASSUMPTIONS.md: the human-readable companion to trusted_assumptions.rs.
+  @pure def genTrustedAssumptionsMd(compositionId: String, trusted: ISZ[TrustedComponent]): ST = {
+    val rows: ISZ[ST] =
+      for (tc <- trusted) yield
+        st"""### `${tc.alias}` (${(tc.componentPath, ".")})
+            |
+            |Not implemented in Rust; its GUMBO contract is **not** discharged by Verus. The
+            |system proof trusts the following guarantee clauses (verify by other means, e.g. testing):
+            |
+            |${(for (c <- tc.guaranteeClauses) yield st"- `$c`", "\n")}"""
+    return (
+      st"""${CommentTemplate.doNotEditComment_xml}
+          |
+          |# Trusted assumptions -- system proof of composition `$compositionId`
+          |
+          |This crate's system VCs assume each schema component satisfies its GUMBO contract.
+          |For Rust components this is discharged by the component's own Verus crate. The
+          |components below are **not** implemented in Rust, so their contracts are trusted --
+          |the system proof is only as strong as these being established by other means
+          |(e.g., testing). See `src/trusted_assumptions.rs` (grep `assumed_`) and
+          |`trusted_assumptions.json`.
+          |
+          |${(rows, "\n\n")}
+          |""")
+  }
+
+  // Renders trusted_assumptions.json: the machine-readable trust ledger (diffable in PRs).
+  @pure def genTrustedAssumptionsJson(compositionId: String, trusted: ISZ[TrustedComponent]): ST = {
+    val entries: ISZ[ST] =
+      for (tc <- trusted) yield
+        st"""{
+            |  "component": "${(tc.componentPath, ".")}",
+            |  "alias": "${tc.alias}",
+            |  "module": "${tc.moduleName}",
+            |  "trustedGuaranteeClauses": [${(for (c <- tc.guaranteeClauses) yield st"\"$c\"", ", ")}]
+            |}"""
+    return (
+      st"""{
+          |  "_comment": "${CommentTemplate.doNotEditComment}",
+          |  "composition": "$compositionId",
+          |  "note": "Components whose GUMBO contract the system proof trusts without a Verus discharge (not implemented in Rust); verify by other means.",
+          |  "trustedComponents": [
+          |    ${(entries, ",\n")}
+          |  ]
+          |}""")
+  }
 
   // Renders a component GUMBO spec method (developer-defined UIF) as an
   // uninterpreted spec fn for the proof crate.
@@ -561,8 +722,14 @@ object VerusVCSerializer {
             info.gclSymbolTable.integrationMap.get(port) match {
               case Some(spec) =>
                 val param = GumboXRustUtil.portToParam(port, crustTypeProvider)
-                val substitutions: Map[String, String] = Map.empty[String, String] + port.identifier ~> param.name
-                val body = SlangExpUtil.rewriteExpH(
+                // event / event-data ports carry an optional payload: bare references
+                // in the clause denote the payload, so they unwrap the Option, and the
+                // whole constraint is vacuously true when no event is present (the
+                // GUMBOX I-Assm/I-Guar guard, mirrored here for the copied spec fn).
+                val isOpt = isPortOptional(port)
+                val portRef: String = if (isOpt) st"${param.name}.unwrap()".render else param.name
+                val substitutions: Map[String, String] = Map.empty[String, String] + port.identifier ~> portRef
+                val rawBody = SlangExpUtil.rewriteExpH(
                   rexp = spec.exp,
                   owner = t.classifier,
                   optComponent = Some(t),
@@ -574,6 +741,7 @@ object VerusVCSerializer {
                   aadlTypes = aadlTypes,
                   store = store,
                   reporter = reporter)
+                val body: ST = if (isOpt) st"(${param.name}.is_some()) ==> ($rawBody)" else rawBody
                 val params = ISZ[GumboXRustUtil.GGParam](param)
                 spec match {
                   case a: ir.GclAssume =>
@@ -960,10 +1128,11 @@ object VerusVCSerializer {
                          reporter: Reporter): ST = {
     var args: ISZ[ST] = ISZ()
     for (p <- f.params) {
-      if (p.isOptional) {
-        reporter.error(None(), toolName,
-          s"Event ports are not yet supported in system VCs: '${p.originName}' of ${f.fnName}")
-      }
+      // event / event-data ports are optional (Option<T>) params; the corresponding
+      // SystemState field is also Option<T> (see StateField.isOptional), so the field
+      // is passed through as-is. Integration-constraint fn bodies are guard-wrapped
+      // (None => true) at their definition; compute/initialize clauses guard via the
+      // user's HasEvent(...) predicates.
       val stateName: String =
         if (p.isInPort || p.kind == GumboXRustUtil.SymbolKind.StateVarPre) preName
         else postName
@@ -1095,20 +1264,39 @@ object VerusVCSerializer {
           }
           val preCovered = coversTransition(t)
           var ens: ISZ[ST] = ISZ()
+          var hasIntegrationAssume: B = F
           if (preCovered) {
             contractsByPath.get(compPath) match {
               case Some(cc) =>
                 for (f <- cc.fns) {
-                  if (f.kind == ContractFnKind.ComputeAssume || f.kind == ContractFnKind.IntegrationAssume) {
+                  // Integration assumes are NOT re-proven here: they are assumed at the
+                  // consumer's Next-Assert premises and discharged once per connection
+                  // by the IntegrationVC (vc_integration.rs). Only compute assumes
+                  // remain as Pre-Assert obligations.
+                  if (f.kind == ContractFnKind.ComputeAssume) {
                     ens = ens :+ contractCall(cc.moduleName, f, compPath, ssm, "st", "st", reporter)
+                  }
+                  if (f.kind == ContractFnKind.IntegrationAssume) {
+                    hasIntegrationAssume = T
                   }
                 }
               case _ =>
             }
           }
+          val aliasU = ops.StringOps(alias).toUpper
+          // When the component has integration assumes, the sequent's obligations are the
+          // compute assumes ONLY; call out that the integration assumes are intentionally
+          // absent (discharged per-connection in vc_integration.rs) so an auditor does not
+          // read the omission as a gap.
           val preDoc: ST =
-            if (preCovered) st"/** VC[$i]: Pre-Assert -- ${placeNames(t.inPlaces)} |- ${ops.StringOps(alias).toUpper} compute + integration assumes */"
-            else st"/** VC[$i]: Pre-Assert -- trivial: this property does not use ${ops.StringOps(alias).toUpper}'s contract (no bound out-place; contract projection) */"
+            if (!preCovered)
+              st"/** VC[$i]: Pre-Assert -- trivial: this property does not use $aliasU's contract (no bound out-place; contract projection) */"
+            else if (hasIntegrationAssume)
+              st"""/** VC[$i]: Pre-Assert -- ${placeNames(t.inPlaces)} |- $aliasU compute assumes.
+                  |  * $aliasU's integration assumes are not obligations here; they are discharged
+                  |  * per-connection in vc_integration.rs (upstream guarantee => assume). */"""
+            else
+              st"/** VC[$i]: Pre-Assert -- ${placeNames(t.inPlaces)} |- $aliasU compute assumes */"
           seqFns = seqFns :+ renderProofFn(
             doc = preDoc,
             fnName = s"vc_pre_assert_${occurrenceOf(t, transIdx)}",
@@ -1133,20 +1321,54 @@ object VerusVCSerializer {
               reporter.error(None(), toolName,
                 st"No write frame for component ${(compPath, ".")}".render)
           }
+          var hasIntegrationGuarantee: B = F
+          var hasIntegrationAssume: B = F
           if (coversTransition(t)) {
             contractsByPath.get(compPath) match {
               case Some(cc) =>
                 for (f <- cc.fns) {
+                  // Integration assumes are ASSUMED here (Next-Assert premises): the
+                  // component may rely on its in-port constraints when it dispatches;
+                  // producer/consumer compatibility is discharged once per connection
+                  // by the IntegrationVC. Integration assume params are in-ports, so
+                  // contractCall selects their pre-state value.
                   if (f.kind == ContractFnKind.ComputeGuarantee || f.kind == ContractFnKind.ComputeCase ||
-                    f.kind == ContractFnKind.IntegrationGuarantee) {
+                    f.kind == ContractFnKind.IntegrationGuarantee || f.kind == ContractFnKind.IntegrationAssume) {
                     req = req :+ contractCall(cc.moduleName, f, compPath, ssm, "pre", "post", reporter)
+                    if (f.kind == ContractFnKind.IntegrationGuarantee) {
+                      hasIntegrationGuarantee = T
+                    }
+                    if (f.kind == ContractFnKind.IntegrationAssume) {
+                      hasIntegrationAssume = T
+                    }
                   }
                 }
               case _ =>
             }
           }
+          val aliasU = ops.StringOps(alias).toUpper
+          // Integration clauses also enter the premises. List each present kind in the
+          // sequent, and note where its validity is discharged: guarantees by the firing
+          // component's own contract proof, assumes per-connection by vc_integration.rs.
+          val gNote: Option[ST] = if (hasIntegrationGuarantee) Some(st" + $aliasU's integration guarantees") else None()
+          val aNote: Option[ST] = if (hasIntegrationAssume) Some(st" + $aliasU's integration assumes") else None()
+          val dischargeOpt: Option[ST] =
+            if (hasIntegrationGuarantee && hasIntegrationAssume)
+              Some(st"The integration guarantees hold by $aliasU's own contract proof (its component crate); the integration assumes are discharged per-connection in vc_integration.rs (upstream guarantee => assume).")
+            else if (hasIntegrationGuarantee)
+              Some(st"The integration guarantees hold by $aliasU's own contract proof (its component crate).")
+            else if (hasIntegrationAssume)
+              Some(st"The integration assumes are discharged per-connection in vc_integration.rs (upstream guarantee => assume).")
+            else None()
+          val sequent = st"VC[$i]: Next-Assert (task) -- ${placeNames(t.inPlaces)} + frames + $aliasU postcondition$gNote$aNote |- ${placeNames(t.outPlaces)}"
+          val nextAssertDoc: ST = dischargeOpt match {
+            case Some(d) =>
+              st"""/** $sequent.
+                  |  * $d */"""
+            case _ => st"/** $sequent */"
+          }
           seqFns = seqFns :+ renderProofFn(
-            doc = st"/** VC[$i]: Next-Assert (task) -- ${placeNames(t.inPlaces)} + frames + ${ops.StringOps(alias).toUpper} postcondition |- ${placeNames(t.outPlaces)} */",
+            doc = nextAssertDoc,
             fnName = s"vc_next_assert_task_${occurrenceOf(t, transIdx)}",
             paramsDecl = "pre: SystemState, post: SystemState",
             requiresClauses = req,
@@ -1180,6 +1402,106 @@ object VerusVCSerializer {
       vcPostPreRs = vcFile(s"Property $propertyId -- Post-Pre VC: the END assertion implies the START assertion across hyperperiod boundaries.", propertyId, postPreFns))
   }
 
+  // Renders src/vc_integration.rs: one empty-body proof fn per IntegrationVC.
+  // A connection carries a single value, so the proof fn takes one `wire`
+  // parameter (the connection's data type) and states
+  //   [sender's I-Guar(wire) ==>] receiver's I-Assm(wire)
+  // by passing `wire` to both copied integration spec fns (each of which takes
+  // its port as the sole parameter); the source out-port and destination in-port
+  // share the connection's data type, so a single `wire` types both calls. When
+  // the sender declares no integration guarantee the requires clause is omitted
+  // (premise `true`). Property- and schedule-independent -- emitted once per
+  // composition crate, like the Commutativity VCs.
+  @pure def genIntegrationVCs(ivcs: ISZ[IntegrationVC],
+                              resolvedComponentAliasMap: Map[String, IdPath],
+                              symbolTable: SymbolTable,
+                              crustTypeProvider: CRustTypeProvider): ST = {
+    val compAliasRev = componentAliasRev(resolvedComponentAliasMap)
+    def moduleOf(path: IdPath): String = {
+      return compAliasRev.getOrElse(path, symbolTable.getThreadById(path).identifier)
+    }
+    var usedNames: Set[String] = Set.empty
+    def uniqueName(base: String): String = {
+      var cand = base
+      var n: Z = 1
+      while (usedNames.contains(cand)) {
+        cand = s"${base}_$n"
+        n = n + 1
+      }
+      usedNames = usedNames + cand
+      return cand
+    }
+    var fns: ISZ[ST] = ISZ()
+    for (i <- z"0" until ivcs.size) {
+      val ivc = ivcs(i)
+      val srcMod = moduleOf(ivc.srcCompPath)
+      val dstMod = moduleOf(ivc.dstCompPath)
+      // the connection's carried value; event/event-data ports carry an optional
+      // payload, so the wire (and both copied integration spec fns) are Option<T>.
+      val wireType = rustFieldType(isPortOptional(ivc.dstPort), GumboXRustUtil.portToParam(ivc.dstPort, crustTypeProvider).langType.render)
+      val requiresClauses: ISZ[ST] = ivc.srcGuaranteeId match {
+        case Some(gid) => ISZ(st"$srcMod::integration_spec_${gid}_guarantee(wire)")
+        case _ => ISZ()
+      }
+      val premiseDoc: ST = ivc.srcGuaranteeId match {
+        case Some(gid) => st"$srcMod.${ivc.srcPort.identifier}'s I-Guar `$gid`"
+        case _ => st"`true` (sender declares no integration guarantee)"
+      }
+      fns = fns :+ renderProofFn(
+        doc =
+          st"""/** VC[$i]: Integration -- connection ${ivc.connName}: $premiseDoc
+              |  * implies $dstMod.${ivc.dstPort.identifier}'s I-Assm `${ivc.dstAssumeId}`, over
+              |  * the value the connection carries. Discharges when the sender's
+              |  * guarantee is at least as strong as the receiver's assume. */""",
+        fnName = uniqueName(s"vc_integration_${srcMod}_${ivc.srcPort.identifier}_to_${dstMod}_${ivc.dstPort.identifier}"),
+        paramsDecl = st"wire: $wireType".render,
+        requiresClauses = requiresClauses,
+        ensuresClauses = ISZ(st"$dstMod::integration_spec_${ivc.dstAssumeId}_assume(wire)"))
+    }
+    val docHeader =
+      st"""//! Integration-constraint VCs, one per connected port pair whose
+          |//! destination in-port has an integration assume. Each states that the
+          |//! sender's integration guarantee on the source out-port (or `true`, when
+          |//! the sender declares none) implies the receiver's integration assume on
+          |//! the destination in-port, over the value the connection carries. Static
+          |//! (schedule- and property-independent) -- shared by the whole composition."""
+    // No integration constraints in the model -> no obligations. Emit an explicit
+    // note instead of an empty `verus!` block so the (otherwise puzzling) empty
+    // module reads as intentional.
+    if (fns.isEmpty) {
+      return (
+        st"""${CommentTemplate.doNotEditComment_slash}
+            |
+            |$docHeader
+            |//!
+            |//! This model declares no integration constraints, so there are no
+            |//! integration VCs to discharge.
+            |""")
+    }
+    return (
+      st"""${CommentTemplate.doNotEditComment_slash}
+          |
+          |$docHeader
+          |//! Each proof fn has an empty body: Verus discharges `requires ==> ensures`
+          |//! via SMT; add proof hints in the body if a VC does not discharge.
+          |
+          |#![allow(non_snake_case)]
+          |#![allow(unused_variables)]
+          |#![allow(unused_imports)]
+          |
+          |use data::*;
+          |use vstd::prelude::*;
+          |
+          |use crate::contracts::*;
+          |
+          |verus! {
+          |
+          |${(fns, "\n\n")}
+          |
+          |} // verus!
+          |""")
+  }
+
   @pure def vcFile(desc: String, propertyId: String, fns: ISZ[ST]): ST = {
     return (
       st"""${CommentTemplate.doNotEditComment_slash}
@@ -1195,7 +1517,7 @@ object VerusVCSerializer {
           |use vstd::prelude::*;
           |
           |use crate::assertions::*;
-          |use crate::assertions_$propertyId::*;
+          |use crate::${propertyId}::assertions::*;
           |use crate::contracts::*;
           |use crate::system_state::SystemState;
           |use crate::write_frames::*;
@@ -1297,9 +1619,10 @@ object VerusVCSerializer {
         for (w <- writes) {
           val actionFnName = s"${alias}_action_${w._1}"
           val paramDecls: ISZ[ST] =
-            for (r <- readScope) yield st"${r._1}: ${crustTypeProvider.getTypeNameProvider(r._2.aadlType).qualifiedRustName}"
+            for (r <- readScope) yield st"${r._1}: ${rustFieldType(r._2.isOptional, crustTypeProvider.getTypeNameProvider(r._2.aadlType).qualifiedRustName)}"
+          val wRet = rustFieldType(w._2.isOptional, crustTypeProvider.getTypeNameProvider(w._2.aadlType).qualifiedRustName)
           uninterpFns = uninterpFns :+
-            st"pub uninterp spec fn $actionFnName(${(paramDecls, ", ")}) -> ${crustTypeProvider.getTypeNameProvider(w._2.aadlType).qualifiedRustName};"
+            st"pub uninterp spec fn $actionFnName(${(paramDecls, ", ")}) -> $wRet;"
           fireClauses = fireClauses :+
             st"post.${w._2.fieldName} == $actionFnName(${(for (r <- readScope) yield st"pre.${r._2.fieldName}", ", ")})"
         }
@@ -1358,10 +1681,11 @@ object VerusVCSerializer {
           |""")
   }
 
-  // Serializes one property's Non-Blocking and Preservation VCs. Both
-  // over-approximate the firing component's actual action by its global write
-  // frame (sound: the real action satisfies the frame). Commutativity is
-  // property-independent and serialized once per composition by
+  // Serializes one property's non-disabling VCs -- pre-assertions preservation and
+  // post-assertions preservation -- which together with Commutativity form the
+  // independence proof. Both over-approximate the firing component's actual action
+  // by its global write frame (sound: the real action satisfies the frame).
+  // Commutativity is property-independent and serialized once per composition by
   // `genCommutativityVCs`.
   @pure def genPropertyIndependenceVCs(propertyId: String,
                                        vcs: ISZ[VC],
@@ -1453,8 +1777,8 @@ object VerusVCSerializer {
           var req = assertCalls(t1.inPlaces, assertByPlace, "pre") ++ assertCalls(t2.inPlaces, assertByPlace, "pre")
           req = req :+ st"${framesByPath.get(firingPath).get.globalFnName}(pre, post)"
           fns = fns :+ renderProofFn(
-            doc = st"/** VC[$i]: Non-Blocking -- ${ops.StringOps(firingAlias).toUpper} firing does not block ${ops.StringOps(otherLabel).toUpper} (MHIP pair t${pair._1}/t${pair._2}) */",
-            fnName = uniqueName(s"vc_non_blocking_${firingAlias}_$otherLabel", i),
+            doc = st"/** VC[$i]: Pre-Assertions Preservation -- ${ops.StringOps(firingAlias).toUpper} firing does not disable ${ops.StringOps(otherLabel).toUpper} (preserves its pre-assertions; MHIP pair t${pair._1}/t${pair._2}) */",
+            fnName = uniqueName(s"vc_pre_assertions_preservation_${firingAlias}_$otherLabel", i),
             paramsDecl = "pre: SystemState, post: SystemState",
             requiresClauses = req,
             ensuresClauses = assertCalls(other.inPlaces, assertByPlace, "post"))
@@ -1475,8 +1799,8 @@ object VerusVCSerializer {
           var req = assertCalls(firing.inPlaces, assertByPlace, "pre") ++ assertCalls(other.outPlaces, assertByPlace, "pre")
           req = req :+ st"${framesByPath.get(firingPath).get.globalFnName}(pre, post)"
           fns = fns :+ renderProofFn(
-            doc = st"/** VC[$i]: Preservation -- ${ops.StringOps(firingAlias).toUpper} firing preserves ${ops.StringOps(otherLabel).toUpper}'s post-assertions (MHIP pair t${pair._1}/t${pair._2}) */",
-            fnName = uniqueName(s"vc_preservation_${firingAlias}_$otherLabel", i),
+            doc = st"/** VC[$i]: Post-Assertions Preservation -- ${ops.StringOps(firingAlias).toUpper} firing preserves ${ops.StringOps(otherLabel).toUpper}'s post-assertions (MHIP pair t${pair._1}/t${pair._2}) */",
+            fnName = uniqueName(s"vc_post_assertions_preservation_${firingAlias}_$otherLabel", i),
             paramsDecl = "pre: SystemState, post: SystemState",
             requiresClauses = req,
             ensuresClauses = assertCalls(other.outPlaces, assertByPlace, "post"))
@@ -1488,8 +1812,13 @@ object VerusVCSerializer {
     return (
       st"""${CommentTemplate.doNotEditComment_slash}
           |
-          |//! Property $propertyId -- Non-Blocking and Preservation VCs for every
-          |//! MHIP transition pair (per direction whose firing member is a component).
+          |//! Property $propertyId -- non-disabling VCs, part of the independence proof,
+          |//! for every MHIP transition pair (per direction whose firing member is a
+          |//! component): pre-assertions preservation (the firing does not disable another
+          |//! transition -- its pre-assertions still hold) and post-assertions preservation
+          |//! (the firing preserves another transition's established post-assertions).
+          |//! Together with the property-independent Commutativity VCs, these establish
+          |//! that concurrently-enabled transitions do not interfere.
           |//! Each proof fn has an empty body: Verus discharges `requires ==> ensures`
           |//! via SMT; add proof hints in the body if a VC does not discharge.
           |
@@ -1500,7 +1829,7 @@ object VerusVCSerializer {
           |use vstd::prelude::*;
           |
           |use crate::assertions::*;
-          |use crate::assertions_$propertyId::*;
+          |use crate::${propertyId}::assertions::*;
           |use crate::system_state::SystemState;
           |use crate::write_frames::*;
           |
@@ -1594,8 +1923,12 @@ object VerusVCSerializer {
       st"""${CommentTemplate.doNotEditComment_slash}
           |
           |//! Commutativity VCs (execIndependent), one per component-component MHIP
-          |//! pair. Assertion-free state equalities over the action abstractions --
-          |//! shared by all of the composition's properties.
+          |//! pair -- part of the independence proof: together with each property's
+          |//! non-disabling VCs (pre-/post-assertions preservation), they establish that
+          |//! concurrently-enabled transitions do not interfere. These are assertion-free
+          |//! state equalities over the action abstractions, so unlike the non-disabling
+          |//! VCs they are property-independent and shared by all of the composition's
+          |//! properties.
           |//! Each proof fn has an empty body: Verus discharges `requires ==> ensures`
           |//! via SMT; add proof hints in the body if a VC does not discharge.
           |
@@ -1618,16 +1951,37 @@ object VerusVCSerializer {
   // Renders crates/sys_proof_<composition>/src/lib.rs. The proof crate is
   // verification-only -- every fn is a spec or proof fn -- but it follows the
   // workspace's no_std conventions so it builds alongside the other crates.
+  // Renders src/<property>/mod.rs -- declares the property folder's submodules
+  // (its bound assertions plus the four VC modules). The content is identical for
+  // every property; the folder name carries the property identity.
+  @pure def genPropertyModRs(): ST = {
+    return (
+      st"""${CommentTemplate.doNotEditComment_slash}
+          |
+          |pub mod assertions;
+          |pub mod vc_non_disabling;
+          |pub mod vc_init;
+          |pub mod vc_post_pre;
+          |pub mod vc_sequential;
+          |""")
+  }
+
   // Shared modules first, then per-property modules in declaration order.
-  @pure def genLibRs(compositionId: String, propertyModIds: ISZ[String]): ST = {
+  // `emitTrusted` adds the trusted_assumptions module (present only when some schema
+  // component has a trusted, non-Rust GUMBO contract).
+  @pure def genLibRs(compositionId: String, propertyModIds: ISZ[String], emitTrusted: B): ST = {
+    // each property's assertions + VC modules live in its own folder src/<p>/,
+    // declared as a single module here (see genPropertyModRs for the folder's mod.rs)
     var propertyMods: ISZ[ST] = ISZ()
     for (p <- propertyModIds) {
-      propertyMods = propertyMods :+
-        st"""pub mod assertions_$p;
-            |pub mod vc_${p}_independence;
-            |pub mod vc_${p}_init;
-            |pub mod vc_${p}_post_pre;
-            |pub mod vc_${p}_sequential;"""
+      propertyMods = propertyMods :+ st"""pub mod $p;"""
+    }
+    var sharedMods: ISZ[ST] = ISZ(
+      st"pub mod actions;", st"pub mod assertions;", st"pub mod contracts;",
+      st"pub mod system_state;", st"pub mod vc_commutativity;", st"pub mod vc_integration;",
+      st"pub mod write_frames;")
+    if (emitTrusted) {
+      sharedMods = sharedMods :+ st"pub mod trusted_assumptions;"
     }
     return (
       st"""#![cfg_attr(not(test), no_std)]
@@ -1638,16 +1992,11 @@ object VerusVCSerializer {
           |
           |//! System-level verification conditions of composition `$compositionId`,
           |//! discharged by Verus -- shared modules (state, contracts, frames,
-          |//! actions, commutativity) plus one module group per property. See the
-          |//! proof-fn doc comments for the VC indices tying each obligation back
-          |//! to the generator output.
+          |//! actions, commutativity, integration) plus one module group per
+          |//! property. See the proof-fn doc comments for the VC indices tying each
+          |//! obligation back to the generator output.
           |
-          |pub mod actions;
-          |pub mod assertions;
-          |pub mod contracts;
-          |pub mod system_state;
-          |pub mod vc_commutativity;
-          |pub mod write_frames;
+          |${(sharedMods, "\n")}
           |
           |${(propertyMods, "\n")}
           |""")
@@ -1676,6 +2025,99 @@ object VerusVCSerializer {
           |${RustUtil.verusCargoDependencies(store)}
           |
           |${RustUtil.commonCargoTomlEntries}
+          |""")
+  }
+
+  // Renders crates/sys_proof_<composition>/Makefile. `all` verifies the whole crate
+  // (every property plus the shared, property-independent Commutativity VCs) in one
+  // `cargo-verus verify`. In addition, one phony target per property (named by its
+  // lowercased module id) runs `cargo-verus verify` over just that property's
+  // generated VCs. A property's proof obligations live entirely in its four vc_*
+  // submodules (its `assertions` submodule holds only spec fns -- no proof
+  // obligations -- so it is not listed), so the per-property target verifies exactly
+  // those four.
+  //
+  // Each property target depends on the `warm-deps` target, which compiles the whole
+  // crate (and thus its dependency crates: vstd, data, the GUMBO library crates)
+  // with `--no-verify`, caching them as Verus import libraries. This is required
+  // because Verus applies the `--verify-module <prop>::...` flags to EVERY crate it
+  // compiles: on a clean build the flag would reach a dependency crate that has no
+  // such module and fail ("could not find module ... specified by --verify-module").
+  // Once the dependencies are cached they are not recompiled, so the per-property
+  // flag only ever reaches this crate.
+  //
+  // ENV_VARS/CARGO_FLAGS mirror the component crates' Makefile (the proof crate is
+  // also no_std and built for aarch64 with build-std).
+  @pure def genSysProofMakefile(propertyModIds: ISZ[String], trusted: ISZ[TrustedComponent]): ST = {
+    // the per-property vc_* submodules declared by genPropertyModRs, in VC order
+    val vcModules: ISZ[String] = ISZ("vc_init", "vc_sequential", "vc_post_pre", "vc_non_disabling")
+
+    val propTargets: ISZ[ST] =
+      for (p <- propertyModIds) yield
+        st"""# verify only property '$p'
+            |.PHONY: $p
+            |$p: warm-deps
+            |${TAB}$$(ENV_VARS) cargo-verus verify $$(CARGO_FLAGS) -- ${(for (m <- vcModules) yield st"--verify-module $p::$m", " ")}"""
+
+    // re-surface the trusted (non-Rust) component contracts on every `make`/`make all`
+    // so the assumption is not overlooked (single quotes: no shell/Make expansion needed)
+    val hasTrusted: B = trusted.nonEmpty
+    val allDeps: String = if (hasTrusted) " trust-notice" else ""
+    val trustNoticeLines: ISZ[ST] =
+      for (tc <- trusted) yield
+        st"${TAB}@echo '  - ${tc.alias} (${(tc.componentPath, ".")}): not Rust; GUMBO contract assumed, not verified by Verus'"
+    val trustNoticeTarget: Option[ST] =
+      if (hasTrusted)
+        Some(
+          st"""# Announce the non-Rust component contracts this proof trusts (see
+              |# TRUSTED_ASSUMPTIONS.md / src/trusted_assumptions.rs). `all` depends on this.
+              |.PHONY: trust-notice
+              |trust-notice:
+              |${TAB}@echo 'WARNING: this system proof TRUSTS ${trusted.size} non-Rust component contract(s) --'
+              |${TAB}@echo 'valid only if these are verified by other means (e.g. testing):'
+              |${(trustNoticeLines, "\n")}""")
+      else None()
+
+    // fold the notice target in with the property targets so its absence adds no
+    // whitespace (keeps all-Rust proof crates' Makefiles byte-identical)
+    val allTargets: ISZ[ST] = trustNoticeTarget match {
+      case Some(tn) => propTargets :+ tn
+      case _ => propTargets
+    }
+
+    return (
+      st"""${CommentTemplate.doNotEditComment_hash}
+          |
+          |# `make all` (or `make`) verifies the whole crate -- every property plus the
+          |# shared, property-independent Commutativity VCs -- in one `cargo-verus
+          |# verify`. `make <property>` runs `cargo-verus verify` on just that
+          |# property's generated VCs (its vc_init / vc_sequential / vc_post_pre /
+          |# vc_non_disabling modules).
+          |
+          |ENV_VARS = RUSTC_BOOTSTRAP=1
+          |
+          |CARGO_FLAGS = -Z build-std=core,alloc,compiler_builtins \
+          |              -Z build-std-features=compiler-builtins-mem \
+          |              --target aarch64-unknown-none
+          |
+          |# verify the entire crate (every property plus the shared Commutativity VCs)
+          |.PHONY: all
+          |all:$allDeps
+          |${TAB}$$(ENV_VARS) cargo-verus verify $$(CARGO_FLAGS)
+          |
+          |# Compile every crate WITHOUT verification so the dependency crates (vstd,
+          |# data, the GUMBO library crates) are cached as Verus import libraries before
+          |# any per-property `--verify-module` run -- that flag is otherwise forwarded
+          |# to the dependency crates too and fails on a clean build (see header note).
+          |.PHONY: warm-deps
+          |warm-deps:
+          |${TAB}$$(ENV_VARS) cargo-verus verify $$(CARGO_FLAGS) -- --no-verify
+          |
+          |${(allTargets, "\n\n")}
+          |
+          |.PHONY: clean
+          |clean:
+          |${TAB}cargo clean
           |""")
   }
 }

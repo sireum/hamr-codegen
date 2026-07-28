@@ -15,7 +15,7 @@ import org.sireum.hamr.codegen.microkit.plugins.c.types.CTypePlugin
 import org.sireum.hamr.codegen.microkit.plugins.monitors.{MonitorInjector, UserLandMonitorPlugin}
 import org.sireum.hamr.codegen.microkit.plugins.rust.apis.{CRustApiPlugin, ComponentApiContributions}
 import org.sireum.hamr.codegen.microkit.plugins.rust.component.{CRustComponentPlugin, ComponentContributions}
-import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, MicrokitPlugin, StoreUtil}
+import org.sireum.hamr.codegen.microkit.plugins.{ComponentGenProfile, MicrokitFinalizePlugin, MicrokitPlugin, StoreUtil}
 import org.sireum.hamr.codegen.microkit.types.{MicrokitTypeUtil, QueueTemplate}
 import org.sireum.hamr.codegen.microkit.util.{MicrokitUtil, RustUtil}
 import org.sireum.hamr.codegen.microkit.{rust => RAST}
@@ -72,6 +72,14 @@ object GumboMonitorPlugin {
 
   @strictpure override def getMonitorName: String = "gumbo_monitor"
 
+  // The gumbo and sys-assert monitors derive their behavior entirely from GUMBO
+  // contracts; users aren't expected to edit them, and their bodies use exec-only
+  // implication macros that can't live inside Verus. So they are fully generated:
+  // plain Rust (no Verus), overwritten on regen (no markers), and no test harness.
+  // (Inherited by GumboSysAssertMonitorPlugin.)
+  @strictpure override def getMonitorGenProfile: ComponentGenProfile =
+    ComponentGenProfile(verusVerified = F, userEditable = F, emitTestHarness = F)
+
   // Phase store keys derived from getMonitorName so each subtype gets its own namespace
   @strictpure def keyModelTransformed: String = s"KEY_${getMonitorName}_Model_Transformed"
 
@@ -94,7 +102,7 @@ object GumboMonitorPlugin {
   @strictpure def haveHandledMonitorMethod(store: Store): B = store.contains(keyMonitorMethod)
 
   @strictpure override def getRetainedNonModelPorts(store: Store): ISZ[IdPath] =
-    for (id <- StoreUtil.getNonModelElements(store) if id.nonEmpty && ops.StringOps(id(id.lastIndex)).startsWith(GumboMonitorPlugin.stateVarPortPrefix)) yield id
+    for (id <- StoreUtil.getSyntheticElements(store) if id.nonEmpty && ops.StringOps(id(id.lastIndex)).startsWith(GumboMonitorPlugin.stateVarPortPrefix)) yield id
 
   @pure override def canHandleModelTransform(model: Aadl,
                                              options: HamrCli.CodegenOption,
@@ -131,6 +139,12 @@ object GumboMonitorPlugin {
       val sysPath = curModel.components(0).identifier.name
       val mProcessPath = monitorProcessPathNamed(sysPath, mName)
       val mThreadPath = monitorThreadPathNamed(sysPath, mName)
+
+      // monitor names are unique (gumbo_monitor; sys_<composition id>_monitor per
+      // composition), so each monitor's crate drops the thread id's
+      // <..>_process_<..>_thread suffix (crates/<monitorName>); only crate-level
+      // names (crates/ dir, Cargo package, staticlib) are affected
+      localStore = StoreUtil.putCrateNameOverride(mThreadPath, mName, localStore)
 
       injectMonitorPDNamed(curModel, mProcessPath, mThreadPath, options, curSymbolTable, localStore, reporter) match {
         case Some((s, m, t, st)) =>
@@ -226,7 +240,7 @@ object GumboMonitorPlugin {
               // monitor instances — only add them once
               if (!existingThreadFeatureNames.contains(svPortName)) {
                 // Output data port on source thread
-                localStore = StoreUtil.addNonModelElement(threadPortPath, localStore)
+                localStore = StoreUtil.addSyntheticElement(threadPortPath, localStore)
                 additionalThreadFeatures = additionalThreadFeatures :+ ir.FeatureEnd(
                   identifier = ir.Name(name = threadPortPath, pos = None()),
                   direction = ir.Direction.Out,
@@ -708,6 +722,19 @@ object GumboMonitorPlugin {
           case _ =>
         }
       }
+      // UNCONNECTED inputs are observed directly (the monitor maps the consumer's own
+      // input region -- see MonitorInjector); their monitor port follows the same
+      // <threadId>_<portId> naming, keyed here by the consumer's port so contract
+      // parameters over such inputs resolve to a getter instead of get_UNKNOWN_*.
+      for (t <- symbolTable.getThreads() if !StoreUtil.isSynthetic(t.path, localStore)) {
+        for (p <- t.getPorts()
+             if p.direction == ir.Direction.In &&
+               !symbolTable.inConnections.contains(p.path) &&
+               !StoreUtil.isSynthetic(p.path, localStore)) {
+          dstPortToMonitorPortName = dstPortToMonitorPortName + p.path ~>
+            s"${MicrokitUtil.getComponentIdPath(t)}_${p.identifier}"
+        }
+      }
 
       // One monitor component per name: size-1 for the gumbo monitor, one per
       // composition for the sys-assert monitor (design D8, approach (i)).
@@ -832,20 +859,23 @@ object GumboMonitorPlugin {
             }
           }
 
+          // Plain-Rust (non-Verus) monitors get no external_body directive.
+          val monitorVerus: B = getMonitorGenProfile.verusVerified
           val externalBodyAttr: String =
-            if (options.verusAttributeSyntax) "#[verus_verify(external_body)]"
+            if (!monitorVerus) ""
+            else if (options.verusAttributeSyntax) "#[verus_verify(external_body)]"
             else "#[verifier::external_body]"
 
           val monitorThread = symbolTable.componentMap.get(monitorThreadPath).get.asInstanceOf[AadlThread]
           val monitorThreadId = MicrokitUtil.getComponentIdPath(monitorThread)
           val appApiType = CRustApiPlugin.applicationApiType(monitorThread)
 
-          val externalBodyAttribute: RAST.Attribute = {
-            val content: ST =
-              if (options.verusAttributeSyntax) st"verus_verify(external_body)"
-              else st"verifier::external_body"
-            RAST.AttributeST(inner = F, content = content)
-          }
+          val externalBodyAttrContent: ST =
+            if (options.verusAttributeSyntax) st"verus_verify(external_body)"
+            else st"verifier::external_body"
+          val externalBodyAttributes: ISZ[RAST.Attribute] =
+            if (!monitorVerus) ISZ()
+            else ISZ(RAST.AttributeST(inner = F, content = externalBodyAttrContent))
 
           val monitorMethod = RAST.FnImpl(
             sig = RAST.FnSig(
@@ -863,8 +893,8 @@ object GumboMonitorPlugin {
                       ty = RAST.TyPath(ISZ(ISZ(appApiType), ISZ("API")), None()), mutbl = RAST.Mutability.Mut)))),
                 outputs = RAST.FnRetTyDefault()),
               verusHeader = None(), fnHeader = RAST.FnHeader(F)),
-            comments = ISZ(), attributes = ISZ(externalBodyAttribute), visibility = RAST.Visibility.Public, meta = ISZ(),
-            verusAttributeSyntax = options.verusAttributeSyntax, contract = None(),
+            comments = ISZ(), attributes = externalBodyAttributes, visibility = RAST.Visibility.Public, meta = ISZ(),
+            verusAttributeSyntax = options.verusAttributeSyntax && monitorVerus, contract = None(),
             body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
               st"""let state = api.get_sched_state();
                   |
@@ -1037,7 +1067,7 @@ object GumboMonitorPlugin {
         case Some(svInfos) =>
           val thread = symbolTable.componentMap.get(e._1).get.asInstanceOf[AadlThread]
           val threadId = MicrokitUtil.getComponentIdPath(thread)
-          val componentCrateDir = CRustComponentPlugin.componentCrateDirectory(thread, options)
+          val componentCrateDir = CRustComponentPlugin.componentCrateDirectory(thread, options, store)
           val componentSrcDir = s"$componentCrateDir/src"
 
           val initPuts: ISZ[ST] = for (sv <- svInfos) yield
@@ -1064,6 +1094,12 @@ object GumboMonitorPlugin {
                     |}""")
             else ISZ(st"NOT YET")
 
+          // Only declare the test module for monitors that get a test harness.
+          val testModDecl: Option[ST] =
+            if (getMonitorGenProfile.emitTestHarness) Some(st"""#[cfg(test)]
+                                                              |mod test;""")
+            else None()
+
           val content =
             st"""#![cfg_attr(not(test), no_std)]
                 |
@@ -1075,8 +1111,7 @@ object GumboMonitorPlugin {
                 |mod component;
                 |mod logging;
                 |
-                |#[cfg(test)]
-                |mod test;
+                |$testModDecl
                 |
                 |use crate::bridge::${CRustApiPlugin.apiModuleName(thread)}::{self as api, *};
                 |use crate::bridge::extern_c_api;
@@ -1146,7 +1181,7 @@ object GumboMonitorPlugin {
       symbolTable.componentMap.get(monitorThreadPath) match {
         case Some(monitorComp) =>
           val monitorThread = monitorComp.asInstanceOf[AadlThread]
-          val monitorCrateDir = CRustComponentPlugin.componentCrateDirectory(monitorThread, options)
+          val monitorCrateDir = CRustComponentPlugin.componentCrateDirectory(monitorThread, options, store)
           val gumboxDir = s"$monitorCrateDir/src/gumbox"
 
           var modDecls: ISZ[String] = ISZ()
@@ -1195,6 +1230,11 @@ object GumboMonitorPlugin {
                     |}""")
             else ISZ(st"NOT YET")
 
+          val testModDecl2: Option[ST] =
+            if (getMonitorGenProfile.emitTestHarness) Some(st"""#[cfg(test)]
+                                                              |mod test;""")
+            else None()
+
           val monitorLibContent =
             st"""#![cfg_attr(not(test), no_std)]
                 |
@@ -1207,8 +1247,7 @@ object GumboMonitorPlugin {
                 |mod gumbox;
                 |mod logging;
                 |
-                |#[cfg(test)]
-                |mod test;
+                |$testModDecl2
                 |
                 |use crate::bridge::${CRustApiPlugin.apiModuleName(monitorThread)}::{self as api, *};
                 |use crate::component::${CRustComponentPlugin.appModuleName(monitorThread)}::*;

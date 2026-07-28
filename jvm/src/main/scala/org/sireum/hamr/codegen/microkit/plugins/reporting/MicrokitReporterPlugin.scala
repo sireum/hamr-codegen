@@ -93,8 +93,11 @@ object MicrokitReporterPlugin {
                   path = ReportUtil.deWin(sel4OutputDir.relativize(Os.path(i.dstPath)).value),
                   overwrittenIfExists = i.overwrite)
               case e: EResource =>
-                halt("Not expecting $e")
-              case e => halt("Not expecting $e")
+                // external resources (e.g. symlinked aux code dirs) are always refreshed
+                r = r :+ ResourceReport(
+                  path = ReportUtil.deWin(sel4OutputDir.relativize(Os.path(e.dstPath)).value),
+                  overwrittenIfExists = T)
+              case e => halt(s"Not expecting $e")
             }
           }
           r
@@ -148,7 +151,7 @@ object MicrokitReporterPlugin {
 
     var componentReports: HashSMap[IdPathR, ComponentReport] = HashSMap.empty
 
-    for (t <- symbolTable.get.getThreads() if !StoreUtil.isNonModelElement(t.path, localStore)) {
+    for (t <- symbolTable.get.getThreads() if !StoreUtil.isSynthetic(t.path, localStore)) {
 
       var ports: HashSMap[IdPathR, PortReport] = HashSMap.empty
 
@@ -161,8 +164,8 @@ object MicrokitReporterPlugin {
 
       val protectionDomain = msd.getProtectionDomain(threadid).get.protection_domains(0)
 
-      val inPorts = t.getPorts().filter(p => p.direction == Direction.In && !StoreUtil.isNonModelElement(p.path, localStore))
-      val outPorts = t.getPorts().filter(p => p.direction == Direction.Out && !StoreUtil.isNonModelElement(p.path, localStore))
+      val inPorts = t.getPorts().filter(p => p.direction == Direction.In && !StoreUtil.isSynthetic(p.path, localStore))
+      val outPorts = t.getPorts().filter(p => p.direction == Direction.Out && !StoreUtil.isSynthetic(p.path, localStore))
 
       val cComponentDir = sel4OutputDir / "components" / threadid / "src"
       assert(cComponentDir.exists, cComponentDir.value)
@@ -281,7 +284,7 @@ object MicrokitReporterPlugin {
 
         { // process api artifacts
           @pure def addPath(pports: ISZ[AadlPort], rustImpl: RustContainers.RustImpl, rustTrait: RustContainers.RustTrait): Unit = {
-            for (p <- pports if !StoreUtil.isNonModelElement(p.path, localStore)) {
+            for (p <- pports if !StoreUtil.isSynthetic(p.path, localStore)) {
               val typ: String = if (p.direction == Direction.In) "get" else "put"
 
               val fn1 = rustImpl.methods.get(s"${typ}_${p.identifier}").get
@@ -525,7 +528,7 @@ object MicrokitReporterPlugin {
 
     var behaviorCodeReports: ISZ[ST] = ISZ()
 
-    for (t <- symbolTable.getThreads() if !StoreUtil.isNonModelElement(t.path, store)) {
+    for (t <- symbolTable.getThreads() if !StoreUtil.isSynthetic(t.path, store)) {
       val classifier = t.classifier
       assert (classifier.size == 2)
 
