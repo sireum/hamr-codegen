@@ -696,10 +696,14 @@ object SlangExpUtil {
                                  slangParentOp: String,
                                  slangChildOp: String, isRightChild: B): B = {
       val slangParentPrecedence = Exp.BinaryOp.precendenceLevel(slangParentOp)
-      val targetParentPrecedence = rustPrecedenceLevel(slangParentOp)
+      val targetParentPrecedence: Z =
+        if (target == TargetLanguage.C2PO) c2poPrecedenceLevel(slangParentOp)
+        else rustPrecedenceLevel(slangParentOp)
 
       val slangChildPrecedence = Exp.BinaryOp.precendenceLevel(slangChildOp)
-      val targetChildPrecedence = rustPrecedenceLevel(slangChildOp)
+      val targetChildPrecedence: Z =
+        if (target == TargetLanguage.C2PO) c2poPrecedenceLevel(slangChildOp)
+        else rustPrecedenceLevel(slangChildOp)
 
       // rust requires comparison expressions to be explicitly parenthesized
       slangChildOp match {
@@ -738,11 +742,16 @@ object SlangExpUtil {
         } else if (targetChildPrecedence == targetParentPrecedence) {
           // same precedence in Rust so may need parens due to
           // right associativity
-          val isParentRightAssoc: B = slangParentOp match {
-            case Exp.BinaryOp.Imply => T
-            case Exp.BinaryOp.CondImply => T
-            case _ => F
-          }
+          // C2PO declares all of its binary precedence levels left-associative, including ->.
+          val isParentRightAssoc: B =
+            if (target == TargetLanguage.C2PO) F
+            else {
+              slangParentOp match {
+                case Exp.BinaryOp.Imply => T
+                case Exp.BinaryOp.CondImply => T
+                case _ => F
+              }
+            }
           return isRightChild != isParentRightAssoc
         } else {
           // in Rust the child's Rust op binds tighter than the
@@ -859,10 +868,45 @@ object SlangExpUtil {
 
         case BinaryOpCust.BiImplication => return 14 //  <==>       requires parens
 
-        case string"-->:" => halt(s"Not expecting '-->:', it should have been converted to ${Exp.BinaryOp.CondImply} at the AIR level")
-        case string"->:" => halt(s"Not expecting '->:', it should have been converted to ${Exp.BinaryOp.Imply} at the AIR level")
+        case _ => halt(s"Infeasible binary operator for Rust: $op")
+      }
+    }
 
-        case _ => halt(s"Infeasible binary operator for GUMBO: $op")
+    // C2PO binary precedence from https://github.com/R2U2/r2u2/blob/develop/compiler/c2po/parse_c2po.py.
+    def c2poPrecedenceLevel(op: String): Z = {
+      op match {
+        case Exp.BinaryOp.Mul => return 3 //             *          left
+        case Exp.BinaryOp.Div => return 3 //             /          left
+        case Exp.BinaryOp.Rem => return 3 //             %          left
+
+        case Exp.BinaryOp.Add => return 4 //             +          left
+        case Exp.BinaryOp.Sub => return 4 //             -          left
+
+        case Exp.BinaryOp.Shl => return 5 //             <<         left
+        case Exp.BinaryOp.Shr => return 5 //             >>         left
+
+        case Exp.BinaryOp.Lt => return 6 //              <          left
+        case Exp.BinaryOp.Le => return 6 //              <=         left
+        case Exp.BinaryOp.Gt => return 6 //              >          left
+        case Exp.BinaryOp.Ge => return 6 //              >=         left
+
+        case Exp.BinaryOp.Eq => return 7 //              ==         left
+        case Exp.BinaryOp.Ne => return 7 //              !=         left
+
+        case Exp.BinaryOp.And => return 8 //             &          left
+
+        case Exp.BinaryOp.Xor => return 9 //             ^          left
+
+        case Exp.BinaryOp.Or => return 10 //             |          left
+
+        case Exp.BinaryOp.CondAnd => return 12 //        &&         left
+
+        case Exp.BinaryOp.CondOr => return 13 //         ||         left
+
+        case Exp.BinaryOp.Imply => return 14 //          ->         left
+        case Exp.BinaryOp.CondImply => return 14 //      ->         left
+
+        case _ => halt(s"Infeasible binary operator for C2PO: $op")
       }
     }
 
