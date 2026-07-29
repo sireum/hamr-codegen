@@ -675,7 +675,7 @@ object SlangExpUtil {
           if (target == TargetLanguage.C2PO){
                return "~"
           } else {
-               return "!"
+               return halt(s"what is the rust equiv of $op")
           }
       }
     }
@@ -692,19 +692,17 @@ object SlangExpUtil {
       }
     }
 
-    @pure def shouldParenthesize(slangParentOp: String, parentPosOpt: Option[Position],
-                                 slangChildOp: String, childPosOpt: Option[Position], isRightChild: B): B = {
+    @pure def shouldParenthesize(target: TargetLanguage.Type,
+                                 slangParentOp: String,
+                                 slangChildOp: String, isRightChild: B): B = {
       val slangParentPrecedence = Exp.BinaryOp.precendenceLevel(slangParentOp)
-      val verusRustParentOp = convertBinaryOp(TargetLanguage.verus, slangParentOp, parentPosOpt)
-      val verusRustParentPrecedence = rustPrecendenceLevel(verusRustParentOp)
+      val targetParentPrecedence = rustPrecedenceLevel(slangParentOp)
 
       val slangChildPrecedence = Exp.BinaryOp.precendenceLevel(slangChildOp)
-      val rustChildOp = convertBinaryOp(TargetLanguage.rust, slangChildOp, childPosOpt)
-      val verusRustChildOp = convertBinaryOp(TargetLanguage.verus, slangChildOp, childPosOpt)
-      val verusRustChildPrecedence = rustPrecendenceLevel(verusRustChildOp)
+      val targetChildPrecedence = rustPrecedenceLevel(slangChildOp)
 
       // rust requires comparison expressions to be explicitly parenthesized
-      rustChildOp match {
+      slangChildOp match {
         case Exp.BinaryOp.Eq => return T
         case Exp.BinaryOp.Ne => return T
         case Exp.BinaryOp.Le => return T
@@ -719,10 +717,10 @@ object SlangExpUtil {
       // Verus doesn't support & and | so those are converted to && and ||. The non-short
       // circuit version have higher precedence than their short circuit counter-parts in
       // rust so we need to parenthesize the child
-      (rustChildOp, verusRustChildOp) match {
-        case (string"&", string"&&") => return T
-        case (string"|", string"||") => return T
-        case _ =>
+      if (target == TargetLanguage.verus){
+          if (slangChildOp == Exp.BinaryOp.And || slangChildOp == Exp.BinaryOp.Or){
+               return T
+          }
       }
 
       if (slangChildPrecedence >= slangParentPrecedence) {
@@ -733,14 +731,14 @@ object SlangExpUtil {
         //      in which case we only potentially need parens in Slang
         //      due to right associativity
 
-        if (verusRustChildPrecedence > verusRustParentPrecedence) {
+        if (targetChildPrecedence > targetParentPrecedence) {
           // in Rust the child's Rust op also binds looser than the
           // parent's Rust op so need parens in Rust
           return T
-        } else if (verusRustChildPrecedence == verusRustParentPrecedence) {
+        } else if (targetChildPrecedence == targetParentPrecedence) {
           // same precedence in Rust so may need parens due to
           // right associativity
-          val isParentRightAssoc: B = verusRustParentOp match {
+          val isParentRightAssoc: B = slangParentOp match {
             case Exp.BinaryOp.Imply => T
             case Exp.BinaryOp.CondImply => T
             case _ => F
@@ -758,42 +756,48 @@ object SlangExpUtil {
       return F
     }
 
-    @pure def convertBinaryOp(target: TargetLanguage.Type, op: String, posOpt: Option[Position]) : String = {
+    @pure def convertBinaryOp(target: TargetLanguage.Type, op: String): String = {
       op match {
-        case Exp.BinaryOp.Add => return op // +
-        case Exp.BinaryOp.Sub => return op // -
-        case Exp.BinaryOp.Mul => return op // *
-        case Exp.BinaryOp.Div => return op // /
-        case Exp.BinaryOp.Rem => return op // %
-        case Exp.BinaryOp.Eq => return op // ==
-        case Exp.BinaryOp.Ne => return op // !=
-        case Exp.BinaryOp.Shl => return op // <<
-        case Exp.BinaryOp.Shr => return op // >>
-        case Exp.BinaryOp.Lt => return op // <
-        case Exp.BinaryOp.Le => return op // >=
-        case Exp.BinaryOp.Gt => return op // >
-        case Exp.BinaryOp.Ge => return op // >=
-        case Exp.BinaryOp.Xor => return op // |^ in Slang, ^ in Rust/Verus
-        case Exp.BinaryOp.CondAnd => return op // &&
-        case Exp.BinaryOp.CondOr => return op // ||
-
-        case Exp.BinaryOp.And => // &
-          return (
-            if (target == TargetLanguage.verus) Exp.BinaryOp.CondAnd
-            else op)
-
+        case Exp.BinaryOp.Add => return "+"
+        case Exp.BinaryOp.Sub => return "-"
+        case Exp.BinaryOp.Mul => return "*"
+        case Exp.BinaryOp.Div => return "/"
+        case Exp.BinaryOp.Rem => return "%"
+        case Exp.BinaryOp.Eq => return "=="
+        case Exp.BinaryOp.Ne => return "!="
+        case Exp.BinaryOp.Shl => return "<<"
+        case Exp.BinaryOp.Shr => return ">>"
+        case Exp.BinaryOp.Lt => return "<"
+        case Exp.BinaryOp.Le => return "<="
+        case Exp.BinaryOp.Gt => return ">"
+        case Exp.BinaryOp.Ge => return ">="
+        case Exp.BinaryOp.Xor => return "^"
+        case Exp.BinaryOp.CondAnd => return "&&"
+        case Exp.BinaryOp.CondOr => return "||"
+        case Exp.BinaryOp.And =>
+          if (target == TargetLanguage.verus){
+               return "&&"
+          } else {
+               return "&"
+          }
         case Exp.BinaryOp.Or => // |
-          return (
-            if (target == TargetLanguage.verus) Exp.BinaryOp.CondOr
-            else op)
-
+          if (target == TargetLanguage.verus){
+               return "||"
+          } else {
+               return "|"
+          }
         case Exp.BinaryOp.Imply => // __>:
-          return (
-            if (target == TargetLanguage.verus) Exp.BinaryOp.CondImply
-            else op)
-
-        case Exp.BinaryOp.CondImply => return op // ___>:
-
+          if (target == TargetLanguage.C2PO){
+               return "->"
+          } else {
+               return "==>"
+          }
+        case Exp.BinaryOp.CondImply =>
+          if (target == TargetLanguage.C2PO){
+               return "->"
+          } else {
+               return "==>"
+          }
         case "->:" => halt(s"Not expecting '->:', it should have been converted to ${Exp.BinaryOp.Imply} at the AIR level")
         case "-->:" => halt(s"Not expecting '-->:', it should have been converted to ${Exp.BinaryOp.CondImply} at the AIR level")
 
@@ -818,7 +822,7 @@ object SlangExpUtil {
 
     // https://doc.rust-lang.org/reference/expressions.html#r-expr.precedence
     // https://verus-lang.github.io/verus/guide/spec-operator-precedence.html
-    def rustPrecendenceLevel(op: String): Z = {
+    def rustPrecedenceLevel(op: String): Z = {
       op match {
         //                                               Verus Op | Associativity
         case Exp.BinaryOp.Mul => return 3 //             *          left
@@ -875,7 +879,7 @@ object SlangExpUtil {
             singleLine = F
           }
 
-          if (shouldParenthesize(slangParentOp, parentPos, leftOp, leftPos, F)) st"($left)"
+          if (shouldParenthesize(target, slangParentOp, leftOp, F)) st"($left)"
           else left
         case _ if isLeftIf =>
           singleLine = F
@@ -889,7 +893,7 @@ object SlangExpUtil {
             singleLine = F
           }
 
-          if (shouldParenthesize(slangParentOp, parentPos, rightOp, rightPos, T)) st"($right)"
+          if (shouldParenthesize(target, slangParentOp, rightOp, T)) st"($right)"
           else right
         case _ if isRightIf =>
           singleLine = F
@@ -898,25 +902,20 @@ object SlangExpUtil {
           right
       }
 
-      // now convert logical operators if in verus (e.g. & becomes &&)
-      val verusRustParentOp: String = convertBinaryOp(TargetLanguage.verus, slangParentOp, parentPos) match {
-        case Exp.BinaryOp.Xor => "^"
-        case Exp.BinaryOp.CondImply => "==>"
-        case op => op
-      }
-
-      if ((target == TargetLanguage.rust || isTesting) && (verusRustParentOp == "==>" || verusRustParentOp == Exp.BinaryOp.Imply)) {
+      if ((target == TargetLanguage.rust || isTesting) &&
+        (slangParentOp == Exp.BinaryOp.Imply || slangParentOp == Exp.BinaryOp.CondImply)) {
         val functionName: String =
-          if (verusRustParentOp == "==>") "implies!"
+          if (slangParentOp == Exp.BinaryOp.CondImply) "implies!"
           else "impliesL!"
         return (
           st"""$functionName(
               |  $leftST,
               |  $rightST)""")
       } else {
+        val targetParentOp: String = convertBinaryOp(target, slangParentOp)
         return (
-          if (alwaysOneLine || singleLine) st"$leftST $verusRustParentOp $rightST"
-          else st"""$leftST $verusRustParentOp
+          if (alwaysOneLine || singleLine) st"$leftST $targetParentOp $rightST"
+          else st"""$leftST $targetParentOp
                    |  $rightST""")
       }
     }
