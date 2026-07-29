@@ -807,10 +807,12 @@ object Generator {
   def genLaunchPackageFile(modelName: String, execDepends: ISZ[String]): (ISZ[String], ST, B, ISZ[Marker]) = {
     val top_level_package_nameT: String = genCppPackageName(modelName)
     val fileName: String = "package.xml"
-    val nativeExecDepends: ST =
-      if (execDepends.isEmpty) st""
-      else st"""
-               |${(for (d <- execDepends) yield st"<exec_depend>${d}</exec_depend>", "\n")}"""
+    // One list rendered at the start of a line: interpolating a multi-line ST mid-line
+    // would indent its continuation lines to that column rather than to the 4 spaces the
+    // first entry sits at.
+    val execDependEntries: ISZ[ST] =
+      ISZ(st"<exec_depend>${top_level_package_nameT}</exec_depend>") ++
+        (for (d <- execDepends) yield st"<exec_depend>${d}</exec_depend>")
 
     val marker = BlockMarker(
       id = "Additions within these tags will be preserved when re-running Codegen",
@@ -834,7 +836,7 @@ object Generator {
           |
           |    <buildtool_depend>ament_cmake</buildtool_depend>
           |
-          |    <exec_depend>${top_level_package_nameT}</exec_depend>${nativeExecDepends}
+          |    ${(execDependEntries, "\n")}
           |
           |    ${marker.beginMarker}
           |
