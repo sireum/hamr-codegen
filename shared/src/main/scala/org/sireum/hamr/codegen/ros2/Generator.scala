@@ -872,74 +872,6 @@ object Generator {
     return launch_node_decl_nameT
   }
 
-  // genLaunchNodeDecl() - generate node declaration
-  //   Example:
-  //     tc_node = Node(
-  //        package="tc_cpp_pkg",
-  //        executable="tc_exe"
-  //        )
-  def genPyFormatLaunchNodeDecl(launch_node_decl_nameT: String,
-                                top_level_package_nameT: String,
-                                component: AadlThread): ST = {
-    val node_executable_file_nameT = genExecutableFileName(genNodeName(component))
-    var args: ISZ[ST] = ISZ(
-      st"""package = "${top_level_package_nameT}"""",
-      st"""executable = "${node_executable_file_nameT}"""")
-    RosUtil.getRosNamespace(component) match {
-      case string"" =>
-      case ns => args = args :+ st"""namespace = "${ns}""""
-    }
-    val s =
-      st"""
-          |${launch_node_decl_nameT} = Node(
-          |   ${(args, ",\n")}
-          |   )
-        """
-    return s
-  }
-
-  // Example:
-  //    ld.add_action(tc_node)
-  def genPyFormatLaunchAddAction(launch_node_decl_nameT: String): ST = {
-    val s = st"""ld.add_action(${launch_node_decl_nameT})"""
-    return s
-  }
-
-  // For example, see https://github.com/santoslab/ros-examples/blob/main/tempControl_ws/src/tc_bringup/launch/tc.launch.py
-  def genPyFormatLaunchFile(modelName: String, threadComponents: ISZ[AadlThread]): (ISZ[String], ST) = {
-    val fileName = genPyLaunchFileName(modelName)
-
-    val top_level_package_nameT: String = genPyPackageName(modelName)
-
-    var node_decls: ISZ[ST] = IS()
-    var ld_entries: ISZ[ST] = IS()
-
-    for (comp <- threadComponents) {
-      val launch_node_decl_nameT = genPyFormatLaunchNodeDeclName(genNodeName(comp))
-      node_decls = node_decls :+ genPyFormatLaunchNodeDecl(launch_node_decl_nameT, top_level_package_nameT, comp)
-      ld_entries = ld_entries :+ genPyFormatLaunchAddAction(launch_node_decl_nameT)
-    }
-
-    val launchFileBody =
-      st"""from launch import LaunchDescription
-          |from launch_ros.actions import Node
-          |
-          |${CommentTemplate.doNotEditComment_hash}
-          |
-          |def generate_launch_description():
-          |    ld = LaunchDescription()
-          |
-          |    ${(node_decls, "\n")}
-          |    ${(ld_entries, "\n")}
-          |
-          |    return ld
-        """
-
-    val filePath: ISZ[String] = IS("src", s"${modelName}_bringup", "launch", fileName)
-
-    return (filePath, launchFileBody)
-  }
-
   //================================================
   //  L a u n c h  File (XML Format)
   //================================================
@@ -1198,6 +1130,361 @@ object Generator {
               |</launch>
           """
         launchFiles = launchFiles :+ (launchDir :+ fileName, topBody, T, IS(launchArgsMarker))
+      }
+    }
+
+    return launchFiles
+  }
+
+  //================================================
+  //  L a u n c h  File (Python Format)
+  //================================================
+  //
+  // A feature-for-feature counterpart of the XML launch files above: same node set, same
+  // namespaces, same deployment split, same preserved blocks.  Both formats are emitted for
+  // every model -- they are alternative front ends over one topology, nothing consumes them
+  // but `ros2 launch`, and a project picks whichever it prefers to hand-edit.
+  //
+  // The ids are taken verbatim from the XML markers so the two files carry identical marker
+  // prose.  A Python comment has no terminator and no "--" hazard, so no collapsing is needed
+  // on this side; xmlCommentSafe has already been applied to the shared id.
+
+  def pyLaunchNodeConfigMarker(thread: AadlThread): BlockMarker = {
+    return BlockMarker(
+      id = launchNodeConfigMarker(thread).id,
+      beginPrefix = "#",
+      optBeginSuffix = None(),
+      endPrefix = "#",
+      optEndSuffix = None())
+  }
+
+  val pyLaunchArgsMarker: BlockMarker = BlockMarker(
+    id = launchArgsMarker.id,
+    beginPrefix = "#",
+    optBeginSuffix = None(),
+    endPrefix = "#",
+    optEndSuffix = None())
+
+  // File-level block above generate_launch_description, for imports and helper functions.  A
+  // Python launch file is a module, so anything a project needs in scope -- an extra launch
+  // action, a factory that wraps a Node, a constant -- has to be introduced at module level,
+  // which is above every other preserved block in the file.
+  val pyLaunchPreambleMarker: BlockMarker = BlockMarker(
+    id = "LAUNCH PREAMBLE - additions within these tags will be preserved when re-running Codegen",
+    beginPrefix = "#",
+    optBeginSuffix = None(),
+    endPrefix = "#",
+    optEndSuffix = None())
+
+  def genPyLaunchPreambleBlock(): ST = {
+    return (
+      st"""${pyLaunchPreambleMarker.beginMarker}
+          |# Add imports and helper functions here, e.g.
+          |#     from launch.actions import TimerAction
+          |#
+          |#     def delayed(action, seconds):
+          |#         return TimerAction(period=float(seconds), actions=[action])
+          |${pyLaunchPreambleMarker.endMarker}""")
+  }
+
+  // Per node, between its declaration and its add_action.  The config block inside Node(...) can
+  // add keyword arguments; this one sits after the call has returned, so rebinding the variable
+  // here replaces the generated declaration outright -- with a differently-constructed Node, a
+  // wrapper such as the TimerAction above, or anything else the launch API accepts.  Python
+  // takes the last binding, so the generated declaration above stays as the starting point.
+  def pyLaunchOverrideMarker(thread: AadlThread): BlockMarker = {
+    return BlockMarker(
+      id = s"LAUNCH OVERRIDE ${genNodeName(thread)} - additions within these tags will be preserved when re-running Codegen",
+      beginPrefix = "#",
+      optBeginSuffix = None(),
+      endPrefix = "#",
+      optEndSuffix = None())
+  }
+
+  // Sits above the node declarations because a node's config block refers to the
+  // LaunchConfiguration objects bound here.
+  def genPyLaunchArgsBlock(): ST = {
+    return (
+      st"""${pyLaunchArgsMarker.beginMarker}
+          |# Declare launch arguments here, e.g.
+          |#     log_file = LaunchConfiguration("log_file")
+          |#     ld.add_action(DeclareLaunchArgument("log_file", default_value="uros-demo.txt"))
+          |# then reference them from a node's config block:
+          |#     parameters=[{"log_file_name": log_file}],
+          |${pyLaunchArgsMarker.endMarker}""")
+  }
+
+  // Only what a given file actually uses: an unused import is harmless but invites the reader to
+  // wonder which action it belongs to.  DeclareLaunchArgument and LaunchConfiguration are the
+  // exception -- they are always imported because the launch-arguments block tells the reader to
+  // use them, and an import appearing only once the block is filled in would be a worse surprise.
+  // One line per import, joined at the start of a line.  Assembling this from partial STs
+  // interpolated mid-line would indent the continuation lines to the interpolation's column and
+  // emit Python that does not parse -- the same hazard as the bringup package.xml exec_depend
+  // list.
+  def genPyLaunchImports(needsInclude: B, needsExecuteProcess: B, needsNode: B): ST = {
+    var launchActions: ISZ[String] = ISZ("DeclareLaunchArgument")
+    if (needsExecuteProcess) {
+      launchActions = launchActions :+ "ExecuteProcess"
+    }
+    if (needsInclude) {
+      launchActions = launchActions :+ "IncludeLaunchDescription"
+    }
+
+    var lines: ISZ[ST] = ISZ()
+    if (needsInclude) {
+      lines = lines :+ st"import os"
+      lines = lines :+ st""
+      lines = lines :+ st"from ament_index_python.packages import get_package_share_directory"
+    }
+    lines = lines :+ st"from launch import LaunchDescription"
+    lines = lines :+ st"from launch.actions import ${(launchActions, ", ")}"
+    if (needsInclude) {
+      lines = lines :+ st"from launch.launch_description_sources import PythonLaunchDescriptionSource"
+    }
+    lines = lines :+ st"from launch.substitutions import LaunchConfiguration"
+    if (needsNode) {
+      lines = lines :+ st"from launch_ros.actions import Node"
+    }
+    return st"${(lines, "\n")}"
+  }
+
+  @strictpure def pyDeclsUse(decls: ISZ[ST], token: String): B =
+    ISZOps(decls).exists(d => ops.StringOps(d.render).contains(token))
+
+  // A node declaration plus the add_action that registers it, with a preserved block on each
+  // side of the call.  The inner one sits inside Node(...) because that is where parameters=
+  // and remappings= go; a trailing comma before the closing paren keeps it editable without
+  // touching generated lines.  The outer one sits after the call, where the variable can be
+  // rebound to something else entirely.
+  def genPyLaunchNodeEntry(declName: String, args: ISZ[ST], thread: AadlThread, leadComment: ST): ST = {
+    val configMarker = pyLaunchNodeConfigMarker(thread)
+    val overrideMarker = pyLaunchOverrideMarker(thread)
+    return (
+      st"""${leadComment}${declName} = Node(
+          |    ${(args, ",\n")},
+          |    ${configMarker.beginMarker}
+          |    ${configMarker.endMarker}
+          |)
+          |${overrideMarker.beginMarker}
+          |# Rebind ${declName} here to replace the declaration above, e.g.
+          |#     ${declName} = Node(package="...", executable="...")
+          |${overrideMarker.endMarker}
+          |ld.add_action(${declName})""")
+  }
+
+  def genPyFormatLaunchNodeDecl(top_level_package_nameT: String, thread: AadlThread): ST = {
+    val declName = genPyFormatLaunchNodeDeclName(genNodeName(thread))
+    val args: ISZ[ST] = ISZ(
+      st"""package="${top_level_package_nameT}"""",
+      st"""executable="${genExecutableFileName(genNodeName(thread))}"""") ++ genPyLaunchNamespaceArg(thread)
+    return genPyLaunchNodeEntry(declName, args, thread, st"")
+  }
+
+  // additional_env is the Python counterpart of the XML <env> child; see
+  // genXmlFormatMicroRosLaunchNodeDecl for why the RMW has to be pinned here.
+  def genPyFormatMicroRosLaunchNodeDecl(microrosPkgName: String, thread: AadlThread): ST = {
+    val declName = genPyFormatLaunchNodeDeclName(genNodeName(thread))
+    val args: ISZ[ST] = ISZ(
+      st"""package="${microrosPkgName}"""",
+      st"""executable="${genExecutableFileName(genNodeName(thread))}"""") ++ genPyLaunchNamespaceArg(thread) ++
+      ISZ(st"""additional_env={"RMW_IMPLEMENTATION": "rmw_microxrcedds"}""")
+    return genPyLaunchNodeEntry(declName, args, thread, st"")
+  }
+
+  def genPyFormatPlatformProvidedNodeDecl(thread: AadlThread, reporter: Reporter): ST = {
+    RosUtil.getNativeExecutable(thread, reporter) match {
+      case Some((nativePackage, nativeExecutable)) =>
+        val declName = genPyFormatLaunchNodeDeclName(genNodeName(thread))
+        val args: ISZ[ST] = ISZ(
+          st"""package="${nativePackage}"""",
+          st"""executable="${nativeExecutable}"""",
+          st"""name="${thread.identifier}"""") ++ genPyLaunchNamespaceArg(thread)
+        return genPyLaunchNodeEntry(declName, args, thread,
+          st"""# realized by `ros2 run ${nativePackage} ${nativeExecutable}` - no code is generated for it
+              |""")
+      case _ => return st""
+    }
+  }
+
+  @strictpure def genPyLaunchNamespaceArg(thread: AadlThread): ISZ[ST] =
+    RosUtil.getRosNamespace(thread) match {
+      case string"" => ISZ[ST]()
+      case ns => ISZ(st"""namespace="${ns}"""")
+    }
+
+  def genPyLaunchInclude(ros2PkgName: String, launchFileName: String): ST = {
+    return (
+      st"""ld.add_action(IncludeLaunchDescription(
+          |    PythonLaunchDescriptionSource(
+          |        os.path.join(
+          |            get_package_share_directory("${ros2PkgName}_bringup"),
+          |            "launch",
+          |            "${launchFileName}"))))""")
+  }
+
+  def genPyFormatLaunchDecls(component: AadlComponent, ros2PkgName: String,
+                             microrosPkgName: String, microRosThreadPaths: Set[ISZ[String]],
+                             reporter: Reporter): (ISZ[ST], ISZ[ST], ISZ[Marker], ISZ[Marker]) = {
+    var ros2Decls: ISZ[ST] = IS()
+    var microRosDecls: ISZ[ST] = IS()
+    var ros2Markers: ISZ[Marker] = IS()
+    var microRosMarkers: ISZ[Marker] = IS()
+
+    for (comp <- component.subComponents) {
+      comp match {
+        case thread: AadlThread if RosUtil.isPlatformProvidedComponent(thread) =>
+          ros2Decls = ros2Decls :+ genPyFormatPlatformProvidedNodeDecl(thread, reporter)
+          ros2Markers = ros2Markers :+ pyLaunchNodeConfigMarker(thread) :+ pyLaunchOverrideMarker(thread)
+        case thread: AadlThread if microRosThreadPaths.contains(thread.path.toISZ) =>
+          microRosDecls = microRosDecls :+ genPyFormatMicroRosLaunchNodeDecl(microrosPkgName, thread)
+          microRosMarkers = microRosMarkers :+ pyLaunchNodeConfigMarker(thread) :+ pyLaunchOverrideMarker(thread)
+        case thread: AadlThread =>
+          ros2Decls = ros2Decls :+ genPyFormatLaunchNodeDecl(ros2PkgName, thread)
+          ros2Markers = ros2Markers :+ pyLaunchNodeConfigMarker(thread) :+ pyLaunchOverrideMarker(thread)
+        case system: AadlSystem =>
+          ros2Decls = ros2Decls :+ genPyLaunchInclude(ros2PkgName, genPyLaunchFileName(system.identifier))
+        case process: AadlProcess =>
+          val (subRos2, subMicroRos, subRos2Markers, subMicroRosMarkers) =
+            genPyFormatLaunchDecls(process, ros2PkgName, microrosPkgName, microRosThreadPaths, reporter)
+          ros2Decls = ros2Decls ++ subRos2
+          microRosDecls = microRosDecls ++ subMicroRos
+          ros2Markers = ros2Markers ++ subRos2Markers
+          microRosMarkers = microRosMarkers ++ subMicroRosMarkers
+        case _ =>
+      }
+    }
+
+    return (ros2Decls, microRosDecls, ros2Markers, microRosMarkers)
+  }
+
+  def genPyFormatLaunchFiles(modelName: String, threadComponents: ISZ[AadlThread],
+                             systemComponents: ISZ[AadlSystem],
+                             microRosThreads: ISZ[AadlThread],
+                             reporter: Reporter): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
+    val ros2PkgName: String = genCppPackageName(modelName)
+    val microrosPkgName: String = genMicroRosPackageName(modelName)
+
+    var microRosThreadPaths: Set[ISZ[String]] = Set.empty
+    for (t <- microRosThreads) {
+      microRosThreadPaths = microRosThreadPaths + t.path.toISZ
+    }
+
+    var launchFiles: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
+
+    for (system <- systemComponents) {
+      val fileName = genPyLaunchFileName(system.identifier)
+      val launchDir: ISZ[String] = IS("src", s"${ros2PkgName}_bringup", "launch")
+
+      val (ros2Decls, microRosDecls, ros2NodeMarkers, microRosNodeMarkers) =
+        genPyFormatLaunchDecls(system, ros2PkgName, microrosPkgName, microRosThreadPaths, reporter)
+
+      val header: String = CommentTemplate.invertedMarkerComment_hash
+
+      // A nested system contributes an include, so the ros2 half may need the include imports
+      // even when there is no micro-ROS split.
+      val ros2HasInclude: B = pyDeclsUse(ros2Decls, "IncludeLaunchDescription")
+      val ros2HasNode: B = pyDeclsUse(ros2Decls, "= Node(")
+
+      if (microRosDecls.isEmpty) {
+        val body: ST =
+          st"""${header}
+              |
+              |${genPyLaunchImports(ros2HasInclude, F, ros2HasNode)}
+              |
+              |${genPyLaunchPreambleBlock()}
+              |
+              |
+              |def generate_launch_description():
+              |    ld = LaunchDescription()
+              |
+              |    ${genPyLaunchArgsBlock()}
+              |
+              |    ${(ros2Decls, "\n\n")}
+              |
+              |    return ld
+          """
+        launchFiles = launchFiles :+ (launchDir :+ fileName, body, T, ros2NodeMarkers :+ pyLaunchArgsMarker :+ pyLaunchPreambleMarker)
+      } else {
+        val ros2FileName = genPyLaunchFileName(s"${system.identifier}_ros2")
+        val microRosFileName = genPyLaunchFileName(s"${system.identifier}_microros")
+
+        val ros2Body: ST =
+          st"""${header}
+              |
+              |${genPyLaunchImports(ros2HasInclude, F, ros2HasNode)}
+              |
+              |${genPyLaunchPreambleBlock()}
+              |
+              |
+              |def generate_launch_description():
+              |    ld = LaunchDescription()
+              |
+              |    ${genPyLaunchArgsBlock()}
+              |
+              |    ${(ros2Decls, "\n\n")}
+              |
+              |    return ld
+          """
+        launchFiles = launchFiles :+ (launchDir :+ ros2FileName, ros2Body, T, ros2NodeMarkers :+ pyLaunchArgsMarker :+ pyLaunchPreambleMarker)
+
+        val microRosBody: ST =
+          st"""${header}
+              |
+              |# The micro-ROS half of the system, valid for a host deployment only.  On an
+              |# embedded target these nodes are flashed rather than launched, and the agent
+              |# may run elsewhere; in that case launch ${ros2FileName} alone.
+              |#
+              |# The agent's transport must agree with RMW_UXRCE_TRANSPORT and the
+              |# RMW_UXRCE_DEFAULT_UDP_* settings in microros_apps/colcon.meta.  Those live in
+              |# a preserved block there, so changing them does not update the command below.
+              |
+              |${genPyLaunchImports(F, T, T)}
+              |
+              |${genPyLaunchPreambleBlock()}
+              |
+              |
+              |def generate_launch_description():
+              |    ld = LaunchDescription()
+              |
+              |    # micro-ROS agent: bridges rmw_microxrcedds nodes to the ROS2 DDS world.
+              |    # Invoked through `ros2 run` because the binary lives in the package's lib
+              |    # directory rather than on PATH.
+              |    ld.add_action(ExecuteProcess(
+              |        cmd=["ros2", "run", "micro_ros_agent", "micro_ros_agent", "udp4", "--port", "8888"],
+              |        output="screen"))
+              |
+              |    ${genPyLaunchArgsBlock()}
+              |
+              |    ${(microRosDecls, "\n\n")}
+              |
+              |    return ld
+          """
+        launchFiles = launchFiles :+ (launchDir :+ microRosFileName, microRosBody, T, microRosNodeMarkers :+ pyLaunchArgsMarker :+ pyLaunchPreambleMarker)
+
+        val topBody: ST =
+          st"""${header}
+              |
+              |# Brings up the whole system on a host.  Launch ${ros2FileName} on its own when
+              |# the micro-ROS nodes run on hardware rather than on this machine.
+              |
+              |${genPyLaunchImports(T, F, F)}
+              |
+              |${genPyLaunchPreambleBlock()}
+              |
+              |
+              |def generate_launch_description():
+              |    ld = LaunchDescription()
+              |
+              |    ${genPyLaunchArgsBlock()}
+              |
+              |    ${genPyLaunchInclude(ros2PkgName, ros2FileName)}
+              |
+              |    ${genPyLaunchInclude(ros2PkgName, microRosFileName)}
+              |
+              |    return ld
+          """
+        launchFiles = launchFiles :+ (launchDir :+ fileName, topBody, T, IS(pyLaunchArgsMarker, pyLaunchPreambleMarker))
       }
     }
 
@@ -3376,35 +3663,31 @@ object Generator {
   //  P a c k a g e   G e n e r a t o r s
   //================================================
 
+  // Unreachable: Ros2Codegen only handles ros2NodesLanguage == Cpp.  Kept for whenever Python
+  // nodes are implemented.  It no longer emits a launch file -- launch files belong to the
+  // bringup package (genLaunchPkg) and are emitted for every model regardless of node language.
   def genPyNodePkg(modelName: String, threadComponents: ISZ[AadlThread], connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
                  strictAADLMode: B): ISZ[(ISZ[String], ST)] = {
     var files: ISZ[(ISZ[String], ST)] = IS()
 
-    files = files :+ genPyFormatLaunchFile(modelName, threadComponents)
     files = files :+ genPySetupFile(modelName, threadComponents)
 
     return files
   }
 
-  // KNOWN GAP: this emits the bringup package but no launch file, so selecting the Python launch
-  // language yields a bringup package with nothing to launch -- and Python is the codegen CLI's
-  // default (HamrCli's ros2LaunchLanguage), so that is what an unqualified invocation produces.
-  // The XML path (genXmlFormatLaunchFiles) is the working one.
+  // The bringup package, carrying both launch formats.
   //
-  // Wiring genPyFormatLaunchFile in below is not sufficient on its own.  It is currently dead
-  // code -- its only other caller, genPyNodePkg, is unreachable because Ros2Codegen handles only
-  // ros2NodesLanguage == Cpp -- and it needs three fixes first:
-  //   - its output path is src/<modelName>_bringup/... whereas the bringup package files above
-  //     land in src/<cppPkgName>_bringup/..., so the launch file would not be inside its package;
-  //   - micro-ROS threads are not passed in (Ros2Codegen calls this with ros2Threads only), and
-  //     the XML version additionally emits the micro_ros_agent <executable> entry a mixed model
-  //     needs to run at all;
-  //   - Ros_Namespace is honored by genPyFormatLaunchNodeDecl but not by GeneratorPy's copy.
-  // Ros2TestUtil no longer pins the launch language, so a test can select Python once this works.
-  def genPyLaunchPkg(modelName: String, threadComponents: ISZ[AadlThread],
-                     reporter: Reporter): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
+  // ros2LaunchLanguage is deliberately not consulted: XML and Python are alternative front ends
+  // over the same topology, nothing but `ros2 launch` consumes either, and emitting both costs a
+  // few files while letting a project hand-edit whichever it prefers.  The CMakeLists installs
+  // the whole launch directory, so both formats ship without further wiring.  The option is
+  // expected to be dropped.
+  def genLaunchPkg(modelName: String, threadComponents: ISZ[AadlThread], systemComponents: ISZ[AadlSystem],
+                   microRosThreads: ISZ[AadlThread], reporter: Reporter): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
     var files: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
 
+    files = files ++ genXmlFormatLaunchFiles(modelName, threadComponents, systemComponents, microRosThreads, reporter)
+    files = files ++ genPyFormatLaunchFiles(modelName, threadComponents, systemComponents, microRosThreads, reporter)
     files = files :+ genLaunchCMakeListsFile(modelName)
     // the bringup package declares its stock-node dependencies regardless of launch format
     files = files :+ genLaunchPackageFile(modelName, getNativeExecPackages(threadComponents, reporter))
@@ -3449,16 +3732,6 @@ object Generator {
     return packages
   }
 
-  def genXmlLaunchPkg(modelName: String, threadComponents: ISZ[AadlThread], systemComponents: ISZ[AadlSystem],
-                     microRosThreads: ISZ[AadlThread], reporter: Reporter): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
-    var files: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
-
-    files = files ++ genXmlFormatLaunchFiles(modelName, threadComponents, systemComponents, microRosThreads, reporter)
-    files = files :+ genLaunchCMakeListsFile(modelName)
-    files = files :+ genLaunchPackageFile(modelName, getNativeExecPackages(threadComponents, reporter))
-
-    return files
-  }
 
   //================================================
   //  M i c r o R O S   C   H e l p e r s

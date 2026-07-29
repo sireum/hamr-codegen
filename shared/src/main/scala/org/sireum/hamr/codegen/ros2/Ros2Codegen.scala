@@ -84,16 +84,22 @@ object Ros2Codegen {
           files = files ++ Generator.genMicroRosNodePkg(modelName, microRosThreads, connectionMap, datatypeMap,
                                                         options.invertTopicBinding, reporter)
         }
-      //case "Python" => files = Generator.genPyNodePkg(modelName, threadComponents, connectionMap, options.strictAadlMode)
-      case _ => reporter.error(None(), toolName, s"Unknown code type: ${options.ros2NodesLanguage.name}")
+      // Python node generation is not implemented.  Two partial implementations exist --
+      // Generator.genPyNodePkg and the whole of GeneratorPy -- but neither is reachable and
+      // neither has been brought up to the current contract: they return (path, body) pairs
+      // rather than the (path, body, overwrite, markers) the resource writer takes, and they
+      // predate micro-ROS threads, platform-provided components, Ros_Namespace and
+      // Ros_Topic_Name.  Wiring one up is real work, not a one-line change.
+      case "Python" =>
+        reporter.error(None(), toolName,
+          "ROS2 Python node generation is not yet supported; use --ros2-nodes-language Cpp")
+      case x => reporter.error(None(), toolName, s"Unknown code type: ${x}")
     }
 
-    options.ros2LaunchLanguage.name match {
-      // all threads, so platform-provided components get their launch entries and exec_depends
-      case "Xml" => files = files ++ Generator.genXmlLaunchPkg(modelName, threadComponents, systemComponents, microRosThreads, reporter)
-      case "Python" => files = files ++ Generator.genPyLaunchPkg(modelName, threadComponents, reporter)
-      case _ => reporter.error(None(), toolName, s"Unknown code type: ${options.ros2NodesLanguage.name}")
-    }
+    // ros2LaunchLanguage is ignored: both launch formats are emitted for every model.  See
+    // Generator.genLaunchPkg.  All threads are passed so platform-provided components get their
+    // launch entries and exec_depends.
+    files = files ++ Generator.genLaunchPkg(modelName, threadComponents, systemComponents, microRosThreads, reporter)
 
     files = files ++ Generator.genInterfacesPkg(modelName, datatypeMap)
 
