@@ -527,12 +527,12 @@ object SlangExpUtil {
             // TODO rust primitives?
             case _ => T
           }
-          val op = convertUnaryOp(target, exp.op)
+          val op = convertUnaryOp(exp.op)
           val rrexp = nestedRewriteExp(exp.exp, sep)
           return if (paren) st"$op($rrexp)" else st"$op$rrexp"
 
         case exp: Exp.UnaryTemporal =>
-          val op = convertUnaryTemporalOp(target, exp.op)
+          val op = convertUnaryTemporalOp(exp.op)
           val rrexp = nestedRewriteExp(exp.exp, sep)
           return st"$op${exp.intvl}($rrexp)"
 
@@ -661,7 +661,7 @@ object SlangExpUtil {
       return for(l <- lits) yield unquoteLit(l)
     }
 
-    @pure def convertUnaryOp(target: TargetLanguage.Type, op: Exp.UnaryOp.Type): String = {
+    @pure def convertUnaryOp(op: Exp.UnaryOp.Type): String = {
       op match {
         case Exp.UnaryOp.Not => return "!"
         case Exp.UnaryOp.Minus => 
@@ -680,7 +680,7 @@ object SlangExpUtil {
       }
     }
 
-    @pure def convertUnaryTemporalOp(target: TargetLanguage.Type, op: Exp.UnaryTemporalOp.Type): String = {
+    @pure def convertUnaryTemporalOp(op: Exp.UnaryTemporalOp.Type): String = {
       if (target != TargetLanguage.C2PO){
           halt(s"Temporal Operator $op is only supported in C2PO/R2U2.")
       }
@@ -692,8 +692,7 @@ object SlangExpUtil {
       }
     }
 
-    @pure def shouldParenthesize(target: TargetLanguage.Type,
-                                 slangParentOp: String,
+    @pure def shouldParenthesize(slangParentOp: String,
                                  slangChildOp: String, isRightChild: B): B = {
       val slangParentPrecedence = Exp.BinaryOp.precendenceLevel(slangParentOp)
       val targetParentPrecedence: Z =
@@ -765,7 +764,7 @@ object SlangExpUtil {
       return F
     }
 
-    @pure def convertBinaryOp(target: TargetLanguage.Type, op: String): String = {
+    @pure def convertBinaryOp(op: String): String = {
       op match {
         case Exp.BinaryOp.Add => return "+"
         case Exp.BinaryOp.Sub => return "-"
@@ -923,7 +922,7 @@ object SlangExpUtil {
             singleLine = F
           }
 
-          if (shouldParenthesize(target, slangParentOp, leftOp, F)) st"($left)"
+          if (shouldParenthesize(slangParentOp, leftOp, F)) st"($left)"
           else left
         case _ if isLeftIf =>
           singleLine = F
@@ -937,7 +936,7 @@ object SlangExpUtil {
             singleLine = F
           }
 
-          if (shouldParenthesize(target, slangParentOp, rightOp, T)) st"($right)"
+          if (shouldParenthesize(slangParentOp, rightOp, T)) st"($right)"
           else right
         case _ if isRightIf =>
           singleLine = F
@@ -956,7 +955,7 @@ object SlangExpUtil {
               |  $leftST,
               |  $rightST)""")
       } else {
-        val targetParentOp: String = convertBinaryOp(target, slangParentOp)
+        val targetParentOp: String = convertBinaryOp(slangParentOp)
         return (
           if (alwaysOneLine || singleLine) st"$leftST $targetParentOp $rightST"
           else st"""$leftST $targetParentOp
