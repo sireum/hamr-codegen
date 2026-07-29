@@ -186,7 +186,7 @@ object GumboRustUtil {
                              gclSymbolTable: GclSymbolTable,
                              store: Store,
                                  reporter: Reporter): (RAST.Expr, Map[String, (RAST.Expr, GumboC2POUtil.C2POType.Type)]) = {
-    val (exp, variablesInSpec) = GumboC2POUtil.collectIdentifiers(spec.exp, gclSymbolTable)
+    val (exp, variablesInSpec) = GumboC2POUtil.collectIdentifiers(spec.exp)
 
     // To-Do: Edit SlangExpUtil to return C2PO format
     val c2poExp =
@@ -221,7 +221,7 @@ object GumboRustUtil {
         tp = tp,
         store = store,
         reporter = reporter)
-      variablesInSpecExpanded += (varName -> (RAST.ExprST(st"""${valExpr}"""), GumboC2POUtil.getExprType(varExp, gclSymbolTable)))
+      variablesInSpecExpanded += (varName -> (RAST.ExprST(st"""${valExpr}"""), GumboC2POUtil.getExprType(varExp)))
     }
 
     val spec_st: RAST.Expr = RAST.ExprST(

@@ -2,7 +2,6 @@
 package org.sireum.hamr.codegen.microkit.plugins.gumbo
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.symbols.GclSymbolTable
 
 object GumboC2POUtil {
 
@@ -23,7 +22,7 @@ object GumboC2POUtil {
 //    "array"
   }
 
-  @pure def getExprType(exp: org.sireum.lang.ast.Exp, gclSymbolTable: GclSymbolTable): C2POType.Type = {
+  @pure def getExprType(exp: org.sireum.lang.ast.Exp): C2POType.Type = {
     exp match {
       // 1. Literal Nodes have fixed concrete types
       case _: org.sireum.lang.ast.Exp.LitB => return C2POType.bool
@@ -44,6 +43,7 @@ object GumboC2POUtil {
           bin.op == org.sireum.lang.ast.Exp.BinaryOp.Ge ||
           bin.op == org.sireum.lang.ast.Exp.BinaryOp.CondAnd ||
           bin.op == org.sireum.lang.ast.Exp.BinaryOp.CondOr ||
+          bin.op == org.sireum.lang.ast.Exp.BinaryOp.Imply ||
           bin.op == org.sireum.lang.ast.Exp.BinaryOp.CondImply ||
           bin.op == org.sireum.lang.ast.Exp.BinaryOp.Eq ||
           bin.op == org.sireum.lang.ast.Exp.BinaryOp.Ne
@@ -57,8 +57,8 @@ object GumboC2POUtil {
             bin.op == org.sireum.lang.ast.Exp.BinaryOp.Shr
         ){
           // Need to infer int or bool math based on left side and right side
-          val return_type_left = getExprType(bin.left, gclSymbolTable)
-          val return_type_right = getExprType(bin.right, gclSymbolTable)
+          val return_type_left = getExprType(bin.left)
+          val return_type_right = getExprType(bin.right)
           if (return_type_left == return_type_right && (return_type_left == C2POType.int || return_type_left == C2POType.bool)){
             return return_type_left
           } else {
@@ -73,8 +73,8 @@ object GumboC2POUtil {
             bin.op == org.sireum.lang.ast.Exp.BinaryOp.Rem
         ){
           // Need to infer int or float math based on left side and right side
-          val return_type_left = getExprType(bin.left, gclSymbolTable)
-          val return_type_right = getExprType(bin.right, gclSymbolTable)
+          val return_type_left = getExprType(bin.left)
+          val return_type_right = getExprType(bin.right)
           if (return_type_left == return_type_right && (return_type_left == C2POType.int || return_type_left == C2POType.float)){
             return return_type_left
           } else {
@@ -108,7 +108,7 @@ object GumboC2POUtil {
             un.op == org.sireum.lang.ast.Exp.UnaryOp.Complement
         ) { // Bitwise operations
           // Need to infer type based on right side (int or bool)
-          val return_type = getExprType(un.exp, gclSymbolTable)
+          val return_type = getExprType(un.exp)
           if (return_type == C2POType.int || return_type == C2POType.bool){
             return return_type
           } else {
@@ -119,7 +119,7 @@ object GumboC2POUtil {
           un.op == org.sireum.lang.ast.Exp.UnaryOp.Minus
         ) {
           // Need to infer type based on right side (int or float)
-          val return_type = getExprType(un.exp, gclSymbolTable)
+          val return_type = getExprType(un.exp)
           if (return_type == C2POType.int || return_type == C2POType.float){
             return return_type
           } else {
@@ -136,24 +136,13 @@ object GumboC2POUtil {
       // 4. Identifiers must be checked against your scope context
       case id: org.sireum.lang.ast.Exp.Ident =>
         halt("Expression type is not supported by C2PO/R2U2")
-//        val name = id.id.value
-//        // Query symbol table records for type details
-//        // (Adjust this specific call to match your actual symbol table architecture)
-//        val lookupType = gclSymbolTable.apiReferences.elements.find(api => api.identifier == name)
-//        lookupType match {
-//          case Some(apiRef) => halt("Expression type is not supported by C2PO/R2U2") // To-Do
-//          case _ => halt("Expression type is not supported by C2PO/R2U2")        // Standard local variable fallback
-//        }
-
       case _ => halt("Expression type is not supported by C2PO/R2U2")
     }
   }
 
   // Function collects any identifiers, flattens them if necessary, and returns the new expr and a
   // map of identifiers to expressions
-  @pure def collectIdentifiers(exp: org.sireum.lang.ast.Exp,
-                               gclSymbolTable: GclSymbolTable
-                              ): (org.sireum.lang.ast.Exp, Map[String, org.sireum.lang.ast.Exp]) = {
+  @pure def collectIdentifiers(exp: org.sireum.lang.ast.Exp): (org.sireum.lang.ast.Exp, Map[String, org.sireum.lang.ast.Exp]) = {
     var categorized : Map[String, org.sireum.lang.ast.Exp] = Map.empty
 
     // Helper closure to build a clean string chain ("api_myStructArray_nonEmpty")
@@ -199,7 +188,7 @@ object GumboC2POUtil {
               // Fallback if it's a non-api selection ending in nonEmpty
               val (updatedRecv, innerMapping): (Option[org.sireum.lang.ast.Exp], Map[String, org.sireum.lang.ast.Exp]) = sel.receiverOpt match {
                 case Some(r) =>
-                  val res = collectIdentifiers(r, gclSymbolTable)
+                  val res = collectIdentifiers(r)
                   (Some(res._1), res._2)
                 case _ => (None[org.sireum.lang.ast.Exp](), Map.empty)
               }
@@ -221,7 +210,7 @@ object GumboC2POUtil {
               // Standard object configuration path, map inner nodes recursively
               val (updatedRecv, innerMapping): (Option[org.sireum.lang.ast.Exp], Map[String, org.sireum.lang.ast.Exp]) = sel.receiverOpt match {
                 case Some(r) =>
-                  val res = collectIdentifiers(r, gclSymbolTable)
+                  val res = collectIdentifiers(r)
                   (Some(res._1), res._2)
                 case _ => (None[org.sireum.lang.ast.Exp](), Map.empty)
               }
@@ -231,18 +220,18 @@ object GumboC2POUtil {
         }
       // 3. Drill down into Binary Operators (e.g., x > 5, a AND b)
       case bin: org.sireum.lang.ast.Exp.Binary =>
-        val res_left = collectIdentifiers(bin.left, gclSymbolTable)
-        val res_right = collectIdentifiers(bin.right, gclSymbolTable)
+        val res_left = collectIdentifiers(bin.left)
+        val res_right = collectIdentifiers(bin.right)
         for (e <- res_left._2.entries) { categorized += e }
         for (e <- res_right._2.entries) { categorized += e }
         return (bin(res_left._1, bin.op, res_right._1), categorized)
       // 4. Drill down into Unary Operators (e.g., !x)
       case un: org.sireum.lang.ast.Exp.Unary =>
-        val res = collectIdentifiers(un.exp, gclSymbolTable)
+        val res = collectIdentifiers(un.exp)
         for (e <- res._2.entries) { categorized += e }
         return (un(exp = res._1), categorized)
       case un: org.sireum.lang.ast.Exp.UnaryTemporal =>
-        val res = collectIdentifiers(un.exp, gclSymbolTable)
+        val res = collectIdentifiers(un.exp)
         for (e <- res._2.entries) { categorized += e }
         return (un(exp = res._1), categorized)
       // 5. Drill down into Function/Method invocations (e.g., compute(x, y))
@@ -258,14 +247,14 @@ object GumboC2POUtil {
         var updatedArgs = ISZ[org.sireum.lang.ast.Exp]()
 
         for (arg <- invoke.args.elements) {
-          val (newArg, argMapping) = collectIdentifiers(arg, gclSymbolTable)
+          val (newArg, argMapping) = collectIdentifiers(arg)
           updatedArgs = updatedArgs :+ newArg
           for (e <- argMapping.entries) { categorized += e }
         }
 
         val res = invoke.receiverOpt match {
           case Some(r) =>
-            val res_inner = collectIdentifiers(r, gclSymbolTable)
+            val res_inner = collectIdentifiers(r)
             (Some(res_inner._1), res_inner._2)
           case _ => (None[org.sireum.lang.ast.Exp](), Map.empty)
         }
