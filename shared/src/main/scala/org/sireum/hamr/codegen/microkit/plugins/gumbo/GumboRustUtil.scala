@@ -198,7 +198,7 @@ object GumboRustUtil {
         context = context,
 
         inRequires = isAssumeRequires,
-        target = TargetLanguage.verus,
+        target = TargetLanguage.C2PO,
         substitutions = Map.empty,
         aadlTypes = types,
         tp = tp,

@@ -527,9 +527,14 @@ object SlangExpUtil {
             // TODO rust primitives?
             case _ => T
           }
-          val op = convertUnaryOp(exp.op)
+          val op = convertUnaryOp(target, exp.op)
           val rrexp = nestedRewriteExp(exp.exp, sep)
           return if (paren) st"$op($rrexp)" else st"$op$rrexp"
+
+        case exp: Exp.UnaryTemporal =>
+          val op = convertUnaryTemporalOp(target, exp.op)
+          val rrexp = nestedRewriteExp(exp.exp, sep)
+          return st"$op${exp.intvl}($rrexp)"
 
         case exp: Exp.QuantRange =>
           assert (exp.fun.params.size == 1 && exp.fun.params(0).idOpt.nonEmpty, "only expecting a single named quantified variable")
@@ -656,13 +661,34 @@ object SlangExpUtil {
       return for(l <- lits) yield unquoteLit(l)
     }
 
-    @pure def convertUnaryOp(op: Exp.UnaryOp.Type): String = {
+    @pure def convertUnaryOp(target: TargetLanguage.Type, op: Exp.UnaryOp.Type): String = {
       op match {
         case Exp.UnaryOp.Not => return "!"
-        case Exp.UnaryOp.Minus => return "-"
-
+        case Exp.UnaryOp.Minus => 
+          if (target == TargetLanguage.C2PO){
+               halt("Unary op '-' is not supported by C2PO/R2U2")
+          } else {
+               return "-"
+          }
         case Exp.UnaryOp.Plus => halt(s"what is the rust equiv of $op")
-        case Exp.UnaryOp.Complement => halt(s"what is the rust equiv of $op")
+        case Exp.UnaryOp.Complement => 
+          if (target == TargetLanguage.C2PO){
+               return "~"
+          } else {
+               return "!"
+          }
+      }
+    }
+
+    @pure def convertUnaryTemporalOp(target: TargetLanguage.Type, op: Exp.UnaryTemporalOp.Type): String = {
+      if (target != TargetLanguage.C2PO){
+          halt(s"Temporal Operator $op is only supported in C2PO/R2U2.")
+      }
+      op match {
+        case Exp.UnaryTemporalOp.Future => return "F"
+        case Exp.UnaryTemporalOp.Globally => return "G"
+        case Exp.UnaryTemporalOp.Once => return "O"
+        case Exp.UnaryTemporalOp.Historically => return "H"
       }
     }
 

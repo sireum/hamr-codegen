@@ -27,10 +27,11 @@ object GumboC2POUtil {
     exp match {
       // 1. Literal Nodes have fixed concrete types
       case _: org.sireum.lang.ast.Exp.LitB => return C2POType.bool
-      case _: org.sireum.lang.ast.Exp.LitZ => return C2POType.int
+      case _: org.sireum.lang.ast.Exp.LitC => return C2POType.int // R2U2 supports i32 by default, char (or u8) can be cast to i32 within R2U2
+      case _: org.sireum.lang.ast.Exp.LitZ => halt("Unbounded Integer is not supported by C2PO/R2U2")
       case _: org.sireum.lang.ast.Exp.LitF32 => return C2POType.float // R2U2 supports f64 by default, f32 can be cast up to f64 within R2U2
       case _: org.sireum.lang.ast.Exp.LitF64 => return C2POType.float
-      case _: org.sireum.lang.ast.Exp.LitR => return C2POType.float
+      case _: org.sireum.lang.ast.Exp.LitR => halt("Unbounded Float is not supported by C2PO/R2U2")
       case _: org.sireum.lang.ast.Exp.LitString => halt("Strings are not supported by C2PO/R2U2")
 
 
@@ -237,6 +238,10 @@ object GumboC2POUtil {
         return (bin(res_left._1, bin.op, res_right._1), categorized)
       // 4. Drill down into Unary Operators (e.g., !x)
       case un: org.sireum.lang.ast.Exp.Unary =>
+        val res = collectIdentifiers(un.exp, gclSymbolTable)
+        for (e <- res._2.entries) { categorized += e }
+        return (un(exp = res._1), categorized)
+      case un: org.sireum.lang.ast.Exp.UnaryTemporal =>
         val res = collectIdentifiers(un.exp, gclSymbolTable)
         for (e <- res._2.entries) { categorized += e }
         return (un(exp = res._1), categorized)
