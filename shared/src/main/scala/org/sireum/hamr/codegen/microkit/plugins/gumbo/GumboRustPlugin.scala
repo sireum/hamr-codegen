@@ -462,6 +462,7 @@ object GumboRustPlugin {
               updatedImplItems = updatedImplItems :+ f(body = b)
             }
             else if (f.ident.string == "initialize" && genVerus) {
+              var init: (Marker, RAST.FnImpl) = null
               if (subclauseInfo.annex.initializes.nonEmpty) {
                 init = handleInitialize(
                   fn = f,
