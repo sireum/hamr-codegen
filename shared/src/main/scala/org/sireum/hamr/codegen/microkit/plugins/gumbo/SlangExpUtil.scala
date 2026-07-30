@@ -536,6 +536,10 @@ object SlangExpUtil {
           val rrexp = nestedRewriteExp(exp.exp, sep)
           return st"$op${exp.intvl}($rrexp)"
 
+        case exp: Exp.BinaryTemporal =>
+          val op = convertBinaryTemporalOp(exp.op)
+          return st"(${nestedRewriteExp(exp.left, sep)} $op${exp.intvl} ${nestedRewriteExp(exp.right, sep)})"
+
         case exp: Exp.QuantRange =>
           assert (exp.fun.params.size == 1 && exp.fun.params(0).idOpt.nonEmpty, "only expecting a single named quantified variable")
           assert (exp.fun.exp.isInstanceOf[SAST.Stmt.Expr], s"Unexpected quantified expression: ${exp.fun.exp.prettyST.render}")
@@ -689,6 +693,18 @@ object SlangExpUtil {
         case Exp.UnaryTemporalOp.Globally => return "G"
         case Exp.UnaryTemporalOp.Once => return "O"
         case Exp.UnaryTemporalOp.Historically => return "H"
+      }
+    }
+
+    @pure def convertBinaryTemporalOp(op: Exp.BinaryTemporalOp.Type): String = {
+      if (target != TargetLanguage.C2PO) {
+        halt(s"Temporal Operator $op is only supported in C2PO/R2U2.")
+      }
+      op match {
+        case Exp.BinaryTemporalOp.Until => return "U"
+        case Exp.BinaryTemporalOp.Release => return "R"
+        case Exp.BinaryTemporalOp.Since => return "S"
+        case Exp.BinaryTemporalOp.Trigger => return "T"
       }
     }
 

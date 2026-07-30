@@ -234,6 +234,12 @@ object GumboC2POUtil {
         val res = collectIdentifiers(un.exp)
         for (e <- res._2.entries) { categorized += e }
         return (un(exp = res._1), categorized)
+      case bin: org.sireum.lang.ast.Exp.BinaryTemporal =>
+        val resLeft = collectIdentifiers(bin.left)
+        val resRight = collectIdentifiers(bin.right)
+        for (e <- resLeft._2.entries) { categorized += e }
+        for (e <- resRight._2.entries) { categorized += e }
+        return (bin(left = resLeft._1, right = resRight._1), categorized)
       // 5. Drill down into Function/Method invocations (e.g., compute(x, y))
       case invoke: org.sireum.lang.ast.Exp.Invoke =>
         println(s"This is an Invoke variable: ${invoke.ident.id.value}")
