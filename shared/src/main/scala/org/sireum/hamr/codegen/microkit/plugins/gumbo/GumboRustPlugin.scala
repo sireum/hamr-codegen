@@ -463,9 +463,13 @@ object GumboRustPlugin {
                   case _ => halt("Not expecting new to contain anything other than Self {...}")
                 }
               } else {
-               val m = Marker.createSlashPlaceholderMarker(GumboRustUtil.GumboMarkers.r2u2MonitorStateVarInit)
-               markers = markers :+ m
-               structDef = structDef(items = structDef.items :+ RAST.MarkerPlaceholder(m))
+                b = f.body match {
+                  case Some(RAST.MethodBody(ISZ(self: RAST.BodyItemSelf))) =>
+                    val m = Marker.createSlashPlaceholderMarker(GumboRustUtil.GumboMarkers.r2u2MonitorStateVarInit)
+                    markers = markers :+ m
+                    Some(RAST.MethodBody(ISZ(self(items = self.items :+ RAST.MarkerPlaceholder(m).prettyST))))
+                  case _ => halt("Not expecting new to contain anything other than Self {...}")
+                }
               }
               updatedImplItems = updatedImplItems :+ f(body = b)
             }
@@ -498,8 +502,8 @@ object GumboRustPlugin {
                   reporter = reporter)
                 markers = markers :+ init._1
               } else {
-               init = handleInitializeMonitorPlaceholder(f)
-               markers = markers :+ init._1
+                init = handleInitializeMonitorPlaceholder(init._2)
+                markers = markers :+ init._1
               }
               updatedImplItems = updatedImplItems :+ init._2
             } else if (f.ident.string == "timeTriggered" && genVerus) {
@@ -533,7 +537,7 @@ object GumboRustPlugin {
                 markers = markers ++ tt._1
                 r2u2SpecDef = Some(r2u2SpecDef_temp)
               } else {
-                tt = handleComputeMonitorPlaceholder(f)
+                tt = handleComputeMonitorPlaceholder(tt._2)
                 markers = markers ++ tt._1
               }
               updatedImplItems = updatedImplItems :+ tt._2
@@ -884,11 +888,11 @@ object GumboRustPlugin {
 
   @pure def handleInitializeMonitorPlaceholder(fn: RAST.FnImpl): (Marker, RAST.FnImpl) = {
     val m = Marker.createSlashPlaceholderMarker(GumboRustUtil.GumboMarkers.r2u2MonitorInitialize)
-    val wrapper = RAST.MarkerWrap(m, "", "\n", None())
+    val placeholder = RAST.MarkerPlaceholder(m)
     return (m,
       fn(body =
         Some(RAST.MethodBody(ISZ(
-          RAST.BodyItemST(st"""${wrapper.prettyST}
+          RAST.BodyItemST(st"""${placeholder.prettyST}
                               |
                               |${if (fn.body.nonEmpty) fn.body.get.prettyST else ""}""")
         )))))
@@ -958,14 +962,14 @@ object GumboRustPlugin {
   @pure def handleComputeMonitorPlaceholder(fn: RAST.FnImpl): (ISZ[Marker], RAST.FnImpl) = {
     val m = Marker.createSlashPlaceholderMarker(GumboRustUtil.GumboMarkers.r2u2MonitorCompute)
     val markers: ISZ[Marker] = ISZ(m)
-    val wrapper = RAST.MarkerWrap(m, "", "\n", None())
-    return ((markers,
+    val placeholder = RAST.MarkerPlaceholder(m)
+    return (markers,
       fn(body =
         Some(RAST.MethodBody(ISZ(
-          RAST.BodyItemST(st"""${wrapper.prettyST}
+          RAST.BodyItemST(st"""${placeholder.prettyST}
                               |
                               |${if (fn.body.nonEmpty) fn.body.get.prettyST else ""}""")
-        ))))), specs)
+        )))))
   }
 
   @pure override def finalizeMicrokit(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
