@@ -12,6 +12,7 @@ import org.sireum.hamr.codegen.microkit.plugins.rust.component.CRustComponentPlu
 import org.sireum.hamr.codegen.microkit.plugins.rust.types.{CRustTypeNameProvider, CRustTypeProvider}
 import org.sireum.hamr.codegen.microkit.rust.FnVerusHeader
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
+import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.TAB
 import org.sireum.hamr.codegen.microkit.{rust => RAST}
 import org.sireum.hamr.ir._
 import org.sireum.lang.ast.Stmt.Return
@@ -188,7 +189,6 @@ object GumboRustUtil {
                                  reporter: Reporter): (RAST.Expr, Map[String, (RAST.Expr, GumboC2POUtil.C2POType.Type)]) = {
     val (exp, variablesInSpec) = GumboC2POUtil.collectIdentifiers(spec.exp)
 
-    // To-Do: Edit SlangExpUtil to return C2PO format
     val c2poExp =
       SlangExpUtil.rewriteExpH(
         rexp = exp,
@@ -225,8 +225,9 @@ object GumboRustUtil {
     }
 
     val spec_st: RAST.Expr = RAST.ExprST(
-      st"""${st"\t${GumboRustUtil.processDescriptor(spec.descriptor, "-- ")}"}
-          |${spec.id}: ${c2poExp};""")
+      st"""${TAB}${GumboRustUtil.processDescriptor(spec.descriptor, "-- ")}
+          |${spec.id}: ${c2poExp};"""
+     )
 
     return (spec_st, variablesInSpecExpanded)
   }

@@ -5,6 +5,7 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, isThread}
 import org.sireum.hamr.codegen.common.containers.{BlockMarker, Marker, PlaceholderMarker}
 import org.sireum.hamr.codegen.microkit.plugins.gumbo.GumboC2POUtil.C2POType
+import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.TAB
 import org.sireum.hamr.codegen.microkit.rust.Printers._
 
 object Printers {
@@ -199,7 +200,7 @@ object Printers {
     return (st"""${name}:${idx}""")
   }
   @pure override def prettyST: ST = {
-    return (st"""${name}: ${type_dec};""")
+    return (st"""${TAB}${name}: ${type_dec};""")
   }
 }
 
@@ -217,7 +218,7 @@ object Printers {
   @pure override def prettyST: ST = {
     return (
       st"""INPUT
-          |${st"\t${printItems(inputs, "\n")}"}
+          |${printItems(inputs, "\n")}
           |
           |${if (ftspecs.nonEmpty) st"FTSPEC \n${printItems(ftspecs, "\n")}\n" else ""}
           |${if (ptspecs.nonEmpty) st"PTSPEC \n${printItems(ptspecs, "\n")}\n" else ""}
