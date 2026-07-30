@@ -126,7 +126,7 @@ object CommonCli {
         tpe = Type.Path(multiple = F, default = None()),
         description = "The path to your ROS2 installation, including the version (../ros/humble)"),
       Opt(name = "ros2NodesLanguage", longKey = "ros2-nodes-language", shortKey = None(),
-        tpe = Type.Choice(name = "NodesCodeLanguage", sep = None(), elements = ISZ("Python", "Cpp")),
+        tpe = Type.Choice(name = "NodesCodeLanguage", sep = None(), elements = ISZ("Cpp", "Python")),
         description = "The programming language for the generated node files"),
       Opt(name = "ros2LaunchLanguage", longKey = "ros2-launch-language", shortKey = None(),
         tpe = Type.Choice(name = "LaunchCodeLanguage", sep = None(), elements = ISZ("Python", "Xml")),

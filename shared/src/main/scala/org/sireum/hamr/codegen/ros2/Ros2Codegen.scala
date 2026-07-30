@@ -103,8 +103,8 @@ object Ros2Codegen {
 
     files = files ++ Generator.genInterfacesPkg(modelName, datatypeMap)
 
-    files = files :+ Generator.genReadme(modelName, ros2Threads, microRosThreads)
-    files = files :+ Generator.genMakefile(modelName, ros2Threads, microRosThreads)
+    files = files :+ Generator.genReadme(modelName, ros2Threads, microRosThreads, systemComponents)
+    files = files :+ Generator.genMakefile(modelName, ros2Threads, microRosThreads, systemComponents)
 
     for (file <- files) {
       var filePath: String = ""

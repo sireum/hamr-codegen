@@ -92,6 +92,8 @@ object CodeGen {
       if (modOptions.platform == CodegenHamrPlatform.SeL4) sel4OutputDir / DirectoryUtil.DIR_SLANG_LIBRARIES
       else output_shared_C_Directory
 
+    val rosOutputDir: Path = getPath(modOptions.ros2OutputWorkspaceDir.getOrElse((outputDir / "ros").value))
+
     val packageName: String = if (modOptions.packageName.nonEmpty) {
       cleanupPackageName(modOptions.packageName.get)
     } else {
@@ -102,7 +104,8 @@ object CodeGen {
       packageName = Some(packageName),
       outputDir = Some(outputDir.canon.value),
       slangOutputDir = Some(slangOutputDir.canon.value),
-      sel4OutputDir = Some(sel4OutputDir.canon.value))
+      sel4OutputDir = Some(sel4OutputDir.canon.value),
+      ros2OutputWorkspaceDir = Some(rosOutputDir.canon.value))
 
     val (runArsit, runACT, runMicrokit, runRos2, isTranspilerProject, isSlangProject): (B, B, B, B, B, B) =
       modOptions.platform match {
