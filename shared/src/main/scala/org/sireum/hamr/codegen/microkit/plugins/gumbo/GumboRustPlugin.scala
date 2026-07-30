@@ -283,9 +283,13 @@ object GumboRustPlugin {
       if (subclauseInfo.annex.monitor.nonEmpty) {
         var monitor: ISZ[RAST.Item] = ISZ()
         monitor = monitor :+ RAST.ItemString(s"""pub r2u2_monitor: r2u2_core::Monitor""")
-        val m = Marker.createSlashMarker(GumboRustUtil.GumboMarkers.gumboMonitor)
+        val m = Marker.createSlashMarker(GumboRustUtil.GumboMarkers.r2u2MonitorStateVar)
         markers = markers :+ m
         structDef = structDef(items = structDef.items :+ RAST.MarkerWrap(m, monitor, ",\n", Some(",")))
+      } else {
+        val m = Marker.createSlashPlaceholderMarker(GumboRustUtil.GumboMarkers.r2u2MonitorStateVar)
+        markers = markers :+ m
+        structDef = structDef(items = structDef.items :+ RAST.MarkerPlaceholder(m))
       }
 
       if (subclauseInfo.annex.methods.nonEmpty) {
@@ -453,11 +457,15 @@ object GumboRustPlugin {
                   case Some(RAST.MethodBody(ISZ(self: RAST.BodyItemSelf))) =>
                     var monitor: ISZ[RAST.Item] = ISZ()
                     monitor = monitor :+ RAST.ItemString(s"""r2u2_monitor: r2u2_core::Monitor::default()""")
-                    val m = Marker.createSlashMarker(GumboRustUtil.GumboMarkers.gumboMonitor)
+                    val m = Marker.createSlashMarker(GumboRustUtil.GumboMarkers.r2u2MonitorStateVarInit)
                     markers = markers :+ m
                     Some(RAST.MethodBody(ISZ(self(items = self.items :+ RAST.MarkerWrap(m, monitor, ",\n", Some(",")).prettyST))))
                   case _ => halt("Not expecting new to contain anything other than Self {...}")
                 }
+              } else {
+               val m = Marker.createSlashPlaceholderMarker(GumboRustUtil.GumboMarkers.r2u2MonitorStateVarInit)
+               markers = markers :+ m
+               structDef = structDef(items = structDef.items :+ RAST.MarkerPlaceholder(m))
               }
               updatedImplItems = updatedImplItems :+ f(body = b)
             }
@@ -489,6 +497,9 @@ object GumboRustPlugin {
                   store = localStore,
                   reporter = reporter)
                 markers = markers :+ init._1
+              } else {
+               init = handleInitializeMonitorPlaceholder(f)
+               markers = markers :+ init._1
               }
               updatedImplItems = updatedImplItems :+ init._2
             } else if (f.ident.string == "timeTriggered" && genVerus) {
@@ -521,6 +532,9 @@ object GumboRustPlugin {
                 tt = tt_temp
                 markers = markers ++ tt._1
                 r2u2SpecDef = Some(r2u2SpecDef_temp)
+              } else {
+                tt = handleComputeMonitorPlaceholder(f)
+                markers = markers ++ tt._1
               }
               updatedImplItems = updatedImplItems :+ tt._2
             } else {
@@ -855,10 +869,22 @@ object GumboRustPlugin {
                                  symbolTable: SymbolTable,
                                  store: Store,
                                  reporter: Reporter): (Marker, RAST.FnImpl) = {
-    val m = Marker.createSlashMarker(GumboRustUtil.GumboMarkers. gumboMonitor)
+    val m = Marker.createSlashMarker(GumboRustUtil.GumboMarkers.r2u2MonitorInitialize)
     var monitor: ISZ[RAST.Item] = ISZ()
     monitor = monitor :+ RAST.ItemString(s"""r2u2_core::update_binary_file(&SPEC, &mut self.r2u2_monitor);""")
     val wrapper = RAST.MarkerWrap(m, monitor, "\n", None())
+    return (m,
+      fn(body =
+        Some(RAST.MethodBody(ISZ(
+          RAST.BodyItemST(st"""${wrapper.prettyST}
+                              |
+                              |${if (fn.body.nonEmpty) fn.body.get.prettyST else ""}""")
+        )))))
+  }
+
+  @pure def handleInitializeMonitorPlaceholder(fn: RAST.FnImpl): (Marker, RAST.FnImpl) = {
+    val m = Marker.createSlashPlaceholderMarker(GumboRustUtil.GumboMarkers.r2u2MonitorInitialize)
+    val wrapper = RAST.MarkerWrap(m, "", "\n", None())
     return (m,
       fn(body =
         Some(RAST.MethodBody(ISZ(
@@ -917,9 +943,22 @@ object GumboRustPlugin {
                                                         |    log::info!("{}:{},{}", out.spec_num, out.verdict.time, if out.verdict.truth {"T"} else {"F"} );
                                                         |}""")
 
-    val m = Marker.createSlashMarker(GumboRustUtil.GumboMarkers. gumboMonitor)
+    val m = Marker.createSlashMarker(GumboRustUtil.GumboMarkers.r2u2MonitorCompute)
     val markers: ISZ[Marker] = ISZ(m)
     val wrapper = RAST.MarkerWrap(m, monitorInputs, "\n", Some("\n"))
+    return ((markers,
+      fn(body =
+        Some(RAST.MethodBody(ISZ(
+          RAST.BodyItemST(st"""${wrapper.prettyST}
+                              |
+                              |${if (fn.body.nonEmpty) fn.body.get.prettyST else ""}""")
+        ))))), specs)
+  }
+
+  @pure def handleComputeMonitorPlaceholder(fn: RAST.FnImpl): (ISZ[Marker], RAST.FnImpl) = {
+    val m = Marker.createSlashPlaceholderMarker(GumboRustUtil.GumboMarkers.r2u2MonitorCompute)
+    val markers: ISZ[Marker] = ISZ(m)
+    val wrapper = RAST.MarkerWrap(m, "", "\n", None())
     return ((markers,
       fn(body =
         Some(RAST.MethodBody(ISZ(
