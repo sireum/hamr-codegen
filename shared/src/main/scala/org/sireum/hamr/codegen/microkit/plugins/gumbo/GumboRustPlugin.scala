@@ -288,7 +288,7 @@ object GumboRustPlugin {
         structDef = structDef(items = structDef.items :+ RAST.MarkerWrap(m, monitor, ",\n", Some(",")))
       } else {
         val m = Marker.createSlashPlaceholderMarker(GumboRustUtil.GumboMarkers.r2u2MonitorStateVar)
-        markers = markers :+ m
+        markers = markers :+ Marker.createSlashMarker(m.id)
         structDef = structDef(items = structDef.items :+ RAST.MarkerPlaceholder(m))
       }
 
@@ -466,7 +466,7 @@ object GumboRustPlugin {
                 b = f.body match {
                   case Some(RAST.MethodBody(ISZ(self: RAST.BodyItemSelf))) =>
                     val m = Marker.createSlashPlaceholderMarker(GumboRustUtil.GumboMarkers.r2u2MonitorStateVarInit)
-                    markers = markers :+ m
+                    markers = markers :+ Marker.createSlashMarker(m.id)
                     Some(RAST.MethodBody(ISZ(self(items = self.items :+ RAST.MarkerPlaceholder(m).prettyST))))
                   case _ => halt("Not expecting new to contain anything other than Self {...}")
                 }
@@ -503,7 +503,7 @@ object GumboRustPlugin {
                 markers = markers :+ init._1
               } else {
                 init = handleInitializeMonitorPlaceholder(init._2)
-                markers = markers :+ init._1
+                markers = markers :+ Marker.createSlashMarker(init._1.id)
               }
               updatedImplItems = updatedImplItems :+ init._2
             } else if (f.ident.string == "timeTriggered" && genVerus) {
@@ -538,7 +538,7 @@ object GumboRustPlugin {
                 r2u2SpecDef = Some(r2u2SpecDef_temp)
               } else {
                 tt = handleComputeMonitorPlaceholder(tt._2)
-                markers = markers ++ tt._1
+                markers = markers :+ Marker.createSlashMarker(tt._1(0).id)
               }
               updatedImplItems = updatedImplItems :+ tt._2
             } else {

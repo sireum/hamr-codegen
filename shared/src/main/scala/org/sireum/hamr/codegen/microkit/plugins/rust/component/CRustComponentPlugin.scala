@@ -20,6 +20,7 @@ import org.sireum.message.Reporter
 object CRustComponentPlugin {
 
   val KEY_CrustComponentPlugin: String = "KEY_CRustComponentPlugin"
+  val MarkerR2U2Spec: String = "MARKER R2U2 SPEC"
 
   @strictpure def hasCRustComponentContributions(store: Store): B = store.contains(KEY_CrustComponentPlugin)
 
@@ -435,6 +436,7 @@ object ComponentContributions {}
 
       { // src/component/<threadid>_app.rs file for user behavior code
         var uses = e._2.appUses
+        var appMarkers = e._2.markers
 
         var body: ST =
           st"""${e._2.appStructDef.prettyST}
@@ -448,8 +450,22 @@ object ComponentContributions {}
                 |${(for(f <- e._2.moduleLevelEntries) yield f.prettyST, "\n\n")}"""
         }
         if (e._2.requiresR2U2) {
+          val m = Marker.createSlashMarker(CRustComponentPlugin.MarkerR2U2Spec)
+          appMarkers = appMarkers :+ m
+          val spec = RAST.MarkerWrap(
+            marker = m,
+            items = ISZ(RAST.ItemString("""const SPEC: [u8; include_bytes!("spec.bin").len()] = *include_bytes!("spec.bin");""")),
+            sep = "\n",
+            optLastItemSep = None())
           body =
-            st"""const SPEC: [u8; include_bytes!("spec.bin").len()] = *include_bytes!("spec.bin");
+            st"""${spec.prettyST}
+                |
+                |$body"""
+        } else {
+          val p = Marker.createSlashPlaceholderMarker(CRustComponentPlugin.MarkerR2U2Spec)
+          appMarkers = appMarkers :+ Marker.createSlashMarker(p.id)
+          body =
+            st"""${RAST.MarkerPlaceholder(p).prettyST}
                 |
                 |$body"""
         }
@@ -479,7 +495,7 @@ object ComponentContributions {}
         resources = resources :+ ResourceUtil.createResourceWithMarkers(
           path = path,
           content = content,
-          markers = if (genProfile.userEditable) e._2.markers else ISZ(),
+          markers = if (genProfile.userEditable) appMarkers else ISZ(),
           invertMarkers = F,
           overwrite = !genProfile.userEditable)
       }
