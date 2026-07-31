@@ -453,7 +453,7 @@ object GumboRustPlugin {
                 }
               }
               if (subclauseInfo.annex.monitor.nonEmpty) {
-                b = f.body match {
+                b = b match {
                   case Some(RAST.MethodBody(ISZ(self: RAST.BodyItemSelf))) =>
                     var monitor: ISZ[RAST.Item] = ISZ()
                     monitor = monitor :+ RAST.ItemString(s"""r2u2_monitor: r2u2_core::Monitor::default()""")
@@ -463,7 +463,7 @@ object GumboRustPlugin {
                   case _ => halt("Not expecting new to contain anything other than Self {...}")
                 }
               } else {
-                b = f.body match {
+                b = b match {
                   case Some(RAST.MethodBody(ISZ(self: RAST.BodyItemSelf))) =>
                     val m = Marker.createSlashPlaceholderMarker(GumboRustUtil.GumboMarkers.r2u2MonitorStateVarInit)
                     markers = markers :+ Marker.createSlashMarker(m.id)
