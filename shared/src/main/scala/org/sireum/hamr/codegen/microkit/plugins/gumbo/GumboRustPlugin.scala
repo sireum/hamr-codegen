@@ -911,7 +911,7 @@ object GumboRustPlugin {
           ptspecs = ISZ()
     )
 
-    var allVariablesInSpecs: Map[String, (RAST.Expr, GumboC2POUtil.C2POType.Type)] = Map.empty
+    var allVariablesInSpecs: Map[String, GumboR2U2Util.R2U2MonitorInput] = Map.empty
 
     for (r <- subclauseInfo.annex.monitor.get.guarantees) {
       val (spec, variablesInSpec) = GumboRustUtil.processGumboSpecC2PO(
@@ -930,18 +930,36 @@ object GumboRustPlugin {
 
     var idx = 0
     var monitorInputs: ISZ[RAST.Item] = ISZ()
-    for ( (exp_name, (exp, exp_type)) <- allVariablesInSpecs.entries){
-      specs = specs(inputs = specs.inputs :+ RAST.R2U2InputDef(exp_name, exp_type, idx.toInt))
-      exp_type match {
+
+    // Read each incoming port referenced by a monitor expression exactly once.
+    // processGumboSpecC2PO has already rewritten the corresponding api.<port>
+    // AST nodes to these dispatch-local identifiers.
+    var referencedInPortIds: Set[String] = Set.empty
+    for (monitorInput <- allVariablesInSpecs.values) {
+      referencedInPortIds = referencedInPortIds ++ monitorInput.referencedInputPorts.elements
+    }
+    for (port <- thread.getPorts().filter(p => p.direction == Direction.In)) {
+      if (referencedInPortIds.contains(port.identifier)) {
+        monitorInputs = monitorInputs :+ RAST.ItemST(
+          st"let ${port.identifier} = api.get_${port.identifier}();")
+      }
+    }
+
+    monitorInputs = monitorInputs :+ RAST.ItemST(st"") // Create a new line
+
+    for ( (exp_name, monitorInput) <- allVariablesInSpecs.entries){
+      specs = specs(inputs = specs.inputs :+ RAST.R2U2InputDef(exp_name, monitorInput.expType, idx.toInt))
+      monitorInput.expType match {
         case GumboC2POUtil.C2POType.bool =>
-          monitorInputs = monitorInputs :+ RAST.ItemST(st"""r2u2_core::load_bool_signal(&mut self.r2u2_monitor, ${idx}, ${exp.prettyST}); // Loading signal ${exp_name} into index ${idx}""")
+          monitorInputs = monitorInputs :+ RAST.ItemST(st"""r2u2_core::load_bool_signal(&mut self.r2u2_monitor, ${idx}, ${monitorInput.exp.prettyST}); // Loading signal ${exp_name} into index ${idx}""")
         case GumboC2POUtil.C2POType.int =>
-          monitorInputs = monitorInputs :+ RAST.ItemST(st"""r2u2_core::load_int_signal(&mut self.r2u2_monitor, ${idx}, ${exp.prettyST}); // Loading signal ${exp_name} into index ${idx}""")
+          monitorInputs = monitorInputs :+ RAST.ItemST(st"""r2u2_core::load_int_signal(&mut self.r2u2_monitor, ${idx}, ${monitorInput.exp.prettyST}); // Loading signal ${exp_name} into index ${idx}""")
         case GumboC2POUtil.C2POType.float =>
-          monitorInputs = monitorInputs :+ RAST.ItemST(st"""r2u2_core::load_float_signal(&mut self.r2u2_monitor, ${idx}, ${exp.prettyST}); // Loading signal ${exp_name} into index ${idx}""")
+          monitorInputs = monitorInputs :+ RAST.ItemST(st"""r2u2_core::load_float_signal(&mut self.r2u2_monitor, ${idx}, ${monitorInput.exp.prettyST}); // Loading signal ${exp_name} into index ${idx}""")
       }
       idx += 1
     }
+    monitorInputs = monitorInputs :+ RAST.ItemST(st"") // Create a new line
     monitorInputs = monitorInputs :+ RAST.ItemST(st"""r2u2_core::monitor_step(&mut self.r2u2_monitor);""")
     monitorInputs = monitorInputs :+ RAST.ItemST(st"""for out in r2u2_core::get_output_buffer(&self.r2u2_monitor) {
                                                         |    log::info!("{}:{},{}", out.spec_num, out.verdict.time, if out.verdict.truth {"T"} else {"F"} );
@@ -1072,4 +1090,3 @@ object GumboRustPlugin {
 @datatype class DefaultGumboRustPlugin extends GumboRustPlugin {
   @strictpure override def name: String = "DefaultGumboRustPlugin"
 }
-

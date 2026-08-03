@@ -189,7 +189,7 @@ object GumboRustUtil {
                              tp: CRustTypeProvider,
                              gclSymbolTable: GclSymbolTable,
                              store: Store,
-                                 reporter: Reporter): (RAST.Expr, Map[String, (RAST.Expr, GumboC2POUtil.C2POType.Type)]) = {
+                                 reporter: Reporter): (RAST.Expr, Map[String, GumboR2U2Util.R2U2MonitorInput]) = {
     val (exp, variablesInSpec) = GumboC2POUtil.collectIdentifiers(spec.exp)
 
     val c2poExp =
@@ -208,10 +208,18 @@ object GumboRustUtil {
         store = store,
         reporter = reporter)
 
-    var variablesInSpecExpanded: Map[String, (RAST.Expr, GumboC2POUtil.C2POType.Type)] = Map.empty
+    val inputPortIds: Set[String] = Set.empty ++
+      component.getPorts().filter(p => p.direction == Direction.In).map(p => p.identifier)
+
+    var variablesInSpecExpanded: Map[String, GumboR2U2Util.R2U2MonitorInput] = Map.empty
     for ( (varName, varExp) <- variablesInSpec.entries){
+      val snapshotRewriter = GumboR2U2Util.MonitorPortSnapshotRewriter(inputPortIds)
+      val snapshotExp: SAST.Exp = snapshotRewriter.transform_langastExp(varExp) match {
+        case MSome(e) => e
+        case _ => varExp
+      }
       val valExpr = SlangExpUtil.rewriteExpH(
-        rexp = varExp,
+        rexp = snapshotExp,
 
         owner = component.classifier,
         optComponent = Some(component),
@@ -224,7 +232,10 @@ object GumboRustUtil {
         tp = tp,
         store = store,
         reporter = reporter)
-      variablesInSpecExpanded += (varName -> (RAST.ExprST(st"""${valExpr}"""), GumboC2POUtil.getExprType(varExp)))
+      variablesInSpecExpanded += (varName -> GumboR2U2Util.R2U2MonitorInput(
+        exp = RAST.ExprST(st"""${valExpr}"""),
+        expType = GumboC2POUtil.getExprType(varExp),
+        referencedInputPorts = snapshotRewriter.referencedInputPorts))
     }
 
     val spec_st: RAST.Expr = RAST.ExprST(
