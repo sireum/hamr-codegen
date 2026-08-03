@@ -601,9 +601,10 @@ object ComponentContributions {}
                   |${TAB}cargo +stable install r2u2_cli --version ${MicrokitUtil.getMicrokitVersions(localStore).get("r2u2").get}
                   |
                   |$$(R2U2_SPEC_BIN): r2u2_cli
+                  |${TAB}mkdir -p .cargo && \
                   |${TAB}cd src/component && \
                   |${TAB}sed '/^--/d' spec.map > temp.map && \
-                  |${TAB}r2u2_cli compile -o . spec.c2po temp.map && \
+                  |${TAB}r2u2_cli compile -o . -b ../../.cargo/config.toml spec.c2po temp.map && \
                   |${TAB}rm temp.map"""))
           } else {
             ISZ()
