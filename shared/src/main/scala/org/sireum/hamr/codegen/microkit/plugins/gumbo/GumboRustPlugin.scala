@@ -967,7 +967,7 @@ object GumboRustPlugin {
 
     val m = Marker.createSlashMarker(GumboRustUtil.GumboMarkers.r2u2MonitorCompute)
     val markers: ISZ[Marker] = ISZ(m)
-    val wrapper = RAST.MarkerWrap(m, monitorInputs, "\n", Some("\n"))
+    val wrapper = RAST.MarkerWrap(m, monitorInputs, "\n", None())
     return ((markers,
       fn(body =
         Some(RAST.MethodBody(ISZ(
