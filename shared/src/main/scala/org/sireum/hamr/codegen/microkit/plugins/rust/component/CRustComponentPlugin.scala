@@ -534,6 +534,16 @@ object ComponentContributions {}
           if (e._2.crateDependencies.nonEmpty) Some(st"${(e._2.crateDependencies, "\n")}")
           else None()
 
+        val r2u2CargoMarker = Marker.createHashMarker("MARKER R2U2 CARGO DEPENDENCIES")
+        val r2u2CargoItems: ISZ[RAST.Item] =
+          if (e._2.requiresR2U2) ISZ(RAST.ItemST(RustUtil.r2u2CargoDependencies(localStore)))
+          else ISZ()
+        val r2u2CargoSection = RAST.MarkerWrap(
+          marker = r2u2CargoMarker,
+          items = r2u2CargoItems,
+          sep = "\n",
+          optLastItemSep = None()).prettyST
+
         val content =
           st"""${CommentTemplate.safeToEditComment_hash}
               |
@@ -552,7 +562,7 @@ object ComponentContributions {}
               |
               |${RustUtil.verusCargoDependencies(localStore)}
               |
-              |${if (e._2.requiresR2U2) RustUtil.r2u2CargoDependencies(localStore) else ""}
+              |$r2u2CargoSection
               |
               |[dev-dependencies]
               |lazy_static = "${versions.get("lazy_static").get}"
@@ -571,10 +581,39 @@ object ComponentContributions {}
               |${RustUtil.commonCargoTomlEntries}
               |"""
         val path = s"$componentCrateDir/Cargo.toml"
-        resources = resources :+ ResourceUtil.createResource(path, content, F)
+        resources = resources :+ ResourceUtil.createResourceWithMarkers(
+          path = path,
+          content = content,
+          markers = ISZ(r2u2CargoMarker),
+          invertMarkers = F,
+          overwrite = F)
       }
 
       { // Makefile
+        val r2u2MakeMarker = Marker.createHashMarker("MARKER R2U2 MAKE RULES")
+        val r2u2MakeItems: ISZ[RAST.Item] =
+          if (e._2.requiresR2U2) {
+            ISZ(RAST.ItemST(
+              st"""R2U2_SPEC_BIN := src/component/spec.bin
+                  |
+                  |r2u2_cli:
+                  |${TAB}@echo "Checking/Updating r2u2_cli from crates.io..."
+                  |${TAB}cargo +stable install r2u2_cli --version ${MicrokitUtil.getMicrokitVersions(localStore).get("r2u2").get}
+                  |
+                  |$$(R2U2_SPEC_BIN): r2u2_cli
+                  |${TAB}cd src/component && \
+                  |${TAB}sed '/^--/d' spec.map > temp.map && \
+                  |${TAB}r2u2_cli compile -o . spec.c2po temp.map && \
+                  |${TAB}rm temp.map"""))
+          } else {
+            ISZ()
+          }
+        val r2u2MakeSection = RAST.MarkerWrap(
+          marker = r2u2MakeMarker,
+          items = r2u2MakeItems,
+          sep = "\n",
+          optLastItemSep = None()).prettyST
+
         val content =
           st"""${CommentTemplate.safeToEditComment_hash}
               |
@@ -582,7 +621,10 @@ object ComponentContributions {}
               |
               |sel4_include_dirs := $$(firstword $$(wildcard $$(microkit_sdk_config_dir)/include \
               |                                            $$(microkit_sdk_config_dir)/debug/include))
-              |${if (e._2.requiresR2U2) "R2U2_SPEC_BIN := src/component/spec.bin\n" else ""}
+              |
+              |$r2u2MakeSection
+              |
+              |R2U2_BUILD_DEPS = $$(R2U2_SPEC_BIN)
               |ENV_VARS = RUSTC_BOOTSTRAP=1
               |
               |BUILD_ENV_VARS = $$(ENV_VARS) \
@@ -593,33 +635,23 @@ object ComponentContributions {}
               |              --target aarch64-unknown-none
               |
               |all: build-verus-release
-              |${if (e._2.requiresR2U2) st"""
-              |r2u2_cli:
-              |${TAB}@echo "Checking/Updating r2u2_cli from crates.io..."
-              |${TAB}cargo +stable install r2u2_cli --version ${MicrokitUtil.getMicrokitVersions(localStore).get("r2u2").get}
               |
-              |$$(R2U2_SPEC_BIN): r2u2_cli
-              |${TAB}cd src/component && \
-              |${TAB}sed '/^--/d' spec.map > temp.map && \
-              |${TAB}r2u2_cli compile -o . spec.c2po temp.map && \
-              |${TAB}rm temp.map
-              |""" else ""}
-              |build-verus-release: ${if (e._2.requiresR2U2) "$(R2U2_SPEC_BIN)" else ""}
+              |build-verus-release: $$(R2U2_BUILD_DEPS)
               |${TAB}$$(BUILD_ENV_VARS) cargo-verus build --features sel4 $$(CARGO_FLAGS) --release
               |
-              |build-verus: ${if (e._2.requiresR2U2) "$(R2U2_SPEC_BIN)" else ""}
+              |build-verus: $$(R2U2_BUILD_DEPS)
               |${TAB}$$(BUILD_ENV_VARS) cargo-verus build --features sel4 $$(CARGO_FLAGS)
               |
-              |build-release: ${if (e._2.requiresR2U2) "$(R2U2_SPEC_BIN)" else ""}
+              |build-release: $$(R2U2_BUILD_DEPS)
               |${TAB}$$(BUILD_ENV_VARS) cargo build --features sel4 $$(CARGO_FLAGS) --release
               |
-              |build: ${if (e._2.requiresR2U2) "$(R2U2_SPEC_BIN)" else ""}
+              |build: $$(R2U2_BUILD_DEPS)
               |${TAB}$$(BUILD_ENV_VARS) cargo build --features sel4 $$(CARGO_FLAGS)
               |
-              |verus: ${if (e._2.requiresR2U2) "$(R2U2_SPEC_BIN)" else ""}
+              |verus: $$(R2U2_BUILD_DEPS)
               |${TAB}$$(ENV_VARS) cargo-verus verify $$(CARGO_FLAGS)
               |
-              |verus-json: ${if (e._2.requiresR2U2) "$(R2U2_SPEC_BIN)" else ""}
+              |verus-json: $$(R2U2_BUILD_DEPS)
               |${TAB}$$(ENV_VARS) cargo-verus verify $$(CARGO_FLAGS) -- --output-json --time > verus_results.json
               |
               |# Test Example:
@@ -629,10 +661,10 @@ object ComponentContributions {}
               |#   Run only unit tests whose name contains 'proptest'
               |#   Usage: make test args=proptest
               |
-              |test-release: ${if (e._2.requiresR2U2) "$(R2U2_SPEC_BIN)" else ""}
+              |test-release: $$(R2U2_BUILD_DEPS)
               |${TAB}cargo test $$(args) --release
               |
-              |test: ${if (e._2.requiresR2U2) "$(R2U2_SPEC_BIN)" else ""}
+              |test: $$(R2U2_BUILD_DEPS)
               |${TAB}cargo test $$(args)
               |
               |# Coverage Example:
@@ -642,7 +674,7 @@ object ComponentContributions {}
               |#   Generate a test coverage report for unit tests whose name contains 'proptest'
               |#   Usage: make coverage args=proptest
               |
-              |coverage: ${if (e._2.requiresR2U2) "$(R2U2_SPEC_BIN)" else ""}
+              |coverage: $$(R2U2_BUILD_DEPS)
               |${TAB}cargo install grcov
               |${TAB}@exists=0; if [ -f target/coverage/report/index.html ]; then exists=1; fi; \
               |${TAB}rm -rf target/coverage; \
@@ -653,9 +685,14 @@ object ComponentContributions {}
               |
               |clean:
               |${TAB}cargo clean
-              |${if (e._2.requiresR2U2)s"""${TAB}rm src/component/spec.bin""" else ""}"""
+              |${TAB}rm -f src/component/spec.bin"""
         val path = s"$componentCrateDir/Makefile"
-        resources = resources :+ ResourceUtil.createResource(path, content, F)
+        resources = resources :+ ResourceUtil.createResourceWithMarkers(
+          path = path,
+          content = content,
+          markers = ISZ(r2u2MakeMarker),
+          invertMarkers = F,
+          overwrite = F)
       }
 
       { // rust-toolchain.toml
