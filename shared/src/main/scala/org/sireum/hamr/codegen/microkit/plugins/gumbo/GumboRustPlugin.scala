@@ -947,15 +947,15 @@ object GumboRustPlugin {
 
     monitorInputs = monitorInputs :+ RAST.ItemST(st"") // Create a new line
 
-    for ( (exp_name, monitorInput) <- allVariablesInSpecs.entries){
-      specs = specs(inputs = specs.inputs :+ RAST.R2U2InputDef(exp_name, monitorInput.expType, idx.toInt))
+    for ((expName, monitorInput) <- allVariablesInSpecs.entries){
+      specs = specs(inputs = specs.inputs :+ RAST.R2U2InputDef(expName, monitorInput.expType, idx.toInt))
       monitorInput.expType match {
         case GumboC2POUtil.C2POType.bool =>
-          monitorInputs = monitorInputs :+ RAST.ItemST(st"""r2u2_core::load_bool_signal(&mut self.r2u2_monitor, ${idx}, ${monitorInput.exp.prettyST}); // Loading signal ${exp_name} into index ${idx}""")
+          monitorInputs = monitorInputs :+ RAST.ItemST(st"""r2u2_core::load_bool_signal(&mut self.r2u2_monitor, ${idx}, ${monitorInput.exp.prettyST}); // Loading signal ${expName} into index ${idx}""")
         case GumboC2POUtil.C2POType.int =>
-          monitorInputs = monitorInputs :+ RAST.ItemST(st"""r2u2_core::load_int_signal(&mut self.r2u2_monitor, ${idx}, ${monitorInput.exp.prettyST}); // Loading signal ${exp_name} into index ${idx}""")
+          monitorInputs = monitorInputs :+ RAST.ItemST(st"""r2u2_core::load_int_signal(&mut self.r2u2_monitor, ${idx}, ${monitorInput.exp.prettyST}); // Loading signal ${expName} into index ${idx}""")
         case GumboC2POUtil.C2POType.float =>
-          monitorInputs = monitorInputs :+ RAST.ItemST(st"""r2u2_core::load_float_signal(&mut self.r2u2_monitor, ${idx}, ${monitorInput.exp.prettyST}); // Loading signal ${exp_name} into index ${idx}""")
+          monitorInputs = monitorInputs :+ RAST.ItemST(st"""r2u2_core::load_float_signal(&mut self.r2u2_monitor, ${idx}, ${monitorInput.exp.prettyST}); // Loading signal ${expName} into index ${idx}""")
       }
       idx += 1
     }

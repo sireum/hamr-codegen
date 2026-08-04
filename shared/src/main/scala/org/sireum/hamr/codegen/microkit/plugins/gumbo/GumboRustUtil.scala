@@ -213,29 +213,16 @@ object GumboRustUtil {
 
     var variablesInSpecExpanded: Map[String, GumboR2U2Util.R2U2MonitorInput] = Map.empty
     for ( (varName, varExp) <- variablesInSpec.entries){
-      val snapshotRewriter = GumboR2U2Util.MonitorPortSnapshotRewriter(inputPortIds)
-      val snapshotExp: SAST.Exp = snapshotRewriter.transform_langastExp(varExp) match {
-        case MSome(e) => e
-        case _ => varExp
-      }
-      val valExpr = SlangExpUtil.rewriteExpH(
-        rexp = snapshotExp,
-
-        owner = component.classifier,
-        optComponent = Some(component),
+      variablesInSpecExpanded = variablesInSpecExpanded + varName ~> GumboR2U2Util.lowerR2U2Input(
+        exp = varExp,
+        inputPortIds = inputPortIds,
+        component = component,
         context = context,
-
-        inRequires = isAssumeRequires,
-        target = TargetLanguage.rust,
-        substitutions = Map.empty,
-        aadlTypes = types,
+        isAssumeRequires = isAssumeRequires,
+        types = types,
         tp = tp,
         store = store,
         reporter = reporter)
-      variablesInSpecExpanded += (varName -> GumboR2U2Util.R2U2MonitorInput(
-        exp = RAST.ExprST(st"""${valExpr}"""),
-        expType = GumboC2POUtil.getExprType(varExp),
-        referencedInputPorts = snapshotRewriter.referencedInputPorts))
     }
 
     val spec_st: RAST.Expr = RAST.ExprST(

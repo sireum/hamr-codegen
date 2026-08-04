@@ -482,11 +482,11 @@ object SlangExpUtil {
               // api.get_*() call) applies in both Verus and exec/GUMBOX contexts --
               // the system-assertion monitor is exec (target == TargetLanguage.rust) yet still needs its
               // aliases resolved. Without a substitution, fall back to a bare
-              // reference (exec) or `self.<field>` (Verus state var).
+              // reference (exec/C2PO) or `self.<field>` (Verus state var).
               substitutions.get(exp.id.value) match {
                 case Some(sub) => return st"$sub"
                 case _ =>
-                  if (target == TargetLanguage.rust) {
+                  if (target == TargetLanguage.rust || target == TargetLanguage.C2PO) {
                     return st"${exp.id.prettyST}"
                   } else {
                     return st"self.${exp.id.prettyST}"

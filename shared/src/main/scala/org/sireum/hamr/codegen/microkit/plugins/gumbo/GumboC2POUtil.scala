@@ -2,6 +2,7 @@
 package org.sireum.hamr.codegen.microkit.plugins.gumbo
 
 import org.sireum._
+import org.sireum.lang.{ast => SAST}
 
 object GumboC2POUtil {
 
@@ -20,6 +21,36 @@ object GumboC2POUtil {
     "float"
 //    "struct"
 //    "array"
+  }
+
+  @pure def getTypedExprType(typed: SAST.Typed): C2POType.Type = {
+    typed match {
+      // Event-data input ports are Option[payload].  C2PO receives the payload
+      // and its presence as separate input signals, so classify the payload.
+      case SAST.Typed.Name(SAST.Typed.optionName, _, ISZ(payload)) =>
+        return getTypedExprType(payload)
+      case n: SAST.Typed.Name =>
+        n.ids match {
+          case ISZ("org", "sireum", "B") => return C2POType.bool
+          case ISZ("org", "sireum", "C") => return C2POType.int
+          case ISZ("org", "sireum", "S8") => return C2POType.int
+          case ISZ("org", "sireum", "S16") => return C2POType.int
+          case ISZ("org", "sireum", "S32") => return C2POType.int
+          case ISZ("org", "sireum", "U8") => return C2POType.int
+          case ISZ("org", "sireum", "U16") => return C2POType.int
+          case ISZ("org", "sireum", "F32") => return C2POType.float
+          case ISZ("org", "sireum", "F64") => return C2POType.float
+          case _ => halt(s"Type ${n.ids} is not supported by C2PO/R2U2")
+        }
+      case _ => halt(s"Type ${typed} is not supported by C2PO/R2U2")
+    }
+  }
+
+  @pure def isOptional(exp: SAST.Exp): B = {
+    exp.typedOpt match {
+      case Some(SAST.Typed.Name(SAST.Typed.optionName, _, _)) => return T
+      case _ => return F
+    }
   }
 
   @pure def getExprType(exp: org.sireum.lang.ast.Exp): C2POType.Type = {
@@ -82,21 +113,6 @@ object GumboC2POUtil {
           }
         } else {
           halt("Expression type is not supported by C2PO/R2U2")
-          // To-Do: These are the unclassified ones:
-//          val Equiv: String = "==="
-//          val EquivUni: String = "≡"
-//          val Inequiv: String = "=!="
-//          val InequivUni: String = "≢"
-//          val FpEq: String = "~~"
-//          val FpNe: String = "!~"
-//          val Ushr: String = ">>>"
-//          val Imply: String = "__>:"
-//          val Append: String = ":+"
-//          val Prepend: String = "+:"
-//          val AppendAll: String = "++"
-//          val RemoveAll: String = "--"
-//          val MapsTo: String = "~>"
-//          val Arrow: String = "=>:"
         }
 
       case un: org.sireum.lang.ast.Exp.Unary =>
@@ -129,13 +145,24 @@ object GumboC2POUtil {
           halt("Expression type is not supported by C2PO/R2U2")
         }
       // 3. Status checks on nested properties are structurally Booleans
-      case sel: org.sireum.lang.ast.Exp.Select if
-        sel.id.value == "nonEmpty" || sel.id.value == "isEmpty" =>
-        return C2POType.bool
+      case sel: org.sireum.lang.ast.Exp.Select => 
+          if (sel.id.value == "nonEmpty" || sel.id.value == "isEmpty") {
+               return C2POType.bool
+          } else {
+               // Port values and other typed selections carry enough resolved type
+               // information to classify them without access to the surrounding scope.
+               sel.attr.typedOpt match {
+                    case Some(typed) => return getTypedExprType(typed)
+                    case _ => halt("Expression type is not supported by C2PO/R2U2")
+               }
+          }
 
       // 4. Identifiers must be checked against your scope context
       case id: org.sireum.lang.ast.Exp.Ident =>
-        halt("Expression type is not supported by C2PO/R2U2")
+        id.attr.typedOpt match {
+          case Some(typed) => return getTypedExprType(typed)
+          case _ => halt("Expression type is not supported by C2PO/R2U2")
+        }
       case _ => halt("Expression type is not supported by C2PO/R2U2")
     }
   }
@@ -173,7 +200,20 @@ object GumboC2POUtil {
       // 2. Matches component dot-selections (e.g., api.my_var or state.my_var)
       case sel: org.sireum.lang.ast.Exp.Select =>
         val propName = sel.id.value
-        if (propName == "nonEmpty" || propName == "isEmpty") {
+        val isOptionGet: B = sel.attr.typedOpt match {
+          case Some(m: SAST.Typed.Method) =>
+            m.owner == ISZ("org", "sireum", "Option") && m.name == "get"
+          case _ => F
+        }
+        if (isOptionGet) {
+          // GCL resolution inserts Option.get when an event-data port is used as
+          // a value.  R2U2 models that value and its presence as separate input
+          // signals, so collect the optional port itself and omit the accessor.
+          sel.receiverOpt match {
+            case Some(receiver) => return collectIdentifiers(receiver)
+            case _ => halt("Option.get is missing its receiver")
+          }
+        } else if (propName == "nonEmpty" || propName == "isEmpty") {
           getFlatPathString(sel) match {
             case Some(collapsedString) =>
               // 1A. SUCCESS: We found an API chain ending in a collection status!
