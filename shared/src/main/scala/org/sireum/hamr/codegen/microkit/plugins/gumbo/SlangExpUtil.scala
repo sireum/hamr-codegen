@@ -234,24 +234,37 @@ object SlangExpUtil {
       val dd: Exp = d
       dd match {
         case exp: Exp.StringInterpolate =>
-          exp.prefix match {
-            case "u8" => return st"${(unquoteLits(exp.lits), "_INFEASIBLE")}u8"
-            case "u16" => return st"${(unquoteLits(exp.lits), "_INFEASIBLE")}u16"
-            case "u32" => return st"${(unquoteLits(exp.lits), "_INFEASIBLE")}u32"
-            case "u64" => return st"${(unquoteLits(exp.lits), "_INFEASIBLE")}u64"
+          if (target == TargetLanguage.C2PO) {
+            exp.prefix match {
+              // C2PO represents every supported integer as a signed 32-bit value,
+              // so Rust's fixed-width literal suffixes must not be emitted.
+              case "u8" | "u16" | "s8" | "s16" | "s32" =>
+                return st"${(unquoteLits(exp.lits), "_INFEASIBLE")}"
+              case x =>
+                reporter.error(d.posOpt, MicrokitCodegen.toolName,
+                  s"The Slang interpolate $x is not supported by C2PO/R2U2 (integers are signed 32-bit)")
+                return st"TODO"
+            }
+          } else {
+               exp.prefix match {
+               case "u8" => return st"${(unquoteLits(exp.lits), "_INFEASIBLE")}u8"
+               case "u16" => return st"${(unquoteLits(exp.lits), "_INFEASIBLE")}u16"
+               case "u32" => return st"${(unquoteLits(exp.lits), "_INFEASIBLE")}u32"
+               case "u64" => return st"${(unquoteLits(exp.lits), "_INFEASIBLE")}u64"
 
-            case "s8" => return st"${(unquoteLits(exp.lits), "_INFEASIBLE")}i8"
-            case "s16" => return st"${(unquoteLits(exp.lits), "_INFEASIBLE")}i16"
-            case "s32" => return st"${(unquoteLits(exp.lits), "_INFEASIBLE")}i32"
-            case "s64" => return st"${(unquoteLits(exp.lits), "_INFEASIBLE")}i64"
+               case "s8" => return st"${(unquoteLits(exp.lits), "_INFEASIBLE")}i8"
+               case "s16" => return st"${(unquoteLits(exp.lits), "_INFEASIBLE")}i16"
+               case "s32" => return st"${(unquoteLits(exp.lits), "_INFEASIBLE")}i32"
+               case "s64" => return st"${(unquoteLits(exp.lits), "_INFEASIBLE")}i64"
 
-            // TODO: verus also has u128 and s128 which slang doesn't
+               // TODO: verus also has u128 and s128 which slang doesn't
 
-            // TODO: how to handle Slang's finer grained s1"0", s2"0", etc.
+               // TODO: how to handle Slang's finer grained s1"0", s2"0", etc.
 
-            case x => reporter.error(d.posOpt, MicrokitCodegen.toolName,
-              s"There is not a direct translation of the Slang interpolate $x for Rust/Verus")
-            return st"TODO"
+               case x => reporter.error(d.posOpt, MicrokitCodegen.toolName,
+                    s"There is not a direct translation of the Slang interpolate $x for Rust/Verus")
+               return st"TODO"
+               }
           }
 
         case exp: Exp.Tuple => halt(s"$exp : ${exp.posOpt}")
