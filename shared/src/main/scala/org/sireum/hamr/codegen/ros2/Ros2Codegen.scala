@@ -72,6 +72,9 @@ object Ros2Codegen {
     // sized -- overflow of an unsized field is silent at runtime
     Generator.validateMicroRosCapacities(microRosThreads, reporter)
 
+    // a queued port whose payload the generated ring buffer cannot faithfully copy
+    Generator.validateMicroRosEventQueues(microRosThreads, reporter)
+
     var files: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
 
     options.ros2NodesLanguage.name match {

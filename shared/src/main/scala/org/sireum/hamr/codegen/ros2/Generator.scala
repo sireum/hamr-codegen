@@ -5,7 +5,7 @@ package org.sireum.hamr.codegen.ros2
 import org.sireum._
 import org.sireum.hamr.codegen.common.containers.{BlockMarker, Marker}
 import org.sireum.hamr.codegen.common.properties.Hamr_Ros_Properties
-import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlDataPort, AadlEventDataPort, AadlPort, AadlProcess, AadlSystem, AadlThread, Dispatch_Protocol}
+import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlDataPort, AadlEventDataPort, AadlEventPort, AadlPort, AadlProcess, AadlSystem, AadlThread, Dispatch_Protocol}
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.types.{AadlType, ArrayType, BaseType, EnumType, RecordType}
 import org.sireum.hamr.ir.Direction
@@ -166,6 +166,53 @@ object Generator {
   // excluded: no publisher, no put_ API, no queue, and no executor handle is generated for them.
   @strictpure def generatedPorts(component: AadlThread): ISZ[AadlPort] =
     ISZOps(component.getPorts()).filter(p => !RosUtil.isInfrastructureRealized(p))
+
+  // Event and event data in ports on a PERIODIC node.
+  //
+  // On a sporadic node an arrival dispatches the port's handler directly, so nothing is buffered.
+  // A periodic node runs on its timer instead, so an arrival has to wait for the next dispatch:
+  // each such port gets a statically allocated ring buffer whose depth is the port's AADL
+  // Queue_Size (default 1), filled by the subscription callback and drained one entry per
+  // dispatch.  Data ports are excluded -- they latch a single newest value, which is their
+  // semantics, not a queue.
+  def microRosQueuedInPorts(component: AadlThread): ISZ[AadlPort] = {
+    return if (isSporadic(component)) IS()
+    else ISZOps(ISZOps(generatedPorts(component)).filter(p => p.direction == Direction.In))
+      .filter(p => !p.isInstanceOf[AadlDataPort])
+  }
+
+  // The AADL queue depth of an event or event data port; 1 (the AADL default) for anything else.
+  @pure def microRosQueueSize(p: AadlPort): Z = {
+    p match {
+      case e: AadlEventDataPort => return e.queueSize
+      case e: AadlEventPort => return e.queueSize
+      case _ => return 1
+    }
+  }
+
+  // Whether a payload's generated C struct holds pointers into separately allocated storage.
+  // rosidl renders a string and an unbounded sequence that way, and a platform-provided type's
+  // native layout is unknown to codegen -- its mirror is a projection, not a layout claim -- so it
+  // has to be assumed to.  A ring buffer copies messages by struct assignment, which duplicates
+  // such a pointer rather than the bytes behind it, leaving every slot aliasing the subscription's
+  // staging buffer.  Fixed-dimension arrays are fine: those render as plain C arrays.
+  def hasPointerCarryingFields(aadlType: AadlType): B = {
+    if (RosUtil.isPlatformProvided(aadlType)) {
+      return T
+    }
+    aadlType match {
+      case b: BaseType => return b.name == "Base_Types::String"
+      case a: ArrayType => return a.dimensions.isEmpty || a.dimensions(0) == 0 || hasPointerCarryingFields(a.baseType)
+      case r: RecordType =>
+        for (entry <- r.fields.entries) {
+          if (hasPointerCarryingFields(entry._2)) {
+            return T
+          }
+        }
+        return F
+      case _ => return F
+    }
+  }
 
   // Arguments to the rclcpp Node base constructor.  The two-argument (name, namespace) form is
   // used only when the model assigns a namespace, so unnamespaced nodes keep the plain form.
@@ -4381,6 +4428,208 @@ object Generator {
     return callbacks
   }
 
+  // Ring buffer state for the queued ports of a periodic node.  An event port carries no payload,
+  // so only its pending count is kept -- the ring would hold nothing but copies of Empty.
+  def genMicroRosEventQueueStructFields(queuedPorts: ISZ[AadlPort], cppPkgName: String,
+                                        datatypeMap: Map[AadlType, Ros2Datatype],
+                                        reporter: Reporter): ISZ[ST] = {
+    var fields: ISZ[ST] = IS()
+    for (p <- queuedPorts) {
+      val portName = genPortName(p)
+      val queueSize = microRosQueueSize(p)
+      val portDatatype = genPortDatatype(p, cppPkgName, datatypeMap, reporter)
+      val cType = cppTypeToCStructName(portDatatype)
+      if (isEventPort(portDatatype)) {
+        fields = fields :+
+          st"""// ${p.identifier}: event port, so only the pending count is queued (Queue_Size ${queueSize})
+              |size_t ${portName}_count;
+              |bool ${portName}_hasEvent;"""
+      } else {
+        fields = fields :+
+          st"""// ${p.identifier}: Queue_Size ${queueSize} ring buffer, plus the entry frozen for this dispatch
+              |${cType} ${portName}_queue[${queueSize}];
+              |size_t ${portName}_head;
+              |size_t ${portName}_count;
+              |${cType} ${portName}_frozen;
+              |bool ${portName}_hasEvent;"""
+      }
+    }
+    return fields
+  }
+
+  // Subscription callbacks for a periodic node.  A data port latches, exactly as on a sporadic
+  // node; a queued port enqueues rather than invoking a handler, because on a periodic node the
+  // entry point is driven by the timer and not by the arrival.
+  def genMicroRosPeriodicSubscriptionCallbacks(inPorts: ISZ[AadlPort], cppPkgName: String,
+                                               datatypeMap: Map[AadlType, Ros2Datatype],
+                                               reporter: Reporter): ISZ[ST] = {
+    var callbacks: ISZ[ST] = IS()
+    for (p <- inPorts) {
+      val portName = genPortName(p)
+      val queueSize = microRosQueueSize(p)
+      val portDatatype = genPortDatatype(p, cppPkgName, datatypeMap, reporter)
+      val cType = cppTypeToCStructName(portDatatype)
+      if (p.isInstanceOf[AadlDataPort]) {
+        callbacks = callbacks :+
+          st"""static void ${portName}_subscription_callback(const void * msgin)
+              |{
+              |    const ${cType} * msg = (const ${cType} *) msgin;
+              |    if (g_self != NULL) {
+              |        g_self->${portName}_msg = *msg;
+              |    }
+              |}
+            """
+      } else if (isEventPort(portDatatype)) {
+        callbacks = callbacks :+
+          st"""static void ${portName}_subscription_callback(const void * msgin)
+              |{
+              |    (void)msgin;
+              |    if (g_self != NULL) {
+              |        if (g_self->${portName}_count < ${queueSize}) {
+              |            g_self->${portName}_count++;
+              |        } else {
+              |            // Queue full.  Discarding the oldest event and recording this one leaves the
+              |            // pending count unchanged, so there is nothing to do but report the loss.
+              |            PRINT_WARN("${p.identifier} queue full (Queue_Size ${queueSize}); dropped an event");
+              |        }
+              |    }
+              |}
+            """
+      } else {
+        callbacks = callbacks :+
+          st"""static void ${portName}_subscription_callback(const void * msgin)
+              |{
+              |    const ${cType} * msg = (const ${cType} *) msgin;
+              |    if (g_self != NULL) {
+              |        if (g_self->${portName}_count == ${queueSize}) {
+              |            // Queue full.  AADL's default Overflow_Handling_Protocol is DropOldest, so the
+              |            // oldest entry is discarded to make room for this arrival.
+              |            g_self->${portName}_head = (g_self->${portName}_head + 1) % ${queueSize};
+              |            g_self->${portName}_count--;
+              |            PRINT_WARN("${p.identifier} queue full (Queue_Size ${queueSize}); dropped oldest message");
+              |        }
+              |        size_t ${portName}_tail = (g_self->${portName}_head + g_self->${portName}_count) % ${queueSize};
+              |        g_self->${portName}_queue[${portName}_tail] = *msg;
+              |        g_self->${portName}_count++;
+              |    }
+              |}
+            """
+      }
+    }
+    return callbacks
+  }
+
+  // Zeroing is belt-and-braces: the runner declares the node struct with static storage duration,
+  // so this state already starts zeroed.  Stating it keeps the queues correct if a node is ever
+  // re-initialized, and documents the starting state at the point it matters.
+  def genMicroRosEventQueueInits(queuedPorts: ISZ[AadlPort], cppPkgName: String,
+                                 datatypeMap: Map[AadlType, Ros2Datatype],
+                                 reporter: Reporter): ISZ[ST] = {
+    var inits: ISZ[ST] = IS()
+    for (p <- queuedPorts) {
+      val portName = genPortName(p)
+      val portDatatype = genPortDatatype(p, cppPkgName, datatypeMap, reporter)
+      if (isEventPort(portDatatype)) {
+        inits = inits :+
+          st"""self->${portName}_count = 0;
+              |self->${portName}_hasEvent = false;"""
+      } else {
+        inits = inits :+
+          st"""self->${portName}_head = 0;
+              |self->${portName}_count = 0;
+              |self->${portName}_hasEvent = false;"""
+      }
+    }
+    return inits
+  }
+
+  // Consumes one queued arrival per port, mirroring what the rclcpp backend's receiveInputs does
+  // for a periodic node.  Called immediately before the entry point and on the same (single)
+  // executor thread as the subscription callbacks, so what a dispatch observes is frozen for its
+  // duration and no locking is involved.
+  def genMicroRosReceiveInputs(queuedPorts: ISZ[AadlPort], nodeName: String, cppPkgName: String,
+                               datatypeMap: Map[AadlType, Ros2Datatype],
+                               reporter: Reporter): ST = {
+    val nodeNameBase = s"${nodeName}_base"
+    var bodies: ISZ[ST] = IS()
+    for (p <- queuedPorts) {
+      val portName = genPortName(p)
+      val queueSize = microRosQueueSize(p)
+      val portDatatype = genPortDatatype(p, cppPkgName, datatypeMap, reporter)
+      if (isEventPort(portDatatype)) {
+        bodies = bodies :+
+          st"""if (self->${portName}_count > 0) {
+              |    self->${portName}_count--;
+              |    self->${portName}_hasEvent = true;
+              |} else {
+              |    self->${portName}_hasEvent = false;
+              |}"""
+      } else {
+        bodies = bodies :+
+          st"""if (self->${portName}_count > 0) {
+              |    self->${portName}_frozen = self->${portName}_queue[self->${portName}_head];
+              |    self->${portName}_head = (self->${portName}_head + 1) % ${queueSize};
+              |    self->${portName}_count--;
+              |    self->${portName}_hasEvent = true;
+              |} else {
+              |    self->${portName}_hasEvent = false;
+              |}"""
+      }
+    }
+    return (
+      st"""static void ${nodeName}_receiveInputs(${nodeNameBase}_t * self)
+          |{
+          |    ${(bodies, "\n")}
+          |}""")
+  }
+
+  def genMicroRosEventGetDecls(queuedPorts: ISZ[AadlPort], nodeName: String, cppPkgName: String,
+                               datatypeMap: Map[AadlType, Ros2Datatype],
+                               reporter: Reporter): ISZ[ST] = {
+    val nodeNameBase = s"${nodeName}_base"
+    var decls: ISZ[ST] = IS()
+    for (p <- queuedPorts) {
+      val portId = p.identifier
+      val portDatatype = genPortDatatype(p, cppPkgName, datatypeMap, reporter)
+      val cType = cppTypeToCStructName(portDatatype)
+      if (isEventPort(portDatatype)) {
+        decls = decls :+ st"// true when an event was dequeued for this dispatch\nbool has_${portId}(${nodeNameBase}_t * self);"
+      } else {
+        decls = decls :+ st"// the message dequeued for this dispatch, or NULL if none arrived\n${cType} * get_${portId}(${nodeNameBase}_t * self);"
+      }
+    }
+    return decls
+  }
+
+  def genMicroRosEventGetImpls(queuedPorts: ISZ[AadlPort], nodeName: String, cppPkgName: String,
+                               datatypeMap: Map[AadlType, Ros2Datatype],
+                               reporter: Reporter): ISZ[ST] = {
+    val nodeNameBase = s"${nodeName}_base"
+    var impls: ISZ[ST] = IS()
+    for (p <- queuedPorts) {
+      val portId = p.identifier
+      val portName = genPortName(p)
+      val portDatatype = genPortDatatype(p, cppPkgName, datatypeMap, reporter)
+      val cType = cppTypeToCStructName(portDatatype)
+      if (isEventPort(portDatatype)) {
+        impls = impls :+
+          st"""bool has_${portId}(${nodeNameBase}_t * self)
+              |{
+              |    return self->${portName}_hasEvent;
+              |}
+            """
+      } else {
+        impls = impls :+
+          st"""${cType} * get_${portId}(${nodeNameBase}_t * self)
+              |{
+              |    return self->${portName}_hasEvent ? &self->${portName}_frozen : NULL;
+              |}
+            """
+      }
+    }
+    return impls
+  }
+
   def genMicroRosSubscriptionExecutorAdds(inPorts: ISZ[AadlPort]): ISZ[ST] = {
     var adds: ISZ[ST] = IS()
     for (p <- inPorts) {
@@ -4458,20 +4707,34 @@ object Generator {
       case _ => st""
     }
 
-    val callbackAndTimerSection: ST =
-      if (isSporadic(component)) {
-        val subscriberFields = genMicroRosSubscriberStructFields(inPorts, cppPkgName, datatypeMap, reporter)
+    val queuedInPorts = microRosQueuedInPorts(component)
+    val subscriberFields = genMicroRosSubscriberStructFields(inPorts, cppPkgName, datatypeMap, reporter)
+    val queueFields = genMicroRosEventQueueStructFields(queuedInPorts, cppPkgName, datatypeMap, reporter)
+    val queueFieldSection: ST =
+      if (queueFields.nonEmpty)
+        st"""
+            |
+            |    // Arrivals wait here for the next dispatch -- see ${nodeName}_receiveInputs
+            |    ${(queueFields, "\n")}"""
+      else st""
+    val subscriptionFieldSection: ST =
+      if (subscriberFields.nonEmpty)
         st"""    //=================================================
             |    //  S u b s c r i p t i o n s
             |    //=================================================
-            |    ${(subscriberFields, "\n")}
+            |    ${(subscriberFields, "\n")}${queueFieldSection}
             |
-            |    //=================================================
+            |"""
+      else st""
+
+    val callbackAndTimerSection: ST =
+      if (isSporadic(component)) {
+        st"""${subscriptionFieldSection}    //=================================================
             |    //  E x e c u t o r
             |    //=================================================
             |    rclc_executor_t executor;"""
       } else {
-        st"""    //=================================================
+        st"""${subscriptionFieldSection}    //=================================================
             |    //  C a l l b a c k   a n d   T i m e r
             |    //=================================================
             |    rcl_timer_t period_timer;
@@ -4480,7 +4743,7 @@ object Generator {
 
     val getDecls = genMicroRosGetFunctionDecls(dataInPorts, nodeName, cppPkgName, datatypeMap, reporter)
     val getSection: ST =
-      if (isSporadic(component) && getDecls.nonEmpty)
+      if (getDecls.nonEmpty)
         st"""
             |//=================================================
             |//  D a t a   P o r t   A c c e s s
@@ -4490,13 +4753,29 @@ object Generator {
             |"""
       else st""
 
+    val eventGetDecls = genMicroRosEventGetDecls(queuedInPorts, nodeName, cppPkgName, datatypeMap, reporter)
+    val eventGetSection: ST =
+      if (eventGetDecls.nonEmpty)
+        st"""
+            |//=================================================
+            |//  Q u e u e d   P o r t   A c c e s s
+            |//=================================================
+            |
+            |${(eventGetDecls, "\n")}
+            |"""
+      else st""
+
+    // stdbool is pulled in only where the queue flags need it, so nodes without queued ports keep
+    // byte-identical output.
+    val stdboolInclude: ST = if (queuedInPorts.nonEmpty) st"\n#include <stdbool.h>" else st""
+
     val fileBody =
       st"""#ifndef ${guardName}
           |#define ${guardName}
           |
           |${CommentTemplate.doNotEditComment_slash}
           |
-          |#include <stdio.h>
+          |#include <stdio.h>${stdboolInclude}
           |#include <rcl/rcl.h>
           |#include <rclc/rclc.h>
           |#include <rclc/executor.h>
@@ -4549,7 +4828,7 @@ object Generator {
           |//=================================================
           |
           |${(putDecls, "\n")}
-          |${getSection}
+          |${getSection}${eventGetSection}
           |#endif  // ${guardName}
         """
 
@@ -4806,6 +5085,28 @@ object Generator {
   // the native type may have unbounded fields the mirror says nothing about.  Codegen only knows
   // the model, so it cannot confirm which native fields are unbounded -- it reports what it could
   // not size and leaves the decision to the modeler.
+  // A queued port's ring buffer copies messages by struct assignment, which is a faithful copy
+  // only when the payload is self-contained.  Where it is not, every slot would point at the same
+  // storage as the subscription's staging buffer, so the queue would hand the entry point whatever
+  // arrived most recently rather than what it dequeued.  Deep-copying would mean giving each slot
+  // its own backing storage -- Queue_Size times the per-port buffers codegen allocates today.
+  def validateMicroRosEventQueues(microRosThreads: ISZ[AadlThread], reporter: Reporter): Unit = {
+    for (thread <- microRosThreads;
+         p <- microRosQueuedInPorts(thread)) {
+      portAadlTypeOpt(p) match {
+        case Some(aadlType) if hasPointerCarryingFields(aadlType) =>
+          reporter.warn(p.posOpt, RosUtil.toolName,
+            st"""${thread.identifier}.${p.identifier} queues ${aadlType.name}, whose generated C struct holds pointers to
+                |separately allocated storage (a string, an unbounded sequence, or a platform-provided type
+                |whose native layout codegen cannot see).  The generated ring buffer copies messages by
+                |struct assignment, so its ${microRosQueueSize(p)} slots would alias one another rather than hold
+                |distinct messages.  Give ${thread.identifier} a Sporadic dispatch protocol, so arrivals are handled
+                |as they land and nothing is queued, or attach per-slot storage in the preserved block.""".render)
+        case _ =>
+      }
+    }
+  }
+
   def validateMicroRosCapacities(microRosThreads: ISZ[AadlThread], reporter: Reporter): Unit = {
     for (thread <- microRosThreads;
          p <- generatedPorts(thread) if p.direction == Direction.In) {
@@ -4884,23 +5185,53 @@ object Generator {
     val publisherInits = genMicroRosPublisherInits(outPorts, nodeName, cppPkgName, datatypeMap, connectionMap, invertTopicBinding, reporter)
     val putImpls = genMicroRosPutFunctionImpls(outPorts, nodeName, cppPkgName, datatypeMap, connectionMap, invertTopicBinding, reporter)
 
+    // Both dispatch protocols subscribe to every in port now; what differs is what the callback
+    // does with the message.  A sporadic node's callback invokes the port's handler directly; a
+    // periodic node's latches a data port or enqueues a queued one for the next dispatch.
+    val queuedInPorts = microRosQueuedInPorts(component)
+    val subscriptionCallbacks: ISZ[ST] =
+      if (isSporadic(component)) genMicroRosSubscriptionCallbacks(inPorts, nodeName, cppPkgName, datatypeMap, reporter)
+      else genMicroRosPeriodicSubscriptionCallbacks(inPorts, cppPkgName, datatypeMap, reporter)
+    val subscriptionInits = genMicroRosSubscriptionInits(inPorts, cppPkgName, datatypeMap, invertTopicBinding, connectionMap, reporter)
+    val executorAdds = genMicroRosSubscriptionExecutorAdds(inPorts)
+    val getImpls = genMicroRosGetFunctionImpls(dataInPorts, nodeName, cppPkgName, datatypeMap, reporter)
+
+    val subscriptionCallbackSection: ST =
+      if (subscriptionCallbacks.nonEmpty)
+        st"""//=================================================
+            |//  S u b s c r i p t i o n   C a l l b a c k s
+            |//=================================================
+            |
+            |${(subscriptionCallbacks, "\n")}"""
+      else st""
+
+    // The whole setup block, rather than a subscriptions fragment, so that a node with nothing to
+    // subscribe to renders exactly the text it did before the periodic receive path existed --
+    // an empty fragment on its own template line would leave a stray blank line behind.
+    val connectionSetupSection: ST =
+      if (subscriptionInits.nonEmpty)
+        st"""    // Setting up connections
+            |    ${(publisherInits, "\n")}
+            |    // Setting up subscriptions
+            |    ${(subscriptionInits, "\n")}${genMicroRosSequenceInitSection(inPorts)}"""
+      else
+        st"""    // Setting up connections
+            |    ${(publisherInits, "\n")}"""
+
+    val getSection: ST =
+      if (getImpls.nonEmpty)
+        st"""
+            |//=================================================
+            |//  D a t a   P o r t   A c c e s s
+            |//=================================================
+            |
+            |${(getImpls, "\n")}"""
+      else st""
+
     val fileBody: ST =
       if (isSporadic(component)) {
         val handleForwardDecls = genMicroRosHandleForwardDecls(inPorts, nodeName, cppPkgName, datatypeMap, reporter)
-        val subscriptionCallbacks = genMicroRosSubscriptionCallbacks(inPorts, nodeName, cppPkgName, datatypeMap, reporter)
-        val subscriptionInits = genMicroRosSubscriptionInits(inPorts, cppPkgName, datatypeMap, invertTopicBinding, connectionMap, reporter)
-        val executorAdds = genMicroRosSubscriptionExecutorAdds(inPorts)
-        val getImpls = genMicroRosGetFunctionImpls(dataInPorts, nodeName, cppPkgName, datatypeMap, reporter)
         val numHandles: Z = inPorts.size
-        val getSection: ST =
-          if (getImpls.nonEmpty)
-            st"""
-                |//=================================================
-                |//  D a t a   P o r t   A c c e s s
-                |//=================================================
-                |
-                |${(getImpls, "\n")}"""
-          else st""
         st"""${genMicroRosBaseNodeIncludes(microrosPkgName, nodeNameBase, component)}
             |
             |${CommentTemplate.invertedMarkerComment_slash}
@@ -4919,11 +5250,7 @@ object Generator {
             |${genMicroRosSequenceBufferSection(inPorts)}
             |${genMicroRosUserDeclarations()}
             |
-            |//=================================================
-            |//  S u b s c r i p t i o n   C a l l b a c k s
-            |//=================================================
-            |
-            |${(subscriptionCallbacks, "\n")}
+            |${subscriptionCallbackSection}
             |//=================================================
             |//  I n i t i a l i z a t i o n
             |//=================================================
@@ -4944,10 +5271,7 @@ object Generator {
             |        ${nodeName}_logger_name = logger_name;
             |    }
             |
-            |    // Setting up connections
-            |    ${(publisherInits, "\n")}
-            |    // Setting up subscriptions
-            |    ${(subscriptionInits, "\n")}${genMicroRosSequenceInitSection(inPorts)}
+            |${connectionSetupSection}
             |
             |    ${genMicroRosUserInit()}
             |
@@ -4970,6 +5294,58 @@ object Generator {
           """
       } else {
         val period = component.period.get
+        // One handle for the period timer, plus one per subscription.
+        val numHandles: Z = inPorts.size + 1
+
+        // Both sections render to nothing when the node subscribes to no port, so a periodic node
+        // without in ports keeps byte-identical output.
+        val contextComment: ST =
+          if (subscriptionCallbacks.nonEmpty)
+            st"""// Static instance pointer for timer and subscription callback context
+                |// (heap-free, MCU-compatible)"""
+          else st"// Static instance pointer for timer callback context (heap-free, MCU-compatible)"
+
+        // Carries its own leading separator so that the empty case collapses to the single blank
+        // line that preceded the timer section before subscriptions existed here.
+        val periodicCallbackSection: ST =
+          if (subscriptionCallbacks.nonEmpty) st"\n\n${subscriptionCallbackSection}"
+          else st"\n"
+
+        val queueInits = genMicroRosEventQueueInits(queuedInPorts, cppPkgName, datatypeMap, reporter)
+        val queueInitSection: ST =
+          if (queueInits.nonEmpty)
+            st"""
+                |
+                |    // Queued ports start empty
+                |    ${(queueInits, "\n")}
+                |"""
+          else st""
+
+        val eventGetImpls = genMicroRosEventGetImpls(queuedInPorts, nodeName, cppPkgName, datatypeMap, reporter)
+        val eventGetSection: ST =
+          if (eventGetImpls.nonEmpty)
+            st"""
+                |//=================================================
+                |//  Q u e u e d   P o r t   A c c e s s
+                |//=================================================
+                |
+                |${(eventGetImpls, "\n")}"""
+          else st""
+
+        // The dequeue step runs before the entry point, so a dispatch sees a value frozen for its
+        // duration rather than one the executor may replace mid-dispatch.
+        val receiveInputsSection: ST =
+          if (queuedInPorts.nonEmpty)
+            st"""${genMicroRosReceiveInputs(queuedInPorts, nodeName, cppPkgName, datatypeMap, reporter)}
+                |
+                |"""
+          else st""
+        val timerBody: ST =
+          if (queuedInPorts.nonEmpty)
+            st"""${nodeName}_receiveInputs(g_self);
+                |${nodeName}_timeTriggered(g_self);"""
+          else st"${nodeName}_timeTriggered(g_self);"
+
         st"""${genMicroRosBaseNodeIncludes(microrosPkgName, nodeNameBase, component)}
             |
             |${CommentTemplate.invertedMarkerComment_slash}
@@ -4977,7 +5353,7 @@ object Generator {
             |// Forward declaration of user compute entry point
             |void ${nodeName}_timeTriggered(${nodeNameBase}_t * self);
             |
-            |// Static instance pointer for timer callback context (heap-free, MCU-compatible)
+            |${contextComment}
             |static ${nodeNameBase}_t * g_self = NULL;
             |
             |// Logger name used by the PRINT_* macros; updated to the node's actual logger
@@ -4985,19 +5361,18 @@ object Generator {
             |const char * ${nodeName}_logger_name = "${nodeName}";
             |
             |${genMicroRosNodeOptions()}
-            |
-            |${genMicroRosUserDeclarations()}
-            |
+            |${genMicroRosSequenceBufferSection(inPorts)}
+            |${genMicroRosUserDeclarations()}${periodicCallbackSection}
             |//=================================================
             |//  C a l l b a c k   a n d   T i m e r
             |//=================================================
             |
-            |static void period_timer_callback(rcl_timer_t * timer, int64_t last_call_time)
+            |${receiveInputsSection}static void period_timer_callback(rcl_timer_t * timer, int64_t last_call_time)
             |{
             |    (void)timer;
             |    (void)last_call_time;
             |    if (g_self != NULL) {
-            |        ${nodeName}_timeTriggered(g_self);
+            |        ${timerBody}
             |    }
             |}
             |
@@ -5021,8 +5396,7 @@ object Generator {
             |        ${nodeName}_logger_name = logger_name;
             |    }
             |
-            |    // Setting up connections
-            |    ${(publisherInits, "\n")}
+            |${connectionSetupSection}${queueInitSection}
             |    // timeTriggered callback timer
             |    RCL_CHECK(rclc_timer_init_default(
             |        &self->period_timer,
@@ -5032,8 +5406,9 @@ object Generator {
             |
             |    ${genMicroRosUserInit()}
             |
-            |    RCL_CHECK(rclc_executor_init(&self->executor, &self->support.context, 1, &self->allocator));
+            |    RCL_CHECK(rclc_executor_init(&self->executor, &self->support.context, ${numHandles}, &self->allocator));
             |    RCL_CHECK(rclc_executor_add_timer(&self->executor, &self->period_timer));
+            |    ${(executorAdds, "\n")}
             |
             |    return RCL_RET_OK;
             |}
@@ -5047,7 +5422,7 @@ object Generator {
             |//  C o m m u n i c a t i o n
             |//=================================================
             |
-            |${(putImpls, "\n")}
+            |${(putImpls, "\n")}${getSection}${eventGetSection}
           """
       }
 
@@ -5245,6 +5620,40 @@ object Generator {
             |//=================================================
             |${(handlers, "\n")}"""
       } else {
+        // A periodic node samples its data ports at the top of each dispatch: the subscription
+        // callback has latched the newest value, and get_<port>() hands back a pointer to it.
+        val inPorts = ISZOps(generatedPorts(component)).filter(p => p.direction == Direction.In)
+        val dataInPorts = ISZOps(inPorts).filter(p => p.isInstanceOf[AadlDataPort])
+        var dataPortExamples: ISZ[ST] = IS()
+        for (dp <- dataInPorts) {
+          val dpId = dp.identifier
+          val dpDatatype = genPortDatatype(dp, cppPkgName, datatypeMap, reporter)
+          val dpCType = cppTypeToCStructName(dpDatatype)
+          dataPortExamples = dataPortExamples :+
+            st"""${dpCType} * ${dpId} = get_${dpId}(self);"""
+        }
+
+        // A queued port yields at most one arrival per dispatch, and may yield none, so each
+        // example is written as the presence test the entry point has to make.
+        var queuedPortExamples: ISZ[ST] = IS()
+        for (qp <- microRosQueuedInPorts(component)) {
+          val qpId = qp.identifier
+          val qpDatatype = genPortDatatype(qp, cppPkgName, datatypeMap, reporter)
+          val qpCType = cppTypeToCStructName(qpDatatype)
+          if (isEventPort(qpDatatype)) {
+            queuedPortExamples = queuedPortExamples :+
+              st"""if (has_${qpId}(self)) {
+                  |    PRINT_INFO("Received ${qpId}");
+                  |}"""
+          } else {
+            queuedPortExamples = queuedPortExamples :+
+              st"""${qpCType} * ${qpId} = get_${qpId}(self);
+                  |if (${qpId} != NULL) {
+                  |    PRINT_INFO("Received ${qpId}");
+                  |}"""
+          }
+        }
+
         var examplePublishes: ISZ[ST] = IS()
         for (p <- outPorts) {
           val portId = p.identifier
@@ -5260,13 +5669,30 @@ object Generator {
                   |${genCSentLog(p)}"""
           }
         }
+
+        val receiveSection: ST =
+          if (dataPortExamples.nonEmpty)
+            st"""
+                |    // example receiving messages on data ports
+                |    ${(dataPortExamples, "\n")}
+                |"""
+          else st""
+
+        val queuedSection: ST =
+          if (queuedPortExamples.nonEmpty)
+            st"""
+                |    // example receiving queued arrivals -- at most one per port per dispatch
+                |    ${(queuedPortExamples, "\n")}
+                |"""
+          else st""
+
         st"""//=================================================
             |//  C o m p u t e    E n t r y    P o i n t
             |//=================================================
             |void ${nodeName}_timeTriggered(${nodeNameBase}_t * self)
             |{
             |    // Handle communication
-            |
+            |${receiveSection}${queuedSection}
             |    // Example publishing messages
             |    ${(examplePublishes, "\n")}
             |}"""
@@ -5496,9 +5922,9 @@ object Generator {
         publishers = publishers + fanOut
       }
 
-      val subscriptions: Z =
-        if (isSporadic(comp)) ISZOps(generatedPorts(comp)).filter(port => port.direction == Direction.In).size
-        else 0
+      // A periodic node subscribes too -- to its data ports for latching and its event ports for
+      // queueing -- so every in port costs a subscription regardless of dispatch protocol.
+      val subscriptions: Z = ISZOps(generatedPorts(comp)).filter(port => port.direction == Direction.In).size
 
       if (publishers > maxPublishers) {
         maxPublishers = publishers
