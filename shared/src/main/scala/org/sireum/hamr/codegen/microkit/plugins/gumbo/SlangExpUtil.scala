@@ -578,7 +578,12 @@ object SlangExpUtil {
             return st"""($lo..${if (exp.hiExact) "=" else ""}$hi).${if(exp.isForall) "all" else "any"}(|${param}| $body)"""
           }
 
-        case exp: Exp.LitC => return exp.prettyST
+        case exp: Exp.LitC => 
+          if (target == TargetLanguage.C2PO) {
+               return st"${exp.value.toZ}" // C2PO casts all chars to ints
+          } else {
+               return exp.prettyST
+          }
 
         case exp: Exp.InvokeNamed => halt(s"$exp : ${exp.posOpt}")
         case exp: Exp.Old => halt(s"$exp : ${exp.posOpt}")
