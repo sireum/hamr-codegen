@@ -40,6 +40,12 @@ object Generator {
   // Mutex is used for thread locking in C++
   val mutex_name: String = "mutex_"
 
+  // Size of the shared MESSAGE_TO_STRING scratch buffer.  The bound has to appear in the extern
+  // declaration too, not just the definition: the macro uses sizeof on it, and an unbounded
+  // `extern char buf[]` is an incomplete type that sizeof cannot be applied to.
+  val msgToStringBufName: String = "_MESSAGE_TO_STRING_buf"
+  val msgToStringBufSize: Z = 512
+
 
   def genPyLaunchFileName(compNameS: String): String = {
     // create launch file name
@@ -4226,7 +4232,7 @@ object Generator {
                     |    return _buf;
                     |}"""
               caseLines = caseLines :+
-                st"    ${cStructName}*: ${helperName}((msg), _MESSAGE_TO_STRING_buf, sizeof(_MESSAGE_TO_STRING_buf)), \\"
+                st"    ${cStructName}*: ${helperName}((msg), ${msgToStringBufName}, sizeof(${msgToStringBufName})), \\"
             case _ =>
           }
         }
@@ -4242,9 +4248,29 @@ object Generator {
     val block: ST =
       st"""${(helpers, "\n\n")}
           |
-          |static char _MESSAGE_TO_STRING_buf[512];
+          |// Scratch buffer for the printers above, defined once in the node's base source.  It is
+          |// declared here rather than defined so that each translation unit including this header
+          |// shares one buffer instead of getting a copy.  Sharing is safe because the rclc executor
+          |// is single-threaded: no two expansions of MESSAGE_TO_STRING can be live at once.
+          |extern char ${msgToStringBufName}[${msgToStringBufSize}];
           |${(macroLines, "\n")}"""
     return Some(block)
+  }
+
+  // Whether genCMsgToStringBlock will emit anything, and therefore whether the base source has to
+  // define the shared buffer.  Mirrors the block's own filter: an event port carries no payload,
+  // and no printer is generated for a platform-provided payload.  Deliberately avoids
+  // genPortDatatype so that asking the question a second time cannot duplicate a diagnostic.
+  def hasCMsgToString(outPorts: ISZ[AadlPort]): B = {
+    for (p <- outPorts) {
+      if (!p.isInstanceOf[AadlEventPort]) {
+        portAadlTypeOpt(p) match {
+          case Some(t) if !RosUtil.isPlatformProvided(t) => return T
+          case _ =>
+        }
+      }
+    }
+    return F
   }
 
   //================================================
@@ -5197,6 +5223,17 @@ object Generator {
     val inPorts = ISZOps(generatedPorts(component)).filter(p => p.direction == Direction.In)
     val dataInPorts = ISZOps(inPorts).filter(p => p.isInstanceOf[AadlDataPort])
 
+    // The one definition backing the extern the base header declares.  Emitted only when that
+    // header actually declares it, so the two stay in step.
+    val msgToStringBufDef: ST =
+      if (hasCMsgToString(outPorts))
+        st"""
+            |// Shared scratch buffer for MESSAGE_TO_STRING; declared extern in the base header so
+            |// every translation unit including it uses this one rather than a copy of its own.
+            |char ${msgToStringBufName}[${msgToStringBufSize}];
+            |"""
+      else st""
+
     val publisherInits = genMicroRosPublisherInits(outPorts, nodeName, cppPkgName, datatypeMap, connectionMap, invertTopicBinding, reporter)
     val putImpls = genMicroRosPutFunctionImpls(outPorts, nodeName, cppPkgName, datatypeMap, reporter)
     val sendOutputsSection: ST =
@@ -5274,7 +5311,7 @@ object Generator {
             |
             |// Static instance pointer for subscription callback context (heap-free, MCU-compatible)
             |static ${nodeNameBase}_t * g_self = NULL;
-            |
+            |${msgToStringBufDef}
             |// Logger name used by the LOG_* macros; updated to the node's actual logger
             |// name once the node has been initialized
             |const char * ${nodeName}_logger_name = "${nodeName}";
@@ -5389,7 +5426,7 @@ object Generator {
             |
             |${contextComment}
             |static ${nodeNameBase}_t * g_self = NULL;
-            |
+            |${msgToStringBufDef}
             |// Logger name used by the LOG_* macros; updated to the node's actual logger
             |// name once the node has been initialized
             |const char * ${nodeName}_logger_name = "${nodeName}";
