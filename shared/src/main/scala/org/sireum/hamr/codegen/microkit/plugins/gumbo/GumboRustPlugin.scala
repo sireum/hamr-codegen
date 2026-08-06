@@ -953,9 +953,9 @@ object GumboRustPlugin {
         case GumboC2POUtil.C2POType.bool =>
           monitorInputs = monitorInputs :+ RAST.ItemST(st"""r2u2_core::load_bool_signal(&mut self.r2u2_monitor, ${idx}, ${monitorInput.exp.prettyST}); // Loading signal ${expName} into index ${idx}""")
         case GumboC2POUtil.C2POType.int =>
-          monitorInputs = monitorInputs :+ RAST.ItemST(st"""r2u2_core::load_int_signal(&mut self.r2u2_monitor, ${idx}, ${monitorInput.exp.prettyST}); // Loading signal ${expName} into index ${idx}""")
+          monitorInputs = monitorInputs :+ RAST.ItemST(st"""r2u2_core::load_int_signal(&mut self.r2u2_monitor, ${idx}, ${monitorInput.exp.prettyST}.into()); // Loading signal ${expName} into index ${idx}""")
         case GumboC2POUtil.C2POType.float =>
-          monitorInputs = monitorInputs :+ RAST.ItemST(st"""r2u2_core::load_float_signal(&mut self.r2u2_monitor, ${idx}, ${monitorInput.exp.prettyST}); // Loading signal ${expName} into index ${idx}""")
+          monitorInputs = monitorInputs :+ RAST.ItemST(st"""r2u2_core::load_float_signal(&mut self.r2u2_monitor, ${idx}, ${monitorInput.exp.prettyST}.into()); // Loading signal ${expName} into index ${idx}""")
       }
       idx += 1
     }

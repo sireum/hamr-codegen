@@ -3,7 +3,7 @@ package org.sireum.hamr.codegen.microkit.plugins.gumbo
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.Store
-import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlPort}
+import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlDataPort, AadlEventDataPort, AadlEventPort, AadlPort}
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.microkit.plugins.gumbo.SlangExpUtil.{Context, TargetLanguage}
 import org.sireum.hamr.codegen.microkit.plugins.rust.types.CRustTypeProvider
@@ -36,8 +36,8 @@ object GumboR2U2Util {
 
     // Rewrite api.port references and collect the ports whose getter snapshots
     // must be declared in timeTriggered.
-    val snapshotRewriter = R2U2InputRewriter(inputPorts)
-    val snapshotExp: SAST.Exp = snapshotRewriter.transform_langastExp(exp) match {
+    val inputRewriter = R2U2InputRewriter(inputPorts)
+    val snapshotExp: SAST.Exp = inputRewriter.transform_langastExp(exp) match {
       case MSome(e) => e
       case _ => exp
     }
@@ -53,10 +53,11 @@ object GumboR2U2Util {
       tp = tp,
       store = store,
       reporter = reporter)
-    val monitorExp: ST = exp.typedOpt match {
+    val monitorExp: ST = snapshotExp.typedOpt match {
       // R2U2 loads a concrete payload value. Presence is loaded as a separate
-      // Boolean signal (e.g., HasEvent(...)), so an absent optional payload 
-      // can safely use a default.
+      // Boolean signal (e.g., HasEvent(...)), so an absent optional payload can
+      // safely use a default. The rewritten expression carries the executable
+      // getter type rather than GCL's ghost-oriented port type.
       case Some(SAST.Typed.Name(SAST.Typed.optionName, _, _)) =>
         st"${rustExp}.unwrap_or_default()"
       case _ =>
@@ -65,7 +66,7 @@ object GumboR2U2Util {
     return R2U2MonitorInput(
       exp = RAST.ExprST(monitorExp),
       expType = GumboC2POUtil.getExprType(exp),
-      referencedInputPorts = snapshotRewriter.referencedInputPorts)
+      referencedInputPorts = inputRewriter.referencedInputPorts)
   }
 
   @record class R2U2InputRewriter(val inputPorts: Map[String, AadlPort]) extends org.sireum.hamr.ir.MTransformer {
@@ -82,16 +83,31 @@ object GumboR2U2Util {
     // port.isEmpty and can be normalized using the executable getter type.
     override def pre_langastExpSelect(o: SAST.Exp.Select): org.sireum.hamr.ir.MTransformer.PreResult[SAST.Exp] = {
       o match {
-        case SAST.Exp.Select(Some(SAST.Exp.Ident(SAST.Id("api"))), id, _)
-          if inputPorts.contains(id.value) =>
-          // Record the port so the caller emits `let port = api.get_port();`.
-          referencedInputPorts = referencedInputPorts + id.value
-          return org.sireum.hamr.ir.MTransformer.PreResult(
-            F,
-            MSome(SAST.Exp.Ident(id = id, attr = o.attr)))
+        case SAST.Exp.Select(Some(SAST.Exp.Ident(SAST.Id("api"))), id, _) =>
+          inputPorts.get(id.value) match {
+            case Some(port) =>
+              // Convert the GCL ghost type to the executable getter type.
+              val snapshotTypedOpt: Option[SAST.Typed] = port match {
+                case _: AadlEventPort =>
+                  SAST.Typed.bOpt
+                case _: AadlDataPort =>
+                  o.typedOpt match {
+                    case Some(SAST.Typed.Name(SAST.Typed.optionName, _, ISZ(payload))) => Some(payload)
+                    case _ => o.typedOpt
+                  }
+                case _: AadlEventDataPort =>
+                  o.typedOpt
+              }
+
+              // Record the port so the caller emits `let port = api.get_port();`.
+              referencedInputPorts = referencedInputPorts + id.value
+              val snapshot = SAST.Exp.Ident(id = id, attr = o.attr(typedOpt = snapshotTypedOpt))
+              return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(snapshot))
+            case _ =>
+          }
         case _ =>
-          return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone[SAST.Exp]())
       }
+      return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone[SAST.Exp]())
     }
 
     // Children are already rewritten, so api.port.status arrives as port.status;
@@ -103,7 +119,7 @@ object GumboR2U2Util {
           inputPorts.get(id.value) match {
             // Event-data remains Option[payload]; SlangExpUtil will translate
             // nonEmpty/isEmpty to is_some()/is_none().
-            case Some(port) if port.isEvent && port.isData =>
+            case Some(_: AadlEventDataPort) =>
               return MNone()
 
             // A plain event getter returns B, so its snapshot already represents
