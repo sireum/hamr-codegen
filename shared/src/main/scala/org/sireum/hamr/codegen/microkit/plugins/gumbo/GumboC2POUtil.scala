@@ -46,13 +46,6 @@ object GumboC2POUtil {
     }
   }
 
-  @pure def isOptional(exp: SAST.Exp): B = {
-    exp.typedOpt match {
-      case Some(SAST.Typed.Name(SAST.Typed.optionName, _, _)) => return T
-      case _ => return F
-    }
-  }
-
   @pure def getExprType(exp: org.sireum.lang.ast.Exp): C2POType.Type = {
     exp match {
       // 1. Literal Nodes have fixed concrete types
