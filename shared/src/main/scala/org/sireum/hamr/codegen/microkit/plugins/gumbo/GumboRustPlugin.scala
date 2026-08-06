@@ -474,9 +474,8 @@ object GumboRustPlugin {
               updatedImplItems = updatedImplItems :+ f(body = b)
             }
             else if (f.ident.string == "initialize" && genVerus) {
-              var init: (Marker, RAST.FnImpl) = null
-              if (subclauseInfo.annex.initializes.nonEmpty) {
-                init = handleInitialize(
+              val init = if (subclauseInfo.annex.initializes.nonEmpty) {
+                handleInitialize(
                   fn = f,
                   thread = thread,
                   subclauseInfo = subclauseInfo,
@@ -485,13 +484,13 @@ object GumboRustPlugin {
                   symbolTable = symbolTable,
                   store = localStore,
                   reporter = reporter)
-                markers = markers :+ init._1
               } else {
-                init = handleInitializePlaceholder(f)
-                markers = markers :+ init._1
+                handleInitializePlaceholder(f)
               }
-              if (subclauseInfo.annex.monitor.nonEmpty) {
-                init = handleInitializeMonitor(
+              markers = markers :+ init._1
+
+              val updatedInit = if (subclauseInfo.annex.monitor.nonEmpty) {
+                handleInitializeMonitor(
                   fn = init._2,
                   thread = thread,
                   subclauseInfo = subclauseInfo,
@@ -500,16 +499,15 @@ object GumboRustPlugin {
                   symbolTable = symbolTable,
                   store = localStore,
                   reporter = reporter)
-                markers = markers :+ init._1
               } else {
-                init = handleInitializeMonitorPlaceholder(init._2)
-                markers = markers :+ Marker.createSlashMarker(init._1.id)
+                val placeholder = handleInitializeMonitorPlaceholder(init._2)
+                (Marker.createSlashMarker(placeholder._1.id), placeholder._2)
               }
-              updatedImplItems = updatedImplItems :+ init._2
+              markers = markers :+ updatedInit._1
+              updatedImplItems = updatedImplItems :+ updatedInit._2
             } else if (f.ident.string == "timeTriggered" && genVerus) {
-              var tt: (ISZ[Marker], RAST.FnImpl) = null
-              if (subclauseInfo.annex.compute.nonEmpty) {
-                tt = handleCompute(
+              val compute = if (subclauseInfo.annex.compute.nonEmpty) {
+                handleCompute(
                   fn = f,
                   thread = thread,
                   subclauseInfo = subclauseInfo,
@@ -518,29 +516,30 @@ object GumboRustPlugin {
                   symbolTable = symbolTable,
                   store = localStore,
                   reporter = reporter)
-                markers = markers ++ tt._1
               } else {
-                tt = handleComputePlaceholder(f)
-                markers = markers ++ tt._1
+                handleComputePlaceholder(f)
               }
-              if (subclauseInfo.annex.monitor.nonEmpty) {
-                val (tt_temp, r2u2SpecDef_temp) = handleComputeMonitor(
-                  fn = tt._2,
+              markers = markers ++ compute._1
+
+              val monitorMethods = if (subclauseInfo.annex.monitor.nonEmpty) {
+                val (monitorMarkers, monitorMethods, spec) = handleComputeMonitor(
+                  fn = f,
                   thread = thread,
                   subclauseInfo = subclauseInfo,
                   types = types,
                   tp = CRustTypePlugin.getCRustTypeProvider(localStore).get,
-                  symbolTable = symbolTable,
                   store = localStore,
                   reporter = reporter)
-                tt = tt_temp
-                markers = markers ++ tt._1
-                r2u2SpecDef = Some(r2u2SpecDef_temp)
+                markers = markers ++ monitorMarkers
+                r2u2SpecDef = Some(spec)
+                monitorMethods
               } else {
-                tt = handleComputeMonitorPlaceholder(tt._2)
-                markers = markers :+ Marker.createSlashMarker(tt._1(0).id)
+                val (monitorMarkers, monitorMethods) = handleComputeMonitorPlaceholder()
+                markers = markers ++ monitorMarkers
+                monitorMethods
               }
-              updatedImplItems = updatedImplItems :+ tt._2
+              updatedImplItems = updatedImplItems ++
+                ISZ(monitorMethods(0), compute._2, monitorMethods(1))
             } else {
               updatedImplItems = updatedImplItems :+ i
             }
@@ -899,23 +898,18 @@ object GumboRustPlugin {
   }
 
   @pure def handleComputeMonitor(fn: RAST.FnImpl,
-                          thread: AadlThread,
-                          subclauseInfo: GclAnnexClauseInfo,
-                          types: AadlTypes,
-                          tp: CRustTypeProvider,
-                          symbolTable: SymbolTable,
-                          store: Store,
-                          reporter: Reporter): ((ISZ[Marker], RAST.FnImpl), RAST.R2U2SpecDef) = {
-    var specs: RAST.R2U2SpecDef = RAST.R2U2SpecDef(inputs = ISZ(),
-          ftspecs = ISZ(),
-          ptspecs = ISZ()
-    )
+                                 thread: AadlThread,
+                                 subclauseInfo: GclAnnexClauseInfo,
+                                 types: AadlTypes,
+                                 tp: CRustTypeProvider,
+                                 store: Store,
+                                 reporter: Reporter): (ISZ[Marker], ISZ[RAST.Item], RAST.R2U2SpecDef) = {
+    var specs = RAST.R2U2SpecDef(inputs = ISZ(), ftspecs = ISZ(), ptspecs = ISZ())
+    var monitorInputs: Map[String, GumboR2U2Util.R2U2MonitorInput] = Map.empty
 
-    var allVariablesInSpecs: Map[String, GumboR2U2Util.R2U2MonitorInput] = Map.empty
-
-    for (r <- subclauseInfo.annex.monitor.get.guarantees) {
-      val (spec, variablesInSpec) = GumboRustUtil.processGumboSpecC2PO(
-        spec = r,
+    for (guarantee <- subclauseInfo.annex.monitor.get.guarantees) {
+      val (ftspec, inputs) = GumboRustUtil.processGumboSpecC2PO(
+        spec = guarantee,
         component = thread,
         context = Context.monitor_clause,
         isAssumeRequires = F,
@@ -924,70 +918,80 @@ object GumboRustPlugin {
         gclSymbolTable = subclauseInfo.gclSymbolTable,
         store = store,
         reporter = reporter)
-      specs = specs(ftspecs = specs.ftspecs :+ RAST.ItemST(spec.prettyST))
-      allVariablesInSpecs = allVariablesInSpecs ++ variablesInSpec.entries
+      specs = specs(ftspecs = specs.ftspecs :+ RAST.ItemST(ftspec.prettyST))
+      monitorInputs = monitorInputs ++ inputs.entries
     }
 
-    var idx = 0
-    var monitorInputs: ISZ[RAST.Item] = ISZ()
-
-    // Read each incoming port referenced by a monitor expression exactly once.
-    // processGumboSpecC2PO has already rewritten the corresponding api.<port>
-    // AST nodes to these dispatch-local identifiers.
-    var referencedInPortIds: Set[String] = Set.empty
-    for (monitorInput <- allVariablesInSpecs.values) {
-      referencedInPortIds = referencedInPortIds ++ monitorInput.referencedInputPorts.elements
-    }
-    for (port <- thread.getPorts().filter(p => p.direction == Direction.In)) {
-      if (referencedInPortIds.contains(port.identifier)) {
-        monitorInputs = monitorInputs :+ RAST.ItemST(
-          st"let ${port.identifier} = api.get_${port.identifier}();")
-      }
+    var referencedInputPorts: Set[String] = Set.empty
+    for (monitorInput <- monitorInputs.values) {
+      referencedInputPorts = referencedInputPorts ++ monitorInput.referencedInputPorts.elements
     }
 
-    monitorInputs = monitorInputs :+ RAST.ItemST(st"") // Create a new line
+    var preItems: ISZ[RAST.Item] = ISZ()
+    for (port <- thread.getPorts().filter(p => p.direction == Direction.In)
+         if referencedInputPorts.contains(port.identifier)) {
+      preItems = preItems :+ RAST.ItemST(
+        st"let ${port.identifier} = api.get_${port.identifier}();")
+    }
+    preItems = preItems :+ RAST.ItemST(st"")
 
-    for ((expName, monitorInput) <- allVariablesInSpecs.entries){
-      specs = specs(inputs = specs.inputs :+ RAST.R2U2InputDef(expName, monitorInput.expType, idx.toInt))
+    var index = 0
+    for ((name, monitorInput) <- monitorInputs.entries) {
+      specs = specs(inputs = specs.inputs :+ RAST.R2U2InputDef(name, monitorInput.expType, index.toInt))
       monitorInput.expType match {
         case GumboC2POUtil.C2POType.bool =>
-          monitorInputs = monitorInputs :+ RAST.ItemST(st"""r2u2_core::load_bool_signal(&mut self.r2u2_monitor, ${idx}, ${monitorInput.exp.prettyST}); // Loading signal ${expName} into index ${idx}""")
+          preItems = preItems :+ RAST.ItemST(st"""r2u2_core::load_bool_signal(&mut self.r2u2_monitor, $index, ${monitorInput.exp.prettyST}); // Loading signal $name into index $index""")
         case GumboC2POUtil.C2POType.int =>
-          monitorInputs = monitorInputs :+ RAST.ItemST(st"""r2u2_core::load_int_signal(&mut self.r2u2_monitor, ${idx}, ${monitorInput.exp.prettyST}.into()); // Loading signal ${expName} into index ${idx}""")
+          preItems = preItems :+ RAST.ItemST(st"""r2u2_core::load_int_signal(&mut self.r2u2_monitor, $index, ${monitorInput.exp.prettyST}.into()); // Loading signal $name into index $index""")
         case GumboC2POUtil.C2POType.float =>
-          monitorInputs = monitorInputs :+ RAST.ItemST(st"""r2u2_core::load_float_signal(&mut self.r2u2_monitor, ${idx}, ${monitorInput.exp.prettyST}.into()); // Loading signal ${expName} into index ${idx}""")
+          preItems = preItems :+ RAST.ItemST(st"""r2u2_core::load_float_signal(&mut self.r2u2_monitor, $index, ${monitorInput.exp.prettyST}.into()); // Loading signal $name into index $index""")
       }
-      idx += 1
+      index += 1
     }
-    monitorInputs = monitorInputs :+ RAST.ItemST(st"") // Create a new line
-    monitorInputs = monitorInputs :+ RAST.ItemST(st"""r2u2_core::monitor_step(&mut self.r2u2_monitor);""")
-    monitorInputs = monitorInputs :+ RAST.ItemST(st"""for out in r2u2_core::get_output_buffer(&self.r2u2_monitor) {
-                                                        |    log::info!("{}:{},{}", out.spec_num, out.verdict.time, if out.verdict.truth {"T"} else {"F"} );
-                                                        |}""")
 
-    val m = Marker.createSlashMarker(GumboRustUtil.GumboMarkers.r2u2MonitorCompute)
-    val markers: ISZ[Marker] = ISZ(m)
-    val wrapper = RAST.MarkerWrap(m, monitorInputs, "\n", None())
-    return ((markers,
-      fn(body =
-        Some(RAST.MethodBody(ISZ(
-          RAST.BodyItemST(st"""${wrapper.prettyST}
-                              |
-                              |${if (fn.body.nonEmpty) fn.body.get.prettyST else ""}""")
-        ))))), specs)
+    val postItems: ISZ[RAST.Item] = ISZ(
+      RAST.ItemST(st""),
+      RAST.ItemST(st"r2u2_core::monitor_step(&mut self.r2u2_monitor);"),
+      RAST.ItemST(
+        st"""for out in r2u2_core::get_output_buffer(&self.r2u2_monitor) {
+            |    log::info!("{}:{},{}", out.spec_num, out.verdict.time, if out.verdict.truth {"T"} else {"F"} );
+            |}"""))
+
+    val preMethodMarker = Marker.createSlashMarker(GumboRustUtil.GumboMarkers.r2u2MonitorPreTimeTriggered)
+    val postMethodMarker = Marker.createSlashMarker(GumboRustUtil.GumboMarkers.r2u2MonitorPostTimeTriggered)
+
+    val preFn = fn(
+      sig = fn.sig(ident = RAST.IdentString("pre_timeTriggered")),
+      contract = None(),
+      body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
+        st"${(preItems.map(i => i.prettyST), "\n")}")))))
+    val postFn = fn(
+      sig = fn.sig(ident = RAST.IdentString("post_timeTriggered")),
+      contract = None(),
+      body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
+        st"${(postItems.map(i => i.prettyST), "\n")}")))))
+
+    val monitorMethods: ISZ[RAST.Item] = ISZ(
+      RAST.MarkerWrap(preMethodMarker, ISZ(preFn), "\n", None()),
+      RAST.MarkerWrap(postMethodMarker, ISZ(postFn), "\n", None()))
+
+    val markers: ISZ[Marker] = ISZ(
+      preMethodMarker,
+      postMethodMarker)
+    return (markers, monitorMethods, specs)
   }
 
-  @pure def handleComputeMonitorPlaceholder(fn: RAST.FnImpl): (ISZ[Marker], RAST.FnImpl) = {
-    val m = Marker.createSlashPlaceholderMarker(GumboRustUtil.GumboMarkers.r2u2MonitorCompute)
-    val markers: ISZ[Marker] = ISZ(m)
-    val placeholder = RAST.MarkerPlaceholder(m)
-    return (markers,
-      fn(body =
-        Some(RAST.MethodBody(ISZ(
-          RAST.BodyItemST(st"""${placeholder.prettyST}
-                              |
-                              |${if (fn.body.nonEmpty) fn.body.get.prettyST else ""}""")
-        )))))
+  @pure def handleComputeMonitorPlaceholder(): (ISZ[Marker], ISZ[RAST.Item]) = {
+    val preMethod = Marker.createSlashPlaceholderMarker(GumboRustUtil.GumboMarkers.r2u2MonitorPreTimeTriggered)
+    val postMethod = Marker.createSlashPlaceholderMarker(GumboRustUtil.GumboMarkers.r2u2MonitorPostTimeTriggered)
+
+    val methods: ISZ[RAST.Item] = ISZ(
+      RAST.MarkerPlaceholder(preMethod),
+      RAST.MarkerPlaceholder(postMethod))
+    val markers: ISZ[Marker] = ISZ(
+      Marker.createSlashMarker(preMethod.id),
+      Marker.createSlashMarker(postMethod.id))
+    return (markers, methods)
   }
 
   @pure override def finalizeMicrokit(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {

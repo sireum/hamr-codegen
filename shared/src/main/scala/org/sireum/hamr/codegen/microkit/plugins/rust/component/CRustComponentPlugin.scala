@@ -298,6 +298,15 @@ object ComponentContributions {}
 
       { // for now just emit src/lib.rs as a resource
 
+        val timeTriggeredCalls: ST =
+          if (e._2.requiresR2U2)
+            st"""// R2U2 observes inputs before the component computes and outputs afterward.
+                |_app.pre_timeTriggered(&mut compute_api);
+                |_app.timeTriggered(&mut compute_api);
+                |_app.post_timeTriggered(&mut compute_api);"""
+          else
+            st"_app.timeTriggered(&mut compute_api);"
+
         val entrypoints: ISZ[ST] =
           if (thread.isPeriodic())
             ISZ(
@@ -305,7 +314,7 @@ object ComponentContributions {}
                   |pub extern "C" fn ${threadId}_timeTriggered() {
                   |  unsafe {
                   |    if let Some(_app) = app.as_mut() {
-                  |      _app.timeTriggered(&mut compute_api);
+                  |      $timeTriggeredCalls
                   |    } else {
                   |      panic!("Unexpected: app is None");
                   |    }
