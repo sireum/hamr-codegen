@@ -75,6 +75,10 @@ object Ros2Codegen {
     // only the AADL default Queue_Size of 1 is realized, on either node kind
     Generator.validateQueueSize(generatedThreads, reporter)
 
+    // --strict-aadl-mode does not reach the micro-ROS nodes; say so rather than let a mixed
+    // system quietly disagree with the command line
+    Generator.reportMicroRosDispatchSemantics(microRosThreads, options.strictAadlMode, reporter)
+
     var files: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
 
     options.ros2NodesLanguage.name match {

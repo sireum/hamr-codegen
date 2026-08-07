@@ -5203,6 +5203,30 @@ object Generator {
     return inits
   }
 
+  // --strict-aadl-mode governs the rclcpp backend only.  Micro-ROS nodes generate strict semantics
+  // unconditionally, so a model built without the flag still gets frozen inputs and outputs
+  // released at dispatch completion on its micro-ROS half.  That is deliberate rather than an
+  // oversight -- lax's distinguishing behaviour is unreachable on rclc, whose executor is
+  // single-threaded, so no callback can interleave with the entry point to be observed mid-dispatch.
+  //
+  // Reported rather than left implicit because it is the one place where a mixed system does not
+  // do what the command line appears to say.  Info, not a warning: nothing here needs fixing.
+  def reportMicroRosDispatchSemantics(microRosThreads: ISZ[AadlThread], strictAadlMode: B,
+                                      reporter: Reporter): Unit = {
+    if (microRosThreads.isEmpty) {
+      return
+    }
+    val names: ISZ[String] = for (t <- microRosThreads) yield t.identifier
+    val flagNote: String =
+      if (strictAadlMode) "The flag was given, so the rclcpp nodes match them."
+      else "The flag was not given, so the rclcpp nodes are lax while these are not."
+    reporter.info(None(), RosUtil.toolName,
+      st"""micro-ROS nodes always generate AADL strict semantics, whatever --strict-aadl-mode says:
+          |inputs are frozen for the dispatch and outputs are released together at its completion.
+          |${flagNote}
+          |Affected: ${(names, ", ")}.""".render)
+  }
+
   // Queue_Size reaches AIR intact and is then realized by neither backend.  The rclcpp path
   // hardcodes a QoS depth of 1 in create_subscription and strict's enqueue is likewise depth 1;
   // the micro-ROS path records a single pending arrival per port.  A model declaring more is
