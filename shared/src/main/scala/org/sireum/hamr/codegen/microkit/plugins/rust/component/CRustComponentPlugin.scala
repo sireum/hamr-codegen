@@ -301,7 +301,7 @@ object ComponentContributions {}
         val timeTriggeredCalls: ST =
           if (e._2.requiresR2U2)
             st"""// R2U2 observes inputs before the component computes and outputs afterward.
-                |_app.pre_timeTriggered(&mut compute_api);
+                |_app.pre_timeTriggered(&compute_api);
                 |_app.timeTriggered(&mut compute_api);
                 |_app.post_timeTriggered(&mut compute_api);"""
           else

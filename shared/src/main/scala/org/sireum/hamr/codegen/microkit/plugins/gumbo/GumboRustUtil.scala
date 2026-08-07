@@ -209,14 +209,13 @@ object GumboRustUtil {
         store = store,
         reporter = reporter)
 
-    val inputPortIds: Set[String] = Set.empty ++
-      component.getPorts().filter(p => p.direction == Direction.In).map(p => p.identifier)
+    val portIds: Set[String] = Set.empty ++ component.getPorts().map(p => p.identifier)
 
     var variablesInSpecExpanded: Map[String, GumboR2U2Util.R2U2MonitorInput] = Map.empty
     for ( (varName, varExp) <- variablesInSpec.entries){
       variablesInSpecExpanded = variablesInSpecExpanded + varName ~> GumboR2U2Util.lowerR2U2Input(
         exp = varExp,
-        inputPortIds = inputPortIds,
+        portIds = portIds,
         component = component,
         context = context,
         isAssumeRequires = isAssumeRequires,
