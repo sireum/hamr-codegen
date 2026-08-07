@@ -38,7 +38,12 @@ object Generator {
   val callback_group_name: String = "cb_group_"
   val subscription_options_name: String = "subscription_options_"
   // Mutex is used for thread locking in C++
-  val mutex_name: String = "mutex_"
+  // Strict mode uses two locks because the single `mutex_` it replaces was doing two unrelated
+  // jobs: guarding the port queues, and (by being held for the whole dispatch lambda) serialising
+  // dispatches.  Collapsing them forced the lock to be held across the user's entry point, so any
+  // put_<port> or get_<port> from user code would deadlock on a non-recursive mutex.
+  val state_mutex_name: String = "state_mutex_"
+  val dispatch_mutex_name: String = "dispatch_mutex_"
 
   // Size of the shared MESSAGE_TO_STRING scratch buffer.  The bound has to appear in the extern
   // declaration too, not just the definition: the macro uses sizeof on it, and an unbounded
@@ -1810,15 +1815,47 @@ object Generator {
     val handlerName = inPort.identifier
 
     val handler: ST =
-    if (!isSporadic || inPort.isInstanceOf[AadlDataPort]) st"enqueue(infrastructureIn_${handlerName}, msg);"
+    if (!isSporadic || inPort.isInstanceOf[AadlDataPort])
+      // The write side of the race ThreadSanitizer caught: receiveInputs reads these same
+      // infrastructure queues from the dispatch, so this acceptor has to take state_mutex_ too.
+      // Data ports land here regardless of dispatch protocol, and so does every port on a
+      // periodic thread.
+      st"""{
+          |    std::lock_guard<std::mutex> lock(${state_mutex_name});
+          |    enqueue(infrastructureIn_${handlerName}, msg);
+          |}"""
     else
-      st"""enqueue(infrastructureIn_${handlerName}, msg);
+      st"""{
+          |    std::lock_guard<std::mutex> lock(${state_mutex_name});
+          |    enqueue(infrastructureIn_${handlerName}, msg);
+          |}
           |std::thread([this]() {
-          |    std::lock_guard<std::mutex> lock(mutex_);
-          |    receiveInputs(infrastructureIn_${handlerName}, applicationIn_${handlerName});
-          |    if (applicationIn_${handlerName}.empty()) return;
-          |    handle_${handlerName}_base(applicationIn_${handlerName}.front());
-          |    applicationIn_${handlerName}.pop();
+          |    // One dispatch at a time.  This is what the old single mutex_ achieved by being
+          |    // held for the whole lambda; it is kept separate so that the state lock can be
+          |    // released around the entry point.
+          |    std::lock_guard<std::mutex> dispatch(${dispatch_mutex_name});
+          |
+          |    MsgType dispatched;
+          |    {
+          |        std::lock_guard<std::mutex> lock(${state_mutex_name});
+          |        receiveInputs(infrastructureIn_${handlerName}, applicationIn_${handlerName});
+          |        if (applicationIn_${handlerName}.empty()) return;
+          |        dispatched = applicationIn_${handlerName}.front();
+          |    }
+          |
+          |    // Deliberately outside state_mutex_: the handler is user code and calls
+          |    // put_<port>/get_<port>, which take that lock themselves.  The value stays on
+          |    // applicationIn_${handlerName} until the handler returns, because get_${handlerName}
+          |    // reads it from there.
+          |    handle_${handlerName}_base(dispatched);
+          |
+          |    {
+          |        std::lock_guard<std::mutex> lock(${state_mutex_name});
+          |        if (!applicationIn_${handlerName}.empty()) {
+          |            applicationIn_${handlerName}.pop();
+          |        }
+          |    }
+          |
           |    sendOutputs();
           |}).detach();"""
 
@@ -2002,6 +2039,8 @@ object Generator {
       putMsgCode =
         st"""void ${nodeName}::put_${handlerName}()
             |{
+            |    // Called from the compute entry point, which runs without state_mutex_ held.
+            |    std::lock_guard<std::mutex> lock(${state_mutex_name});
             |    enqueue(applicationOut_${handlerName}, ${portType}());
             |}
         """
@@ -2010,6 +2049,8 @@ object Generator {
       putMsgCode =
         st"""void ${nodeName}::put_${handlerName}(${portType} msg)
             |{
+            |    // Called from the compute entry point, which runs without state_mutex_ held.
+            |    std::lock_guard<std::mutex> lock(${state_mutex_name});
             |    enqueue(applicationOut_${handlerName}, msg);
             |}
         """
@@ -2370,6 +2411,8 @@ object Generator {
 
     val subscriptionMessageHeader: ST =
       st"""${portType} ${nodeName}::get_${portName}() {
+          |    // Called from the compute entry point, which runs without state_mutex_ held.
+          |    std::lock_guard<std::mutex> lock(${state_mutex_name});
           |    MsgType msg = applicationIn_${portName}.front();
           |    return std::get<${portType}>(msg);
           |}
@@ -2383,6 +2426,7 @@ object Generator {
     return method
   }
 
+  // Caller must hold state_mutex_: this is a helper, not an entry point.
   def genCppReceiveInputsSporadic(nodeName: String): ST = {
     val method: ST =
       st"""void ${nodeName}::receiveInputs(std::queue<MsgType>& infrastructureQueue, std::queue<MsgType>& applicationQueue) {
@@ -2410,6 +2454,7 @@ object Generator {
     return method
   }
 
+  // Caller must hold state_mutex_: this is a helper, not an entry point.
   def genCppReceiveInputsPeriodic(nodeName: String): ST = {
     val method: ST =
       st"""void ${nodeName}::receiveInputs() {
@@ -2444,22 +2489,39 @@ object Generator {
   def genCppSendOutputs(nodeName: String): ST = {
     val method: ST =
       st"""void ${nodeName}::sendOutputs() {
-          |    for (std::tuple<std::queue<MsgType>*, std::queue<MsgType>*, void (${nodeName}::*)(MsgType)> port : outPortTupleVector) {
-          |        auto applicationQueue = std::get<0>(port);
-          |        if (applicationQueue->size() != 0) {
-          |            auto msg = applicationQueue->front();
-          |            applicationQueue->pop();
-          |            enqueue(*std::get<1>(port), msg);
+          |    // The queue work happens under state_mutex_; the publishing does not.  accept_<port>
+          |    // runs from a subscription callback, so the middleware already holds locks of its own
+          |    // when it takes state_mutex_.  Publishing while holding state_mutex_ would establish
+          |    // the reverse order and put this lock into a cycle with the middleware's.  No such
+          |    // cycle has been observed -- the lock-order inversions ThreadSanitizer reports here
+          |    // are internal to Fast DDS and involve neither of this node's mutexes -- so this is
+          |    // ordering hygiene rather than a fix for a diagnosed deadlock.  It also keeps the
+          |    // critical section off the wire.  Collect first, release, then publish.
+          |    std::vector<std::pair<void (${nodeName}::*)(MsgType), MsgType>> pending;
+          |    {
+          |        std::lock_guard<std::mutex> lock(${state_mutex_name});
+          |        for (std::tuple<std::queue<MsgType>*, std::queue<MsgType>*, void (${nodeName}::*)(MsgType)> port : outPortTupleVector) {
+          |            auto applicationQueue = std::get<0>(port);
+          |            if (applicationQueue->size() != 0) {
+          |                auto msg = applicationQueue->front();
+          |                applicationQueue->pop();
+          |                enqueue(*std::get<1>(port), msg);
+          |            }
+          |        }
+          |
+          |        for (std::tuple<std::queue<MsgType>*, std::queue<MsgType>*, void (${nodeName}::*)(MsgType)> port : outPortTupleVector) {
+          |            auto infrastructureQueue = std::get<1>(port);
+          |            if (infrastructureQueue->size() != 0) {
+          |                auto msg = infrastructureQueue->front();
+          |                infrastructureQueue->pop();
+          |                pending.emplace_back(std::get<2>(port), msg);
+          |            }
           |        }
           |    }
           |
-          |    for (std::tuple<std::queue<MsgType>*, std::queue<MsgType>*, void (${nodeName}::*)(MsgType)> port : outPortTupleVector) {
-          |        auto infrastructureQueue = std::get<1>(port);
-          |        if (infrastructureQueue->size() != 0) {
-          |            auto msg = infrastructureQueue->front();
-          |            infrastructureQueue->pop();
-          |            (this->*std::get<2>(port))(msg);
-          |        }
+          |    // Still one dispatch's worth of outputs, released together -- only the lock is gone.
+          |    for (auto& entry : pending) {
+          |        (this->*entry.first)(entry.second);
           |    }
           |}
         """
@@ -2473,6 +2535,7 @@ object Generator {
   }
 
   // Currently, all queues are treated as having a size of 1.
+  // Caller must hold state_mutex_: this is a helper, not an entry point.
   def genCppEnqueue(nodeName: String): ST = {
     val method: ST =
       st"""void ${nodeName}::enqueue(std::queue<MsgType>& queue, MsgType val) {
@@ -2527,6 +2590,10 @@ object Generator {
 
     val initializer: ST =
       st"""void ${nodeName}::init_${portName}(${portType} val) {
+          |    // Reachable from the initialize entry point.  That runs during construction, before
+          |    // the executor spins, so there is no contention -- the lock is taken anyway to keep
+          |    // one rule: anything user code can call takes state_mutex_.
+          |    std::lock_guard<std::mutex> lock(${state_mutex_name});
           |    enqueue(infrastructureIn_${portName}, val);
           |}"""
     return initializer
@@ -2624,8 +2691,19 @@ object Generator {
   def genCppTimeTriggeredCaller(nodeName: String): ST = {
     val timeTriggered: ST =
       st"""void ${nodeName}::timeTriggeredCaller() {
-          |    receiveInputs();
+          |    // One dispatch at a time: the callback group is Reentrant, so a period shorter than
+          |    // the entry point would otherwise re-enter this concurrently.
+          |    std::lock_guard<std::mutex> dispatch(${dispatch_mutex_name});
+          |
+          |    {
+          |        std::lock_guard<std::mutex> lock(${state_mutex_name});
+          |        receiveInputs();
+          |    }
+          |
+          |    // Deliberately outside state_mutex_: timeTriggered is user code and calls
+          |    // put_<port>/get_<port>, which take that lock themselves.
           |    timeTriggered();
+          |
           |    sendOutputs();
           |}
         """
@@ -2851,7 +2929,8 @@ object Generator {
         st"""${stdIncludes}
             |#include <vector>
             |#include <variant>
-            |#include <mutex>"""
+            |#include <mutex>
+            |#include <utility>"""
     }
 
     val enumConverterInclude: ST = if (hasEnumConverter) st"""#include "${packageName}/base_headers/enum_converter.hpp"""" else st""
@@ -3018,7 +3097,14 @@ object Generator {
       fileBody =
         st"""${fileBody}
             |    // Used for thread locking
-            |    std::mutex ${mutex_name};
+            |    // Guards the port queues.  Never held across the compute entry point -- user code
+            |    // calls put_<port>/get_<port>, which take it themselves.
+            |    std::mutex ${state_mutex_name};
+            |
+            |    // Held for the length of a dispatch so dispatches do not overlap.  The callback
+            |    // group is Reentrant, so without this two arrivals on the same port could run the
+            |    // entry point concurrently.
+            |    std::mutex ${dispatch_mutex_name};
             |
             |    // Used by receiveInputs
             |    ${genCppInDataPortTupleVectorHeader()}"""
