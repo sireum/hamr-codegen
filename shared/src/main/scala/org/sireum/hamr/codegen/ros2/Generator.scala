@@ -6123,6 +6123,15 @@ object Generator {
     // (embedded targets generally want rcl_logging_noop).
     val loggingEnabled: String = if (hasRosoutProducer) "ON" else "OFF"
     val loggingImpl: String = if (hasRosoutProducer) "rcl_logging_spdlog" else "rcl_logging_noop"
+
+    // rcl_node_init creates a /rosout publisher of its own for every node when rcl is built
+    // with RCL_LOGGING_ENABLED=ON, so with logging on a node draws one more publisher from the
+    // pool than the model accounts for.  That publisher is taken during rclc_node_init_default,
+    // which leaves the first model publisher to be the one that fails -- reported as
+    // "Error in rcl_publisher_init: error not set", since the rmw returns NULL without
+    // setting an error.
+    val rosoutPublishers: Z = if (hasRosoutProducer) 1 else 0
+    val publisherPool: Z = maxPublishers + rosoutPublishers
     val buildProfileMarker = BlockMarker(
       id = "BUILD PROFILE - additions within these tags will be preserved when re-running Codegen",
       beginPrefix = "#",
@@ -6214,8 +6223,11 @@ object Generator {
           |                # its own executable, so these hold the largest node's entities
           |                # rather than the sum over nodes.  Generated nodes create no services
           |                # or clients.  Undersizing them makes entity creation fail silently.
+          |                #
+          |                # The publisher count is the model's ${maxPublishers} plus ${rosoutPublishers} for the /rosout
+          |                # publisher rcl_node_init creates per node when RCL_LOGGING_ENABLED is ON.
           |                "-DRMW_UXRCE_MAX_NODES=1",
-          |                "-DRMW_UXRCE_MAX_PUBLISHERS=${maxPublishers}",
+          |                "-DRMW_UXRCE_MAX_PUBLISHERS=${publisherPool}",
           |                "-DRMW_UXRCE_MAX_SUBSCRIPTIONS=${maxSubscriptions}",
           |                "-DRMW_UXRCE_MAX_SERVICES=0",
           |                "-DRMW_UXRCE_MAX_CLIENTS=0",
@@ -6485,10 +6497,13 @@ object Generator {
             |fail quietly if it is never applied:
             |
             |- `RMW_UXRCE_MAX_PUBLISHERS` / `RMW_UXRCE_MAX_SUBSCRIPTIONS` -- these are derived from
-            |  the model's port counts and regenerated on every codegen run.  If the firmware's
-            |  pools are smaller than the nodes need, entity creation fails without a diagnostic,
-            |  so re-apply after adding ports.  `RMW_UXRCE_TRANSPORT` and the agent address are in
-            |  the same package, so they apply on every target, host included.
+            |  the model's port counts and regenerated on every codegen run.  The publisher count
+            |  carries one extra beyond the model's ports when rcl logging is on, for the `/rosout`
+            |  publisher `rcl_node_init` creates per node.  If the firmware's pools are smaller than
+            |  the nodes need, entity creation fails: `rcl_publisher_init` reports `error not set`,
+            |  because the rmw returns NULL without setting an error.  Re-apply after adding ports.
+            |  `RMW_UXRCE_TRANSPORT` and the agent address are in the same package, so they apply on
+            |  every target, host included.
             |- `RCL_COMMAND_LINE_ENABLED=ON` -- **embedded targets only.**  It restores the rcl
             |  argument parsing that `micro_ros_setup` disables in its cross-compiled configs;
             |  without it the rcl arguments in each node's `node_options` block (topic remap rules
@@ -6669,10 +6684,15 @@ object Generator {
     return (
       st"""
           |# Arguments passed to `ros2 launch`, e.g.
-          |#   make launch LAUNCH_ARGS="log_file:=run1.txt joystick_dev:=/dev/input/js0"
+          |#   make launch LAUNCH_ARGS="log_file:=run1.txt joystick_dev:=/dev/input/by-id/<pad>-joystick"
           |# `ros2 launch --show-args $$(BRINGUP_PKG) $$(LAUNCH_FILE).launch.py` lists what the file
           |# accepts.  Unlike ROS_ARGS above these are launch arguments, not rcl arguments: they are
           |# declared by the launch file and reach a node through its parameters.
+          |#
+          |# Device arguments take a by-id path rather than /dev/input/jsN, which is assigned in
+          |# connection order and moves across replugs; `ls /dev/input/by-id` lists them.  Every
+          |# argument also needs a non-empty value -- `name:=` is rejected as malformed -- so an
+          |# argument whose value should be empty has to be changed in the launch file instead.
           |LAUNCH_ARGS ?=
           |
           |# Which launch file to run.  ${launchStem} brings up the whole system on this host;
@@ -6762,16 +6782,24 @@ object Generator {
             |# the workspace root is read by nothing.
             |#
             |# MICROROS_WS is shared across projects and the stock profile is already at that path,
-            |# so any existing colcon.meta is renamed to colcon.meta.bak rather than discarded.
+            |# so any existing colcon.meta is backed up to colcon.meta.bak rather than discarded.
+            |# The backup is only taken when what is there is not already our own copy, otherwise
+            |# a second run of this target would overwrite the stock backup with the project profile.
             |#
-            |# --cmake-force-configure is forwarded to colcon (build_firmware.sh passes anything
-            |# after -- straight through).  Without it a changed colcon.meta can leave the existing
-            |# CMake caches in place, so the target reports success while the new settings never
-            |# take effect -- the same silent-failure shape as an ignored remap rule.
+            |# --cmake-force-configure is forwarded to colcon (build_firmware.sh shifts past -- and
+            |# the host config passes the remaining "$$$$@" to each colcon build).  Without it a changed
+            |# colcon.meta can leave the existing CMake caches in place, so the target reports success
+            |# while the new settings never take effect -- the same silent-failure shape as an ignored
+            |# remap rule.  Note the doubled --: `ros2 run` parses its own command line with argparse,
+            |# which swallows the first --, so a single one never reaches build_firmware.sh and its
+            |# getopts rejects --cmake-force-configure as an illegal option.
             |microros-config: check-ros2
-            |	@test -f "$$(MICROROS_WS)/src/colcon.meta" && mv "$$(MICROROS_WS)/src/colcon.meta" "$$(MICROROS_WS)/src/colcon.meta.bak" && echo "Renamed existing src/colcon.meta to src/colcon.meta.bak" || true
+            |	@if [ -f "$$(MICROROS_WS)/src/colcon.meta" ] && ! cmp -s "$$(MICROROS_WS)/src/colcon.meta" microros_apps/colcon.meta; then \
+            |	  cp "$$(MICROROS_WS)/src/colcon.meta" "$$(MICROROS_WS)/src/colcon.meta.bak"; \
+            |	  echo "Backed up existing src/colcon.meta to src/colcon.meta.bak"; \
+            |	fi
             |	cp microros_apps/colcon.meta $$(MICROROS_WS)/src/colcon.meta
-            |	cd $$(MICROROS_WS) && bash -c "$$(SOURCE_BASE); ros2 run micro_ros_setup build_firmware.sh -- --cmake-force-configure"
+            |	cd $$(MICROROS_WS) && bash -c "$$(SOURCE_BASE); ros2 run micro_ros_setup build_firmware.sh -- -- --cmake-force-configure"
             |	@echo "Firmware rebuilt with microros_apps/colcon.meta. Re-run 'make build' to rebuild the app packages against it."
             |
             |check-ros2:
