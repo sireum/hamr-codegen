@@ -461,22 +461,52 @@ object ComponentContributions {}
         if (e._2.requiresR2U2) {
           val m = Marker.createSlashMarker(CRustComponentPlugin.MarkerR2U2Spec)
           appMarkers = appMarkers :+ m
+          val externalBody: String =
+            if (options.verusAttributeSyntax) "verus_verify(external_body)"
+            else "verifier::external_body"
+          val external: String =
+            if (options.verusAttributeSyntax) "verus_verify(external)"
+            else "verifier::external"
+          val specItems: ISZ[RAST.Item] = ISZ(RAST.ItemST(
+            st"""#[$externalBody]
+                |pub struct R2U2Monitor { inner: r2u2_core::Monitor }
+                |
+                |#[$external]
+                |impl core::ops::Deref for R2U2Monitor {
+                |  type Target = r2u2_core::Monitor;
+                |  fn deref(&self) -> &Self::Target { &self.inner }
+                |}
+                |
+                |#[$external]
+                |impl core::ops::DerefMut for R2U2Monitor {
+                |  fn deref_mut(&mut self) -> &mut Self::Target { &mut self.inner }
+                |}
+                |
+                |#[$externalBody]
+                |fn default_r2u2_monitor() -> R2U2Monitor {
+                |  R2U2Monitor { inner: r2u2_core::Monitor::default() }
+                |}
+                |
+                |#[$externalBody]
+                |fn load_spec(monitor: &mut R2U2Monitor) {
+                |  r2u2_core::update_binary_file(include_bytes!("spec.bin"), monitor);
+                |}"""))
           val spec = RAST.MarkerWrap(
             marker = m,
-            items = ISZ(RAST.ItemString("""const SPEC: [u8; include_bytes!("spec.bin").len()] = *include_bytes!("spec.bin");""")),
+            items = specItems,
             sep = "\n",
             optLastItemSep = None())
           body =
-            st"""${spec.prettyST}
+            st"""$body
                 |
-                |$body"""
+                |${spec.prettyST}"""
         } else {
           val p = Marker.createSlashPlaceholderMarker(CRustComponentPlugin.MarkerR2U2Spec)
           appMarkers = appMarkers :+ Marker.createSlashMarker(p.id)
           body =
-            st"""${RAST.MarkerPlaceholder(p).prettyST}
+            st"""$body
                 |
-                |$body"""
+                |${RAST.MarkerPlaceholder(p).prettyST}"""
         }
         if (e._2.requiresVerus && !options.verusAttributeSyntax) {
           body = RAST.MacCall(
@@ -603,7 +633,8 @@ object ComponentContributions {}
         val r2u2MakeItems: ISZ[RAST.Item] =
           if (e._2.requiresR2U2) {
             ISZ(RAST.ItemST(
-              st"""R2U2_SPEC_BIN := src/component/spec.bin
+              st""".DEFAULT_GOAL := all
+                  |R2U2_SPEC_BIN := src/component/spec.bin
                   |
                   |r2u2_cli:
                   |${TAB}@echo "Checking/Updating r2u2_cli from crates.io..."

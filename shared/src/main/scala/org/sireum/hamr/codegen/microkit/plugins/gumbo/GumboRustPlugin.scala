@@ -282,7 +282,7 @@ object GumboRustPlugin {
 
       if (subclauseInfo.annex.monitor.nonEmpty) {
         var monitor: ISZ[RAST.Item] = ISZ()
-        monitor = monitor :+ RAST.ItemString(s"""pub r2u2_monitor: r2u2_core::Monitor""")
+        monitor = monitor :+ RAST.ItemString(s"""pub r2u2_monitor: R2U2Monitor""")
         val m = Marker.createSlashMarker(GumboRustUtil.GumboMarkers.r2u2MonitorStateVar)
         markers = markers :+ m
         structDef = structDef(items = structDef.items :+ RAST.MarkerWrap(m, monitor, ",\n", Some(",")))
@@ -469,7 +469,7 @@ object GumboRustPlugin {
                 b = b match {
                   case Some(RAST.MethodBody(ISZ(self: RAST.BodyItemSelf))) =>
                     var monitor: ISZ[RAST.Item] = ISZ()
-                    monitor = monitor :+ RAST.ItemString(s"""r2u2_monitor: r2u2_core::Monitor::default()""")
+                    monitor = monitor :+ RAST.ItemString(s"""r2u2_monitor: default_r2u2_monitor()""")
                     val m = Marker.createSlashMarker(GumboRustUtil.GumboMarkers.r2u2MonitorStateVarInit)
                     markers = markers :+ m
                     Some(RAST.MethodBody(ISZ(self(items = self.items :+ RAST.MarkerWrap(m, monitor, ",\n", Some(",")).prettyST))))
@@ -889,7 +889,7 @@ object GumboRustPlugin {
                                  reporter: Reporter): (Marker, RAST.FnImpl) = {
     val m = Marker.createSlashMarker(GumboRustUtil.GumboMarkers.r2u2MonitorInitialize)
     var monitor: ISZ[RAST.Item] = ISZ()
-    monitor = monitor :+ RAST.ItemString(s"""r2u2_core::update_binary_file(&SPEC, &mut self.r2u2_monitor);""")
+    monitor = monitor :+ RAST.ItemString(s"""load_spec(&mut self.r2u2_monitor);""")
     val wrapper = RAST.MarkerWrap(m, monitor, "\n", None())
     return (m,
       fn(body =
@@ -1015,16 +1015,23 @@ object GumboRustPlugin {
           preInputs = preInputs :+ input
       }
     }
+    val externalBodyAttr: ST =
+      if (fn.verusAttributeSyntax) st"verus_verify(external_body)"
+      else st"verifier::external_body"
+    val generatedComment = RAST.BodyItemST(
+      st"// HAMR-generated R2U2 hook. Do not edit; changes are replaced during regeneration.")
     val preFn = fn(
       sig = fn.sig(
         ident = RAST.IdentString("pre_timeTriggered"),
         fnDecl = fn.sig.fnDecl(inputs = preInputs)),
+      attributes = fn.attributes :+ RAST.AttributeST(F, externalBodyAttr),
       contract = None(),
-      body = Some(RAST.MethodBody(preItems)))
+      body = Some(RAST.MethodBody(generatedComment +: preItems)))
     val postFn = fn(
       sig = fn.sig(ident = RAST.IdentString("post_timeTriggered")),
+      attributes = fn.attributes :+ RAST.AttributeST(F, externalBodyAttr),
       contract = None(),
-      body = Some(RAST.MethodBody(postItems)))
+      body = Some(RAST.MethodBody(generatedComment +: postItems)))
 
     val monitorMethods: ISZ[RAST.Item] = ISZ(
       RAST.MarkerWrap(preMethodMarker, ISZ(preFn), "\n", None()),
