@@ -72,9 +72,6 @@ object Ros2Codegen {
     // sized -- overflow of an unsized field is silent at runtime
     Generator.validateMicroRosCapacities(microRosThreads, reporter)
 
-    // only the AADL default Queue_Size of 1 is realized, on either node kind
-    Generator.validateQueueSize(generatedThreads, reporter)
-
     // --strict-aadl-mode does not reach the micro-ROS nodes; say so rather than let a mixed
     // system quietly disagree with the command line
     Generator.reportMicroRosDispatchSemantics(microRosThreads, options.strictAadlMode, reporter)

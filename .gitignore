@@ -16,7 +16,9 @@ bin/.aot/
 bin/linux
 bin/mac
 bin/win
+bin/sbt
 bin/scala
+bin/verilator
 lib
 /resources/
 versions.properties

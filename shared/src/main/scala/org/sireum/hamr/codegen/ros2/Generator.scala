@@ -183,9 +183,10 @@ object Generator {
   // On a sporadic node an arrival dispatches the port's handler directly, so nothing is buffered.
   // A periodic node runs on its timer instead, so an arrival has to wait for the next dispatch:
   // each such port records that one is waiting, and receiveInputs consumes it at the top of the
-  // next dispatch.  Only the AADL default Queue_Size of 1 is realized -- see validateQueueSize --
-  // so a second arrival replaces the first rather than queueing behind it.  Data ports are
-  // excluded: they latch a single newest value, which is their semantics, not a queue.
+  // next dispatch.  Only the AADL default Queue_Size of 1 is realized -- RosLinter rejects any
+  // larger declaration -- so a second arrival replaces the first rather than queueing behind it.
+  // Data ports are excluded: they latch a single newest value, which is their semantics, not a
+  // queue.
   def microRosQueuedInPorts(component: AadlThread): ISZ[AadlPort] = {
     return if (isSporadic(component)) IS()
     else ISZOps(ISZOps(generatedPorts(component)).filter(p => p.direction == Direction.In))
@@ -504,12 +505,31 @@ object Generator {
       case _ => F
     }
 
+  // A handler for an in rosout port must not log through the ROS logger.  An rclcpp node
+  // publishes its own log records to /rosout by default, and this node is subscribed to
+  // /rosout -- so a log call here feeds the handler its own output.  It is self-sustaining
+  // rather than merely noisy: measured at ~9000 records/sec from a 10 records/sec producer,
+  // bounded only by CPU.  The skeleton therefore explains itself instead of demonstrating it.
+  @strictpure def genRosoutHandlerNote: ST =
+    st"""// Deliberately does not log.  This node subscribes to /rosout, and a ROS node
+        |// publishes its own log records there -- so logging here would feed this handler
+        |// its own output and run away.  Write records to a file, a socket, or stdout;
+        |// anything routed through the ROS logger comes back."""
+
   // The example "Received <port>" log line emitted into generated user code.  msgExpr is the
   // C++ expression holding the message; a platform-provided payload has no printer, so only
   // the port name is logged.
   @strictpure def genCppReceivedLog(port: AadlPort, msgExpr: String): ST =
-    if (isPlatformProvidedPayload(port)) st"""LOG_INFO("Received ${port.identifier}");"""
+    if (RosUtil.isRosoutPort(port)) genRosoutHandlerNote
+    else if (isPlatformProvidedPayload(port)) st"""LOG_INFO("Received ${port.identifier}");"""
     else st"""LOG_INFO("Received ${port.identifier}: %s", MESSAGE_TO_STRING(${msgExpr}));"""
+
+  // The micro-ROS counterpart of genCppReceivedLog.  Generated C user code logs the port name
+  // only -- there is no _Generic printer for an in port's payload -- but the rosout guard is
+  // the same, since a micro-ROS consumer subscribed to /rosout can feed itself just as readily.
+  @strictpure def genCppReceivedLogC(port: AadlPort, portId: String): ST =
+    if (RosUtil.isRosoutPort(port)) genRosoutHandlerNote
+    else st"""LOG_INFO("Received ${portId}");"""
 
   // The example "Sent <port>" log line emitted into generated micro-ROS user code; as with
   // genCppReceivedLog, a platform-provided payload is logged by port name only.
@@ -5227,33 +5247,6 @@ object Generator {
           |Affected: ${(names, ", ")}.""".render)
   }
 
-  // Queue_Size reaches AIR intact and is then realized by neither backend.  The rclcpp path
-  // hardcodes a QoS depth of 1 in create_subscription and strict's enqueue is likewise depth 1;
-  // the micro-ROS path records a single pending arrival per port.  A model declaring more is
-  // therefore claiming a depth the generated system does not have, on either node kind, which is
-  // exactly the sort of thing that is invisible until a burst is silently lost at runtime.
-  //
-  // This deliberately covers every generated thread rather than just micro-ROS ones: the rclcpp
-  // side has always behaved this way and simply never said so.
-  def validateQueueSize(threads: ISZ[AadlThread], reporter: Reporter): Unit = {
-    for (thread <- threads;
-         p <- generatedPorts(thread) if p.direction == Direction.In) {
-      val declared: Z = p match {
-        case e: AadlEventDataPort => e.queueSize
-        case e: AadlEventPort => e.queueSize
-        case _ => 1
-      }
-      if (declared > 1) {
-        reporter.warn(p.posOpt, RosUtil.toolName,
-          st"""${thread.identifier}.${p.identifier} declares Queue_Size ${declared}, but the ROS 2 backend realizes
-              |only the AADL default of 1, on rclcpp and micro-ROS nodes alike.  The port holds the most
-              |recent arrival and earlier ones are dropped, so a dispatch sees at most one message here
-              |however deep the model says the queue is.  Drop the declaration, or give the receiving
-              |thread a Sporadic dispatch protocol so each arrival is handled as it lands.""".render)
-      }
-    }
-  }
-
   // A micro-ROS subscription whose payload codegen cannot fully size is a latent silent-drop:
   // the native type may have unbounded fields the mirror says nothing about.  Codegen only knows
   // the model, so it cannot confirm which native fields are unbounded -- it reports what it could
@@ -5783,7 +5776,7 @@ object Generator {
                 """
           } else {
             var bodyLines: ISZ[ST] = IS(st"    // Handle ${portId} msg")
-            bodyLines = bodyLines :+ st"""    LOG_INFO("Received ${portId}");"""
+            bodyLines = bodyLines :+ st"    ${genCppReceivedLogC(p, portId)}"
             for (l <- extraBodyLines) {
               bodyLines = bodyLines :+ l
             }
@@ -5830,7 +5823,7 @@ object Generator {
             queuedPortExamples = queuedPortExamples :+
               st"""${qpCType} * ${qpId} = get_${qpId}(self);
                   |if (${qpId} != NULL) {
-                  |    LOG_INFO("Received ${qpId}");
+                  |    ${genCppReceivedLogC(qp, qpId)}
                   |}"""
           }
         }
@@ -6157,10 +6150,18 @@ object Generator {
           |        #
           |        # The UCLIENT_PROFILE_* transport enabled here must agree with
           |        # RMW_UXRCE_TRANSPORT below.
+          |        #
+          |        # MULTITHREAD adds internal locking to the XRCE session so that several
+          |        # threads may drive it concurrently.  Generated micro-ROS nodes never do:
+          |        # every node runs one rclc executor on one thread, and all port traffic is
+          |        # released through sendOutputs at dispatch completion.  micro_ros_setup's
+          |        # stock host profile turns this ON; it is off here because nothing in a
+          |        # generated node needs it and it is not free.
           |        "microxrcedds_client": {
           |            "cmake-args": [
           |                "-DBUILD_SHARED_LIBS=ON",
-          |                "-DUCLIENT_PROFILE_UDP=ON"
+          |                "-DUCLIENT_PROFILE_UDP=ON",
+          |                "-DUCLIENT_PROFILE_MULTITHREAD=OFF"
           |            ]
           |        },
           |        "microcdr": {
@@ -6467,10 +6468,14 @@ object Generator {
             |## Firmware Configuration
             |
             |`microros_apps/colcon.meta` holds the build configuration the generated nodes need
-            |from the micro-ROS middleware.  It is **not** consumed from where it sits: it
-            |configures packages such as `rcl` and `rmw_microxrcedds`, which live in the firmware
-            |workspace and are built by step 4 above -- not by `make build`, which builds only the
-            |application packages.  Applying it is therefore a separate step:
+            |from the micro-ROS middleware -- `rmw_microxrcedds`, `microxrcedds_client` and the
+            |typesupport packages.  Those live in the firmware workspace and were built by step 4
+            |above, not by `make build`, which builds only the application packages.
+            |
+            |To have any effect it must be installed into that workspace, as
+            |`$$MICROROS_WS/src/colcon.meta` -- the path `micro_ros_setup`'s host `build.sh` reads,
+            |via `colcon build --metas src`.  Sitting in `microros_apps/` it does nothing.
+            |Installing it is therefore a separate step:
             |
             |```bash
             |make microros-config
@@ -6498,19 +6503,25 @@ object Generator {
             |preserved.  To override a derived value, restate its `-D` flag inside a marked block --
             |colcon passes `cmake-args` through in order and CMake takes the last occurrence.
             |
-            |Because `MICROROS_WS` is shared across projects, `make microros-config` backs up any
-            |`colcon.meta` already there to `colcon.meta.bak`.  If you maintain your own firmware
-            |configuration, merge the two rather than letting one replace the other.
+            |`create_firmware_ws.sh` seeds that same path with micro-ROS's stock profile, and
+            |`MICROROS_WS` is shared across projects, so `make microros-config` renames any
+            |`colcon.meta` already there to `colcon.meta.bak` rather than discarding it.  The stock
+            |profile it displaces sizes the `RMW_UXRCE_MAX_*` pools generously and enables
+            |`UCLIENT_PROFILE_MULTITHREAD`; the generated one sizes the pools from your model and
+            |turns multithreading off, since a generated node drives its XRCE session from a single
+            |thread.  If you maintain your own firmware configuration, merge the two rather than
+            |letting one replace the other.
             |
-            |### On a host workspace this step is effectively a no-op
+            |### On a host workspace the `rcl` entry is inert
             |
             |A firmware workspace created for the **host** platform
             |(`create_firmware_ws.sh host generic`) does not check out `rcl` at all -- on host,
             |micro-ROS is `rmw_microxrcedds` and `rclc` layered over the ROS 2 distribution's own
-            |`rcl`, so there is no micro-ROS `rcl` to configure.  `make microros-config` will copy
-            |`colcon.meta` into place and rebuild successfully, but the `rcl` entry matches no
-            |package and is silently inert; `find_package(rcl)` keeps resolving to
-            |`/opt/ros/$$ROS_DISTRO`.
+            |`rcl`, so there is no micro-ROS `rcl` to configure.  The `rcl` entry below therefore
+            |matches no package and is silently inert on host; `find_package(rcl)` keeps resolving
+            |to `/opt/ros/$$ROS_DISTRO`.  The other entries -- `microxrcedds_client`,
+            |`rmw_microxrcedds`, and the typesupport packages -- do apply, since those are checked
+            |out and built there.
             |
             |This is usually invisible, because the distribution's `rcl` is built with both
             |argument parsing and logging enabled -- the very things the flags above turn on.  So
@@ -6745,16 +6756,21 @@ object Generator {
             |# there; until then the rcl arguments in each node's node_options block are silently
             |# ignored.  The host config does not disable it, so that part is moot on host.
             |#
-            |# MICROROS_WS is shared across projects, so any existing colcon.meta there is backed
-            |# up rather than discarded.
+            |# It goes to $$(MICROROS_WS)/src/colcon.meta, which is where the host firmware build
+            |# reads it from: micro_ros_setup's host build.sh runs `colcon build --metas src`, and
+            |# its create.sh seeds that same path with the stock profile.  A colcon.meta placed at
+            |# the workspace root is read by nothing.
+            |#
+            |# MICROROS_WS is shared across projects and the stock profile is already at that path,
+            |# so any existing colcon.meta is renamed to colcon.meta.bak rather than discarded.
             |#
             |# --cmake-force-configure is forwarded to colcon (build_firmware.sh passes anything
             |# after -- straight through).  Without it a changed colcon.meta can leave the existing
             |# CMake caches in place, so the target reports success while the new settings never
             |# take effect -- the same silent-failure shape as an ignored remap rule.
             |microros-config: check-ros2
-            |	@test -f "$$(MICROROS_WS)/colcon.meta" && cp "$$(MICROROS_WS)/colcon.meta" "$$(MICROROS_WS)/colcon.meta.bak" && echo "Backed up existing colcon.meta to colcon.meta.bak" || true
-            |	cp microros_apps/colcon.meta $$(MICROROS_WS)/colcon.meta
+            |	@test -f "$$(MICROROS_WS)/src/colcon.meta" && mv "$$(MICROROS_WS)/src/colcon.meta" "$$(MICROROS_WS)/src/colcon.meta.bak" && echo "Renamed existing src/colcon.meta to src/colcon.meta.bak" || true
+            |	cp microros_apps/colcon.meta $$(MICROROS_WS)/src/colcon.meta
             |	cd $$(MICROROS_WS) && bash -c "$$(SOURCE_BASE); ros2 run micro_ros_setup build_firmware.sh -- --cmake-force-configure"
             |	@echo "Firmware rebuilt with microros_apps/colcon.meta. Re-run 'make build' to rebuild the app packages against it."
             |
