@@ -49,7 +49,11 @@ jobs:
           curl -L -o /tmp/ros2-apt-source.deb "https://github.com/ros-infrastructure/ros-apt-source/releases/download/${ROS_APT_SOURCE_VERSION}/ros2-apt-source_${ROS_APT_SOURCE_VERSION}.$(. /etc/os-release && echo ${UBUNTU_CODENAME:-${VERSION_CODENAME}})_all.deb"
           dpkg -i /tmp/ros2-apt-source.deb
           apt-get update -y
-          apt-get install -y ros-dev-tools ros-humble-ros-base
+          # turtlesim is not part of ros-base, but the turtle-control test models consume its
+          # message types as platform-provided types, so the generated cpp_pkg has a build-time
+          # 'find_package(turtlesim REQUIRED)'.  Installed standalone rather than pulling in all
+          # of ros-humble-desktop for this one package.
+          apt-get install -y ros-dev-tools ros-humble-ros-base ros-humble-turtlesim
 
       - name: Cache Java
         id: cache-java
