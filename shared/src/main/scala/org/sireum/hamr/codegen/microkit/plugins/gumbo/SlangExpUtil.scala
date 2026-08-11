@@ -242,7 +242,7 @@ object SlangExpUtil {
                 return st"${(unquoteLits(exp.lits), "_INFEASIBLE")}"
               case x =>
                 reporter.error(d.posOpt, MicrokitCodegen.toolName,
-                  s"The Slang interpolate $x is not supported by C2PO/R2U2 (integers are signed 32-bit)")
+                  s"The Slang interpolate $x is not supported by R2U2 monitors (integers are signed 32-bit)")
                 return st"TODO"
             }
           } else {
@@ -688,7 +688,7 @@ object SlangExpUtil {
         case Exp.UnaryOp.Not => return "!"
         case Exp.UnaryOp.Minus => 
           if (target == TargetLanguage.C2PO){
-               halt("Unary op '-' is not supported by C2PO/R2U2")
+               halt("Unary op '-' is not supported by R2U2 monitors")
           } else {
                return "-"
           }
@@ -704,7 +704,7 @@ object SlangExpUtil {
 
     @pure def convertUnaryTemporalOp(op: Exp.UnaryTemporalOp.Type): String = {
       if (target != TargetLanguage.C2PO){
-          halt(s"Temporal Operator $op is only supported in C2PO/R2U2.")
+          halt(s"Temporal Operator $op is only supported in R2U2 monitors.")
       }
       op match {
         case Exp.UnaryTemporalOp.Future => return "F"
@@ -716,7 +716,7 @@ object SlangExpUtil {
 
     @pure def convertBinaryTemporalOp(op: Exp.BinaryTemporalOp.Type): String = {
       if (target != TargetLanguage.C2PO) {
-        halt(s"Temporal Operator $op is only supported in C2PO/R2U2.")
+        halt(s"Temporal Operator $op is only supported in R2U2 monitors.")
       }
       op match {
         case Exp.BinaryTemporalOp.Until => return "U"
@@ -807,8 +807,18 @@ object SlangExpUtil {
         case Exp.BinaryOp.Rem => return "%"
         case Exp.BinaryOp.Eq => return "=="
         case Exp.BinaryOp.Ne => return "!="
-        case Exp.BinaryOp.Shl => return "<<"
-        case Exp.BinaryOp.Shr => return ">>"
+        case Exp.BinaryOp.Shl => 
+          if(target == TargetLanguage.C2PO){
+               halt("Binary op '<<' is not supported by R2U2 monitors")
+          } else {
+               return "<<"
+          }
+        case Exp.BinaryOp.Shr => 
+          if(target == TargetLanguage.C2PO){
+               halt("Binary op '>>' is not supported by R2U2 monitors")
+          } else {
+               return ">>"
+          }
         case Exp.BinaryOp.Lt => return "<"
         case Exp.BinaryOp.Le => return "<="
         case Exp.BinaryOp.Gt => return ">"

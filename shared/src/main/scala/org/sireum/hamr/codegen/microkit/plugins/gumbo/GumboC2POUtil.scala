@@ -31,9 +31,9 @@ object GumboC2POUtil {
           case ISZ("org", "sireum", "U16") => return C2POType.int
           case ISZ("org", "sireum", "F32") => return C2POType.float
           case ISZ("org", "sireum", "F64") => return C2POType.float
-          case _ => halt(s"Type ${n.ids} is not supported by C2PO/R2U2")
+          case _ => halt(s"Type ${n.ids} is not supported by R2U2 monitors")
         }
-      case _ => halt(s"Type ${typed} is not supported by C2PO/R2U2")
+      case _ => halt(s"Type ${typed} is not supported by R2U2 monitors")
     }
   }
 
@@ -42,11 +42,11 @@ object GumboC2POUtil {
       // 1. Literal Nodes have fixed concrete types
       case _: org.sireum.lang.ast.Exp.LitB => return C2POType.bool
       case _: org.sireum.lang.ast.Exp.LitC => return C2POType.int // R2U2 supports i32 by default, char (or u8) can be cast to i32 within R2U2
-      case _: org.sireum.lang.ast.Exp.LitZ => halt("Unbounded Integer is not supported by C2PO/R2U2")
+      case _: org.sireum.lang.ast.Exp.LitZ => halt("Unbounded Integer is not supported by R2U2 monitors")
       case _: org.sireum.lang.ast.Exp.LitF32 => return C2POType.float // R2U2 supports f64 by default, f32 can be cast up to f64 within R2U2
       case _: org.sireum.lang.ast.Exp.LitF64 => return C2POType.float
-      case _: org.sireum.lang.ast.Exp.LitR => halt("Unbounded Float is not supported by C2PO/R2U2")
-      case _: org.sireum.lang.ast.Exp.LitString => halt("Strings are not supported by C2PO/R2U2")
+      case _: org.sireum.lang.ast.Exp.LitR => halt("Unbounded Float is not supported by R2U2 monitors")
+      case _: org.sireum.lang.ast.Exp.LitString => halt("Strings are not supported by R2U2 monitors")
 
 
       // 2. Logic and comparison operations always return standard Booleans
@@ -77,7 +77,7 @@ object GumboC2POUtil {
           if (return_type_left == return_type_right && (return_type_left == C2POType.int || return_type_left == C2POType.bool)){
             return return_type_left
           } else {
-            halt("Expression type is not supported by C2PO/R2U2")
+            halt("Expression type is not supported by R2U2 monitors")
           }
         }
         else if ( // Arithmetic operations
@@ -93,10 +93,10 @@ object GumboC2POUtil {
           if (return_type_left == return_type_right && (return_type_left == C2POType.int || return_type_left == C2POType.float)){
             return return_type_left
           } else {
-            halt("Expression type is not supported by C2PO/R2U2")
+            halt("Expression type is not supported by R2U2 monitors")
           }
         } else {
-          halt("Expression type is not supported by C2PO/R2U2")
+          halt("Expression type is not supported by R2U2 monitors")
         }
 
       case un: org.sireum.lang.ast.Exp.Unary =>
@@ -112,7 +112,7 @@ object GumboC2POUtil {
           if (return_type == C2POType.int || return_type == C2POType.bool){
             return return_type
           } else {
-            halt("Expression type is not supported by C2PO/R2U2")
+            halt("Expression type is not supported by R2U2 monitors")
           }
         } else if ( // Arithmetic signs
           un.op == org.sireum.lang.ast.Exp.UnaryOp.Plus ||
@@ -123,10 +123,10 @@ object GumboC2POUtil {
           if (return_type == C2POType.int || return_type == C2POType.float){
             return return_type
           } else {
-            halt("Expression type is not supported by C2PO/R2U2")
+            halt("Expression type is not supported by R2U2 monitors")
           }
         } else {
-          halt("Expression type is not supported by C2PO/R2U2")
+          halt("Expression type is not supported by R2U2 monitors")
         }
       // 3. Status checks on nested properties are structurally Booleans
       case sel: org.sireum.lang.ast.Exp.Select => 
@@ -137,7 +137,7 @@ object GumboC2POUtil {
                // information to classify them without access to the surrounding scope.
                sel.attr.typedOpt match {
                     case Some(typed) => return getTypedExprType(typed)
-                    case _ => halt("Expression type is not supported by C2PO/R2U2")
+                    case _ => halt("Expression type is not supported by R2U2 monitors")
                }
           }
 
@@ -145,9 +145,9 @@ object GumboC2POUtil {
       case id: org.sireum.lang.ast.Exp.Ident =>
         id.attr.typedOpt match {
           case Some(typed) => return getTypedExprType(typed)
-          case _ => halt("Expression type is not supported by C2PO/R2U2")
+          case _ => halt("Expression type is not supported by R2U2 monitors")
         }
-      case _ => halt("Expression type is not supported by C2PO/R2U2")
+      case _ => halt("Expression type is not supported by R2U2 monitors")
     }
   }
 
