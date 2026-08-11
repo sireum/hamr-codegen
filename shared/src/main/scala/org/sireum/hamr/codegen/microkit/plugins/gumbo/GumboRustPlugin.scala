@@ -923,7 +923,7 @@ object GumboRustPlugin {
     var monitorInputs: Map[String, GumboR2U2Util.R2U2MonitorInput] = Map.empty
 
     for (guarantee <- subclauseInfo.annex.monitor.get.guarantees) {
-      val (ftspec, inputs) = GumboRustUtil.processGumboSpecC2PO(
+      val (c2poSpec, tense, inputs) = GumboRustUtil.processGumboSpecC2PO(
         spec = guarantee,
         component = thread,
         context = Context.monitor_clause,
@@ -933,7 +933,10 @@ object GumboRustPlugin {
         gclSymbolTable = subclauseInfo.gclSymbolTable,
         store = store,
         reporter = reporter)
-      specs = specs(ftspecs = specs.ftspecs :+ RAST.ItemST(ftspec.prettyST))
+      tense match {
+        case GumboC2POUtil.SpecTense.Future => specs = specs(ftspecs = specs.ftspecs :+ RAST.ItemST(c2poSpec.prettyST))
+        case GumboC2POUtil.SpecTense.Past => specs = specs(ptspecs = specs.ptspecs :+ RAST.ItemST(c2poSpec.prettyST))
+      }
       monitorInputs = monitorInputs ++ inputs.entries
     }
 

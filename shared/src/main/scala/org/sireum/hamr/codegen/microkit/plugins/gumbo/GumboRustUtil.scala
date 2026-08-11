@@ -190,8 +190,10 @@ object GumboRustUtil {
                              tp: CRustTypeProvider,
                              gclSymbolTable: GclSymbolTable,
                              store: Store,
-                                 reporter: Reporter): (RAST.Expr, Map[String, GumboR2U2Util.R2U2MonitorInput]) = {
+                                 reporter: Reporter): (RAST.Expr, GumboC2POUtil.SpecTense.Type, Map[String, GumboR2U2Util.R2U2MonitorInput]) = {
+
     val (exp, variablesInSpec) = GumboC2POUtil.collectIdentifiers(spec.exp)
+    val tense = GumboC2POUtil.getSpecTense(exp)
 
     val c2poExp =
       SlangExpUtil.rewriteExpH(
@@ -230,7 +232,7 @@ object GumboRustUtil {
           |${spec.id}: ${c2poExp};"""
      )
 
-    return (spec_st, variablesInSpecExpanded)
+    return (spec_st, tense, variablesInSpecExpanded)
   }
 
   @pure def processGumboCase(c: GclCaseStatement,

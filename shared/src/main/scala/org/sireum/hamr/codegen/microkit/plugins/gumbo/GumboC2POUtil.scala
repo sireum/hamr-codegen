@@ -6,15 +6,6 @@ import org.sireum.lang.{ast => SAST}
 
 object GumboC2POUtil {
 
-  @enum object C2POInputType {
-    "API_REFERENCE"
-    "API_REFERENCE_NONEMPTY"
-    "API_REFERENCE_ISEMPTY"
-    "LOCAL_VARIABLE_OR_STATE"
-    "FUNCTION"
-    // Add your new target here!
-  }
-
   @enum object C2POType {
     "bool"
     "int"
@@ -302,6 +293,47 @@ object GumboC2POUtil {
       // Fallback for literals, constants, or unsupported expressions
       case leaf =>
         return (leaf, categorized)
+    }
+  }
+
+  @enum object SpecTense {
+    "Future"
+    "Past"
+  }
+
+  @record class TenseCollector extends org.sireum.hamr.ir.MTransformer {
+    var hasFuture: B = F
+    var hasPast: B = F
+
+    override def pre_langastExpUnaryTemporal(o: SAST.Exp.UnaryTemporal): org.sireum.hamr.ir.MTransformer.PreResult[SAST.Exp] = {
+      o.op match {
+        case SAST.Exp.UnaryTemporalOp.Future | SAST.Exp.UnaryTemporalOp.Globally => hasFuture = T
+        case SAST.Exp.UnaryTemporalOp.Once | SAST.Exp.UnaryTemporalOp.Historically => hasPast = T
+      }
+      return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone[SAST.Exp]())
+    }
+
+    override def pre_langastExpBinaryTemporal(o: SAST.Exp.BinaryTemporal): org.sireum.hamr.ir.MTransformer.PreResult[SAST.Exp] = {
+      o.op match {
+        case SAST.Exp.BinaryTemporalOp.Until | SAST.Exp.BinaryTemporalOp.Release => hasFuture = T
+        case SAST.Exp.BinaryTemporalOp.Since | SAST.Exp.BinaryTemporalOp.Trigger => hasPast = T
+      }
+      return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone[SAST.Exp]())
+    }
+  }
+
+  @pure def getSpecTense(exp: org.sireum.lang.ast.Exp): SpecTense.Type = {
+    val collector = TenseCollector()
+    collector.transform_langastExp(exp)
+
+    if (collector.hasFuture && collector.hasPast) {
+      halt(s"Monitor guarantee cannot combine future-time and past-time temporal operators")
+    }
+
+    if (collector.hasPast) {
+      return SpecTense.Past
+    } else { // Expressions without temporal operators are also future-time specifications.
+      return SpecTense.Future
     }
   }
 }
