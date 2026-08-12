@@ -217,12 +217,21 @@ object Printers {
   }
 
   @pure override def prettyST: ST = {
-    val enumSection: ST =
-      if (enums.isEmpty) st""
-      else st"""ENUM
-               |${(for (e <- enums) yield st"${TAB}${e.name}: {${(e.values, ", ")}};", "\n")}
-               |
-               |"""
+    var enumSection: ST = st""
+    if (enums.nonEmpty) {
+      var enumDefs: ISZ[ST] = ISZ()
+      for (e <- enums) {
+        var members: ISZ[ST] = ISZ()
+        for (i <- z"0" until e.values.size) {
+          members = members :+ st"${e.values(i)}: $i"
+        }
+        enumDefs = enumDefs :+ st"${TAB}${e.name}: {${(members, ", ")}};"
+      }
+      enumSection = st"""ENUM
+                         |${(enumDefs, "\n")}
+                         |
+                         |"""
+    }
     return (
       st"""${enumSection}INPUT
           |${printItems(inputs, "\n")}
