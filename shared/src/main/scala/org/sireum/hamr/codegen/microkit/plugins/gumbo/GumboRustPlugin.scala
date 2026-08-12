@@ -919,7 +919,7 @@ object GumboRustPlugin {
                                  tp: CRustTypeProvider,
                                  store: Store,
                                  reporter: Reporter): (ISZ[Marker], ISZ[RAST.Item], RAST.R2U2SpecDef, RAST.FnImpl) = {
-    var specs = RAST.R2U2SpecDef(inputs = ISZ(), ftspecs = ISZ(), ptspecs = ISZ())
+    var specs = RAST.R2U2SpecDef(enums = ISZ(), inputs = ISZ(), ftspecs = ISZ(), ptspecs = ISZ())
     var monitorInputs: Map[String, GumboR2U2Util.R2U2MonitorInput] = Map.empty
 
     for (guarantee <- subclauseInfo.annex.monitor.get.guarantees) {
@@ -975,7 +975,15 @@ object GumboRustPlugin {
 
     var index = 0
     for ((name, monitorInput) <- monitorInputs.entries) {
-      specs = specs(inputs = specs.inputs :+ RAST.R2U2InputDef(name, monitorInput.expType, index.toInt))
+      val typeName: String = monitorInput.enumTypeOpt match {
+        case Some(enumType) =>
+          if (!ops.ISZOps(specs.enums).exists(existing => existing.name == enumType.name)) {
+            specs = specs(enums = specs.enums :+ enumType)
+          }
+          enumType.name
+        case _ => monitorInput.expType.string
+      }
+      specs = specs(inputs = specs.inputs :+ RAST.R2U2InputDef(name, typeName, index.toInt))
       val loadSignal: RAST.BodyItem = monitorInput.expType match {
         case GumboC2POUtil.C2POType.bool =>
           RAST.BodyItemST(st"""r2u2_core::load_bool_signal(&mut self.r2u2_monitor, $index, ${monitorInput.exp.prettyST}); // Loading signal $name into index $index""")
@@ -983,6 +991,8 @@ object GumboRustPlugin {
           RAST.BodyItemST(st"""r2u2_core::load_int_signal(&mut self.r2u2_monitor, $index, ${monitorInput.exp.prettyST}.into()); // Loading signal $name into index $index""")
         case GumboC2POUtil.C2POType.float =>
           RAST.BodyItemST(st"""r2u2_core::load_float_signal(&mut self.r2u2_monitor, $index, ${monitorInput.exp.prettyST}.into()); // Loading signal $name into index $index""")
+        case GumboC2POUtil.C2POType.enumeration =>
+          RAST.BodyItemST(st"""r2u2_core::load_int_signal(&mut self.r2u2_monitor, $index, ${monitorInput.exp.prettyST} as i32); // Loading enum signal $name into index $index""")
       }
       val referencesOutput = ops.ISZOps(monitorInput.referencedPorts.elements).exists(
         portId => referencedOutputPorts.contains(portId))

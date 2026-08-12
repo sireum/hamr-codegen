@@ -4,7 +4,7 @@ package org.sireum.hamr.codegen.microkit.rust
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, isThread}
 import org.sireum.hamr.codegen.common.containers.{BlockMarker, Marker, PlaceholderMarker}
-import org.sireum.hamr.codegen.microkit.plugins.gumbo.GumboC2POUtil.C2POType
+import org.sireum.hamr.codegen.microkit.plugins.gumbo.GumboC2POUtil.C2POEnum
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.TAB
 import org.sireum.hamr.codegen.microkit.rust.Printers._
 
@@ -194,17 +194,18 @@ object Printers {
 }
 
 @datatype class R2U2InputDef(val name: String,
-                            val type_dec: C2POType.Type,
+                            val typeName: String,
                             val idx: Int) extends Item {
   @pure def printMap: ST = {
     return (st"""${name}:${idx}""")
   }
   @pure override def prettyST: ST = {
-    return (st"""${TAB}${name}: ${type_dec};""")
+    return (st"""${TAB}${name}: ${typeName};""")
   }
 }
 
-@datatype class R2U2SpecDef(val inputs: ISZ[R2U2InputDef],
+@datatype class R2U2SpecDef(val enums: ISZ[C2POEnum],
+                          val inputs: ISZ[R2U2InputDef],
                           val ftspecs: ISZ[Item],
                           val ptspecs: ISZ[Item]) extends Item {
   @pure def printMap: ST = {
@@ -216,8 +217,14 @@ object Printers {
   }
 
   @pure override def prettyST: ST = {
+    val enumSection: ST =
+      if (enums.isEmpty) st""
+      else st"""ENUM
+               |${(for (e <- enums) yield st"${TAB}${e.name}: {${(e.values, ", ")}};", "\n")}
+               |
+               |"""
     return (
-      st"""INPUT
+      st"""${enumSection}INPUT
           |${printItems(inputs, "\n")}
           |
           |${if (ftspecs.nonEmpty) st"FTSPEC \n${printItems(ftspecs, "\n")}\n" else ""}

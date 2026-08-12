@@ -273,6 +273,9 @@ object SlangExpUtil {
             case Some(s: SAST.Typed.Name) =>
               exp.resOpt match {
                 case Some(e: SAST.ResolvedInfo.EnumElement) =>
+                  if (target == TargetLanguage.C2PO) {
+                    return st"${e.name}"
+                  }
                   return st"${(e.owner, "::")}::${e.name}"
                 case _ => "."
               }

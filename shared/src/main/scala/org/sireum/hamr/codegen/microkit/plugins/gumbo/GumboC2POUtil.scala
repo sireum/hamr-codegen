@@ -2,7 +2,9 @@
 package org.sireum.hamr.codegen.microkit.plugins.gumbo
 
 import org.sireum._
+import org.sireum.hamr.codegen.common.types.{AadlTypes, EnumType}
 import org.sireum.lang.{ast => SAST}
+import org.sireum.lang.symbol.Info
 
 object GumboC2POUtil {
 
@@ -10,9 +12,11 @@ object GumboC2POUtil {
     "bool"
     "int"
     "float"
-//    "struct"
-//    "array"
+    "enumeration"
   }
+
+  @datatype class C2POEnum(val name: String,
+                           val values: ISZ[String])
 
   @pure def getTypedExprType(typed: SAST.Typed): C2POType.Type = {
     typed match {
@@ -31,6 +35,8 @@ object GumboC2POUtil {
           case ISZ("org", "sireum", "U16") => return C2POType.int
           case ISZ("org", "sireum", "F32") => return C2POType.float
           case ISZ("org", "sireum", "F64") => return C2POType.float
+          // Enum element types end in "Type".
+          case _ if n.ids.nonEmpty && n.ids(n.ids.lastIndex) == Info.Enum.elementTypeSuffix => return C2POType.enumeration
           case _ => halt(s"Type ${n.ids} is not supported by R2U2 monitors")
         }
       case _ => halt(s"Type ${typed} is not supported by R2U2 monitors")
@@ -151,6 +157,22 @@ object GumboC2POUtil {
     }
   }
 
+  @pure def getEnumType(exp: SAST.Exp, aadlTypes: AadlTypes): C2POEnum = {
+    val typed: SAST.Typed = exp.typedOpt match {
+      case Some(SAST.Typed.Name(SAST.Typed.optionName, _, ISZ(payload))) => payload
+      case Some(t) => t
+      case _ => halt("Enum expression is missing its resolved type")
+    }
+    typed match {
+      case n: SAST.Typed.Name =>
+        aadlTypes.getTypeByPathOpt(n.ids) match {
+          case Some(e: EnumType) => return C2POEnum(e.simpleName, e.values)
+          case _ => halt(s"Type ${n.ids} is not an AADL enum")
+        }
+      case _ => halt(s"Type $typed is not an AADL enum")
+    }
+  }
+
   // Function collects any identifiers, flattens them if necessary, and returns the new expr and a
   // map of identifiers to expressions
   @pure def collectIdentifiers(exp: org.sireum.lang.ast.Exp): (org.sireum.lang.ast.Exp, Map[String, org.sireum.lang.ast.Exp]) = {
@@ -184,12 +206,20 @@ object GumboC2POUtil {
       // 2. Matches component dot-selections (e.g., api.my_var or state.my_var)
       case sel: org.sireum.lang.ast.Exp.Select =>
         val propName = sel.id.value
+        val isEnumMember: B = sel.resOpt match {
+          case Some(_: SAST.ResolvedInfo.EnumElement) => T
+          case _ => F
+        }
         val isOptionGet: B = sel.attr.typedOpt match {
           case Some(m: SAST.Typed.Method) =>
             m.owner == ISZ("org", "sireum", "Option") && m.name == "get"
           case _ => F
         }
-        if (isOptionGet) {
+        if (isEnumMember) {
+          // Enum members are constants, not monitor inputs. Preserve the
+          // selection so SlangExpUtil can lower it to its C2PO member name.
+          return (sel, categorized)
+        } else if (isOptionGet) {
           // GCL resolution inserts Option.get when an event-data port is used as
           // a value.  R2U2 models that value and its presence as separate input
           // signals, so collect the optional port itself and omit the accessor.

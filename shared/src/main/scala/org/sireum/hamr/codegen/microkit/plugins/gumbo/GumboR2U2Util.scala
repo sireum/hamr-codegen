@@ -17,6 +17,7 @@ object GumboR2U2Util {
 
   @datatype class R2U2MonitorInput(val exp: RAST.Expr,
                                    val expType: GumboC2POUtil.C2POType.Type,
+                                   val enumTypeOpt: Option[GumboC2POUtil.C2POEnum],
                                    val referencedPorts: Set[String])
 
   // The C transport exposes peek for every port; only R2U2 components add it
@@ -77,9 +78,14 @@ object GumboR2U2Util {
       case _ =>
         rustExp
     }
+    val expType: GumboC2POUtil.C2POType.Type = GumboC2POUtil.getExprType(exp)
+    val enumTypeOpt: Option[GumboC2POUtil.C2POEnum] =
+      if (expType == GumboC2POUtil.C2POType.enumeration) Some(GumboC2POUtil.getEnumType(exp, types))
+      else None()
     return R2U2MonitorInput(
       exp = RAST.ExprST(monitorExp),
-      expType = GumboC2POUtil.getExprType(exp),
+      expType = expType,
+      enumTypeOpt = enumTypeOpt,
       referencedPorts = portRewriter.referencedPorts)
   }
 
