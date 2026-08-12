@@ -189,6 +189,7 @@ object GumboRustPlugin {
       var structDef = threadContributions.appStructDef
       var structImpl = threadContributions.appStructImpl.asInstanceOf[RAST.ImplBase]
       var r2u2SpecDef = threadContributions.appR2U2SpecDef
+      var r2u2MonitorMethods = threadContributions.appR2U2MonitorMethods
       var moduleLevelEntries = threadContributions.moduleLevelEntries
       val crateDependencies = threadContributions.crateDependencies ++ crateDeps
 
@@ -535,8 +536,8 @@ object GumboRustPlugin {
               markers = markers ++ compute._1
 
               var timeTriggered: RAST.FnImpl = compute._2
-              val monitorMethods = if (subclauseInfo.annex.monitor.nonEmpty) {
-                val (monitorMarkers, monitorMethods, spec, monitorTimeTriggered) = handleComputeMonitor(
+              if (subclauseInfo.annex.monitor.nonEmpty) {
+                val (monitorMethods, spec, monitorTimeTriggered) = handleComputeMonitor(
                   fn = compute._2,
                   thread = thread,
                   subclauseInfo = subclauseInfo,
@@ -544,17 +545,13 @@ object GumboRustPlugin {
                   tp = CRustTypePlugin.getCRustTypeProvider(localStore).get,
                   store = localStore,
                   reporter = reporter)
-                markers = markers ++ monitorMarkers
                 r2u2SpecDef = Some(spec)
+                r2u2MonitorMethods = monitorMethods
                 timeTriggered = monitorTimeTriggered
-                monitorMethods
               } else {
-                val (monitorMarkers, monitorMethods) = handleComputeMonitorPlaceholder()
-                markers = markers ++ monitorMarkers
-                monitorMethods
+                r2u2MonitorMethods = ISZ()
               }
-              updatedImplItems = updatedImplItems ++
-                ISZ(monitorMethods(0), timeTriggered, monitorMethods(1))
+              updatedImplItems = updatedImplItems :+ timeTriggered
             } else {
               updatedImplItems = updatedImplItems :+ i
             }
@@ -589,6 +586,7 @@ object GumboRustPlugin {
               appStructDef = structDef,
               appStructImpl = structImpl(items = updatedImplItems),
               appR2U2SpecDef = r2u2SpecDef,
+              appR2U2MonitorMethods = r2u2MonitorMethods,
               moduleLevelEntries = annotatedModuleLevelItems,
               crateDependencies = crateDependencies)),
         localStore)
@@ -918,7 +916,7 @@ object GumboRustPlugin {
                                  types: AadlTypes,
                                  tp: CRustTypeProvider,
                                  store: Store,
-                                 reporter: Reporter): (ISZ[Marker], ISZ[RAST.Item], RAST.R2U2SpecDef, RAST.FnImpl) = {
+                                 reporter: Reporter): (ISZ[RAST.Item], RAST.R2U2SpecDef, RAST.FnImpl) = {
     var specs = RAST.R2U2SpecDef(enums = ISZ(), inputs = ISZ(), ftspecs = ISZ(), ptspecs = ISZ())
     var monitorInputs: Map[String, GumboR2U2Util.R2U2MonitorInput] = Map.empty
 
@@ -1011,9 +1009,6 @@ object GumboRustPlugin {
           |    log::info!("{}:{},{}", out.spec_num, out.verdict.time, if out.verdict.truth {"T"} else {"F"} );
           |}""")
 
-    val preMethodMarker = Marker.createSlashMarker(GumboRustUtil.GumboMarkers.r2u2MonitorPreTimeTriggered)
-    val postMethodMarker = Marker.createSlashMarker(GumboRustUtil.GumboMarkers.r2u2MonitorPostTimeTriggered)
-
     var preInputs: ISZ[RAST.Param] = ISZ()
     for (input <- fn.sig.fnDecl.inputs) {
       input match {
@@ -1031,28 +1026,20 @@ object GumboRustPlugin {
     val externalBodyAttr: ST =
       if (fn.verusAttributeSyntax) st"verus_verify(external_body)"
       else st"verifier::external_body"
-    val generatedComment = RAST.BodyItemST(
-      st"// HAMR-generated R2U2 hook. Do not edit; changes are replaced during regeneration.")
     val preFn = fn(
       sig = fn.sig(
         ident = RAST.IdentString("pre_timeTriggered"),
         fnDecl = fn.sig.fnDecl(inputs = preInputs)),
       attributes = fn.attributes :+ RAST.AttributeST(F, externalBodyAttr),
       contract = None(),
-      body = Some(RAST.MethodBody(generatedComment +: preItems)))
+      body = Some(RAST.MethodBody(preItems)))
     val postFn = fn(
       sig = fn.sig(ident = RAST.IdentString("post_timeTriggered")),
       attributes = fn.attributes :+ RAST.AttributeST(F, externalBodyAttr),
       contract = None(),
-      body = Some(RAST.MethodBody(generatedComment +: postItems)))
+      body = Some(RAST.MethodBody(postItems)))
 
-    val monitorMethods: ISZ[RAST.Item] = ISZ(
-      RAST.MarkerWrap(preMethodMarker, ISZ(preFn), "\n", None()),
-      RAST.MarkerWrap(postMethodMarker, ISZ(postFn), "\n", None()))
-
-    val markers: ISZ[Marker] = ISZ(
-      preMethodMarker,
-      postMethodMarker)
+    val monitorMethods: ISZ[RAST.Item] = ISZ(preFn, postFn)
       
     var timeTriggered: RAST.FnImpl = fn
     if (inputGets.nonEmpty) {
@@ -1062,20 +1049,7 @@ object GumboRustPlugin {
         case _ =>
       }
     }
-    return (markers, monitorMethods, specs, timeTriggered)
-  }
-
-  @pure def handleComputeMonitorPlaceholder(): (ISZ[Marker], ISZ[RAST.Item]) = {
-    val preMethod = Marker.createSlashPlaceholderMarker(GumboRustUtil.GumboMarkers.r2u2MonitorPreTimeTriggered)
-    val postMethod = Marker.createSlashPlaceholderMarker(GumboRustUtil.GumboMarkers.r2u2MonitorPostTimeTriggered)
-
-    val methods: ISZ[RAST.Item] = ISZ(
-      RAST.MarkerPlaceholder(preMethod),
-      RAST.MarkerPlaceholder(postMethod))
-    val markers: ISZ[Marker] = ISZ(
-      Marker.createSlashMarker(preMethod.id),
-      Marker.createSlashMarker(postMethod.id))
-    return (markers, methods)
+    return (monitorMethods, specs, timeTriggered)
   }
 
   @pure override def finalizeMicrokit(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {

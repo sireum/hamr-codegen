@@ -4,7 +4,7 @@ package org.sireum.hamr.codegen.microkit.plugins.reporting
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, Store, toolName}
 import org.sireum.hamr.codegen.common.CommonUtil
-import org.sireum.hamr.codegen.common.containers.{EResource, InternalResource}
+import org.sireum.hamr.codegen.common.containers.{EResource, InternalResource, RemoveResource}
 import org.sireum.hamr.codegen.common.plugin.Plugin
 import org.sireum.hamr.codegen.common.reporting.{CodegenReporting, CodegenReports, JSON, ResourceReport, Status, ToolReport}
 import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlEventPort, AadlPort, AadlThread, SymbolTable}
@@ -97,6 +97,8 @@ object MicrokitReporterPlugin {
                 r = r :+ ResourceReport(
                   path = ReportUtil.deWin(sel4OutputDir.relativize(Os.path(e.dstPath)).value),
                   overwrittenIfExists = T)
+              case _: RemoveResource =>
+                // Removed files are intentionally absent from the generated-resource report.
               case e => halt(s"Not expecting $e")
             }
           }
