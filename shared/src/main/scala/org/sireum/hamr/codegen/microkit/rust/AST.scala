@@ -195,9 +195,13 @@ object Printers {
 
 @datatype class R2U2InputDef(val name: String,
                             val typeName: String,
-                            val idx: Int) extends Item {
+                            val idx: Int,
+                            val arraySizeOpt: Option[Z]) extends Item {
   @pure def printMap: ST = {
-    return (st"""${name}:${idx}""")
+    arraySizeOpt match {
+      case Some(size) => return st"${name}[0..${size - 1}]:${idx}"
+      case _ => return st"${name}:${idx}"
+    }
   }
   @pure override def prettyST: ST = {
     return (st"""${TAB}${name}: ${typeName};""")

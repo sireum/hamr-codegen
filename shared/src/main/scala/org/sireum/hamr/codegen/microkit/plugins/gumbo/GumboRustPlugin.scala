@@ -974,23 +974,38 @@ object GumboRustPlugin {
     var index = 0
     for ((name, monitorInput) <- monitorInputs.entries) {
       val typeName: String = monitorInput.enumTypeOpt match {
-        case Some(enumType) =>
+        case Some(enumType) => // Check if enum type and adjust type name to enum type name
           if (!ops.ISZOps(specs.enums).exists(existing => existing.name == enumType.name)) {
             specs = specs(enums = specs.enums :+ enumType)
           }
           enumType.name
-        case _ => monitorInput.expType.string
+        case _ => monitorInput.arrayTypeOpt match {
+           // Check if array type and adjust type name to array syntax
+          case Some(arrayType) => s"${arrayType.elementType.string}[${arrayType.size}]"
+          case _ => monitorInput.expType.string
+        }
       }
-      specs = specs(inputs = specs.inputs :+ RAST.R2U2InputDef(name, typeName, index.toInt))
+      specs = specs(inputs = specs.inputs :+ RAST.R2U2InputDef(name, typeName, index.toInt, monitorInput.arrayTypeOpt.map(t => t.size)))
       val loadSignal: RAST.BodyItem = monitorInput.expType match {
         case GumboC2POUtil.C2POType.bool =>
           RAST.BodyItemST(st"""r2u2_core::load_bool_signal(&mut self.r2u2_monitor, $index, ${monitorInput.exp.prettyST}); // Loading signal $name into index $index""")
         case GumboC2POUtil.C2POType.int =>
-          RAST.BodyItemST(st"""r2u2_core::load_int_signal(&mut self.r2u2_monitor, $index, ${monitorInput.exp.prettyST}.into()); // Loading signal $name into index $index""")
+          RAST.BodyItemST(st"""r2u2_core::load_int_signal(&mut self.r2u2_monitor, $index, (${monitorInput.exp.prettyST}) as i32); // Loading signal $name into index $index""")
         case GumboC2POUtil.C2POType.float =>
-          RAST.BodyItemST(st"""r2u2_core::load_float_signal(&mut self.r2u2_monitor, $index, ${monitorInput.exp.prettyST}.into()); // Loading signal $name into index $index""")
+          RAST.BodyItemST(st"""r2u2_core::load_float_signal(&mut self.r2u2_monitor, $index, (${monitorInput.exp.prettyST}) as f64); // Loading signal $name into index $index""")
         case GumboC2POUtil.C2POType.enumeration =>
           RAST.BodyItemST(st"""r2u2_core::load_int_signal(&mut self.r2u2_monitor, $index, ${monitorInput.exp.prettyST} as i32); // Loading enum signal $name into index $index""")
+        case GumboC2POUtil.C2POType.array =>
+          val arrayType: GumboC2POUtil.C2POArray = monitorInput.arrayTypeOpt.get
+          arrayType.elementType match {
+            case GumboC2POUtil.C2POType.bool =>
+              RAST.BodyItemST(st"""r2u2_core::load_bool_array(&mut self.r2u2_monitor, $index, &${monitorInput.exp.prettyST}); // Loading array signal $name into indices $index..${index + arrayType.size - 1}""")
+            case GumboC2POUtil.C2POType.int =>
+              RAST.BodyItemST(st"""r2u2_core::load_int_array(&mut self.r2u2_monitor, $index, &(${monitorInput.exp.prettyST}).map(|value| value as i32)); // Loading array signal $name into indices $index..${index + arrayType.size - 1}""")
+            case GumboC2POUtil.C2POType.float =>
+              RAST.BodyItemST(st"""r2u2_core::load_float_array(&mut self.r2u2_monitor, $index, &(${monitorInput.exp.prettyST}).map(|value| value as f64)); // Loading array signal $name into indices $index..${index + arrayType.size - 1}""")
+            case _ => halt("Unsupported R2U2 array element type")
+          }
       }
       val referencesOutput = ops.ISZOps(monitorInput.referencedPorts.elements).exists(
         portId => referencedOutputPorts.contains(portId))
@@ -999,7 +1014,10 @@ object GumboRustPlugin {
       } else {
         preItems = preItems :+ loadSignal
       }
-      index += 1
+      monitorInput.arrayTypeOpt match {
+        case Some(arrayType) => index = index + arrayType.size // Increment mapping index by array size
+        case _ => index = index + 1
+      }
     }
 
     if (postItems.nonEmpty) { postItems = postItems :+ RAST.BodyItemST(st"") }

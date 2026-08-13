@@ -18,6 +18,7 @@ object GumboR2U2Util {
   @datatype class R2U2MonitorInput(val exp: RAST.Expr,
                                    val expType: GumboC2POUtil.C2POType.Type,
                                    val enumTypeOpt: Option[GumboC2POUtil.C2POEnum],
+                                   val arrayTypeOpt: Option[GumboC2POUtil.C2POArray],
                                    val referencedPorts: Set[String])
 
   // The C transport exposes peek for every port; only R2U2 components add it
@@ -79,6 +80,10 @@ object GumboR2U2Util {
         rustExp
     }
     val expType: GumboC2POUtil.C2POType.Type = GumboC2POUtil.getExprType(exp)
+    val arrayTypeOpt: Option[GumboC2POUtil.C2POArray] =
+      if (expType == GumboC2POUtil.C2POType.array) GumboC2POUtil.getArrayType(exp, types, store)
+      else None()
+
     val enumTypeOpt: Option[GumboC2POUtil.C2POEnum] =
       if (expType == GumboC2POUtil.C2POType.enumeration) Some(GumboC2POUtil.getEnumType(exp, types))
       else None()
@@ -86,6 +91,7 @@ object GumboR2U2Util {
       exp = RAST.ExprST(monitorExp),
       expType = expType,
       enumTypeOpt = enumTypeOpt,
+      arrayTypeOpt = arrayTypeOpt,
       referencedPorts = portRewriter.referencedPorts)
   }
 
@@ -130,27 +136,38 @@ object GumboR2U2Util {
       return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone[SAST.Exp]())
     }
 
-    // Children are already rewritten, so api.port.status arrives as port.status;
-    // the retained Id identifies its AADL port kind.
+    // Children are already rewritten, so api.port.operation arrives as
+    // port.operation; the retained Id identifies its AADL port kind.
     @pure override def post_langastExpSelect(o: SAST.Exp.Select): MOption[SAST.Exp] = {
       o match {
-        case SAST.Exp.Select(Some(snapshot@SAST.Exp.Ident(id)), statusId, _)
-          if statusId.value == "nonEmpty" || statusId.value == "isEmpty" =>
+        case SAST.Exp.Select(Some(snapshot@SAST.Exp.Ident(id)), operationId, _) =>
           ports.get(id.value) match {
-            // Event-data remains Option[payload]; SlangExpUtil will translate
-            // nonEmpty/isEmpty to is_some()/is_none().
             case Some(_: AadlEventDataPort) =>
-              return MNone()
+              operationId.value match {
+                // Event-data remains Option[payload]; SlangExpUtil will translate
+                // nonEmpty/isEmpty to is_some()/is_none().
+                case "nonEmpty" | "isEmpty" =>
+                  return MNone()
+                case "get" =>
+                  // R2U2 loads presence separately, so use a default payload when
+                  // the event-data port is empty instead of panicking on unwrap().
+                  o.typedOpt match {
+                    case Some(m: SAST.Typed.Method) if m.owner == SAST.Typed.optionName && m.name == "get" =>
+                      return MSome(o(id = operationId(value = "unwrap_or_default()")))
+                    case _ =>
+                  }
+                case _ =>
+              }
 
             // A plain event getter returns B, so its snapshot already represents
             // presence: nonEmpty is the value and isEmpty is its negation.
-            case Some(_) =>
-              if (statusId.value == "isEmpty") {
+            case Some(_: AadlEventPort) if operationId.value == "nonEmpty" || operationId.value == "isEmpty" =>
+              if (operationId.value == "isEmpty") {
                 return MSome(SAST.Exp.Unary(
                   op = SAST.Exp.UnaryOp.Not,
                   exp = snapshot,
                   attr = o.attr,
-                  opPosOpt = statusId.attr.posOpt))
+                  opPosOpt = operationId.attr.posOpt))
               } else {
                 return MSome(snapshot)
               }

@@ -2,7 +2,9 @@
 package org.sireum.hamr.codegen.microkit.plugins.gumbo
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.types.{AadlTypes, EnumType}
+import org.sireum.hamr.codegen.common.CommonUtil.Store
+import org.sireum.hamr.codegen.common.resolvers.GclResolver
+import org.sireum.hamr.codegen.common.types.{AadlTypes, ArrayType, BaseType, EnumType, SlangType}
 import org.sireum.lang.{ast => SAST}
 import org.sireum.lang.symbol.Info
 
@@ -13,10 +15,14 @@ object GumboC2POUtil {
     "int"
     "float"
     "enumeration"
+    "array"
   }
 
   @datatype class C2POEnum(val name: String,
                            val values: ISZ[String])
+
+  @datatype class C2POArray(val elementType: C2POType.Type,
+                            val size: Z)
 
   @pure def getTypedExprType(typed: SAST.Typed): C2POType.Type = {
     typed match {
@@ -26,6 +32,8 @@ object GumboC2POUtil {
         return getTypedExprType(payload)
       case n: SAST.Typed.Name =>
         n.ids match {
+          case ISZ("org", "sireum", "IS") => return C2POType.array
+          case ISZ("org", "sireum", "ISZ") => return C2POType.array
           case ISZ("org", "sireum", "B") => return C2POType.bool
           case ISZ("org", "sireum", "C") => return C2POType.int
           case ISZ("org", "sireum", "S8") => return C2POType.int
@@ -138,6 +146,8 @@ object GumboC2POUtil {
       case sel: org.sireum.lang.ast.Exp.Select => 
           if (sel.id.value == "nonEmpty" || sel.id.value == "isEmpty") {
                return C2POType.bool
+          } else if (sel.id.value == "size") {
+               return C2POType.int
           } else {
                // Port values and other typed selections carry enough resolved type
                // information to classify them without access to the surrounding scope.
@@ -173,6 +183,43 @@ object GumboC2POUtil {
     }
   }
 
+  @pure def getArrayType(exp: SAST.Exp,
+                         aadlTypes: AadlTypes,
+                         store: Store): Option[C2POArray] = {
+    val typed: SAST.Typed = exp.typedOpt match {
+      case Some(SAST.Typed.Name(SAST.Typed.optionName, _, ISZ(payload))) => payload
+      case Some(t) => t
+      case _ => halt("Array expression is missing its resolved type")
+    }
+    typed match {
+      case n: SAST.Typed.Name =>
+        val aadlTypePath: ISZ[String] = GclResolver.getSlangTypeToAadlType(store).get(n) match {
+          case Some(path) => path
+          case _ => halt(s"Could not resolve Slang array type $n to an AADL type")
+        }
+        aadlTypes.getTypeByPathOpt(aadlTypePath) match {
+          case Some(arrayType: ArrayType) =>
+            if (arrayType.dimensions.size != 1) {
+              halt("Only one-dimensional arrays are supported by R2U2 monitors")
+            }
+            val elementType: C2POType.Type = arrayType.baseType match {
+              case b: BaseType =>
+                b.slangType match {
+                  case SlangType.B => C2POType.bool
+                  case SlangType.S8 | SlangType.S16 | SlangType.S32 |
+                       SlangType.U8 | SlangType.U16 => C2POType.int
+                  case SlangType.F32 | SlangType.F64 => C2POType.float
+                  case _ => halt(s"Array element type ${b.slangType} is not supported by R2U2 monitors")
+                }
+              case _ => halt("Only arrays of primitive values are supported by R2U2 monitors")
+            }
+            return Some(C2POArray(elementType, arrayType.dimensions(0)))
+          case _ => return None()
+        }
+      case _ => halt(s"Type $typed is not an AADL array")
+    }
+  }
+
   // Function collects any identifiers, flattens them if necessary, and returns the new expr and a
   // map of identifiers to expressions
   @pure def collectIdentifiers(exp: org.sireum.lang.ast.Exp): (org.sireum.lang.ast.Exp, Map[String, org.sireum.lang.ast.Exp]) = {
@@ -189,7 +236,7 @@ object GumboC2POUtil {
           sel.receiverOpt match {
             case Some(recv) =>
               getFlatPathString(recv) match {
-                case Some(prefix) => return Some(s"${prefix}_${sel.id.value}")
+                case Some(prefix) => return Some(if (sel.id.value == "get") prefix else s"${prefix}_${sel.id.value}")
                 case _ => return None()
               }
             case _ => return None()
@@ -205,7 +252,6 @@ object GumboC2POUtil {
         return (id, categorized)
       // 2. Matches component dot-selections (e.g., api.my_var or state.my_var)
       case sel: org.sireum.lang.ast.Exp.Select =>
-        val propName = sel.id.value
         val isEnumMember: B = sel.resOpt match {
           case Some(_: SAST.ResolvedInfo.EnumElement) => T
           case _ => F
@@ -227,33 +273,9 @@ object GumboC2POUtil {
             case Some(receiver) => return collectIdentifiers(receiver)
             case _ => halt("Option.get is missing its receiver")
           }
-        } else if (propName == "nonEmpty" || propName == "isEmpty") {
-          getFlatPathString(sel) match {
-            case Some(collapsedString) =>
-              // 1A. SUCCESS: We found an API chain ending in a collection status!
-              categorized += (collapsedString -> sel)
-
-              // Generate and return a single fresh identifier node, eliminating the deep sub-tree
-              val freshId = org.sireum.lang.ast.Id(value = collapsedString, attr = sel.id.attr)
-              val rewrittenNode = org.sireum.lang.ast.Exp.Ident(id = freshId, attr = sel.attr)
-              return (rewrittenNode, categorized)
-
-            case _ =>
-              // Fallback if it's a non-api selection ending in nonEmpty
-              val (updatedRecv, innerMapping): (Option[org.sireum.lang.ast.Exp], Map[String, org.sireum.lang.ast.Exp]) = sel.receiverOpt match {
-                case Some(r) =>
-                  val res = collectIdentifiers(r)
-                  (Some(res._1), res._2)
-                case _ => (None[org.sireum.lang.ast.Exp](), Map.empty)
-              }
-              for (e <- innerMapping.entries) { categorized += e }
-              return (sel(receiverOpt = updatedRecv), categorized)
-          }
         } else {
-          // Standard property tree execution path (like api.myStructArray)
           getFlatPathString(sel) match {
             case Some(collapsedString) =>
-              // 1B. SUCCESS: We found a standard standalone API chain
               categorized += (collapsedString -> sel)
 
               val freshId = org.sireum.lang.ast.Id(value = collapsedString, attr = sel.id.attr)
@@ -261,7 +283,6 @@ object GumboC2POUtil {
               return (rewrittenNode, categorized)
 
             case _ =>
-              // Standard object configuration path, map inner nodes recursively
               val (updatedRecv, innerMapping): (Option[org.sireum.lang.ast.Exp], Map[String, org.sireum.lang.ast.Exp]) = sel.receiverOpt match {
                 case Some(r) =>
                   val res = collectIdentifiers(r)
@@ -296,9 +317,19 @@ object GumboC2POUtil {
         return (bin(left = resLeft._1, right = resRight._1), categorized)
       // 5. Drill down into Function/Method invocations (e.g., compute(x, y))
       case invoke: org.sireum.lang.ast.Exp.Invoke =>
-        println(s"This is an Invoke variable: ${invoke.ident.id.value}")
-        val functionName: String = invoke.receiverOpt.getOrElse(invoke.ident) match {
-          case fId: org.sireum.lang.ast.Exp.Ident => fId.id.value
+        // GCL combines Option.get and array indexing for an event-data array into
+        // api.port.get(index). Preserve the index while omitting the Option access.
+        val ident = invoke.receiverOpt match {
+          case Some(receiver) if invoke.ident.id.value == "get" =>
+            receiver.typedOpt match {
+              case Some(SAST.Typed.Name(SAST.Typed.optionName, _, _)) =>
+                invoke.ident(id = invoke.ident.id(value = "apply"))
+              case _ => invoke.ident
+            }
+          case _ => invoke.ident
+        }
+        val functionName: String = invoke.receiverOpt match {
+          case Some(fId: org.sireum.lang.ast.Exp.Ident) => fId.id.value
           case _ => ""
         }
         if (functionName != "") {
@@ -312,14 +343,14 @@ object GumboC2POUtil {
           for (e <- argMapping.entries) { categorized += e }
         }
 
-        val res = invoke.receiverOpt match {
+        val res: (Option[org.sireum.lang.ast.Exp], Map[String, org.sireum.lang.ast.Exp]) = invoke.receiverOpt match {
           case Some(r) =>
             val res_inner = collectIdentifiers(r)
             (Some(res_inner._1), res_inner._2)
           case _ => (None[org.sireum.lang.ast.Exp](), Map.empty)
         }
         for (e <- res._2.entries) { categorized += e }
-        return (invoke(receiverOpt = res._1, args = updatedArgs), categorized)
+        return (invoke(receiverOpt = res._1, ident = ident, args = updatedArgs), categorized)
       // Fallback for literals, constants, or unsupported expressions
       case leaf =>
         return (leaf, categorized)
