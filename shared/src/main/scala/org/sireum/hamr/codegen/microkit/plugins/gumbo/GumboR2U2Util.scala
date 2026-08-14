@@ -19,6 +19,7 @@ object GumboR2U2Util {
                                    val expType: GumboC2POUtil.C2POType.Type,
                                    val enumTypeOpt: Option[GumboC2POUtil.C2POEnum],
                                    val arrayTypeOpt: Option[GumboC2POUtil.C2POArray],
+                                   val structTypeOpt: Option[GumboC2POUtil.C2POStruct],
                                    val referencedPorts: Set[String])
 
   // The C transport exposes peek for every port; only R2U2 components add it
@@ -87,11 +88,15 @@ object GumboR2U2Util {
     val enumTypeOpt: Option[GumboC2POUtil.C2POEnum] =
       if (expType == GumboC2POUtil.C2POType.enumeration) Some(GumboC2POUtil.getEnumType(exp, types))
       else None()
+    val structTypeOpt: Option[GumboC2POUtil.C2POStruct] =
+      if (expType == GumboC2POUtil.C2POType.struct) Some(GumboC2POUtil.getStructType(exp, types))
+      else None()
     return R2U2MonitorInput(
       exp = RAST.ExprST(monitorExp),
       expType = expType,
       enumTypeOpt = enumTypeOpt,
       arrayTypeOpt = arrayTypeOpt,
+      structTypeOpt = structTypeOpt,
       referencedPorts = portRewriter.referencedPorts)
   }
 

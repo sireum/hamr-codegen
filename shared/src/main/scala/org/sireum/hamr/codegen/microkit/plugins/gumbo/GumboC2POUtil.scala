@@ -4,7 +4,7 @@ package org.sireum.hamr.codegen.microkit.plugins.gumbo
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.Store
 import org.sireum.hamr.codegen.common.resolvers.GclResolver
-import org.sireum.hamr.codegen.common.types.{AadlTypes, ArrayType, BaseType, EnumType, SlangType}
+import org.sireum.hamr.codegen.common.types.{AadlTypes, ArrayType, BaseType, EnumType, RecordType, SlangType}
 import org.sireum.lang.{ast => SAST}
 import org.sireum.lang.symbol.Info
 
@@ -16,6 +16,7 @@ object GumboC2POUtil {
     "float"
     "enumeration"
     "array"
+    "struct"
   }
 
   @datatype class C2POEnum(val name: String,
@@ -23,6 +24,14 @@ object GumboC2POUtil {
 
   @datatype class C2POArray(val elementType: C2POType.Type,
                             val size: Z)
+
+  @datatype class C2POStructField(val name: String,
+                                  val fieldType: C2POType.Type,
+                                  val enumTypeOpt: Option[C2POEnum],
+                                  val arrayTypeOpt: Option[C2POArray])
+
+  @datatype class C2POStruct(val name: String,
+                             val fields: ISZ[C2POStructField])
 
   @pure def getTypedExprType(typed: SAST.Typed): C2POType.Type = {
     typed match {
@@ -45,6 +54,8 @@ object GumboC2POUtil {
           case ISZ("org", "sireum", "F64") => return C2POType.float
           // Enum element types end in "Type".
           case _ if n.ids.nonEmpty && n.ids(n.ids.lastIndex) == Info.Enum.elementTypeSuffix => return C2POType.enumeration
+          // Other named AADL types are validated as records by getStructType.
+          case _ if n.ids.size < 2 || n.ids(0) != "org" || n.ids(1) != "sireum" => return C2POType.struct
           case _ => halt(s"Type ${n.ids} is not supported by R2U2 monitors")
         }
       case _ => halt(s"Type ${typed} is not supported by R2U2 monitors")
@@ -167,6 +178,16 @@ object GumboC2POUtil {
     }
   }
 
+  @pure def getBaseType(baseType: BaseType): C2POType.Type = {
+    baseType.slangType match {
+      case SlangType.B => return C2POType.bool
+      case SlangType.S8 | SlangType.S16 | SlangType.S32 |
+           SlangType.U8 | SlangType.U16 => return C2POType.int
+      case SlangType.F32 | SlangType.F64 => return C2POType.float
+      case _ => halt(s"Type ${baseType.slangType} is not supported by R2U2 monitors")
+    }
+  }
+
   @pure def getEnumType(exp: SAST.Exp, aadlTypes: AadlTypes): C2POEnum = {
     val typed: SAST.Typed = exp.typedOpt match {
       case Some(SAST.Typed.Name(SAST.Typed.optionName, _, ISZ(payload))) => payload
@@ -199,24 +220,46 @@ object GumboC2POUtil {
         }
         aadlTypes.getTypeByPathOpt(aadlTypePath) match {
           case Some(arrayType: ArrayType) =>
-            if (arrayType.dimensions.size != 1) {
-              halt("Only one-dimensional arrays are supported by R2U2 monitors")
-            }
-            val elementType: C2POType.Type = arrayType.baseType match {
-              case b: BaseType =>
-                b.slangType match {
-                  case SlangType.B => C2POType.bool
-                  case SlangType.S8 | SlangType.S16 | SlangType.S32 |
-                       SlangType.U8 | SlangType.U16 => C2POType.int
-                  case SlangType.F32 | SlangType.F64 => C2POType.float
-                  case _ => halt(s"Array element type ${b.slangType} is not supported by R2U2 monitors")
-                }
+            if (arrayType.dimensions.size != 1) halt("Only one-dimensional arrays are supported by R2U2 monitors")
+            arrayType.baseType match {
+              case b: BaseType => return Some(C2POArray(getBaseType(b), arrayType.dimensions(0)))
               case _ => halt("Only arrays of primitive values are supported by R2U2 monitors")
             }
-            return Some(C2POArray(elementType, arrayType.dimensions(0)))
           case _ => return None()
         }
       case _ => halt(s"Type $typed is not an AADL array")
+    }
+  }
+
+  @pure def getStructType(exp: SAST.Exp, aadlTypes: AadlTypes): C2POStruct = {
+    val typed: SAST.Typed = exp.typedOpt match {
+      case Some(SAST.Typed.Name(SAST.Typed.optionName, _, ISZ(payload))) => payload
+      case Some(t) => t
+      case _ => halt("Struct expression is missing its resolved type")
+    }
+    typed match {
+      case n: SAST.Typed.Name =>
+        aadlTypes.getTypeByPathOpt(n.ids) match {
+          case Some(recordType: RecordType) =>
+            val fields: ISZ[C2POStructField] = for (field <- recordType.fields.entries) yield {
+              field._2 match {
+                case b: BaseType =>
+                  C2POStructField(field._1, getBaseType(b), None(), None())
+                case e: EnumType =>
+                  C2POStructField(field._1, C2POType.enumeration, Some(C2POEnum(e.simpleName, e.values)), None())
+                case a: ArrayType =>
+                  if (a.dimensions.size != 1) halt("Only one-dimensional arrays are supported by R2U2 monitors")
+                  a.baseType match {
+                    case b: BaseType => C2POStructField(field._1, C2POType.array, None(), Some(C2POArray(getBaseType(b), a.dimensions(0))))
+                    case _ => halt("Only arrays of primitive values are supported by R2U2 monitors")
+                  }
+                case _ => halt("Nested structs are not supported by R2U2 monitors")
+              }
+            }
+            return C2POStruct(recordType.nameProvider.typeName, fields)
+          case _ => halt(s"Type ${n.ids} is not an AADL struct")
+        }
+      case _ => halt(s"Type $typed is not an AADL struct")
     }
   }
 
@@ -261,6 +304,11 @@ object GumboC2POUtil {
             m.owner == ISZ("org", "sireum", "Option") && m.name == "get"
           case _ => F
         }
+        val isStructMember: B = sel.id.value != "size" && sel.receiverOpt.exists((receiver: SAST.Exp) => receiver.typedOpt match {
+          case Some(m: SAST.Typed.Method) => m.owner == SAST.Typed.optionName && m.name == "get"
+          case Some(SAST.Typed.Name(ids, _, _)) => ids.size < 2 || ids(0) != "org" || ids(1) != "sireum"
+          case _ => F
+        })
         if (isEnumMember) {
           // Enum members are constants, not monitor inputs. Preserve the
           // selection so SlangExpUtil can lower it to its C2PO member name.
@@ -273,6 +321,11 @@ object GumboC2POUtil {
             case Some(receiver) => return collectIdentifiers(receiver)
             case _ => halt("Option.get is missing its receiver")
           }
+        } else if (isStructMember) {
+          // Preserve record member access while collecting the record input.
+          val res = collectIdentifiers(sel.receiverOpt.get)
+          for (e <- res._2.entries) { categorized += e }
+          return (sel(receiverOpt = Some(res._1)), categorized)
         } else {
           getFlatPathString(sel) match {
             case Some(collapsedString) =>

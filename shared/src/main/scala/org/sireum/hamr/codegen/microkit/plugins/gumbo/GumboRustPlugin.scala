@@ -917,7 +917,7 @@ object GumboRustPlugin {
                                  tp: CRustTypeProvider,
                                  store: Store,
                                  reporter: Reporter): (ISZ[RAST.Item], RAST.R2U2SpecDef, RAST.FnImpl) = {
-    var specs = RAST.R2U2SpecDef(enums = ISZ(), inputs = ISZ(), ftspecs = ISZ(), ptspecs = ISZ())
+    var specs = RAST.R2U2SpecDef(structs = ISZ(), enums = ISZ(), inputs = ISZ(), defines = ISZ(), ftspecs = ISZ(), ptspecs = ISZ())
     var monitorInputs: Map[String, GumboR2U2Util.R2U2MonitorInput] = Map.empty
 
     for (guarantee <- subclauseInfo.annex.monitor.get.guarantees) {
@@ -937,6 +937,36 @@ object GumboRustPlugin {
       }
       monitorInputs = monitorInputs ++ inputs.entries
     }
+
+    // Expand struct inputs into loadable fields and reconstruct them with a C2PO DEFINE.
+    var expandedMonitorInputs: Map[String, GumboR2U2Util.R2U2MonitorInput] = Map.empty
+    for ((name, monitorInput) <- monitorInputs.entries) {
+      monitorInput.structTypeOpt match {
+        case Some(structType) =>
+          if (!ops.ISZOps(specs.structs).exists(existing => existing.name == structType.name)) {
+            specs = specs(structs = specs.structs :+ structType)
+          }
+          for (field <- structType.fields if field.enumTypeOpt.nonEmpty;
+               enumType = field.enumTypeOpt.get
+               if !ops.ISZOps(specs.enums).exists(existing => existing.name == enumType.name)) {
+            specs = specs(enums = specs.enums :+ enumType)
+          }
+          val fieldNames: ISZ[String] = for (field <- structType.fields) yield s"${name}_${field.name}"
+          specs = specs(defines = specs.defines :+ RAST.ItemST(st"  $name := ${structType.name}(${(fieldNames, ", ")});"))
+          for (field <- structType.fields) {
+            val fieldName = s"${name}_${field.name}"
+            expandedMonitorInputs = expandedMonitorInputs + fieldName ~> GumboR2U2Util.R2U2MonitorInput(
+              exp = RAST.ExprST(st"(${monitorInput.exp.prettyST}).${field.name}"),
+              expType = field.fieldType,
+              enumTypeOpt = field.enumTypeOpt,
+              arrayTypeOpt = field.arrayTypeOpt,
+              structTypeOpt = None(),
+              referencedPorts = monitorInput.referencedPorts)
+          }
+        case _ => expandedMonitorInputs = expandedMonitorInputs + (name ~> monitorInput)
+      }
+    }
+    monitorInputs = expandedMonitorInputs
 
     val ports: Map[String, AadlPort] = Map.empty ++
       thread.getPorts().map(port => port.identifier ~> port)
@@ -1006,6 +1036,7 @@ object GumboRustPlugin {
               RAST.BodyItemST(st"""r2u2_core::load_float_array(&mut self.r2u2_monitor, $index, &(${monitorInput.exp.prettyST}).map(|value| value as f64)); // Loading array signal $name into indices $index..${index + arrayType.size - 1}""")
             case _ => halt("Unsupported R2U2 array element type")
           }
+        case GumboC2POUtil.C2POType.struct => halt("R2U2 struct input was not expanded")
       }
       val referencesOutput = ops.ISZOps(monitorInput.referencedPorts.elements).exists(
         portId => referencedOutputPorts.contains(portId))
