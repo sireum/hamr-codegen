@@ -64,7 +64,7 @@ object GumboC2POUtil {
 
   @pure def getExprType(exp: org.sireum.lang.ast.Exp): C2POType.Type = {
     exp match {
-      // 1. Literal Nodes have fixed concrete types
+      // Literals have fixed concrete types.
       case _: org.sireum.lang.ast.Exp.LitB => return C2POType.bool
       case _: org.sireum.lang.ast.Exp.LitC => return C2POType.int // R2U2 supports i32 by default, char (or u8) can be cast to i32 within R2U2
       case _: org.sireum.lang.ast.Exp.LitZ => halt("Unbounded Integer is not supported by R2U2 monitors")
@@ -73,10 +73,8 @@ object GumboC2POUtil {
       case _: org.sireum.lang.ast.Exp.LitR => halt("Unbounded Float is not supported by R2U2 monitors")
       case _: org.sireum.lang.ast.Exp.LitString => halt("Strings are not supported by R2U2 monitors")
 
-
-      // 2. Logic and comparison operations always return standard Booleans
       case bin: org.sireum.lang.ast.Exp.Binary =>
-        if ( // Relational operations
+        if ( // Boolean and comparison operations
           bin.op == org.sireum.lang.ast.Exp.BinaryOp.Lt ||
           bin.op == org.sireum.lang.ast.Exp.BinaryOp.Le ||
           bin.op == org.sireum.lang.ast.Exp.BinaryOp.Gt ||
@@ -88,6 +86,7 @@ object GumboC2POUtil {
           bin.op == org.sireum.lang.ast.Exp.BinaryOp.Eq ||
           bin.op == org.sireum.lang.ast.Exp.BinaryOp.Ne
         ) {
+          // Boolean and comparison operations always return Booleans.
           return C2POType.bool
         } else if ( // Bitwise operations
             bin.op == org.sireum.lang.ast.Exp.BinaryOp.And ||
@@ -96,7 +95,7 @@ object GumboC2POUtil {
             bin.op == org.sireum.lang.ast.Exp.BinaryOp.Shl ||
             bin.op == org.sireum.lang.ast.Exp.BinaryOp.Shr
         ){
-          // Need to infer int or bool math based on left side and right side
+          // Bitwise operations preserve their matching int or bool operand type.
           val return_type_left = getExprType(bin.left)
           val return_type_right = getExprType(bin.right)
           if (return_type_left == return_type_right && (return_type_left == C2POType.int || return_type_left == C2POType.bool)){
@@ -112,7 +111,7 @@ object GumboC2POUtil {
             bin.op == org.sireum.lang.ast.Exp.BinaryOp.Div ||
             bin.op == org.sireum.lang.ast.Exp.BinaryOp.Rem
         ){
-          // Need to infer int or float math based on left side and right side
+          // Arithmetic operations preserve their matching int or float operand type.
           val return_type_left = getExprType(bin.left)
           val return_type_right = getExprType(bin.right)
           if (return_type_left == return_type_right && (return_type_left == C2POType.int || return_type_left == C2POType.float)){
@@ -125,14 +124,14 @@ object GumboC2POUtil {
         }
 
       case un: org.sireum.lang.ast.Exp.Unary =>
-        if ( // Relational operations
+        if ( // Logical negation
           un.op == org.sireum.lang.ast.Exp.UnaryOp.Not
         ) {
           return C2POType.bool
         } else if (
             un.op == org.sireum.lang.ast.Exp.UnaryOp.Complement
         ) { // Bitwise operations
-          // Need to infer type based on right side (int or bool)
+          // Bitwise complement preserves its int or bool operand type.
           val return_type = getExprType(un.exp)
           if (return_type == C2POType.int || return_type == C2POType.bool){
             return return_type
@@ -143,7 +142,7 @@ object GumboC2POUtil {
           un.op == org.sireum.lang.ast.Exp.UnaryOp.Plus ||
           un.op == org.sireum.lang.ast.Exp.UnaryOp.Minus
         ) {
-          // Need to infer type based on right side (int or float)
+          // Arithmetic signs preserve their int or float operand type.
           val return_type = getExprType(un.exp)
           if (return_type == C2POType.int || return_type == C2POType.float){
             return return_type
@@ -153,7 +152,16 @@ object GumboC2POUtil {
         } else {
           halt("Expression type is not supported by R2U2 monitors")
         }
-      // 3. Status checks on nested properties are structurally Booleans
+      case ifExp: org.sireum.lang.ast.Exp.If =>
+          // Both branches of a conditional must have the same result type and boolean.
+          val thenType = getExprType(ifExp.thenExp)
+          val elseType = getExprType(ifExp.elseExp)
+          if (thenType == elseType && thenType == C2POType.bool) {
+               return thenType
+          } else {
+          halt("Expression type is not supported by R2U2 monitors")
+      }
+      // Classify status, size, port, and member selections.
       case sel: org.sireum.lang.ast.Exp.Select => 
           if (sel.id.value == "nonEmpty" || sel.id.value == "isEmpty") {
                return C2POType.bool
@@ -168,7 +176,7 @@ object GumboC2POUtil {
                }
           }
 
-      // 4. Identifiers must be checked against your scope context
+      // Resolved identifiers carry their expression type.
       case id: org.sireum.lang.ast.Exp.Ident =>
         id.attr.typedOpt match {
           case Some(typed) => return getTypedExprType(typed)
@@ -346,14 +354,21 @@ object GumboC2POUtil {
               return (sel(receiverOpt = updatedRecv), categorized)
           }
         }
-      // 3. Drill down into Binary Operators (e.g., x > 5, a AND b)
+      // 3. Drill down into conditional expressions.
+      case ifExp: org.sireum.lang.ast.Exp.If =>
+        val cond = collectIdentifiers(ifExp.cond)
+        val thenExp = collectIdentifiers(ifExp.thenExp)
+        val elseExp = collectIdentifiers(ifExp.elseExp)
+        for (res <- ISZ(cond, thenExp, elseExp); e <- res._2.entries) { categorized += e }
+        return (ifExp(cond._1, thenExp._1, elseExp._1), categorized)
+      // 4. Drill down into Binary Operators (e.g., x > 5, a AND b)
       case bin: org.sireum.lang.ast.Exp.Binary =>
         val res_left = collectIdentifiers(bin.left)
         val res_right = collectIdentifiers(bin.right)
         for (e <- res_left._2.entries) { categorized += e }
         for (e <- res_right._2.entries) { categorized += e }
         return (bin(res_left._1, bin.op, res_right._1), categorized)
-      // 4. Drill down into Unary Operators (e.g., !x)
+      // 5. Drill down into Unary Operators (e.g., !x)
       case un: org.sireum.lang.ast.Exp.Unary =>
         val res = collectIdentifiers(un.exp)
         for (e <- res._2.entries) { categorized += e }
@@ -368,7 +383,7 @@ object GumboC2POUtil {
         for (e <- resLeft._2.entries) { categorized += e }
         for (e <- resRight._2.entries) { categorized += e }
         return (bin(left = resLeft._1, right = resRight._1), categorized)
-      // 5. Drill down into Function/Method invocations (e.g., compute(x, y))
+      // 6. Drill down into Function/Method invocations (e.g., compute(x, y))
       case invoke: org.sireum.lang.ast.Exp.Invoke =>
         // GCL combines Option.get and array indexing for an event-data array into
         // api.port.get(index). Preserve the index while omitting the Option access.

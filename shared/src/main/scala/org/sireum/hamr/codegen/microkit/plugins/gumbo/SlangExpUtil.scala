@@ -528,12 +528,17 @@ object SlangExpUtil {
               halt(s"Only expecting Ident to be wrapped in In(): ${exp.exp}")
           }
         case exp: Exp.If =>
-          // rust/verus requires curly braces
-          return st"""if (${nestedRewriteExp(exp.cond, None())}) {
-                     |  ${nestedRewriteExp(exp.thenExp, None())}
-                     |} else {
-                     |  ${nestedRewriteExp(exp.elseExp, None())}
-                     |}"""
+          if (target == TargetLanguage.C2PO) {
+            val cond = nestedRewriteExp(exp.cond, None())
+            return st"((($cond) && (${nestedRewriteExp(exp.thenExp, sep)})) || (!($cond) && (${nestedRewriteExp(exp.elseExp, sep)})))"
+          } else {
+            // rust/verus requires curly braces
+            return st"""if (${nestedRewriteExp(exp.cond, None())}) {
+                       |  ${nestedRewriteExp(exp.thenExp, None())}
+                       |} else {
+                       |  ${nestedRewriteExp(exp.elseExp, None())}
+                       |}"""
+          }
         case exp: Exp.LitZ => return exp.prettyST
         case exp: Exp.LitB => return if (exp.value) st"true" else st"false"
 
