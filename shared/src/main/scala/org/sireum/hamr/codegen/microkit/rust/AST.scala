@@ -188,7 +188,7 @@ object Printers {
       st"""${printComments(comments)}
           |${printAttributes(attributes)}
           |${printVis(visibility)}struct ${ident.prettyST} {
-          |  ${printItems(items, ",\n")}
+          |  ${printItems(items, "\n")}
           |}""")
   }
 }
@@ -299,7 +299,7 @@ object Printers {
                             val fieldType: Ty) extends Item {
   @pure override def prettyST: ST = {
     val ghost: String = if (isGhost) "ghost " else ""
-    return st"${printVis(visibility)}$ghost${ident.prettyST}: ${fieldType.prettyST}"
+    return st"${printVis(visibility)}$ghost${ident.prettyST}: ${fieldType.prettyST},"
   }
 }
 

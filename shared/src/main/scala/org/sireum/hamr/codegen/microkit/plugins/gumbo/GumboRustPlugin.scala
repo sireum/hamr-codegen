@@ -273,7 +273,7 @@ object GumboRustPlugin {
           }
           val m = Marker.createSlashMarker(GumboRustUtil.GumboMarkers.stateVar)
           markers = markers :+ m
-          structDef = structDef(items = structDef.items :+ RAST.MarkerWrap(m, stateVars.asInstanceOf[ISZ[RAST.Item]], ",\n", Some(",")))
+          structDef = structDef(items = structDef.items :+ RAST.MarkerWrap(m, stateVars.asInstanceOf[ISZ[RAST.Item]], "\n", None()))
         }
       } else {
         val m = Marker.createSlashPlaceholderMarker(GumboRustUtil.GumboMarkers.stateVar)
@@ -282,11 +282,10 @@ object GumboRustPlugin {
       }
 
       if (subclauseInfo.annex.monitor.nonEmpty) {
-        var monitor: ISZ[RAST.Item] = ISZ()
-        monitor = monitor :+ RAST.ItemString(s"""pub r2u2_monitor: R2U2Monitor""")
+        val monitor: ISZ[RAST.Item] = ISZ(RAST.ItemString(s"""pub r2u2_monitor: R2U2Monitor,"""))
         val m = Marker.createSlashMarker(GumboRustUtil.GumboMarkers.r2u2MonitorStateVar)
         markers = markers :+ m
-        structDef = structDef(items = structDef.items :+ RAST.MarkerWrap(m, monitor, ",\n", Some(",")))
+        structDef = structDef(items = structDef.items :+ RAST.MarkerWrap(m, monitor, "\n", None()))
       } else {
         val m = Marker.createSlashPlaceholderMarker(GumboRustUtil.GumboMarkers.r2u2MonitorStateVar)
         markers = markers :+ Marker.createSlashMarker(m.id)
