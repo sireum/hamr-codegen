@@ -548,13 +548,20 @@ object ComponentContributions {}
               |              -Z build-std-features=compiler-builtins-mem \
               |              --target aarch64-unknown-none
               |
+              |${RustUtil.smtOptsMakeVar}
+              |
               |all: build-verus-release
               |
+              |# NOTE: cargo-verus requires Verus-relevant cargo options (e.g. --features,
+              |#       --release, --package, --manifest-path) to precede Verus-irrelevant
+              |#       ones (e.g. --target, -Z ...), otherwise it errors out.  CARGO_FLAGS
+              |#       holds the Verus-irrelevant options, so it must come last.
+              |
               |build-verus-release:
-              |${TAB}$$(BUILD_ENV_VARS) cargo-verus build --features sel4 $$(CARGO_FLAGS) --release
+              |${TAB}$$(BUILD_ENV_VARS) cargo-verus build --features sel4 --release $$(CARGO_FLAGS) -- $$(SMT_OPTS)
               |
               |build-verus:
-              |${TAB}$$(BUILD_ENV_VARS) cargo-verus build --features sel4 $$(CARGO_FLAGS)
+              |${TAB}$$(BUILD_ENV_VARS) cargo-verus build --features sel4 $$(CARGO_FLAGS) -- $$(SMT_OPTS)
               |
               |build-release:
               |${TAB}$$(BUILD_ENV_VARS) cargo build --features sel4 $$(CARGO_FLAGS) --release
@@ -563,10 +570,10 @@ object ComponentContributions {}
               |${TAB}$$(BUILD_ENV_VARS) cargo build --features sel4 $$(CARGO_FLAGS)
               |
               |verus:
-              |${TAB}$$(ENV_VARS) cargo-verus verify $$(CARGO_FLAGS)
+              |${TAB}$$(ENV_VARS) cargo-verus verify $$(CARGO_FLAGS) -- $$(SMT_OPTS)
               |
               |verus-json:
-              |${TAB}$$(ENV_VARS) cargo-verus verify $$(CARGO_FLAGS) -- --output-json --time > verus_results.json
+              |${TAB}$$(ENV_VARS) cargo-verus verify $$(CARGO_FLAGS) -- $$(SMT_OPTS) --output-json --time > verus_results.json
               |
               |# Test Example:
               |#   Run all unit tests

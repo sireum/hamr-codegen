@@ -26,6 +26,37 @@ object MicrokitUtil {
 
   val MemAlignmentInKiBytes: Z = 4
 
+  /** Number of seL4 (security) scheduling domains, i.e. the KernelNumDomains configuration
+    * the SDK's kernel was built with -- so valid domain ids are 0 until this value.
+    *
+    * This is only the STOCK Microkit 2.3.0 default, not a fact about the SDK in use: it is
+    * an arbitrary value (upstream's own characterization in build_sdk.py) that an SDK
+    * rebuild may raise, up to seL4's hard limit of 256.  Codegen is given neither the SDK
+    * path nor the target board, so it cannot read the real value out of the kernel's
+    * gen_config.json.  Use it only for advisory warnings -- the microkit tool performs the
+    * authoritative check against the actual kernel config at build time.
+    *
+    * Note the stock SMP configurations set this to 1: seL4 gates KernelMaxNumNodes on
+    * KernelNumDomains being 1, so domain scheduling and SMP are mutually exclusive.
+    */
+  val KernelNumDomains: Z = 16
+
+  /** Number of entries in the kernel's domain schedule array, i.e. the
+    * KernelNumDomainSchedules configuration the SDK's kernel was built with.  The microkit
+    * tool requires the number of schedule entries to be strictly less than this, as the
+    * last array entry is reserved to be an end marker.
+    *
+    * As with [[KernelNumDomains]], this is only the stock Microkit 2.3.0 default and is
+    * advisory here.
+    */
+  val KernelNumDomainSchedules: Z = 100
+
+  /** The name declared for scheduling domain @param id in the SDF's &lt;domains&gt; element.
+    * Microkit 2.3.0 requires domains to be referenced by name rather than by id, both from
+    * &lt;schedule_entry&gt; and from a protection domain's 'domain' attribute.
+    */
+  @strictpure def schedulingDomainName(id: Z): String = s"domain_$id"
+
   val KEY_MICROKIT_VERSIONS: String = "KEY_MICROKIT_VERSISION"
 
   val KEY_MICROKIT_AUX_CODE: String = "KEY_MICROKIT_AUX_CODE"

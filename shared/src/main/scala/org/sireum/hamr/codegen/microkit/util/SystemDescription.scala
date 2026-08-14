@@ -5,7 +5,7 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.IdPath
 import org.sireum.hamr.codegen.common.containers.{BlockMarker, Marker}
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
-import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
+import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.{KiBytesToHex, schedulingDomainName}
 
 @datatype class SystemDescription (val name: String,
                                    val schedulingDomains: ISZ[SchedulingDomain],
@@ -25,11 +25,54 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
   val scheduleName: String = s"${prefix}microkit.schedule.xml"
   val dotName: String = s"${prefix}microkit.dot"
 
+  /** The distinct scheduling domain ids, ordered by id.  A schedule interleaves the same
+    * domain many times (e.g. the pacer between every component), but Microkit 2.3.0 requires
+    * each domain to be declared exactly once in the &lt;domains&gt; element.
+    */
+  @pure def distinctSchedulingDomainIds: ISZ[Z] = {
+    var seen: Set[Z] = Set.empty
+    var ret = ISZ[Z]()
+    for (sd <- schedulingDomains if !seen.contains(sd.id)) {
+      seen = seen + sd.id
+      ret = ret :+ sd.id
+    }
+    return ops.ISZOps(ret).sortWith((a: Z, b: Z) => a < b)
+  }
+
+  /** All protection domains in the system, including nested child PDs.  Microkit 2.3.0
+    * requires a 'domain' attribute on every protection domain -- root and child alike --
+    * whenever a domain schedule is present.
+    */
+  @pure def allProtectionDomains: ISZ[ProtectionDomain] = {
+    var ret = ISZ[ProtectionDomain]()
+    var work = protectionDomains
+    while (work.nonEmpty) {
+      val pd = work(0)
+      work = ops.ISZOps(work).drop(1)
+      ret = ret :+ pd
+      for (c <- pd.children) {
+        c match {
+          case child: ProtectionDomain => work = work :+ child
+          case _ =>
+        }
+      }
+    }
+    return ret
+  }
+
+  // The <schedule_end_marker /> is what the kernel wraps on, and is emitted explicitly so
+  // that the cycle boundary does not depend on the residual contents of the kernel's domain
+  // schedule array.  It occupies an entry against KernelNumDomainSchedules.
   val stSchedulingDomain: Option[ST] =
     if (schedulingDomains.nonEmpty) Some(
-      st"""<domain_schedule>
-          |  ${(for( sd <- schedulingDomains) yield sd.prettyST, "\n")}
-          |</domain_schedule>""")
+      st"""<domains>
+          |  ${(for (id <- distinctSchedulingDomainIds) yield st"""<domain name="${schedulingDomainName(id)}" id="$id" />""", "\n")}
+          |
+          |  <domain_schedule>
+          |    ${(for( sd <- schedulingDomains) yield sd.prettyST, "\n")}
+          |    <schedule_end_marker />
+          |  </domain_schedule>
+          |</domains>""")
     else None()
 
   @pure def scheduleText: ST = {
@@ -48,6 +91,9 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
           |<system xmlns:xi="http://www.w3.org/2001/XInclude">
           |  ${CommentTemplate.invertedMarkerComment_xml}
           |
+          |  <!-- the included <domains> element must precede every <protection_domain>: the
+          |       microkit tool resolves each PD's 'domain' attribute against the domains it
+          |       has seen so far in a single pass over the merged document -->
           |  <xi:include href="$scheduleName" />
           |
           |  ${(stProtectionDomains, "\n\n")}
@@ -91,11 +137,21 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
   }
 }
 
+/** One slot of a cyclic schedule.  The unit of @param length depends on the scheduling
+  * approach: milliseconds for domain scheduling (rendered as SDF XML by prettyST) and
+  * nanoseconds for MCS/user-land scheduling (rendered as a Python schedule table by
+  * SystemDescriptionProvider_MCS, which does not use prettyST).
+  */
 @datatype class SchedulingDomain (val id: Z,
                                   val isUserPartition: B, // true if this belongs to a model component
                                   val componentName: String,
                                   val length: Z) {
-  @strictpure def prettyST: ST = st"""<domain name="domain_$id" length="$length" /> <!-- $componentName -->"""
+  /** Renders this slot as a Microkit 2.3.0 &lt;schedule_entry&gt;.  Only meaningful for
+    * domain-scheduling MSDs, where 'length' is in milliseconds; Microkit expresses
+    * durations as a value and a unit and requires the value to be non-zero.
+    */
+  @strictpure def prettyST: ST =
+    st"""<schedule_entry domain="${schedulingDomainName(id)}" duration="${length * 1000} us" /> <!-- $componentName -->"""
 }
 
 @sig trait MicrokitDomain {
@@ -206,7 +262,7 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
 
   @pure def prettyST: ST = {
     val schedulingDomainOpt: Option[ST] =
-      if (schedulingDomain.nonEmpty) Some(st""" domain="domain_${schedulingDomain.get}"""")
+      if (schedulingDomain.nonEmpty) Some(st""" domain="${schedulingDomainName(schedulingDomain.get)}"""")
       else None()
     val stIdOpt: Option[ST] =
       if (id.nonEmpty) Some(st""" id="${id.get}"""")

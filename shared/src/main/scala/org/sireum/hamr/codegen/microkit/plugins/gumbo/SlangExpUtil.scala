@@ -35,6 +35,12 @@ object SlangExpUtil {
 
   @strictpure def toKey(e: SAST.Exp): SymTableKey = SymTableKey(e, e.fullPosOpt)
 
+  // `inRequires` and `inEnsures` say which half of a Verus contract the expression
+  // is being rendered into, and are mutually exclusive (both F when it is neither --
+  // e.g. a spec fn body, a datatype invariant, or a GUMBOX exec expression). They
+  // select how a reference to a `&mut` parameter of the enclosing entrypoint is
+  // disambiguated: `old(self)`/`old(api)` in a precondition, `final(self)`/`final(api)`
+  // in a postcondition. Verus rejects a bare `self`/`api` deref in either.
   @pure def rewriteExp(rexp: Exp,
 
                        owner: IdPath,
@@ -42,13 +48,14 @@ object SlangExpUtil {
                        context: Context.Type,
 
                        inRequires: B,
+                       inEnsures: B,
                        inVerus: B, // verus or GUMBOX
 
                        tp: CRustTypeProvider,
                        aadlTypes: AadlTypes,
                        store: Store,
                        reporter: Reporter): ST = {
-    return rewriteExpH(rexp, owner, optComponent, context, Map.empty, inRequires, inVerus, tp, aadlTypes, store, reporter)
+    return rewriteExpH(rexp, owner, optComponent, context, Map.empty, inRequires, inEnsures, inVerus, tp, aadlTypes, store, reporter)
   }
 
   @pure def rewriteExpH(rexp: Exp,
@@ -60,13 +67,14 @@ object SlangExpUtil {
                         substitutions: Map[String, String],
 
                         inRequires: B,
+                        inEnsures: B,
                         inVerus: B,
 
                         tp: CRustTypeProvider,
                         aadlTypes: AadlTypes,
                         store: Store,
                         reporter: Reporter): ST = {
-    return rewriteExpHL(rexp, owner, optComponent, context, substitutions, inRequires, inVerus, F, F, None(), tp, aadlTypes, store, reporter)
+    return rewriteExpHL(rexp, owner, optComponent, context, substitutions, inRequires, inEnsures, inVerus, F, F, None(), tp, aadlTypes, store, reporter)
   }
 
   // Like rewriteExp, but coerces the top-level result back to `coerceToType` when Verus would
@@ -81,13 +89,14 @@ object SlangExpUtil {
                              context: Context.Type,
 
                              inRequires: B,
+                             inEnsures: B,
                              inVerus: B,
 
                              tp: CRustTypeProvider,
                              aadlTypes: AadlTypes,
                              store: Store,
                              reporter: Reporter): ST = {
-    return rewriteExpHL(rexp, owner, optComponent, context, Map.empty, inRequires, inVerus, F, F, Some(coerceToType), tp, aadlTypes, store, reporter)
+    return rewriteExpHL(rexp, owner, optComponent, context, Map.empty, inRequires, inEnsures, inVerus, F, F, Some(coerceToType), tp, aadlTypes, store, reporter)
   }
 
   @pure def rewriteExpHL(rexp: Exp,
@@ -99,6 +108,7 @@ object SlangExpUtil {
                          substitutions: Map[String, String],
 
                          inRequires: B,
+                         inEnsures: B,
                          inVerus: B,
 
                          alwaysOneLine: B, // don't add newlines, useful when testing
@@ -117,6 +127,13 @@ object SlangExpUtil {
     var expressionContainsQuantifier: B = F
     var quantifierUsedInIndexingExpr: B = F
     var appliedTrigger: B = F
+
+    // How to name a `&mut` entrypoint parameter (`self`, `api`) in a Verus
+    // postcondition: a bare deref is ambiguous there, so it must be wrapped in
+    // `final(..)`. Preconditions are wrapped in `old(..)` at the individual use
+    // sites, which have their own substitution ordering to preserve.
+    @strictpure def postState(id: String): ST =
+      if (inVerus && inEnsures) st"final($id)" else st"$id"
 
     @pure def applyTrigger(rewrittenExp: ST, posOpt: Option[Position]): ST = {
       if (inVerus && !appliedTrigger && expressionContainsQuantifier && quantifierUsedInIndexingExpr) {
@@ -427,7 +444,7 @@ object SlangExpUtil {
                             substitutions.get(exp.ident.id.value) match {
                               case Some(s) => st"${s}"
                               case _ =>
-                                st"self.${exp.ident.id.value}"
+                                st"${postState("self")}.${exp.ident.id.value}"
                             }
                           case Some(v: SAST.ResolvedInfo.LocalVar)
                             if context == Context.library_function || context == Context.subclause_function =>
@@ -481,7 +498,7 @@ object SlangExpUtil {
                   if (!inVerus) {
                     return st"${exp.id.prettyST}"
                   } else {
-                    return st"self.${exp.id.prettyST}"
+                    return st"${postState("self")}.${exp.id.prettyST}"
                   }
               }
             case Some(x: SAST.ResolvedInfo.LocalVar) =>
@@ -492,6 +509,8 @@ object SlangExpUtil {
             case _ =>
               if (exp.id.value == "api" && inRequires) {
                 return st"old(${exp.id.prettyST})"
+              } else if (exp.id.value == "api") {
+                return postState(exp.id.value)
               } else {
                 return exp.id.prettyST
               }

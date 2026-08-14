@@ -279,6 +279,7 @@ object GumboSysAssertMonitorPlugin {
               context = SlangExpUtil.Context.compute_clause,
               substitutions = portSubstitutions,
               inRequires = F,
+              inEnsures = F,
               // the monitor body is executable (GUMBOX) code, not verus spec, so
               // implication must render via the implies!/impliesL! macros rather
               // than the spec-only `==>` operator (which is invalid in exec context)

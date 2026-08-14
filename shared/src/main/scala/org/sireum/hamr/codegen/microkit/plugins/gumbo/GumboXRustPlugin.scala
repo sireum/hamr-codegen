@@ -544,6 +544,7 @@ object GumboXComputeContributions {
             // integration GclGuarantees become verus requires clauses and
             // integration GclAssumes become verus ensures clauses
             inRequires = clause.isInstanceOf[GclAssume],
+            inEnsures = F,
 
             inVerus = F,
             tp = crustTypeProvider,
@@ -682,6 +683,8 @@ object GumboXComputeContributions {
             context = Context.initialize_clause,
 
             inRequires = F,
+
+            inEnsures = F,
             inVerus = F,
 
             tp = crustTypeProvider,
@@ -877,6 +880,8 @@ object GumboXComputeContributions {
             context = Context.compute_clause,
 
             inRequires = T,
+
+            inEnsures = F,
             inVerus = F,
             tp = crustTypeProvider,
             aadlTypes = types,
@@ -922,6 +927,8 @@ object GumboXComputeContributions {
             context = Context.compute_clause,
 
             inRequires = F,
+
+            inEnsures = F,
             inVerus = F,
             tp = crustTypeProvider,
             aadlTypes = types,
@@ -1030,6 +1037,8 @@ object GumboXComputeContributions {
                     context = Context.compute_clause,
 
                     inRequires = T,
+
+                    inEnsures = F,
                     inVerus = F,
                     tp = crustTypeProvider,
                     aadlTypes = types,
@@ -1048,6 +1057,8 @@ object GumboXComputeContributions {
               context = Context.compute_clause,
 
               inRequires = F,
+
+              inEnsures = F,
               inVerus = F,
               tp = crustTypeProvider,
               aadlTypes = types,

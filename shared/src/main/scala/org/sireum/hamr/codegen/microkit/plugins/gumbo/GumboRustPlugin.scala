@@ -611,6 +611,8 @@ object GumboRustPlugin {
                 context = Context.integration_constraint,
                 substitutions = subs,
                 isAssumeRequires = F,
+                // becomes a postcondition of the port's `&mut self` getter
+                isGuaranteeEnsures = T,
                 types = types,
                 tp = tp,
                 gclSymbolTable = subclauseInfo.gclSymbolTable,
@@ -638,6 +640,8 @@ object GumboRustPlugin {
                 substitutions = subs,
 
                 isAssumeRequires = F,
+
+                isGuaranteeEnsures = F,
 
                 types = types,
                 tp = tp,
@@ -669,6 +673,7 @@ object GumboRustPlugin {
         context = Context.initialize_clause,
 
         isAssumeRequires = F,
+        isGuaranteeEnsures = T,
 
         types = types,
         tp = tp,
@@ -713,6 +718,7 @@ object GumboRustPlugin {
           component = thread,
           context = Context.compute_clause,
           isAssumeRequires = T,
+          isGuaranteeEnsures = F,
           types = types,
           tp = tp,
           gclSymbolTable = subclauseInfo.gclSymbolTable,
@@ -737,6 +743,7 @@ object GumboRustPlugin {
           component = thread,
           context = Context.compute_clause,
           isAssumeRequires = F,
+          isGuaranteeEnsures = T,
           types = types,
           tp = tp,
           gclSymbolTable = subclauseInfo.gclSymbolTable,
