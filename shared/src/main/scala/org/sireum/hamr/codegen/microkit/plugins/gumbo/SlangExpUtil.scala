@@ -529,8 +529,13 @@ object SlangExpUtil {
           }
         case exp: Exp.If =>
           if (target == TargetLanguage.C2PO) {
-            val cond = nestedRewriteExp(exp.cond, None())
-            return st"((($cond) && (${nestedRewriteExp(exp.thenExp, sep)})) || (!($cond) && (${nestedRewriteExp(exp.elseExp, sep)})))"
+            (exp.thenExp.typedOpt, exp.elseExp.typedOpt) match {
+              case (Some(SAST.Typed.Name(ISZ("org", "sireum", "B"), _, _)),
+                    Some(SAST.Typed.Name(ISZ("org", "sireum", "B"), _, _))) =>
+                val cond = nestedRewriteExp(exp.cond, None())
+                return st"((($cond) && (${nestedRewriteExp(exp.thenExp, sep)})) || (!($cond) && (${nestedRewriteExp(exp.elseExp, sep)})))"
+              case _ => halt("R2U2 monitors only support conditional expressions with Boolean branches")
+            }
           } else {
             // rust/verus requires curly braces
             return st"""if (${nestedRewriteExp(exp.cond, None())}) {
@@ -957,7 +962,7 @@ object SlangExpUtil {
         case Exp.BinaryOp.Imply => return 14 //          ->         left
         case Exp.BinaryOp.CondImply => return 14 //      ->         left
 
-        case _ => halt(s"Infeasible binary operator for C2PO: $op")
+        case _ => halt(s"Infeasible binary operator for R2U2 monitors: $op")
       }
     }
 
