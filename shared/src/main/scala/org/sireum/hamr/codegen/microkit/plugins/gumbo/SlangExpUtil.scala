@@ -11,7 +11,7 @@ import org.sireum.hamr.codegen.microkit.MicrokitCodegen
 import org.sireum.hamr.codegen.microkit.plugins.rust.component.CRustComponentPlugin
 import org.sireum.hamr.codegen.microkit.plugins.rust.types.CRustTypeProvider
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
-import org.sireum.lang.ast.{Exp, Id}
+import org.sireum.lang.ast.Exp
 import org.sireum.lang.{ast => SAST}
 import org.sireum.message.{Position, Reporter}
 
@@ -125,6 +125,9 @@ object SlangExpUtil {
     var expressionContainsQuantifier: B = F
     var quantifierUsedInIndexingExpr: B = F
     var appliedTrigger: B = F
+    // Tracks concrete binder values while expanding C2PO quantifiers.
+    var c2poQuantifierValues: Map[String, Z] = Map.empty
+    var c2poQuantifierCount: Z = 0
 
     @pure def applyTrigger(rewrittenExp: ST, posOpt: Option[Position]): ST = {
       if (target == TargetLanguage.verus && !appliedTrigger && expressionContainsQuantifier && quantifierUsedInIndexingExpr) {
@@ -475,9 +478,19 @@ object SlangExpUtil {
                       }
                     } else {
                       // array indexing expression
-
                       if (!appliedTrigger && expressionContainsQuantifier) {
                         quantifierUsedInIndexingExpr = T
+                      }
+                      // C2PO array indices must be statically resolvable numerals.
+                      if (target == TargetLanguage.C2PO) {
+                        val indices: ISZ[ST] = for (arg <- exp.args) yield {
+                          val value: Z = GumboC2POUtil.getStaticValue(arg, c2poQuantifierValues, aadlTypes, store) match {
+                            case Some(value) => value
+                            case _ => halt("R2U2 monitors require statically resolvable array indices")
+                          }
+                          st"$value"
+                        }
+                        return st"$fname[${(indices, ", ")}]"
                       }
                       return st"$fname[${(args, ", ")}]"
                     }
@@ -511,6 +524,12 @@ object SlangExpUtil {
             case Some(x: SAST.ResolvedInfo.LocalVar) =>
               if (target == TargetLanguage.verus && ops.ISZOps(quantifiers.elements).contains(x.id) && !appliedTrigger) {
                 expressionContainsQuantifier = T
+              } else if (target == TargetLanguage.C2PO) {
+                // Substitute the current value during static quantifier expansion.
+                c2poQuantifierValues.get(x.id) match {
+                  case Some(value) => return st"$value"
+                  case _ =>
+                }
               }
               return exp.id.prettyST
             case _ =>
@@ -571,18 +590,62 @@ object SlangExpUtil {
           assert (exp.fun.exp.isInstanceOf[SAST.Stmt.Expr], s"Unexpected quantified expression: ${exp.fun.exp.prettyST.render}")
 
           val param = exp.fun.params(0).idOpt.get.value
+          val bodyExp = exp.fun.exp.asInstanceOf[SAST.Stmt.Expr].exp
+
+          if (target == TargetLanguage.C2PO) {
+            val quantifierId: Z = c2poQuantifierCount
+            c2poQuantifierCount = c2poQuantifierCount + 1
+            val binder: String =
+              if (ops.ISZOps(quantifiers.elements).contains(param)) s"${param}_${quantifierId}"
+              else param
+            val aggregate: String =
+              if (exp.isForall) "foreach" else "forsome"
+
+            val (lo, lastIndexOpt, rewrittenBody, directArrayOpt) = GumboC2POUtil.getQuantRange(
+              exp, param, binder, bodyExp, c2poQuantifierValues, aadlTypes, store)
+
+            // All/Exists(0 until example.size)(...) becomes foreach/forsome(i:api_example)(...) and
+            // All/Exists(0 to example.size-1)(...) becomes foreach/forsome(i:api_example)(...)
+            directArrayOpt match {
+              case Some(array) =>
+                val collection: ST = nestedRewriteExp(array, None())
+                quantifiers = quantifiers.push(param)
+                val body: ST = nestedRewriteExp(rewrittenBody, None())
+                quantifiers = quantifiers.pop.get._2
+
+                val range: ST = lastIndexOpt match {
+                  case Some(last) => st"$collection[$lo..$last]"
+                  case _ => collection
+                }
+                return st"$aggregate($binder:$range)($body)"
+              case _ =>
+            }
+
+            // Expands indices if required as C2PO indices must be numerals (i.e., not variables).
+            // For example, (examples(i) <= examples(i+1)) becomes (examples(0) <= examples(1)), etc.
+            val oldValues: Map[String, Z] = c2poQuantifierValues
+            quantifiers = quantifiers.push(param)
+            val bodies: ISZ[ST] = for (index <- lo to lastIndexOpt.get) yield {
+              c2poQuantifierValues = c2poQuantifierValues + param ~> index
+              nestedRewriteExp(bodyExp, None())
+            }
+            quantifiers = quantifiers.pop.get._2
+            c2poQuantifierValues = oldValues
+            val result: String = s"${param}_result_${quantifierId}"
+            return st"$aggregate($result:{${(bodies, ",")}})($result)"
+          }
 
           val lo = nestedRewriteExp(exp.lo, None())
           val hi = nestedRewriteExp(exp.hi, None())
 
           quantifiers = quantifiers.push(param)
-          val body = nestedRewriteExp(exp.fun.exp.asInstanceOf[SAST.Stmt.Expr].exp, None())
+          val body = nestedRewriteExp(bodyExp, None())
           quantifiers = quantifiers.pop.get._2
 
-           if (target == TargetLanguage.verus) {
+          if (target == TargetLanguage.verus) {
             val quantType: String = if (exp.isForall) "forall" else "exists"
 
-             val op: String = if (exp.isForall) "==>" else "&&"
+            val op: String = if (exp.isForall) "==>" else "&&"
 
             val range = st"$lo <= $param ${if (exp.hiExact) "<=" else "<"} $hi"
 

@@ -33,6 +33,187 @@ object GumboC2POUtil {
   @datatype class C2POStruct(val name: String,
                              val fields: ISZ[C2POStructField])
 
+  // Removes a generated bounded-index conversion, e.g., I8FE679(i) becomes i.
+  @pure def getIndexingExpr(exp: SAST.Exp, store: Store): SAST.Exp = {
+    exp match {
+      case invoke: SAST.Exp.Invoke if GclResolver.getIndexingTypeFingerprints(store).contains(invoke.ident.id.value) =>
+        invoke.args match {
+          case ISZ(index) => return index
+          case _ => halt("Unexpected array indexing expression")
+        }
+      case _ => return exp
+    }
+  }
+
+  // Returns the generated C2PO path for a supported array expression.
+  @pure def getC2POArrayPath(exp: SAST.Exp): Option[String] = {
+    exp match {
+      case id: SAST.Exp.Ident => return Some(id.id.value)
+      case select: SAST.Exp.Select if select.receiverOpt.nonEmpty =>
+        getC2POArrayPath(select.receiverOpt.get) match {
+          case Some(receiver) =>
+            select.attr.typedOpt match {
+              case Some(m: SAST.Typed.Method) if m.owner == SAST.Typed.optionName && m.name == "get" =>
+                return Some(receiver)
+              case _ =>
+                val separator: String = select.receiverOpt.get match {
+                  case id: SAST.Exp.Ident if id.id.value == "api" => "_"
+                  case _ => "."
+                }
+                return Some(s"$receiver$separator${select.id.value}")
+            }
+          case _ => return None()
+        }
+      case _ => return None()
+    }
+  }
+
+  // Determines whether two expressions reference the same C2PO array.
+  @pure def isSameArray(left: SAST.Exp, right: SAST.Exp): B = {
+    (getC2POArrayPath(left), getC2POArrayPath(right)) match {
+      case (Some(l), Some(r)) => return l == r
+      case _ => return F
+    }
+  }
+
+  // Evaluates static range bounds and indices, e.g., samples.size - 2 or i + 1.
+  @pure def getStaticValue(exp: SAST.Exp,
+                           quantifierValues: Map[String, Z],
+                           aadlTypes: AadlTypes,
+                           store: Store): Option[Z] = {
+    @pure def getValue(e: SAST.Exp): Option[Z] = e match {
+      case lit: SAST.Exp.LitZ => return Some(lit.value)
+      case id: SAST.Exp.Ident =>
+        id.resOpt match {
+          case Some(local: SAST.ResolvedInfo.LocalVar) => return quantifierValues.get(local.id)
+          case _ => return None()
+        }
+      case binary: SAST.Exp.Binary =>
+        (getValue(binary.left), binary.op, getValue(binary.right)) match {
+          case (Some(left), SAST.Exp.BinaryOp.Add, Some(right)) => return Some(left + right)
+          case (Some(left), SAST.Exp.BinaryOp.Sub, Some(right)) => return Some(left - right)
+          case (Some(left), SAST.Exp.BinaryOp.Mul, Some(right)) => return Some(left * right)
+          case (Some(left), SAST.Exp.BinaryOp.Div, Some(right)) if right != 0 => return Some(left / right)
+          case (Some(left), SAST.Exp.BinaryOp.Rem, Some(right)) if right != 0 => return Some(left % right)
+          case _ => return None()
+        }
+      case select: SAST.Exp.Select if select.id.value == "size" && select.receiverOpt.nonEmpty =>
+        val array: SAST.Exp = select.receiverOpt.get match {
+          case get: SAST.Exp.Select if get.receiverOpt.nonEmpty =>
+            get.attr.typedOpt match {
+              case Some(m: SAST.Typed.Method) if m.owner == SAST.Typed.optionName && m.name == "get" =>
+                get.receiverOpt.get
+              case _ => get
+            }
+          case receiver => receiver
+        }
+        getArrayType(array, aadlTypes, store) match {
+          case Some(arrayType) => return Some(arrayType.size)
+          case _ => return None()
+        }
+      case invoke: SAST.Exp.Invoke if GclResolver.getIndexingTypeFingerprints(store).contains(invoke.ident.id.value) =>
+        return getValue(getIndexingExpr(invoke, store))
+      case _ => return None()
+    }
+    return getValue(exp)
+  }
+
+  // Resolves a quantified range and its direct C2PO array representation.
+  @pure def getQuantRange(exp: SAST.Exp.QuantRange,
+                          param: String,
+                          binder: String,
+                          bodyExp: SAST.Exp,
+                          quantifierValues: Map[String, Z],
+                          aadlTypes: AadlTypes,
+                          store: Store): (Z, Option[Z], SAST.Exp, Option[SAST.Exp]) = {
+    val lo: Z = getStaticValue(exp.lo, quantifierValues, aadlTypes, store) match {
+      case Some(value) => value
+      case _ => halt("R2U2 monitors require statically resolvable quantified ranges")
+    }
+
+    // Determines whether the predicate can bind a C2PO array element directly.
+    val rewriter = C2POQuantifierRewriter(param, binder, store)
+    // Predicate with indexed uses of the local quantifier variable replaced by the C2PO binder.
+    val rewrittenBody: SAST.Exp = rewriter.transform_langastExp(bodyExp).getOrElse(bodyExp)
+    // Array to aggregate directly when every use of the quantifier variable is local.
+    val directArrayOpt: Option[SAST.Exp] = if (rewriter.isQuantifierVarLocal) rewriter.arrayOpt else None()
+    // Recognizes full ranges: 0 until samples.size or 0 to samples.size - 1.
+    val fullRangeSizeExpOpt: Option[SAST.Exp] =
+      if (!exp.hiExact) Some(exp.hi)
+      else exp.hi match {
+        case binary: SAST.Exp.Binary if binary.op == SAST.Exp.BinaryOp.Sub &&
+          getStaticValue(binary.right, quantifierValues, aadlTypes, store) == Some(z"1") => Some(binary.left)
+        case _ => None()
+      }
+    // True when the range spans the same array used by the predicate.
+    val isFullArray: B = (fullRangeSizeExpOpt, directArrayOpt) match {
+      case (Some(select: SAST.Exp.Select), Some(array))
+        if lo == 0 && select.id.value == "size" && select.receiverOpt.nonEmpty =>
+        isSameArray(select.receiverOpt.get, array)
+      case _ => F
+    }
+    // None omits the slice for a full array; otherwise this is the inclusive final index.
+    val lastIndexOpt: Option[Z] =
+      if (isFullArray) None()
+      else getStaticValue(exp.hi, quantifierValues, aadlTypes, store) match {
+        case Some(hi) => Some(if (exp.hiExact) hi else hi - 1)
+        case _ => halt("R2U2 monitors require statically resolvable quantified ranges")
+      }
+    return (lo, lastIndexOpt, rewrittenBody, directArrayOpt)
+  }
+
+  @record class C2POQuantifierRewriter(val param: String, val binder: String, val store: Store) extends org.sireum.hamr.ir.MTransformer {
+    var arrayOpt: Option[SAST.Exp] = None()
+    var isQuantifierVarLocal: B = T
+
+    // Replaces array indexing on the local quantifier variable with the C2PO element binder.
+    override def pre_langastExpInvoke(o: SAST.Exp.Invoke): org.sireum.hamr.ir.MTransformer.PreResult[SAST.Exp] = {
+      o.attr.resOpt match {
+        case Some(m: SAST.ResolvedInfo.Method)
+          if m.owner == ISZ("org", "sireum") && m.id == "IS" && o.ident.id.value != "IS" && o.args.size == 1 =>
+          val indexedArrayOpt: Option[SAST.Exp] =
+            if (o.ident.id.value == "apply") o.receiverOpt
+            else Some(o.ident)
+          (indexedArrayOpt, getIndexingExpr(o.args(0), store)) match {
+            case (Some(array), index: SAST.Exp.Ident) =>
+              (index.resOpt, getC2POArrayPath(array)) match {
+                case (Some(local: SAST.ResolvedInfo.LocalVar), Some(_)) if local.id == param =>
+                  arrayOpt match {
+                    case Some(a) if !isSameArray(a, array) => isQuantifierVarLocal = F
+                    case _ => arrayOpt = Some(array)
+                  }
+                  return org.sireum.hamr.ir.MTransformer.PreResult(
+                    F, MSome(index(id = index.id(value = binder), attr = o.attr(resOpt = None()))))
+                case _ =>
+              }
+            case _ =>
+          }
+        case _ =>
+      }
+      return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone[SAST.Exp]())
+    }
+
+    // Detects uses of the quantified variable outside a supported array index.
+    override def pre_langastExpIdent(o: SAST.Exp.Ident): org.sireum.hamr.ir.MTransformer.PreResult[SAST.Exp] = {
+      o.resOpt match {
+        case Some(local: SAST.ResolvedInfo.LocalVar) if local.id == param => isQuantifierVarLocal = F
+        case _ =>
+      }
+      return org.sireum.hamr.ir.MTransformer.PreResult(F, MNone[SAST.Exp]())
+    }
+
+    // Disables direct element rewriting when a nested quantifier shadows the binder.
+    override def pre_langastExpQuantRange(o: SAST.Exp.QuantRange): org.sireum.hamr.ir.MTransformer.PreResult[SAST.Exp.Quant] = {
+      if (ops.ISZOps(o.fun.params).exists((p: SAST.Exp.Fun.Param) =>
+        p.idOpt.exists((id: SAST.Id) => id.value == param))) {
+        isQuantifierVarLocal = F
+        return org.sireum.hamr.ir.MTransformer.PreResult(F, MNone[SAST.Exp.Quant]())
+      }
+      return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone[SAST.Exp.Quant]())
+    }
+  }
+
+  // Maps a resolved Slang type to its C2PO type.
   @pure def getTypedExprType(typed: SAST.Typed): C2POType.Type = {
     typed match {
       // Event-data input ports are Option[payload].  C2PO receives the payload
@@ -62,6 +243,7 @@ object GumboC2POUtil {
     }
   }
 
+  // Determines the C2PO result type of a GUMBO expression.
   @pure def getExprType(exp: org.sireum.lang.ast.Exp): C2POType.Type = {
     exp match {
       // Literals have fixed concrete types.
@@ -186,6 +368,7 @@ object GumboC2POUtil {
     }
   }
 
+  // Maps an AADL primitive type to its C2PO type.
   @pure def getBaseType(baseType: BaseType): C2POType.Type = {
     baseType.slangType match {
       case SlangType.B => return C2POType.bool
@@ -196,6 +379,7 @@ object GumboC2POUtil {
     }
   }
 
+  // Resolves an expression's AADL enum declaration.
   @pure def getEnumType(exp: SAST.Exp, aadlTypes: AadlTypes): C2POEnum = {
     val typed: SAST.Typed = exp.typedOpt match {
       case Some(SAST.Typed.Name(SAST.Typed.optionName, _, ISZ(payload))) => payload
@@ -212,6 +396,7 @@ object GumboC2POUtil {
     }
   }
 
+  // Resolves a supported one-dimensional AADL array type.
   @pure def getArrayType(exp: SAST.Exp,
                          aadlTypes: AadlTypes,
                          store: Store): Option[C2POArray] = {
@@ -239,6 +424,7 @@ object GumboC2POUtil {
     }
   }
 
+  // Resolves an expression's supported AADL struct declaration.
   @pure def getStructType(exp: SAST.Exp, aadlTypes: AadlTypes): C2POStruct = {
     val typed: SAST.Typed = exp.typedOpt match {
       case Some(SAST.Typed.Name(SAST.Typed.optionName, _, ISZ(payload))) => payload
@@ -299,6 +485,11 @@ object GumboC2POUtil {
     exp match {
       // 1. Matches simple variables, ports, or standalone identifiers
       case id: org.sireum.lang.ast.Exp.Ident =>
+        // Quantifier local variables are NOT monitor inputs.
+        id.resOpt match {
+          case Some(_: SAST.ResolvedInfo.LocalVar) => return (id, categorized)
+          case _ =>
+        }
         categorized += (id.id.value -> id)
         return (id, categorized)
       // 2. Matches component dot-selections (e.g., api.my_var or state.my_var)
@@ -318,7 +509,7 @@ object GumboC2POUtil {
           case _ => F
         })
         if (isEnumMember) {
-          // Enum members are constants, not monitor inputs. Preserve the
+          // Enum members are constants, NOT monitor inputs. Preserve the
           // selection so SlangExpUtil can lower it to its C2PO member name.
           return (sel, categorized)
         } else if (isOptionGet) {
@@ -383,7 +574,16 @@ object GumboC2POUtil {
         for (e <- resLeft._2.entries) { categorized += e }
         for (e <- resRight._2.entries) { categorized += e }
         return (bin(left = resLeft._1, right = resRight._1), categorized)
-      // 6. Drill down into Function/Method invocations (e.g., compute(x, y))
+      // 6. Range bounds are static; only the predicate contributes monitor inputs.
+      case quant: org.sireum.lang.ast.Exp.QuantRange =>
+        quant.fun.exp match {
+          case stmt: SAST.Stmt.Expr =>
+            val res: (SAST.Exp, Map[String, SAST.Exp]) = collectIdentifiers(stmt.exp)
+            for (e <- res._2.entries) { categorized += e }
+            return (quant(fun = quant.fun(exp = stmt(exp = res._1))), categorized)
+          case _ => halt(s"Unexpected quantified expression: ${quant.fun.exp.prettyST.render}")
+        }
+      // 7. Drill down into Function/Method invocations
       case invoke: org.sireum.lang.ast.Exp.Invoke =>
         // GCL combines Option.get and array indexing for an event-data array into
         // api.port.get(index). Preserve the index while omitting the Option access.
@@ -402,6 +602,16 @@ object GumboC2POUtil {
         }
         if (functionName != "") {
           categorized += (functionName -> invoke)
+        }
+        // Collect the indexed array as an input.
+        invoke.attr.resOpt match {
+          case Some(m: SAST.ResolvedInfo.Method)
+            if m.owner == ISZ("org", "sireum") && m.id == "IS" && invoke.receiverOpt.isEmpty =>
+            invoke.ident.resOpt match {
+              case Some(_: SAST.ResolvedInfo.Var) => categorized += (invoke.ident.id.value -> invoke.ident)
+              case _ =>
+            }
+          case _ =>
         }
         var updatedArgs = ISZ[org.sireum.lang.ast.Exp]()
 
@@ -434,6 +644,7 @@ object GumboC2POUtil {
     var hasFuture: B = F
     var hasPast: B = F
 
+    // Records future-time or past-time unary temporal operators.
     override def pre_langastExpUnaryTemporal(o: SAST.Exp.UnaryTemporal): org.sireum.hamr.ir.MTransformer.PreResult[SAST.Exp] = {
       o.op match {
         case SAST.Exp.UnaryTemporalOp.Future | SAST.Exp.UnaryTemporalOp.Globally => hasFuture = T
@@ -442,6 +653,7 @@ object GumboC2POUtil {
       return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone[SAST.Exp]())
     }
 
+    // Records future-time or past-time binary temporal operators.
     override def pre_langastExpBinaryTemporal(o: SAST.Exp.BinaryTemporal): org.sireum.hamr.ir.MTransformer.PreResult[SAST.Exp] = {
       o.op match {
         case SAST.Exp.BinaryTemporalOp.Until | SAST.Exp.BinaryTemporalOp.Release => hasFuture = T
@@ -451,6 +663,7 @@ object GumboC2POUtil {
     }
   }
 
+  // Determines whether a monitor specification uses future or past time.
   @pure def getSpecTense(exp: org.sireum.lang.ast.Exp): SpecTense.Type = {
     val collector = TenseCollector()
     collector.transform_langastExp(exp)
