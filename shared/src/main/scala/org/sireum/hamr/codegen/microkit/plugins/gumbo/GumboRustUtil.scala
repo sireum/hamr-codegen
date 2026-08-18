@@ -225,10 +225,11 @@ object GumboRustUtil {
         reporter = reporter)
     }
 
+    // Indent every line so multiline C2PO expressions align with INPUT entries.
     val spec_st: RAST.Expr = RAST.ExprST(
-      st"""${TAB}${GumboRustUtil.processDescriptor(spec.descriptor, "-- ")}
-          |${spec.id}: ${c2poExp};"""
-     )
+      st"${TAB}${(STUtil.splitST(
+        st"""${GumboRustUtil.processDescriptor(spec.descriptor, "-- ")}
+            |${spec.id}: ${c2poExp};"""), s"\n$TAB")}")
 
     return (spec_st, tense, variablesInSpecExpanded)
   }

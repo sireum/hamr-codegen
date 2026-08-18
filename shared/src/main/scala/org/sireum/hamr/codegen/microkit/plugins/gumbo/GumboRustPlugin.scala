@@ -951,7 +951,7 @@ object GumboRustPlugin {
             specs = specs(enums = specs.enums :+ enumType)
           }
           val fieldNames: ISZ[String] = for (field <- structType.fields) yield s"${name}_${field.name}"
-          specs = specs(defines = specs.defines :+ RAST.ItemST(st"  $name := ${structType.name}(${(fieldNames, ", ")});"))
+          specs = specs(defines = specs.defines :+ RAST.ItemST(st"${MicrokitUtil.TAB}$name := ${structType.name}(${(fieldNames, ", ")});"))
           for (field <- structType.fields) {
             val fieldName = s"${name}_${field.name}"
             expandedMonitorInputs = expandedMonitorInputs + fieldName ~> GumboR2U2Util.R2U2MonitorInput(

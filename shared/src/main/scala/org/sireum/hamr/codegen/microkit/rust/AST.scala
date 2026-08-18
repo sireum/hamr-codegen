@@ -263,9 +263,15 @@ object Printers {
       st"""${enumSection}${structSection}INPUT
           |${printItems(inputs, "\n")}
           |
-          |${if (defines.nonEmpty) st"DEFINE\n${printItems(defines, "\n")}\n" else ""}
-          |${if (ftspecs.nonEmpty) st"FTSPEC \n${printItems(ftspecs, "\n")}\n" else ""}
-          |${if (ptspecs.nonEmpty) st"PTSPEC \n${printItems(ptspecs, "\n")}\n" else ""}
+          |${if (defines.nonEmpty) st"""DEFINE
+                                             |${printItems(defines, "\n")}
+                                             |""" else ""}
+          |${if (ftspecs.nonEmpty) st"""FTSPEC
+                                             |${printItems(ftspecs, "\n")}
+                                             |""" else ""}
+          |${if (ptspecs.nonEmpty) st"""PTSPEC
+                                             |${printItems(ptspecs, "\n")}
+                                             |""" else ""}
           |""")
   }
 }
