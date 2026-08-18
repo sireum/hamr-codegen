@@ -539,6 +539,9 @@ object ComponentContributions {}
               |sel4_include_dirs := $$(firstword $$(wildcard $$(microkit_sdk_config_dir)/include \
               |                                            $$(microkit_sdk_config_dir)/debug/include))
               |
+              |# The toolchain is pinned to a stable release channel (see rust-toolchain.toml),
+              |# which rejects the #![feature(..)] attributes the generated crates declare, so
+              |# every cargo invocation -- building, verifying and testing alike -- needs this.
               |ENV_VARS = RUSTC_BOOTSTRAP=1
               |
               |BUILD_ENV_VARS = $$(ENV_VARS) \
@@ -583,10 +586,10 @@ object ComponentContributions {}
               |#   Usage: make test args=proptest
               |
               |test-release:
-              |${TAB}cargo test $$(args) --release
+              |${TAB}$$(ENV_VARS) cargo test $$(args) --release
               |
               |test:
-              |${TAB}cargo test $$(args)
+              |${TAB}$$(ENV_VARS) cargo test $$(args)
               |
               |# Coverage Example:
               |#   Generate a test coverage report combining the results of all unit tests
@@ -599,7 +602,7 @@ object ComponentContributions {}
               |${TAB}cargo install grcov
               |${TAB}@exists=0; if [ -f target/coverage/report/index.html ]; then exists=1; fi; \
               |${TAB}rm -rf target/coverage; \
-              |${TAB}CARGO_INCREMENTAL=0 RUSTFLAGS='-Cinstrument-coverage' LLVM_PROFILE_FILE='target/coverage/cargo-test-%p-%m.profraw' \
+              |${TAB}$$(ENV_VARS) CARGO_INCREMENTAL=0 RUSTFLAGS='-Cinstrument-coverage' LLVM_PROFILE_FILE='target/coverage/cargo-test-%p-%m.profraw' \
               |${TAB}cargo test $$(args); \
               |${TAB}grcov . --binary-path ./target/debug/deps/ -s . -t html --branch --ignore-not-existing -o target/coverage/report; \
               |${TAB}if [ $$$$exists -eq 0 ]; then open target/coverage/report/index.html; fi

@@ -236,10 +236,11 @@ object MakefileTemplate {
     val content =
       st"""${CommentTemplate.doNotEditComment_hash}
           |
-          |ifeq ($$(strip $$(LIONSOS)),)
-          |$$(error LIONSOS must be specified)
+          |SDDF ?= $$(LIONSOS)/dep/sddf
+          |override SDDF := $$(abspath $$(SDDF))
+          |ifeq ("$$(wildcard $$(SDDF)/util/util.mk)","")
+          |$$(error Set SDDF to a copy of https://github.com/au-ts/sddf, or LIONSOS to a checkout that vendors it at dep/sddf)
           |endif
-          |override LIONSOS:=$$(abspath $${LIONSOS})
           |
           |
           |# Metaprogram that generates the system description file.
@@ -265,7 +266,6 @@ object MakefileTemplate {
           |MICROKIT_TOOL ?= $$(MICROKIT_SDK)/bin/microkit
           |DTC := dtc
           |PYTHON ?= python3
-          |SDDF := $$(LIONSOS)/dep/sddf
           |
           |SYSTEM_FILE := arinc_scheduling.system
           |IMAGE_FILE := loader.img
@@ -296,7 +296,6 @@ object MakefileTemplate {
           |export TOP_TYPES_INCLUDE = -I$$(TOP_DIR)/types/include
           |
           |CFLAGS += \
-          |${TAB}-I$$(LIONSOS)/include \
           |${TAB}-I$$(SDDF)/include \
           |${TAB}-I$$(SDDF)/include/microkit \
           |${TAB}-I$$(TOP_DIR)/scheduler/include \

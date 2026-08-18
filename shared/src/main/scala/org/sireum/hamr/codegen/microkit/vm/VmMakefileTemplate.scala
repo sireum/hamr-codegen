@@ -31,17 +31,18 @@ object VmMakefileTemplate {
           |
           |# @ivanv: incremental builds don't work with LINUX_IMAGE_DIR changing
           |
-          |LIB_VMM_DIR ?= $$(VMM_DIR)
-          |ifeq ("$$(wildcard $$(LIB_VMM_DIR)/tools)","")
-          |LIB_VMM_DIR := $$(${threadId}_DIR)/libvmm
-          |ifeq ("$$(wildcard $$(LIB_VMM_DIR)/tools)","")
-          |$$(error Set VMM_DIR to point to a copy of https://github.com/au-ts/libvmm")
-          |endif
+          |# This component runs a virtual machine, which is built with libvmm.
+          |# Point LIBVMM at a copy of https://github.com/au-ts/libvmm, or set
+          |# LIONSOS to a LionsOS checkout, which vendors it at dep/libvmm.
+          |LIBVMM ?= $$(LIONSOS)/dep/libvmm
+          |override LIBVMM := $$(abspath $$(LIBVMM))
+          |ifeq ("$$(wildcard $$(LIBVMM)/tools)","")
+          |$$(error Set LIBVMM to a copy of https://github.com/au-ts/libvmm, or LIONSOS to a checkout that vendors it at dep/libvmm)
           |endif
           |
-          |LIB_VMM_TOOLS_DIR := $$(LIB_VMM_DIR)/tools
-          |LIB_VMM_SRC_DIR := $$(LIB_VMM_DIR)/src
-          |export SDDF=$$(LIB_VMM_DIR)/dep/sddf
+          |LIBVMM_TOOLS_DIR := $$(LIBVMM)/tools
+          |LIBVMM_SRC_DIR := $$(LIBVMM)/src
+          |export SDDF = $$(LIBVMM)/dep/sddf
           |
           |ARCH := aarch64
           |SDDF_CUSTOM_LIBC := 1
@@ -71,7 +72,7 @@ object VmMakefileTemplate {
           |${TAB}-Wall -Wno-unused-function -Werror \
           |${TAB}-DMICROKIT_CONFIG_$$(MICROKIT_CONFIG) \
           |${TAB}-DBOARD_$$(MICROKIT_BOARD) \
-          |${TAB}-I$$(LIB_VMM_DIR)/include \
+          |${TAB}-I$$(LIBVMM)/include \
           |${TAB}-I$$(MICROKIT_BOARD_DIR)/include \
           |${TAB}-I$$(SDDF)/include \
           |${TAB}-I$$(SDDF)/include/sddf/util \
@@ -105,12 +106,12 @@ object VmMakefileTemplate {
           |ifeq ("", "$$(shell which $$(DTC))")
           |${TAB}$$(error "Could not find dependency: Device Tree Compiler (dtc)")
           |endif
-          |${TAB}$$(LIB_VMM_TOOLS_DIR)/dtscat $$(DTS) $$(LINUX_IMAGE_DIR)/overlay.dts > $$(TOP_BUILD_DIR)/linux.dts
+          |${TAB}$$(LIBVMM_TOOLS_DIR)/dtscat $$(DTS) $$(LINUX_IMAGE_DIR)/overlay.dts > $$(TOP_BUILD_DIR)/linux.dts
           |${TAB}# @ivanv: Shouldn't supress warnings
           |${TAB}$$(DTC) -q -I dts -O dtb $$(TOP_BUILD_DIR)/linux.dts > $$@
           |
-          |#$$(TOP_BUILD_DIR)/package_guest_images.o: $$(LIB_VMM_TOOLS_DIR)/package_guest_images.S $$(LINUX_IMAGE_DIR) $$(LINUX) $$(INITRD) $$(DTB)
-          |$$(TOP_BUILD_DIR)/package_guest_images.o: $$(LIB_VMM_TOOLS_DIR)/package_guest_images.S $$(LINUX) $$(INITRD) $$(DTB)
+          |#$$(TOP_BUILD_DIR)/package_guest_images.o: $$(LIBVMM_TOOLS_DIR)/package_guest_images.S $$(LINUX_IMAGE_DIR) $$(LINUX) $$(INITRD) $$(DTB)
+          |$$(TOP_BUILD_DIR)/package_guest_images.o: $$(LIBVMM_TOOLS_DIR)/package_guest_images.S $$(LINUX) $$(INITRD) $$(DTB)
           |${TAB}$$(CC) -c -g3 -x assembler-with-cpp \
           |${TAB}${TAB}-DGUEST_KERNEL_IMAGE_PATH=\"$$(LINUX)\" \
           |${TAB}${TAB}-DGUEST_DTB_IMAGE_PATH=\"$$(DTB)\" \
@@ -125,12 +126,18 @@ object VmMakefileTemplate {
           |${TAB}$$(CC) -c $$(CFLAGS) $$< -o $$@ $$(TOP_TYPES_INCLUDE) $$(${threadId}_INCLUDE)
           |
           |-include vmm.d
-          |include $$(LIB_VMM_DIR)/vmm.mk
+          |include $$(LIBVMM)/vmm.mk
           |include $$(SDDF)/util/util.mk
-          |vpath %.c $$(LIB_VMM_DIR)
+          |vpath %.c $$(LIBVMM)
           |
-          |$$(TOP_BUILD_DIR)/${threadId}.a: libvmm.a libsddf_util.a $$(TOP_BUILD_DIR)/${threadId}.o $$(TOP_BUILD_DIR)/${threadId}_user.o $$(TOP_BUILD_DIR)/package_guest_images.o Makefile
-          |${TAB}mkdir -p libsddf_util; cd libsddf_util; $$(AR) -x ../libsddf_util.a
+          |# libvmm routes printf through sddf, so one of sddf's two putchar backends has
+          |# to be linked in.  It must be the debug one: libsddf_util.a's putchar writes
+          |# into a serial transmit queue that serial_putchar_init has to be handed, and
+          |# a generated system has no sddf serial virtualiser to supply one, so its
+          |# queue handle stays null and the first LOG_VMM faults the whole component.
+          |# libsddf_util_debug.a's putchar goes straight to seL4_DebugPutChar instead.
+          |$$(TOP_BUILD_DIR)/${threadId}.a: libvmm.a libsddf_util_debug.a $$(TOP_BUILD_DIR)/${threadId}.o $$(TOP_BUILD_DIR)/${threadId}_user.o $$(TOP_BUILD_DIR)/package_guest_images.o Makefile
+          |${TAB}mkdir -p libsddf_util; cd libsddf_util; $$(AR) -x ../libsddf_util_debug.a
           |${TAB}$$(AR) r libvmm.a libsddf_util/*.o $$(TOP_BUILD_DIR)/${threadId}.o $$(TOP_BUILD_DIR)/${threadId}_user.o $$(TOP_BUILD_DIR)/package_guest_images.o
           |${TAB}cp libvmm.a $$@
           |"""
@@ -256,8 +263,8 @@ object VmMakefileTemplate {
                             |        stdout-path = "/pl011@9000000";
                             |        bootargs = "earlycon=pl011,0x9000000 earlyprintk=serial debug loglevel=8";
                             |        linux,stdout-path = "/pl011@9000000";
-                            |        linux,initrd-start = <0x4d000000>;
-                            |        linux,initrd-end = <0x4d800000>;
+                            |        linux,initrd-start = <${VmUtil.defaultGuestInitRamDiskGpaInHex}>;
+                            |        linux,initrd-end = <${VmUtil.defaultGuestInitRamDiskEndGpaInHex}>;
                             |    };
                             |};
                             |"""

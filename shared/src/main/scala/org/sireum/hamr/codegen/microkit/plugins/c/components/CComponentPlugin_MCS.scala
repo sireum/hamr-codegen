@@ -172,7 +172,7 @@ import org.sireum.message.Reporter
           schedulingDomain = Some(schedulingDomain),
           memMaps = ISZ(MemoryMap(
             memoryRegion = guestRam.name,
-            vaddrInKiBytes = 1048576, // 0x40_000_000
+            vaddrInKiBytes = VmUtil.defaultVmGuestRamGpaInKiBytes,
             perms = ISZ(Perm.READ, Perm.WRITE, Perm.EXECUTE),
             varAddr = None(),
             cached = None()),
@@ -213,8 +213,10 @@ import org.sireum.message.Reporter
         resources = resources :+ ResourceUtil.createResource(s"${boardPath}/simple.system", vmmSimpleSystem, F)
 
         val vmm_config = VmUtil.vmm_config(
-          guestDtbVaddrInHex = "0x4f000000",
-          guestInitRamDiskVaddrInHex = "0x4d700000",
+          guestRamStartGpaInHex = MicrokitUtil.KiBytesToHexH(VmUtil.defaultVmGuestRamGpaInKiBytes, F),
+          guestRamSizeInHex = MicrokitUtil.KiBytesToHexH(VmUtil.defaultVmRamSizeInKiBytes, F),
+          guestDtbGpaInHex = VmUtil.defaultGuestDtbGpaInHex,
+          guestInitRamDiskGpaInHex = VmUtil.defaultGuestInitRamDiskGpaInHex,
           maxIrqs = 1
         )
         resources = resources :+ ResourceUtil.createResource(s"${options.sel4OutputDir.get}/${mk.relativePathIncludeDir}/${threadId}_user.h", vmm_config, F)
@@ -499,8 +501,8 @@ import org.sireum.message.Reporter
 
       val utilIncludes: ST =
         if (isVM)
-          st"""#include <libvmm/util/printf.h>
-              |#include <libvmm/util/util.h>"""
+          // libvmm's util.h maps printf onto sddf's, so it is all a VM component needs
+          st"""#include <libvmm/util/util.h>"""
         else
           st"""${MicrokitUtil.microkit_util_imports}"""
 

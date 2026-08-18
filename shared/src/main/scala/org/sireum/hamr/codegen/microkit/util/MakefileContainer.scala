@@ -95,7 +95,7 @@ import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
           } else {
             st"""# user code
                  |$userObjName: $$(TOP_DIR)/$relativePathSrcDir/$cUserImplFilename Makefile
-                 |${TAB}$$(CC) -c $$(CFLAGS) $$< -o $$@ $$(TOP_INCLUDE)/$header"""
+                 |${TAB}$$(CC) -c $$(CFLAGS) $$< -o $$@ $$(TOP_INCLUDE)$header"""
           }
         return(
           st"""# monitor
@@ -127,7 +127,7 @@ import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
         return (
           st"""
               |$objName: $$(TOP_DIR)/$relativePathSrcDir/$cImplFilename Makefile
-              |${TAB}$$(CC) -c $$(CFLAGS) $$< -o $$@ -I$$(TOP_INCLUDE)$header""")
+              |${TAB}$$(CC) -c $$(CFLAGS) $$< -o $$@ $$(TOP_INCLUDE)$header""")
       }
   }
 
