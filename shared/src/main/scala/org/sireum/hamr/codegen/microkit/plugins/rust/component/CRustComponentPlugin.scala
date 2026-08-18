@@ -560,6 +560,7 @@ object ComponentContributions {}
           st"""${CommentTemplate.doNotEditComment_slash}
               |
               |use crate::bridge::${CRustApiPlugin.apiModuleName(thread)}::*;
+              |use crate::bridge::${threadId}_GUMBOX as GUMBOX;
               |use data::*;
               |use super::$modName::$threadId;
               |${if (e._2.requiresVerus) "use vstd::prelude::*;" else ""}

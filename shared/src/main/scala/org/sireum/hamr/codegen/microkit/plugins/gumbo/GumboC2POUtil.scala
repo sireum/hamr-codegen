@@ -4,7 +4,7 @@ package org.sireum.hamr.codegen.microkit.plugins.gumbo
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.Store
 import org.sireum.hamr.codegen.common.resolvers.GclResolver
-import org.sireum.hamr.codegen.common.types.{AadlTypes, ArrayType, BaseType, EnumType, RecordType, SlangType}
+import org.sireum.hamr.codegen.common.types.{AadlTypes, ArrayType, BaseType, EnumType, RecordType, SlangType, TypeUtil}
 import org.sireum.lang.{ast => SAST}
 import org.sireum.lang.symbol.Info
 
@@ -392,6 +392,12 @@ object GumboC2POUtil {
           case Some(typed) => return getTypedExprType(typed)
           case _ => halt("Expression type is not supported by R2U2 monitors")
         }
+      // Resolved GUMBO function calls carry their return type.
+      case invoke: org.sireum.lang.ast.Exp.Invoke =>
+        invoke.attr.typedOpt match {
+          case Some(typed) => return getTypedExprType(typed)
+          case _ => halt("Expression type is not supported by R2U2 monitors")
+        }
       case _ => halt("Expression type is not supported by R2U2 monitors")
     }
   }
@@ -490,30 +496,28 @@ object GumboC2POUtil {
     }
   }
 
+  // Helper to build a clean string chain ("api_myStructArray_nonEmpty").
+  // It returns None() if the selection path does not originate from the 'api' object.
+  @pure def getFlatPathString(subExp: org.sireum.lang.ast.Exp): Option[String] = {
+    subExp match {
+      case id: org.sireum.lang.ast.Exp.Ident if id.id.value == "api" => return Some("api")
+      case sel: org.sireum.lang.ast.Exp.Select =>
+        sel.receiverOpt match {
+          case Some(recv) =>
+            getFlatPathString(recv) match {
+              case Some(prefix) => return Some(if (sel.id.value == "get") prefix else s"${prefix}_${sel.id.value}")
+              case _ => return None()
+            }
+          case _ => return None()
+        }
+      case _ => return None()
+    }
+  }
+
   // Function collects any identifiers, flattens them if necessary, and returns the new expr and a
   // map of identifiers to expressions
   @pure def collectIdentifiers(exp: org.sireum.lang.ast.Exp): (org.sireum.lang.ast.Exp, Map[String, org.sireum.lang.ast.Exp]) = {
     var categorized : Map[String, org.sireum.lang.ast.Exp] = Map.empty
-
-    // Helper closure to build a clean string chain ("api_myStructArray_nonEmpty")
-    // It returns None() if the selection path does not originate from the 'api' object
-    def getFlatPathString(subExp: org.sireum.lang.ast.Exp): Option[String] = {
-      subExp match {
-        case id: org.sireum.lang.ast.Exp.Ident if id.id.value == "api" =>
-          return Some("api")
-
-        case sel: org.sireum.lang.ast.Exp.Select =>
-          sel.receiverOpt match {
-            case Some(recv) =>
-              getFlatPathString(recv) match {
-                case Some(prefix) => return Some(if (sel.id.value == "get") prefix else s"${prefix}_${sel.id.value}")
-                case _ => return None()
-              }
-            case _ => return None()
-          }
-        case _ => return None()
-      }
-    }
 
     exp match {
       // 1. Collect simple variables, ports, or standalone identifiers.
@@ -671,6 +675,54 @@ object GumboC2POUtil {
       case leaf =>
         return (leaf, categorized)
     }
+  }
+
+  // Checks whether an expression calls a local GUMBO function.
+  @pure def isGumboFunctionCall(exp: SAST.Exp, owner: ISZ[String]): B = {
+    exp match {
+      case invoke: SAST.Exp.Invoke =>
+        invoke.attr.resOpt match {
+          case Some(method: SAST.ResolvedInfo.Method) => return method.owner == owner
+          case _ => return F
+        }
+      case _ => return F
+    }
+  }
+
+  // Replaces local GUMBO calls with named C2PO input identifiers.
+  @record class C2POFunctionRewriter(val owner: ISZ[String]) extends org.sireum.hamr.ir.MTransformer {
+    var functionInputs: Map[String, SAST.Exp] = Map.empty
+
+    // Names simple function arguments directly and fingerprints complex expressions.
+    def getFunctionArgumentName(arg: SAST.Exp): String = {
+      getFlatPathString(arg) match {
+        case Some(name) if ops.StringOps(name).startsWith("api_") =>
+          return ops.StringOps(name).substring(4, name.size)
+        case Some(name) => return name
+        case _ => return s"arg_${TypeUtil.stableTypeSig(arg.prettyST.render, 3)}"
+      }
+    }
+
+    override def pre_langastExpInvoke(invoke: SAST.Exp.Invoke): org.sireum.hamr.ir.MTransformer.PreResult[SAST.Exp] = {
+      if (isGumboFunctionCall(invoke, owner)) {
+        val argumentNames: ISZ[String] = for (arg <- invoke.args) yield getFunctionArgumentName(arg)
+        val suffix: String = if (argumentNames.nonEmpty) st"_${(argumentNames, "_")}".render else ""
+        val name = s"fn_${invoke.ident.id.value}$suffix"
+        functionInputs = functionInputs + name ~> invoke
+        return org.sireum.hamr.ir.MTransformer.PreResult(
+          F, MSome(SAST.Exp.Ident(SAST.Id(name, invoke.ident.id.attr), invoke.attr)))
+      }
+      return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone[SAST.Exp]())
+    }
+  }
+
+  // Collects standard monitor inputs after replacing local function calls.
+  @pure def collectMonitorInputs(exp: SAST.Exp,
+                                 owner: ISZ[String]): (SAST.Exp, Map[String, SAST.Exp]) = {
+    val rewriter = C2POFunctionRewriter(owner)
+    val rewrittenExp: SAST.Exp = rewriter.transform_langastExp(exp).getOrElse(exp)
+    val result = collectIdentifiers(rewrittenExp)
+    return (result._1, result._2 ++ rewriter.functionInputs.entries)
   }
 
   @enum object SpecTense {

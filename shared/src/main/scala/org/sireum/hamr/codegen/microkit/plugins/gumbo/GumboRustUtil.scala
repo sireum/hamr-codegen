@@ -191,7 +191,7 @@ object GumboRustUtil {
                              reporter: Reporter): (RAST.Expr, GumboC2POUtil.SpecTense.Type, Map[String, GumboR2U2Util.R2U2MonitorInput]) = {
 
     GumboC2POUtil.checkC2POIdentifier(spec.id)
-    val (exp, variablesInSpec) = GumboC2POUtil.collectIdentifiers(spec.exp)
+    val (exp, variablesInSpec) = GumboC2POUtil.collectMonitorInputs(spec.exp, component.classifier)
     val tense = GumboC2POUtil.getSpecTense(exp)
 
     val c2poExp =

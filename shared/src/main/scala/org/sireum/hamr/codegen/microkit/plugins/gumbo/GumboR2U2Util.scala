@@ -77,7 +77,7 @@ object GumboR2U2Util {
       case Some(stateVar) => Map.empty[String, String] + stateVar.id.value ~> s"self.${stateVar.id.value}"
       case _ => Map.empty
     }
-    val rustExp = SlangExpUtil.rewriteExpH(
+    var rustExp = SlangExpUtil.rewriteExpH(
       rexp = snapshotExp,
       owner = component.classifier,
       optComponent = Some(component),
@@ -89,15 +89,18 @@ object GumboR2U2Util {
       tp = tp,
       store = store,
       reporter = reporter)
-    val monitorExp: ST = snapshotExp.typedOpt match {
+    // Local subclause functions are emitted in the component's GUMBOX module.
+    if (GumboC2POUtil.isGumboFunctionCall(valueExp, component.classifier)) {
+      rustExp = st"GUMBOX::$rustExp"
+    }
+    snapshotExp.typedOpt match {
       // R2U2 loads a concrete payload value. Presence is loaded as a separate
       // Boolean signal (e.g., HasEvent(...)), so an absent optional payload can
       // safely use a default. The rewritten expression carries the executable
       // peek type rather than GCL's ghost-oriented port type.
       case Some(SAST.Typed.Name(SAST.Typed.optionName, _, _)) =>
-        st"${rustExp}.unwrap_or_default()"
+        rustExp = st"${rustExp}.unwrap_or_default()"
       case _ =>
-        rustExp
     }
     val expType: GumboC2POUtil.C2POType.Type = GumboC2POUtil.getExprType(valueExp)
     val arrayTypeOpt: Option[GumboC2POUtil.C2POArray] =
@@ -111,7 +114,7 @@ object GumboR2U2Util {
       if (expType == GumboC2POUtil.C2POType.struct) Some(GumboC2POUtil.getStructType(valueExp, types))
       else None()
     return R2U2MonitorInput(
-      exp = RAST.ExprST(monitorExp),
+      exp = RAST.ExprST(rustExp),
       expType = expType,
       enumTypeOpt = enumTypeOpt,
       arrayTypeOpt = arrayTypeOpt,
