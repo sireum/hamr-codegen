@@ -19,6 +19,28 @@ object GumboC2POUtil {
     "struct"
   }
 
+  // Mirrors C2PO's lexer-reserved identifiers.
+  val C2POReservedWords: Set[String] = Set.empty[String] ++ ISZ(
+    "STRUCT", "ENUM", "INPUT", "DEFINE", "FTSPEC", "PTSPEC",
+    "foreach", "forsome", "forexactly", "foratleast", "foratmost",
+    "TAU", "pow", "sqrt", "abs", "xor", "prev",
+    "G", "F", "H", "O", "U", "R", "S", "T", "M", "true", "false")
+
+  // C2PO's prev token also matches the beginning of longer identifiers.
+  @pure def checkC2POIdentifier(identifier: String): Unit = {
+    if (C2POReservedWords.contains(identifier) || ops.StringOps(identifier).startsWith("prev")) {
+      halt(s"C2PO identifier '$identifier' conflicts with a reserved word")
+    }
+  }
+
+  // Checks the C2PO identifiers emitted for an AADL enum.
+  @pure def checkC2POEnum(enumType: EnumType): Unit = {
+    checkC2POIdentifier(enumType.simpleName)
+    for (value <- enumType.values) {
+      checkC2POIdentifier(value)
+    }
+  }
+
   @datatype class C2POEnum(val name: String,
                            val values: ISZ[String])
 
@@ -126,6 +148,7 @@ object GumboC2POUtil {
                           quantifierValues: Map[String, Z],
                           aadlTypes: AadlTypes,
                           store: Store): (Z, Option[Z], SAST.Exp, Option[SAST.Exp]) = {
+    checkC2POIdentifier(param)
     val lo: Z = getStaticValue(exp.lo, quantifierValues, aadlTypes, store) match {
       case Some(value) => value
       case _ => halt("R2U2 monitors require statically resolvable quantified ranges")
@@ -394,7 +417,9 @@ object GumboC2POUtil {
     typed match {
       case n: SAST.Typed.Name =>
         aadlTypes.getTypeByPathOpt(n.ids) match {
-          case Some(e: EnumType) => return C2POEnum(e.simpleName, e.values)
+          case Some(e: EnumType) =>
+            checkC2POEnum(e)
+            return C2POEnum(e.simpleName, e.values)
           case _ => halt(s"Type ${n.ids} is not an AADL enum")
         }
       case _ => halt(s"Type $typed is not an AADL enum")
@@ -440,11 +465,14 @@ object GumboC2POUtil {
       case n: SAST.Typed.Name =>
         aadlTypes.getTypeByPathOpt(n.ids) match {
           case Some(recordType: RecordType) =>
+            checkC2POIdentifier(recordType.nameProvider.typeName)
             val fields: ISZ[C2POStructField] = for (field <- recordType.fields.entries) yield {
+              checkC2POIdentifier(field._1)
               field._2 match {
                 case b: BaseType =>
                   C2POStructField(field._1, getBaseType(b), None(), None())
                 case e: EnumType =>
+                  checkC2POEnum(e)
                   C2POStructField(field._1, C2POType.enumeration, Some(C2POEnum(e.simpleName, e.values)), None())
                 case a: ArrayType =>
                   if (a.dimensions.size != 1) halt("Only one-dimensional arrays are supported by R2U2 monitors")

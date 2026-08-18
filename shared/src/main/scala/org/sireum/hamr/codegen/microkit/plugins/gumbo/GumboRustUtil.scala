@@ -190,6 +190,7 @@ object GumboRustUtil {
                              store: Store,
                                  reporter: Reporter): (RAST.Expr, GumboC2POUtil.SpecTense.Type, Map[String, GumboR2U2Util.R2U2MonitorInput]) = {
 
+    GumboC2POUtil.checkC2POIdentifier(spec.id)
     val (exp, variablesInSpec) = GumboC2POUtil.collectIdentifiers(spec.exp)
     val tense = GumboC2POUtil.getSpecTense(exp)
 
@@ -213,6 +214,7 @@ object GumboRustUtil {
 
     var variablesInSpecExpanded: Map[String, GumboR2U2Util.R2U2MonitorInput] = Map.empty
     for ( (varName, varExp) <- variablesInSpec.entries){
+      GumboC2POUtil.checkC2POIdentifier(varName)
       variablesInSpecExpanded = variablesInSpecExpanded + varName ~> GumboR2U2Util.lowerR2U2Input(
         exp = varExp,
         portIds = portIds,
