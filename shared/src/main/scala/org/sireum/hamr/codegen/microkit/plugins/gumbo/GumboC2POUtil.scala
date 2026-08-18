@@ -516,7 +516,7 @@ object GumboC2POUtil {
     }
 
     exp match {
-      // 1. Matches simple variables, ports, or standalone identifiers
+      // 1. Collect simple variables, ports, or standalone identifiers.
       case id: org.sireum.lang.ast.Exp.Ident =>
         // Quantifier local variables are NOT monitor inputs.
         id.resOpt match {
@@ -525,7 +525,7 @@ object GumboC2POUtil {
         }
         categorized += (id.id.value -> id)
         return (id, categorized)
-      // 2. Matches component dot-selections (e.g., api.my_var or state.my_var)
+      // 2. Collect and rewrite component selections (e.g., api.my_var or state.my_var).
       case sel: org.sireum.lang.ast.Exp.Select =>
         val isEnumMember: B = sel.resOpt match {
           case Some(_: SAST.ResolvedInfo.EnumElement) => T
@@ -578,21 +578,26 @@ object GumboC2POUtil {
               return (sel(receiverOpt = updatedRecv), categorized)
           }
         }
-      // 3. Drill down into conditional expressions.
+      // 3. Collect In(state) under a distinct pre-state input name.
+      case input @ org.sireum.lang.ast.Exp.Input(id: org.sireum.lang.ast.Exp.Ident) =>
+        val name = s"in_${id.id.value}"
+        categorized += (name -> input)
+        return (id(id = id.id(value = name)), categorized)
+      // 4. Drill down into conditional expressions.
       case ifExp: org.sireum.lang.ast.Exp.If =>
         val cond = collectIdentifiers(ifExp.cond)
         val thenExp = collectIdentifiers(ifExp.thenExp)
         val elseExp = collectIdentifiers(ifExp.elseExp)
         for (res <- ISZ(cond, thenExp, elseExp); e <- res._2.entries) { categorized += e }
         return (ifExp(cond._1, thenExp._1, elseExp._1), categorized)
-      // 4. Drill down into Binary Operators (e.g., x > 5, a AND b)
+      // 5. Drill down into binary operators (e.g., x > 5, a AND b).
       case bin: org.sireum.lang.ast.Exp.Binary =>
         val res_left = collectIdentifiers(bin.left)
         val res_right = collectIdentifiers(bin.right)
         for (e <- res_left._2.entries) { categorized += e }
         for (e <- res_right._2.entries) { categorized += e }
         return (bin(res_left._1, bin.op, res_right._1), categorized)
-      // 5. Drill down into Unary Operators (e.g., !x)
+      // 6. Drill down into unary operators (e.g., !x).
       case un: org.sireum.lang.ast.Exp.Unary =>
         val res = collectIdentifiers(un.exp)
         for (e <- res._2.entries) { categorized += e }
@@ -607,7 +612,7 @@ object GumboC2POUtil {
         for (e <- resLeft._2.entries) { categorized += e }
         for (e <- resRight._2.entries) { categorized += e }
         return (bin(left = resLeft._1, right = resRight._1), categorized)
-      // 6. Range bounds are static; only the predicate contributes monitor inputs.
+      // 7. Range bounds are static; only the predicate contributes monitor inputs.
       case quant: org.sireum.lang.ast.Exp.QuantRange =>
         quant.fun.exp match {
           case stmt: SAST.Stmt.Expr =>
@@ -616,7 +621,7 @@ object GumboC2POUtil {
             return (quant(fun = quant.fun(exp = stmt(exp = res._1))), categorized)
           case _ => halt(s"Unexpected quantified expression: ${quant.fun.exp.prettyST.render}")
         }
-      // 7. Drill down into Function/Method invocations
+      // 8. Drill down into function or method invocations.
       case invoke: org.sireum.lang.ast.Exp.Invoke =>
         // GCL combines Option.get and array indexing for an event-data array into
         // api.port.get(index). Preserve the index while omitting the Option access.

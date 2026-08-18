@@ -186,9 +186,9 @@ object GumboRustUtil {
 
                              types: AadlTypes,
                              tp: CRustTypeProvider,
-                             gclSymbolTable: GclSymbolTable,
+                             stateVars: ISZ[GclStateVar],
                              store: Store,
-                                 reporter: Reporter): (RAST.Expr, GumboC2POUtil.SpecTense.Type, Map[String, GumboR2U2Util.R2U2MonitorInput]) = {
+                             reporter: Reporter): (RAST.Expr, GumboC2POUtil.SpecTense.Type, Map[String, GumboR2U2Util.R2U2MonitorInput]) = {
 
     GumboC2POUtil.checkC2POIdentifier(spec.id)
     val (exp, variablesInSpec) = GumboC2POUtil.collectIdentifiers(spec.exp)
@@ -221,6 +221,7 @@ object GumboRustUtil {
         component = component,
         context = context,
         isAssumeRequires = isAssumeRequires,
+        stateVars = stateVars,
         types = types,
         tp = tp,
         store = store,

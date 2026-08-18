@@ -927,7 +927,7 @@ object GumboRustPlugin {
         isAssumeRequires = F,
         types = types,
         tp = tp,
-        gclSymbolTable = subclauseInfo.gclSymbolTable,
+        stateVars = subclauseInfo.annex.state,
         store = store,
         reporter = reporter)
       tense match {
@@ -960,7 +960,8 @@ object GumboRustPlugin {
               enumTypeOpt = field.enumTypeOpt,
               arrayTypeOpt = field.arrayTypeOpt,
               structTypeOpt = None(),
-              referencedPorts = monitorInput.referencedPorts)
+              referencedPorts = monitorInput.referencedPorts,
+              isPostStateVar = monitorInput.isPostStateVar)
           }
         case _ => expandedMonitorInputs = expandedMonitorInputs + (name ~> monitorInput)
       }
@@ -1039,7 +1040,8 @@ object GumboRustPlugin {
       }
       val referencesOutput = ops.ISZOps(monitorInput.referencedPorts.elements).exists(
         portId => referencedOutputPorts.contains(portId))
-      if (referencesOutput) {
+      // Output ports and current state variables are observed after dispatch.
+      if (referencesOutput || monitorInput.isPostStateVar) {
         postItems = postItems :+ loadSignal
       } else {
         preItems = preItems :+ loadSignal

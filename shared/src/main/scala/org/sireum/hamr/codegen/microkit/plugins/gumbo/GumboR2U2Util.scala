@@ -10,6 +10,7 @@ import org.sireum.hamr.codegen.microkit.plugins.rust.apis.{CRustApiUtil, Compone
 import org.sireum.hamr.codegen.microkit.plugins.rust.types.CRustTypeProvider
 import org.sireum.hamr.codegen.microkit.plugins.StoreUtil
 import org.sireum.hamr.codegen.microkit.{rust => RAST}
+import org.sireum.hamr.ir.GclStateVar
 import org.sireum.lang.{ast => SAST}
 import org.sireum.message.Reporter
 
@@ -20,7 +21,8 @@ object GumboR2U2Util {
                                    val enumTypeOpt: Option[GumboC2POUtil.C2POEnum],
                                    val arrayTypeOpt: Option[GumboC2POUtil.C2POArray],
                                    val structTypeOpt: Option[GumboC2POUtil.C2POStruct],
-                                   val referencedPorts: Set[String])
+                                   val referencedPorts: Set[String],
+                                   val isPostStateVar: B)
 
   // The C transport exposes peek for every port; only R2U2 components add it
   // to their generated Rust application API.
@@ -42,10 +44,23 @@ object GumboR2U2Util {
                           component: AadlComponent,
                           context: Context.Type,
                           isAssumeRequires: B,
+                          stateVars: ISZ[GclStateVar],
                           types: AadlTypes,
                           tp: CRustTypeProvider,
                           store: Store,
                           reporter: Reporter): R2U2MonitorInput = {
+    // In(state) is sampled before dispatch; current state is sampled afterward.
+    val stateVarOpt: Option[SAST.Exp.Ident] = exp match {
+      case SAST.Exp.Input(id: SAST.Exp.Ident) => Some(id)
+      case id: SAST.Exp.Ident if ops.ISZOps(stateVars).exists((stateVar: GclStateVar) => stateVar.name == id.id.value) =>
+        Some(id)
+      case _ => None()
+    }
+    val valueExp: SAST.Exp = stateVarOpt match {
+      case Some(stateVar) => stateVar
+      case _ => exp
+    }
+    val isPostStateVar: B = stateVarOpt.nonEmpty && !exp.isInstanceOf[SAST.Exp.Input]
     val ports: Map[String, AadlPort] = Map.empty ++
       component.getPorts()
         .filter(p => portIds.contains(p.identifier))
@@ -54,9 +69,13 @@ object GumboR2U2Util {
     // Rewrite api.port references and collect the ports that must be observed
     // in the pre- or post-dispatch hook.
     val portRewriter = R2U2PortRewriter(ports)
-    val snapshotExp: SAST.Exp = portRewriter.transform_langastExp(exp) match {
+    val snapshotExp: SAST.Exp = portRewriter.transform_langastExp(valueExp) match {
       case MSome(e) => e
-      case _ => exp
+      case _ => valueExp
+    }
+    val substitutions: Map[String, String] = stateVarOpt match {
+      case Some(stateVar) => Map.empty[String, String] + stateVar.id.value ~> s"self.${stateVar.id.value}"
+      case _ => Map.empty
     }
     val rustExp = SlangExpUtil.rewriteExpH(
       rexp = snapshotExp,
@@ -65,7 +84,7 @@ object GumboR2U2Util {
       context = context,
       inRequires = isAssumeRequires,
       target = TargetLanguage.rust,
-      substitutions = Map.empty,
+      substitutions = substitutions,
       aadlTypes = types,
       tp = tp,
       store = store,
@@ -80,16 +99,16 @@ object GumboR2U2Util {
       case _ =>
         rustExp
     }
-    val expType: GumboC2POUtil.C2POType.Type = GumboC2POUtil.getExprType(exp)
+    val expType: GumboC2POUtil.C2POType.Type = GumboC2POUtil.getExprType(valueExp)
     val arrayTypeOpt: Option[GumboC2POUtil.C2POArray] =
-      if (expType == GumboC2POUtil.C2POType.array) GumboC2POUtil.getArrayType(exp, types, store)
+      if (expType == GumboC2POUtil.C2POType.array) GumboC2POUtil.getArrayType(valueExp, types, store)
       else None()
 
     val enumTypeOpt: Option[GumboC2POUtil.C2POEnum] =
-      if (expType == GumboC2POUtil.C2POType.enumeration) Some(GumboC2POUtil.getEnumType(exp, types))
+      if (expType == GumboC2POUtil.C2POType.enumeration) Some(GumboC2POUtil.getEnumType(valueExp, types))
       else None()
     val structTypeOpt: Option[GumboC2POUtil.C2POStruct] =
-      if (expType == GumboC2POUtil.C2POType.struct) Some(GumboC2POUtil.getStructType(exp, types))
+      if (expType == GumboC2POUtil.C2POType.struct) Some(GumboC2POUtil.getStructType(valueExp, types))
       else None()
     return R2U2MonitorInput(
       exp = RAST.ExprST(monitorExp),
@@ -97,7 +116,8 @@ object GumboR2U2Util {
       enumTypeOpt = enumTypeOpt,
       arrayTypeOpt = arrayTypeOpt,
       structTypeOpt = structTypeOpt,
-      referencedPorts = portRewriter.referencedPorts)
+      referencedPorts = portRewriter.referencedPorts,
+      isPostStateVar = isPostStateVar)
   }
 
   @record class R2U2PortRewriter(val ports: Map[String, AadlPort]) extends org.sireum.hamr.ir.MTransformer {
