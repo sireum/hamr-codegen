@@ -130,6 +130,14 @@ object GumboC2POUtil {
       case Some(value) => value
       case _ => halt("R2U2 monitors require statically resolvable quantified ranges")
     }
+    val hi: Z = getStaticValue(exp.hi, quantifierValues, aadlTypes, store) match {
+      case Some(value) => value
+      case _ => halt("R2U2 monitors require statically resolvable quantified ranges")
+    }
+    val lastIndex: Z = if (exp.hiExact) hi else hi - 1
+    if (!(lo < lastIndex && lo >= 0)) {
+      halt(s"R2U2 monitor quantifier range has lower bound $lo and upper bound $lastIndex; the lower bound must be nonnegative and less than the upper bound")
+    }
 
     // Determines whether the predicate can bind a C2PO array element directly.
     val rewriter = C2POQuantifierRewriter(param, binder, store)
@@ -155,10 +163,7 @@ object GumboC2POUtil {
     // None omits the slice for a full array; otherwise this is the inclusive final index.
     val lastIndexOpt: Option[Z] =
       if (isFullArray) None()
-      else getStaticValue(exp.hi, quantifierValues, aadlTypes, store) match {
-        case Some(hi) => Some(if (exp.hiExact) hi else hi - 1)
-        case _ => halt("R2U2 monitors require statically resolvable quantified ranges")
-      }
+      else Some(lastIndex)
     return (lo, lastIndexOpt, rewrittenBody, directArrayOpt)
   }
 

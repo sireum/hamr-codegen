@@ -481,11 +481,18 @@ object SlangExpUtil {
                       if (!appliedTrigger && expressionContainsQuantifier) {
                         quantifierUsedInIndexingExpr = T
                       }
-                      // C2PO array indices must be statically resolvable numerals.
+                      // C2PO array indices must be static numerals within the fixed array bounds.
                       if (target == TargetLanguage.C2PO) {
                         val indices: ISZ[ST] = for (arg <- exp.args) yield {
                           val value: Z = GumboC2POUtil.getStaticValue(arg, c2poQuantifierValues, aadlTypes, store) match {
-                            case Some(value) => value
+                            case Some(value) =>
+                              val array: SAST.Exp = if (exp.ident.id.value == "apply") receiverOpt.get else exp.ident
+                              GumboC2POUtil.getArrayType(array, aadlTypes, store) match {
+                                case Some(arrayType) if value < 0 || value >= arrayType.size =>
+                                  halt(s"R2U2 monitor array index $value is outside 0..${arrayType.size - 1}")
+                                case _ =>
+                              }
+                              value
                             case _ => halt("R2U2 monitors require statically resolvable array indices")
                           }
                           st"$value"
