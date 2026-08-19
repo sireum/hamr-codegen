@@ -931,8 +931,8 @@ object GumboRustPlugin {
         store = store,
         reporter = reporter)
       tense match {
-        case GumboC2POUtil.SpecTense.Future => specs = specs(ftspecs = specs.ftspecs :+ RAST.ItemST(c2poSpec.prettyST))
-        case GumboC2POUtil.SpecTense.Past => specs = specs(ptspecs = specs.ptspecs :+ RAST.ItemST(c2poSpec.prettyST))
+        case GumboC2POUtil.SpecTense.Future => specs = specs(ftspecs = specs.ftspecs :+ c2poSpec)
+        case GumboC2POUtil.SpecTense.Past => specs = specs(ptspecs = specs.ptspecs :+ c2poSpec)
       }
       monitorInputs = monitorInputs ++ inputs.entries
     }
@@ -1054,10 +1054,11 @@ object GumboRustPlugin {
 
     if (postItems.nonEmpty) { postItems = postItems :+ RAST.BodyItemST(st"") }
     postItems = postItems :+ RAST.BodyItemST(st"r2u2_core::monitor_step(&mut self.r2u2_monitor);")
-    postItems = postItems :+ RAST.BodyItemST(
-      st"""for out in r2u2_core::get_output_buffer(&self.r2u2_monitor) {
-          |    log::info!("{}:{},{}", out.spec_num, out.verdict.time, if out.verdict.truth {"T"} else {"F"} );
-          |}""")
+    val (loggedSpecsConstOpt, outputItems) = GumboR2U2Util.processOutputs(
+      thread = thread,
+      orderedSpecs = specs.ftspecs ++ specs.ptspecs,
+      alerts = subclauseInfo.annex.monitor.get.alerts)
+    postItems = postItems ++ outputItems
 
     var preInputs: ISZ[RAST.Param] = ISZ()
     for (input <- fn.sig.fnDecl.inputs) {
@@ -1089,7 +1090,10 @@ object GumboRustPlugin {
       contract = None(),
       body = Some(RAST.MethodBody(postItems)))
 
-    val monitorMethods: ISZ[RAST.Item] = ISZ(preFn, postFn)
+    val monitorMethods: ISZ[RAST.Item] = loggedSpecsConstOpt match {
+      case Some(loggedSpecsConst) => ISZ(loggedSpecsConst, preFn, postFn)
+      case _ => ISZ(preFn, postFn)
+    }
       
     var timeTriggered: RAST.FnImpl = fn
     if (inputGets.nonEmpty) {

@@ -188,7 +188,7 @@ object GumboRustUtil {
                              tp: CRustTypeProvider,
                              stateVars: ISZ[GclStateVar],
                              store: Store,
-                             reporter: Reporter): (RAST.Expr, GumboC2POUtil.SpecTense.Type, Map[String, GumboR2U2Util.R2U2MonitorInput]) = {
+                             reporter: Reporter): (RAST.R2U2Formula, GumboC2POUtil.SpecTense.Type, Map[String, GumboR2U2Util.R2U2MonitorInput]) = {
 
     GumboC2POUtil.checkC2POIdentifier(spec.id)
     val (exp, variablesInSpec) = GumboC2POUtil.collectMonitorInputs(spec.exp, component.classifier)
@@ -228,13 +228,12 @@ object GumboRustUtil {
         reporter = reporter)
     }
 
-    // Indent every line so multiline C2PO expressions align with INPUT entries.
-    val spec_st: RAST.Expr = RAST.ExprST(
-      st"${TAB}${(STUtil.splitST(
-        st"""${GumboRustUtil.processDescriptor(spec.descriptor, "-- ")}
-            |${spec.id}: ${c2poExp};"""), s"\n$TAB")}")
+    val c2poSpec = RAST.R2U2Formula(
+      commentOpt = GumboRustUtil.processDescriptor(spec.descriptor, "-- "),
+      id = spec.id,
+      exp = RAST.ExprST(c2poExp))
 
-    return (spec_st, tense, variablesInSpecExpanded)
+    return (c2poSpec, tense, variablesInSpecExpanded)
   }
 
   @pure def processGumboCase(c: GclCaseStatement,

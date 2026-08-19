@@ -1850,6 +1850,38 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           }
           resolvedGuarantees = resolvedGuarantees :+ guarantees(exp = resolvedExp)
         }
+
+        var alertPortGuarantees: Map[String, String] = Map.empty
+        for (alert <- s.monitor.get.alerts) {
+          if (!seenGuaranteeIds.contains(alert.guaranteeId)) {
+            reportError(alert.posOpt, s"Could not resolve monitor guarantee '${alert.guaranteeId}'", reporter)
+          } else {
+            alertPortGuarantees.get(alert.portId) match {
+              case Some(guaranteeId) if guaranteeId != alert.guaranteeId =>
+                reportError(alert.posOpt,
+                  s"Alert port '${alert.portId}' cannot be mapped to both monitor guarantees '$guaranteeId' and '${alert.guaranteeId}'", reporter)
+              case _ => alertPortGuarantees = alertPortGuarantees + alert.portId ~> alert.guaranteeId
+            }
+          }
+
+          component.getPorts().filter(port => port.identifier == alert.portId) match {
+            case ISZ(port) if port.direction != Direction.Out =>
+              reportError(alert.posOpt, s"Alert port '${alert.portId}' must be an output port", reporter)
+            case ISZ(_: AadlEventPort) =>
+            case ISZ(port: AadlEventDataPort) =>
+              port.aadlType match {
+                case baseType: BaseType if baseType.slangType == SlangType.B =>
+                case _ => reportError(alert.posOpt,
+                  s"Alert event data port '${alert.portId}' must have Boolean type", reporter)
+              }
+            case ISZ(_) =>
+              reportError(alert.posOpt,
+                s"Alert port '${alert.portId}' must be an event or event data port", reporter)
+            case ISZ() =>
+              reportError(alert.posOpt, s"Could not resolve alert port '${alert.portId}'", reporter)
+            case _ => halt("Infeasible")
+          }
+        }
         resolvedMonitor = Some(s.monitor.get(
           guarantees = resolvedGuarantees))
       }

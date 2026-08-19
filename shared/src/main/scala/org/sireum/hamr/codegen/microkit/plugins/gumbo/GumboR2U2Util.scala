@@ -10,7 +10,7 @@ import org.sireum.hamr.codegen.microkit.plugins.rust.apis.{CRustApiUtil, Compone
 import org.sireum.hamr.codegen.microkit.plugins.rust.types.CRustTypeProvider
 import org.sireum.hamr.codegen.microkit.plugins.StoreUtil
 import org.sireum.hamr.codegen.microkit.{rust => RAST}
-import org.sireum.hamr.ir.GclStateVar
+import org.sireum.hamr.ir.{GclAlert, GclStateVar}
 import org.sireum.lang.{ast => SAST}
 import org.sireum.message.Reporter
 
@@ -34,6 +34,80 @@ object GumboR2U2Util {
       contributions = contributions.combine(CRustApiUtil.processPeekPort(port, tp))
     }
     return contributions
+  }
+
+  // Route cached specification verdicts to their mapped alert ports.
+  @pure def processOutputs(thread: AadlThread,
+                           orderedSpecs: ISZ[RAST.R2U2Formula],
+                           alerts: ISZ[GclAlert]): (Option[RAST.Item], ISZ[RAST.BodyItem]) = {
+    // Map all specifications to the ordering in C2PO.
+    val specNumbers: Map[String, Z] = Map.empty ++
+      (for (i <- 0 until orderedSpecs.size) yield orderedSpecs(i).id ~> i)
+    val alertSpecNumbers: Map[String, Z] = Map.empty ++
+      (for (alert <- alerts) yield alert.portId ~> specNumbers.get(alert.guaranteeId).get)
+    val alertedSpecNumbers: Set[Z] = Set.empty ++ alertSpecNumbers.values
+
+    val loggedSpecs: ISZ[ST] = for (i <- 0 until orderedSpecs.size if !alertedSpecNumbers.contains(i)) yield
+      st"($i, \"${orderedSpecs(i).id}\")"
+    val loggedSpecsConstOpt: Option[RAST.Item] =
+      if (loggedSpecs.nonEmpty) {
+        Some(RAST.ItemST(
+          st"""// Specifications without an alert mapping are logged after every monitor step.
+              |const R2U2_LOGGED_SPECS: [(usize, &'static str); ${loggedSpecs.size}] = [
+              |    ${(loggedSpecs, ",\n")}
+              |];"""))
+      } else {
+        None()
+      }
+
+    var outputItems: ISZ[RAST.BodyItem] = ISZ(RAST.BodyItemST(
+      st"""let r2u2_time_stamp = self.r2u2_monitor.time_stamp;
+          |// Expire cached verdicts before applying this step's new outputs.
+          |for verdict in self.r2u2_monitor.verdict_cache.iter_mut() {
+          |    if verdict.is_some() && r2u2_time_stamp > verdict.unwrap().time {
+          |        *verdict = None;
+          |    }
+          |}
+          |// Cache the newest verdict returned for each specification.
+          |let output_buffer = r2u2_core::get_output_buffer(&self.r2u2_monitor.inner);
+          |let verdict_cache = &mut self.r2u2_monitor.verdict_cache;
+          |for out in output_buffer {
+          |    verdict_cache[out.spec_num as usize] = Some(out.verdict);
+          |}"""))
+
+    if (loggedSpecs.nonEmpty) {
+      outputItems = outputItems :+ RAST.BodyItemST(
+        st"""// Report the current status of specifications without alert ports.
+            |for (spec_num, spec_name) in Self::R2U2_LOGGED_SPECS {
+            |    let status = match self.r2u2_monitor.verdict_cache[spec_num] {
+            |        Some(verdict) => if verdict.truth { "true" } else { "false" },
+            |        None => "unknown",
+            |    };
+            |    log::info!(" {} is currently {}", spec_name, status);
+            |}""")
+    }
+
+    val alertOutputs: ISZ[ST] =
+      for (port <- thread.getPorts() if alertSpecNumbers.contains(port.identifier)) yield {
+        val number = alertSpecNumbers.get(port.identifier).get
+        val put: ST = port match {
+          case _: AadlEventPort =>
+            st"""if !verdict.truth {
+                |    api.put_${port.identifier}();
+                |}"""
+          case _: AadlEventDataPort => st"api.put_${port.identifier}(verdict.truth);"
+          case _ => halt("Unexpected R2U2 alert port type")
+        }
+        st"""if let Some(verdict) = self.r2u2_monitor.verdict_cache[$number] {
+            |    $put
+            |}"""
+      }
+    if (alertOutputs.nonEmpty) {
+      outputItems = outputItems :+ RAST.BodyItemST(
+        st"""// Send the latest cached verdict through each mapped alert port.
+            |${(alertOutputs, "\n")}""")
+    }
+    return (loggedSpecsConstOpt, outputItems)
   }
 
   // Lower a resolved Slang expression to an executable R2U2 signal expression.

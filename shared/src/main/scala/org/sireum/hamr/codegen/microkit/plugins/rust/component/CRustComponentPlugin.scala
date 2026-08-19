@@ -523,9 +523,15 @@ object ComponentContributions {}
           implIdent = None(),
           forIdent = RAST.IdentString(threadId),
           items = e._2.appR2U2MonitorMethods)
+        val specs = e._2.appR2U2SpecDef.get
+        val numSpecs = specs.ftspecs.size + specs.ptspecs.size
         val monitorSpec =
           st"""#[$externalBody]
-              |pub struct R2U2Monitor { inner: r2u2_core::Monitor }
+              |pub struct R2U2Monitor {
+              |  inner: r2u2_core::Monitor,
+              |  // Cache latest verdict (if applicable) per C2PO specification between monitor steps.
+              |  verdict_cache: [Option<r2u2_core::r2u2_verdict>; $numSpecs],
+              |}
               |
               |#[$external]
               |impl core::ops::Deref for R2U2Monitor {
@@ -540,7 +546,10 @@ object ComponentContributions {}
               |
               |#[$externalBody]
               |pub(super) fn default_r2u2_monitor() -> R2U2Monitor {
-              |  R2U2Monitor { inner: r2u2_core::Monitor::default() }
+              |  R2U2Monitor {
+              |    inner: r2u2_core::Monitor::default(),
+              |    verdict_cache: [None; $numSpecs],
+              |  }
               |}
               |
               |#[$externalBody]

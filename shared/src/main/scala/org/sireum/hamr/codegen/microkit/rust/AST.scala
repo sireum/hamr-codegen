@@ -3,6 +3,7 @@ package org.sireum.hamr.codegen.microkit.rust
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, isThread}
+import org.sireum.hamr.codegen.common.STUtil
 import org.sireum.hamr.codegen.common.containers.{BlockMarker, Marker, PlaceholderMarker}
 import org.sireum.hamr.codegen.microkit.plugins.gumbo.GumboC2POUtil.{C2POEnum, C2POStruct}
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.TAB
@@ -208,12 +209,23 @@ object Printers {
   }
 }
 
+@datatype class R2U2Formula(val commentOpt: Option[ST],
+                            val id: String,
+                            val exp: Expr) extends Item {
+  @pure override def prettyST: ST = {
+    val formula: ST =
+      st"""$commentOpt
+          |$id: ${exp.prettyST};"""
+    return st"${TAB}${(STUtil.splitST(formula), s"\n$TAB")}"
+  }
+}
+
 @datatype class R2U2SpecDef(val structs: ISZ[C2POStruct],
                           val enums: ISZ[C2POEnum],
                           val inputs: ISZ[R2U2InputDef],
                           val defines: ISZ[Item],
-                          val ftspecs: ISZ[Item],
-                          val ptspecs: ISZ[Item]) extends Item {
+                          val ftspecs: ISZ[R2U2Formula],
+                          val ptspecs: ISZ[R2U2Formula]) extends Item {
   @pure def printMap: ST = {
     if (inputs.nonEmpty){
       return st"${(for(i <- inputs) yield i.printMap, "\n")}"
