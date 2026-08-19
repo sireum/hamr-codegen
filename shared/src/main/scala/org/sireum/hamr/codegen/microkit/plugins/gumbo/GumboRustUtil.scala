@@ -119,19 +119,23 @@ object GumboRustUtil {
     return ret
   }
 
+  // `isAssumeRequires` and `isGuaranteeEnsures` say which half of the enclosing
+  // Verus contract the spec lands in; they are mutually exclusive and both F when
+  // it is neither (see SlangExpUtil.rewriteExp).
   @pure def processGumboSpec(spec: GclSpec,
 
                              component: AadlComponent,
                              context: Context.Type,
 
                              isAssumeRequires: B,
+                             isGuaranteeEnsures: B,
 
                              types: AadlTypes,
                              tp: CRustTypeProvider,
                              gclSymbolTable: GclSymbolTable,
                              store: Store,
                              reporter: Reporter): RAST.Expr = {
-    return processGumboSpecH(spec, component, context, isAssumeRequires, Map.empty, types, tp, gclSymbolTable, store, reporter)
+    return processGumboSpecH(spec, component, context, isAssumeRequires, isGuaranteeEnsures, Map.empty, types, tp, gclSymbolTable, store, reporter)
   }
 
   @pure def processGumboSpecH(spec: GclSpec,
@@ -140,6 +144,7 @@ object GumboRustUtil {
                               context: Context.Type,
 
                               isAssumeRequires: B,
+                              isGuaranteeEnsures: B,
 
                               substitutions: Map[String, String],
 
@@ -165,6 +170,7 @@ object GumboRustUtil {
         context = context,
 
         inRequires = isAssumeRequires,
+        inEnsures = isGuaranteeEnsures,
         target = TargetLanguage.verus,
         substitutions = substitutions,
         aadlTypes = types,
@@ -203,6 +209,7 @@ object GumboRustUtil {
         context = context,
 
         inRequires = isAssumeRequires,
+        inEnsures = F,
         target = TargetLanguage.C2PO,
         substitutions = Map.empty,
         aadlTypes = types,
@@ -255,6 +262,7 @@ object GumboRustUtil {
 
           substitutions = Map.empty,
           inRequires = T,
+          inEnsures = F,
           target = TargetLanguage.verus,
           aadlTypes = aadlTypes,
           tp = tp,
@@ -271,6 +279,7 @@ object GumboRustUtil {
 
         substitutions = Map.empty,
         inRequires = F,
+        inEnsures = T,
         target = TargetLanguage.verus,
         aadlTypes = aadlTypes,
         tp = tp,
@@ -362,7 +371,8 @@ object GumboRustUtil {
               context = if (isLibraryMethod) Context.library_function else Context.subclause_function,
 
               inRequires = F,
-              target = TargetLanguage.verus,
+              inEnsures = F,
+              target = target,
               tp = tp,
               aadlTypes = aadlTypes,
               store = store,

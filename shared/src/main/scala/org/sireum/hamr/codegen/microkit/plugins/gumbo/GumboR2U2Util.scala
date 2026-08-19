@@ -157,6 +157,7 @@ object GumboR2U2Util {
       optComponent = Some(component),
       context = context,
       inRequires = isAssumeRequires,
+      inEnsures = F,
       target = TargetLanguage.rust,
       substitutions = substitutions,
       aadlTypes = types,

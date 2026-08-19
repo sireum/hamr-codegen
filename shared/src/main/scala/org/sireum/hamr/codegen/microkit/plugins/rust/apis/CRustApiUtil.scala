@@ -229,6 +229,9 @@ object CRustApiUtil {
       body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(body)))))
   }
 
+  // The returned expressions are postconditions of `&mut self` methods, so
+  // post-state field references must be written as `final(self).<field>` --
+  // Verus rejects a bare `self` deref in an `ensures` clause as ambiguous.
   @pure def getApiContract(srcPort: AadlPort, apiPorts: ISZ[AadlPort]): ISZ[RAST.Expr] = {
     val isEventPort = srcPort.isInstanceOf[AadlEventPort]
     var r: ISZ[RAST.Expr] = ISZ()
@@ -237,18 +240,18 @@ object CRustApiUtil {
         if (srcPort.direction == Direction.Out) {
           srcPort match {
             case i: AadlEventPort =>
-              r = r :+ RAST.ExprST(st"self.${srcPort.identifier} == Some(${MicrokitTypeUtil.eventPortRustValue})")
+              r = r :+ RAST.ExprST(st"final(self).${srcPort.identifier} == Some(${MicrokitTypeUtil.eventPortRustValue})")
             case i: AadlDataPort =>
-              r = r :+ RAST.ExprST(st"self.${srcPort.identifier} == ${CRustApiPlugin.apiParameterName}")
+              r = r :+ RAST.ExprST(st"final(self).${srcPort.identifier} == ${CRustApiPlugin.apiParameterName}")
             case i: AadlEventDataPort =>
-              r = r :+ RAST.ExprST(st"self.${srcPort.identifier} == Some(${CRustApiPlugin.apiParameterName})")
+              r = r :+ RAST.ExprST(st"final(self).${srcPort.identifier} == Some(${CRustApiPlugin.apiParameterName})")
           }
         } else {
-          r = r :+ RAST.ExprST(st"old(self).${otherPort.identifier} == self.${otherPort.identifier}")
-          r = r :+ RAST.ExprST(st"${CRustApiPlugin.apiResultName} == self.${srcPort.identifier}${if(isEventPort) ".is_some()" else ""}")
+          r = r :+ RAST.ExprST(st"old(self).${otherPort.identifier} == final(self).${otherPort.identifier}")
+          r = r :+ RAST.ExprST(st"${CRustApiPlugin.apiResultName} == final(self).${srcPort.identifier}${if(isEventPort) ".is_some()" else ""}")
         }
       } else {
-        r = r :+ RAST.ExprST(st"old(self).${otherPort.identifier} == self.${otherPort.identifier}")
+        r = r :+ RAST.ExprST(st"old(self).${otherPort.identifier} == final(self).${otherPort.identifier}")
       }
     }
     return r
@@ -262,11 +265,13 @@ object CRustApiUtil {
     val ghostName = getGhostName(srcPort)
     val portTypeNP = crustTypeProvider.getTypeNameProvider(aadlType)
     val ensures = getApiContract(srcPort, apiPorts)
+    // The tracking field is `ghost`, so the update has to happen in ghost code --
+    // Verus rejects assigning a spec-mode place from an executable context.
     val bodyGhost: RAST.BodyItem =
       srcPort match {
-        case i: AadlEventPort => RAST.BodyItemST(st"self.${ghostName} = Some(${MicrokitTypeUtil.eventPortRustValue});")
-        case i: AadlDataPort => RAST.BodyItemST(st"self.${ghostName} = ${CRustApiPlugin.apiParameterName};")
-        case i: AadlEventDataPort => RAST.BodyItemST(st"self.${ghostName} = Some(${CRustApiPlugin.apiParameterName});")
+        case i: AadlEventPort => RAST.BodyItemST(st"proof { self.${ghostName} = Some(${MicrokitTypeUtil.eventPortRustValue}); }")
+        case i: AadlDataPort => RAST.BodyItemST(st"proof { self.${ghostName} = ${CRustApiPlugin.apiParameterName}; }")
+        case i: AadlEventDataPort => RAST.BodyItemST(st"proof { self.${ghostName} = Some(${CRustApiPlugin.apiParameterName}); }")
       }
 
     var inputs: ISZ[RAST.Param] = ISZ(RAST.ParamFixMe(st"&mut self"))

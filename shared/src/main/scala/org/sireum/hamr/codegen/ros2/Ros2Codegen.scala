@@ -72,8 +72,9 @@ object Ros2Codegen {
     // sized -- overflow of an unsized field is silent at runtime
     Generator.validateMicroRosCapacities(microRosThreads, reporter)
 
-    // a queued port whose payload the generated ring buffer cannot faithfully copy
-    Generator.validateMicroRosEventQueues(microRosThreads, reporter)
+    // --strict-aadl-mode does not reach the micro-ROS nodes; say so rather than let a mixed
+    // system quietly disagree with the command line
+    Generator.reportMicroRosDispatchSemantics(microRosThreads, options.strictAadlMode, reporter)
 
     var files: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
 

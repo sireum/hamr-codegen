@@ -731,6 +731,10 @@ object ComponentContributions {}
               |$r2u2MakeSection
               |
               |R2U2_BUILD_DEPS = $$(R2U2_SPEC_BIN)
+              |
+              |# The toolchain is pinned to a stable release channel (see rust-toolchain.toml),
+              |# which rejects the #![feature(..)] attributes the generated crates declare, so
+              |# every cargo invocation -- building, verifying and testing alike -- needs this.
               |ENV_VARS = RUSTC_BOOTSTRAP=1
               |
               |BUILD_ENV_VARS = $$(ENV_VARS) \
@@ -740,13 +744,20 @@ object ComponentContributions {}
               |              -Z build-std-features=compiler-builtins-mem \
               |              --target aarch64-unknown-none
               |
+              |${RustUtil.smtOptsMakeVar}
+              |
               |all: build-verus-release
               |
+              |# NOTE: cargo-verus requires Verus-relevant cargo options (e.g. --features,
+              |#       --release, --package, --manifest-path) to precede Verus-irrelevant
+              |#       ones (e.g. --target, -Z ...), otherwise it errors out.  CARGO_FLAGS
+              |#       holds the Verus-irrelevant options, so it must come last.
+              |
               |build-verus-release: $$(R2U2_BUILD_DEPS)
-              |${TAB}$$(BUILD_ENV_VARS) cargo-verus build --features sel4 $$(CARGO_FLAGS) --release
+              |${TAB}$$(BUILD_ENV_VARS) cargo-verus build --features sel4 --release $$(CARGO_FLAGS) -- $$(SMT_OPTS)
               |
               |build-verus: $$(R2U2_BUILD_DEPS)
-              |${TAB}$$(BUILD_ENV_VARS) cargo-verus build --features sel4 $$(CARGO_FLAGS)
+              |${TAB}$$(BUILD_ENV_VARS) cargo-verus build --features sel4 $$(CARGO_FLAGS) -- $$(SMT_OPTS)
               |
               |build-release: $$(R2U2_BUILD_DEPS)
               |${TAB}$$(BUILD_ENV_VARS) cargo build --features sel4 $$(CARGO_FLAGS) --release
@@ -755,10 +766,10 @@ object ComponentContributions {}
               |${TAB}$$(BUILD_ENV_VARS) cargo build --features sel4 $$(CARGO_FLAGS)
               |
               |verus: $$(R2U2_BUILD_DEPS)
-              |${TAB}$$(ENV_VARS) cargo-verus verify $$(CARGO_FLAGS)
+              |${TAB}$$(ENV_VARS) cargo-verus verify $$(CARGO_FLAGS) -- $$(SMT_OPTS)
               |
               |verus-json: $$(R2U2_BUILD_DEPS)
-              |${TAB}$$(ENV_VARS) cargo-verus verify $$(CARGO_FLAGS) -- --output-json --time > verus_results.json
+              |${TAB}$$(ENV_VARS) cargo-verus verify $$(CARGO_FLAGS) -- $$(SMT_OPTS) --output-json --time > verus_results.json
               |
               |# Test Example:
               |#   Run all unit tests
@@ -768,10 +779,10 @@ object ComponentContributions {}
               |#   Usage: make test args=proptest
               |
               |test-release: $$(R2U2_BUILD_DEPS)
-              |${TAB}cargo test $$(args) --release
+              |${TAB}$$(ENV_VARS) cargo test $$(args) --release
               |
               |test: $$(R2U2_BUILD_DEPS)
-              |${TAB}cargo test $$(args)
+              |${TAB}$$(ENV_VARS) cargo test $$(args)
               |
               |# Coverage Example:
               |#   Generate a test coverage report combining the results of all unit tests
@@ -784,7 +795,7 @@ object ComponentContributions {}
               |${TAB}cargo install grcov
               |${TAB}@exists=0; if [ -f target/coverage/report/index.html ]; then exists=1; fi; \
               |${TAB}rm -rf target/coverage; \
-              |${TAB}CARGO_INCREMENTAL=0 RUSTFLAGS='-Cinstrument-coverage' LLVM_PROFILE_FILE='target/coverage/cargo-test-%p-%m.profraw' \
+              |${TAB}$$(ENV_VARS) CARGO_INCREMENTAL=0 RUSTFLAGS='-Cinstrument-coverage' LLVM_PROFILE_FILE='target/coverage/cargo-test-%p-%m.profraw' \
               |${TAB}cargo test $$(args); \
               |${TAB}grcov . --binary-path ./target/debug/deps/ -s . -t html --branch --ignore-not-existing -o target/coverage/report; \
               |${TAB}if [ $$$$exists -eq 0 ]; then open target/coverage/report/index.html; fi

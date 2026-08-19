@@ -9,6 +9,7 @@ import org.sireum.hamr.codegen.common.util.HamrCli
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen
 import org.sireum.hamr.codegen.microkit.plugins.MicrokitLintPlugin
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
+import org.sireum.hamr.codegen.microkit.util.MicrokitUtil
 import org.sireum.hamr.ir.{Aadl, ConnectionInstance, Direction}
 import org.sireum.message.Reporter
 
@@ -90,6 +91,18 @@ object MicrokitLinterPlugin {
               reporter.error(process.component.identifier.pos, MicrokitCodegen.toolName, s"Domain $dom has already been assigned to ${other.identifier}.")
             case _ =>
               assignedDomains = assignedDomains + dom ~> process
+          }
+          // Only a warning: the real bound is the KernelNumDomains the SDK's kernel was
+          // built with, which is not knowable here -- codegen is not given the SDK path
+          // or the target board (MICROKIT_SDK/MICROKIT_BOARD are supplied to the generated
+          // Makefile at build time). MicrokitUtil.KernelNumDomains is only the stock
+          // Microkit default, and upstream describes it as an arbitrary value that an SDK
+          // rebuild may raise. The microkit tool performs the authoritative check against
+          // the actual kernel config when it processes the system description.
+          if (dom >= MicrokitUtil.KernelNumDomains) {
+            reporter.warn(process.component.identifier.pos, MicrokitCodegen.toolName,
+              st"""Domain $dom assigned to ${process.identifier} is not less than the default KernelNumDomains of ${MicrokitUtil.KernelNumDomains}.
+                  |Building this system requires an SDK whose kernel was built with a larger KernelNumDomains (seL4 permits up to 256).""".render)
           }
         case _ =>
           reporter.error(process.component.identifier.pos, MicrokitCodegen.toolName, s"Processes must be assigned to a scheduling domain.")

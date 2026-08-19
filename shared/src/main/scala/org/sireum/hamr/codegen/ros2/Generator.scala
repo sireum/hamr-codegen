@@ -38,7 +38,18 @@ object Generator {
   val callback_group_name: String = "cb_group_"
   val subscription_options_name: String = "subscription_options_"
   // Mutex is used for thread locking in C++
-  val mutex_name: String = "mutex_"
+  // Strict mode uses two locks because the single `mutex_` it replaces was doing two unrelated
+  // jobs: guarding the port queues, and (by being held for the whole dispatch lambda) serialising
+  // dispatches.  Collapsing them forced the lock to be held across the user's entry point, so any
+  // put_<port> or get_<port> from user code would deadlock on a non-recursive mutex.
+  val state_mutex_name: String = "state_mutex_"
+  val dispatch_mutex_name: String = "dispatch_mutex_"
+
+  // Size of the shared MESSAGE_TO_STRING scratch buffer.  The bound has to appear in the extern
+  // declaration too, not just the definition: the macro uses sizeof on it, and an unbounded
+  // `extern char buf[]` is an incomplete type that sizeof cannot be applied to.
+  val msgToStringBufName: String = "_MESSAGE_TO_STRING_buf"
+  val msgToStringBufSize: Z = 512
 
 
   def genPyLaunchFileName(compNameS: String): String = {
@@ -171,47 +182,15 @@ object Generator {
   //
   // On a sporadic node an arrival dispatches the port's handler directly, so nothing is buffered.
   // A periodic node runs on its timer instead, so an arrival has to wait for the next dispatch:
-  // each such port gets a statically allocated ring buffer whose depth is the port's AADL
-  // Queue_Size (default 1), filled by the subscription callback and drained one entry per
-  // dispatch.  Data ports are excluded -- they latch a single newest value, which is their
-  // semantics, not a queue.
+  // each such port records that one is waiting, and receiveInputs consumes it at the top of the
+  // next dispatch.  Only the AADL default Queue_Size of 1 is realized -- RosLinter rejects any
+  // larger declaration -- so a second arrival replaces the first rather than queueing behind it.
+  // Data ports are excluded: they latch a single newest value, which is their semantics, not a
+  // queue.
   def microRosQueuedInPorts(component: AadlThread): ISZ[AadlPort] = {
     return if (isSporadic(component)) IS()
     else ISZOps(ISZOps(generatedPorts(component)).filter(p => p.direction == Direction.In))
       .filter(p => !p.isInstanceOf[AadlDataPort])
-  }
-
-  // The AADL queue depth of an event or event data port; 1 (the AADL default) for anything else.
-  @pure def microRosQueueSize(p: AadlPort): Z = {
-    p match {
-      case e: AadlEventDataPort => return e.queueSize
-      case e: AadlEventPort => return e.queueSize
-      case _ => return 1
-    }
-  }
-
-  // Whether a payload's generated C struct holds pointers into separately allocated storage.
-  // rosidl renders a string and an unbounded sequence that way, and a platform-provided type's
-  // native layout is unknown to codegen -- its mirror is a projection, not a layout claim -- so it
-  // has to be assumed to.  A ring buffer copies messages by struct assignment, which duplicates
-  // such a pointer rather than the bytes behind it, leaving every slot aliasing the subscription's
-  // staging buffer.  Fixed-dimension arrays are fine: those render as plain C arrays.
-  def hasPointerCarryingFields(aadlType: AadlType): B = {
-    if (RosUtil.isPlatformProvided(aadlType)) {
-      return T
-    }
-    aadlType match {
-      case b: BaseType => return b.name == "Base_Types::String"
-      case a: ArrayType => return a.dimensions.isEmpty || a.dimensions(0) == 0 || hasPointerCarryingFields(a.baseType)
-      case r: RecordType =>
-        for (entry <- r.fields.entries) {
-          if (hasPointerCarryingFields(entry._2)) {
-            return T
-          }
-        }
-        return F
-      case _ => return F
-    }
   }
 
   // Arguments to the rclcpp Node base constructor.  The two-argument (name, namespace) form is
@@ -526,18 +505,37 @@ object Generator {
       case _ => F
     }
 
+  // A handler for an in rosout port must not log through the ROS logger.  An rclcpp node
+  // publishes its own log records to /rosout by default, and this node is subscribed to
+  // /rosout -- so a log call here feeds the handler its own output.  It is self-sustaining
+  // rather than merely noisy: measured at ~9000 records/sec from a 10 records/sec producer,
+  // bounded only by CPU.  The skeleton therefore explains itself instead of demonstrating it.
+  @strictpure def genRosoutHandlerNote: ST =
+    st"""// Deliberately does not log.  This node subscribes to /rosout, and a ROS node
+        |// publishes its own log records there -- so logging here would feed this handler
+        |// its own output and run away.  Write records to a file, a socket, or stdout;
+        |// anything routed through the ROS logger comes back."""
+
   // The example "Received <port>" log line emitted into generated user code.  msgExpr is the
   // C++ expression holding the message; a platform-provided payload has no printer, so only
   // the port name is logged.
   @strictpure def genCppReceivedLog(port: AadlPort, msgExpr: String): ST =
-    if (isPlatformProvidedPayload(port)) st"""PRINT_INFO("Received ${port.identifier}");"""
-    else st"""PRINT_INFO("Received ${port.identifier}: %s", MESSAGE_TO_STRING(${msgExpr}));"""
+    if (RosUtil.isRosoutPort(port)) genRosoutHandlerNote
+    else if (isPlatformProvidedPayload(port)) st"""LOG_INFO("Received ${port.identifier}");"""
+    else st"""LOG_INFO("Received ${port.identifier}: %s", MESSAGE_TO_STRING(${msgExpr}));"""
+
+  // The micro-ROS counterpart of genCppReceivedLog.  Generated C user code logs the port name
+  // only -- there is no _Generic printer for an in port's payload -- but the rosout guard is
+  // the same, since a micro-ROS consumer subscribed to /rosout can feed itself just as readily.
+  @strictpure def genCppReceivedLogC(port: AadlPort, portId: String): ST =
+    if (RosUtil.isRosoutPort(port)) genRosoutHandlerNote
+    else st"""LOG_INFO("Received ${portId}");"""
 
   // The example "Sent <port>" log line emitted into generated micro-ROS user code; as with
   // genCppReceivedLog, a platform-provided payload is logged by port name only.
   @strictpure def genCSentLog(port: AadlPort): ST =
-    if (isPlatformProvidedPayload(port)) st"""PRINT_INFO("Sent ${port.identifier}");"""
-    else st"""PRINT_INFO("Sent ${port.identifier}: %s", MESSAGE_TO_STRING(&${port.identifier}));"""
+    if (isPlatformProvidedPayload(port)) st"""LOG_INFO("Sent ${port.identifier}");"""
+    else st"""LOG_INFO("Sent ${port.identifier}: %s", MESSAGE_TO_STRING(&${port.identifier}));"""
 
   // The native ROS packages that the given threads' ports depend on -- i.e. the packages
   // supplying their platform-provided payload types.  These become build/runtime dependencies
@@ -1837,15 +1835,47 @@ object Generator {
     val handlerName = inPort.identifier
 
     val handler: ST =
-    if (!isSporadic || inPort.isInstanceOf[AadlDataPort]) st"enqueue(infrastructureIn_${handlerName}, msg);"
+    if (!isSporadic || inPort.isInstanceOf[AadlDataPort])
+      // The write side of the race ThreadSanitizer caught: receiveInputs reads these same
+      // infrastructure queues from the dispatch, so this acceptor has to take state_mutex_ too.
+      // Data ports land here regardless of dispatch protocol, and so does every port on a
+      // periodic thread.
+      st"""{
+          |    std::lock_guard<std::mutex> lock(${state_mutex_name});
+          |    enqueue(infrastructureIn_${handlerName}, msg);
+          |}"""
     else
-      st"""enqueue(infrastructureIn_${handlerName}, msg);
+      st"""{
+          |    std::lock_guard<std::mutex> lock(${state_mutex_name});
+          |    enqueue(infrastructureIn_${handlerName}, msg);
+          |}
           |std::thread([this]() {
-          |    std::lock_guard<std::mutex> lock(mutex_);
-          |    receiveInputs(infrastructureIn_${handlerName}, applicationIn_${handlerName});
-          |    if (applicationIn_${handlerName}.empty()) return;
-          |    handle_${handlerName}_base(applicationIn_${handlerName}.front());
-          |    applicationIn_${handlerName}.pop();
+          |    // One dispatch at a time.  This is what the old single mutex_ achieved by being
+          |    // held for the whole lambda; it is kept separate so that the state lock can be
+          |    // released around the entry point.
+          |    std::lock_guard<std::mutex> dispatch(${dispatch_mutex_name});
+          |
+          |    MsgType dispatched;
+          |    {
+          |        std::lock_guard<std::mutex> lock(${state_mutex_name});
+          |        receiveInputs(infrastructureIn_${handlerName}, applicationIn_${handlerName});
+          |        if (applicationIn_${handlerName}.empty()) return;
+          |        dispatched = applicationIn_${handlerName}.front();
+          |    }
+          |
+          |    // Deliberately outside state_mutex_: the handler is user code and calls
+          |    // put_<port>/get_<port>, which take that lock themselves.  The value stays on
+          |    // applicationIn_${handlerName} until the handler returns, because get_${handlerName}
+          |    // reads it from there.
+          |    handle_${handlerName}_base(dispatched);
+          |
+          |    {
+          |        std::lock_guard<std::mutex> lock(${state_mutex_name});
+          |        if (!applicationIn_${handlerName}.empty()) {
+          |            applicationIn_${handlerName}.pop();
+          |        }
+          |    }
+          |
           |    sendOutputs();
           |}).detach();"""
 
@@ -2011,7 +2041,7 @@ object Generator {
           |    if (auto typedMsg = std::get_if<${portType}>(&msg)) {
           |        ${(publishers, "\n")}
           |    } else {
-          |        PRINT_ERROR("Sending out wrong type of variable on port ${handlerName}.\nThis shouldn't be possible.  If you are seeing this message, please notify this tool's current maintainer.");
+          |        LOG_ERROR("Sending out wrong type of variable on port ${handlerName}.\nThis shouldn't be possible.  If you are seeing this message, please notify this tool's current maintainer.");
           |    }
           |}
          """
@@ -2029,6 +2059,8 @@ object Generator {
       putMsgCode =
         st"""void ${nodeName}::put_${handlerName}()
             |{
+            |    // Called from the compute entry point, which runs without state_mutex_ held.
+            |    std::lock_guard<std::mutex> lock(${state_mutex_name});
             |    enqueue(applicationOut_${handlerName}, ${portType}());
             |}
         """
@@ -2037,6 +2069,8 @@ object Generator {
       putMsgCode =
         st"""void ${nodeName}::put_${handlerName}(${portType} msg)
             |{
+            |    // Called from the compute entry point, which runs without state_mutex_ held.
+            |    std::lock_guard<std::mutex> lock(${state_mutex_name});
             |    enqueue(applicationOut_${handlerName}, msg);
             |}
         """
@@ -2112,7 +2146,7 @@ object Generator {
       subscriptionHandlerHeader = st"""void ${nodeName}::handle_${handlerName}()
                                       |{
                                       |    // Handle ${handlerName} event
-                                      |    PRINT_INFO("Received ${handlerName}");"""
+                                      |    LOG_INFO("Received ${handlerName}");"""
     }
     else {
       subscriptionHandlerHeader = st"""void ${nodeName}::handle_${handlerName}(const ${portType}::SharedPtr msg)
@@ -2146,7 +2180,7 @@ object Generator {
       subscriptionHandlerHeader = st"""void ${nodeName}::handle_${handlerName}()
                                       |{
                                       |    // Handle ${handlerName} event
-                                      |    PRINT_INFO("Received ${handlerName}");
+                                      |    LOG_INFO("Received ${handlerName}");
                                       |}
                                     """
     }
@@ -2185,7 +2219,7 @@ object Generator {
       subscriptionHandlerHeader = st"""void ${nodeName}::handle_${handlerName}()
                                       |{
                                       |    // Handle ${handlerName} event
-                                      |    PRINT_INFO("Received ${handlerName}");"""
+                                      |    LOG_INFO("Received ${handlerName}");"""
     }
     else {
       subscriptionHandlerHeader = st"""void ${nodeName}::handle_${handlerName}(const ${portType} msg)
@@ -2217,7 +2251,7 @@ object Generator {
       subscriptionHandlerHeader = st"""void ${nodeName}::handle_${handlerName}()
                                       |{
                                       |    // Handle ${handlerName} event
-                                      |    PRINT_INFO("Received ${handlerName}");
+                                      |    LOG_INFO("Received ${handlerName}");
                                       |}
                                     """
     }
@@ -2283,7 +2317,7 @@ object Generator {
                         |    if (auto typedMsg = std::get_if<${portType}>(&msg)) {
                         |        handle_${handlerName}(*typedMsg);
                         |    } else {
-                        |        PRINT_ERROR("Receiving wrong type of variable on port ${handlerName}.\nThis shouldn't be possible.  If you are seeing this message, please notify this tool's current maintainer.");
+                        |        LOG_ERROR("Receiving wrong type of variable on port ${handlerName}.\nThis shouldn't be possible.  If you are seeing this message, please notify this tool's current maintainer.");
                         |    }
                         |}
                       """
@@ -2397,6 +2431,8 @@ object Generator {
 
     val subscriptionMessageHeader: ST =
       st"""${portType} ${nodeName}::get_${portName}() {
+          |    // Called from the compute entry point, which runs without state_mutex_ held.
+          |    std::lock_guard<std::mutex> lock(${state_mutex_name});
           |    MsgType msg = applicationIn_${portName}.front();
           |    return std::get<${portType}>(msg);
           |}
@@ -2410,6 +2446,7 @@ object Generator {
     return method
   }
 
+  // Caller must hold state_mutex_: this is a helper, not an entry point.
   def genCppReceiveInputsSporadic(nodeName: String): ST = {
     val method: ST =
       st"""void ${nodeName}::receiveInputs(std::queue<MsgType>& infrastructureQueue, std::queue<MsgType>& applicationQueue) {
@@ -2437,6 +2474,7 @@ object Generator {
     return method
   }
 
+  // Caller must hold state_mutex_: this is a helper, not an entry point.
   def genCppReceiveInputsPeriodic(nodeName: String): ST = {
     val method: ST =
       st"""void ${nodeName}::receiveInputs() {
@@ -2471,22 +2509,39 @@ object Generator {
   def genCppSendOutputs(nodeName: String): ST = {
     val method: ST =
       st"""void ${nodeName}::sendOutputs() {
-          |    for (std::tuple<std::queue<MsgType>*, std::queue<MsgType>*, void (${nodeName}::*)(MsgType)> port : outPortTupleVector) {
-          |        auto applicationQueue = std::get<0>(port);
-          |        if (applicationQueue->size() != 0) {
-          |            auto msg = applicationQueue->front();
-          |            applicationQueue->pop();
-          |            enqueue(*std::get<1>(port), msg);
+          |    // The queue work happens under state_mutex_; the publishing does not.  accept_<port>
+          |    // runs from a subscription callback, so the middleware already holds locks of its own
+          |    // when it takes state_mutex_.  Publishing while holding state_mutex_ would establish
+          |    // the reverse order and put this lock into a cycle with the middleware's.  No such
+          |    // cycle has been observed -- the lock-order inversions ThreadSanitizer reports here
+          |    // are internal to Fast DDS and involve neither of this node's mutexes -- so this is
+          |    // ordering hygiene rather than a fix for a diagnosed deadlock.  It also keeps the
+          |    // critical section off the wire.  Collect first, release, then publish.
+          |    std::vector<std::pair<void (${nodeName}::*)(MsgType), MsgType>> pending;
+          |    {
+          |        std::lock_guard<std::mutex> lock(${state_mutex_name});
+          |        for (std::tuple<std::queue<MsgType>*, std::queue<MsgType>*, void (${nodeName}::*)(MsgType)> port : outPortTupleVector) {
+          |            auto applicationQueue = std::get<0>(port);
+          |            if (applicationQueue->size() != 0) {
+          |                auto msg = applicationQueue->front();
+          |                applicationQueue->pop();
+          |                enqueue(*std::get<1>(port), msg);
+          |            }
+          |        }
+          |
+          |        for (std::tuple<std::queue<MsgType>*, std::queue<MsgType>*, void (${nodeName}::*)(MsgType)> port : outPortTupleVector) {
+          |            auto infrastructureQueue = std::get<1>(port);
+          |            if (infrastructureQueue->size() != 0) {
+          |                auto msg = infrastructureQueue->front();
+          |                infrastructureQueue->pop();
+          |                pending.emplace_back(std::get<2>(port), msg);
+          |            }
           |        }
           |    }
           |
-          |    for (std::tuple<std::queue<MsgType>*, std::queue<MsgType>*, void (${nodeName}::*)(MsgType)> port : outPortTupleVector) {
-          |        auto infrastructureQueue = std::get<1>(port);
-          |        if (infrastructureQueue->size() != 0) {
-          |            auto msg = infrastructureQueue->front();
-          |            infrastructureQueue->pop();
-          |            (this->*std::get<2>(port))(msg);
-          |        }
+          |    // Still one dispatch's worth of outputs, released together -- only the lock is gone.
+          |    for (auto& entry : pending) {
+          |        (this->*entry.first)(entry.second);
           |    }
           |}
         """
@@ -2500,6 +2555,7 @@ object Generator {
   }
 
   // Currently, all queues are treated as having a size of 1.
+  // Caller must hold state_mutex_: this is a helper, not an entry point.
   def genCppEnqueue(nodeName: String): ST = {
     val method: ST =
       st"""void ${nodeName}::enqueue(std::queue<MsgType>& queue, MsgType val) {
@@ -2554,6 +2610,10 @@ object Generator {
 
     val initializer: ST =
       st"""void ${nodeName}::init_${portName}(${portType} val) {
+          |    // Reachable from the initialize entry point.  That runs during construction, before
+          |    // the executor spins, so there is no contention -- the lock is taken anyway to keep
+          |    // one rule: anything user code can call takes state_mutex_.
+          |    std::lock_guard<std::mutex> lock(${state_mutex_name});
           |    enqueue(infrastructureIn_${portName}, val);
           |}"""
     return initializer
@@ -2651,8 +2711,19 @@ object Generator {
   def genCppTimeTriggeredCaller(nodeName: String): ST = {
     val timeTriggered: ST =
       st"""void ${nodeName}::timeTriggeredCaller() {
-          |    receiveInputs();
+          |    // One dispatch at a time: the callback group is Reentrant, so a period shorter than
+          |    // the entry point would otherwise re-enter this concurrently.
+          |    std::lock_guard<std::mutex> dispatch(${dispatch_mutex_name});
+          |
+          |    {
+          |        std::lock_guard<std::mutex> lock(${state_mutex_name});
+          |        receiveInputs();
+          |    }
+          |
+          |    // Deliberately outside state_mutex_: timeTriggered is user code and calls
+          |    // put_<port>/get_<port>, which take that lock themselves.
           |    timeTriggered();
+          |
           |    sendOutputs();
           |}
         """
@@ -2878,7 +2949,8 @@ object Generator {
         st"""${stdIncludes}
             |#include <vector>
             |#include <variant>
-            |#include <mutex>"""
+            |#include <mutex>
+            |#include <utility>"""
     }
 
     val enumConverterInclude: ST = if (hasEnumConverter) st"""#include "${packageName}/base_headers/enum_converter.hpp"""" else st""
@@ -2925,9 +2997,9 @@ object Generator {
           |    //=================================================
           |
           |    ${msgToStringMacro}
-          |    #define PRINT_INFO(...) RCLCPP_INFO(this->get_logger(), __VA_ARGS__)
-          |    #define PRINT_WARN(...) RCLCPP_WARN(this->get_logger(), __VA_ARGS__)
-          |    #define PRINT_ERROR(...) RCLCPP_ERROR(this->get_logger(), __VA_ARGS__)
+          |    #define LOG_INFO(...) RCLCPP_INFO(this->get_logger(), __VA_ARGS__)
+          |    #define LOG_WARN(...) RCLCPP_WARN(this->get_logger(), __VA_ARGS__)
+          |    #define LOG_ERROR(...) RCLCPP_ERROR(this->get_logger(), __VA_ARGS__)
           |
           |    ${(putMethodHeaders, "\n")}
         """
@@ -3045,7 +3117,14 @@ object Generator {
       fileBody =
         st"""${fileBody}
             |    // Used for thread locking
-            |    std::mutex ${mutex_name};
+            |    // Guards the port queues.  Never held across the compute entry point -- user code
+            |    // calls put_<port>/get_<port>, which take it themselves.
+            |    std::mutex ${state_mutex_name};
+            |
+            |    // Held for the length of a dispatch so dispatches do not overlap.  The callback
+            |    // group is Reentrant, so without this two arrivals on the same port could run the
+            |    // entry point concurrently.
+            |    std::mutex ${dispatch_mutex_name};
             |
             |    // Used by receiveInputs
             |    ${genCppInDataPortTupleVectorHeader()}"""
@@ -3500,7 +3579,7 @@ object Generator {
           |//=================================================
           |void ${nodeName}::initialize()
           |{
-          |    PRINT_INFO("Initialize Entry Point invoked");
+          |    LOG_INFO("Initialize Entry Point invoked");
           |
           |    // Initialize the node"""
 
@@ -3558,7 +3637,7 @@ object Generator {
           |    // Invoke initialize entry point
           |    initialize();
           |
-          |    PRINT_INFO("${nodeName} infrastructure set up");
+          |    LOG_INFO("${nodeName} infrastructure set up");
           |}
           |
           |int main(int argc, char **argv)
@@ -4259,7 +4338,7 @@ object Generator {
                     |    return _buf;
                     |}"""
               caseLines = caseLines :+
-                st"    ${cStructName}*: ${helperName}((msg), _MESSAGE_TO_STRING_buf, sizeof(_MESSAGE_TO_STRING_buf)), \\"
+                st"    ${cStructName}*: ${helperName}((msg), ${msgToStringBufName}, sizeof(${msgToStringBufName})), \\"
             case _ =>
           }
         }
@@ -4275,9 +4354,29 @@ object Generator {
     val block: ST =
       st"""${(helpers, "\n\n")}
           |
-          |static char _MESSAGE_TO_STRING_buf[512];
+          |// Scratch buffer for the printers above, defined once in the node's base source.  It is
+          |// declared here rather than defined so that each translation unit including this header
+          |// shares one buffer instead of getting a copy.  Sharing is safe because the rclc executor
+          |// is single-threaded: no two expansions of MESSAGE_TO_STRING can be live at once.
+          |extern char ${msgToStringBufName}[${msgToStringBufSize}];
           |${(macroLines, "\n")}"""
     return Some(block)
+  }
+
+  // Whether genCMsgToStringBlock will emit anything, and therefore whether the base source has to
+  // define the shared buffer.  Mirrors the block's own filter: an event port carries no payload,
+  // and no printer is generated for a platform-provided payload.  Deliberately avoids
+  // genPortDatatype so that asking the question a second time cannot duplicate a diagnostic.
+  def hasCMsgToString(outPorts: ISZ[AadlPort]): B = {
+    for (p <- outPorts) {
+      if (!p.isInstanceOf[AadlEventPort]) {
+        portAadlTypeOpt(p) match {
+          case Some(t) if !RosUtil.isPlatformProvided(t) => return T
+          case _ =>
+        }
+      }
+    }
+    return F
   }
 
   //================================================
@@ -4302,8 +4401,30 @@ object Generator {
           i = i + 1
         }
       }
+      // Where put_<port> leaves a value until sendOutputs releases it at the end of the dispatch.
+      if (isEventPort(portDatatype)) {
+        fields = fields :+
+          st"""// ${p.identifier}: an event port carries no payload, so the flag is the whole record
+              |bool ${portName}_out_hasValue;"""
+      } else {
+        val cType = cppTypeToCStructName(portDatatype)
+        fields = fields :+
+          st"""// ${p.identifier}: the copy is required -- put_${p.identifier} is handed a pointer to a
+              |// local in the entry point, and sendOutputs runs after that frame is gone
+              |${cType} ${portName}_out;
+              |bool ${portName}_out_hasValue;"""
+      }
     }
     return fields
+  }
+
+  // Staged outputs start empty, for the same belt-and-braces reason the queue flags do.
+  def genMicroRosOutputStagingInits(outPorts: ISZ[AadlPort]): ISZ[ST] = {
+    var inits: ISZ[ST] = IS()
+    for (p <- outPorts) {
+      inits = inits :+ st"self->${genPortName(p)}_out_hasValue = false;"
+    }
+    return inits
   }
 
   def genMicroRosPutFunctionDecls(outPorts: ISZ[AadlPort], nodeName: String, cppPkgName: String,
@@ -4384,9 +4505,18 @@ object Generator {
     return decls
   }
 
+  // On a sporadic node the arrival is the dispatch, so a handler invocation is followed by the
+  // release of whatever it staged.  A data-port callback is not a dispatch and gets neither.
+  // The statements are joined as a sequence rather than spliced into the call line: an ST holding
+  // a newline picks up the indentation of the column it is interpolated at.
   def genMicroRosSubscriptionCallbacks(inPorts: ISZ[AadlPort], nodeName: String, cppPkgName: String,
                                         datatypeMap: Map[AadlType, Ros2Datatype],
+                                        hasOutPorts: B,
                                         reporter: Reporter): ISZ[ST] = {
+    @strictpure def dispatchStmts(handlerCall: ST): ISZ[ST] =
+      if (hasOutPorts) ISZ(handlerCall, st"${nodeName}_sendOutputs(g_self);")
+      else ISZ(handlerCall)
+
     var callbacks: ISZ[ST] = IS()
     for (p <- inPorts) {
       val portName = genPortName(p)
@@ -4394,13 +4524,23 @@ object Generator {
       val portDatatype = genPortDatatype(p, cppPkgName, datatypeMap, reporter)
       val cType = cppTypeToCStructName(portDatatype)
       if (p.isInstanceOf[AadlDataPort]) {
+        // An empty function body in generated code reads like an oversight, so the emitted comment
+        // has to say why it is not one.  rclc rejects a NULL callback
+        // (rclc_executor_add_subscription checks it), and the executor has already taken the
+        // message into ${portName}_msg -- the buffer it was registered with, and the same storage
+        // get_${p.identifier} returns -- so the latch is done before this runs.  Copying msgin into
+        // it would assign the buffer to itself.
         callbacks = callbacks :+
           st"""static void ${portName}_subscription_callback(const void * msgin)
               |{
-              |    const ${cType} * msg = (const ${cType} *) msgin;
-              |    if (g_self != NULL) {
-              |        g_self->${portName}_msg = *msg;
-              |    }
+              |    // Intentionally does nothing.  A data port latches its newest value, and the
+              |    // executor has already written that value into ${portName}_msg: it is the
+              |    // buffer handed to rclc_executor_add_subscription, so rcl_take fills it before
+              |    // this callback is invoked, and get_${p.identifier} returns that same storage.
+              |    //
+              |    // The function exists because rclc requires a non-NULL callback to register the
+              |    // subscription, and the subscription is what makes the executor take at all.
+              |    (void)msgin;
               |}
             """
       } else if (isEventPort(portDatatype)) {
@@ -4409,7 +4549,7 @@ object Generator {
               |{
               |    (void)msgin;
               |    if (g_self != NULL) {
-              |        ${nodeName}_handle_${portId}(g_self);
+              |        ${(dispatchStmts(st"${nodeName}_handle_${portId}(g_self);"), "\n")}
               |    }
               |}
             """
@@ -4419,7 +4559,7 @@ object Generator {
               |{
               |    const ${cType} * msg = (const ${cType} *) msgin;
               |    if (g_self != NULL) {
-              |        ${nodeName}_handle_${portId}(g_self, msg);
+              |        ${(dispatchStmts(st"${nodeName}_handle_${portId}(g_self, msg);"), "\n")}
               |    }
               |}
             """
@@ -4436,23 +4576,18 @@ object Generator {
     var fields: ISZ[ST] = IS()
     for (p <- queuedPorts) {
       val portName = genPortName(p)
-      val queueSize = microRosQueueSize(p)
       val portDatatype = genPortDatatype(p, cppPkgName, datatypeMap, reporter)
-      val cType = cppTypeToCStructName(portDatatype)
-      if (isEventPort(portDatatype)) {
-        fields = fields :+
-          st"""// ${p.identifier}: event port, so only the pending count is queued (Queue_Size ${queueSize})
-              |size_t ${portName}_count;
-              |bool ${portName}_hasEvent;"""
-      } else {
-        fields = fields :+
-          st"""// ${p.identifier}: Queue_Size ${queueSize} ring buffer, plus the entry frozen for this dispatch
-              |${cType} ${portName}_queue[${queueSize}];
-              |size_t ${portName}_head;
-              |size_t ${portName}_count;
-              |${cType} ${portName}_frozen;
-              |bool ${portName}_hasEvent;"""
-      }
+      val payloadNote: ST =
+        if (isEventPort(portDatatype)) st"// An event port carries no payload."
+        else
+          st"""// The payload stays in ${portName}_msg, which the executor
+              |// writes before it invokes the callback."""
+      fields = fields :+
+        st"""// ${p.identifier}: only the AADL default Queue_Size of 1 is supported, so an
+            |// arrival needs no ring -- just the two flags below.
+            |${payloadNote}
+            |bool ${portName}_pending;
+            |bool ${portName}_hasEvent;"""
     }
     return fields
   }
@@ -4466,51 +4601,43 @@ object Generator {
     var callbacks: ISZ[ST] = IS()
     for (p <- inPorts) {
       val portName = genPortName(p)
-      val queueSize = microRosQueueSize(p)
       val portDatatype = genPortDatatype(p, cppPkgName, datatypeMap, reporter)
-      val cType = cppTypeToCStructName(portDatatype)
       if (p.isInstanceOf[AadlDataPort]) {
+        // An empty function body in generated code reads like an oversight, so the emitted comment
+        // has to say why it is not one.  rclc rejects a NULL callback
+        // (rclc_executor_add_subscription checks it), and the executor has already taken the
+        // message into ${portName}_msg -- the buffer it was registered with, and the same storage
+        // get_${p.identifier} returns -- so the latch is done before this runs.  Copying msgin into
+        // it would assign the buffer to itself.
         callbacks = callbacks :+
           st"""static void ${portName}_subscription_callback(const void * msgin)
               |{
-              |    const ${cType} * msg = (const ${cType} *) msgin;
-              |    if (g_self != NULL) {
-              |        g_self->${portName}_msg = *msg;
-              |    }
+              |    // Intentionally does nothing.  A data port latches its newest value, and the
+              |    // executor has already written that value into ${portName}_msg: it is the
+              |    // buffer handed to rclc_executor_add_subscription, so rcl_take fills it before
+              |    // this callback is invoked, and get_${p.identifier} returns that same storage.
+              |    //
+              |    // The function exists because rclc requires a non-NULL callback to register the
+              |    // subscription, and the subscription is what makes the executor take at all.
+              |    (void)msgin;
               |}
             """
-      } else if (isEventPort(portDatatype)) {
+      } else {
+        // Queued arrival on a periodic node.  Registered ON_NEW_DATA, so rclc invokes this only
+        // when it has taken a message, and msgin is the buffer registered with the executor --
+        // ${portName}_msg for an event data port.  The payload is therefore already where
+        // get_${p.identifier} will look for it, and recording the arrival is all that is left.
         callbacks = callbacks :+
           st"""static void ${portName}_subscription_callback(const void * msgin)
               |{
               |    (void)msgin;
               |    if (g_self != NULL) {
-              |        if (g_self->${portName}_count < ${queueSize}) {
-              |            g_self->${portName}_count++;
-              |        } else {
-              |            // Queue full.  Discarding the oldest event and recording this one leaves the
-              |            // pending count unchanged, so there is nothing to do but report the loss.
-              |            PRINT_WARN("${p.identifier} queue full (Queue_Size ${queueSize}); dropped an event");
+              |        if (g_self->${portName}_pending) {
+              |            // An arrival is already waiting for the next dispatch.  Queue_Size is 1, so
+              |            // this one replaces it, matching AADL's default DropOldest overflow handling.
+              |            LOG_WARN("${p.identifier}: overwrote an arrival that no dispatch had consumed");
               |        }
-              |    }
-              |}
-            """
-      } else {
-        callbacks = callbacks :+
-          st"""static void ${portName}_subscription_callback(const void * msgin)
-              |{
-              |    const ${cType} * msg = (const ${cType} *) msgin;
-              |    if (g_self != NULL) {
-              |        if (g_self->${portName}_count == ${queueSize}) {
-              |            // Queue full.  AADL's default Overflow_Handling_Protocol is DropOldest, so the
-              |            // oldest entry is discarded to make room for this arrival.
-              |            g_self->${portName}_head = (g_self->${portName}_head + 1) % ${queueSize};
-              |            g_self->${portName}_count--;
-              |            PRINT_WARN("${p.identifier} queue full (Queue_Size ${queueSize}); dropped oldest message");
-              |        }
-              |        size_t ${portName}_tail = (g_self->${portName}_head + g_self->${portName}_count) % ${queueSize};
-              |        g_self->${portName}_queue[${portName}_tail] = *msg;
-              |        g_self->${portName}_count++;
+              |        g_self->${portName}_pending = true;
               |    }
               |}
             """
@@ -4528,25 +4655,21 @@ object Generator {
     var inits: ISZ[ST] = IS()
     for (p <- queuedPorts) {
       val portName = genPortName(p)
-      val portDatatype = genPortDatatype(p, cppPkgName, datatypeMap, reporter)
-      if (isEventPort(portDatatype)) {
-        inits = inits :+
-          st"""self->${portName}_count = 0;
-              |self->${portName}_hasEvent = false;"""
-      } else {
-        inits = inits :+
-          st"""self->${portName}_head = 0;
-              |self->${portName}_count = 0;
-              |self->${portName}_hasEvent = false;"""
-      }
+      inits = inits :+
+        st"""self->${portName}_pending = false;
+            |self->${portName}_hasEvent = false;"""
     }
     return inits
   }
 
-  // Consumes one queued arrival per port, mirroring what the rclcpp backend's receiveInputs does
-  // for a periodic node.  Called immediately before the entry point and on the same (single)
-  // executor thread as the subscription callbacks, so what a dispatch observes is frozen for its
-  // duration and no locking is involved.
+  // Enacts AADL's dispatch-time dequeue: each queued port yields at most one arrival per dispatch,
+  // and yields it whether or not the entry point reads the port (Dequeue_Protocol defaults to
+  // OneItem).  _hasEvent therefore means "what this dispatch received", not "what is pending now".
+  //
+  // Note what this does NOT do.  It does not freeze anything -- the rclc executor is
+  // single-threaded, so no callback can run while the entry point does, and inputs are stable for
+  // the dispatch whether or not this function exists.  The dequeue is the part that is load
+  // bearing; without it a second get_<port> call in one dispatch would consume twice.
   def genMicroRosReceiveInputs(queuedPorts: ISZ[AadlPort], nodeName: String, cppPkgName: String,
                                datatypeMap: Map[AadlType, Ros2Datatype],
                                reporter: Reporter): ST = {
@@ -4554,27 +4677,9 @@ object Generator {
     var bodies: ISZ[ST] = IS()
     for (p <- queuedPorts) {
       val portName = genPortName(p)
-      val queueSize = microRosQueueSize(p)
-      val portDatatype = genPortDatatype(p, cppPkgName, datatypeMap, reporter)
-      if (isEventPort(portDatatype)) {
-        bodies = bodies :+
-          st"""if (self->${portName}_count > 0) {
-              |    self->${portName}_count--;
-              |    self->${portName}_hasEvent = true;
-              |} else {
-              |    self->${portName}_hasEvent = false;
-              |}"""
-      } else {
-        bodies = bodies :+
-          st"""if (self->${portName}_count > 0) {
-              |    self->${portName}_frozen = self->${portName}_queue[self->${portName}_head];
-              |    self->${portName}_head = (self->${portName}_head + 1) % ${queueSize};
-              |    self->${portName}_count--;
-              |    self->${portName}_hasEvent = true;
-              |} else {
-              |    self->${portName}_hasEvent = false;
-              |}"""
-      }
+      bodies = bodies :+
+        st"""self->${portName}_hasEvent = self->${portName}_pending;
+            |self->${portName}_pending = false;"""
     }
     return (
       st"""static void ${nodeName}_receiveInputs(${nodeNameBase}_t * self)
@@ -4622,7 +4727,7 @@ object Generator {
         impls = impls :+
           st"""${cType} * get_${portId}(${nodeNameBase}_t * self)
               |{
-              |    return self->${portName}_hasEvent ? &self->${portName}_frozen : NULL;
+              |    return self->${portName}_hasEvent ? &self->${portName}_msg : NULL;
               |}
             """
       }
@@ -4766,8 +4871,12 @@ object Generator {
       else st""
 
     // stdbool is pulled in only where the queue flags need it, so nodes without queued ports keep
-    // byte-identical output.
-    val stdboolInclude: ST = if (queuedInPorts.nonEmpty) st"\n#include <stdbool.h>" else st""
+    // byte-identical output.  These are joined as a sequence rather than spliced into the
+    // #include <stdio.h> line: an ST holding a newline picks up the indentation of the column it
+    // is interpolated at, which would push the conditional include out to stdio's end column.
+    val systemIncludes: ISZ[ST] =
+      if (queuedInPorts.nonEmpty) ISZ(st"#include <stdio.h>", st"#include <stdbool.h>")
+      else ISZ(st"#include <stdio.h>")
 
     val fileBody =
       st"""#ifndef ${guardName}
@@ -4775,7 +4884,7 @@ object Generator {
           |
           |${CommentTemplate.doNotEditComment_slash}
           |
-          |#include <stdio.h>${stdboolInclude}
+          |${(systemIncludes, "\n")}
           |#include <rcl/rcl.h>
           |#include <rclc/rclc.h>
           |#include <rclc/executor.h>
@@ -4784,14 +4893,14 @@ object Generator {
           |${enumConverterInclude}
           |${exampleTypesInclude}
           |
-          |// Logger name used by the PRINT_* macros.  It defaults to the node name and is
+          |// Logger name used by the LOG_* macros.  It defaults to the node name and is
           |// updated to the node's actual logger name (rcl_node_get_logger_name) during
           |// ${nodeNameBase}_init.
           |extern const char * ${nodeName}_logger_name;
           |
-          |#define PRINT_INFO(fmt, ...) RCUTILS_LOG_INFO_NAMED(${nodeName}_logger_name, fmt, ##__VA_ARGS__)
-          |#define PRINT_WARN(fmt, ...) RCUTILS_LOG_WARN_NAMED(${nodeName}_logger_name, fmt, ##__VA_ARGS__)
-          |#define PRINT_ERROR(fmt, ...) RCUTILS_LOG_ERROR_NAMED(${nodeName}_logger_name, fmt, ##__VA_ARGS__)
+          |#define LOG_INFO(fmt, ...) RCUTILS_LOG_INFO_NAMED(${nodeName}_logger_name, fmt, ##__VA_ARGS__)
+          |#define LOG_WARN(fmt, ...) RCUTILS_LOG_WARN_NAMED(${nodeName}_logger_name, fmt, ##__VA_ARGS__)
+          |#define LOG_ERROR(fmt, ...) RCUTILS_LOG_ERROR_NAMED(${nodeName}_logger_name, fmt, ##__VA_ARGS__)
           |
           |// rcl/rclc report entity-creation failures by return code rather than by trapping,
           |// and on an MCU the usual causes -- an exhausted RMW_UXRCE_MAX_* pool, an
@@ -4799,7 +4908,7 @@ object Generator {
           |// leaves a node that spins normally but silently never publishes or receives, so
           |// ${nodeNameBase}_init stops at the first failure and hands the status back.
           |// Expands to a return, so it is usable only in a function returning rcl_ret_t.
-          |#define RCL_CHECK(fn) do { rcl_ret_t rc_ = (fn); if (rc_ != RCL_RET_OK) { PRINT_ERROR("rcl call failed at %s:%d with status %d", __FILE__, __LINE__, (int) rc_); return rc_; } } while (0)
+          |#define RCL_CHECK(fn) do { rcl_ret_t rc_ = (fn); if (rc_ != RCL_RET_OK) { LOG_ERROR("rcl call failed at %s:%d with status %d", __FILE__, __LINE__, (int) rc_); return rc_; } } while (0)
           |${msgToStringSection}
           |
           |//=================================================
@@ -4879,26 +4988,61 @@ object Generator {
     return inits
   }
 
+  // put_<port> no longer publishes.  AADL releases a dispatch's outputs at its completion rather
+  // than as the entry point produces them, so each put stages into the node struct and
+  // <node>_sendOutputs releases the staged set once the entry point has returned.  An observer
+  // therefore never sees half of a dispatch's output.
   def genMicroRosPutFunctionImpls(outPorts: ISZ[AadlPort], nodeName: String, cppPkgName: String,
                                   datatypeMap: Map[AadlType, Ros2Datatype],
-                                  connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
-                                  invertTopicBinding: B, reporter: Reporter): ISZ[ST] = {
+                                  reporter: Reporter): ISZ[ST] = {
     var impls: ISZ[ST] = IS()
     for (p <- outPorts) {
       val portId = p.identifier
       val portName = genPortName(p)
       val portDatatype = genPortDatatype(p, cppPkgName, datatypeMap, reporter)
 
-      val numPubs: Z = if (invertTopicBinding) 1 else if (connectionMap.get(p.path).nonEmpty) connectionMap.get(p.path).get.size else 1
-      val cType = cppTypeToCStructName(portDatatype)
+      if (isEventPort(portDatatype)) {
+        impls = impls :+
+          st"""void put_${portId}(${nodeName}_base_t * self)
+              |{
+              |    self->${portName}_out_hasValue = true;
+              |}
+            """
+      } else {
+        val cType = cppTypeToCStructName(portDatatype)
+        impls = impls :+
+          st"""void put_${portId}(${nodeName}_base_t * self, ${cType} * msg)
+              |{
+              |    self->${portName}_out = *msg;
+              |    self->${portName}_out_hasValue = true;
+              |}
+            """
+      }
+    }
+    return impls
+  }
 
-      val msgArg: String = if (isEventPort(portDatatype)) "&msg" else "msg"
+  // Releases everything the dispatch staged, then clears the flags so the next dispatch starts
+  // empty.  This is the only place generated micro-ROS code calls rcl_publish.
+  def genMicroRosSendOutputs(outPorts: ISZ[AadlPort], nodeName: String, cppPkgName: String,
+                             datatypeMap: Map[AadlType, Ros2Datatype],
+                             connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
+                             invertTopicBinding: B, reporter: Reporter): ST = {
+    val nodeNameBase = s"${nodeName}_base"
+    var bodies: ISZ[ST] = IS()
+    for (p <- outPorts) {
+      val portId = p.identifier
+      val portName = genPortName(p)
+      val portDatatype = genPortDatatype(p, cppPkgName, datatypeMap, reporter)
+      val cType = cppTypeToCStructName(portDatatype)
+      val numPubs: Z = if (invertTopicBinding) 1 else if (connectionMap.get(p.path).nonEmpty) connectionMap.get(p.path).get.size else 1
+      val msgArg: String = if (isEventPort(portDatatype)) "&msg" else s"&self->${portName}_out"
 
       var publishStmts: ISZ[ST] = IS()
       if (numPubs == 1) {
         publishStmts = IS(st"""rcl_ret_t ret = rcl_publish(&self->${portName}_publisher, ${msgArg}, NULL);
                               |if (ret != RCL_RET_OK) {
-                              |    PRINT_ERROR("Failed to publish ${portId}");
+                              |    LOG_ERROR("Failed to publish ${portId}");
                               |}""")
       } else {
         var i: Z = 1
@@ -4906,31 +5050,29 @@ object Generator {
           publishStmts = publishStmts :+
             st"""rcl_ret_t ret${i} = rcl_publish(&self->${portName}_publisher_${i}, ${msgArg}, NULL);
                 |if (ret${i} != RCL_RET_OK) {
-                |    PRINT_ERROR("Failed to publish ${portId} (${i})");
+                |    LOG_ERROR("Failed to publish ${portId} (${i})");
                 |}"""
           i = i + 1
         }
       }
 
+      var inner: ISZ[ST] = IS()
       if (isEventPort(portDatatype)) {
-        impls = impls :+
-          st"""void put_${portId}(${nodeName}_base_t * self)
-              |{
-              |    ${cType} msg;
-              |    ${cType}__init(&msg);
-              |    ${(publishStmts, "\n")}
-              |}
-            """
-      } else {
-        impls = impls :+
-          st"""void put_${portId}(${nodeName}_base_t * self, ${cType} * msg)
-              |{
-              |    ${(publishStmts, "\n")}
-              |}
-            """
+        inner = inner :+ st"${cType} msg;" :+ st"${cType}__init(&msg);"
       }
+      inner = inner ++ publishStmts
+      inner = inner :+ st"self->${portName}_out_hasValue = false;"
+
+      bodies = bodies :+
+        st"""if (self->${portName}_out_hasValue) {
+            |    ${(inner, "\n")}
+            |}"""
     }
-    return impls
+    return (
+      st"""static void ${nodeName}_sendOutputs(${nodeNameBase}_t * self)
+          |{
+          |    ${(bodies, "\n")}
+          |}""")
   }
 
   // The user-editable block holding this node's rcl arguments.  Its contents are preserved
@@ -5081,32 +5223,34 @@ object Generator {
     return inits
   }
 
+  // --strict-aadl-mode governs the rclcpp backend only.  Micro-ROS nodes generate strict semantics
+  // unconditionally, so a model built without the flag still gets frozen inputs and outputs
+  // released at dispatch completion on its micro-ROS half.  That is deliberate rather than an
+  // oversight -- lax's distinguishing behaviour is unreachable on rclc, whose executor is
+  // single-threaded, so no callback can interleave with the entry point to be observed mid-dispatch.
+  //
+  // Reported rather than left implicit because it is the one place where a mixed system does not
+  // do what the command line appears to say.  Info, not a warning: nothing here needs fixing.
+  def reportMicroRosDispatchSemantics(microRosThreads: ISZ[AadlThread], strictAadlMode: B,
+                                      reporter: Reporter): Unit = {
+    if (microRosThreads.isEmpty) {
+      return
+    }
+    val names: ISZ[String] = for (t <- microRosThreads) yield t.identifier
+    val flagNote: String =
+      if (strictAadlMode) "The flag was given, so the rclcpp nodes match them."
+      else "The flag was not given, so the rclcpp nodes are lax while these are not."
+    reporter.info(None(), RosUtil.toolName,
+      st"""micro-ROS nodes always generate AADL strict semantics, whatever --strict-aadl-mode says:
+          |inputs are frozen for the dispatch and outputs are released together at its completion.
+          |${flagNote}
+          |Affected: ${(names, ", ")}.""".render)
+  }
+
   // A micro-ROS subscription whose payload codegen cannot fully size is a latent silent-drop:
   // the native type may have unbounded fields the mirror says nothing about.  Codegen only knows
   // the model, so it cannot confirm which native fields are unbounded -- it reports what it could
   // not size and leaves the decision to the modeler.
-  // A queued port's ring buffer copies messages by struct assignment, which is a faithful copy
-  // only when the payload is self-contained.  Where it is not, every slot would point at the same
-  // storage as the subscription's staging buffer, so the queue would hand the entry point whatever
-  // arrived most recently rather than what it dequeued.  Deep-copying would mean giving each slot
-  // its own backing storage -- Queue_Size times the per-port buffers codegen allocates today.
-  def validateMicroRosEventQueues(microRosThreads: ISZ[AadlThread], reporter: Reporter): Unit = {
-    for (thread <- microRosThreads;
-         p <- microRosQueuedInPorts(thread)) {
-      portAadlTypeOpt(p) match {
-        case Some(aadlType) if hasPointerCarryingFields(aadlType) =>
-          reporter.warn(p.posOpt, RosUtil.toolName,
-            st"""${thread.identifier}.${p.identifier} queues ${aadlType.name}, whose generated C struct holds pointers to
-                |separately allocated storage (a string, an unbounded sequence, or a platform-provided type
-                |whose native layout codegen cannot see).  The generated ring buffer copies messages by
-                |struct assignment, so its ${microRosQueueSize(p)} slots would alias one another rather than hold
-                |distinct messages.  Give ${thread.identifier} a Sporadic dispatch protocol, so arrivals are handled
-                |as they land and nothing is queued, or attach per-slot storage in the preserved block.""".render)
-        case _ =>
-      }
-    }
-  }
-
   def validateMicroRosCapacities(microRosThreads: ISZ[AadlThread], reporter: Reporter): Unit = {
     for (thread <- microRosThreads;
          p <- generatedPorts(thread) if p.direction == Direction.In) {
@@ -5182,15 +5326,44 @@ object Generator {
     val inPorts = ISZOps(generatedPorts(component)).filter(p => p.direction == Direction.In)
     val dataInPorts = ISZOps(inPorts).filter(p => p.isInstanceOf[AadlDataPort])
 
+    // The one definition backing the extern the base header declares.  Emitted only when that
+    // header actually declares it, so the two stay in step.
+    val msgToStringBufDef: ST =
+      if (hasCMsgToString(outPorts))
+        st"""
+            |// Shared scratch buffer for MESSAGE_TO_STRING; declared extern in the base header so
+            |// every translation unit including it uses this one rather than a copy of its own.
+            |char ${msgToStringBufName}[${msgToStringBufSize}];
+            |"""
+      else st""
+
     val publisherInits = genMicroRosPublisherInits(outPorts, nodeName, cppPkgName, datatypeMap, connectionMap, invertTopicBinding, reporter)
-    val putImpls = genMicroRosPutFunctionImpls(outPorts, nodeName, cppPkgName, datatypeMap, connectionMap, invertTopicBinding, reporter)
+    val putImpls = genMicroRosPutFunctionImpls(outPorts, nodeName, cppPkgName, datatypeMap, reporter)
+    val sendOutputsSection: ST =
+      if (outPorts.nonEmpty)
+        st"""${genMicroRosSendOutputs(outPorts, nodeName, cppPkgName, datatypeMap, connectionMap, invertTopicBinding, reporter)}
+            |
+            |"""
+      else st""
+    // Every dispatch ends by releasing what it staged.  A node with no out ports has nothing to
+    // release, so the call is omitted rather than emitted empty.
+    val sendOutputsCall: ST = if (outPorts.nonEmpty) st"\n${nodeName}_sendOutputs(g_self);" else st""
+    val stagingInits = genMicroRosOutputStagingInits(outPorts)
+    val stagingInitSection: ST =
+      if (stagingInits.nonEmpty)
+        st"""
+            |
+            |    // Staged outputs start empty
+            |    ${(stagingInits, "\n")}
+            |"""
+      else st""
 
     // Both dispatch protocols subscribe to every in port now; what differs is what the callback
     // does with the message.  A sporadic node's callback invokes the port's handler directly; a
     // periodic node's latches a data port or enqueues a queued one for the next dispatch.
     val queuedInPorts = microRosQueuedInPorts(component)
     val subscriptionCallbacks: ISZ[ST] =
-      if (isSporadic(component)) genMicroRosSubscriptionCallbacks(inPorts, nodeName, cppPkgName, datatypeMap, reporter)
+      if (isSporadic(component)) genMicroRosSubscriptionCallbacks(inPorts, nodeName, cppPkgName, datatypeMap, outPorts.nonEmpty, reporter)
       else genMicroRosPeriodicSubscriptionCallbacks(inPorts, cppPkgName, datatypeMap, reporter)
     val subscriptionInits = genMicroRosSubscriptionInits(inPorts, cppPkgName, datatypeMap, invertTopicBinding, connectionMap, reporter)
     val executorAdds = genMicroRosSubscriptionExecutorAdds(inPorts)
@@ -5241,8 +5414,8 @@ object Generator {
             |
             |// Static instance pointer for subscription callback context (heap-free, MCU-compatible)
             |static ${nodeNameBase}_t * g_self = NULL;
-            |
-            |// Logger name used by the PRINT_* macros; updated to the node's actual logger
+            |${msgToStringBufDef}
+            |// Logger name used by the LOG_* macros; updated to the node's actual logger
             |// name once the node has been initialized
             |const char * ${nodeName}_logger_name = "${nodeName}";
             |
@@ -5250,7 +5423,7 @@ object Generator {
             |${genMicroRosSequenceBufferSection(inPorts)}
             |${genMicroRosUserDeclarations()}
             |
-            |${subscriptionCallbackSection}
+            |${sendOutputsSection}${subscriptionCallbackSection}
             |//=================================================
             |//  I n i t i a l i z a t i o n
             |//=================================================
@@ -5265,13 +5438,13 @@ object Generator {
             |
             |    RCL_CHECK(rclc_node_init_default(&self->node, "${nodeName}", "${RosUtil.getRosNamespace(component)}", &self->support));
             |
-            |    // Retrieve the node's registered logger name for use by the PRINT_* macros
+            |    // Retrieve the node's registered logger name for use by the LOG_* macros
             |    const char * logger_name = rcl_node_get_logger_name(&self->node);
             |    if (logger_name != NULL) {
             |        ${nodeName}_logger_name = logger_name;
             |    }
             |
-            |${connectionSetupSection}
+            |${connectionSetupSection}${stagingInitSection}
             |
             |    ${genMicroRosUserInit()}
             |
@@ -5320,6 +5493,7 @@ object Generator {
                 |    ${(queueInits, "\n")}
                 |"""
           else st""
+        val queueAndStagingInitSection: ST = st"${queueInitSection}${stagingInitSection}"
 
         val eventGetImpls = genMicroRosEventGetImpls(queuedInPorts, nodeName, cppPkgName, datatypeMap, reporter)
         val eventGetSection: ST =
@@ -5343,8 +5517,8 @@ object Generator {
         val timerBody: ST =
           if (queuedInPorts.nonEmpty)
             st"""${nodeName}_receiveInputs(g_self);
-                |${nodeName}_timeTriggered(g_self);"""
-          else st"${nodeName}_timeTriggered(g_self);"
+                |${nodeName}_timeTriggered(g_self);${sendOutputsCall}"""
+          else st"${nodeName}_timeTriggered(g_self);${sendOutputsCall}"
 
         st"""${genMicroRosBaseNodeIncludes(microrosPkgName, nodeNameBase, component)}
             |
@@ -5355,8 +5529,8 @@ object Generator {
             |
             |${contextComment}
             |static ${nodeNameBase}_t * g_self = NULL;
-            |
-            |// Logger name used by the PRINT_* macros; updated to the node's actual logger
+            |${msgToStringBufDef}
+            |// Logger name used by the LOG_* macros; updated to the node's actual logger
             |// name once the node has been initialized
             |const char * ${nodeName}_logger_name = "${nodeName}";
             |
@@ -5367,7 +5541,7 @@ object Generator {
             |//  C a l l b a c k   a n d   T i m e r
             |//=================================================
             |
-            |${receiveInputsSection}static void period_timer_callback(rcl_timer_t * timer, int64_t last_call_time)
+            |${sendOutputsSection}${receiveInputsSection}static void period_timer_callback(rcl_timer_t * timer, int64_t last_call_time)
             |{
             |    (void)timer;
             |    (void)last_call_time;
@@ -5390,13 +5564,13 @@ object Generator {
             |
             |    RCL_CHECK(rclc_node_init_default(&self->node, "${nodeName}", "${RosUtil.getRosNamespace(component)}", &self->support));
             |
-            |    // Retrieve the node's registered logger name for use by the PRINT_* macros
+            |    // Retrieve the node's registered logger name for use by the LOG_* macros
             |    const char * logger_name = rcl_node_get_logger_name(&self->node);
             |    if (logger_name != NULL) {
             |        ${nodeName}_logger_name = logger_name;
             |    }
             |
-            |${connectionSetupSection}${queueInitSection}
+            |${connectionSetupSection}${queueAndStagingInitSection}
             |    // timeTriggered callback timer
             |    RCL_CHECK(rclc_timer_init_default(
             |        &self->period_timer,
@@ -5456,14 +5630,14 @@ object Generator {
           |    // receive.  Exiting non-zero instead lets the launching layer notice.
           |    rcl_ret_t init_status = ${nodeNameBase}_init(&node);
           |    if (init_status != RCL_RET_OK) {
-          |        PRINT_ERROR("${nodeName} initialization failed with status %d; aborting", (int) init_status);
+          |        LOG_ERROR("${nodeName} initialization failed with status %d; aborting", (int) init_status);
           |        return 1;
           |    }
           |
           |    // Invoke initialize entry point
           |    ${nodeName}_initialize(&node);
           |
-          |    PRINT_INFO("${nodeName} infrastructure set up");
+          |    LOG_INFO("${nodeName} infrastructure set up");
           |
           |    ${nodeNameBase}_spin(&node);
           |
@@ -5590,7 +5764,7 @@ object Generator {
 
           if (isEventPort(portDatatype)) {
             var bodyLines: ISZ[ST] = IS(st"    // Handle ${portId} event")
-            bodyLines = bodyLines :+ st"""    PRINT_INFO("Received ${portId}");"""
+            bodyLines = bodyLines :+ st"""    LOG_INFO("Received ${portId}");"""
             for (l <- extraBodyLines) {
               bodyLines = bodyLines :+ l
             }
@@ -5602,7 +5776,7 @@ object Generator {
                 """
           } else {
             var bodyLines: ISZ[ST] = IS(st"    // Handle ${portId} msg")
-            bodyLines = bodyLines :+ st"""    PRINT_INFO("Received ${portId}");"""
+            bodyLines = bodyLines :+ st"    ${genCppReceivedLogC(p, portId)}"
             for (l <- extraBodyLines) {
               bodyLines = bodyLines :+ l
             }
@@ -5643,13 +5817,13 @@ object Generator {
           if (isEventPort(qpDatatype)) {
             queuedPortExamples = queuedPortExamples :+
               st"""if (has_${qpId}(self)) {
-                  |    PRINT_INFO("Received ${qpId}");
+                  |    LOG_INFO("Received ${qpId}");
                   |}"""
           } else {
             queuedPortExamples = queuedPortExamples :+
               st"""${qpCType} * ${qpId} = get_${qpId}(self);
                   |if (${qpId} != NULL) {
-                  |    PRINT_INFO("Received ${qpId}");
+                  |    ${genCppReceivedLogC(qp, qpId)}
                   |}"""
           }
         }
@@ -5709,7 +5883,7 @@ object Generator {
           |//=================================================
           |void ${nodeName}_initialize(${nodeNameBase}_t * self)
           |{
-          |    PRINT_INFO("Initialize Entry Point invoked");
+          |    LOG_INFO("Initialize Entry Point invoked");
           |
           |    // Initialize the node
           |}
@@ -5949,6 +6123,15 @@ object Generator {
     // (embedded targets generally want rcl_logging_noop).
     val loggingEnabled: String = if (hasRosoutProducer) "ON" else "OFF"
     val loggingImpl: String = if (hasRosoutProducer) "rcl_logging_spdlog" else "rcl_logging_noop"
+
+    // rcl_node_init creates a /rosout publisher of its own for every node when rcl is built
+    // with RCL_LOGGING_ENABLED=ON, so with logging on a node draws one more publisher from the
+    // pool than the model accounts for.  That publisher is taken during rclc_node_init_default,
+    // which leaves the first model publisher to be the one that fails -- reported as
+    // "Error in rcl_publisher_init: error not set", since the rmw returns NULL without
+    // setting an error.
+    val rosoutPublishers: Z = if (hasRosoutProducer) 1 else 0
+    val publisherPool: Z = maxPublishers + rosoutPublishers
     val buildProfileMarker = BlockMarker(
       id = "BUILD PROFILE - additions within these tags will be preserved when re-running Codegen",
       beginPrefix = "#",
@@ -5976,10 +6159,18 @@ object Generator {
           |        #
           |        # The UCLIENT_PROFILE_* transport enabled here must agree with
           |        # RMW_UXRCE_TRANSPORT below.
+          |        #
+          |        # MULTITHREAD adds internal locking to the XRCE session so that several
+          |        # threads may drive it concurrently.  Generated micro-ROS nodes never do:
+          |        # every node runs one rclc executor on one thread, and all port traffic is
+          |        # released through sendOutputs at dispatch completion.  micro_ros_setup's
+          |        # stock host profile turns this ON; it is off here because nothing in a
+          |        # generated node needs it and it is not free.
           |        "microxrcedds_client": {
           |            "cmake-args": [
           |                "-DBUILD_SHARED_LIBS=ON",
-          |                "-DUCLIENT_PROFILE_UDP=ON"
+          |                "-DUCLIENT_PROFILE_UDP=ON",
+          |                "-DUCLIENT_PROFILE_MULTITHREAD=OFF"
           |            ]
           |        },
           |        "microcdr": {
@@ -6032,8 +6223,11 @@ object Generator {
           |                # its own executable, so these hold the largest node's entities
           |                # rather than the sum over nodes.  Generated nodes create no services
           |                # or clients.  Undersizing them makes entity creation fail silently.
+          |                #
+          |                # The publisher count is the model's ${maxPublishers} plus ${rosoutPublishers} for the /rosout
+          |                # publisher rcl_node_init creates per node when RCL_LOGGING_ENABLED is ON.
           |                "-DRMW_UXRCE_MAX_NODES=1",
-          |                "-DRMW_UXRCE_MAX_PUBLISHERS=${maxPublishers}",
+          |                "-DRMW_UXRCE_MAX_PUBLISHERS=${publisherPool}",
           |                "-DRMW_UXRCE_MAX_SUBSCRIPTIONS=${maxSubscriptions}",
           |                "-DRMW_UXRCE_MAX_SERVICES=0",
           |                "-DRMW_UXRCE_MAX_CLIENTS=0",
@@ -6286,10 +6480,14 @@ object Generator {
             |## Firmware Configuration
             |
             |`microros_apps/colcon.meta` holds the build configuration the generated nodes need
-            |from the micro-ROS middleware.  It is **not** consumed from where it sits: it
-            |configures packages such as `rcl` and `rmw_microxrcedds`, which live in the firmware
-            |workspace and are built by step 4 above -- not by `make build`, which builds only the
-            |application packages.  Applying it is therefore a separate step:
+            |from the micro-ROS middleware -- `rmw_microxrcedds`, `microxrcedds_client` and the
+            |typesupport packages.  Those live in the firmware workspace and were built by step 4
+            |above, not by `make build`, which builds only the application packages.
+            |
+            |To have any effect it must be installed into that workspace, as
+            |`$$MICROROS_WS/src/colcon.meta` -- the path `micro_ros_setup`'s host `build.sh` reads,
+            |via `colcon build --metas src`.  Sitting in `microros_apps/` it does nothing.
+            |Installing it is therefore a separate step:
             |
             |```bash
             |make microros-config
@@ -6299,10 +6497,13 @@ object Generator {
             |fail quietly if it is never applied:
             |
             |- `RMW_UXRCE_MAX_PUBLISHERS` / `RMW_UXRCE_MAX_SUBSCRIPTIONS` -- these are derived from
-            |  the model's port counts and regenerated on every codegen run.  If the firmware's
-            |  pools are smaller than the nodes need, entity creation fails without a diagnostic,
-            |  so re-apply after adding ports.  `RMW_UXRCE_TRANSPORT` and the agent address are in
-            |  the same package, so they apply on every target, host included.
+            |  the model's port counts and regenerated on every codegen run.  The publisher count
+            |  carries one extra beyond the model's ports when rcl logging is on, for the `/rosout`
+            |  publisher `rcl_node_init` creates per node.  If the firmware's pools are smaller than
+            |  the nodes need, entity creation fails: `rcl_publisher_init` reports `error not set`,
+            |  because the rmw returns NULL without setting an error.  Re-apply after adding ports.
+            |  `RMW_UXRCE_TRANSPORT` and the agent address are in the same package, so they apply on
+            |  every target, host included.
             |- `RCL_COMMAND_LINE_ENABLED=ON` -- **embedded targets only.**  It restores the rcl
             |  argument parsing that `micro_ros_setup` disables in its cross-compiled configs;
             |  without it the rcl arguments in each node's `node_options` block (topic remap rules
@@ -6317,19 +6518,25 @@ object Generator {
             |preserved.  To override a derived value, restate its `-D` flag inside a marked block --
             |colcon passes `cmake-args` through in order and CMake takes the last occurrence.
             |
-            |Because `MICROROS_WS` is shared across projects, `make microros-config` backs up any
-            |`colcon.meta` already there to `colcon.meta.bak`.  If you maintain your own firmware
-            |configuration, merge the two rather than letting one replace the other.
+            |`create_firmware_ws.sh` seeds that same path with micro-ROS's stock profile, and
+            |`MICROROS_WS` is shared across projects, so `make microros-config` renames any
+            |`colcon.meta` already there to `colcon.meta.bak` rather than discarding it.  The stock
+            |profile it displaces sizes the `RMW_UXRCE_MAX_*` pools generously and enables
+            |`UCLIENT_PROFILE_MULTITHREAD`; the generated one sizes the pools from your model and
+            |turns multithreading off, since a generated node drives its XRCE session from a single
+            |thread.  If you maintain your own firmware configuration, merge the two rather than
+            |letting one replace the other.
             |
-            |### On a host workspace this step is effectively a no-op
+            |### On a host workspace the `rcl` entry is inert
             |
             |A firmware workspace created for the **host** platform
             |(`create_firmware_ws.sh host generic`) does not check out `rcl` at all -- on host,
             |micro-ROS is `rmw_microxrcedds` and `rclc` layered over the ROS 2 distribution's own
-            |`rcl`, so there is no micro-ROS `rcl` to configure.  `make microros-config` will copy
-            |`colcon.meta` into place and rebuild successfully, but the `rcl` entry matches no
-            |package and is silently inert; `find_package(rcl)` keeps resolving to
-            |`/opt/ros/$$ROS_DISTRO`.
+            |`rcl`, so there is no micro-ROS `rcl` to configure.  The `rcl` entry below therefore
+            |matches no package and is silently inert on host; `find_package(rcl)` keeps resolving
+            |to `/opt/ros/$$ROS_DISTRO`.  The other entries -- `microxrcedds_client`,
+            |`rmw_microxrcedds`, and the typesupport packages -- do apply, since those are checked
+            |out and built there.
             |
             |This is usually invisible, because the distribution's `rcl` is built with both
             |argument parsing and logging enabled -- the very things the flags above turn on.  So
@@ -6477,10 +6684,15 @@ object Generator {
     return (
       st"""
           |# Arguments passed to `ros2 launch`, e.g.
-          |#   make launch LAUNCH_ARGS="log_file:=run1.txt joystick_dev:=/dev/input/js0"
+          |#   make launch LAUNCH_ARGS="log_file:=run1.txt joystick_dev:=/dev/input/by-id/<pad>-joystick"
           |# `ros2 launch --show-args $$(BRINGUP_PKG) $$(LAUNCH_FILE).launch.py` lists what the file
           |# accepts.  Unlike ROS_ARGS above these are launch arguments, not rcl arguments: they are
           |# declared by the launch file and reach a node through its parameters.
+          |#
+          |# Device arguments take a by-id path rather than /dev/input/jsN, which is assigned in
+          |# connection order and moves across replugs; `ls /dev/input/by-id` lists them.  Every
+          |# argument also needs a non-empty value -- `name:=` is rejected as malformed -- so an
+          |# argument whose value should be empty has to be changed in the launch file instead.
           |LAUNCH_ARGS ?=
           |
           |# Which launch file to run.  ${launchStem} brings up the whole system on this host;
@@ -6564,17 +6776,30 @@ object Generator {
             |# there; until then the rcl arguments in each node's node_options block are silently
             |# ignored.  The host config does not disable it, so that part is moot on host.
             |#
-            |# MICROROS_WS is shared across projects, so any existing colcon.meta there is backed
-            |# up rather than discarded.
+            |# It goes to $$(MICROROS_WS)/src/colcon.meta, which is where the host firmware build
+            |# reads it from: micro_ros_setup's host build.sh runs `colcon build --metas src`, and
+            |# its create.sh seeds that same path with the stock profile.  A colcon.meta placed at
+            |# the workspace root is read by nothing.
             |#
-            |# --cmake-force-configure is forwarded to colcon (build_firmware.sh passes anything
-            |# after -- straight through).  Without it a changed colcon.meta can leave the existing
-            |# CMake caches in place, so the target reports success while the new settings never
-            |# take effect -- the same silent-failure shape as an ignored remap rule.
+            |# MICROROS_WS is shared across projects and the stock profile is already at that path,
+            |# so any existing colcon.meta is backed up to colcon.meta.bak rather than discarded.
+            |# The backup is only taken when what is there is not already our own copy, otherwise
+            |# a second run of this target would overwrite the stock backup with the project profile.
+            |#
+            |# --cmake-force-configure is forwarded to colcon (build_firmware.sh shifts past -- and
+            |# the host config passes the remaining "$$$$@" to each colcon build).  Without it a changed
+            |# colcon.meta can leave the existing CMake caches in place, so the target reports success
+            |# while the new settings never take effect -- the same silent-failure shape as an ignored
+            |# remap rule.  Note the doubled --: `ros2 run` parses its own command line with argparse,
+            |# which swallows the first --, so a single one never reaches build_firmware.sh and its
+            |# getopts rejects --cmake-force-configure as an illegal option.
             |microros-config: check-ros2
-            |	@test -f "$$(MICROROS_WS)/colcon.meta" && cp "$$(MICROROS_WS)/colcon.meta" "$$(MICROROS_WS)/colcon.meta.bak" && echo "Backed up existing colcon.meta to colcon.meta.bak" || true
-            |	cp microros_apps/colcon.meta $$(MICROROS_WS)/colcon.meta
-            |	cd $$(MICROROS_WS) && bash -c "$$(SOURCE_BASE); ros2 run micro_ros_setup build_firmware.sh -- --cmake-force-configure"
+            |	@if [ -f "$$(MICROROS_WS)/src/colcon.meta" ] && ! cmp -s "$$(MICROROS_WS)/src/colcon.meta" microros_apps/colcon.meta; then \
+            |	  cp "$$(MICROROS_WS)/src/colcon.meta" "$$(MICROROS_WS)/src/colcon.meta.bak"; \
+            |	  echo "Backed up existing src/colcon.meta to src/colcon.meta.bak"; \
+            |	fi
+            |	cp microros_apps/colcon.meta $$(MICROROS_WS)/src/colcon.meta
+            |	cd $$(MICROROS_WS) && bash -c "$$(SOURCE_BASE); ros2 run micro_ros_setup build_firmware.sh -- -- --cmake-force-configure"
             |	@echo "Firmware rebuilt with microros_apps/colcon.meta. Re-run 'make build' to rebuild the app packages against it."
             |
             |check-ros2:

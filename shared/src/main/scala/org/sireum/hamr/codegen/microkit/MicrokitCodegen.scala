@@ -228,7 +228,6 @@ object MicrokitCodegen {
     val utilSrcPath = s"${options.sel4OutputDir.get}/${MicrokitUtil.utilDir}/${MicrokitCodegen.dirSrc}"
     resources = resources :+ ResourceUtil.createResource(s"${utilIncludePath}/printf.h", MicrokitUtil.printfh, T)
     resources = resources :+ ResourceUtil.createResource(s"${utilSrcPath}/printf.c", MicrokitUtil.printfc, T)
-    resources = resources :+ ResourceUtil.createResource(s"${utilIncludePath}/util.h", MicrokitUtil.utilh, T)
     resources = resources :+ ResourceUtil.createResource(s"${utilSrcPath}/util.c", MicrokitUtil.utilc, T)
 
 

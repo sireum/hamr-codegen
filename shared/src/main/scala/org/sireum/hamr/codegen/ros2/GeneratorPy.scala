@@ -352,7 +352,7 @@ object GeneratorPy {
          |  if isinstance(&msg, Int32):
          |    handle_${handlerName}(*typedMsg)
          |  else:
-         |    PRINT_ERROR("Sending out wrong type of variable on port ${handlerName}.\nThis shouldn't be possible.  If you are seeing this message, please notify this tool's current maintainer.")
+         |    LOG_ERROR("Sending out wrong type of variable on port ${handlerName}.\nThis shouldn't be possible.  If you are seeing this message, please notify this tool's current maintainer.")
          |"""
     return handlerCode
   }
@@ -421,7 +421,7 @@ object GeneratorPy {
          |  if isinstance(&msg, Int32):
          |    ${(publishers, "\n")}
          |   else:
-         |    PRINT_ERROR("Sending out wrong type of variable on port ${handlerName}.\nThis shouldn't be possible.  If you are seeing this message, please notify this tool's current maintainer.")
+         |    LOG_ERROR("Sending out wrong type of variable on port ${handlerName}.\nThis shouldn't be possible.  If you are seeing this message, please notify this tool's current maintainer.")
          |"""
     return publisherCode
   }
@@ -902,7 +902,7 @@ object GeneratorPy {
           |//=================================================
           |def initialize(self)
           |{
-          |    PRINT_INFO("Initialize Entry Point invoked");
+          |    LOG_INFO("Initialize Entry Point invoked");
           |
           |    // Initialize the node
           |}
@@ -941,7 +941,7 @@ object GeneratorPy {
           |    // Invoke initialize entry point
           |    initialize();
           |
-          |    PRINT_INFO("${nodeName} infrastructure set up");
+          |    LOG_INFO("${nodeName} infrastructure set up");
           |}
           |
           |int main(int argc, char **argv)
