@@ -33,6 +33,12 @@ jobs:
         with:
           path: hamr-codegen
           submodules: recursive
+      - name: Checkout runtime-monitoring INSPECTA models
+        uses: actions/checkout@v5
+        with:
+          repository: loonwerks/INSPECTA-models
+          ref: runtime_monitoring_v2
+          path: hamr-codegen/jvm/src/test/resources/models/INSPECTA-models
       - name: Retrieve versions.properties
         run: |
           wget -q https://raw.githubusercontent.com/sireum/kekinian/master/versions.properties

@@ -35,6 +35,13 @@ jobs:
         uses: actions/checkout@v5
         with:
           submodules: recursive
+      - name: Checkout runtime-monitoring INSPECTA models
+        if: contains(matrix.testSuffix, 'MicrokitTests')
+        uses: actions/checkout@v5
+        with:
+          repository: loonwerks/INSPECTA-models
+          ref: runtime_monitoring_v2
+          path: jvm/src/test/resources/models/INSPECTA-models
       - name: Retrieve versions.properties
         run: |
           wget -q https://raw.githubusercontent.com/sireum/kekinian/master/versions.properties
