@@ -1545,8 +1545,11 @@ object Generator {
 
   def genMsgFiles(modelName: String, datatypeMap: Map[AadlType, Ros2Datatype]): ISZ[(ISZ[String], ST, B, ISZ[Marker])] = {
     var msg_files: ISZ[(ISZ[String], ST, B, ISZ[Marker])] = IS()
-    // platform-provided types already exist on the target platform, so no .msg file is emitted
-    for (datatype <- datatypeMap.values if !datatype.isPlatformProvided) {
+    // platform-provided types already exist on the target platform, so no .msg file is emitted.
+    // Iterate the value *set*, as genInterfacesCMakeListsFile does: distinct AADL types can map to
+    // the same ROS2 datatype -- Base_Types::Integer and Base_Types::Integer_64 both become Integer64,
+    // as do Float and Float_64 -- and one .msg file per key would emit that file once per alias.
+    for (datatype <- datatypeMap.valueSet.elements if !datatype.isPlatformProvided) {
       msg_files = msg_files :+ genMsgFile(modelName, datatype.name, datatype.content)
     }
     msg_files = msg_files :+ (ISZ("src", s"${genCppPackageName(modelName)}_interfaces", "msg", "Empty.msg"), st"${CommentTemplate.doNotEditComment_hash}", T, IS())
