@@ -59,6 +59,22 @@ object ComponentContributions {}
 
                                         val moduleLevelEntries: ISZ[RAST.Item],
 
+                                        // Contributions to the crate root, src/lib.rs.  This plugin owns that
+                                        // file's skeleton; anything another plugin needs woven into it arrives
+                                        // here rather than by re-emitting the file at the same path and relying
+                                        // on running later.  The entrypoint slots name positions inside the
+                                        // generated extern "C" bodies, which a contributor cannot otherwise
+                                        // reach.
+                                        val libModDecls: ISZ[RAST.Item],
+                                        val libUses: ISZ[RAST.Item],
+                                        val libModuleLevelEntries: ISZ[RAST.Item],
+                                        // before the app instance is constructed in <thread>_initialize
+                                        val libInitializePre: ISZ[RAST.BodyItem],
+                                        // after _app.initialize(..), before app = Some(_app)
+                                        val libInitializePost: ISZ[RAST.BodyItem],
+                                        // after the compute entrypoint dispatches to the app
+                                        val libComputePost: ISZ[RAST.BodyItem],
+
                                         // items for Cargo.toml's [dependencies] table
                                         val crateDependencies: ISZ[ST])
 
@@ -247,6 +263,12 @@ object ComponentContributions {}
           appStructDef = struct,
           appStructImpl = impl,
           moduleLevelEntries = funcs,
+          libModDecls = ISZ(),
+          libUses = ISZ(),
+          libModuleLevelEntries = ISZ(),
+          libInitializePre = ISZ(),
+          libInitializePost = ISZ(),
+          libComputePost = ISZ(),
           crateDependencies = ISZ())
 
       if (genProfile.emitTestHarness) {
@@ -290,7 +312,40 @@ object ComponentContributions {}
       val componentSrcDir = s"$componentCrateDir/src"
       val componentDir = CRustComponentPlugin.componentDirectory(thread, options, store)
 
-      { // for now just emit src/lib.rs as a resource
+      { // src/lib.rs -- this plugin owns the skeleton; other plugins weave into it
+        // through the lib* fields of ComponentContributions, rather than re-emitting
+        // this path and relying on running later.
+
+        val contribs = e._2
+
+        // Each slot renders to None when nothing was contributed, so a component with
+        // no contributors produces exactly the text it did before the slots existed.
+        // Placed after `mod component;` so contributed modules land in the alphabetical
+        // position the hand-written monitor template used (bridge, component, gumbox,
+        // logging).
+        val libModDecls: Option[ST] =
+          if (contribs.libModDecls.isEmpty) None()
+          else Some(st"${(for (i <- contribs.libModDecls) yield i.prettyST, "\n")}")
+        val libUses: Option[ST] =
+          if (contribs.libUses.isEmpty) None()
+          else Some(st"${(for (i <- contribs.libUses) yield i.prettyST, "\n")}")
+        val libModuleLevelEntries: Option[ST] =
+          if (contribs.libModuleLevelEntries.isEmpty) None()
+          else Some(st"${(for (i <- contribs.libModuleLevelEntries) yield i.prettyST, "\n")}")
+        // The initialize slots sit between statement groups that are separated by blank
+        // lines, so the blank lines belong to the slot rather than to the contributor.
+        val initializePre: Option[ST] =
+          if (contribs.libInitializePre.isEmpty) None()
+          else Some(st"""${(for (i <- contribs.libInitializePre) yield i.prettyST, "\n")}
+                        |""")
+        val initializePost: Option[ST] =
+          if (contribs.libInitializePost.isEmpty) None()
+          else Some(st"""
+                        |${(for (i <- contribs.libInitializePost) yield i.prettyST, "\n")}
+                        |""")
+        val computePost: Option[ST] =
+          if (contribs.libComputePost.isEmpty) None()
+          else Some(st"${(for (i <- contribs.libComputePost) yield i.prettyST, "\n")}")
 
         val entrypoints: ISZ[ST] =
           if (thread.isPeriodic())
@@ -300,6 +355,7 @@ object ComponentContributions {}
                   |  unsafe {
                   |    if let Some(_app) = app.as_mut() {
                   |      _app.timeTriggered(&mut compute_api);
+                  |      $computePost
                   |    } else {
                   |      panic!("Unexpected: app is None");
                   |    }
@@ -323,17 +379,20 @@ object ComponentContributions {}
               |
               |mod bridge;
               |mod component;
+              |$libModDecls
               |mod logging;
               |
               |$testModDecl
               |
               |use crate::bridge::${CRustApiPlugin.apiModuleName(thread)}::{self as api, *};
+              |$libUses
               |use crate::component::${CRustComponentPlugin.appModuleName(thread)}::*;
               |use data::*;
               |
               |static mut app: Option<$threadId> = None;
               |static mut init_api: ${CRustApiPlugin.applicationApiType(thread)}<${CRustApiPlugin.initializationApiType(thread)}> = api::init_api();
               |static mut compute_api: ${CRustApiPlugin.applicationApiType(thread)}<${CRustApiPlugin.computeApiType(thread)}> = api::compute_api();
+              |$libModuleLevelEntries
               |
               |#[no_mangle]
               |pub extern "C" fn ${threadId}_initialize() {
@@ -343,8 +402,10 @@ object ComponentContributions {}
               |    #[cfg(test)]
               |    crate::bridge::extern_c_api::initialize_test_globals();
               |
+              |    $initializePre
               |    let mut _app = $threadId::new();
               |    _app.initialize(&mut init_api);
+              |    $initializePost
               |    app = Some(_app);
               |  }
               |}

@@ -688,6 +688,45 @@ object GumboMonitorPlugin {
       localStore = CRustApiPlugin.putCRustApiContributions(crustApiContribs, localStore)
       if (monitoringEntries.nonEmpty) {
         localStore = localStore + GumboMonitorPlugin.KEY_RUST_MONITORING ~> RustMonitoringStore(monitoringEntries)
+
+        // Contribute the monitoring observation points into each monitored component's
+        // crate root.  This used to be done by re-emitting crates/<component>/src/lib.rs
+        // wholesale from finalizeMicrokit, which meant maintaining a second near-copy of
+        // CRustComponentPlugin's ~80-line template and winning by running last.  The
+        // guarded blocks are contributed whole, so CRustComponentPlugin needs to know
+        // nothing about monitoring.
+        if (CRustComponentPlugin.hasCRustComponentContributions(localStore)) {
+          val contributions = CRustComponentPlugin.getCRustComponentContributions(localStore)
+          var updated = contributions.componentContributions
+          for (entry <- monitoringEntries.entries) {
+            val threadPath = entry._1
+            val svInfos = entry._2
+            updated.get(threadPath) match {
+              case Some(contrib) =>
+                val puts: ISZ[ST] = for (sv <- svInfos) yield
+                  st"extern_c_api::unsafe_put_${GumboMonitorPlugin.stateVarPortName(sv.name)}(&_app.${sv.name});"
+                updated = updated + threadPath ~> contrib(
+                  libUses = contrib.libUses :+ RAST.ItemST(st"use crate::bridge::extern_c_api;"),
+                  libModuleLevelEntries = contrib.libModuleLevelEntries :+
+                    RAST.ItemST(st"static mut monitoring_enabled: bool = false;"),
+                  libInitializePre = contrib.libInitializePre :+
+                    RAST.BodyItemST(st"monitoring_enabled = extern_c_api::unsafe_is_monitoring_enabled();"),
+                  libInitializePost = contrib.libInitializePost :+
+                    RAST.BodyItemST(
+                      st"""if monitoring_enabled {
+                          |  ${(puts, "\n")}
+                          |}"""),
+                  libComputePost = contrib.libComputePost :+
+                    RAST.BodyItemST(
+                      st"""if monitoring_enabled {
+                          |  ${(puts, "\n")}
+                          |}"""))
+              case _ =>
+            }
+          }
+          localStore = CRustComponentPlugin.putComponentContributions(
+            contributions.replaceComponentContributions(updated), localStore)
+        }
       }
     }
 
@@ -1025,7 +1064,10 @@ object GumboMonitorPlugin {
             appStructDef = updatedStruct,
             appStructImpl = updatedImpl,
             moduleLevelEntries = monitorContrib.moduleLevelEntries :+ buildUserChannelTablesFn,
-            appUses = monitorContrib.appUses ++ additionalUses)
+            appUses = monitorContrib.appUses ++ additionalUses,
+            // the monitor crate carries a gumbox module; contributing that declaration
+            // is the whole reason its lib.rs used to be re-emitted wholesale
+            libModDecls = monitorContrib.libModDecls :+ RAST.ItemST(st"mod gumbox;"))
 
           localStore = CRustComponentPlugin.putComponentContributions(
             contributions.replaceComponentContributions(
@@ -1051,125 +1093,20 @@ object GumboMonitorPlugin {
         !haveRustFinalized(store))
   }
 
-  // TODO: This replaces CRustComponentPlugin's lib.rs with a custom version that posts state vars
-  //       to shared memory regions for runtime monitoring. lib.rs should be refactored to use a
-  //       contribution-based approach (like the component app modules) so that plugins can modify
-  //       it directly rather than regenerating the entire file.
+  // Emits the GUMBOX and container modules into each monitor crate's src/gumbox, and
+  // that directory's mod.rs.  Nothing here writes a crate's src/lib.rs any more: the
+  // observation points that post state vars to shared memory, and the monitor crate's
+  // `mod gumbox;`, are contributed to CRustComponentPlugin during handle (see the lib*
+  // fields of ComponentContributions), rather than regenerating a file this plugin does
+  // not own and winning by running last.
   @pure override def finalizeMicrokit(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes,
                                       symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
     var resources: ISZ[Resource] = ISZ()
 
-    val monitoringStore = GumboMonitorPlugin.getRustMonitoringStore(store).get
-    val componentContributions = CRustComponentPlugin.getCRustComponentContributions(store).componentContributions
-
-    for (e <- componentContributions.entries) {
-      monitoringStore.entries.get(e._1) match {
-        case Some(svInfos) =>
-          val thread = symbolTable.componentMap.get(e._1).get.asInstanceOf[AadlThread]
-          val threadId = MicrokitUtil.getComponentIdPath(thread)
-          val componentCrateDir = CRustComponentPlugin.componentCrateDirectory(thread, options, store)
-          val componentSrcDir = s"$componentCrateDir/src"
-
-          val initPuts: ISZ[ST] = for (sv <- svInfos) yield
-            st"extern_c_api::unsafe_put_${GumboMonitorPlugin.stateVarPortName(sv.name)}(&_app.${sv.name});"
-
-          val postPuts: ISZ[ST] = for (sv <- svInfos) yield
-            st"extern_c_api::unsafe_put_${GumboMonitorPlugin.stateVarPortName(sv.name)}(&_app.${sv.name});"
-
-          val entrypoints: ISZ[ST] =
-            if (thread.isPeriodic())
-              ISZ(
-                st"""#[no_mangle]
-                    |pub extern "C" fn ${threadId}_timeTriggered() {
-                    |  unsafe {
-                    |    if let Some(_app) = app.as_mut() {
-                    |      _app.timeTriggered(&mut compute_api);
-                    |      if monitoring_enabled {
-                    |        ${(postPuts, "\n")}
-                    |      }
-                    |    } else {
-                    |      panic!("Unexpected: app is None");
-                    |    }
-                    |  }
-                    |}""")
-            else ISZ(st"NOT YET")
-
-          // Only declare the test module for monitors that get a test harness.
-          val testModDecl: Option[ST] =
-            if (getMonitorGenProfile.emitTestHarness) Some(st"""#[cfg(test)]
-                                                              |mod test;""")
-            else None()
-
-          val content =
-            st"""#![cfg_attr(not(test), no_std)]
-                |
-                |${RustUtil.defaultCrateLevelAttributes}
-                |
-                |${CommentTemplate.doNotEditComment_slash}
-                |
-                |mod bridge;
-                |mod component;
-                |mod logging;
-                |
-                |$testModDecl
-                |
-                |use crate::bridge::${CRustApiPlugin.apiModuleName(thread)}::{self as api, *};
-                |use crate::bridge::extern_c_api;
-                |use crate::component::${CRustComponentPlugin.appModuleName(thread)}::*;
-                |use data::*;
-                |
-                |static mut app: Option<$threadId> = None;
-                |static mut init_api: ${CRustApiPlugin.applicationApiType(thread)}<${CRustApiPlugin.initializationApiType(thread)}> = api::init_api();
-                |static mut compute_api: ${CRustApiPlugin.applicationApiType(thread)}<${CRustApiPlugin.computeApiType(thread)}> = api::compute_api();
-                |static mut monitoring_enabled: bool = false;
-                |
-                |#[no_mangle]
-                |pub extern "C" fn ${threadId}_initialize() {
-                |  logging::init_logging();
-                |
-                |  unsafe {
-                |    #[cfg(test)]
-                |    crate::bridge::extern_c_api::initialize_test_globals();
-                |
-                |    monitoring_enabled = extern_c_api::unsafe_is_monitoring_enabled();
-                |
-                |    let mut _app = $threadId::new();
-                |    _app.initialize(&mut init_api);
-                |
-                |    if monitoring_enabled {
-                |      ${(initPuts, "\n")}
-                |    }
-                |
-                |    app = Some(_app);
-                |  }
-                |}
-                |
-                |${(entrypoints, "\n\n")}
-                |
-                |#[no_mangle]
-                |pub extern "C" fn ${threadId}_notify(channel: microkit_channel) {
-                |  unsafe {
-                |    if let Some(_app) = app.as_mut() {
-                |      _app.notify(channel);
-                |    } else {
-                |      panic!("Unexpected: app is None");
-                |    }
-                |  }
-                |}
-                |
-                |// Need a Panic handler in a no_std environment
-                |#[panic_handler]
-                |#[cfg(not(test))]
-                |fn panic(info: &core::panic::PanicInfo) -> ! {
-                |  log::error!("PANIC: {info:#?}");
-                |  loop {}
-                |}
-                |"""
-          resources = resources :+ ResourceUtil.createResource(s"$componentSrcDir/lib.rs", content, T)
-
-        case _ =>
-      }
-    }
+    // The monitored components' crates/<component>/src/lib.rs used to be re-emitted
+    // here, duplicating CRustComponentPlugin's template and winning by running later.
+    // The observation points are now contributed to that plugin during handle (see the
+    // lib* fields of ComponentContributions), so there is nothing to emit here.
 
     // Generate GUMBOX and container modules in each monitor crate under src/gumbox.
     // One monitor per name: size-1 for the gumbo monitor, one per composition for
@@ -1211,89 +1148,6 @@ object GumboMonitorPlugin {
                 |${(modEntries, "\n")}
                 |"""
           resources = resources :+ ResourceUtil.createResource(s"$gumboxDir/mod.rs", modContent, T)
-
-          // Regenerate the monitor crate's lib.rs to include 'mod gumbox;'
-          val monitorThreadId = MicrokitUtil.getComponentIdPath(monitorThread)
-          val monitorSrcDir = s"$monitorCrateDir/src"
-          val monitorEntrypoints: ISZ[ST] =
-            if (monitorThread.isPeriodic())
-              ISZ(
-                st"""#[no_mangle]
-                    |pub extern "C" fn ${monitorThreadId}_timeTriggered() {
-                    |  unsafe {
-                    |    if let Some(_app) = app.as_mut() {
-                    |      _app.timeTriggered(&mut compute_api);
-                    |    } else {
-                    |      panic!("Unexpected: app is None");
-                    |    }
-                    |  }
-                    |}""")
-            else ISZ(st"NOT YET")
-
-          val testModDecl2: Option[ST] =
-            if (getMonitorGenProfile.emitTestHarness) Some(st"""#[cfg(test)]
-                                                              |mod test;""")
-            else None()
-
-          val monitorLibContent =
-            st"""#![cfg_attr(not(test), no_std)]
-                |
-                |${RustUtil.defaultCrateLevelAttributes}
-                |
-                |${CommentTemplate.doNotEditComment_slash}
-                |
-                |mod bridge;
-                |mod component;
-                |mod gumbox;
-                |mod logging;
-                |
-                |$testModDecl2
-                |
-                |use crate::bridge::${CRustApiPlugin.apiModuleName(monitorThread)}::{self as api, *};
-                |use crate::component::${CRustComponentPlugin.appModuleName(monitorThread)}::*;
-                |use data::*;
-                |
-                |static mut app: Option<$monitorThreadId> = None;
-                |static mut init_api: ${CRustApiPlugin.applicationApiType(monitorThread)}<${CRustApiPlugin.initializationApiType(monitorThread)}> = api::init_api();
-                |static mut compute_api: ${CRustApiPlugin.applicationApiType(monitorThread)}<${CRustApiPlugin.computeApiType(monitorThread)}> = api::compute_api();
-                |
-                |#[no_mangle]
-                |pub extern "C" fn ${monitorThreadId}_initialize() {
-                |  logging::init_logging();
-                |
-                |  unsafe {
-                |    #[cfg(test)]
-                |    crate::bridge::extern_c_api::initialize_test_globals();
-                |
-                |    let mut _app = $monitorThreadId::new();
-                |    _app.initialize(&mut init_api);
-                |    app = Some(_app);
-                |  }
-                |}
-                |
-                |${(monitorEntrypoints, "\n\n")}
-                |
-                |#[no_mangle]
-                |pub extern "C" fn ${monitorThreadId}_notify(channel: microkit_channel) {
-                |  unsafe {
-                |    if let Some(_app) = app.as_mut() {
-                |      _app.notify(channel);
-                |    } else {
-                |      panic!("Unexpected: app is None");
-                |    }
-                |  }
-                |}
-                |
-                |// Need a Panic handler in a no_std environment
-                |#[panic_handler]
-                |#[cfg(not(test))]
-                |fn panic(info: &core::panic::PanicInfo) -> ! {
-                |  log::error!("PANIC: {info:#?}");
-                |  loop {}
-                |}
-                |"""
-          resources = resources :+ ResourceUtil.createResource(s"$monitorSrcDir/lib.rs", monitorLibContent, T)
-
         case _ =>
       }
       }

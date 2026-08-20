@@ -171,20 +171,30 @@ object CConnectionProviderPlugin {
 
     var typeHeaderFilenames: ISZ[String] = ISZ(MicrokitTypeUtil.cAadlTypesFilename)
 
-    for (entry <- ret) {
-      val srcPath = s"${options.sel4OutputDir.get}/${MicrokitTypeUtil.cTypesDir}/${MicrokitCodegen.dirSrc}"
+    // A queue wrapper is per (type, queue size), which is exactly what its filename
+    // encodes -- but ret holds one entry per connection, and every connection
+    // carrying a given type contributes the same wrapper again.  Emitting straight
+    // from that loop wrote the same .h/.c once per connection: identical content,
+    // but written repeatedly and listed repeatedly in the codegen report (isolette
+    // emitted one of them five times).  Collecting by filename first makes one
+    // wrapper per type structural, rather than something a later pass has to undo
+    // -- which is what uniqueTypeHeaderFilenames below already had to do for the
+    // include list.
+    var typeApis: HashSMap[String, TypeApiContributions] = HashSMap.empty
+    for (entry <- ret; tc <- entry.typeApiContributions) {
+      typeHeaderFilenames = typeHeaderFilenames :+ tc.headerFilename
+      typeApis = typeApis + tc.headerFilename ~> tc
+    }
 
-      for (tc <- entry.typeApiContributions) {
-        typeHeaderFilenames = typeHeaderFilenames :+ tc.headerFilename
+    val srcPath = s"${options.sel4OutputDir.get}/${MicrokitTypeUtil.cTypesDir}/${MicrokitCodegen.dirSrc}"
+    for (tc <- typeApis.values) {
+      val headerPath = s"$baseTypesIncludePath/${tc.headerFilename}"
+      resources = resources :+ ResourceUtil.createResourceH(
+        path = headerPath, content = tc.header, overwrite = T, isDatatype = T)
 
-        val headerPath = s"$baseTypesIncludePath/${tc.headerFilename}"
-        resources = resources :+ ResourceUtil.createResourceH(
-          path = headerPath, content = tc.header, overwrite = T, isDatatype = T)
-
-        val implPath = s"$srcPath/${tc.implementationFilename}"
-        resources = resources :+ ResourceUtil.createResourceH(
-          path = implPath, content = tc.implementation, overwrite = T, isDatatype = T)
-      }
+      val implPath = s"$srcPath/${tc.implementationFilename}"
+      resources = resources :+ ResourceUtil.createResourceH(
+        path = implPath, content = tc.implementation, overwrite = T, isDatatype = T)
     }
 
     val uniqueTypeHeaderFilenames: ISZ[String] = (Set.empty[String] ++ typeHeaderFilenames).elements
