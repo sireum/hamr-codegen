@@ -549,6 +549,45 @@ object CodeGen {
   }
 
   def writeOutResources(resources: ISZ[Resource], reporter: Reporter): Unit = {
+    // Every generator's output funnels through here, so this is where "codegen emits
+    // each resource exactly once" can actually be enforced.  A repeated path is at
+    // best redundant I/O and a duplicated entry in the codegen report; at worst it is
+    // two generators disagreeing about one file, where whichever writes last silently
+    // wins.  Report it rather than let it pass: identical content is a wasted write
+    // worth removing at its source, and differing content is a real conflict.
+    var seen = HashSMap.empty[String, InternalResource]
+    for (r <- resources) {
+      r match {
+        case i: InternalResource =>
+          val key = Os.path(i.dstPath).canon.value
+          seen.get(key) match {
+            case Some(prev) =>
+              // Differing content is an error: no generator overrides another by
+              // running later any more.  The one place that did -- GumboMonitorPlugin
+              // re-emitting a component's src/lib.rs over CRustComponentPlugin's --
+              // now contributes into that file instead (see ComponentContributions'
+              // lib* fields), so a path emitted twice with different bytes means two
+              // generators genuinely disagree and whichever runs last would win
+              // silently.
+              if (prev.content.render != i.content.render || prev.overwrite != i.overwrite) {
+                reporter.error(None(), toolName,
+                  st"""Codegen emitted conflicting content for the same path: $key
+                      |Two generators disagree about this file; the last write would win
+                      |silently.  If one is meant to override the other, contribute into the
+                      |owning generator rather than re-emitting the path.""".render)
+              } else {
+                reporter.error(None(), toolName,
+                  st"""Codegen emitted the same resource more than once: $key
+                      |The content is identical, so the output is correct, but the file is written
+                      |repeatedly and appears more than once in the codegen report.""".render)
+              }
+            case _ =>
+          }
+          seen = seen + key ~> i
+        case _ =>
+      }
+    }
+
     def render(i: InternalResource): String = {
       val ret: String = {
         val lineSep: String = if (Os.isWin) "\r\n" else "\n" // ST render uses System.lineSep
