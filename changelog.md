@@ -1,4 +1,4 @@
-*Last Updated 2026-08-10*
+*Last Updated 2026-08-20*
 
 <!-- begin pre-release -->
 # Pre-Release
@@ -20,7 +20,80 @@ cd kekinian
 <!-- end pre-release -->
 
 <!-- begin dev -->
-# [dev](https://github.com/sireum/kekinian/releases/tag/dev)  <font size=3>as of 2026-08-10</font>
+# [dev](https://github.com/sireum/kekinian/releases/tag/dev)  <font size=3>as of 2026-08-20 (kekinian commit tip [067a3754](https://github.com/sireum/kekinian/tree/067a37543d1a04a73362ffea90afb93c628e6b2f))</font>
+
+**Microkit**
+
+  * Upgraded to the Microkit 2.3.0 SDK and the 2026.08 Verus toolchain: Verus ``0.2026.01.23`` -> ``0.2026.08.09`` with ``vstd``/``verus_builtin`` bumped to match, the Rust toolchain pinned to the release channel (1.97.1) that the Verus release was built against rather than to a nightly date, ``sel4``/``sel4-logging`` v2.0.0 -> v5.0.0, and the ``microkit-sdk`` (2.3.0) and ``sdfgen`` (0.33.0) tool versions recorded alongside the other pins.  The Verus API changes that upgrade requires are now emitted: post-state field references in an ``ensures`` on a ``&mut self`` method are written ``final(self).<field>`` (an in-ensures/is-guarantee-ensures flag is threaded through GUMBO spec rewriting so the expression emitter knows which half of the enclosing contract a spec lands in), and ghost tracking field updates are placed inside a ``proof { }`` block
+
+  * Domain scheduling now emits the stock ``<domains>`` element -- deduped ``<domain name id>`` declarations followed by a ``<domain_schedule>`` holding a ``<schedule_entry domain duration>`` per slot and an explicit ``<schedule_end_marker />`` -- replacing the ``<domain name length>`` form of the patched 1.4.1-dev SDK, with slot durations converted from the model's milliseconds to microseconds.  Codegen now validates at generation time what the microkit tool would otherwise only reject at build time: non-positive durations, and protection domains that are missing or misreference a scheduling domain, are errors, while ``KernelNumDomains`` and ``KernelNumDomainSchedules`` are advisory warnings, since the real bounds belong to the kernel the SDK was built with and codegen is given neither the SDK path nor the target board
+
+  * VM support migrated to the current libvmm API, so generated code builds against the libvmm and sDDF that LionsOS 3945dc5 vendors, which is recorded alongside the other tool pins: ``guest_init`` declares the guest's RAM layout up front, bringing up the virtual GIC and registering the regions guest physical addresses resolve against, so the addresses handed to it are named ``*_GPA`` rather than ``*_VADDR`` and the config header gains ``GUEST_RAM_START_GPA``/``GUEST_RAM_SIZE``; ``virq_register_passthrough`` replaces ``virq_register`` plus its ack handler, since libvmm acks a pass-through hardware IRQ itself once the guest acks the virtual one; the vCPU id is no longer threaded through the guest and vIRQ calls; ``guest_start`` reports failure; and the guest addresses become named constants that the DTS overlay reads too, so the initrd window cannot drift between the two
+
+  * VM makefiles take ``LIBVMM`` and ``SDDF`` from ``LIONSOS`` rather than requiring ``VMM_DIR``, and link ``libsddf_util_debug.a``: libvmm routes ``printf`` through sDDF, and the non-debug ``putchar`` writes into a serial transmit queue that a generated system has no virtualiser to supply, so the first ``LOG_VMM`` faulted the whole component.  The arinc makefile likewise lets ``SDDF`` be set directly, defaulting to ``$(LIONSOS)/dep/sddf``.  Two malformed include flags are fixed -- ``$(TOP_INCLUDE)`` already carries its own ``-I``, so the extra one turned the types include into a nonexistent directory, and under MCS, where ``TOP_INCLUDE`` expands to nothing, the bare ``-I`` swallowed the component's own include directory
+
+  * The vendored ``util.h`` is no longer emitted.  All it supplied was a ``printf`` declaration, so that cascade moves into the generated headers, ordered most-specific first and tested with ``<>`` rather than ``""`` -- a component built against sDDF has ``$(SDDF)/include/sddf/util`` on its include path, so ``"util.h"`` would resolve to sDDF's copy, which declares no ``printf`` at all.  ``memcpy`` and ``memset`` are declared beside it, since none of the three ``util.h`` variants declares them and a ``-ffreestanding -nostdlib`` build has no ``<string.h>`` to fall back on
+
+  * Added an ``SMT_OPTS`` make variable that forwards extra arguments to Verus, defaulting to ``--rlimit 100 --smt-option smt.random_seed=7``.  Both settings are needed for ``vstd`` itself, which cargo-verus builds from source as a dependency of every generated crate: ``GhostSubseq::agree_map`` fails its postcondition under Z3's default random seed, and ``endian.rs`` exceeds Verus' default resource limit of 10, both becoming reachable with the Verus 0.2026.08 and Z3 4.16.0 upgrade.  ``?=`` is kept, so an exported ``SMT_OPTS`` still wins -- which is how the seed had been supplied until now, from a developer's shell profile, and why local builds passed while CI did not
+
+  * Generated Rust crates put ``RUSTC_BOOTSTRAP=1`` on the test and coverage targets as well as the build ones, since the pinned stable channel rejects the ``#![feature(..)]`` attributes they declare on every cargo invocation, and allow ``unused_features`` and ``unexpected_cfgs``, which fire only on the non-Verus path
+
+  * A component's ``src/lib.rs`` is now a contribution target rather than something a later plugin re-emits wholesale: ``ComponentContributions`` gains slots for mod declarations, uses, module-level entries, and positions inside the generated initialize and compute entrypoints, so the runtime-monitoring observation points and the monitor crate's ``mod gumbox;`` are woven into the file its owner generates.  Each slot renders to nothing when unused, so a component with no contributors emits exactly the text it did before
+
+**General**
+
+  * Codegen now reports when the same resource path is emitted more than once: differing content means two generators disagree and the last write would silently win, while identical content is a redundant write and a duplicated codegen-report entry.  The check surfaced the C queue wrappers, which are per (type, queue size) but were emitted once per connection carrying the type -- isolette wrote one of them five times -- so they are now collected by filename in the connection provider
+
+  * The ``structs_arrays`` SysMLv2 model is now exercised by ``MicrokitBehaviorTests``; its expected results were already checked in, but nothing was running them
+
+**Backward Incompatibilities**
+
+  * **Microkit**
+
+    * Generated systems now require the Microkit 2.3.0 SDK -- the ``<domains>``/``<domain_schedule>`` form emitted for domain scheduling is not accepted by the patched 1.4.1-dev SDK -- along with Verus 0.2026.08.09 and the 1.97.1 Rust release channel it was built against
+
+    * VM builds now take ``LIBVMM`` and ``SDDF`` from ``LIONSOS`` instead of ``VMM_DIR``, and target the current libvmm API; the guest addresses handed to ``guest_init`` are renamed ``*_GPA`` from ``*_VADDR``.  ``sdf-gen`` is referred to as ``sdfgen``, matching the package the generated metaprogram imports and asserts against
+
+    * The vendored ``util.h`` and the dead ``vmm_c`` template are no longer emitted
+
+<details><summary>How to build</summary>
+
+```
+git clone --rec --depth 1 --branch dev https://github.com/sireum/kekinian.git
+cd kekinian
+./bin/build.cmd
+```
+
+</details>
+
+<details><summary>Commits</summary>
+
+* [632353d](https://github.com/sireum/hamr-codegen/commit/632353d) update submodule
+
+* [4fde3de](https://github.com/sireum/hamr-codegen/commit/4fde3de) Run the structs_arrays SysML model in MicrokitBehaviorTests
+
+* [c6e3cf5](https://github.com/sireum/hamr-codegen/commit/c6e3cf5) Document the AADL GUMBO grammar's rejection of postfix on In(...)
+
+* [5b74e18](https://github.com/sireum/hamr-codegen/commit/5b74e18) Make src/lib.rs a contribution target and reject duplicate resources
+
+* [00b4f1c](https://github.com/sireum/hamr-codegen/commit/00b4f1c) microkit: give SMT_OPTS a default that lets vstd verify
+
+* [7d4fd76](https://github.com/sireum/hamr-codegen/commit/7d4fd76) update submodule
+
+* [8edee7f](https://github.com/sireum/hamr-codegen/commit/8edee7f) microkit: migrate VM support to the current libvmm API
+
+* [4cb5bf6](https://github.com/sireum/hamr-codegen/commit/4cb5bf6) microkit: upgrade to Microkit 2.3.0 and the 2026.08 Verus toolchain
+
+* [a52be0b](https://github.com/sireum/hamr-codegen/commit/a52be0b) update changelog
+
+* [1d717b0](https://github.com/sireum/hamr-codegen/commit/1d717b0) install turtlesim
+</details>
+<br>
+<!-- end dev -->
+
+<!-- released -->
+<!-- begin 4.20260810.80aad0c2 -->
+# [4.20260810.80aad0c2](https://github.com/sireum/kekinian/releases/tag/4.20260810.80aad0c2) 
 
 **ROS2**
 
@@ -75,7 +148,7 @@ cd kekinian
 <details><summary>How to build</summary>
 
 ```
-git clone --rec --depth 1 --branch dev https://github.com/sireum/kekinian.git
+git clone --rec --depth 1 --branch 4.20260810.80aad0c2 https://github.com/sireum/kekinian.git
 cd kekinian
 ./bin/build.cmd
 ```
@@ -133,9 +206,9 @@ cd kekinian
 * [ade952e](https://github.com/sireum/hamr-codegen/commit/ade952e) tweak
 </details>
 <br>
-<!-- end dev -->
+<!-- end 4.20260810.80aad0c2 -->
 
-<!-- released -->
+
 <!-- begin 4.20260720.6a05e505 -->
 # [4.20260720.6a05e505](https://github.com/sireum/kekinian/releases/tag/4.20260720.6a05e505) 
 
