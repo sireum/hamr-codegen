@@ -62,9 +62,16 @@ var dev = st""
 
 for(e <- released.entries) {
   val dest = s"https://github.com/sireum/kekinian/releases/tag/${e._1.tag}"
+  // dev is a moving tag, so record which kekinian commit it currently points at
+  val suffix: ST =
+    if (e._1.tag == "dev") {
+      val full = ops.StringOps(proc"git rev-list -n 1 ${e._1.tag}".at(sireumHome).runCheck().out).trim
+      val h = ops.StringOps(full).substring(0, 8)
+      st" <font size=3>as of ${e._1.tagDate.format(java.time.format.DateTimeFormatter.ofPattern(string"yyyy-MM-dd".native))} (kekinian commit tip [$h](https://github.com/sireum/kekinian/tree/$full))</font>"
+    } else st""
   val content =
     st"""<!-- begin ${e._1.tag} -->
-        |# [${e._1.tag}]($dest) ${if (e._1.tag == "dev") s" <font size=3>as of ${e._1.tagDate.format(java.time.format.DateTimeFormatter.ofPattern(string"yyyy-MM-dd".native))}</font>" else "" }
+        |# [${e._1.tag}]($dest) $suffix
         |
         |<details><summary>How to build</summary>
         |
