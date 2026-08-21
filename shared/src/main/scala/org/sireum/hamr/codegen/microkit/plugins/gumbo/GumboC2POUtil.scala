@@ -103,39 +103,41 @@ object GumboC2POUtil {
                            quantifierValues: Map[String, Z],
                            aadlTypes: AadlTypes,
                            store: Store): Option[Z] = {
-    @pure def getValue(e: SAST.Exp): Option[Z] = e match {
-      case lit: SAST.Exp.LitZ => return Some(lit.value)
-      case id: SAST.Exp.Ident =>
-        id.resOpt match {
-          case Some(local: SAST.ResolvedInfo.LocalVar) => return quantifierValues.get(local.id)
-          case _ => return None()
-        }
-      case binary: SAST.Exp.Binary =>
-        (getValue(binary.left), binary.op, getValue(binary.right)) match {
-          case (Some(left), SAST.Exp.BinaryOp.Add, Some(right)) => return Some(left + right)
-          case (Some(left), SAST.Exp.BinaryOp.Sub, Some(right)) => return Some(left - right)
-          case (Some(left), SAST.Exp.BinaryOp.Mul, Some(right)) => return Some(left * right)
-          case (Some(left), SAST.Exp.BinaryOp.Div, Some(right)) if right != 0 => return Some(left / right)
-          case (Some(left), SAST.Exp.BinaryOp.Rem, Some(right)) if right != 0 => return Some(left % right)
-          case _ => return None()
-        }
-      case select: SAST.Exp.Select if select.id.value == "size" && select.receiverOpt.nonEmpty =>
-        val array: SAST.Exp = select.receiverOpt.get match {
-          case get: SAST.Exp.Select if get.receiverOpt.nonEmpty =>
-            get.attr.typedOpt match {
-              case Some(m: SAST.Typed.Method) if m.owner == SAST.Typed.optionName && m.name == "get" =>
-                get.receiverOpt.get
-              case _ => get
-            }
-          case receiver => receiver
-        }
-        getArrayType(array, aadlTypes, store) match {
-          case Some(arrayType) => return Some(arrayType.size)
-          case _ => return None()
-        }
-      case invoke: SAST.Exp.Invoke if GclResolver.getIndexingTypeFingerprints(store).contains(invoke.ident.id.value) =>
-        return getValue(getIndexingExpr(invoke, store))
-      case _ => return None()
+    @pure def getValue(e: SAST.Exp): Option[Z] = {
+      e match {
+        case lit: SAST.Exp.LitZ => return Some(lit.value)
+        case id: SAST.Exp.Ident =>
+          id.resOpt match {
+            case Some(local: SAST.ResolvedInfo.LocalVar) => return quantifierValues.get(local.id)
+            case _ => return None()
+          }
+        case binary: SAST.Exp.Binary =>
+          (getValue(binary.left), binary.op, getValue(binary.right)) match {
+            case (Some(left), SAST.Exp.BinaryOp.Add, Some(right)) => return Some(left + right)
+            case (Some(left), SAST.Exp.BinaryOp.Sub, Some(right)) => return Some(left - right)
+            case (Some(left), SAST.Exp.BinaryOp.Mul, Some(right)) => return Some(left * right)
+            case (Some(left), SAST.Exp.BinaryOp.Div, Some(right)) if right != 0 => return Some(left / right)
+            case (Some(left), SAST.Exp.BinaryOp.Rem, Some(right)) if right != 0 => return Some(left % right)
+            case _ => return None()
+          }
+        case select: SAST.Exp.Select if select.id.value == "size" && select.receiverOpt.nonEmpty =>
+          val array: SAST.Exp = select.receiverOpt.get match {
+            case get: SAST.Exp.Select if get.receiverOpt.nonEmpty =>
+              get.attr.typedOpt match {
+                case Some(m: SAST.Typed.Method) if m.owner == SAST.Typed.optionName && m.name == "get" =>
+                  get.receiverOpt.get
+                case _ => get
+              }
+            case receiver => receiver
+          }
+          getArrayType(array, aadlTypes, store) match {
+            case Some(arrayType) => return Some(arrayType.size)
+            case _ => return None()
+          }
+        case invoke: SAST.Exp.Invoke if GclResolver.getIndexingTypeFingerprints(store).contains(invoke.ident.id.value) =>
+          return getValue(getIndexingExpr(invoke, store))
+        case _ => return None()
+      }
     }
     return getValue(exp)
   }
@@ -169,13 +171,16 @@ object GumboC2POUtil {
     // Array to aggregate directly when every use of the quantifier variable is local.
     val directArrayOpt: Option[SAST.Exp] = if (rewriter.isQuantifierVarLocal) rewriter.arrayOpt else None()
     // Recognizes full ranges: 0 until samples.size or 0 to samples.size - 1.
-    val fullRangeSizeExpOpt: Option[SAST.Exp] =
-      if (!exp.hiExact) Some(exp.hi)
-      else exp.hi match {
+    var fullRangeSizeExpOpt: Option[SAST.Exp] = None()
+    if (!exp.hiExact) {
+      fullRangeSizeExpOpt = Some(exp.hi)
+    } else {
+      fullRangeSizeExpOpt = exp.hi match {
         case binary: SAST.Exp.Binary if binary.op == SAST.Exp.BinaryOp.Sub &&
           getStaticValue(binary.right, quantifierValues, aadlTypes, store) == Some(z"1") => Some(binary.left)
         case _ => None()
       }
+    }
     // True when the range spans the same array used by the predicate.
     val isFullArray: B = (fullRangeSizeExpOpt, directArrayOpt) match {
       case (Some(select: SAST.Exp.Select), Some(array))
@@ -406,9 +411,13 @@ object GumboC2POUtil {
   @pure def getBaseType(baseType: BaseType): C2POType.Type = {
     baseType.slangType match {
       case SlangType.B => return C2POType.bool
-      case SlangType.S8 | SlangType.S16 | SlangType.S32 |
-           SlangType.U8 | SlangType.U16 => return C2POType.int
-      case SlangType.F32 | SlangType.F64 => return C2POType.float
+      case SlangType.S8 => return C2POType.int
+      case SlangType.S16 => return C2POType.int
+      case SlangType.S32 => return C2POType.int
+      case SlangType.U8 => return C2POType.int
+      case SlangType.U16 => return C2POType.int
+      case SlangType.F32 => return C2POType.float
+      case SlangType.F64 => return C2POType.float
       case _ => halt(s"Type ${baseType.slangType} is not supported by R2U2 monitors")
     }
   }
@@ -449,7 +458,9 @@ object GumboC2POUtil {
         }
         aadlTypes.getTypeByPathOpt(aadlTypePath) match {
           case Some(arrayType: ArrayType) =>
-            if (arrayType.dimensions.size != 1) halt("Only one-dimensional arrays are supported by R2U2 monitors")
+            if (arrayType.dimensions.size != 1) {
+              halt("Only one-dimensional arrays are supported by R2U2 monitors")
+            }
             arrayType.baseType match {
               case b: BaseType => return Some(C2POArray(getBaseType(b), arrayType.dimensions(0)))
               case _ => halt("Only arrays of primitive values are supported by R2U2 monitors")
@@ -472,22 +483,26 @@ object GumboC2POUtil {
         aadlTypes.getTypeByPathOpt(n.ids) match {
           case Some(recordType: RecordType) =>
             checkC2POIdentifier(recordType.nameProvider.typeName)
-            val fields: ISZ[C2POStructField] = for (field <- recordType.fields.entries) yield {
+            var fields: ISZ[C2POStructField] = ISZ()
+            for (field <- recordType.fields.entries) {
               checkC2POIdentifier(field._1)
-              field._2 match {
+              val c2poField: C2POStructField = field._2 match {
                 case b: BaseType =>
                   C2POStructField(field._1, getBaseType(b), None(), None())
                 case e: EnumType =>
                   checkC2POEnum(e)
                   C2POStructField(field._1, C2POType.enumeration, Some(C2POEnum(e.simpleName, e.values)), None())
                 case a: ArrayType =>
-                  if (a.dimensions.size != 1) halt("Only one-dimensional arrays are supported by R2U2 monitors")
+                  if (a.dimensions.size != 1) {
+                    halt("Only one-dimensional arrays are supported by R2U2 monitors")
+                  }
                   a.baseType match {
                     case b: BaseType => C2POStructField(field._1, C2POType.array, None(), Some(C2POArray(getBaseType(b), a.dimensions(0))))
                     case _ => halt("Only arrays of primitive values are supported by R2U2 monitors")
                   }
                 case _ => halt("Nested structs are not supported by R2U2 monitors")
               }
+              fields = fields :+ c2poField
             }
             return C2POStruct(recordType.nameProvider.typeName, fields)
           case _ => halt(s"Type ${n.ids} is not an AADL struct")
@@ -527,7 +542,7 @@ object GumboC2POUtil {
           case Some(_: SAST.ResolvedInfo.LocalVar) => return (id, categorized)
           case _ =>
         }
-        categorized += (id.id.value -> id)
+        categorized = categorized + (id.id.value ~> id)
         return (id, categorized)
       // 2. Collect and rewrite component selections (e.g., api.my_var or state.my_var).
       case sel: org.sireum.lang.ast.Exp.Select =>
@@ -560,12 +575,12 @@ object GumboC2POUtil {
         } else if (isStructMember) {
           // Preserve record member access while collecting the record input.
           val res = collectIdentifiers(sel.receiverOpt.get)
-          for (e <- res._2.entries) { categorized += e }
+          for (e <- res._2.entries) { categorized = categorized + e }
           return (sel(receiverOpt = Some(res._1)), categorized)
         } else {
           getFlatPathString(sel) match {
             case Some(collapsedString) =>
-              categorized += (collapsedString -> sel)
+              categorized = categorized + (collapsedString ~> sel)
 
               val freshId = org.sireum.lang.ast.Id(value = collapsedString, attr = sel.id.attr)
               val rewrittenNode = org.sireum.lang.ast.Exp.Ident(id = freshId, attr = sel.attr)
@@ -578,50 +593,50 @@ object GumboC2POUtil {
                   (Some(res._1), res._2)
                 case _ => (None[org.sireum.lang.ast.Exp](), Map.empty)
               }
-              for (e <- innerMapping.entries) { categorized += e }
+              for (e <- innerMapping.entries) { categorized = categorized + e }
               return (sel(receiverOpt = updatedRecv), categorized)
           }
         }
       // 3. Collect In(state) under a distinct pre-state input name.
       case input @ org.sireum.lang.ast.Exp.Input(id: org.sireum.lang.ast.Exp.Ident) =>
         val name = s"in_${id.id.value}"
-        categorized += (name -> input)
+        categorized = categorized + (name ~> input)
         return (id(id = id.id(value = name)), categorized)
       // 4. Drill down into conditional expressions.
       case ifExp: org.sireum.lang.ast.Exp.If =>
         val cond = collectIdentifiers(ifExp.cond)
         val thenExp = collectIdentifiers(ifExp.thenExp)
         val elseExp = collectIdentifiers(ifExp.elseExp)
-        for (res <- ISZ(cond, thenExp, elseExp); e <- res._2.entries) { categorized += e }
-        return (ifExp(cond._1, thenExp._1, elseExp._1), categorized)
+        for (res <- ISZ(cond, thenExp, elseExp); e <- res._2.entries) { categorized = categorized + e }
+        return (ifExp(cond = cond._1, thenExp = thenExp._1, elseExp = elseExp._1), categorized)
       // 5. Drill down into binary operators (e.g., x > 5, a AND b).
       case bin: org.sireum.lang.ast.Exp.Binary =>
         val res_left = collectIdentifiers(bin.left)
         val res_right = collectIdentifiers(bin.right)
-        for (e <- res_left._2.entries) { categorized += e }
-        for (e <- res_right._2.entries) { categorized += e }
-        return (bin(res_left._1, bin.op, res_right._1), categorized)
+        for (e <- res_left._2.entries) { categorized = categorized + e }
+        for (e <- res_right._2.entries) { categorized = categorized + e }
+        return (bin(left = res_left._1, right = res_right._1), categorized)
       // 6. Drill down into unary operators (e.g., !x).
       case un: org.sireum.lang.ast.Exp.Unary =>
         val res = collectIdentifiers(un.exp)
-        for (e <- res._2.entries) { categorized += e }
+        for (e <- res._2.entries) { categorized = categorized + e }
         return (un(exp = res._1), categorized)
       case un: org.sireum.lang.ast.Exp.UnaryTemporal =>
         val res = collectIdentifiers(un.exp)
-        for (e <- res._2.entries) { categorized += e }
+        for (e <- res._2.entries) { categorized = categorized + e }
         return (un(exp = res._1), categorized)
       case bin: org.sireum.lang.ast.Exp.BinaryTemporal =>
         val resLeft = collectIdentifiers(bin.left)
         val resRight = collectIdentifiers(bin.right)
-        for (e <- resLeft._2.entries) { categorized += e }
-        for (e <- resRight._2.entries) { categorized += e }
+        for (e <- resLeft._2.entries) { categorized = categorized + e }
+        for (e <- resRight._2.entries) { categorized = categorized + e }
         return (bin(left = resLeft._1, right = resRight._1), categorized)
       // 7. Range bounds are static; only the predicate contributes monitor inputs.
       case quant: org.sireum.lang.ast.Exp.QuantRange =>
         quant.fun.exp match {
           case stmt: SAST.Stmt.Expr =>
             val res: (SAST.Exp, Map[String, SAST.Exp]) = collectIdentifiers(stmt.exp)
-            for (e <- res._2.entries) { categorized += e }
+            for (e <- res._2.entries) { categorized = categorized + e }
             return (quant(fun = quant.fun(exp = stmt(exp = res._1))), categorized)
           case _ => halt(s"Unexpected quantified expression: ${quant.fun.exp.prettyST.render}")
         }
@@ -629,7 +644,7 @@ object GumboC2POUtil {
       case invoke: org.sireum.lang.ast.Exp.Invoke =>
         // GCL combines Option.get and array indexing for an event-data array into
         // api.port.get(index). Preserve the index while omitting the Option access.
-        val ident = invoke.receiverOpt match {
+        val ident: SAST.Exp.Ident = invoke.receiverOpt match {
           case Some(receiver) if invoke.ident.id.value == "get" =>
             receiver.typedOpt match {
               case Some(SAST.Typed.Name(SAST.Typed.optionName, _, _)) =>
@@ -643,24 +658,24 @@ object GumboC2POUtil {
           case _ => ""
         }
         if (functionName != "") {
-          categorized += (functionName -> invoke)
+          categorized = categorized + (functionName ~> invoke)
         }
         // Collect the indexed array as an input.
         invoke.attr.resOpt match {
           case Some(m: SAST.ResolvedInfo.Method)
             if m.owner == ISZ("org", "sireum") && m.id == "IS" && invoke.receiverOpt.isEmpty =>
             invoke.ident.resOpt match {
-              case Some(_: SAST.ResolvedInfo.Var) => categorized += (invoke.ident.id.value -> invoke.ident)
+              case Some(_: SAST.ResolvedInfo.Var) => categorized = categorized + (invoke.ident.id.value ~> invoke.ident)
               case _ =>
             }
           case _ =>
         }
         var updatedArgs = ISZ[org.sireum.lang.ast.Exp]()
 
-        for (arg <- invoke.args.elements) {
+        for (arg <- invoke.args) {
           val (newArg, argMapping) = collectIdentifiers(arg)
           updatedArgs = updatedArgs :+ newArg
-          for (e <- argMapping.entries) { categorized += e }
+          for (e <- argMapping.entries) { categorized = categorized + e }
         }
 
         val res: (Option[org.sireum.lang.ast.Exp], Map[String, org.sireum.lang.ast.Exp]) = invoke.receiverOpt match {
@@ -669,7 +684,7 @@ object GumboC2POUtil {
             (Some(res_inner._1), res_inner._2)
           case _ => (None[org.sireum.lang.ast.Exp](), Map.empty)
         }
-        for (e <- res._2.entries) { categorized += e }
+        for (e <- res._2.entries) { categorized = categorized + e }
         return (invoke(receiverOpt = res._1, ident = ident, args = updatedArgs), categorized)
       // Fallback for literals, constants, or unsupported expressions
       case leaf =>
@@ -737,8 +752,10 @@ object GumboC2POUtil {
     // Records future-time or past-time unary temporal operators.
     override def pre_langastExpUnaryTemporal(o: SAST.Exp.UnaryTemporal): org.sireum.hamr.ir.MTransformer.PreResult[SAST.Exp] = {
       o.op match {
-        case SAST.Exp.UnaryTemporalOp.Future | SAST.Exp.UnaryTemporalOp.Globally => hasFuture = T
-        case SAST.Exp.UnaryTemporalOp.Once | SAST.Exp.UnaryTemporalOp.Historically => hasPast = T
+        case SAST.Exp.UnaryTemporalOp.Future => hasFuture = T
+        case SAST.Exp.UnaryTemporalOp.Globally => hasFuture = T
+        case SAST.Exp.UnaryTemporalOp.Once => hasPast = T
+        case SAST.Exp.UnaryTemporalOp.Historically => hasPast = T
       }
       return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone[SAST.Exp]())
     }
@@ -746,8 +763,10 @@ object GumboC2POUtil {
     // Records future-time or past-time binary temporal operators.
     override def pre_langastExpBinaryTemporal(o: SAST.Exp.BinaryTemporal): org.sireum.hamr.ir.MTransformer.PreResult[SAST.Exp] = {
       o.op match {
-        case SAST.Exp.BinaryTemporalOp.Until | SAST.Exp.BinaryTemporalOp.Release => hasFuture = T
-        case SAST.Exp.BinaryTemporalOp.Since | SAST.Exp.BinaryTemporalOp.Trigger => hasPast = T
+        case SAST.Exp.BinaryTemporalOp.Until => hasFuture = T
+        case SAST.Exp.BinaryTemporalOp.Release => hasFuture = T
+        case SAST.Exp.BinaryTemporalOp.Since => hasPast = T
+        case SAST.Exp.BinaryTemporalOp.Trigger => hasPast = T
       }
       return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone[SAST.Exp]())
     }

@@ -5,7 +5,7 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, Store}
 import org.sireum.hamr.codegen.common.{STUtil, StringUtil}
 import org.sireum.hamr.codegen.common.util.HamrCli
-import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlThread, GclAnnexClauseInfo, GclSymbolTable, SymbolTable}
+import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlPort, AadlThread, GclAnnexClauseInfo, GclSymbolTable, SymbolTable}
 import org.sireum.hamr.codegen.common.types.{AadlTypes, SlangType}
 import SlangExpUtil.{Context, TargetLanguage}
 import org.sireum.hamr.codegen.microkit.plugins.rust.component.CRustComponentPlugin
@@ -217,10 +217,12 @@ object GumboRustUtil {
         store = store,
         reporter = reporter)
 
-    val portIds: Set[String] = Set.empty ++ component.getPorts().map(p => p.identifier)
+    val portIds: Set[String] = Set.empty[String] ++ component.getPorts().map((p: AadlPort) => p.identifier)
 
     var variablesInSpecExpanded: Map[String, GumboR2U2Util.R2U2MonitorInput] = Map.empty
-    for ( (varName, varExp) <- variablesInSpec.entries){
+    for (entry <- variablesInSpec.entries) {
+      val varName: String = entry._1
+      val varExp: SAST.Exp = entry._2
       GumboC2POUtil.checkC2POIdentifier(varName)
       variablesInSpecExpanded = variablesInSpecExpanded + varName ~> GumboR2U2Util.lowerR2U2Input(
         exp = varExp,

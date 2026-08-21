@@ -258,7 +258,15 @@ object SlangExpUtil {
             exp.prefix match {
               // C2PO represents every supported integer as a signed 32-bit value,
               // so Rust's fixed-width literal suffixes must not be emitted.
-              case "u8" | "u16" | "s8" | "s16" | "s32" =>
+              case "u8" =>
+                return st"${(unquoteLits(exp.lits), "_INFEASIBLE")}"
+              case "u16" =>
+                return st"${(unquoteLits(exp.lits), "_INFEASIBLE")}"
+              case "s8" =>
+                return st"${(unquoteLits(exp.lits), "_INFEASIBLE")}"
+              case "s16" =>
+                return st"${(unquoteLits(exp.lits), "_INFEASIBLE")}"
+              case "s32" =>
                 return st"${(unquoteLits(exp.lits), "_INFEASIBLE")}"
               case x =>
                 reporter.error(d.posOpt, MicrokitCodegen.toolName,
@@ -500,7 +508,8 @@ object SlangExpUtil {
                       }
                       // C2PO array indices must be static numerals within the fixed array bounds.
                       if (target == TargetLanguage.C2PO) {
-                        val indices: ISZ[ST] = for (arg <- exp.args) yield {
+                        var indices: ISZ[ST] = ISZ()
+                        for (arg <- exp.args) {
                           val value: Z = GumboC2POUtil.getStaticValue(arg, c2poQuantifierValues, aadlTypes, store) match {
                             case Some(value) =>
                               val array: SAST.Exp = if (exp.ident.id.value == "apply") receiverOpt.get else exp.ident
@@ -512,7 +521,7 @@ object SlangExpUtil {
                               value
                             case _ => halt("R2U2 monitors require statically resolvable array indices")
                           }
-                          st"$value"
+                          indices = indices :+ st"$value"
                         }
                         return st"$fname[${(indices, ", ")}]"
                       }
@@ -651,9 +660,10 @@ object SlangExpUtil {
             // For example, (examples(i) <= examples(i+1)) becomes (examples(0) <= examples(1)), etc.
             val oldValues: Map[String, Z] = c2poQuantifierValues
             quantifiers = quantifiers.push(param)
-            val bodies: ISZ[ST] = for (index <- lo to lastIndexOpt.get) yield {
+            var bodies: ISZ[ST] = ISZ()
+            for (index <- lo to lastIndexOpt.get) {
               c2poQuantifierValues = c2poQuantifierValues + param ~> index
-              nestedRewriteExp(bodyExp, None())
+              bodies = bodies :+ nestedRewriteExp(bodyExp, None())
             }
             quantifiers = quantifiers.pop.get._2
             c2poQuantifierValues = oldValues
@@ -799,7 +809,7 @@ object SlangExpUtil {
           if (target == TargetLanguage.C2PO){
                return "~"
           } else {
-               return halt(s"what is the rust equiv of $op")
+               halt(s"what is the rust equiv of $op")
           }
       }
     }
@@ -878,15 +888,14 @@ object SlangExpUtil {
           // same precedence in Rust so may need parens due to
           // right associativity
           // C2PO declares all of its binary precedence levels left-associative, including ->.
-          val isParentRightAssoc: B =
-            if (target == TargetLanguage.C2PO) F
-            else {
-              slangParentOp match {
-                case Exp.BinaryOp.Imply => T
-                case Exp.BinaryOp.CondImply => T
-                case _ => F
-              }
+          var isParentRightAssoc: B = F
+          if (target != TargetLanguage.C2PO) {
+            slangParentOp match {
+              case Exp.BinaryOp.Imply => isParentRightAssoc = T
+              case Exp.BinaryOp.CondImply => isParentRightAssoc = T
+              case _ =>
             }
+          }
           return isRightChild != isParentRightAssoc
         } else {
           // in Rust the child's Rust op binds tighter than the

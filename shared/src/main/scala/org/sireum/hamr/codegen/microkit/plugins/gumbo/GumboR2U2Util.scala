@@ -41,11 +41,11 @@ object GumboR2U2Util {
                            orderedSpecs: ISZ[RAST.R2U2Formula],
                            alerts: ISZ[GclAlert]): (Option[RAST.Item], ISZ[RAST.BodyItem]) = {
     // Map all specifications to the ordering in C2PO.
-    val specNumbers: Map[String, Z] = Map.empty ++
+    val specNumbers: Map[String, Z] = Map.empty[String, Z] ++
       (for (i <- 0 until orderedSpecs.size) yield orderedSpecs(i).id ~> i)
-    val alertSpecNumbers: Map[String, Z] = Map.empty ++
+    val alertSpecNumbers: Map[String, Z] = Map.empty[String, Z] ++
       (for (alert <- alerts) yield alert.portId ~> specNumbers.get(alert.guaranteeId).get)
-    val alertedSpecNumbers: Set[Z] = Set.empty ++ alertSpecNumbers.values
+    val alertedSpecNumbers: Set[Z] = Set.empty[Z] ++ alertSpecNumbers.values
 
     val loggedSpecs: ISZ[ST] = for (i <- 0 until orderedSpecs.size if !alertedSpecNumbers.contains(i)) yield
       st"($i, \"${orderedSpecs(i).id}\")"
@@ -87,8 +87,8 @@ object GumboR2U2Util {
             |}""")
     }
 
-    val alertOutputs: ISZ[ST] =
-      for (port <- thread.getPorts() if alertSpecNumbers.contains(port.identifier)) yield {
+    var alertOutputs: ISZ[ST] = ISZ()
+    for (port <- thread.getPorts() if alertSpecNumbers.contains(port.identifier)) {
         val number = alertSpecNumbers.get(port.identifier).get
         val put: ST = port match {
           case _: AadlEventPort =>
@@ -98,10 +98,10 @@ object GumboR2U2Util {
           case _: AadlEventDataPort => st"api.put_${port.identifier}(verdict.truth);"
           case _ => halt("Unexpected R2U2 alert port type")
         }
-        st"""if let Some(verdict) = self.r2u2_monitor.verdict_cache[$number] {
-            |    $put
-            |}"""
-      }
+        alertOutputs = alertOutputs :+ st"""if let Some(verdict) = self.r2u2_monitor.verdict_cache[$number] {
+                                           |    $put
+                                           |}"""
+    }
     if (alertOutputs.nonEmpty) {
       outputItems = outputItems :+ RAST.BodyItemST(
         st"""// Send the latest cached verdict through each mapped alert port.
@@ -135,10 +135,10 @@ object GumboR2U2Util {
       case _ => exp
     }
     val isPostStateVar: B = stateVarOpt.nonEmpty && !exp.isInstanceOf[SAST.Exp.Input]
-    val ports: Map[String, AadlPort] = Map.empty ++
-      component.getPorts()
-        .filter(p => portIds.contains(p.identifier))
-        .map(p => p.identifier ~> p)
+    val ports: Map[String, AadlPort] = Map.empty[String, AadlPort] ++
+      (component.getPorts()
+        .filter((p: AadlPort) => portIds.contains(p.identifier))
+        .map((p: AadlPort) => p.identifier ~> p))
 
     // Rewrite api.port references and collect the ports that must be observed
     // in the pre- or post-dispatch hook.
@@ -249,7 +249,9 @@ object GumboR2U2Util {
               operationId.value match {
                 // Event-data remains Option[payload]; SlangExpUtil will translate
                 // nonEmpty/isEmpty to is_some()/is_none().
-                case "nonEmpty" | "isEmpty" =>
+                case "nonEmpty" =>
+                  return MNone()
+                case "isEmpty" =>
                   return MNone()
                 case "get" =>
                   // R2U2 loads presence separately, so use a default payload when

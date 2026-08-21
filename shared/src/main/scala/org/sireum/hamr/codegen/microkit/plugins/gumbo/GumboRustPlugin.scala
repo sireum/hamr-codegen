@@ -446,7 +446,7 @@ object GumboRustPlugin {
         i match {
           case f: RAST.FnImpl =>
             if (f.ident.string == "new") {
-              var b: Option[RAST.MethodBody] = null
+              var b: Option[RAST.MethodBody] = None()
               if (optStateVarInits.nonEmpty) {
                 b = f.body match {
                   case Some(RAST.MethodBody(ISZ(self: RAST.BodyItemSelf))) =>
@@ -487,7 +487,7 @@ object GumboRustPlugin {
               updatedImplItems = updatedImplItems :+ f(body = b)
             }
             else if (f.ident.string == "initialize" && genVerus) {
-              val init = if (subclauseInfo.annex.initializes.nonEmpty) {
+              val init: (Marker, RAST.FnImpl) = if (subclauseInfo.annex.initializes.nonEmpty) {
                 handleInitialize(
                   fn = f,
                   thread = thread,
@@ -502,7 +502,7 @@ object GumboRustPlugin {
               }
               markers = markers :+ init._1
 
-              val updatedInit = if (subclauseInfo.annex.monitor.nonEmpty) {
+              val updatedInit: (Marker, RAST.FnImpl) = if (subclauseInfo.annex.monitor.nonEmpty) {
                 handleInitializeMonitor(
                   fn = init._2,
                   thread = thread,
@@ -519,7 +519,7 @@ object GumboRustPlugin {
               markers = markers :+ updatedInit._1
               updatedImplItems = updatedImplItems :+ updatedInit._2
             } else if (f.ident.string == "timeTriggered" && genVerus) {
-              val compute = if (subclauseInfo.annex.compute.nonEmpty) {
+              val compute: (ISZ[Marker], RAST.FnImpl) = if (subclauseInfo.annex.compute.nonEmpty) {
                 handleCompute(
                   fn = f,
                   thread = thread,
@@ -946,16 +946,19 @@ object GumboRustPlugin {
 
     // Expand struct inputs into loadable fields and reconstruct them with a C2PO DEFINE.
     var expandedMonitorInputs: Map[String, GumboR2U2Util.R2U2MonitorInput] = Map.empty
-    for ((name, monitorInput) <- monitorInputs.entries) {
+    for (entry <- monitorInputs.entries) {
+      val name: String = entry._1
+      val monitorInput: GumboR2U2Util.R2U2MonitorInput = entry._2
       monitorInput.structTypeOpt match {
         case Some(structType) =>
           if (!ops.ISZOps(specs.structs).exists(existing => existing.name == structType.name)) {
             specs = specs(structs = specs.structs :+ structType)
           }
-          for (field <- structType.fields if field.enumTypeOpt.nonEmpty;
-               enumType = field.enumTypeOpt.get
-               if !ops.ISZOps(specs.enums).exists(existing => existing.name == enumType.name)) {
-            specs = specs(enums = specs.enums :+ enumType)
+          for (field <- structType.fields if field.enumTypeOpt.nonEmpty) {
+            val enumType: GumboC2POUtil.C2POEnum = field.enumTypeOpt.get
+            if (!ops.ISZOps(specs.enums).exists(existing => existing.name == enumType.name)) {
+              specs = specs(enums = specs.enums :+ enumType)
+            }
           }
           val fieldNames: ISZ[String] = for (field <- structType.fields) yield s"${name}_${field.name}"
           specs = specs(defines = specs.defines :+ RAST.ItemST(st"${MicrokitUtil.TAB}$name := ${structType.name}(${(fieldNames, ", ")});"))
@@ -975,8 +978,8 @@ object GumboRustPlugin {
     }
     monitorInputs = expandedMonitorInputs
 
-    val ports: Map[String, AadlPort] = Map.empty ++
-      thread.getPorts().map(port => port.identifier ~> port)
+    val ports: Map[String, AadlPort] = Map.empty[String, AadlPort] ++
+      (thread.getPorts().map((port: AadlPort) => port.identifier ~> port))
     var referencedInputPorts: Set[String] = Set.empty
     var referencedOutputPorts: Set[String] = Set.empty
     for (monitorInput <- monitorInputs.values; portId <- monitorInput.referencedPorts.elements) {
@@ -1009,7 +1012,9 @@ object GumboRustPlugin {
     if (postItems.nonEmpty) { postItems = postItems :+ RAST.BodyItemST(st"") }
 
     var index = 0
-    for ((name, monitorInput) <- monitorInputs.entries) {
+    for (entry <- monitorInputs.entries) {
+      val name: String = entry._1
+      val monitorInput: GumboR2U2Util.R2U2MonitorInput = entry._2
       val typeName: String = monitorInput.enumTypeOpt match {
         case Some(enumType) => // Check if enum type and adjust type name to enum type name
           if (!ops.ISZOps(specs.enums).exists(existing => existing.name == enumType.name)) {
@@ -1022,7 +1027,7 @@ object GumboRustPlugin {
           case _ => monitorInput.expType.string
         }
       }
-      specs = specs(inputs = specs.inputs :+ RAST.R2U2InputDef(name, typeName, index.toInt, monitorInput.arrayTypeOpt.map(t => t.size)))
+      specs = specs(inputs = specs.inputs :+ RAST.R2U2InputDef(name, typeName, index, monitorInput.arrayTypeOpt.map(t => t.size)))
       val loadSignal: RAST.BodyItem = monitorInput.expType match {
         case GumboC2POUtil.C2POType.bool =>
           RAST.BodyItemST(st"""r2u2_core::load_bool_signal(&mut self.r2u2_monitor, $index, ${monitorInput.exp.prettyST}); // Loading signal $name into index $index""")

@@ -10,7 +10,7 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.TAB
 import org.sireum.hamr.codegen.microkit.rust.Printers._
 
 object Printers {
-  def printItems[T <: Item](items: ISZ[T], sep: String): Option[ST] = {
+  def printItems(items: ISZ[Item], sep: String): Option[ST] = {
     return if (items.nonEmpty) Some(st"${(for(i <- items) yield i.prettyST, sep)}") else None()
   }
 
@@ -196,7 +196,7 @@ object Printers {
 
 @datatype class R2U2InputDef(val name: String,
                             val typeName: String,
-                            val idx: Int,
+                            val idx: Z,
                             val arraySizeOpt: Option[Z]) extends Item {
   @pure def printMap: ST = {
     arraySizeOpt match {
@@ -237,8 +237,10 @@ object Printers {
   @pure override def prettyST: ST = {
     var structSection: ST = st""
     if (structs.nonEmpty) {
-      val structDefs: ISZ[ST] = for (s <- structs) yield {
-        val fields: ISZ[ST] = for (f <- s.fields) yield {
+      var structDefs: ISZ[ST] = ISZ()
+      for (s <- structs) {
+        var fields: ISZ[ST] = ISZ()
+        for (f <- s.fields) {
           val typeName: String = f.enumTypeOpt match {
             case Some(e) => e.name
             case _ => f.arrayTypeOpt match {
@@ -247,9 +249,9 @@ object Printers {
               case _ => f.fieldType.string
             }
           }
-          st"${f.name}: $typeName;"
+          fields = fields :+ st"${f.name}: $typeName;"
         }
-        st"${TAB}${s.name}: { ${(fields, " ")} };"
+        structDefs = structDefs :+ st"${TAB}${s.name}: { ${(fields, " ")} };"
       }
       structSection = st"""STRUCT
                           |${(structDefs, "\n")}
@@ -273,16 +275,16 @@ object Printers {
     }
     return (
       st"""${enumSection}${structSection}INPUT
-          |${printItems(inputs, "\n")}
+          |${printItems(inputs.asInstanceOf[ISZ[Item]], "\n")}
           |
           |${if (defines.nonEmpty) st"""DEFINE
                                              |${printItems(defines, "\n")}
                                              |""" else ""}
           |${if (ftspecs.nonEmpty) st"""FTSPEC
-                                             |${printItems(ftspecs, "\n")}
+                                             |${printItems(ftspecs.asInstanceOf[ISZ[Item]], "\n")}
                                              |""" else ""}
           |${if (ptspecs.nonEmpty) st"""PTSPEC
-                                             |${printItems(ptspecs, "\n")}
+                                             |${printItems(ptspecs.asInstanceOf[ISZ[Item]], "\n")}
                                              |""" else ""}
           |""")
   }
