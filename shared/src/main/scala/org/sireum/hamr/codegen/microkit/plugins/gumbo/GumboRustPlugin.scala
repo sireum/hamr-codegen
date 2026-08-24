@@ -281,17 +281,6 @@ object GumboRustPlugin {
         structDef = structDef(items = structDef.items :+ RAST.MarkerPlaceholder(m))
       }
 
-      if (subclauseInfo.annex.monitor.nonEmpty) {
-        val monitor: ISZ[RAST.Item] = ISZ(RAST.ItemString(s"""pub r2u2_monitor: R2U2Monitor,"""))
-        val m = Marker.createSlashMarker(GumboRustUtil.GumboMarkers.r2u2MonitorStateVar)
-        markers = markers :+ m
-        structDef = structDef(items = structDef.items :+ RAST.MarkerWrap(m, monitor, "\n", None()))
-      } else {
-        val m = Marker.createSlashPlaceholderMarker(GumboRustUtil.GumboMarkers.r2u2MonitorStateVar)
-        markers = markers :+ Marker.createSlashMarker(m.id)
-        structDef = structDef(items = structDef.items :+ RAST.MarkerPlaceholder(m))
-      }
-
       if (subclauseInfo.annex.methods.nonEmpty) {
 
         var verusFuns: ISZ[RAST.Item] = ISZ()
@@ -461,25 +450,6 @@ object GumboRustPlugin {
                   case Some(RAST.MethodBody(ISZ(self: RAST.BodyItemSelf))) =>
                     val m = Marker.createSlashPlaceholderMarker(GumboRustUtil.GumboMarkers.stateVarInit)
                     markers = markers :+ m
-                    Some(RAST.MethodBody(ISZ(self(items = self.items :+ RAST.MarkerPlaceholder(m).prettyST))))
-                  case _ => halt("Not expecting new to contain anything other than Self {...}")
-                }
-              }
-              if (subclauseInfo.annex.monitor.nonEmpty) {
-                b = b match {
-                  case Some(RAST.MethodBody(ISZ(self: RAST.BodyItemSelf))) =>
-                    var monitor: ISZ[RAST.Item] = ISZ()
-                    monitor = monitor :+ RAST.ItemString(s"""r2u2_monitor: default_r2u2_monitor()""")
-                    val m = Marker.createSlashMarker(GumboRustUtil.GumboMarkers.r2u2MonitorStateVarInit)
-                    markers = markers :+ m
-                    Some(RAST.MethodBody(ISZ(self(items = self.items :+ RAST.MarkerWrap(m, monitor, ",\n", Some(",")).prettyST))))
-                  case _ => halt("Not expecting new to contain anything other than Self {...}")
-                }
-              } else {
-                b = b match {
-                  case Some(RAST.MethodBody(ISZ(self: RAST.BodyItemSelf))) =>
-                    val m = Marker.createSlashPlaceholderMarker(GumboRustUtil.GumboMarkers.r2u2MonitorStateVarInit)
-                    markers = markers :+ Marker.createSlashMarker(m.id)
                     Some(RAST.MethodBody(ISZ(self(items = self.items :+ RAST.MarkerPlaceholder(m).prettyST))))
                   case _ => halt("Not expecting new to contain anything other than Self {...}")
                 }
@@ -961,6 +931,12 @@ object GumboRustPlugin {
     }
     if (preItems.nonEmpty) { preItems = preItems :+ RAST.BodyItemST(st"") }
     if (postItems.nonEmpty) { postItems = postItems :+ RAST.BodyItemST(st"") }
+    val monitorInstance = RAST.BodyItemST(
+      st"""let r2u2_monitor = unsafe {
+          |  R2U2_MONITOR.as_mut().expect("R2U2 monitor used before initialization")
+          |};""")
+    preItems = preItems :+ monitorInstance :+ RAST.BodyItemST(st"")
+    postItems = postItems :+ monitorInstance :+ RAST.BodyItemST(st"")
 
     var index = 0
     for (entry <- monitorInputs.entries) {
@@ -981,22 +957,22 @@ object GumboRustPlugin {
       specs = specs(inputs = specs.inputs :+ RAST.R2U2InputDef(name, typeName, index, monitorInput.arrayTypeOpt.map(t => t.size)))
       val loadSignal: RAST.BodyItem = monitorInput.expType match {
         case GumboC2POUtil.C2POType.bool =>
-          RAST.BodyItemST(st"""r2u2_core::load_bool_signal(&mut self.r2u2_monitor, $index, ${monitorInput.exp.prettyST}); // Loading signal $name into index $index""")
+          RAST.BodyItemST(st"""r2u2_core::load_bool_signal(&mut r2u2_monitor.monitor, $index, ${monitorInput.exp.prettyST}); // Loading signal $name into index $index""")
         case GumboC2POUtil.C2POType.int =>
-          RAST.BodyItemST(st"""r2u2_core::load_int_signal(&mut self.r2u2_monitor, $index, (${monitorInput.exp.prettyST}) as i32); // Loading signal $name into index $index""")
+          RAST.BodyItemST(st"""r2u2_core::load_int_signal(&mut r2u2_monitor.monitor, $index, (${monitorInput.exp.prettyST}) as i32); // Loading signal $name into index $index""")
         case GumboC2POUtil.C2POType.float =>
-          RAST.BodyItemST(st"""r2u2_core::load_float_signal(&mut self.r2u2_monitor, $index, (${monitorInput.exp.prettyST}) as f64); // Loading signal $name into index $index""")
+          RAST.BodyItemST(st"""r2u2_core::load_float_signal(&mut r2u2_monitor.monitor, $index, (${monitorInput.exp.prettyST}) as f64); // Loading signal $name into index $index""")
         case GumboC2POUtil.C2POType.enumeration =>
-          RAST.BodyItemST(st"""r2u2_core::load_int_signal(&mut self.r2u2_monitor, $index, ${monitorInput.exp.prettyST} as i32); // Loading enum signal $name into index $index""")
+          RAST.BodyItemST(st"""r2u2_core::load_int_signal(&mut r2u2_monitor.monitor, $index, ${monitorInput.exp.prettyST} as i32); // Loading enum signal $name into index $index""")
         case GumboC2POUtil.C2POType.array =>
           val arrayType: GumboC2POUtil.C2POArray = monitorInput.arrayTypeOpt.get
           arrayType.elementType match {
             case GumboC2POUtil.C2POType.bool =>
-              RAST.BodyItemST(st"""r2u2_core::load_bool_array(&mut self.r2u2_monitor, $index, &${monitorInput.exp.prettyST}); // Loading array signal $name into indices $index..${index + arrayType.size - 1}""")
+              RAST.BodyItemST(st"""r2u2_core::load_bool_array(&mut r2u2_monitor.monitor, $index, &${monitorInput.exp.prettyST}); // Loading array signal $name into indices $index..${index + arrayType.size - 1}""")
             case GumboC2POUtil.C2POType.int =>
-              RAST.BodyItemST(st"""r2u2_core::load_int_array(&mut self.r2u2_monitor, $index, &(${monitorInput.exp.prettyST}).map(|value| value as i32)); // Loading array signal $name into indices $index..${index + arrayType.size - 1}""")
+              RAST.BodyItemST(st"""r2u2_core::load_int_array(&mut r2u2_monitor.monitor, $index, &(${monitorInput.exp.prettyST}).map(|value| value as i32)); // Loading array signal $name into indices $index..${index + arrayType.size - 1}""")
             case GumboC2POUtil.C2POType.float =>
-              RAST.BodyItemST(st"""r2u2_core::load_float_array(&mut self.r2u2_monitor, $index, &(${monitorInput.exp.prettyST}).map(|value| value as f64)); // Loading array signal $name into indices $index..${index + arrayType.size - 1}""")
+              RAST.BodyItemST(st"""r2u2_core::load_float_array(&mut r2u2_monitor.monitor, $index, &(${monitorInput.exp.prettyST}).map(|value| value as f64)); // Loading array signal $name into indices $index..${index + arrayType.size - 1}""")
             case _ => halt("Unsupported R2U2 array element type")
           }
         case GumboC2POUtil.C2POType.struct => halt("R2U2 struct input was not expanded")
@@ -1016,7 +992,7 @@ object GumboRustPlugin {
     }
 
     if (postItems.nonEmpty) { postItems = postItems :+ RAST.BodyItemST(st"") }
-    postItems = postItems :+ RAST.BodyItemST(st"r2u2_core::monitor_step(&mut self.r2u2_monitor);")
+    postItems = postItems :+ RAST.BodyItemST(st"r2u2_core::monitor_step(&mut r2u2_monitor.monitor);")
     val (loggedSpecsConstOpt, outputItems) = GumboR2U2Util.processOutputs(
       thread = thread,
       orderedSpecs = specs.ftspecs ++ specs.ptspecs,
@@ -1037,28 +1013,27 @@ object GumboRustPlugin {
           preInputs = preInputs :+ input
       }
     }
-    val externalBodyAttr: ST =
-      if (fn.verusAttributeSyntax) st"verus_verify(external_body)"
-      else st"verifier::external_body"
     val initializeFn = fn(
       sig = fn.sig(
         ident = RAST.IdentString("r2u2_monitor_initialize"),
         generics = None(),
         fnDecl = fn.sig.fnDecl(inputs = ISZ(RAST.ParamFixMe(st"&mut self")))),
-      attributes = fn.attributes :+ RAST.AttributeST(F, externalBodyAttr),
+      attributes = ISZ(),
       contract = None(),
       body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
-        st"r2u2_core::update_binary_file(include_bytes!(\"spec.bin\"), &mut self.r2u2_monitor);")))))
+        st"""let mut r2u2_monitor = R2U2Monitor::new();
+            |r2u2_core::update_binary_file(include_bytes!("spec.bin"), &mut r2u2_monitor.monitor);
+            |unsafe { R2U2_MONITOR = Some(r2u2_monitor); }""")))))
     val preFn = fn(
       sig = fn.sig(
         ident = RAST.IdentString("r2u2_monitor_pre_timeTriggered"),
         fnDecl = fn.sig.fnDecl(inputs = preInputs)),
-      attributes = fn.attributes :+ RAST.AttributeST(F, externalBodyAttr),
+      attributes = ISZ(),
       contract = None(),
       body = Some(RAST.MethodBody(preItems)))
     val postFn = fn(
       sig = fn.sig(ident = RAST.IdentString("r2u2_monitor_post_timeTriggered")),
-      attributes = fn.attributes :+ RAST.AttributeST(F, externalBodyAttr),
+      attributes = ISZ(),
       contract = None(),
       body = Some(RAST.MethodBody(postItems)))
 

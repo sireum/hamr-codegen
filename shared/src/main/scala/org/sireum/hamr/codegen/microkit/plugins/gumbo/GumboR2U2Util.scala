@@ -61,16 +61,16 @@ object GumboR2U2Util {
       }
 
     var outputItems: ISZ[RAST.BodyItem] = ISZ(RAST.BodyItemST(
-      st"""let r2u2_time_stamp = self.r2u2_monitor.time_stamp;
+      st"""let r2u2_time_stamp = r2u2_monitor.monitor.time_stamp;
           |// Expire cached verdicts before applying this step's new outputs.
-          |for verdict in self.r2u2_monitor.verdict_cache.iter_mut() {
+          |for verdict in r2u2_monitor.verdict_cache.iter_mut() {
           |    if verdict.is_some() && r2u2_time_stamp > verdict.unwrap().time {
           |        *verdict = None;
           |    }
           |}
           |// Cache the newest verdict returned for each specification.
-          |let output_buffer = r2u2_core::get_output_buffer(&self.r2u2_monitor.inner);
-          |let verdict_cache = &mut self.r2u2_monitor.verdict_cache;
+          |let output_buffer = r2u2_core::get_output_buffer(&r2u2_monitor.monitor);
+          |let verdict_cache = &mut r2u2_monitor.verdict_cache;
           |for out in output_buffer {
           |    verdict_cache[out.spec_num as usize] = Some(out.verdict);
           |}"""))
@@ -78,8 +78,8 @@ object GumboR2U2Util {
     if (loggedSpecs.nonEmpty) {
       outputItems = outputItems :+ RAST.BodyItemST(
         st"""// Report the current status of specifications without alert ports.
-            |for (spec_num, spec_name) in Self::R2U2_LOGGED_SPECS {
-            |    let status = match self.r2u2_monitor.verdict_cache[spec_num] {
+            |for (spec_num, spec_name) in R2U2_LOGGED_SPECS {
+            |    let status = match r2u2_monitor.verdict_cache[spec_num] {
             |        Some(verdict) => if verdict.truth { "true" } else { "false" },
             |        None => "unknown",
             |    };
@@ -98,7 +98,7 @@ object GumboR2U2Util {
           case _: AadlEventDataPort => st"api.put_${port.identifier}(verdict.truth);"
           case _ => halt("Unexpected R2U2 alert port type")
         }
-        alertOutputs = alertOutputs :+ st"""if let Some(verdict) = self.r2u2_monitor.verdict_cache[$number] {
+        alertOutputs = alertOutputs :+ st"""if let Some(verdict) = r2u2_monitor.verdict_cache[$number] {
                                            |    $put
                                            |}"""
     }

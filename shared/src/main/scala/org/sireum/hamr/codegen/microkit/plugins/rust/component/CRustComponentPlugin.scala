@@ -20,7 +20,6 @@ import org.sireum.message.Reporter
 object CRustComponentPlugin {
 
   val KEY_CrustComponentPlugin: String = "KEY_CRustComponentPlugin"
-  val MarkerR2U2Import: String = "MARKER R2U2 MONITOR IMPORT"
   val MarkerR2U2Module: String = "MARKER R2U2 MONITOR MODULE"
 
   @strictpure def hasCRustComponentContributions(store: Store): B = store.contains(KEY_CrustComponentPlugin)
@@ -517,21 +516,6 @@ object ComponentContributions {}
 
       { // src/component/<threadid>_app.rs file for user behavior code
         val uses = e._2.appUses
-        var appMarkers = e._2.markers
-
-        val r2u2ImportMarker = Marker.createSlashMarker(CRustComponentPlugin.MarkerR2U2Import)
-        appMarkers = appMarkers :+ r2u2ImportMarker
-        val r2u2Import: ST =
-          if (e._2.requiresR2U2) {
-            RAST.MarkerWrap(
-              marker = r2u2ImportMarker,
-              items = ISZ(RAST.ItemST(st"use super::r2u2_monitor::*;")),
-              sep = "\n",
-              optLastItemSep = None()).prettyST
-          } else {
-            RAST.MarkerPlaceholder(
-              Marker.createSlashPlaceholderMarker(CRustComponentPlugin.MarkerR2U2Import)).prettyST
-          }
         var body: ST =
           st"""${e._2.appStructDef.prettyST}
               |
@@ -562,7 +546,6 @@ object ComponentContributions {}
               |$editHeader
               |
               |${(for (u <- uses) yield u.prettyST, "\n")}
-              |$r2u2Import
               |
               |$body
               |"""
@@ -570,65 +553,53 @@ object ComponentContributions {}
         resources = resources :+ ResourceUtil.createResourceWithMarkers(
           path = path,
           content = content,
-          markers = if (genProfile.userEditable) appMarkers else ISZ(),
+          markers = if (genProfile.userEditable) e._2.markers else ISZ(),
           invertMarkers = F,
           overwrite = !genProfile.userEditable)
       }
 
       if (e._2.requiresR2U2) { // src/component/r2u2_monitor.rs
-        val externalBody: String =
-          if (options.verusAttributeSyntax) "verus_verify(external_body)"
-          else "verifier::external_body"
-        val external: String =
-          if (options.verusAttributeSyntax) "verus_verify(external)"
-          else "verifier::external"
-        val monitorImplAttributes: ISZ[RAST.Attribute] =
-          if (options.verusAttributeSyntax && e._2.requiresVerus)
-            ISZ(RAST.AttributeST(inner = F, content = st"verus_verify"))
-          else ISZ()
+        // Constants remain module-local while lifecycle functions extend the app.
+        var monitorItems: ISZ[RAST.Item] = ISZ()
+        var monitorMethods: ISZ[RAST.Item] = ISZ()
+        for (item <- e._2.appR2U2MonitorMethods) {
+          item match {
+            case _: RAST.FnImpl => monitorMethods = monitorMethods :+ item
+            case _ => monitorItems = monitorItems :+ item
+          }
+        }
         val monitorImpl = RAST.ImplBase(
           comments = ISZ(),
-          attributes = monitorImplAttributes,
+          attributes = ISZ(),
           implIdent = None(),
           forIdent = RAST.IdentString(threadId),
-          items = e._2.appR2U2MonitorMethods)
+          items = monitorMethods)
         val specs = e._2.appR2U2SpecDef.get
         val numSpecs = specs.ftspecs.size + specs.ptspecs.size
         val monitorSpec =
-          st"""#[$externalBody]
-              |pub struct R2U2Monitor {
-              |  inner: r2u2_core::Monitor,
+          st"""// Instance of the R2U2 monitor.
+              |static mut R2U2_MONITOR: Option<R2U2Monitor> = None;
+              |
+              |${(for (item <- monitorItems) yield item.prettyST, "\n\n")}
+              |
+              |struct R2U2Monitor {
+              |  monitor: r2u2_core::Monitor,
               |  // Cache latest verdict (if applicable) per C2PO specification between monitor steps.
               |  verdict_cache: [Option<r2u2_core::r2u2_verdict>; $numSpecs],
               |}
               |
-              |#[$external]
-              |impl core::ops::Deref for R2U2Monitor {
-              |  type Target = r2u2_core::Monitor;
-              |  fn deref(&self) -> &Self::Target { &self.inner }
-              |}
-              |
-              |#[$external]
-              |impl core::ops::DerefMut for R2U2Monitor {
-              |  fn deref_mut(&mut self) -> &mut Self::Target { &mut self.inner }
-              |}
-              |
-              |#[$externalBody]
-              |pub(super) fn default_r2u2_monitor() -> R2U2Monitor {
-              |  R2U2Monitor {
-              |    inner: r2u2_core::Monitor::default(),
-              |    verdict_cache: [None; $numSpecs],
+              |impl R2U2Monitor {
+              |  fn new() -> Self {
+              |    Self {
+              |      monitor: r2u2_core::Monitor::default(),
+              |      verdict_cache: [None; $numSpecs],
+              |    }
               |  }
               |}"""
-        var monitorBody =
-          st"""${monitorImpl.prettyST}
+        val monitorBody =
+          st"""$monitorSpec
               |
-              |$monitorSpec"""
-        if (e._2.requiresVerus && !options.verusAttributeSyntax) {
-          monitorBody = RAST.MacCall(
-            macName = "verus",
-            items = ISZ(RAST.ItemST(monitorBody))).prettyST
-        }
+              |${monitorImpl.prettyST}"""
         val content =
           st"""${CommentTemplate.doNotEditComment_slash}
               |
@@ -636,7 +607,6 @@ object ComponentContributions {}
               |use crate::bridge::${threadId}_GUMBOX as GUMBOX;
               |use data::*;
               |use super::$modName::$threadId;
-              |${if (e._2.requiresVerus) "use vstd::prelude::*;" else ""}
               |
               |$monitorBody
               |"""
