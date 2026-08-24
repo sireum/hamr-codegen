@@ -83,7 +83,7 @@ object GumboR2U2Util {
             |        Some(verdict) => if verdict.truth { "true" } else { "false" },
             |        None => "unknown",
             |    };
-            |    log::info!(" {} is currently {}", spec_name, status);
+            |    log::info!("{} is currently {}", spec_name, status);
             |}""")
     }
 

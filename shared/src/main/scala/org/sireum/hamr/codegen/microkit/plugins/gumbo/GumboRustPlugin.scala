@@ -501,23 +501,7 @@ object GumboRustPlugin {
                 handleInitializePlaceholder(f)
               }
               markers = markers :+ init._1
-
-              val updatedInit: (Marker, RAST.FnImpl) = if (subclauseInfo.annex.monitor.nonEmpty) {
-                handleInitializeMonitor(
-                  fn = init._2,
-                  thread = thread,
-                  subclauseInfo = subclauseInfo,
-                  types = types,
-                  tp = CRustTypePlugin.getCRustTypeProvider(localStore).get,
-                  symbolTable = symbolTable,
-                  store = localStore,
-                  reporter = reporter)
-              } else {
-                val placeholder = handleInitializeMonitorPlaceholder(init._2)
-                (Marker.createSlashMarker(placeholder._1.id), placeholder._2)
-              }
-              markers = markers :+ updatedInit._1
-              updatedImplItems = updatedImplItems :+ updatedInit._2
+              updatedImplItems = updatedImplItems :+ init._2
             } else if (f.ident.string == "timeTriggered" && genVerus) {
               val compute: (ISZ[Marker], RAST.FnImpl) = if (subclauseInfo.annex.compute.nonEmpty) {
                 handleCompute(
@@ -883,39 +867,6 @@ object GumboRustPlugin {
         ensures = ISZ()))))
   }
 
-  @pure def handleInitializeMonitor(fn: RAST.FnImpl,
-                                 thread: AadlThread,
-                                 subclauseInfo: GclAnnexClauseInfo,
-                                 types: AadlTypes,
-                                 tp: CRustTypeProvider,
-                                 symbolTable: SymbolTable,
-                                 store: Store,
-                                 reporter: Reporter): (Marker, RAST.FnImpl) = {
-    val m = Marker.createSlashMarker(GumboRustUtil.GumboMarkers.r2u2MonitorInitialize)
-    var monitor: ISZ[RAST.Item] = ISZ()
-    monitor = monitor :+ RAST.ItemString(s"""load_spec(&mut self.r2u2_monitor);""")
-    val wrapper = RAST.MarkerWrap(m, monitor, "\n", None())
-    return (m,
-      fn(body =
-        Some(RAST.MethodBody(ISZ(
-          RAST.BodyItemST(st"""${wrapper.prettyST}
-                              |
-                              |${if (fn.body.nonEmpty) fn.body.get.prettyST else ""}""")
-        )))))
-  }
-
-  @pure def handleInitializeMonitorPlaceholder(fn: RAST.FnImpl): (Marker, RAST.FnImpl) = {
-    val m = Marker.createSlashPlaceholderMarker(GumboRustUtil.GumboMarkers.r2u2MonitorInitialize)
-    val placeholder = RAST.MarkerPlaceholder(m)
-    return (m,
-      fn(body =
-        Some(RAST.MethodBody(ISZ(
-          RAST.BodyItemST(st"""${placeholder.prettyST}
-                              |
-                              |${if (fn.body.nonEmpty) fn.body.get.prettyST else ""}""")
-        )))))
-  }
-
   @pure def handleComputeMonitor(fn: RAST.FnImpl,
                                  thread: AadlThread,
                                  subclauseInfo: GclAnnexClauseInfo,
@@ -1089,22 +1040,31 @@ object GumboRustPlugin {
     val externalBodyAttr: ST =
       if (fn.verusAttributeSyntax) st"verus_verify(external_body)"
       else st"verifier::external_body"
+    val initializeFn = fn(
+      sig = fn.sig(
+        ident = RAST.IdentString("r2u2_monitor_initialize"),
+        generics = None(),
+        fnDecl = fn.sig.fnDecl(inputs = ISZ(RAST.ParamFixMe(st"&mut self")))),
+      attributes = fn.attributes :+ RAST.AttributeST(F, externalBodyAttr),
+      contract = None(),
+      body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
+        st"r2u2_core::update_binary_file(include_bytes!(\"spec.bin\"), &mut self.r2u2_monitor);")))))
     val preFn = fn(
       sig = fn.sig(
-        ident = RAST.IdentString("pre_timeTriggered"),
+        ident = RAST.IdentString("r2u2_monitor_pre_timeTriggered"),
         fnDecl = fn.sig.fnDecl(inputs = preInputs)),
       attributes = fn.attributes :+ RAST.AttributeST(F, externalBodyAttr),
       contract = None(),
       body = Some(RAST.MethodBody(preItems)))
     val postFn = fn(
-      sig = fn.sig(ident = RAST.IdentString("post_timeTriggered")),
+      sig = fn.sig(ident = RAST.IdentString("r2u2_monitor_post_timeTriggered")),
       attributes = fn.attributes :+ RAST.AttributeST(F, externalBodyAttr),
       contract = None(),
       body = Some(RAST.MethodBody(postItems)))
 
     val monitorMethods: ISZ[RAST.Item] = loggedSpecsConstOpt match {
-      case Some(loggedSpecsConst) => ISZ(loggedSpecsConst, preFn, postFn)
-      case _ => ISZ(preFn, postFn)
+      case Some(loggedSpecsConst) => ISZ(loggedSpecsConst, initializeFn, preFn, postFn)
+      case _ => ISZ(initializeFn, preFn, postFn)
     }
       
     var timeTriggered: RAST.FnImpl = fn

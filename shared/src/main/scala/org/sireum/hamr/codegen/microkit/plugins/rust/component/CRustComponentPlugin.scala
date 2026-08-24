@@ -347,15 +347,20 @@ object ComponentContributions {}
           if (contribs.libInitializePre.isEmpty) None()
           else Some(st"""${(for (i <- contribs.libInitializePre) yield i.prettyST, "\n")}
                         |""")
-        val initializePost: Option[ST] =
+        var initializePost: Option[ST] =
           if (contribs.libInitializePost.isEmpty) None()
           else Some(st"""
                         |${(for (i <- contribs.libInitializePost) yield i.prettyST, "\n")}
                         |""")
 
+        if (e._2.requiresR2U2) {
+          initializePost = Some(st"""$initializePost
+                                    |_app.r2u2_monitor_initialize();""")
+        }
+
         val computePre: Option[ST] = 
           if (e._2.requiresR2U2)
-            Some(st"_app.pre_timeTriggered(&compute_api);")
+            Some(st"_app.r2u2_monitor_pre_timeTriggered(&compute_api);")
           else None()
 
         var computePost: Option[ST] =
@@ -364,7 +369,7 @@ object ComponentContributions {}
           
         if (e._2.requiresR2U2) {
           computePost = Some(st"""$computePost
-               |_app.post_timeTriggered(&mut compute_api);""")
+               |_app.r2u2_monitor_post_timeTriggered(&mut compute_api);""")
         }
 
         val entrypoints: ISZ[ST] =
@@ -614,11 +619,6 @@ object ComponentContributions {}
               |    inner: r2u2_core::Monitor::default(),
               |    verdict_cache: [None; $numSpecs],
               |  }
-              |}
-              |
-              |#[$externalBody]
-              |pub(super) fn load_spec(monitor: &mut R2U2Monitor) {
-              |  r2u2_core::update_binary_file(include_bytes!("spec.bin"), monitor);
               |}"""
         var monitorBody =
           st"""${monitorImpl.prettyST}
