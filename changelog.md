@@ -1,4 +1,4 @@
-*Last Updated 2026-08-20*
+*Last Updated 2026-08-24*
 
 <!-- begin pre-release -->
 # Pre-Release
@@ -20,7 +20,7 @@ cd kekinian
 <!-- end pre-release -->
 
 <!-- begin dev -->
-# [dev](https://github.com/sireum/kekinian/releases/tag/dev)  <font size=3>as of 2026-08-20 (kekinian commit tip [067a3754](https://github.com/sireum/kekinian/tree/067a37543d1a04a73362ffea90afb93c628e6b2f))</font>
+# [dev](https://github.com/sireum/kekinian/releases/tag/dev)  <font size=3>as of 2026-08-22 (kekinian commit tip [c570e409](https://github.com/sireum/kekinian/tree/c570e409b9b669a6f5361a52b76f7c97abdae444))</font>
 
 **Microkit**
 
@@ -40,9 +40,13 @@ cd kekinian
 
   * A component's ``src/lib.rs`` is now a contribution target rather than something a later plugin re-emits wholesale: ``ComponentContributions`` gains slots for mod declarations, uses, module-level entries, and positions inside the generated initialize and compute entrypoints, so the runtime-monitoring observation points and the monitor crate's ``mod gumbox;`` are woven into the file its owner generates.  Each slot renders to nothing when unused, so a component with no contributors emits exactly the text it did before
 
+  * The model URI a component's codegen-report entry carries is now relativized against the report directory, as every other position in a report already was.  ``componentReport``'s ``modelImplementation`` was built straight from the position the front end recorded rather than through ``ReportUtil.buildPosA``, so each component kept one unresolved URI -- the OSATE workspace path for AADL, and the absolute ``file://`` URI of the model on the generating machine for SysML.  Neither resolves from where the report sits, and a report builds its own links as ``uriOpt#Lbegin``, so those entries led nowhere
+
 **General**
 
   * Codegen now reports when the same resource path is emitted more than once: differing content means two generators disagree and the last write would silently win, while identical content is a redundant write and a duplicated codegen-report entry.  The check surfaced the C queue wrappers, which are per (type, queue size) but were emitted once per connection carrying the type -- isolette wrote one of them five times -- so they are now collected by filename in the connection provider
+
+  * ROS2 codegen emits one ``.msg`` file per ROS2 datatype rather than one per AADL type that maps to it: ``genMsgFiles`` iterated the datatype map's values, so a datatype reachable from more than one AADL type was written once per alias -- in ``datatype-examples``, ``Base_Types::Integer`` and ``Base_Types::Integer_64`` both map to ``Integer64``, and ``Float`` and ``Float_64`` both map to ``Float64``, so each of those two files was emitted twice.  It iterates the value set now, as the interfaces ``CMakeLists`` generator twenty lines below already did -- which is why the duplication stayed invisible until the check above began reporting it.  The generated output is unchanged
 
   * The ``structs_arrays`` SysMLv2 model is now exercised by ``MicrokitBehaviorTests``; its expected results were already checked in, but nothing was running them
 
@@ -67,6 +71,12 @@ cd kekinian
 </details>
 
 <details><summary>Commits</summary>
+
+* [f5d792a](https://github.com/sireum/hamr-codegen/commit/f5d792a) microkit: relativize the model URI a component report carries
+
+* [119313e](https://github.com/sireum/hamr-codegen/commit/119313e) ros2: emit one .msg file per ROS2 datatype, not per AADL alias
+
+* [f85e5e6](https://github.com/sireum/hamr-codegen/commit/f85e5e6) update changelog
 
 * [632353d](https://github.com/sireum/hamr-codegen/commit/632353d) update submodule
 
