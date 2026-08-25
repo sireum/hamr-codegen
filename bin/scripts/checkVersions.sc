@@ -152,6 +152,84 @@ compare(phantomVersionsP, phantomCurrentVers)
   fcompare("hamr", phantomCurrentVers.get("org.sireum.aadl.osate.plugins.version_alt").get)
 }
 
+var proversMisaligned = F
+
+{ // provers-env pins the toolchain that generated Microkit systems are built
+  // against, so what it installs has to be what codegen generates for: a system
+  // emitted for one Verus, Microkit SDK or sDDF and built against another is a
+  // failure at the user's `make`, not here.  The two files are in different
+  // repositories, so a mismatch is reported rather than fixed -- whichever side
+  // is behind has to be bumped deliberately.
+  val proversVersionsUrl = "https://raw.githubusercontent.com/loonwerks/INSPECTA-models/main/provers-env/bin/versions.sh"
+  val microkitVersionsP = SIREUM_HOME / "hamr" / "codegen" / "jvm" / "src" / "main" / "resources" / "microkit_versions.properties"
+
+  // codegen's key, and the variable versions.sh pins the same tool as
+  val pins: ISZ[(String, String)] = ISZ(
+    ("microkit-sdk", "MICROKIT_SDK_VER"),
+    ("rust-channel", "RUST_TOOLCHAIN_VER"),
+    ("sdfgen", "SDFGEN_VER"),
+    ("verus-release", "VERUS_VER"),
+    ("lionsos", "LIONSOS_VER"))
+
+  val temp = Os.slashDir / "temp-provers-versions.sh"
+  temp.removeOnExit()
+  if (!temp.downloadFrom(proversVersionsUrl)) {
+    // Not a mismatch, so not a failure: an unreachable GitHub says nothing about
+    // whether the pins agree.
+    exclamations()
+    println(s"WARNING: could not fetch $proversVersionsUrl, so the provers-env pins were not checked")
+    exclamations()
+  } else {
+    // versions.sh pins each tool as an overridable default: : "${NAME:=value}"
+    var proversVers = Map.empty[String, String]
+    for (l <- temp.readLines) {
+      val o = ops.StringOps(ops.StringOps(l).trim)
+      if (o.startsWith(": \"${") && o.endsWith("}\"")) {
+        val body = ops.StringOps(o.substring(5, o.size - 2))
+        val i = body.stringIndexOf(":=")
+        if (i > 0) {
+          proversVers = proversVers + body.substring(0, i) ~> body.substring(i + 2, body.size)
+        }
+      }
+    }
+
+    val microkitVers = microkitVersionsP.properties
+    var mismatches = ISZ[ST]()
+    for (pin <- pins) {
+      val key = pin._1
+      val envVar = pin._2
+      if (!microkitVers.contains(key)) {
+        halt(s"$microkitVersionsP doesn't contain $key")
+      } else if (!proversVers.contains(envVar)) {
+        // renamed or dropped upstream, so this check has gone blind to that tool
+        exclamations()
+        println(s"WARNING: $proversVersionsUrl no longer pins $envVar, which $key was checked against")
+        exclamations()
+        proversMisaligned = T
+      } else {
+        val ours = microkitVers.get(key).get
+        val theirs = proversVers.get(envVar).get
+        if (ours != theirs) {
+          mismatches = mismatches :+ st"$key = $ours, but versions.sh pins $envVar = $theirs"
+        }
+      }
+    }
+
+    if (mismatches.nonEmpty) {
+      exclamations()
+      println(
+        st"""WARNING: provers-env installs a different toolchain than codegen generates for:
+            |
+            |  ${(mismatches, "\n  ")}
+            |
+            |  ${microkitVersionsP.toUri}
+            |  $proversVersionsUrl""".render)
+      exclamations()
+      proversMisaligned = T
+    }
+  }
+}
+
 if (!noUpdate && jitpackFetches.nonEmpty) {
   val scalaKey = ops.StringOps(org.sireum.project.DependencyManager.scalaKey).replaceAllChars(':', '%')
   val scalaVer = versions.get(scalaKey).get
@@ -176,8 +254,14 @@ if (!noUpdate && jitpackFetches.nonEmpty) {
 if (changesDetected && !noUpdate) {
   val hamrCodegenModule = SIREUM_HOME / "hamr" / "codegen" / "jvm"
   println(s"\nVersion changes detected: rebuild the hamr-codegen module to force macro expansion: ${hamrCodegenModule.toUri}")
+}
 
-  Os.exit(1) // return 1 to indicate versions have changed
+// changesDetected on its own, not 'changesDetected && !noUpdate'.  Under no-update
+// the properties files are left as they are, but the drift that was found is just
+// as real -- and no-update is how VersionCheck runs this, so gating the exit on it
+// meant that test could never fail on the versions it exists to watch.
+if (changesDetected || proversMisaligned) {
+  Os.exit(1) // versions have changed, or drifted from provers-env
 } else {
   Os.exit(0)
 }
