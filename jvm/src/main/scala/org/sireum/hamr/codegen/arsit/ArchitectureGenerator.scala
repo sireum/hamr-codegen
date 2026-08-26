@@ -417,7 +417,7 @@ object ArchitectureGenerator {
       }
     }
 
-    for (thread <- if (arsitOptions.devicesAsThreads) symbolTable.getThreadOrDevices() else symbolTable.getThreads();
+    for (thread <- (if (arsitOptions.devicesAsThreads) symbolTable.getThreadOrDevices() else symbolTable.getThreads().asInstanceOf[ISZ[AadlThreadOrDevice]]);
          port <- thread.getPorts()) {
       port match {
         case d: AadlFeatureData => add(port.feature.identifier.pos, d.aadlType)
