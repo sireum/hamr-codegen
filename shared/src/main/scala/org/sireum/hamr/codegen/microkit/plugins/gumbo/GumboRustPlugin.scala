@@ -848,7 +848,7 @@ object GumboRustPlugin {
     var monitorInputs: Map[String, GumboR2U2Util.R2U2MonitorInput] = Map.empty
 
     for (guarantee <- subclauseInfo.annex.monitor.get.guarantees) {
-      val (c2poSpec, tense, inputs) = GumboRustUtil.processGumboSpecC2PO(
+      val (c2poSpec, tense, inputs) = GumboRustUtil.processGumboSpecR2U2(
         spec = guarantee,
         component = thread,
         context = Context.monitor_clause,
@@ -865,39 +865,10 @@ object GumboRustPlugin {
       monitorInputs = monitorInputs ++ inputs.entries
     }
 
-    // Expand struct inputs into loadable fields and reconstruct them with a C2PO DEFINE.
-    var expandedMonitorInputs: Map[String, GumboR2U2Util.R2U2MonitorInput] = Map.empty
-    for (entry <- monitorInputs.entries) {
-      val name: String = entry._1
-      val monitorInput: GumboR2U2Util.R2U2MonitorInput = entry._2
-      monitorInput.structTypeOpt match {
-        case Some(structType) =>
-          if (!ops.ISZOps(specs.structs).exists(existing => existing.name == structType.name)) {
-            specs = specs(structs = specs.structs :+ structType)
-          }
-          for (field <- structType.fields if field.enumTypeOpt.nonEmpty) {
-            val enumType: GumboC2POUtil.C2POEnum = field.enumTypeOpt.get
-            if (!ops.ISZOps(specs.enums).exists(existing => existing.name == enumType.name)) {
-              specs = specs(enums = specs.enums :+ enumType)
-            }
-          }
-          val fieldNames: ISZ[String] = for (field <- structType.fields) yield s"${name}_${field.name}"
-          specs = specs(defines = specs.defines :+ RAST.ItemST(st"${MicrokitUtil.TAB}$name := ${structType.name}(${(fieldNames, ", ")});"))
-          for (field <- structType.fields) {
-            val fieldName = s"${name}_${field.name}"
-            expandedMonitorInputs = expandedMonitorInputs + fieldName ~> GumboR2U2Util.R2U2MonitorInput(
-              exp = RAST.ExprST(st"(${monitorInput.exp.prettyST}).${field.name}"),
-              expType = field.fieldType,
-              enumTypeOpt = field.enumTypeOpt,
-              arrayTypeOpt = field.arrayTypeOpt,
-              structTypeOpt = None(),
-              referencedPorts = monitorInput.referencedPorts,
-              isPostStateVar = monitorInput.isPostStateVar)
-          }
-        case _ => expandedMonitorInputs = expandedMonitorInputs + (name ~> monitorInput)
-      }
-    }
-    monitorInputs = expandedMonitorInputs
+    val expandedInputs: (RAST.R2U2SpecDef, Map[String, GumboR2U2Util.R2U2MonitorInput]) =
+      GumboR2U2Util.expandStructInputs(specs, monitorInputs)
+    specs = expandedInputs._1
+    monitorInputs = expandedInputs._2
 
     val ports: Map[String, AadlPort] = Map.empty[String, AadlPort] ++
       (thread.getPorts().map((port: AadlPort) => port.identifier ~> port))
@@ -949,12 +920,13 @@ object GumboRustPlugin {
           }
           enumType.name
         case _ => monitorInput.arrayTypeOpt match {
-           // Check if array type and adjust type name to array syntax
+          // Check if array type and adjust type name to array syntax
           case Some(arrayType) => s"${arrayType.elementType.string}[${arrayType.size}]"
           case _ => monitorInput.expType.string
         }
       }
-      specs = specs(inputs = specs.inputs :+ RAST.R2U2InputDef(name, typeName, index, monitorInput.arrayTypeOpt.map(t => t.size)))
+      specs = specs(inputs = specs.inputs :+ RAST.R2U2InputDef(
+        name, typeName, index, monitorInput.arrayTypeOpt.map(t => t.size)))
       val loadSignal: RAST.BodyItem = monitorInput.expType match {
         case GumboC2POUtil.C2POType.bool =>
           RAST.BodyItemST(st"""r2u2_core::load_bool_signal(&mut r2u2_monitor.monitor, $index, ${monitorInput.exp.prettyST}); // Loading signal $name into index $index""")
@@ -993,7 +965,7 @@ object GumboRustPlugin {
 
     if (postItems.nonEmpty) { postItems = postItems :+ RAST.BodyItemST(st"") }
     postItems = postItems :+ RAST.BodyItemST(st"r2u2_core::monitor_step(&mut r2u2_monitor.monitor);")
-    val (loggedSpecsConstOpt, outputItems) = GumboR2U2Util.processOutputs(
+    val (loggedSpecsConstOpt, outputItems) = GumboR2U2Util.processRustOutputs(
       thread = thread,
       orderedSpecs = specs.ftspecs ++ specs.ptspecs,
       alerts = subclauseInfo.annex.monitor.get.alerts)

@@ -5,7 +5,7 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, Store}
 import org.sireum.hamr.codegen.common.{STUtil, StringUtil}
 import org.sireum.hamr.codegen.common.util.HamrCli
-import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlPort, AadlThread, GclAnnexClauseInfo, GclSymbolTable, SymbolTable}
+import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlThread, GclAnnexClauseInfo, GclSymbolTable, SymbolTable}
 import org.sireum.hamr.codegen.common.types.{AadlTypes, SlangType}
 import SlangExpUtil.{Context, TargetLanguage}
 import org.sireum.hamr.codegen.microkit.plugins.rust.component.CRustComponentPlugin
@@ -179,7 +179,7 @@ object GumboRustUtil {
           |$verusExp""")
   }
 
-  @pure def processGumboSpecC2PO(spec: GclSpec,
+  @pure def processGumboSpecR2U2(spec: GclSpec,
 
                              component: AadlComponent,
                              context: Context.Type,
@@ -191,38 +191,15 @@ object GumboRustUtil {
                              stateVars: ISZ[GclStateVar],
                              store: Store,
                              reporter: Reporter): (RAST.R2U2Formula, GumboC2POUtil.SpecTense.Type, Map[String, GumboR2U2Util.R2U2MonitorInput]) = {
-
-    GumboC2POUtil.checkC2POIdentifier(spec.id)
-    val (exp, variablesInSpec) = GumboC2POUtil.collectMonitorInputs(spec.exp, component.classifier)
-    val tense = GumboC2POUtil.getSpecTense(exp)
-
-    val c2poExp =
-      SlangExpUtil.rewriteExpH(
-        rexp = exp,
-
-        owner = component.classifier,
-        optComponent = Some(component),
-        context = context,
-
-        inRequires = isAssumeRequires,
-        inEnsures = F,
-        target = TargetLanguage.C2PO,
-        substitutions = Map.empty,
-        aadlTypes = types,
-        tp = tp,
-        store = store,
-        reporter = reporter)
-
-    val portIds: Set[String] = Set.empty[String] ++ component.getPorts().map((p: AadlPort) => p.identifier)
+    val (c2poSpec, tense, variablesInSpec) =
+      GumboC2POUtil.processGumboSpec(spec, component, context, isAssumeRequires, types, tp, store, reporter)
 
     var variablesInSpecExpanded: Map[String, GumboR2U2Util.R2U2MonitorInput] = Map.empty
     for (entry <- variablesInSpec.entries) {
       val varName: String = entry._1
       val varExp: SAST.Exp = entry._2
-      GumboC2POUtil.checkC2POIdentifier(varName)
-      variablesInSpecExpanded = variablesInSpecExpanded + varName ~> GumboR2U2Util.lowerR2U2Input(
+      variablesInSpecExpanded = variablesInSpecExpanded + varName ~> GumboR2U2Util.lowerRustR2U2Input(
         exp = varExp,
-        portIds = portIds,
         component = component,
         context = context,
         isAssumeRequires = isAssumeRequires,
@@ -232,12 +209,6 @@ object GumboRustUtil {
         store = store,
         reporter = reporter)
     }
-
-    val c2poSpec = RAST.R2U2Formula(
-      commentOpt = GumboRustUtil.processDescriptor(spec.descriptor, "-- "),
-      id = spec.id,
-      exp = RAST.ExprST(c2poExp))
-
     return (c2poSpec, tense, variablesInSpecExpanded)
   }
 

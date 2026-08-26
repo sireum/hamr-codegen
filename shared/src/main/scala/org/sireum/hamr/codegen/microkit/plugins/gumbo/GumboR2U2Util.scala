@@ -5,6 +5,7 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.Store
 import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlDataPort, AadlEventDataPort, AadlEventPort, AadlPort, AadlThread}
 import org.sireum.hamr.codegen.common.types.AadlTypes
+import org.sireum.hamr.codegen.microkit.MicrokitCodegen
 import org.sireum.hamr.codegen.microkit.plugins.gumbo.SlangExpUtil.{Context, TargetLanguage}
 import org.sireum.hamr.codegen.microkit.plugins.rust.apis.{CRustApiUtil, ComponentApiContributions}
 import org.sireum.hamr.codegen.microkit.plugins.rust.types.CRustTypeProvider
@@ -24,6 +25,55 @@ object GumboR2U2Util {
                                    val referencedPorts: Set[String],
                                    val isPostStateVar: B)
 
+  // Resolve the shared C2PO type information for a C or Rust monitor input.
+  @pure def createMonitorInput(exp: RAST.Expr,
+                               valueExp: SAST.Exp,
+                               referencedPorts: Set[String],
+                               isPostStateVar: B,
+                               types: AadlTypes,
+                               store: Store): R2U2MonitorInput = {
+    val expType: GumboC2POUtil.C2POType.Type = GumboC2POUtil.getExprType(valueExp)
+    val enumTypeOpt: Option[GumboC2POUtil.C2POEnum] =
+      if (expType == GumboC2POUtil.C2POType.enumeration) Some(GumboC2POUtil.getEnumType(valueExp, types))
+      else None()
+    val arrayTypeOpt: Option[GumboC2POUtil.C2POArray] =
+      if (expType == GumboC2POUtil.C2POType.array) GumboC2POUtil.getArrayType(valueExp, types, store)
+      else None()
+    val structTypeOpt: Option[GumboC2POUtil.C2POStruct] =
+      if (expType == GumboC2POUtil.C2POType.struct) Some(GumboC2POUtil.getStructType(valueExp, types))
+      else None()
+    return R2U2MonitorInput(exp, expType, enumTypeOpt, arrayTypeOpt, structTypeOpt, referencedPorts, isPostStateVar)
+  }
+
+  // Add each struct's C2PO declarations and DEFINE, then replace the struct input
+  // with one R2U2 input per field while preserving its port and dispatch metadata.
+  @pure def expandStructInputs(specs: RAST.R2U2SpecDef,
+                               monitorInputs: Map[String, R2U2MonitorInput]): (RAST.R2U2SpecDef, Map[String, R2U2MonitorInput]) = {
+    var updatedSpecs: RAST.R2U2SpecDef = specs
+    var expandedInputs: Map[String, R2U2MonitorInput] = Map.empty
+    for (entry <- monitorInputs.entries) {
+      val name: String = entry._1
+      val input: R2U2MonitorInput = entry._2
+      input.structTypeOpt match {
+        case Some(structType) =>
+          updatedSpecs = GumboC2POUtil.addStructDefinition(updatedSpecs, name, structType)
+          for (field <- structType.fields) {
+            val fieldName: String = s"${name}_${field.name}"
+            expandedInputs = expandedInputs + fieldName ~> R2U2MonitorInput(
+              exp = RAST.ExprST(st"(${input.exp.prettyST}).${field.name}"),
+              expType = field.fieldType,
+              enumTypeOpt = field.enumTypeOpt,
+              arrayTypeOpt = field.arrayTypeOpt,
+              structTypeOpt = None(),
+              referencedPorts = input.referencedPorts,
+              isPostStateVar = input.isPostStateVar)
+          }
+        case _ => expandedInputs = expandedInputs + entry
+      }
+    }
+    return (updatedSpecs, expandedInputs)
+  }
+
   // The C transport exposes peek for every port; only R2U2 components add it
   // to their generated Rust application API.
   @pure def peekApiContributions(thread: AadlThread,
@@ -36,15 +86,11 @@ object GumboR2U2Util {
     return contributions
   }
 
-  // Route cached specification verdicts to their mapped alert ports.
-  @pure def processOutputs(thread: AadlThread,
-                           orderedSpecs: ISZ[RAST.R2U2Formula],
-                           alerts: ISZ[GclAlert]): (Option[RAST.Item], ISZ[RAST.BodyItem]) = {
-    // Map all specifications to the ordering in C2PO.
-    val specNumbers: Map[String, Z] = Map.empty[String, Z] ++
-      (for (i <- 0 until orderedSpecs.size) yield orderedSpecs(i).id ~> i)
-    val alertSpecNumbers: Map[String, Z] = Map.empty[String, Z] ++
-      (for (alert <- alerts) yield alert.portId ~> specNumbers.get(alert.guaranteeId).get)
+  // Route cached specification verdicts through the generated Rust monitor.
+  @pure def processRustOutputs(thread: AadlThread,
+                               orderedSpecs: ISZ[RAST.R2U2Formula],
+                               alerts: ISZ[GclAlert]): (Option[RAST.Item], ISZ[RAST.BodyItem]) = {
+    val alertSpecNumbers: Map[String, Z] = getAlertSpecNumbers(orderedSpecs, alerts)
     val alertedSpecNumbers: Set[Z] = Set.empty[Z] ++ alertSpecNumbers.values
 
     val loggedSpecs: ISZ[ST] = for (i <- 0 until orderedSpecs.size if !alertedSpecNumbers.contains(i)) yield
@@ -110,46 +156,115 @@ object GumboR2U2Util {
     return (loggedSpecsConstOpt, outputItems)
   }
 
-  // Lower a resolved Slang expression to an executable R2U2 signal expression.
-  // Port reads become dispatch-local observations. An absent event-data 
-  // payload uses its Rust default.
-  @pure def lowerR2U2Input(exp: SAST.Exp,
-                          portIds: Set[String],
-                          component: AadlComponent,
-                          context: Context.Type,
-                          isAssumeRequires: B,
-                          stateVars: ISZ[GclStateVar],
-                          types: AadlTypes,
-                          tp: CRustTypeProvider,
-                          store: Store,
-                          reporter: Reporter): R2U2MonitorInput = {
-    // In(state) is sampled before dispatch; current state is sampled afterward.
-    val stateVarOpt: Option[SAST.Exp.Ident] = exp match {
-      case SAST.Exp.Input(id: SAST.Exp.Ident) => Some(id)
-      case id: SAST.Exp.Ident if ops.ISZOps(stateVars).exists((stateVar: GclStateVar) => stateVar.name == id.id.value) =>
-        Some(id)
-      case _ => None()
+  // Route cached specification verdicts through the generated C monitor.
+  @pure def processCOutputs(thread: AadlThread,
+                            orderedSpecs: ISZ[RAST.R2U2Formula],
+                            alerts: ISZ[GclAlert]): (Option[ST], ISZ[ST]) = {
+    val alertSpecNumbers: Map[String, Z] = getAlertSpecNumbers(orderedSpecs, alerts)
+    val alertedSpecNumbers: Set[Z] = Set.empty[Z] ++ alertSpecNumbers.values
+    val loggedSpecs: ISZ[ST] = for (i <- z"0" until orderedSpecs.size if !alertedSpecNumbers.contains(i)) yield
+      st"{$i, \"${orderedSpecs(i).id}\"}"
+
+    val loggedSpecDefinitions: Option[ST] =
+      if (loggedSpecs.nonEmpty) {
+        Some(st"""typedef struct {
+                   |  size_t spec_number;
+                   |  const char *spec_name;
+                   |} r2u2_logged_spec_t;
+                   |
+                   |// Specifications without an alert mapping are logged after every monitor step.
+                   |static const r2u2_logged_spec_t r2u2_logged_specs[${loggedSpecs.size}] = {
+                   |  ${(loggedSpecs, ",\n")}
+                   |};""")
+      } else {
+        None()
+      }
+
+    var outputItems: ISZ[ST] = ISZ(
+      st"""// The callback runs during r2u2_step. Expire older cached verdicts
+          |// against the new timestamp without discarding this step's outputs.
+          |for (size_t i = 0; i < R2U2_SPEC_COUNT; ++i) {
+          |  if (r2u2_monitor.verdict_valid[i] && !r2u2_monitor.verdict_updated[i] &&
+          |      r2u2_monitor.monitor.time_stamp > get_verdict_time(r2u2_monitor.verdict_cache[i])) {
+          |    r2u2_monitor.verdict_valid[i] = false;
+          |  }
+          |}""")
+
+    if (loggedSpecs.nonEmpty) {
+      outputItems = outputItems :+
+        st"""// Report the current status of specifications without alert ports.
+            |for (size_t i = 0; i < ${loggedSpecs.size}; ++i) {
+            |  size_t spec_number = r2u2_logged_specs[i].spec_number;
+            |  const char *status = "unknown";
+            |  if (r2u2_monitor.verdict_valid[spec_number]) {
+            |    status = get_verdict_truth(r2u2_monitor.verdict_cache[spec_number]) ? "true" : "false";
+            |  }
+            |  printf("%s is currently %s\n",
+            |      r2u2_logged_specs[i].spec_name, status);
+            |}"""
     }
+
+    var alertOutputs: ISZ[ST] = ISZ()
+    for (port <- thread.getPorts() if alertSpecNumbers.contains(port.identifier)) {
+      val number: Z = alertSpecNumbers.get(port.identifier).get
+      port match {
+        case _: AadlEventPort =>
+          alertOutputs = alertOutputs :+
+            st"""if (r2u2_monitor.verdict_valid[$number] && !get_verdict_truth(r2u2_monitor.verdict_cache[$number])) {
+                |  (void) put_${port.identifier}();
+                |}"""
+        case _: AadlEventDataPort =>
+          alertOutputs = alertOutputs :+
+            st"""if (r2u2_monitor.verdict_valid[$number]) {
+                |  bool truth = get_verdict_truth(r2u2_monitor.verdict_cache[$number]);
+                |  (void) put_${port.identifier}(&truth);
+                |}"""
+        case _ => halt("Unexpected C R2U2 alert port type")
+      }
+    }
+    if (alertOutputs.nonEmpty) {
+      outputItems = outputItems :+
+        st"""// Send the latest cached verdict through each mapped alert port.
+            |${(alertOutputs, "\n")}"""
+    }
+    return (loggedSpecDefinitions, outputItems)
+  }
+
+  // Map alert port identifiers to the specification ordering used by C2PO.
+  @pure def getAlertSpecNumbers(orderedSpecs: ISZ[RAST.R2U2Formula],
+                                alerts: ISZ[GclAlert]): Map[String, Z] = {
+    val specNumbers: Map[String, Z] = Map.empty[String, Z] ++
+      (for (i <- 0 until orderedSpecs.size) yield orderedSpecs(i).id ~> i)
+    // GclResolver has already validated each guarantee-to-port mapping.
+    return Map.empty[String, Z] ++
+      (for (alert <- alerts) yield alert.portId ~> specNumbers.get(alert.guaranteeId).get)
+  }
+
+  // Lower a resolved Slang expression to an executable Rust R2U2 signal expression.
+  // Port reads become dispatch-local observations. An absent event-data
+  // payload uses its Rust default.
+  @pure def lowerRustR2U2Input(exp: SAST.Exp,
+                              component: AadlComponent,
+                              context: Context.Type,
+                              isAssumeRequires: B,
+                              stateVars: ISZ[GclStateVar],
+                              types: AadlTypes,
+                              tp: CRustTypeProvider,
+                              store: Store,
+                              reporter: Reporter): R2U2MonitorInput = {
+    // In(state) is sampled before dispatch; current state is sampled afterward.
+    val stateVarOpt: Option[SAST.Exp.Ident] = getStateVar(exp, stateVars)
     val valueExp: SAST.Exp = stateVarOpt match {
       case Some(stateVar) => stateVar
       case _ => exp
     }
-    val isPostStateVar: B = stateVarOpt.nonEmpty && !exp.isInstanceOf[SAST.Exp.Input]
-    val ports: Map[String, AadlPort] = Map.empty[String, AadlPort] ++
-      (component.getPorts()
-        .filter((p: AadlPort) => portIds.contains(p.identifier))
-        .map((p: AadlPort) => p.identifier ~> p))
-
-    // Rewrite api.port references and collect the ports that must be observed
-    // in the pre- or post-dispatch hook.
-    val portRewriter = R2U2PortRewriter(ports)
-    val snapshotExp: SAST.Exp = portRewriter.transform_langastExp(valueExp) match {
+    // Rewrite ports and state variables to executable Rust forms, and collect
+    // the ports observed in the pre- or post-dispatch hook.
+    val expRewriter: R2U2ExpRewriter =
+      R2U2ExpRewriter(TargetLanguage.rust, component, stateVars, types, store, reporter)
+    val snapshotExp: SAST.Exp = expRewriter.transform_langastExp(exp) match {
       case MSome(e) => e
-      case _ => valueExp
-    }
-    val substitutions: Map[String, String] = stateVarOpt match {
-      case Some(stateVar) => Map.empty[String, String] + stateVar.id.value ~> s"self.${stateVar.id.value}"
-      case _ => Map.empty
+      case _ => exp
     }
     var rustExp = SlangExpUtil.rewriteExpH(
       rexp = snapshotExp,
@@ -159,7 +274,7 @@ object GumboR2U2Util {
       inRequires = isAssumeRequires,
       inEnsures = F,
       target = TargetLanguage.rust,
-      substitutions = substitutions,
+      substitutions = Map.empty[String, String],
       aadlTypes = types,
       tp = tp,
       store = store,
@@ -177,45 +292,211 @@ object GumboR2U2Util {
         rustExp = st"${rustExp}.unwrap_or_default()"
       case _ =>
     }
-    val expType: GumboC2POUtil.C2POType.Type = GumboC2POUtil.getExprType(valueExp)
-    val arrayTypeOpt: Option[GumboC2POUtil.C2POArray] =
-      if (expType == GumboC2POUtil.C2POType.array) GumboC2POUtil.getArrayType(valueExp, types, store)
-      else None()
-
-    val enumTypeOpt: Option[GumboC2POUtil.C2POEnum] =
-      if (expType == GumboC2POUtil.C2POType.enumeration) Some(GumboC2POUtil.getEnumType(valueExp, types))
-      else None()
-    val structTypeOpt: Option[GumboC2POUtil.C2POStruct] =
-      if (expType == GumboC2POUtil.C2POType.struct) Some(GumboC2POUtil.getStructType(valueExp, types))
-      else None()
-    return R2U2MonitorInput(
+    return createMonitorInput(
       exp = RAST.ExprST(rustExp),
-      expType = expType,
-      enumTypeOpt = enumTypeOpt,
-      arrayTypeOpt = arrayTypeOpt,
-      structTypeOpt = structTypeOpt,
-      referencedPorts = portRewriter.referencedPorts,
-      isPostStateVar = isPostStateVar)
+      valueExp = valueExp,
+      referencedPorts = expRewriter.referencedPorts,
+      isPostStateVar = expRewriter.referencesPostStateVar,
+      types = types,
+      store = store)
   }
 
-  @record class R2U2PortRewriter(val ports: Map[String, AadlPort]) extends org.sireum.hamr.ir.MTransformer {
-    var referencedPorts: Set[String] = Set.empty
+  // Lower a resolved Slang expression to a native C R2U2 monitor input.
+  @pure def lowerCR2U2Input(exp: SAST.Exp,
+                            component: AadlThread,
+                            stateVars: ISZ[GclStateVar],
+                            types: AadlTypes,
+                            tp: CRustTypeProvider,
+                            store: Store,
+                            reporter: Reporter): (R2U2MonitorInput, Set[String]) = {
+    val stateVarOpt: Option[SAST.Exp.Ident] = getStateVar(exp, stateVars)
+    val valueExp: SAST.Exp = stateVarOpt match {
+      case Some(stateVar) => stateVar
+      case _ => exp
+    }
+    // Rewrite ports, state variables, and local function calls to their generated
+    // C forms, and collect ports observed in the pre- or post-dispatch hook.
+    val expRewriter: R2U2ExpRewriter =
+      R2U2ExpRewriter(TargetLanguage.C, component, stateVars, types, store, reporter)
+    val snapshotExp: SAST.Exp = expRewriter.transform_langastExp(exp) match {
+      case MSome(e) => e
+      case _ => exp
+    }
+    val cExp: ST = SlangExpUtil.rewriteExpH(
+      rexp = snapshotExp,
+      owner = component.classifier,
+      optComponent = Some(component),
+      context = Context.monitor_clause,
+      substitutions = Map.empty[String, String],
+      inRequires = F,
+      inEnsures = F,
+      target = TargetLanguage.C,
+      tp = tp,
+      aadlTypes = types,
+      store = store,
+      reporter = reporter)
 
-    // GCL resolves HasEvent(port) to api.port.nonEmpty. Verus models event and
-    // event-data ports as Option, but their executable Rust peek methods differ:
-    //
-    //   event port       -> B
-    //   data port        -> payload
-    //   event-data port  -> Option[payload]
-    //
-    // Rewrite api.port in pre. In post, its parent has become port.nonEmpty or
-    // port.isEmpty and can be normalized using the executable getter type.
+    return (createMonitorInput(
+      exp = RAST.ExprST(cExp),
+      valueExp = valueExp,
+      referencedPorts = expRewriter.referencedPorts,
+      isPostStateVar = expRewriter.referencesPostStateVar,
+      types = types,
+      store = store), expRewriter.referencedMethods)
+  }
+
+  // Resolve a monitor input that refers to a local state variable.
+  @pure def getStateVar(exp: SAST.Exp, stateVars: ISZ[GclStateVar]): Option[SAST.Exp.Ident] = {
+    exp match {
+      case SAST.Exp.Input(id: SAST.Exp.Ident) => return Some(id)
+      case id: SAST.Exp.Ident if ops.ISZOps(stateVars).exists((stateVar: GclStateVar) => stateVar.name == id.id.value) =>
+        return Some(id)
+      case _ => return None()
+    }
+  }
+
+  // Rewrite resolved GUMBO monitor inputs into executable C or Rust expressions,
+  // collecting referenced ports, state timing, and C helper functions along the way.
+  @record class R2U2ExpRewriter(val target: TargetLanguage.Type,
+                                val component: AadlComponent,
+                                val stateVars: ISZ[GclStateVar],
+                                val types: AadlTypes,
+                                val store: Store,
+                                val reporter: Reporter) extends org.sireum.hamr.ir.MTransformer {
+    val ports: Map[String, AadlPort] = Map.empty[String, AadlPort] ++
+      component.getPorts().map((p: AadlPort) => p.identifier ~> p)
+    val stateVarNames: Set[String] = Set.empty[String] ++
+      stateVars.map((stateVar: GclStateVar) => stateVar.name)
+    // Record information needed after expression rewriting.
+    var referencedPorts: Set[String] = Set.empty
+    var referencedMethods: Set[String] = Set.empty
+    var referencesPreStateVar: B = F
+    var referencesPostStateVar: B = F
+
+    // Report an unsupported expression and continue with a placeholder.
+    @pure def unsupported(exp: SAST.Exp, message: String): SAST.Exp = {
+      reporter.error(exp.posOpt, MicrokitCodegen.toolName, message)
+      return SAST.Exp.LitZ(0, SAST.Attr(exp.posOpt))
+    }
+
+    // Resolve a direct api.port selection to its AADL port.
+    @pure def directPort(exp: SAST.Exp): Option[AadlPort] = {
+      exp match {
+        case SAST.Exp.Select(Some(SAST.Exp.Ident(SAST.Id("api"))), id, _) => return ports.get(id.value)
+        case _ => return None()
+      }
+    }
+
+    // Rename current state for the target and record its post-dispatch timing.
+    override def pre_langastExpIdent(o: SAST.Exp.Ident): org.sireum.hamr.ir.MTransformer.PreResult[SAST.Exp] = {
+      o.resOpt match {
+        case Some(v: SAST.ResolvedInfo.Var)
+          if v.isInObject && stateVarNames.contains(o.id.value) =>
+          referencesPostStateVar = T
+          if (target == TargetLanguage.C) {
+            return org.sireum.hamr.ir.MTransformer.PreResult(
+              F, MSome(o(id = o.id(value = s"r2u2_state_${o.id.value}"))))
+          } else {
+            return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(o(id = o.id(value = s"self.${o.id.value}"))))
+          }
+        case _ =>
+      }
+      return org.sireum.hamr.ir.MTransformer.PreResult(F, MNone[SAST.Exp]())
+    }
+
+    // Remove In(state), rename the state for the target, and record its pre-dispatch timing.
+    override def pre_langastExpInput(o: SAST.Exp.Input): org.sireum.hamr.ir.MTransformer.PreResult[SAST.Exp] = {
+      o.exp match {
+        case id: SAST.Exp.Ident =>
+          id.resOpt match {
+            case Some(v: SAST.ResolvedInfo.Var)
+              if v.isInObject && stateVarNames.contains(id.id.value) =>
+              referencesPreStateVar = T
+              val name: String = if (target == TargetLanguage.C) s"r2u2_state_${id.id.value}" else s"self.${id.id.value}"
+              return org.sireum.hamr.ir.MTransformer.PreResult(
+                F, MSome(id(id = id.id(value = name))))
+            case _ =>
+          }
+        case _ =>
+      }
+      return org.sireum.hamr.ir.MTransformer.PreResult(
+        F, MSome(unsupported(o, "R2U2 monitors only support In(stateVariable)")))
+    }
+
+    // Normalize C port operations and static array sizes before rewriting receivers.
     override def pre_langastExpSelect(o: SAST.Exp.Select): org.sireum.hamr.ir.MTransformer.PreResult[SAST.Exp] = {
-      o match {
-        case SAST.Exp.Select(Some(SAST.Exp.Ident(SAST.Id("api"))), id, _) =>
-          ports.get(id.value) match {
-            case Some(port) =>
-              // Convert the GCL ghost type to the executable peek type.
+      if (target == TargetLanguage.C) {
+        o.receiverOpt match {
+          case Some(receiver) =>
+            o.id.value match {
+              case "nonEmpty" =>
+                directPort(receiver) match {
+                  case Some(port) =>
+                    referencedPorts = referencedPorts + port.identifier
+                    return org.sireum.hamr.ir.MTransformer.PreResult(
+                      F, MSome(SAST.Exp.Ident(SAST.Id(s"r2u2_port_${port.identifier}_present", o.id.attr), o.attr)))
+                  case _ =>
+                    return org.sireum.hamr.ir.MTransformer.PreResult(
+                      F, MSome(unsupported(o, "C R2U2 monitors only support nonEmpty on event ports")))
+                }
+              case "isEmpty" =>
+                directPort(receiver) match {
+                  case Some(port) =>
+                    referencedPorts = referencedPorts + port.identifier
+                    val present: SAST.Exp = SAST.Exp.Ident(
+                      SAST.Id(s"r2u2_port_${port.identifier}_present", o.id.attr), o.attr)
+                    return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(SAST.Exp.Unary(
+                      SAST.Exp.UnaryOp.Not, present, o.attr, o.id.attr.posOpt)))
+                  case _ =>
+                    return org.sireum.hamr.ir.MTransformer.PreResult(
+                      F, MSome(unsupported(o, "C R2U2 monitors only support isEmpty on event ports")))
+                }
+              case "get" =>
+                directPort(receiver) match {
+                  case Some(port) =>
+                    referencedPorts = referencedPorts + port.identifier
+                    return org.sireum.hamr.ir.MTransformer.PreResult(
+                      F, MSome(SAST.Exp.Ident(SAST.Id(s"r2u2_port_${port.identifier}", o.id.attr), o.attr)))
+                  case _ =>
+                }
+              case "size" =>
+                // GCL inserts Option.get between an event-data port and its array payload.
+                val arrayExp: SAST.Exp = receiver match {
+                  case select: SAST.Exp.Select =>
+                    select.typedOpt match {
+                      case Some(m: SAST.Typed.Method)
+                        if m.owner == SAST.Typed.optionName && m.name == "get" => select.receiverOpt.get
+                      case _ => receiver
+                    }
+                  case _ => receiver
+                }
+                GumboC2POUtil.getArrayType(arrayExp, types, store) match {
+                  case Some(arrayType) =>
+                    return org.sireum.hamr.ir.MTransformer.PreResult(
+                      F, MSome(SAST.Exp.LitZ(arrayType.size, SAST.Attr(o.posOpt))))
+                  case _ =>
+                    return org.sireum.hamr.ir.MTransformer.PreResult(
+                      F, MSome(unsupported(o, "Could not resolve the C R2U2 array size")))
+                }
+              case _ =>
+            }
+          case _ =>
+        }
+      }
+
+      // Replace api.port with the target's dispatch-local snapshot expression.
+      directPort(o) match {
+        case Some(port) =>
+          referencedPorts = referencedPorts + port.identifier
+          val snapshot: SAST.Exp.Ident =
+            if (target == TargetLanguage.C) {
+              val name: String = port match {
+                case _: AadlEventPort => s"r2u2_port_${port.identifier}_present"
+                case _ => s"r2u2_port_${port.identifier}"
+              }
+              SAST.Exp.Ident(SAST.Id(name, o.id.attr), o.attr)
+            } else {
+              // Convert GCL's ghost port type to the executable Rust peek type.
               val snapshotTypedOpt: Option[SAST.Typed] = port match {
                 case _: AadlEventPort =>
                   SAST.Typed.bOpt
@@ -227,21 +508,27 @@ object GumboR2U2Util {
                 case _: AadlEventDataPort =>
                   o.typedOpt
               }
-
-              // Record the port so the caller emits a dispatch-local peek.
-              referencedPorts = referencedPorts + id.value
-              val snapshot = SAST.Exp.Ident(id = id, attr = o.attr(typedOpt = snapshotTypedOpt))
-              return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(snapshot))
-            case _ =>
-          }
+              SAST.Exp.Ident(id = o.id, attr = o.attr(typedOpt = snapshotTypedOpt))
+            }
+          return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(snapshot))
         case _ =>
       }
       return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone[SAST.Exp]())
     }
 
-    // Children are already rewritten, so api.port.operation arrives as
-    // port.operation; the retained Id identifies its AADL port kind.
+    // Finish target-specific Option and event normalization after rewriting children.
     @pure override def post_langastExpSelect(o: SAST.Exp.Select): MOption[SAST.Exp] = {
+      if (target == TargetLanguage.C) {
+        // C snapshots contain concrete payloads, so remove the Option accessor.
+        o.typedOpt match {
+          case Some(m: SAST.Typed.Method)
+            if m.owner == SAST.Typed.optionName && m.name == "get" && o.receiverOpt.nonEmpty =>
+            return MSome(o.receiverOpt.get)
+          case _ =>
+        }
+        return MNone()
+      }
+
       o match {
         case SAST.Exp.Select(Some(snapshot@SAST.Exp.Ident(id)), operationId, _) =>
           ports.get(id.value) match {
@@ -279,6 +566,34 @@ object GumboR2U2Util {
             case _ =>
           }
         case _ =>
+      }
+      return MNone()
+    }
+
+    // Rename C helper calls and normalize C array-port indexing.
+    @pure override def post_langastExpInvoke(o: SAST.Exp.Invoke): MOption[SAST.Exp] = {
+      if (target == TargetLanguage.C) {
+        // Collect local helpers so GumboCPlugin emits each required function body.
+        if (GumboC2POUtil.isGumboFunctionCall(o, component.classifier)) {
+          referencedMethods = referencedMethods + o.ident.id.value
+          return MSome(o(ident = o.ident(id = o.ident.id(value = s"r2u2_gumbo_${o.ident.id.value}"))))
+        }
+        // GCL represents array-port indexing as api.port(index).
+        o.receiverOpt match {
+          case Some(SAST.Exp.Ident(SAST.Id("api"))) =>
+            ports.get(o.ident.id.value) match {
+              case Some(port) =>
+                referencedPorts = referencedPorts + port.identifier
+                if (o.args.size == 1) {
+                  return MSome(o(receiverOpt = None(),
+                    ident = o.ident(id = o.ident.id(value = s"r2u2_port_${port.identifier}"))))
+                } else {
+                  return MSome(unsupported(o, "C R2U2 monitors only support one-dimensional array indexing"))
+                }
+              case _ =>
+            }
+          case _ =>
+        }
       }
       return MNone()
     }

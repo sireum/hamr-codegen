@@ -27,6 +27,7 @@ object SlangExpUtil {
   @enum object TargetLanguage {
     "rust"
     "verus"
+    "C"
     "C2PO"
     // Add your new target here!
   }
@@ -254,10 +255,9 @@ object SlangExpUtil {
       val dd: Exp = d
       dd match {
         case exp: Exp.StringInterpolate =>
-          if (target == TargetLanguage.C2PO) {
+          if (target == TargetLanguage.C || target == TargetLanguage.C2PO) {
             exp.prefix match {
-              // C2PO represents every supported integer as a signed 32-bit value,
-              // so Rust's fixed-width literal suffixes must not be emitted.
+              // Native C and C2PO do not use Rust's fixed-width literal suffixes.
               case "u8" =>
                 return st"${(unquoteLits(exp.lits), "_INFEASIBLE")}"
               case "u16" =>
@@ -301,7 +301,7 @@ object SlangExpUtil {
             case Some(s: SAST.Typed.Name) =>
               exp.resOpt match {
                 case Some(e: SAST.ResolvedInfo.EnumElement) =>
-                  if (target == TargetLanguage.C2PO) {
+                  if (target == TargetLanguage.C || target == TargetLanguage.C2PO) {
                     return st"${e.name}"
                   }
                   return st"${(e.owner, "::")}::${e.name}"
@@ -353,6 +353,14 @@ object SlangExpUtil {
             right = applyTrigger(nestedRewriteExp(exp.right, sep), exp.right.posOpt), rightSlangOp = rightOpOpt, isRightIf = exp.right.isInstanceOf[Exp.If], rightPos = rightPosOpt)
 
         case exp: Exp.Invoke =>
+          if (target == TargetLanguage.C && exp.ident.id.value == "get" &&
+            exp.args.size == 1 && exp.receiverOpt.nonEmpty) {
+            exp.receiverOpt.get.typedOpt match {
+              case Some(SAST.Typed.Name(SAST.Typed.optionName, _, _)) =>
+                return st"${nestedRewriteExp(exp.receiverOpt.get, None())}[${nestedRewriteExp(exp.args(0), None())}]"
+              case _ =>
+            }
+          }
           GclResolver.getIndexingTypeFingerprints(store).get(exp.ident.id.value) match {
             case Some(indexingType) =>
               // bounded array index. The Z literals are wrapped in calls to the indexing type's fingerprint method
@@ -377,7 +385,11 @@ object SlangExpUtil {
 
                   val np = tp.getTypeNameProvider(aadlType)
 
-                  return st"((${args(0)}) as ${(np.qualifiedRustNameS, "::")})"
+                  if (target == TargetLanguage.C) {
+                    return st"((${(np.qualifiedRustNameS, "::")}) (${args(0)}))"
+                  } else {
+                    return st"((${args(0)}) as ${(np.qualifiedRustNameS, "::")})"
+                  }
                 }
               } else {
 
@@ -410,8 +422,8 @@ object SlangExpUtil {
                           optComponent match {
                             case Some(component) =>
                               if (component.classifier == m.owner) {
-                                if(target == TargetLanguage.rust) {
-                                  // emitting GUMBOX, call local GUMBOX function
+                                if(target == TargetLanguage.rust || target == TargetLanguage.C) {
+                                  // Call a local executable function.
                                   return st"$id(${(cargs, ", ")})"
                                 } else {
                                   // emitting Verus
@@ -492,6 +504,9 @@ object SlangExpUtil {
                       }
                     if (exp.ident.id.value == "IS") {
                       // array construction
+                      if (target == TargetLanguage.C) {
+                        halt("Array construction is not supported in C R2U2 helper functions")
+                      }
                       m.tpeOpt.get.ret.asInstanceOf[SAST.Typed.Name].args(0).asInstanceOf[SAST.Typed.Name].ids match {
                         case ISZ("org", "sireum", "Z") =>
                           // unbounded array construction
@@ -548,7 +563,7 @@ object SlangExpUtil {
               substitutions.get(exp.id.value) match {
                 case Some(sub) => return st"$sub"
                 case _ =>
-                  if (target == TargetLanguage.rust || target == TargetLanguage.C2PO) {
+              if (target == TargetLanguage.rust || target == TargetLanguage.C || target == TargetLanguage.C2PO) {
                     return st"${exp.id.prettyST}"
                   } else {
                     return st"${postState("self")}.${exp.id.prettyST}"
@@ -577,7 +592,11 @@ object SlangExpUtil {
         case exp: Exp.Input =>
           exp.exp match {
             case id: Exp.Ident =>
-              return st"old(self).${exp.exp.prettyST}"
+              if (target == TargetLanguage.C) {
+                return nestedRewriteExp(id, None())
+              } else {
+                return st"old(self).${exp.exp.prettyST}"
+              }
             case _ =>
               halt(s"Only expecting Ident to be wrapped in In(): ${exp.exp}")
           }
@@ -590,6 +609,8 @@ object SlangExpUtil {
                 return st"((($cond) && (${nestedRewriteExp(exp.thenExp, sep)})) || (!($cond) && (${nestedRewriteExp(exp.elseExp, sep)})))"
               case _ => halt("R2U2 monitors only support conditional expressions with Boolean branches")
             }
+          } else if (target == TargetLanguage.C) {
+            return st"((${nestedRewriteExp(exp.cond, None())}) ? (${nestedRewriteExp(exp.thenExp, None())}) : (${nestedRewriteExp(exp.elseExp, None())}))"
           } else {
             // rust/verus requires curly braces
             return st"""if (${nestedRewriteExp(exp.cond, None())}) {
@@ -686,13 +707,15 @@ object SlangExpUtil {
             val range = st"$lo <= $param ${if (exp.hiExact) "<=" else "<"} $hi"
 
             return st"$quantType|$param:int| $range $op $body"
-          } else {
+          } else if (target == TargetLanguage.rust) {
             return st"""($lo..${if (exp.hiExact) "=" else ""}$hi).${if(exp.isForall) "all" else "any"}(|${param}| $body)"""
+          } else {
+            halt("Quantified expressions are not supported in C R2U2 helper functions")
           }
 
         case exp: Exp.LitC => 
-          if (target == TargetLanguage.C2PO) {
-               return st"${exp.value.toZ}" // C2PO casts all chars to ints
+          if (target == TargetLanguage.C || target == TargetLanguage.C2PO) {
+               return st"${exp.value.toZ}" // Native C and C2PO represent chars numerically here.
           } else {
                return exp.prettyST
           }
@@ -700,8 +723,18 @@ object SlangExpUtil {
         case exp: Exp.InvokeNamed => halt(s"$exp : ${exp.posOpt}")
         case exp: Exp.Old => halt(s"$exp : ${exp.posOpt}")
         case exp: Exp.Result => halt(s"$exp : ${exp.posOpt}")
-        case exp: Exp.LitF32 => halt(s"$exp : ${exp.posOpt}")
-        case exp: Exp.LitF64 => halt(s"$exp : ${exp.posOpt}")
+        case exp: Exp.LitF32 =>
+          if (target == TargetLanguage.C) {
+            return st"${exp.value}f"
+          } else {
+            halt(s"$exp : ${exp.posOpt}")
+          }
+        case exp: Exp.LitF64 =>
+          if (target == TargetLanguage.C) {
+            return st"${exp.value}"
+          } else {
+            halt(s"$exp : ${exp.posOpt}")
+          }
         case exp: Exp.LitR => halt(s"$exp : ${exp.posOpt}")
         case exp: Exp.LitString => halt(s"$exp : ${exp.posOpt}")
 
@@ -804,9 +837,14 @@ object SlangExpUtil {
           } else {
                return "-"
           }
-        case Exp.UnaryOp.Plus => halt(s"what is the rust equiv of $op")
+        case Exp.UnaryOp.Plus =>
+          if (target == TargetLanguage.C) {
+            return "+"
+          } else {
+            halt(s"what is the rust equiv of $op")
+          }
         case Exp.UnaryOp.Complement => 
-          if (target == TargetLanguage.C2PO){
+          if (target == TargetLanguage.C || target == TargetLanguage.C2PO){
                return "~"
           } else {
                halt(s"what is the rust equiv of $op")
@@ -1067,6 +1105,15 @@ object SlangExpUtil {
     @pure def BinaryPrettyST(slangParentOp: String, parentPos: Option[Position],
                              left: ST, leftSlangOp: Option[String], isLeftIf: B, leftPos: Option[Position],
                              right: ST, rightSlangOp: Option[String], isRightIf: B, rightPos: Option[Position]): ST = {
+      // Parenthesize native C expressions so Slang and C precedence differences cannot alter their meaning.
+      if (target == TargetLanguage.C) {
+        if (slangParentOp == Exp.BinaryOp.Imply || slangParentOp == Exp.BinaryOp.CondImply) {
+          return st"(!($left) || ($right))"
+        } else {
+          return st"(($left) ${convertBinaryOp(slangParentOp)} ($right))"
+        }
+      }
+
       val slangParentPrecedence = Exp.BinaryOp.precendenceLevel(slangParentOp)
 
       var singleLine = T

@@ -4,9 +4,16 @@ package org.sireum.hamr.codegen.microkit.plugins.gumbo
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.Store
 import org.sireum.hamr.codegen.common.resolvers.GclResolver
+import org.sireum.hamr.codegen.common.symbols.AadlComponent
 import org.sireum.hamr.codegen.common.types.{AadlTypes, ArrayType, BaseType, EnumType, RecordType, SlangType, TypeUtil}
+import org.sireum.hamr.codegen.microkit.plugins.gumbo.SlangExpUtil.{Context, TargetLanguage}
+import org.sireum.hamr.codegen.microkit.plugins.rust.types.CRustTypeProvider
+import org.sireum.hamr.codegen.microkit.util.MicrokitUtil
+import org.sireum.hamr.codegen.microkit.{rust => RAST}
+import org.sireum.hamr.ir.GclSpec
 import org.sireum.lang.{ast => SAST}
 import org.sireum.lang.symbol.Info
+import org.sireum.message.Reporter
 
 object GumboC2POUtil {
 
@@ -54,6 +61,60 @@ object GumboC2POUtil {
 
   @datatype class C2POStruct(val name: String,
                              val fields: ISZ[C2POStructField])
+
+  // Process a GUMBO specification into its C2PO formula and inputs.
+  @pure def processGumboSpec(spec: GclSpec,
+                             component: AadlComponent,
+                             context: Context.Type,
+                             isAssumeRequires: B,
+                             types: AadlTypes,
+                             tp: CRustTypeProvider,
+                             store: Store,
+                             reporter: Reporter): (RAST.R2U2Formula, SpecTense.Type, Map[String, SAST.Exp]) = {
+    checkC2POIdentifier(spec.id)
+    val (exp, variablesInSpec) = collectMonitorInputs(spec.exp, component.classifier)
+    val tense: SpecTense.Type = getSpecTense(exp)
+    val c2poExp: ST = SlangExpUtil.rewriteExpH(
+      rexp = exp,
+      owner = component.classifier,
+      optComponent = Some(component),
+      context = context,
+      inRequires = isAssumeRequires,
+      inEnsures = F,
+      target = TargetLanguage.C2PO,
+      substitutions = Map.empty,
+      aadlTypes = types,
+      tp = tp,
+      store = store,
+      reporter = reporter)
+    for (entry <- variablesInSpec.entries) {
+      checkC2POIdentifier(entry._1)
+    }
+    val formula: RAST.R2U2Formula = RAST.R2U2Formula(
+      commentOpt = GumboRustUtil.processDescriptor(spec.descriptor, "-- "),
+      id = spec.id,
+      exp = RAST.ExprST(c2poExp))
+    return (formula, tense, variablesInSpec)
+  }
+
+  // Add the C2PO declarations and DEFINE used to reconstruct a struct input.
+  @pure def addStructDefinition(specs: RAST.R2U2SpecDef,
+                                name: String,
+                                structType: C2POStruct): RAST.R2U2SpecDef = {
+    var result: RAST.R2U2SpecDef = specs
+    if (!ops.ISZOps(result.structs).exists((s: C2POStruct) => s.name == structType.name)) {
+      result = result(structs = result.structs :+ structType)
+    }
+    for (field <- structType.fields if field.enumTypeOpt.nonEmpty) {
+      val enumType: C2POEnum = field.enumTypeOpt.get
+      if (!ops.ISZOps(result.enums).exists((e: C2POEnum) => e.name == enumType.name)) {
+        result = result(enums = result.enums :+ enumType)
+      }
+    }
+    val fieldNames: ISZ[String] = for (field <- structType.fields) yield s"${name}_${field.name}"
+    return result(defines = result.defines :+
+      RAST.ItemST(st"${MicrokitUtil.TAB}$name := ${structType.name}(${(fieldNames, ", ")});"))
+  }
 
   // Removes a generated bounded-index conversion, e.g., I8FE679(i) becomes i.
   @pure def getIndexingExpr(exp: SAST.Exp, store: Store): SAST.Exp = {
