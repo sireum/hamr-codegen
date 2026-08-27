@@ -425,6 +425,8 @@ import org.sireum.message.Reporter
 
       if (t.isPeriodic()) {
         val timeTriggeredMethodName = st"${threadId}_timeTriggered"
+        val timeTriggeredBody: ISZ[ST] = r2u2Contributions.inputGets :+
+          st"printf(\"%s: $timeTriggeredMethodName invoked\\n\", microkit_name);"
         cCodeContributions = cCodeContributions(
           cBridge_EntrypointMethodSignatures = cCodeContributions.cBridge_EntrypointMethodSignatures :+ st"void ${timeTriggeredMethodName}(void)",
           cBridge_ComputeContributions =
@@ -432,7 +434,7 @@ import org.sireum.message.Reporter
               st"${timeTriggeredMethodName}();") ++ r2u2Contributions.computePost),
           cUser_MethodDefaultImpls =  cCodeContributions.cUser_MethodDefaultImpls :+
             st"""void $timeTriggeredMethodName(void) {
-                |  printf("%s: $timeTriggeredMethodName invoked\n", microkit_name);
+                |  ${(timeTriggeredBody, "\n")}
                 |}""")
       }
 

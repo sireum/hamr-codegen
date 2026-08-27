@@ -169,6 +169,7 @@ object CComponentPlugin {
 // Contributions used to add an R2U2 monitor to a native C component.
 @datatype class CComponentR2U2Contributions(val requiresR2U2: B,
                                             val r2u2SpecDef: Option[RAST.R2U2SpecDef],
+                                            val inputGets: ISZ[ST],
                                             val r2u2HeaderItems: ISZ[ST],
                                             val r2u2MonitorItems: ISZ[ST],
                                             val r2u2PreItems: ISZ[ST],
@@ -189,7 +190,7 @@ object CComponentPlugin {
 
 object CComponentR2U2Contributions {
   @strictpure def empty: CComponentR2U2Contributions =
-    CComponentR2U2Contributions(F, None(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ())
+    CComponentR2U2Contributions(F, None(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ(), ISZ())
 }
 
 @sig trait CComponentPlugin extends MicrokitPlugin {

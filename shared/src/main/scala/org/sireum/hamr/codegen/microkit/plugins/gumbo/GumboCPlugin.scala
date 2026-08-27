@@ -69,19 +69,15 @@ object GumboCPlugin {
     @pure def snapshotPort(port: AadlPort): ST = {
       port match {
         case _: AadlEventPort =>
-          return st"""bool r2u2_port_${port.identifier}_present = peek_${port.identifier}();
-                     |(void) r2u2_port_${port.identifier}_present;"""
+          return st"bool r2u2_port_${port.identifier}_present = peek_${port.identifier}();"
         case _: AadlDataPort =>
           val cTypeName: String = getCTypeName(MicrokitTypeUtil.getPortType(port))
-          return st"""$cTypeName r2u2_port_${port.identifier} = {0};
-                     |(void) peek_${port.identifier}(&r2u2_port_${port.identifier});
-                     |(void) r2u2_port_${port.identifier};"""
+          return st"""$cTypeName r2u2_port_${port.identifier};
+                     |peek_${port.identifier}(&r2u2_port_${port.identifier});"""
         case _: AadlEventDataPort =>
           val cTypeName: String = getCTypeName(MicrokitTypeUtil.getPortType(port))
           return st"""$cTypeName r2u2_port_${port.identifier} = {0};
-                     |bool r2u2_port_${port.identifier}_present = peek_${port.identifier}(&r2u2_port_${port.identifier});
-                     |(void) r2u2_port_${port.identifier};
-                     |(void) r2u2_port_${port.identifier}_present;"""
+                     |bool r2u2_port_${port.identifier}_present = peek_${port.identifier}(&r2u2_port_${port.identifier});"""
       }
     }
 
@@ -182,9 +178,21 @@ object GumboCPlugin {
 
     var preSnapshots: ISZ[ST] = ISZ()
     var postSnapshots: ISZ[ST] = ISZ()
+    var inputGets: ISZ[ST] = ISZ()
     var outputEventQueueDeclarations: ISZ[ST] = ISZ()
     var outputEventCountDeclarations: ISZ[ST] = ISZ()
     for (port <- component.getPorts() if !StoreUtil.isSynthetic(port.path, store)) {
+      if (port.direction == Direction.In &&
+        (prePortIds.contains(port.identifier) || postPortIds.contains(port.identifier))) {
+        port match {
+          case _: AadlEventPort =>
+            inputGets = inputGets :+ st"get_${port.identifier}();"
+          case _ =>
+            val cTypeName: String = getCTypeName(MicrokitTypeUtil.getPortType(port))
+            inputGets = inputGets :+ st"""$cTypeName ${port.identifier};
+                                             |get_${port.identifier}(&${port.identifier});"""
+        }
+      }
       if (prePortIds.contains(port.identifier)) {
         preSnapshots = preSnapshots :+ snapshotPort(port)
       }
@@ -226,9 +234,8 @@ object GumboCPlugin {
               postSnapshots = postSnapshots :+ st"""$cTypeName r2u2_port_${port.identifier} = {0};
                                                        |bool r2u2_port_${port.identifier}_present = $queueName->numSent != r2u2_port_${port.identifier}_count;
                                                        |if (r2u2_port_${port.identifier}_present) {
-                                                       |  (void) peek_${port.identifier}(&r2u2_port_${port.identifier});
-                                                       |}
-                                                       |(void) r2u2_port_${port.identifier};"""
+                                                       |  peek_${port.identifier}(&r2u2_port_${port.identifier});
+                                                       |}"""
             case _ => halt("Expected an output event port")
           }
         } else {
@@ -388,6 +395,7 @@ object GumboCPlugin {
     return CComponentR2U2Contributions(
       requiresR2U2 = T,
       r2u2SpecDef = Some(specs),
+      inputGets = inputGets,
       r2u2HeaderItems = stateDeclarations,
       r2u2MonitorItems = monitorItems,
       r2u2PreItems = preItems,
