@@ -484,7 +484,7 @@ object GumboRustPlugin {
                   store = localStore,
                   reporter = reporter)
               } else {
-                handleComputePlaceholder(f)
+                handleComputePlaceholder(f, thread, subclauseInfo)
               }
               markers = markers ++ compute._1
 
@@ -743,8 +743,8 @@ object GumboRustPlugin {
     assert (fn.contract.isEmpty, "who filled this in already?")
 
     // general assumes clauses
-    var requires: ISZ[RAST.Expr] =
-      for (r <- subclauseInfo.annex.compute.get.assumes) yield
+    val requires: ISZ[RAST.Expr] = getAadlRequires(thread) ++
+      (for (r <- subclauseInfo.annex.compute.get.assumes) yield
         GumboRustUtil.processGumboSpec(
           spec = r,
           component = thread,
@@ -755,17 +755,7 @@ object GumboRustPlugin {
           tp = tp,
           gclSymbolTable = subclauseInfo.gclSymbolTable,
           store = store,
-          reporter = reporter)
-
-    var aadlReq: ISZ[ST] = ISZ()
-    for (p <- thread.getPorts() if !p.isInstanceOf[AadlDataPort] && p.direction == Direction.Out) {
-      aadlReq = aadlReq :+ (st"old(api).${p.identifier}.is_none()")
-    }
-    if (aadlReq.nonEmpty) {
-      requires = RAST.ExprST(st"""// assume AADL_Requirement
-                                 |//   All outgoing event ports must be empty
-                                 |${(aadlReq, ",\n")}""") +: requires
-    }
+          reporter = reporter))
 
     val ensures: ISZ[RAST.Expr] = {
       // general ensures clauses
@@ -790,7 +780,7 @@ object GumboRustPlugin {
             aadlTypes = types ,
             tp = tp,
             gclSymbolTable = subclauseInfo.gclSymbolTable,
-            reporter = reporter))
+            reporter = reporter)) ++ getAlertEnsures(subclauseInfo)
     }
 
     var optEnsuresMarker: Option[Marker] = None()
@@ -825,16 +815,55 @@ object GumboRustPlugin {
         ensures = ensures))))
   }
 
-  @pure def handleComputePlaceholder(fn: RAST.FnImpl): (ISZ[Marker], RAST.FnImpl) = {
-    val requiresPlaceholder = Marker.createSlashPlaceholderMarker(GumboRustUtil.GumboMarkers.timeTriggeredRequires)
-    val ensuresPlaceholder = Marker.createSlashPlaceholderMarker(GumboRustUtil.GumboMarkers.timeTriggeredEnsures)
-    val markers: ISZ[Marker] = ISZ(requiresPlaceholder, ensuresPlaceholder)
+  // Require outgoing event ports to be empty before user code runs.
+  @pure def getAadlRequires(thread: AadlThread): ISZ[RAST.Expr] = {
+    val outputPorts: ISZ[ST] = for (port <- thread.getPorts()
+                                    if !port.isInstanceOf[AadlDataPort] &&
+                                      port.direction == Direction.Out) yield
+      st"old(api).${port.identifier}.is_none()"
+    if (outputPorts.nonEmpty) {
+      return ISZ(RAST.ExprST(st"""// assume AADL_Requirement
+                                    |//   All outgoing event ports must be empty
+                                    |${(outputPorts, ",\n")}"""))
+    }
+    return ISZ()
+  }
+
+  // Reserve alert ports for verdicts published by the R2U2 monitor.
+  @pure def getAlertEnsures(subclauseInfo: GclAnnexClauseInfo): ISZ[RAST.Expr] = {
+    subclauseInfo.annex.monitor match {
+      case Some(monitor) if monitor.alerts.nonEmpty =>
+        val alertPorts: ISZ[ST] = for (alert <- monitor.alerts) yield
+          st"old(api).${alert.portId} == final(api).${alert.portId}"
+        return ISZ(RAST.ExprST(st"""// guarantee Monitor_Requirement
+                                      |//   Alert ports are reserved for the monitor
+                                      |${(alertPorts, ",\n")}"""))
+      case _ => return ISZ()
+    }
+  }
+
+  @pure def handleComputePlaceholder(fn: RAST.FnImpl,
+                                     thread: AadlThread,
+                                     subclauseInfo: GclAnnexClauseInfo): (ISZ[Marker], RAST.FnImpl) = {
+    val requires: ISZ[RAST.Expr] = getAadlRequires(thread)
+    val requiresMarker: Marker = if (requires.nonEmpty) {
+      Marker.createSlashMarker(GumboRustUtil.GumboMarkers.timeTriggeredRequires)
+    } else {
+      Marker.createSlashPlaceholderMarker(GumboRustUtil.GumboMarkers.timeTriggeredRequires)
+    }
+    val ensures: ISZ[RAST.Expr] = getAlertEnsures(subclauseInfo)
+    val ensuresMarker: Marker = if (ensures.nonEmpty) {
+      Marker.createSlashMarker(GumboRustUtil.GumboMarkers.timeTriggeredEnsures)
+    } else {
+      Marker.createSlashPlaceholderMarker(GumboRustUtil.GumboMarkers.timeTriggeredEnsures)
+    }
+    val markers: ISZ[Marker] = ISZ(requiresMarker, ensuresMarker)
     return (markers,
       fn(contract = Some(RAST.FnContract(
-        optRequiresMarker = Some(requiresPlaceholder),
-        requires = ISZ(),
-        optEnsuresMarker = Some(ensuresPlaceholder),
-        ensures = ISZ()))))
+        optRequiresMarker = Some(requiresMarker),
+        requires = requires,
+        optEnsuresMarker = Some(ensuresMarker),
+        ensures = ensures))))
   }
 
   @pure def handleComputeMonitor(fn: RAST.FnImpl,
