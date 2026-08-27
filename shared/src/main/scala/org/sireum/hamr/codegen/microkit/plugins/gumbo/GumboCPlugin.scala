@@ -351,26 +351,47 @@ object GumboCPlugin {
     val stateDefinitions: ISZ[ST] = for (state <- subclauseInfo.annex.state) yield
       st"${getCTypeName(types.typeMap.get(state.classifier).get)} r2u2_state_${state.name} = {0};"
 
+    var monitorItems: ISZ[ST] = ISZ()
+    val outputEventDeclarations: ISZ[ST] = outputEventQueueDeclarations ++ outputEventCountDeclarations
+    if (outputEventDeclarations.nonEmpty) {
+      monitorItems = monitorItems :+ st"${(outputEventDeclarations, "\n")}"
+    }
+    if (stateDefinitions.nonEmpty) {
+      monitorItems = monitorItems :+ st"${(stateDefinitions, "\n")}"
+    }
+    if (prototypes.nonEmpty) {
+      monitorItems = monitorItems :+ st"${(prototypes, "\n")}"
+    }
+    if (definitions.nonEmpty) {
+      monitorItems = monitorItems :+ st"${(definitions, "\n\n")}"
+    }
+    if (loggedSpecDefinitions.nonEmpty) {
+      monitorItems = monitorItems :+ loggedSpecDefinitions.get
+    }
+
+    var preItems: ISZ[ST] = ISZ()
+    if (preSnapshots.nonEmpty) {
+      preItems = preItems :+ st"${(preSnapshots, "\n\n")}"
+    }
+    if (preLoads.nonEmpty) {
+      preItems = preItems :+ st"${(preLoads, "\n")}"
+    }
+
+    var postItems: ISZ[ST] = ISZ()
+    if (postSnapshots.nonEmpty) {
+      postItems = postItems :+ st"${(postSnapshots, "\n\n")}"
+    }
+    if (postLoads.nonEmpty) {
+      postItems = postItems :+ st"${(postLoads, "\n")}"
+    }
+
     return CComponentR2U2Contributions(
       requiresR2U2 = T,
       r2u2SpecDef = Some(specs),
-      r2u2HeaderItems = ISZ(st"${(stateDeclarations, "\n")}"),
-      r2u2MonitorItems = ISZ(st"""${(outputEventQueueDeclarations, "\n")}
-                                      |${(outputEventCountDeclarations, "\n")}
-                                      |
-                                      |${(stateDefinitions, "\n")}
-                                      |
-                                      |${(prototypes, "\n")}
-                                      |
-                                      |${(definitions, "\n\n")}
-                                      |
-                                      |$loggedSpecDefinitions"""),
-      r2u2PreItems = ISZ(st"""${(preSnapshots, "\n\n")}
-                                  |
-                                  |${(preLoads, "\n")}"""),
-      r2u2PostItems = ISZ(st"""${(postSnapshots, "\n\n")}
-                                   |
-                                   |${(postLoads, "\n")}"""),
+      r2u2HeaderItems = stateDeclarations,
+      r2u2MonitorItems = monitorItems,
+      r2u2PreItems = preItems,
+      r2u2PostItems = postItems,
       r2u2OutputItems = outputItems)
   }
 

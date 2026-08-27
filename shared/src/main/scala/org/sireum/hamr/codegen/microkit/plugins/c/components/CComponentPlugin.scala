@@ -62,6 +62,10 @@ object CComponentPlugin {
 
     val specs: RAST.R2U2SpecDef = contributions.r2u2SpecDef.get
     val specCount: Z = specs.ftspecs.size + specs.ptspecs.size
+    val headerItems: ISZ[ST] = contributions.r2u2HeaderItems :+
+      st"""void r2u2_monitor_initialize(void);
+          |void r2u2_monitor_pre_timeTriggered(void);
+          |void r2u2_monitor_post_timeTriggered(void);"""
     val header: ST =
       st"""#pragma once
           |
@@ -69,12 +73,33 @@ object CComponentPlugin {
           |
           |${CommentTemplate.doNotEditComment_slash}
           |
-          |${(contributions.r2u2HeaderItems, "\n")}
-          |
-          |void r2u2_monitor_initialize(void);
-          |void r2u2_monitor_pre_timeTriggered(void);
-          |void r2u2_monitor_post_timeTriggered(void);
+          |${(headerItems, "\n\n")}
           |"""
+
+    val monitorItems: ISZ[ST] = contributions.r2u2MonitorItems :+
+      st"""// Cache the newest verdict returned for each specification.
+          |static r2u2_status_t r2u2_cache_output(
+          |    r2u2_mltl_instruction_t instruction,
+          |    r2u2_verdict *verdict) {
+          |  size_t spec_number = instruction.op2_value;
+          |  if (verdict == NULL || spec_number >= R2U2_SPEC_COUNT) {
+          |    return R2U2_ERR_OTHER;
+          |  }
+          |  r2u2_monitor.verdict_cache[spec_number] = *verdict;
+          |  r2u2_monitor.verdict_valid[spec_number] = true;
+          |  r2u2_monitor.verdict_updated[spec_number] = true;
+          |  return R2U2_OK;
+          |}"""
+    val postItems: ISZ[ST] =
+      (contributions.r2u2PostItems :+
+        st"""for (size_t i = 0; i < R2U2_SPEC_COUNT; ++i) {
+            |  r2u2_monitor.verdict_updated[i] = false;
+            |}
+            |r2u2_status_t status = r2u2_step(&r2u2_monitor.monitor);
+            |if (status != R2U2_OK) {
+            |  printf("R2U2 monitor step failed: %d\n", (int) status);
+            |  return;
+            |}""") ++ contributions.r2u2OutputItems
     val source: ST =
       st"""#include "${MicrokitUtil.getComponentIdPath(component)}.h"
           |#include <r2u2.h>
@@ -98,21 +123,7 @@ object CComponentPlugin {
           |  .monitor = R2U2_DEFAULT_MONITOR
           |};
           |
-          |${(contributions.r2u2MonitorItems, "\n\n")}
-          |
-          |// Cache the newest verdict returned for each specification.
-          |static r2u2_status_t r2u2_cache_output(
-          |    r2u2_mltl_instruction_t instruction,
-          |    r2u2_verdict *verdict) {
-          |  size_t spec_number = instruction.op2_value;
-          |  if (verdict == NULL || spec_number >= R2U2_SPEC_COUNT) {
-          |    return R2U2_ERR_OTHER;
-          |  }
-          |  r2u2_monitor.verdict_cache[spec_number] = *verdict;
-          |  r2u2_monitor.verdict_valid[spec_number] = true;
-          |  r2u2_monitor.verdict_updated[spec_number] = true;
-          |  return R2U2_OK;
-          |}
+          |${(monitorItems, "\n\n")}
           |
           |void r2u2_monitor_initialize(void) {
           |  for (size_t i = 0; i < R2U2_SPEC_COUNT; ++i) {
@@ -136,17 +147,7 @@ object CComponentPlugin {
           |}
           |
           |void r2u2_monitor_post_timeTriggered(void) {
-          |  ${(contributions.r2u2PostItems, "\n\n")}
-          |
-          |  for (size_t i = 0; i < R2U2_SPEC_COUNT; ++i) {
-          |    r2u2_monitor.verdict_updated[i] = false;
-          |  }
-          |  r2u2_status_t status = r2u2_step(&r2u2_monitor.monitor);
-          |  if (status != R2U2_OK) {
-          |    printf("R2U2 monitor step failed: %d\n", (int) status);
-          |    return;
-          |  }
-          |  ${(contributions.r2u2OutputItems, "\n\n")}
+          |  ${(postItems, "\n\n")}
           |}
           |"""
 
