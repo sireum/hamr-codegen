@@ -279,13 +279,13 @@ object Printers {
           |
           |${if (defines.nonEmpty) st"""DEFINE
                                              |${printItems(defines, "\n")}
-                                             |""" else ""}
+                                             |""" else st""}
           |${if (ftspecs.nonEmpty) st"""FTSPEC
                                              |${printItems(ftspecs.asInstanceOf[ISZ[Item]], "\n")}
-                                             |""" else ""}
+                                             |""" else st""}
           |${if (ptspecs.nonEmpty) st"""PTSPEC
                                              |${printItems(ptspecs.asInstanceOf[ISZ[Item]], "\n")}
-                                             |""" else ""}
+                                             |""" else st""}
           |""")
   }
 }
