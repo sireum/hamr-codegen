@@ -34,7 +34,9 @@ REPOS_TO_CHECK = [
     ("santoslab", "rts-showcase", "CI-windows.yml"),
     ("santoslab", "rts-showcase", "CI_linux.yml"),
     # https://github.com/loonwerks/INSPECTA-models/actions
-    ("loonwerks", "INSPECTA-models", "ci-hamr.yml"),
+    ("loonwerks", "INSPECTA-models", "ci-hamr-docker.yml"),
+    ("loonwerks", "INSPECTA-models", "ci-hamr-linux.yml"),
+    ("loonwerks", "INSPECTA-models", "ci-hamr-mac.yml"),
 ]
 
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")

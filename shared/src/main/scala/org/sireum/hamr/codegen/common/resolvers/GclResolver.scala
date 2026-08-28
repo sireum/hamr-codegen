@@ -2711,7 +2711,14 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             {
               val localScope = Scope.Local.create(HashMap.empty, adtScope)
               val fqn: QName = qualifiedName :+ fingerMethodAST_unresolved.sig.id.value
-              val th = TypeHierarchy(nameMap = globalNameMap, typeMap = globalTypeMap, poset = Poset.empty, aliases = HashSMap.empty)
+              // The poset starts from the library's own, as the SysML front end does,
+              // rather than from Poset.empty: TypeHierarchy.build skips types that are
+              // already outlined, so the library's edges have to be carried in rather
+              // than rediscovered.  Built on top of it are the AADL-derived types.
+              // Left empty, the hierarchy answers no subtype question at all and lub
+              // returns None for every pair of named types -- a type against itself
+              // included, which is what the 'X == X' errors were.
+              val th = TypeHierarchy.build(F, TypeHierarchy(nameMap = globalNameMap, typeMap = globalTypeMap, poset = GclResolver.libraryReporter.typeHierarchy.poset, aliases = HashSMap.empty), reporter)
 
               val tmembers = TypeInfo.Members(
                 specVars = HashSMap.empty,
@@ -2784,10 +2791,14 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           val ast: AST.Stmt.TypeAlias = {
             val _id = AST.Id(simpleName, attr)
             val typeParams: ISZ[TypeParam] = ISZ()
-            val simpleSireumName: String = slangName(slangName.lastIndex)
+            // Named by the qualified slangName, not its last segment.  The scope this
+            // alias is declared in carries no imports, so a bare `Z` or `S32` resolves
+            // to nothing once TypeHierarchy.build re-resolves it -- and it does now
+            // that the poset is built.  The fully qualified name is already to hand,
+            // and is what the typedOpt below has always said.
             val tipe: AST.Type = AST.Type.Named(
               name = AST.Name(
-                ids = ISZ(AST.Id(simpleSireumName, attr)),
+                ids = for (n <- slangName) yield AST.Id(n, attr),
                 attr = attr
               ),
               rTypeOpt = None(),
@@ -4095,11 +4106,13 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
             return (None(), store)
         }
 
-        val typeHierarchy: TypeHierarchy = TypeHierarchy(
+        // see the note at the other TypeHierarchy.build call: the poset has to be
+        // built, or nothing in these clauses type checks against the hierarchy.
+        val typeHierarchy: TypeHierarchy = TypeHierarchy.build(F, TypeHierarchy(
           nameMap = globalNameMap,
           typeMap = globalTypeMap,
-          poset = Poset.empty,
-          aliases = HashSMap.empty)
+          poset = GclResolver.libraryReporter.typeHierarchy.poset,
+          aliases = HashSMap.empty), reporter)
 
         processGclSubclause(component, gclSubclause, gclLibs, symbolTable, aadlTypes, typeHierarchy, scope, reporter) match {
           case Some((resolvedGclSubclause, gclSymbolTable)) =>
@@ -4129,11 +4142,11 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
 
             val localScope = Scope.Local.create(HashMap.empty, o.scope)
 
-            val typeHierarchy: TypeHierarchy = TypeHierarchy(
+            val typeHierarchy: TypeHierarchy = TypeHierarchy.build(F, TypeHierarchy(
               nameMap = globalNameMap,
               typeMap = globalTypeMap,
-              poset = Poset.empty,
-              aliases = HashSMap.empty)
+              poset = GclResolver.libraryReporter.typeHierarchy.poset,
+              aliases = HashSMap.empty), reporter)
 
             processGclLib(qualifiedName, gclLib, symbolTable, aadlTypes, typeHierarchy, localScope, reporter) match {
               case Some((resolvedGclLib, gclSymbolTable)) =>

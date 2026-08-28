@@ -455,7 +455,12 @@ object MicrokitReporterPlugin {
 
       val subcomponents: ISZ[IdPathR] = for(s <- t.subComponents) yield IdPathR(s.path)
 
-      val modelImplementation = IdPos(id = t.classifierAsString, pos = t.component.identifier.pos.get)
+      // the raw AST position carries the absolute file:// URI of the model on the
+      // generating machine, so relativize it against the report directory as the
+      // port positions above are
+      val modelImplementation = IdPos(
+        id = t.classifierAsString,
+        pos = ReportUtil.buildPosA(t.component.identifier.pos.get, workspaceRoot, sel4OutputDir))
 
       componentReports = componentReports + IdPathR(t.path) ~>
         ComponentReport(

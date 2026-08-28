@@ -26,7 +26,7 @@ object StubTemplate {
     return (
       st"""def ${methodName}(${(params, ",\n")}): ${_returnType} = ${"$"}""",
       st"""def ${methodName}(${(params, ",\n")}): ${_returnType} = {
-          |  ${if (exampleValue.nonEmpty) st"return ${exampleValue.get}" else ""}
+          |  ${if (exampleValue.nonEmpty) st"return ${exampleValue.get}" else st""}
           |}""")
   }
 

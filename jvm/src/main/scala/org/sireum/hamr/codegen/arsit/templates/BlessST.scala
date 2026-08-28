@@ -38,7 +38,7 @@ object BlessST {
           |
           |  var currentState : ${completeStateEnumName}.Type = ${completeStateEnumName}.${initialState}
           |
-          |  ${if (globalVars.isEmpty) "// no global vars" else st"${(globalVars, "\n")}"}
+          |  ${if (globalVars.isEmpty) st"// no global vars" else st"${(globalVars, "\n")}"}
           |
           |  ${(methods, "\n\n")}
           |

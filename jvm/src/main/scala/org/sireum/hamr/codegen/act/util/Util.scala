@@ -197,7 +197,7 @@ object Util {
   }
 
   def genMonitorFeatureName(featureSimpleName: String, num: Option[Z]): String = {
-    return brand(s"${featureSimpleName}${if (num.nonEmpty) num.get else ""}")
+    return brand(s"${featureSimpleName}${if (num.nonEmpty) num.get.string else ""}")
   }
 
   def genSeL4NotificationName(featureSimpleName: String, isDataPort: B): String = {
