@@ -55,18 +55,22 @@ object ConnectionUtil {
       cMethodApiSigs = cMethodApiSigs :+
         QueueTemplate.getClientIsEmpty_C_MethodSig(dstPort.identifier) :+
         QueueTemplate.getClientGetter_C_MethodPollSig(dstPort.identifier, cTypeName, isEventPort) :+
-        QueueTemplate.getClientGetter_C_MethodSig(dstPort.identifier, cTypeName, isEventPort)
+        QueueTemplate.getClientGetter_C_MethodSig(dstPort.identifier, cTypeName, isEventPort) :+
+        QueueTemplate.getClientPeek_C_MethodSig(dstPort.identifier, cTypeName, isEventPort)
 
       cMethodApis = cMethodApis :+
         QueueTemplate.getClientIsEmpty_C_Method(dstPort.identifier, cTypeName, dstQueueSize) :+
         QueueTemplate.getClientGetter_C_MethodPoll(dstPort.identifier, cTypeName, dstQueueSize, isEventPort) :+
-        QueueTemplate.getClientGetter_C_Method(dstPort.identifier, cTypeName, isEventPort)
+        QueueTemplate.getClientGetter_C_Method(dstPort.identifier, cTypeName, isEventPort) :+
+        QueueTemplate.getClientInputPeek_C_Method(dstPort.identifier, cTypeName, dstQueueSize, isEventPort)
     } else {
       cMethodApiSigs = cMethodApiSigs :+
-        QueueTemplate.getClientGetter_C_MethodSig(dstPort.identifier, cTypeName, F)
+        QueueTemplate.getClientGetter_C_MethodSig(dstPort.identifier, cTypeName, F) :+
+        QueueTemplate.getClientPeek_C_MethodSig(dstPort.identifier, cTypeName, F)
 
       cMethodApis = cMethodApis :+
-        QueueTemplate.getClientDataGetter_C_Method(dstPort.identifier, cTypeName, dstQueueSize, aadlType, cTypeNameProvider)
+        QueueTemplate.getClientDataGetter_C_Method(dstPort.identifier, cTypeName, dstQueueSize, aadlType, cTypeNameProvider) :+
+        QueueTemplate.getClientDataPeek_C_Method(dstPort.identifier, cTypeName, dstQueueSize, aadlType, cTypeNameProvider)
     }
 
     var cEntrypointMethodSignatures: ISZ[ST] = ISZ()
@@ -125,6 +129,7 @@ object ConnectionUtil {
     var cSharedMemoryVars: ISZ[GlobalVarContribution] = ISZ()
     var cInitContributions: ISZ[ST] = ISZ()
     var srcPutContributions: ISZ[ST] = ISZ()
+    var srcPeekContribution: Option[ST] = None()
 
     var uniqueQueueSizes: Set[Z] = Set.empty
 
@@ -155,6 +160,14 @@ object ConnectionUtil {
         queueElementTypeName = cTypeName,
         queueSize = receiverContribution.queueSize,
         isEventPort = isEventPort)
+      if (srcPeekContribution.isEmpty) {
+        srcPeekContribution = Some(QueueTemplate.getClientOutputPeek_C_Method(
+          portName = srcPort.identifier,
+          queueElementTypeName = cTypeName,
+          queueSize = receiverContribution.queueSize,
+          sharedMemoryVarName = sharedMemVarName,
+          isEventPort = isEventPort))
+      }
 
       val cPortType: String = cTypeProvider.getTypeNameProvider(receiverContribution.aadlType).mangledName
       val queueType = QueueTemplate.getTypeQueueTypeName(cPortType, receiverContribution.queueSize)
@@ -195,6 +208,12 @@ object ConnectionUtil {
         queueElementTypeName = cTypeName,
         queueSize = queueSize,
         isEventPort = isEventPort)
+      srcPeekContribution = Some(QueueTemplate.getClientOutputPeek_C_Method(
+        portName = srcPort.identifier,
+        queueElementTypeName = cTypeName,
+        queueSize = queueSize,
+        sharedMemoryVarName = sharedMemVarName,
+        isEventPort = isEventPort))
 
       val cPortType: String = cTypeProvider.getTypeNameProvider(senderPortType).mangledName
       val queueType = QueueTemplate.getTypeQueueTypeName(cPortType, queueSize)
@@ -217,6 +236,7 @@ object ConnectionUtil {
 
     val cPortType: String = cTypeProvider.getTypeNameProvider(senderPortType).mangledName
     val cPortApiMethodSig = QueueTemplate.getClientPut_C_MethodSig(srcPort.identifier, cPortType, isEventPort)
+    val cPortPeekMethodSig = QueueTemplate.getClientPeek_C_MethodSig(srcPort.identifier, cPortType, isEventPort)
     val cApiMethod = QueueTemplate.getClientPut_C_Method(srcPort.identifier, cPortType, srcPutContributions, isEventPort)
 
     return UberConnectionContributions(
@@ -230,8 +250,8 @@ object ConnectionUtil {
         cBridge_EntrypointMethodSignatures = ISZ(),
         cUser_MethodDefaultImpls = ISZ(),
         cBridge_GlobalVarContributions = cSharedMemoryVars,
-        cPortApiMethodSigs = ISZ(cPortApiMethodSig),
-        cBridge_PortApiMethods = ISZ(cApiMethod),
+        cPortApiMethodSigs = ISZ(cPortApiMethodSig, cPortPeekMethodSig),
+        cBridge_PortApiMethods = ISZ(cApiMethod, srcPeekContribution.get),
         cBridge_InitContributions = cInitContributions,
         cBridge_ComputeContributions = ISZ())
     )

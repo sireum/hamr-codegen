@@ -65,6 +65,19 @@ object CRustApiUtil {
     )
   }
 
+  @pure def processPeekPort(port: AadlPort,
+                            crustTypeProvider: CRustTypeProvider): ComponentApiContributions = {
+    val portType = crustTypeProvider.getRepresentativeType(MicrokitTypeUtil.getPortType(port))
+    val portTypeNameProvider = crustTypeProvider.getTypeNameProvider(portType)
+
+    return ComponentApiContributions.empty(
+      externCApis = ISZ(getCPeekExternMethodSig(port, portType, portTypeNameProvider)),
+      unsafeExternCApiWrappers = ISZ(getUnsafePeekWrapper(port, portType, crustTypeProvider)),
+      externApiTestingApis = ISZ(getPeekTestingApi(port, portType.classifier, portTypeNameProvider)),
+      unverifiedGetApis = ISZ(getBridgePeekApi(port, portType, crustTypeProvider)),
+      appApiDefaultGetters = ISZ(getApiDefaultPeek(port, portType, crustTypeProvider)))
+  }
+
   @pure def getGhostInitializations(port: AadlPort, a: AadlType, crustTypeProvider: CRustTypeProvider): RAST.Item = {
     return (
       if (port.isInstanceOf[AadlDataPort])
@@ -95,6 +108,17 @@ object CRustApiUtil {
     val methodName: String =
       if (port.direction == Direction.In) s"get_${port.identifier}"
       else s"put_${port.identifier}"
+    return getCExternMethodSigFor(port, aadlType, crustTypeNameProvider, methodName)
+  }
+
+  @pure def getCPeekExternMethodSig(port: AadlPort, aadlType: AadlType, crustTypeNameProvider: CRustTypeNameProvider): RAST.FnSig = {
+    return getCExternMethodSigFor(port, aadlType, crustTypeNameProvider, s"peek_${port.identifier}")
+  }
+
+  @pure def getCExternMethodSigFor(port: AadlPort,
+                                  aadlType: AadlType,
+                                  crustTypeNameProvider: CRustTypeNameProvider,
+                                  methodName: String): RAST.FnSig = {
     val args: ISZ[RAST.Param] =
       if (port.isInstanceOf[AadlEventPort]) ISZ()
       else ISZ(
@@ -148,8 +172,19 @@ object CRustApiUtil {
   }
 
   @pure def getUnsafeGetWrapper(port: AadlPort, aadlType: AadlType, crustTypeProvider: CRustTypeProvider): RAST.Fn = {
+    return getUnsafeReadWrapper(port, aadlType, crustTypeProvider, "get")
+  }
+
+  @pure def getUnsafePeekWrapper(port: AadlPort, aadlType: AadlType, crustTypeProvider: CRustTypeProvider): RAST.Fn = {
+    return getUnsafeReadWrapper(port, aadlType, crustTypeProvider, "peek")
+  }
+
+  @pure def getUnsafeReadWrapper(port: AadlPort,
+                                 aadlType: AadlType,
+                                 crustTypeProvider: CRustTypeProvider,
+                                 operation: String): RAST.Fn = {
     val tn = crustTypeProvider.getTypeNameProvider(aadlType)
-    val externCMethodName = s"get_${port.identifier}"
+    val externCMethodName = s"${operation}_${port.identifier}"
     val unsafeMethodName = s"unsafe_$externCMethodName"
     val defaultValue = MicrokitTypeUtil.getCRustTypeDefaultValue(aadlType, crustTypeProvider)
     var returnType: RAST.Ty = MicrokitTypeUtil.rustBoolType
@@ -298,6 +333,43 @@ object CRustApiUtil {
         ISZ(RAST.BodyItemST(st"self.api.${unverifiedMethodName}(&Ghost(self.${ghostName}))")))))
   }
 
+  @pure def getApiDefaultPeek(port: AadlPort,
+                              aadlType: AadlType,
+                              crustTypeProvider: CRustTypeProvider): RAST.Item = {
+    val methodName = s"peek_${port.identifier}"
+    val unverifiedMethodName = s"unverified_$methodName"
+    val ghostName = getGhostName(port)
+    val portTypeNP = crustTypeProvider.getTypeNameProvider(aadlType)
+    val isEventPort = port.isInstanceOf[AadlEventPort]
+    val retType: RAST.FnRetTy = port match {
+      case _: AadlDataPort => RAST.FnRetTyImpl(RAST.TyTuple(ISZ(
+        RAST.TyFixMe(st"${CRustApiPlugin.apiResultName} : ${portTypeNP.qualifiedRustName}"))))
+      case _: AadlEventPort => RAST.FnRetTyImpl(RAST.TyTuple(ISZ(
+        RAST.TyFixMe(st"${CRustApiPlugin.apiResultName} : bool"))))
+      case _: AadlEventDataPort => RAST.FnRetTyImpl(RAST.TyTuple(ISZ(
+        RAST.TyFixMe(st"${CRustApiPlugin.apiResultName} : Option<${portTypeNP.qualifiedRustName}>"))))
+    }
+    val ensures = RAST.ExprST(
+      st"${CRustApiPlugin.apiResultName} == self.$ghostName${if (isEventPort) ".is_some()" else ""}")
+
+    return RAST.FnImpl(
+      sig = RAST.FnSig(
+        ident = RAST.IdentString(methodName),
+        fnDecl = RAST.FnDecl(
+          inputs = ISZ(RAST.ParamFixMe(st"&self")),
+          outputs = retType),
+        verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
+      verusAttributeSyntax = WRAPPED_IN_VERUS_MACRO,
+      contract = Some(RAST.FnContract(
+        optEnsuresMarker = None(),
+        ensures = ISZ(ensures),
+        optRequiresMarker = None(),
+        requires = ISZ())),
+      comments = ISZ(), attributes = ISZ(), visibility = RAST.Visibility.Public, meta = ISZ(),
+      body = Some(RAST.MethodBody(
+        ISZ(RAST.BodyItemST(st"self.api.$unverifiedMethodName(&Ghost(self.$ghostName))")))))
+  }
+
   @pure def getBridgePutApi(port: AadlPort, aadlType: AadlType, crustTypeProvider: CRustTypeProvider): RAST.Item = {
     val methodName = s"unverified_put_${port.identifier}"
     val unsafeMethodName = s"unsafe_put_${port.identifier}"
@@ -375,6 +447,93 @@ object CRustApiUtil {
       body = Some(RAST.MethodBody(ISZ(body))))
   }
 
+  @pure def getBridgePeekApi(port: AadlPort,
+                             aadlType: AadlType,
+                             crustTypeProvider: CRustTypeProvider): RAST.FnImpl = {
+    val methodName = s"unverified_peek_${port.identifier}"
+    val unsafeMethodName = s"unsafe_peek_${port.identifier}"
+    val isEventPort = port.isInstanceOf[AadlEventPort]
+    val portTypeNP = crustTypeProvider.getTypeNameProvider(aadlType)
+    val ghostType: RAST.TyPath =
+      if (port.isEvent) RAST.TyPath(ISZ(ISZ("Ghost"), ISZ("Option"), portTypeNP.qualifiedRustNameS), Some(aadlType.classifier))
+      else RAST.TyPath(ISZ(ISZ("Ghost"), portTypeNP.qualifiedRustNameS), Some(aadlType.classifier))
+    val args: ISZ[RAST.Param] = ISZ(
+      RAST.ParamFixMe(st"&self"),
+      RAST.ParamImpl(
+        ident = RAST.IdentString(CRustApiPlugin.apiParameterName),
+        kind = RAST.TyRef(
+          lifetime = None(),
+          mutty = RAST.MutTy(
+            ty = ghostType,
+            mutbl = RAST.Mutability.Not))))
+    val retType: RAST.FnRetTy = port match {
+      case _: AadlEventPort => RAST.FnRetTyImpl(
+        RAST.TyTuple(ISZ(RAST.TyFixMe(st"${CRustApiPlugin.apiResultName} : bool"))))
+      case _: AadlDataPort => RAST.FnRetTyImpl(
+        RAST.TyTuple(ISZ(RAST.TyFixMe(st"${CRustApiPlugin.apiResultName} : ${portTypeNP.qualifiedRustName}"))))
+      case _: AadlEventDataPort => RAST.FnRetTyImpl(
+        RAST.TyTuple(ISZ(RAST.TyFixMe(st"${CRustApiPlugin.apiResultName} : Option<${portTypeNP.qualifiedRustName}>"))))
+    }
+    val ensures = RAST.ExprST(
+      st"${CRustApiPlugin.apiResultName} == ${CRustApiPlugin.apiParameterName}@${if (isEventPort) ".is_some()" else ""}")
+
+    return RAST.FnImpl(
+      attributes = ISZ(RAST.AttributeST(F, st"verifier::external_body")),
+      sig = RAST.FnSig(
+        ident = RAST.IdentString(methodName),
+        fnDecl = RAST.FnDecl(inputs = args, outputs = retType),
+        verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
+      verusAttributeSyntax = WRAPPED_IN_VERUS_MACRO,
+      contract = Some(RAST.FnContract(
+        optRequiresMarker = None(),
+        requires = ISZ(),
+        optEnsuresMarker = None(),
+        ensures = ISZ(ensures))),
+      comments = ISZ(), visibility = RAST.Visibility.Private, meta = ISZ(),
+      body = Some(RAST.MethodBody(ISZ(
+        RAST.BodyItemST(st"return extern_api::$unsafeMethodName();")))))
+  }
+
+
+  @pure def getPeekTestingApi(p: AadlPort,
+                              aadlType: ISZ[String],
+                              portTypeNameProvider: CRustTypeNameProvider): RAST.Item = {
+    val isEventPort = p.isInstanceOf[AadlEventPort]
+    val varName = s"${if (p.direction == Direction.In) "IN" else "OUT"}_${p.identifier}"
+    val inputs: ISZ[RAST.Param] =
+      if (isEventPort) ISZ()
+      else ISZ(RAST.ParamImpl(
+        ident = RAST.IdentString("value"),
+        kind = RAST.TyPtr(mutty = RAST.MutTy(
+          ty = RAST.TyPath(ISZ(portTypeNameProvider.qualifiedRustNameS), Some(aadlType)),
+          mutbl = RAST.Mutability.Mut))))
+    val body: ST =
+      if (isEventPort) {
+        st"return $varName.lock().unwrap_or_else(|e| e.into_inner()).is_some();"
+      } else {
+        st"""unsafe {
+            |  match *$varName.lock().unwrap_or_else(|e| e.into_inner()) {
+            |    Some(v) => {
+            |      *value = v;
+            |      return true;
+            |    },
+            |    None => return false,
+            |  }
+            |}"""
+      }
+
+    return RAST.FnImpl(
+      attributes = ISZ(RAST.AttributeST(F, st"cfg(test)")),
+      sig = RAST.FnSig(
+        ident = RAST.IdentString(s"peek_${p.identifier}"),
+        fnDecl = RAST.FnDecl(
+          inputs = inputs,
+          outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
+        verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
+      comments = ISZ(), visibility = RAST.Visibility.Public, meta = ISZ(),
+      verusAttributeSyntax = WRAPPED_IN_VERUS_MACRO, contract = None(),
+      body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(body)))))
+  }
 
   @pure def getCrustTestingArtifacts(p: AadlPort,
                                      aadlType: ISZ[String],

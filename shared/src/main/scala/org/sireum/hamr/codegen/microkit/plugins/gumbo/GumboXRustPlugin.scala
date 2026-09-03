@@ -10,7 +10,7 @@ import org.sireum.hamr.codegen.common.types.{AadlTypes, RecordType}
 import org.sireum.hamr.codegen.common.util.HamrCli.CodegenHamrPlatform
 import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
 import GumboXRustUtil._
-import SlangExpUtil.Context
+import SlangExpUtil.{Context, TargetLanguage}
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.microkit.plugins.rust.apis.CRustApiPlugin
 import org.sireum.hamr.codegen.microkit.plugins.rust.component.{CRustComponentPlugin, CRustComponentStoreUtil}
@@ -339,7 +339,7 @@ object GumboXComputeContributions {
             optComponent = None(),
             isLibraryMethod = T,
 
-            inVerus = F,
+            target = TargetLanguage.rust,
             options = options,
 
             aadlTypes = types,
@@ -359,7 +359,7 @@ object GumboXComputeContributions {
             optComponent = None(),
             isLibraryMethod = T,
 
-            inVerus = F,
+            target = TargetLanguage.rust,
             options = options,
 
             aadlTypes = types,
@@ -483,7 +483,7 @@ object GumboXComputeContributions {
                 optComponent = Some(thread),
                 isLibraryMethod = F,
 
-                inVerus = F,
+                target = TargetLanguage.rust,
                 options = options,
 
                 aadlTypes = types,
@@ -503,7 +503,7 @@ object GumboXComputeContributions {
                 optComponent = Some(thread),
                 isLibraryMethod = F,
 
-                inVerus = F,
+                target = TargetLanguage.rust,
                 options = options,
 
                 aadlTypes = types,
@@ -546,7 +546,7 @@ object GumboXComputeContributions {
             inRequires = clause.isInstanceOf[GclAssume],
             inEnsures = F,
 
-            inVerus = F,
+            target = TargetLanguage.rust,
             tp = crustTypeProvider,
             aadlTypes = types,
             store = store,
@@ -667,7 +667,7 @@ object GumboXComputeContributions {
       GumboXRustUtil.stateVarsToParams(subclauseInfoOpt, F, types, crustTypeProvider)
 
     subclauseInfoOpt match {
-      case Some(GclAnnexClauseInfo(GclSubclause(stateVars, _, _, Some(initializes), _, _, _), gclSymbolTable)) if initializes.guarantees.nonEmpty =>
+      case Some(GclAnnexClauseInfo(GclSubclause(stateVars, _, _, Some(initializes), _, _, _, _), gclSymbolTable)) if initializes.guarantees.nonEmpty =>
 
         var combinedSpecCalls: ISZ[ST] = ISZ()
 
@@ -683,9 +683,8 @@ object GumboXComputeContributions {
             context = Context.initialize_clause,
 
             inRequires = F,
-
             inEnsures = F,
-            inVerus = F,
+            target = TargetLanguage.rust,
 
             tp = crustTypeProvider,
             aadlTypes = types,
@@ -853,7 +852,7 @@ object GumboXComputeContributions {
       GumboXRustUtil.stateVarsToParams(subclauseInfoOpt, F, types, crustTypeProvider)
 
     subclauseInfoOpt match {
-      case Some(GclAnnexClauseInfo(GclSubclause(stateVars, _, _, _, _, Some(compute), _), gclSymbolTable)) => { // process top level assume/guarantees
+      case Some(GclAnnexClauseInfo(GclSubclause(stateVars, _, _, _, _, Some(compute), _, _), gclSymbolTable)) => { // process top level assume/guarantees
 
         var CEP_T_Assum_Params: Set[GGParam] = Set.empty
 
@@ -880,9 +879,8 @@ object GumboXComputeContributions {
             context = Context.compute_clause,
 
             inRequires = T,
-
             inEnsures = F,
-            inVerus = F,
+            target = TargetLanguage.rust,
             tp = crustTypeProvider,
             aadlTypes = types,
             store = store,
@@ -927,9 +925,8 @@ object GumboXComputeContributions {
             context = Context.compute_clause,
 
             inRequires = F,
-
             inEnsures = F,
-            inVerus = F,
+            target = TargetLanguage.rust,
             tp = crustTypeProvider,
             aadlTypes = types,
             store = store,
@@ -1037,9 +1034,8 @@ object GumboXComputeContributions {
                     context = Context.compute_clause,
 
                     inRequires = T,
-
                     inEnsures = F,
-                    inVerus = F,
+                    target = TargetLanguage.rust,
                     tp = crustTypeProvider,
                     aadlTypes = types,
                     store = store,
@@ -1057,9 +1053,8 @@ object GumboXComputeContributions {
               context = Context.compute_clause,
 
               inRequires = F,
-
               inEnsures = F,
-              inVerus = F,
+              target = TargetLanguage.rust,
               tp = crustTypeProvider,
               aadlTypes = types,
               store = store,

@@ -6,12 +6,13 @@ import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, Store}
 import org.sireum.hamr.codegen.common.{STUtil, StringUtil}
 import org.sireum.hamr.codegen.common.util.HamrCli
 import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlThread, GclAnnexClauseInfo, GclSymbolTable, SymbolTable}
-import org.sireum.hamr.codegen.common.types.AadlTypes
-import SlangExpUtil.Context
+import org.sireum.hamr.codegen.common.types.{AadlTypes, SlangType}
+import SlangExpUtil.{Context, TargetLanguage}
 import org.sireum.hamr.codegen.microkit.plugins.rust.component.CRustComponentPlugin
 import org.sireum.hamr.codegen.microkit.plugins.rust.types.{CRustTypeNameProvider, CRustTypeProvider}
 import org.sireum.hamr.codegen.microkit.rust.FnVerusHeader
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
+import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.TAB
 import org.sireum.hamr.codegen.microkit.{rust => RAST}
 import org.sireum.hamr.ir._
 import org.sireum.lang.ast.Stmt.Return
@@ -73,6 +74,7 @@ object GumboRustUtil {
             initializes = None(),
             integration = None(),
             compute = None(),
+            monitor = None(),
             compositions = ISZ(),
             attr = Attr(None())),
           gclSymbolTable = GclSymbolTable(
@@ -165,8 +167,7 @@ object GumboRustUtil {
 
         inRequires = isAssumeRequires,
         inEnsures = isGuaranteeEnsures,
-
-        inVerus = T,
+        target = TargetLanguage.verus,
         substitutions = substitutions,
         aadlTypes = types,
         tp = tp,
@@ -176,6 +177,39 @@ object GumboRustUtil {
       st"""// $typ ${spec.id}
           |${GumboRustUtil.processDescriptor(spec.descriptor, "//   ")}
           |$verusExp""")
+  }
+
+  @pure def processGumboSpecR2U2(spec: GclSpec,
+
+                             component: AadlComponent,
+                             context: Context.Type,
+
+                             isAssumeRequires: B,
+
+                             types: AadlTypes,
+                             tp: CRustTypeProvider,
+                             stateVars: ISZ[GclStateVar],
+                             store: Store,
+                             reporter: Reporter): (RAST.R2U2Formula, GumboC2POUtil.SpecTense.Type, Map[String, GumboR2U2Util.R2U2MonitorInput]) = {
+    val (c2poSpec, tense, variablesInSpec) =
+      GumboC2POUtil.processGumboSpec(spec, component, context, isAssumeRequires, types, tp, store, reporter)
+
+    var variablesInSpecExpanded: Map[String, GumboR2U2Util.R2U2MonitorInput] = Map.empty
+    for (entry <- variablesInSpec.entries) {
+      val varName: String = entry._1
+      val varExp: SAST.Exp = entry._2
+      variablesInSpecExpanded = variablesInSpecExpanded + varName ~> GumboR2U2Util.lowerRustR2U2Input(
+        exp = varExp,
+        component = component,
+        context = context,
+        isAssumeRequires = isAssumeRequires,
+        stateVars = stateVars,
+        types = types,
+        tp = tp,
+        store = store,
+        reporter = reporter)
+    }
+    return (c2poSpec, tense, variablesInSpecExpanded)
   }
 
   @pure def processGumboCase(c: GclCaseStatement,
@@ -198,7 +232,7 @@ object GumboRustUtil {
           substitutions = Map.empty,
           inRequires = T,
           inEnsures = F,
-          inVerus = T,
+          target = TargetLanguage.verus,
           aadlTypes = aadlTypes,
           tp = tp,
           store = store,
@@ -215,7 +249,7 @@ object GumboRustUtil {
         substitutions = Map.empty,
         inRequires = F,
         inEnsures = T,
-        inVerus = T,
+        target = TargetLanguage.verus,
         aadlTypes = aadlTypes,
         tp = tp,
         store = store,
@@ -252,7 +286,7 @@ object GumboRustUtil {
                              optComponent: Option[AadlComponent],
                              isLibraryMethod: B,
 
-                             inVerus: B,
+                             target: TargetLanguage.Type,
 
                              options: HamrCli.CodegenOption,
 
@@ -306,9 +340,8 @@ object GumboRustUtil {
               context = if (isLibraryMethod) Context.library_function else Context.subclause_function,
 
               inRequires = F,
-
               inEnsures = F,
-              inVerus = inVerus,
+              target = target,
               tp = tp,
               aadlTypes = aadlTypes,
               store = store,
@@ -322,7 +355,7 @@ object GumboRustUtil {
       case _ => None()
     }
 
-    val id: String = s"${m.sig.id.value}${if (isLibraryMethod && inVerus) "_spec" else ""}"
+    val id: String = s"${m.sig.id.value}${if (isLibraryMethod && target == TargetLanguage.verus) "_spec" else ""}"
 
     val fn =
       RAST.FnImpl(
@@ -336,7 +369,7 @@ object GumboRustUtil {
           outputs = RAST.FnRetTyImpl(RAST.TyPath(ISZ(r(m.sig.returnType.asInstanceOf[SAST.Type.Named]).qualifiedRustNameS), None()))
         ),
         verusHeader =
-          if (inVerus) Some(FnVerusHeader(isOpen = T, kind = RAST.VerusFnKind.spec))
+          if (target == TargetLanguage.verus) Some(FnVerusHeader(isOpen = T, kind = RAST.VerusFnKind.spec))
           else None(),
         fnHeader = RAST.FnHeader(F), generics = None()),
       verusAttributeSyntax = options.verusAttributeSyntax,
@@ -351,7 +384,7 @@ object GumboRustUtil {
                              owner: ISZ[String],
                              optComponent: Option[AadlThread],
                              isLibraryMethod: B,
-                             inVerus: B,
+                             target: TargetLanguage.Type,
                              options: HamrCli.CodegenOption,
                              aadlTypes: AadlTypes,
                              tp: CRustTypeProvider,
@@ -370,15 +403,15 @@ object GumboRustUtil {
         kind = RAST.TyPath(ISZ(r(p.tipe.asInstanceOf[SAST.Type.Named]).qualifiedRustNameS), None()))
     }
 
-    val context: String = if (inVerus) "Verus" else "GUMBOX"
-    val context_lc: String = if (inVerus) "verus" else "gumbox"
+    val context: String = if (target == TargetLanguage.verus) "Verus" else "GUMBOX"
+    val context_lc: String = if (target == TargetLanguage.verus) "verus" else "gumbox"
 
     val verusFunctionName = s"${m.sig.id.value}__developer_verus"
 
     val developerFunctionName = s"${m.sig.id.value}__developer_$context_lc"
 
     val fqDeveloperFunctionName: String = {
-      if (inVerus) {
+      if (target == TargetLanguage.verus) {
         developerFunctionName
       } else if (isLibraryMethod) {
         developerFunctionName
@@ -393,7 +426,7 @@ object GumboRustUtil {
     val bodyOpt: Option[RAST.MethodBody] = Some(
       RAST.MethodBody(items = ISZ(RAST.BodyItemST(st"$fqDeveloperFunctionName(${(developerArgs, ", ")})"))))
 
-    val verusId: String = s"${m.sig.id.value}${if (isLibraryMethod && inVerus) "_spec" else ""}"
+    val verusId: String = s"${m.sig.id.value}${if (isLibraryMethod && target == TargetLanguage.verus) "_spec" else ""}"
 
     val retType = RAST.TyPath(ISZ(r(m.sig.returnType.asInstanceOf[SAST.Type.Named]).qualifiedRustNameS), None())
 
@@ -404,13 +437,13 @@ object GumboRustUtil {
         outputs = RAST.FnRetTyImpl(retType)
       ),
       verusHeader =
-        if (inVerus) Some(FnVerusHeader(isOpen = T, kind = RAST.VerusFnKind.spec))
+        if (target == TargetLanguage.verus) Some(FnVerusHeader(isOpen = T, kind = RAST.VerusFnKind.spec))
         else None(),
       fnHeader = RAST.FnHeader(F), generics = None())
 
 
     val developerVerusHeader: RAST.FnVerusHeader =
-      if (inVerus) RAST.FnVerusHeader(isOpen = T, kind = RAST.VerusFnKind.spec)
+      if (target == TargetLanguage.verus) RAST.FnVerusHeader(isOpen = T, kind = RAST.VerusFnKind.spec)
       else RAST.FnVerusHeader(isOpen = F, kind = RAST.VerusFnKind.exec)
 
     val developerFnDecl = verusSig.fnDecl(outputs = RAST.FnNamedRetTyImpl(id = "res", ty = retType))
@@ -429,7 +462,7 @@ object GumboRustUtil {
           |The semantics of the GUMBO spec function are entirely defined by the developer-supplied implementation.""")))
 
     val developerContract: Option[RAST.FnContract] = {
-      if (!inVerus)
+      if (target == TargetLanguage.rust)
         Some(RAST.FnContract(
           optRequiresMarker = None(),
           requires = ISZ(),
@@ -452,7 +485,7 @@ object GumboRustUtil {
     val developerComments: ISZ[RAST.Comment] = ISZ(RAST.CommentRustDoc(STUtil.splitST(
       st"""Developer-supplied $context realization of the GUMBO spec function `test`.
           |
-          |This function may be freely refined${if (inVerus) " as long as it remains a pure Verus `spec fn`" else ""}.""")))
+          |This function may be freely refined${if (target == TargetLanguage.verus) " as long as it remains a pure Verus `spec fn`" else ""}.""")))
 
     val bodyComment = RAST.CommentNonDoc(STUtil.splitST(st"""This default implementation returns `true`, which is safe but weak:
                           |* In `assume` contexts, returning `false` may allow $context to prove `false`.

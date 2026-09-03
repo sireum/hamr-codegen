@@ -113,4 +113,13 @@ object RustUtil {
           |sel4 = { git = "https://github.com/seL4/rust-sel4", features = ["single-threaded"], optional = true$sel4Opt}
           |sel4-logging = { git = "https://github.com/seL4/rust-sel4", optional = true$sel4LoggingOpt}""")
   }
+
+  @pure def r2u2CargoDependencies(store: Store) : ST = {
+    val versions = MicrokitUtil.getMicrokitVersions(store)
+    return (
+      st"""# -----------------------------------------------------------------------------
+          |# R2U2 crate dependencies
+          |# -----------------------------------------------------------------------------
+          |r2u2_core = { version = "${versions.get("r2u2").get}" }""")
+  }
 }

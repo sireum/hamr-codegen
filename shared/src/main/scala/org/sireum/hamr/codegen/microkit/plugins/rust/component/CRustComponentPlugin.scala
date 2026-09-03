@@ -20,6 +20,7 @@ import org.sireum.message.Reporter
 object CRustComponentPlugin {
 
   val KEY_CrustComponentPlugin: String = "KEY_CRustComponentPlugin"
+  val MarkerR2U2Module: String = "MARKER R2U2 MONITOR MODULE"
 
   @strictpure def hasCRustComponentContributions(store: Store): B = store.contains(KEY_CrustComponentPlugin)
 
@@ -52,11 +53,13 @@ object ComponentContributions {}
 
                                         // items for component/<thread-path>_app.rs
                                         val requiresVerus: B,
+                                        val requiresR2U2: B,
                                         val appModDirectives: ISZ[RAST.Item],
                                         val appUses: ISZ[RAST.Item],
                                         val appStructDef: RAST.StructDef,
                                         val appStructImpl: RAST.Impl,
-
+                                        val appR2U2SpecDef: Option[RAST.R2U2SpecDef],
+                                        val appR2U2MonitorMethods: ISZ[RAST.Item],
                                         val moduleLevelEntries: ISZ[RAST.Item],
 
                                         // Contributions to the crate root, src/lib.rs.  This plugin owns that
@@ -222,6 +225,8 @@ object ComponentContributions {}
         items = ISZ[RAST.Item](newFn, initFn) ++ entrypointFns :+ notify,
         comments = ISZ(), attributes = ISZ(), implIdent = None())
 
+      val r2u2Spec: Option[RAST.R2U2SpecDef] = None()
+
       var funcs: ISZ[RAST.Item] = ISZ()
 
       funcs = funcs :+ RAST.FnImpl(
@@ -258,10 +263,13 @@ object ComponentContributions {}
         ComponentContributions(
           markers = ISZ(),
           requiresVerus = genProfile.verusVerified,
+          requiresR2U2 = F,
           appModDirectives = modDirectives,
           appUses = uses,
           appStructDef = struct,
           appStructImpl = impl,
+          appR2U2SpecDef = r2u2Spec,
+          appR2U2MonitorMethods = ISZ(),
           moduleLevelEntries = funcs,
           libModDecls = ISZ(),
           libUses = ISZ(),
@@ -338,14 +346,30 @@ object ComponentContributions {}
           if (contribs.libInitializePre.isEmpty) None()
           else Some(st"""${(for (i <- contribs.libInitializePre) yield i.prettyST, "\n")}
                         |""")
-        val initializePost: Option[ST] =
+        var initializePost: Option[ST] =
           if (contribs.libInitializePost.isEmpty) None()
           else Some(st"""
                         |${(for (i <- contribs.libInitializePost) yield i.prettyST, "\n")}
                         |""")
-        val computePost: Option[ST] =
+
+        if (e._2.requiresR2U2) {
+          initializePost = Some(st"""$initializePost
+                                    |_app.r2u2_monitor_initialize();""")
+        }
+
+        val computePre: Option[ST] = 
+          if (e._2.requiresR2U2)
+            Some(st"_app.r2u2_monitor_pre_timeTriggered(&compute_api);")
+          else None()
+
+        var computePost: Option[ST] =
           if (contribs.libComputePost.isEmpty) None()
           else Some(st"${(for (i <- contribs.libComputePost) yield i.prettyST, "\n")}")
+          
+        if (e._2.requiresR2U2) {
+          computePost = Some(st"""$computePost
+               |_app.r2u2_monitor_post_timeTriggered(&mut compute_api);""")
+        }
 
         val entrypoints: ISZ[ST] =
           if (thread.isPeriodic())
@@ -354,6 +378,7 @@ object ComponentContributions {}
                   |pub extern "C" fn ${threadId}_timeTriggered() {
                   |  unsafe {
                   |    if let Some(_app) = app.as_mut() {
+                  |      $computePre
                   |      _app.timeTriggered(&mut compute_api);
                   |      $computePost
                   |    } else {
@@ -490,8 +515,7 @@ object ComponentContributions {}
 
 
       { // src/component/<threadid>_app.rs file for user behavior code
-        var uses = e._2.appUses
-
+        val uses = e._2.appUses
         var body: ST =
           st"""${e._2.appStructDef.prettyST}
               |
@@ -503,7 +527,6 @@ object ComponentContributions {}
                 |
                 |${(for(f <- e._2.moduleLevelEntries) yield f.prettyST, "\n\n")}"""
         }
-
         if (e._2.requiresVerus && !options.verusAttributeSyntax) {
           body = RAST.MacCall(
             macName = "verus",
@@ -535,14 +558,111 @@ object ComponentContributions {}
           overwrite = !genProfile.userEditable)
       }
 
+      if (e._2.requiresR2U2) { // src/component/r2u2_monitor.rs
+        // Constants remain module-local while lifecycle functions extend the app.
+        var monitorItems: ISZ[RAST.Item] = ISZ()
+        var monitorMethods: ISZ[RAST.Item] = ISZ()
+        for (item <- e._2.appR2U2MonitorMethods) {
+          item match {
+            case _: RAST.FnImpl => monitorMethods = monitorMethods :+ item
+            case _ => monitorItems = monitorItems :+ item
+          }
+        }
+        val monitorImpl = RAST.ImplBase(
+          comments = ISZ(),
+          attributes = ISZ(),
+          implIdent = None(),
+          forIdent = RAST.IdentString(threadId),
+          items = monitorMethods)
+        val specs = e._2.appR2U2SpecDef.get
+        val numSpecs = specs.ftspecs.size + specs.ptspecs.size
+        val monitorSpec =
+          st"""// Instance of the R2U2 monitor.
+              |static mut R2U2_MONITOR: Option<R2U2Monitor> = None;
+              |
+              |${(for (item <- monitorItems) yield item.prettyST, "\n\n")}
+              |
+              |struct R2U2Monitor {
+              |  monitor: r2u2_core::Monitor,
+              |  // Cache latest verdict (if applicable) per C2PO specification between monitor steps.
+              |  verdict_cache: [Option<r2u2_core::r2u2_verdict>; $numSpecs],
+              |}
+              |
+              |impl R2U2Monitor {
+              |  fn new() -> Self {
+              |    Self {
+              |      monitor: r2u2_core::Monitor::default(),
+              |      verdict_cache: [None; $numSpecs],
+              |    }
+              |  }
+              |}"""
+        val monitorBody =
+          st"""$monitorSpec
+              |
+              |${monitorImpl.prettyST}"""
+        val content =
+          st"""${CommentTemplate.doNotEditComment_slash}
+              |
+              |use crate::bridge::${CRustApiPlugin.apiModuleName(thread)}::*;
+              |use crate::bridge::${threadId}_GUMBOX as GUMBOX;
+              |use data::*;
+              |use super::$modName::$threadId;
+              |
+              |$monitorBody
+              |"""
+        val path = s"$componentDir/r2u2_monitor.rs"
+        resources = resources :+ ResourceUtil.createResource(path, content, T)
+      }
+
       { // src/component/mod.rs
+        val r2u2ModuleMarker = Marker.createSlashMarker(CRustComponentPlugin.MarkerR2U2Module)
+        val r2u2Module: ST =
+          if (e._2.requiresR2U2) {
+            RAST.MarkerWrap(
+              marker = r2u2ModuleMarker,
+              items = ISZ(RAST.ItemST(st"mod r2u2_monitor;")),
+              sep = "\n",
+              optLastItemSep = None()).prettyST
+          } else {
+            RAST.MarkerPlaceholder(
+              Marker.createSlashPlaceholderMarker(CRustComponentPlugin.MarkerR2U2Module)).prettyST
+          }
         val content =
           st"""${CommentTemplate.safeToEditComment_slash}
               |
               |pub mod $modName;
+              |$r2u2Module
               |"""
         val path = s"$componentDir/mod.rs"
-        resources = resources :+ ResourceUtil.createResource(path, content, F)
+        resources = resources :+ ResourceUtil.createResourceWithMarkers(
+          path = path,
+          content = content,
+          markers = ISZ(r2u2ModuleMarker),
+          invertMarkers = F,
+          overwrite = F)
+      }
+
+      { // src/component/spec.c2po + src/component/spec.map
+        if (e._2.requiresR2U2){
+          val spec_content =
+            st"""${CommentTemplate.doNotEditComment_c2po}
+                 |
+                 |${e._2.appR2U2SpecDef.get.prettyST}
+                 |"""
+          val spec_path = s"$componentDir/spec.c2po"
+          resources = resources :+ ResourceUtil.createResource(spec_path, spec_content, T)
+          val map_content = st"""${CommentTemplate.doNotEditComment_c2po}
+                 |${e._2.appR2U2SpecDef.get.printMap}
+                 |"""
+          val map_path = s"$componentDir/spec.map"
+          resources = resources :+ ResourceUtil.createResource(map_path, map_content, T)
+        } else {
+          for (filename <- ISZ("r2u2_monitor.rs", "spec.c2po", "spec.map")) {
+            resources = resources :+ ResourceUtil.createRemoveResource(
+              s"$componentDir/$filename",
+              CommentTemplate.doNotEditComment)
+          }
+        }
       }
 
       { // Cargo.toml
@@ -551,6 +671,16 @@ object ComponentContributions {}
         val optDeps: Option[ST] =
           if (e._2.crateDependencies.nonEmpty) Some(st"${(e._2.crateDependencies, "\n")}")
           else None()
+
+        val r2u2CargoMarker = Marker.createHashMarker("MARKER R2U2 CARGO DEPENDENCIES")
+        val r2u2CargoItems: ISZ[RAST.Item] =
+          if (e._2.requiresR2U2) ISZ(RAST.ItemST(RustUtil.r2u2CargoDependencies(localStore)))
+          else ISZ()
+        val r2u2CargoSection = RAST.MarkerWrap(
+          marker = r2u2CargoMarker,
+          items = r2u2CargoItems,
+          sep = "\n",
+          optLastItemSep = None()).prettyST
 
         val content =
           st"""${CommentTemplate.safeToEditComment_hash}
@@ -570,6 +700,7 @@ object ComponentContributions {}
               |
               |${RustUtil.verusCargoDependencies(localStore)}
               |
+              |$r2u2CargoSection
               |
               |[dev-dependencies]
               |lazy_static = "${versions.get("lazy_static").get}"
@@ -588,10 +719,41 @@ object ComponentContributions {}
               |${RustUtil.commonCargoTomlEntries}
               |"""
         val path = s"$componentCrateDir/Cargo.toml"
-        resources = resources :+ ResourceUtil.createResource(path, content, F)
+        resources = resources :+ ResourceUtil.createResourceWithMarkers(
+          path = path,
+          content = content,
+          markers = ISZ(r2u2CargoMarker),
+          invertMarkers = F,
+          overwrite = F)
       }
 
       { // Makefile
+        val r2u2MakeMarker = Marker.createHashMarker("MARKER R2U2 MAKE RULES")
+        val r2u2MakeItems: ISZ[RAST.Item] =
+          if (e._2.requiresR2U2) {
+            ISZ(RAST.ItemST(
+              st""".DEFAULT_GOAL := all
+                  |R2U2_SPEC_BIN := src/component/spec.bin
+                  |
+                  |r2u2_cli:
+                  |${TAB}@echo "Checking/Updating r2u2_cli from crates.io..."
+                  |${TAB}cargo +stable install r2u2_cli --version ${MicrokitUtil.getMicrokitVersions(localStore).get("r2u2").get}
+                  |
+                  |$$(R2U2_SPEC_BIN): r2u2_cli
+                  |${TAB}mkdir -p .cargo && \
+                  |${TAB}cd src/component && \
+                  |${TAB}sed '/^--/d' spec.map > temp.map && \
+                  |${TAB}r2u2_cli compile -o . -b ../../.cargo/config.toml spec.c2po temp.map && \
+                  |${TAB}rm temp.map"""))
+          } else {
+            ISZ()
+          }
+        val r2u2MakeSection = RAST.MarkerWrap(
+          marker = r2u2MakeMarker,
+          items = r2u2MakeItems,
+          sep = "\n",
+          optLastItemSep = None()).prettyST
+
         val content =
           st"""${CommentTemplate.safeToEditComment_hash}
               |
@@ -599,6 +761,10 @@ object ComponentContributions {}
               |
               |sel4_include_dirs := $$(firstword $$(wildcard $$(microkit_sdk_config_dir)/include \
               |                                            $$(microkit_sdk_config_dir)/debug/include))
+              |
+              |$r2u2MakeSection
+              |
+              |R2U2_BUILD_DEPS = $$(R2U2_SPEC_BIN)
               |
               |# The toolchain is pinned to a stable release channel (see rust-toolchain.toml),
               |# which rejects the #![feature(..)] attributes the generated crates declare, so
@@ -621,22 +787,22 @@ object ComponentContributions {}
               |#       ones (e.g. --target, -Z ...), otherwise it errors out.  CARGO_FLAGS
               |#       holds the Verus-irrelevant options, so it must come last.
               |
-              |build-verus-release:
+              |build-verus-release: $$(R2U2_BUILD_DEPS)
               |${TAB}$$(BUILD_ENV_VARS) cargo-verus build --features sel4 --release $$(CARGO_FLAGS) -- $$(SMT_OPTS)
               |
-              |build-verus:
+              |build-verus: $$(R2U2_BUILD_DEPS)
               |${TAB}$$(BUILD_ENV_VARS) cargo-verus build --features sel4 $$(CARGO_FLAGS) -- $$(SMT_OPTS)
               |
-              |build-release:
+              |build-release: $$(R2U2_BUILD_DEPS)
               |${TAB}$$(BUILD_ENV_VARS) cargo build --features sel4 $$(CARGO_FLAGS) --release
               |
-              |build:
+              |build: $$(R2U2_BUILD_DEPS)
               |${TAB}$$(BUILD_ENV_VARS) cargo build --features sel4 $$(CARGO_FLAGS)
               |
-              |verus:
+              |verus: $$(R2U2_BUILD_DEPS)
               |${TAB}$$(ENV_VARS) cargo-verus verify $$(CARGO_FLAGS) -- $$(SMT_OPTS)
               |
-              |verus-json:
+              |verus-json: $$(R2U2_BUILD_DEPS)
               |${TAB}$$(ENV_VARS) cargo-verus verify $$(CARGO_FLAGS) -- $$(SMT_OPTS) --output-json --time > verus_results.json
               |
               |# Test Example:
@@ -646,10 +812,10 @@ object ComponentContributions {}
               |#   Run only unit tests whose name contains 'proptest'
               |#   Usage: make test args=proptest
               |
-              |test-release:
+              |test-release: $$(R2U2_BUILD_DEPS)
               |${TAB}$$(ENV_VARS) cargo test $$(args) --release
               |
-              |test:
+              |test: $$(R2U2_BUILD_DEPS)
               |${TAB}$$(ENV_VARS) cargo test $$(args)
               |
               |# Coverage Example:
@@ -659,7 +825,7 @@ object ComponentContributions {}
               |#   Generate a test coverage report for unit tests whose name contains 'proptest'
               |#   Usage: make coverage args=proptest
               |
-              |coverage:
+              |coverage: $$(R2U2_BUILD_DEPS)
               |${TAB}cargo install grcov
               |${TAB}@exists=0; if [ -f target/coverage/report/index.html ]; then exists=1; fi; \
               |${TAB}rm -rf target/coverage; \
@@ -670,9 +836,14 @@ object ComponentContributions {}
               |
               |clean:
               |${TAB}cargo clean
-              |"""
+              |${TAB}rm -f src/component/spec.bin"""
         val path = s"$componentCrateDir/Makefile"
-        resources = resources :+ ResourceUtil.createResource(path, content, F)
+        resources = resources :+ ResourceUtil.createResourceWithMarkers(
+          path = path,
+          content = content,
+          markers = ISZ(r2u2MakeMarker),
+          invertMarkers = F,
+          overwrite = F)
       }
 
       { // rust-toolchain.toml

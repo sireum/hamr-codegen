@@ -14,7 +14,8 @@ import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
                                   val isVM: B,
                                   val isRustic: B,
                                   val hasUserContent: B,
-                                  val hasMonitorCompanion: B) {
+                                  val hasMonitorCompanion: B,
+                                  val requiresR2U2: B) {
 
   @strictpure def cHeaderFilename: String = s"$resourceSuffix.h"
 
@@ -140,13 +141,16 @@ import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
     val auxObjs: Option[String] =
       if (includeAuxObjs) Some(s" $$(${MicrokitUtil.make_AUX_OBJS})")
       else None()
+    val r2u2Objs: Option[String] =
+      if (requiresR2U2) Some(s" $$(${ops.StringOps(resourceSuffix).toUpper}_R2U2_OBJS)")
+      else None()
     if (hasUserContent) {
       val elfEntry: ST =
         if (isRustic) {
           st"""$elfName: $$(${MicrokitUtil.make_UTIL_OBJS}) $$(${MicrokitTypeUtil.make_TYPE_OBJS}) $userRusticName $objName
               |${TAB}$$(LD) $$(LDFLAGS) -L $${CRATES_DIR}/$crateName/target/aarch64-unknown-none/release $$(filter %.o, $$^) $$(LIBS) -l$crateName -o $$@"""
         } else {
-          st"""$elfName: $$(${MicrokitUtil.make_UTIL_OBJS}) $$(${MicrokitTypeUtil.make_TYPE_OBJS})$auxObjs $userObjName $objName
+          st"""$elfName: $$(${MicrokitUtil.make_UTIL_OBJS}) $$(${MicrokitTypeUtil.make_TYPE_OBJS})$auxObjs$r2u2Objs $userObjName $objName
               |${TAB}$$(LD) $$(LDFLAGS) $$^ $$(LIBS) -o $$@"""
         }
 
@@ -175,7 +179,7 @@ import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
         st"""$monElfName: $monCompanion$monObjName$monAuxObjs
             |${TAB}$$(LD) $$(LDFLAGS) $$^ $$(LIBS) -o $$@
             |
-            |$elfName: $$(${MicrokitTypeUtil.make_TYPE_OBJS}) $vmArchive
+            |$elfName: $$(${MicrokitTypeUtil.make_TYPE_OBJS})$r2u2Objs $vmArchive
             |${TAB}$$(LD) $$(LDFLAGS) $$^ --start-group -lmicrokit -Tmicrokit.ld $vmArchive --end-group -o $$@"""
       return ret
     }

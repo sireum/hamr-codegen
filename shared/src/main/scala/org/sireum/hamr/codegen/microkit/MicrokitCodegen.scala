@@ -108,6 +108,21 @@ object MicrokitCodegen {
     resources = resources :+ ResourceUtil.createResource(makefilePath, makefileContents, T)
 
     val makefileContainers = StoreUtil.getMakefileContainers(localStore)
+    val r2u2MakefileContainers: ISZ[MakefileContainer] =
+      for (mk <- makefileContainers if mk.requiresR2U2) yield mk
+    val r2u2BuildEntries: ISZ[ST] =
+      if (r2u2MakefileContainers.nonEmpty) {
+        val componentEntries: ISZ[ST] =
+          for (mk <- r2u2MakefileContainers) yield R2U2Util.buildEntry(mk)
+        // Keep the shared definitions and all consumers in one entry. The domain-scheduler
+        // template deduplicates entries through a set, so this also preserves Make's required
+        // definition-before-use ordering.
+        ISZ(st"""${R2U2Util.globalBuildEntry(localStore)}
+                 |
+                 |${(componentEntries, "\n\n")}""")
+      } else {
+        ISZ()
+      }
 
     // process user-supplied C libraries provided via --sel4-aux-code-dirs: copy each .c/.h
     // file into <sel4OutputDir>/aux_code (preserving the directory structure relative to the
@@ -182,7 +197,7 @@ object MicrokitCodegen {
 
         val sourcePaths: ISZ[String] = for (mk <- makefileContainers) yield s"$$(TOP_DIR)/${mk.relativePathSrcDir}"
 
-        var mcsBuildEntries: ISZ[ST] = auxBuildEntries
+        var mcsBuildEntries: ISZ[ST] = auxBuildEntries ++ r2u2BuildEntries
         for (mk <- makefileContainers if (mk.isRustic && mk.hasUserContent)) {
           mcsBuildEntries = mcsBuildEntries :+ mk.rustBuildEntry
         }
@@ -208,6 +223,7 @@ object MicrokitCodegen {
         val buildEntries: ISZ[ST] =
           CConnectionProviderPlugin.getMakeFileEntries(localStore) ++
             auxBuildEntries ++
+            r2u2BuildEntries ++
             (for (mk <- makefileContainers) yield mk.buildEntry)
 
         MakefileTemplate.systemMakefileDomainScheduler(
@@ -229,6 +245,9 @@ object MicrokitCodegen {
     resources = resources :+ ResourceUtil.createResource(s"${utilIncludePath}/printf.h", MicrokitUtil.printfh, T)
     resources = resources :+ ResourceUtil.createResource(s"${utilSrcPath}/printf.c", MicrokitUtil.printfc, T)
     resources = resources :+ ResourceUtil.createResource(s"${utilSrcPath}/util.c", MicrokitUtil.utilc, T)
+    if (r2u2MakefileContainers.nonEmpty) {
+      resources = resources ++ R2U2Util.platformResources(options.sel4OutputDir.get)
+    }
 
 
     if (reporter.hasError) {
