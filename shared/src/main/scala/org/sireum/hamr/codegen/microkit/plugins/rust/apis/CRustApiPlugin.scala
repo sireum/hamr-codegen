@@ -254,7 +254,7 @@ object ComponentApiContributions {
               |pub struct $appInterfaceName<API: $apiTraitName> {
               |  pub api: API,
               |
-              |  ${(for (g <- c._2.ghostVariables) yield g.prettyST, ",\n")}
+              |  ${(for (g <- c._2.ghostVariables) yield g.prettyST, "\n")}
               |}
               |
               |impl<API: $apiPutTraitName> $appInterfaceName<API> {

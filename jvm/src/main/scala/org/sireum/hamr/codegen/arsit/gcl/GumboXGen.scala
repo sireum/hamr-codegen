@@ -418,7 +418,7 @@ object GumboXGen {
       GumboXGenUtil.stateVarsToParams(componentNames, gclSubclauseInfo, F, aadlTypes)
 
     gclSubclauseInfo match {
-      case Some((GclSubclause(stateVars, _, _, Some(initializes), _, _, _), gclSymbolTable)) if initializes.guarantees.nonEmpty =>
+      case Some((GclSubclause(stateVars, _, _, Some(initializes), _, _, _, _), gclSymbolTable)) if initializes.guarantees.nonEmpty =>
 
         var requiresMethods: ISZ[(ISZ[String], ST)] = ISZ()
         var combinedSpecCalls: ISZ[ST] = ISZ()
@@ -588,7 +588,7 @@ object GumboXGen {
       GumboXGenUtil.stateVarsToParams(componentNames, gclSubclauseInfo, F, aadlTypes)
 
     gclSubclauseInfo match {
-      case Some((GclSubclause(stateVars, _, _, _, _, Some(gclCompute), _), gclSymbolTable)) => {
+      case Some((GclSubclause(stateVars, _, _, _, _, Some(gclCompute), _, _), gclSymbolTable)) => {
         { // process top level assume/guarantees
 
           var CEP_T_Assm_Params: Set[GGParam] = Set.empty

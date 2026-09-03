@@ -41,6 +41,11 @@ object Resource {
 
 @sig trait Resource
 
+// Requests removal of a generated file that is no longer applicable.  This is
+// intentionally separate from FileResource because it has no content to emit.
+@datatype class RemoveResource(val dstPath: String,
+                               val generatedContentMarker: String) extends Resource
+
 @sig trait FileResource extends Resource {
   def dstPath: String
 

@@ -61,6 +61,18 @@ object QueueTemplate {
     return s"${queueName}_dequeue"
   }
 
+  def getQueuePeekMethodName(queueElementTypeName: String,
+                             queueSize: Z): String = {
+    val queueName = getTypeQueueName(queueElementTypeName, queueSize)
+    return s"${queueName}_peek"
+  }
+
+  def getQueuePeekLatestMethodName(queueElementTypeName: String,
+                                   queueSize: Z): String = {
+    val queueName = getTypeQueueName(queueElementTypeName, queueSize)
+    return s"${queueName}_peek_latest"
+  }
+
   def getQueueIsEmptyMethodName(queueElementTypeName: String,
                                 queueSize: Z): String = {
     val queueName = getTypeQueueName(queueElementTypeName, queueSize)
@@ -157,6 +169,10 @@ object QueueTemplate {
 
   def getClientGetterMethodName(portName: String): ST = {
     return st"get_${portName}"
+  }
+
+  def getClientPeekMethodName(portName: String): ST = {
+    return st"peek_${portName}"
   }
 
 
@@ -297,6 +313,93 @@ object QueueTemplate {
   /////////////////////////////////////////////////////////////////////////////////////////////
 
 
+  /////////////////////////////////////////////////////////////////////////////////////////////
+  // BEGIN client peek
+  /////////////////////////////////////////////////////////////////////////////////////////////
+
+  def getClientPeek_C_MethodSig(portName: String,
+                                queueElementTypeName: String,
+                                isEventPort: B): ST = {
+    val optData: Option[ST] =
+      if (isEventPort) None()
+      else Some(st"$queueElementTypeName *data")
+    return st"bool ${getClientPeekMethodName(portName)}($optData)"
+  }
+
+  def getClientInputPeek_C_Method(portName: String,
+                                  queueElementTypeName: String,
+                                  queueSize: Z,
+                                  isEventPort: B): ST = {
+    val queuePeekMethod = getQueuePeekMethodName(queueElementTypeName, queueSize)
+    val recvQueueName = getClientRecvQueueName(portName)
+    val recvQueueTypeName = getTypeRecvQueueTypeName(queueElementTypeName, queueSize)
+    val eventPayload: Option[ST] =
+      if (isEventPort) Some(
+        st"""${queueElementTypeName} eventPortPayload;
+            |${queueElementTypeName} *data = &eventPortPayload;""")
+      else None()
+
+    return st"""${getClientPeek_C_MethodSig(portName, queueElementTypeName, isEventPort)} {
+                 |  $eventPayload
+                 |  ${MicrokitTypeUtil.eventCounterTypename} numDropped;
+                 |  return $queuePeekMethod(($recvQueueTypeName *) &$recvQueueName, &numDropped, data);
+                 |}"""
+  }
+
+  def getClientDataPeek_C_Method(portName: String,
+                                 queueElementTypeName: String,
+                                 queueSize: Z,
+                                 aadlType: AadlType,
+                                 cTypeNameProvider: CTypeNameProvider): ST = {
+    val queuePeekMethod = getQueuePeekMethodName(queueElementTypeName, queueSize)
+    val recvQueueName = getClientRecvQueueName(portName)
+    val recvQueueTypeName = getTypeRecvQueueTypeName(queueElementTypeName, queueSize)
+    val lastPayloadName = s"last_${portName}_payload"
+
+    val copyResult: ST = aadlType match {
+      case _: ArrayType =>
+        st"""if (isFresh) {
+            |    memcpy(data, &freshData, ${CTypePlugin.getArrayStringByteSizeDefineName(cTypeNameProvider)});
+            |  } else {
+            |    memcpy(data, &$lastPayloadName, ${CTypePlugin.getArrayStringByteSizeDefineName(cTypeNameProvider)});
+            |  }"""
+      case _ =>
+        st"*data = isFresh ? freshData : $lastPayloadName;"
+    }
+
+    return st"""${getClientPeek_C_MethodSig(portName, queueElementTypeName, F)} {
+                 |  ${MicrokitTypeUtil.eventCounterTypename} numDropped;
+                 |  ${queueElementTypeName} freshData;
+                 |  bool isFresh = $queuePeekMethod(($recvQueueTypeName *) &$recvQueueName, &numDropped, &freshData);
+                 |  $copyResult
+                 |  return isFresh;
+                 |}"""
+  }
+
+  def getClientOutputPeek_C_Method(portName: String,
+                                   queueElementTypeName: String,
+                                   queueSize: Z,
+                                   sharedMemoryVarName: String,
+                                   isEventPort: B): ST = {
+    val queueTypeName = getTypeQueueTypeName(queueElementTypeName, queueSize)
+    val queuePeekLatestMethod = getQueuePeekLatestMethodName(queueElementTypeName, queueSize)
+    val eventPayload: Option[ST] =
+      if (isEventPort) Some(
+        st"""${queueElementTypeName} eventPortPayload;
+            |${queueElementTypeName} *data = &eventPortPayload;""")
+      else None()
+
+    return st"""${getClientPeek_C_MethodSig(portName, queueElementTypeName, isEventPort)} {
+                 |  $eventPayload
+                 |  return $queuePeekLatestMethod(($queueTypeName *) $sharedMemoryVarName, data);
+                 |}"""
+  }
+
+  /////////////////////////////////////////////////////////////////////////////////////////////
+  // END client peek
+  /////////////////////////////////////////////////////////////////////////////////////////////
+
+
   def getClientEventHandlerMethodName(portName: String): ST = {
     return st"handle_$portName"
   }
@@ -417,6 +520,12 @@ object QueueTemplate {
           |  ${queueTypeName} *queue,
           |  ${queueElementTypeName} *data);
           |
+          |// Copy the most recently enqueued element without modifying the queue.
+          |// Returns false if no element has been enqueued.
+          |bool ${queueName}_peek_latest(
+          |  ${queueTypeName} *queue,
+          |  ${queueElementTypeName} *data);
+          |
           |//------------------------------------------------------------------------------
           |// Receiver API
           |//
@@ -469,6 +578,14 @@ object QueueTemplate {
           |  ${MicrokitTypeUtil.eventCounterTypename} *numDropped,
           |  ${queueElementTypeName} *data);
           |
+          |// Copy the element that the next dequeue would observe without advancing
+          |// this receiver. With no intervening enqueue, peek and dequeue return the
+          |// same status, dropped count, and data.
+          |bool ${queueName}_peek(
+          |  ${recvQueueTypeName} *recvQueue,
+          |  ${MicrokitTypeUtil.eventCounterTypename} *numDropped,
+          |  ${queueElementTypeName} *data);
+          |
           |// Is queue empty? If the queue is not empty, it will stay that way until the
           |// receiver dequeues all data. If the queue is empty you can make no
           |// assumptions about how long it will stay empty.
@@ -494,6 +611,8 @@ object QueueTemplate {
     val initMethodName = getQueueInitMethodName(queueElementTypeName, queueSize)
     val recvInitMethodName = getQueueRecvInitMethodName(queueElementTypeName, queueSize)
     val dequeueMethodName = getQueueDequeueMethodName(queueElementTypeName, queueSize)
+    val peekMethodName = getQueuePeekMethodName(queueElementTypeName, queueSize)
+    val peekLatestMethodName = getQueuePeekLatestMethodName(queueElementTypeName, queueSize)
     val enqueueMethodName = getQueueEnqueueMethodName(queueElementTypeName, queueSize)
     val isEmptyMethodName = getQueueIsEmptyMethodName(queueElementTypeName, queueSize)
 
@@ -562,6 +681,26 @@ object QueueTemplate {
           |  ++(queue->numSent);
           |}
           |
+          |bool ${peekLatestMethodName}(
+          |  ${queueTypeName} *queue,
+          |  ${queueElementTypeName} *data) {
+          |
+          |  ${MicrokitTypeUtil.eventCounterTypename} numSent = queue->numSent;
+          |  if (0 == numSent) {
+          |    return false;
+          |  }
+          |
+          |  // Position a temporary receiver immediately before the latest committed
+          |  // enqueue. Reading through the dequeue algorithm preserves its coherence
+          |  // checks without changing any real receiver's cursor.
+          |  ${recvQueueTypeName} snapshot = {
+          |    .numRecv = numSent - 1,
+          |    .queue = queue
+          |  };
+          |  ${MicrokitTypeUtil.eventCounterTypename} numDropped;
+          |  return ${dequeueMethodName}(&snapshot, &numDropped, data);
+          |}
+          |
           |//------------------------------------------------------------------------------
           |// Receiver API
           |//
@@ -624,6 +763,17 @@ object QueueTemplate {
           |    ++(*numDropped);
           |    return false;
           |  }
+          |}
+          |
+          |bool ${peekMethodName}(
+          |  ${recvQueueTypeName} *recvQueue,
+          |  ${MicrokitTypeUtil.eventCounterTypename} *numDropped,
+          |  ${queueElementTypeName} *data) {
+          |
+          |  // Dequeue against a shallow copy so the real receiver's numRecv is not
+          |  // advanced. The copied queue pointer still observes the same shared data.
+          |  ${recvQueueTypeName} snapshot = *recvQueue;
+          |  return ${dequeueMethodName}(&snapshot, numDropped, data);
           |}
           |
           |bool ${isEmptyMethodName}(${recvQueueTypeName} *recvQueue) {

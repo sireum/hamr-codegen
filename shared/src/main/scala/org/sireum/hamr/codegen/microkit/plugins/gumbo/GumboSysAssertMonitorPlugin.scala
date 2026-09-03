@@ -283,7 +283,7 @@ object GumboSysAssertMonitorPlugin {
               // the monitor body is executable (GUMBOX) code, not verus spec, so
               // implication must render via the implies!/impliesL! macros rather
               // than the spec-only `==>` operator (which is invalid in exec context)
-              inVerus = F,
+              target = SlangExpUtil.TargetLanguage.rust,
               tp = crustTypeProvider,
               aadlTypes = types,
               store = localStore,
@@ -626,7 +626,7 @@ object GumboSysAssertMonitorPlugin {
                 owner = rootSystem.classifier,
                 optComponent = None(),
                 isLibraryMethod = F,
-                inVerus = F,
+                target = SlangExpUtil.TargetLanguage.rust,
                 options = options,
                 aadlTypes = types,
                 tp = crustTypeProvider,

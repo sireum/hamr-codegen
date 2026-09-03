@@ -74,6 +74,9 @@ import org.sireum.message.Reporter
         sharedMemoryRegions = sharedMemoryRegions ++ codeContributions.sharedMemoryMapping
       }
 
+      val r2u2Contributions: CComponentR2U2Contributions =
+        CComponentPlugin.getCComponentR2U2ContributionsFor(t.path, localStore)
+
       val schedulingDomain: Z = t.getDomain(symbolTable) match {
         case Some(d) =>
           if (d == 0 || d == 1) { // TODO what's upper bound
@@ -94,7 +97,8 @@ import org.sireum.message.Reporter
         isVM = isVM,
         isRustic = isRustic,
         hasUserContent = !isVM,
-        hasMonitorCompanion = T)
+        hasMonitorCompanion = T,
+        requiresR2U2 = r2u2Contributions.requiresR2U2)
       makefileContainers = makefileContainers :+ mk
 
       val computeExecutionTimeinMilli: Z = t.getComputeExecutionTime() match {
@@ -400,7 +404,9 @@ import org.sireum.message.Reporter
       val cUserNotifyMethodName = st"${threadId}_notify"
 
       cCodeContributions = cCodeContributions(
-        cBridge_InitContributions = cCodeContributions.cBridge_InitContributions :+ st"$initializeMethodName();",
+        cBridge_InitContributions =
+          (cCodeContributions.cBridge_InitContributions :+ st"$initializeMethodName();") ++
+            r2u2Contributions.initializePost,
         cBridge_EntrypointMethodSignatures =
           st"void ${initializeMethodName}(void)" +:
             cCodeContributions.cBridge_EntrypointMethodSignatures :+
@@ -412,12 +418,16 @@ import org.sireum.message.Reporter
 
       if (t.isPeriodic()) {
         val timeTriggeredMethodName = st"${threadId}_timeTriggered"
+        val timeTriggeredBody: ISZ[ST] = r2u2Contributions.inputGets :+
+          st"printf(\"%s: $timeTriggeredMethodName invoked\\n\", microkit_name);"
         cCodeContributions = cCodeContributions(
           cBridge_EntrypointMethodSignatures = cCodeContributions.cBridge_EntrypointMethodSignatures :+ st"void ${timeTriggeredMethodName}(void)",
-          cBridge_ComputeContributions = cCodeContributions.cBridge_ComputeContributions :+ st"${timeTriggeredMethodName}();",
+          cBridge_ComputeContributions =
+            (((cCodeContributions.cBridge_ComputeContributions ++ r2u2Contributions.computePre) :+
+              st"${timeTriggeredMethodName}();") ++ r2u2Contributions.computePost),
           cUser_MethodDefaultImpls =  cCodeContributions.cUser_MethodDefaultImpls :+
             st"""void $timeTriggeredMethodName(void) {
-                |  printf("%s: $timeTriggeredMethodName invoked\n", microkit_name);
+                |  ${(timeTriggeredBody, "\n")}
                 |}""")
       }
 
@@ -514,6 +524,7 @@ import org.sireum.message.Reporter
             |#include <stdint.h>
             |#include <microkit.h>
             |#include <${MicrokitTypeUtil.cAllTypesFilename}>
+            |${(r2u2Contributions.headerIncludes, "\n")}
             |
             |${CommentTemplate.doNotEditComment_slash}
             |
@@ -522,6 +533,8 @@ import org.sireum.message.Reporter
             |"""
       val cApiPath = s"${options.sel4OutputDir.get}/${mk.relativePathIncludeDir}/${mk.cHeaderFilename}"
       resources = resources :+ ResourceUtil.createResource(cApiPath, cApiContent, T)
+
+      resources = resources ++ CComponentPlugin.r2u2Resources(t, options, r2u2Contributions)
 
     } // end processThread
 

@@ -9,6 +9,7 @@ import org.sireum.hamr.codegen.common.sysvc.{IntegrationVC, ScheduleNextRel, VC,
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes}
 import org.sireum.hamr.codegen.common.util.HamrCli
+import SlangExpUtil.TargetLanguage
 import org.sireum.hamr.codegen.microkit.plugins.rust.types.CRustTypeProvider
 import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
 import org.sireum.hamr.codegen.microkit.util.RustUtil
@@ -579,7 +580,7 @@ object VerusVCSerializer {
       substitutions = substitutions,
       inRequires = F,
       inEnsures = F,
-      inVerus = T,
+      target = TargetLanguage.verus,
       tp = crustTypeProvider,
       aadlTypes = aadlTypes,
       store = store,
@@ -620,7 +621,7 @@ object VerusVCSerializer {
                   owner = t.classifier,
                   optComponent = Some(t),
                   isLibraryMethod = F,
-                  inVerus = T,
+                  target = TargetLanguage.verus,
                   options = options,
                   aadlTypes = aadlTypes,
                   tp = crustTypeProvider,
@@ -737,7 +738,7 @@ object VerusVCSerializer {
                   substitutions = substitutions,
                   inRequires = F,
                   inEnsures = F,
-                  inVerus = T,
+                  target = TargetLanguage.verus,
                   tp = crustTypeProvider,
                   aadlTypes = aadlTypes,
                   store = store,
@@ -862,7 +863,7 @@ object VerusVCSerializer {
                 owner = rootSystem.classifier,
                 optComponent = None(),
                 isLibraryMethod = F,
-                inVerus = T,
+                target = TargetLanguage.verus,
                 options = options,
                 aadlTypes = aadlTypes,
                 tp = crustTypeProvider,
@@ -913,7 +914,7 @@ object VerusVCSerializer {
         substitutions = substitutions,
         inRequires = F,
         inEnsures = F,
-        inVerus = T,
+        target = TargetLanguage.verus,
         tp = crustTypeProvider,
         aadlTypes = aadlTypes,
         store = store,

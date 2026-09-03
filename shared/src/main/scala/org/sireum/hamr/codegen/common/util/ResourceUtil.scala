@@ -3,10 +3,14 @@
 package org.sireum.hamr.codegen.common.util
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.containers.{EResource, IResource, Marker, FileResource}
+import org.sireum.hamr.codegen.common.containers.{EResource, FileResource, IResource, Marker, RemoveResource}
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
 
 object ResourceUtil {
+
+  @strictpure def createRemoveResource(path: String,
+                                       generatedContentMarker: String): RemoveResource =
+    RemoveResource(path, generatedContentMarker)
 
   def checkConsistency(path: String, content: ST, overwrite: B, invertedMarker: B, markers: ISZ[Marker]): B = {
     val renderedContent = content.render

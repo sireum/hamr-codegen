@@ -547,7 +547,7 @@ object GumboXGenUtil {
   def stateVarsToParams(componentNames: NameProvider, gclSubclauseInfo: Option[(GclSubclause, GclSymbolTable)], isPre: B, aadlTypes: AadlTypes): ISZ[GGParam] = {
     var ret: ISZ[GGParam] = ISZ()
     gclSubclauseInfo match {
-      case Some((GclSubclause(stateVars, _, _, _, _, _, _), _)) =>
+      case Some((GclSubclause(stateVars, _, _, _, _, _, _, _), _)) =>
 
         for (i <- 0 until stateVars.size) {
           val stateVar = stateVars(i)

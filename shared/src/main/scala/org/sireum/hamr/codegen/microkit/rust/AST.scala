@@ -3,7 +3,10 @@ package org.sireum.hamr.codegen.microkit.rust
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{IdPath, isThread}
+import org.sireum.hamr.codegen.common.STUtil
 import org.sireum.hamr.codegen.common.containers.{BlockMarker, Marker, PlaceholderMarker}
+import org.sireum.hamr.codegen.microkit.plugins.gumbo.GumboC2POUtil.{C2POEnum, C2POStruct}
+import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.TAB
 import org.sireum.hamr.codegen.microkit.rust.Printers._
 
 object Printers {
@@ -186,8 +189,104 @@ object Printers {
       st"""${printComments(comments)}
           |${printAttributes(attributes)}
           |${printVis(visibility)}struct ${ident.prettyST} {
-          |  ${printItems(items, ",\n")}
+          |  ${printItems(items, "\n")}
           |}""")
+  }
+}
+
+@datatype class R2U2InputDef(val name: String,
+                            val typeName: String,
+                            val idx: Z,
+                            val arraySizeOpt: Option[Z]) extends Item {
+  @pure def printMap: ST = {
+    arraySizeOpt match {
+      case Some(size) => return st"${name}[0..${size - 1}]:${idx}"
+      case _ => return st"${name}:${idx}"
+    }
+  }
+  @pure override def prettyST: ST = {
+    return (st"""${TAB}${name}: ${typeName};""")
+  }
+}
+
+@datatype class R2U2Formula(val commentOpt: Option[ST],
+                            val id: String,
+                            val exp: Expr) extends Item {
+  @pure override def prettyST: ST = {
+    val formula: ST =
+      st"""$commentOpt
+          |$id: ${exp.prettyST};"""
+    return st"${TAB}${(STUtil.splitST(formula), s"\n$TAB")}"
+  }
+}
+
+@datatype class R2U2SpecDef(val structs: ISZ[C2POStruct],
+                          val enums: ISZ[C2POEnum],
+                          val inputs: ISZ[R2U2InputDef],
+                          val defines: ISZ[Item],
+                          val ftspecs: ISZ[R2U2Formula],
+                          val ptspecs: ISZ[R2U2Formula]) extends Item {
+  @pure def printMap: ST = {
+    if (inputs.nonEmpty){
+      return st"${(for(i <- inputs) yield i.printMap, "\n")}"
+    } else {
+      return st""
+    }
+  }
+
+  @pure override def prettyST: ST = {
+    var structSection: ST = st""
+    if (structs.nonEmpty) {
+      var structDefs: ISZ[ST] = ISZ()
+      for (s <- structs) {
+        var fields: ISZ[ST] = ISZ()
+        for (f <- s.fields) {
+          val typeName: String = f.enumTypeOpt match {
+            case Some(e) => e.name
+            case _ => f.arrayTypeOpt match {
+              // Struct array members are unsized; their INPUT values retain the AADL size.
+              case Some(a) => s"${a.elementType.string}[]"
+              case _ => f.fieldType.string
+            }
+          }
+          fields = fields :+ st"${f.name}: $typeName;"
+        }
+        structDefs = structDefs :+ st"${TAB}${s.name}: { ${(fields, " ")} };"
+      }
+      structSection = st"""STRUCT
+                          |${(structDefs, "\n")}
+                          |
+                          |"""
+    }
+    var enumSection: ST = st""
+    if (enums.nonEmpty) {
+      var enumDefs: ISZ[ST] = ISZ()
+      for (e <- enums) {
+        var members: ISZ[ST] = ISZ()
+        for (i <- z"0" until e.values.size) {
+          members = members :+ st"${e.values(i)}: $i"
+        }
+        enumDefs = enumDefs :+ st"${TAB}${e.name}: {${(members, ", ")}};"
+      }
+      enumSection = st"""ENUM
+                         |${(enumDefs, "\n")}
+                         |
+                         |"""
+    }
+    return (
+      st"""${enumSection}${structSection}INPUT
+          |${printItems(inputs.asInstanceOf[ISZ[Item]], "\n")}
+          |
+          |${if (defines.nonEmpty) st"""DEFINE
+                                             |${printItems(defines, "\n")}
+                                             |""" else st""}
+          |${if (ftspecs.nonEmpty) st"""FTSPEC
+                                             |${printItems(ftspecs.asInstanceOf[ISZ[Item]], "\n")}
+                                             |""" else st""}
+          |${if (ptspecs.nonEmpty) st"""PTSPEC
+                                             |${printItems(ptspecs.asInstanceOf[ISZ[Item]], "\n")}
+                                             |""" else st""}
+          |""")
   }
 }
 
@@ -220,7 +319,7 @@ object Printers {
                             val fieldType: Ty) extends Item {
   @pure override def prettyST: ST = {
     val ghost: String = if (isGhost) "ghost " else ""
-    return st"${printVis(visibility)}$ghost${ident.prettyST}: ${fieldType.prettyST}"
+    return st"${printVis(visibility)}$ghost${ident.prettyST}: ${fieldType.prettyST},"
   }
 }
 

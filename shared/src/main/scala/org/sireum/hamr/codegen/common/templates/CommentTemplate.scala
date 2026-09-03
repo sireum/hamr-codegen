@@ -14,6 +14,8 @@ object CommentTemplate {
 
   val doNotEditComment_smt2: String = s"; $doNotEditComment"
 
+  val doNotEditComment_c2po: String = s"-- $doNotEditComment"
+
 
 
 

@@ -689,6 +689,23 @@ object CodeGen {
                 reporter.info(None(), toolName, s"Copied: ${e.srcPath} to ${dst}")
               }
           }
+        case r: RemoveResource =>
+          // Keep the leaf unresolved so removing a symlink removes the link,
+          // never the file it points to.
+          val dstPath = Os.path(r.dstPath)
+          val p = dstPath.up.canon / dstPath.name
+          assert(!p.exists || p.isFile || p.isSymLink,
+            s"$p ${if (p.exists) "exists " else ""} and it is ${if (!p.isFile) "not " else ""} a file")
+          if (p.isFile) {
+            val content = p.read
+            if (ops.StringOps(content).contains(r.generatedContentMarker)) {
+              p.remove()
+              reporter.info(None(), toolName, s"Removed obsolete generated file: $p")
+            } else {
+              reporter.warn(None(), toolName,
+                s"Did not remove $p because it does not contain a recognized HAMR-generated content marker")
+            }
+          }
         case _ =>
       }
     }

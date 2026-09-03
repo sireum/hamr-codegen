@@ -3,7 +3,7 @@ package org.sireum.hamr.codegen.microkit.plugins.attestation
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{BoolValue, Store}
-import org.sireum.hamr.codegen.common.containers.{ExternalResource, InternalResource}
+import org.sireum.hamr.codegen.common.containers.{ExternalResource, InternalResource, RemoveResource}
 import org.sireum.hamr.codegen.common.plugin.Plugin
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
 import org.sireum.hamr.codegen.common.types.AadlTypes
@@ -95,6 +95,8 @@ import org.sireum.{B, strictpure}
           } else {
             codegenFiles = codegenFiles :+ path
           }
+        case _: RemoveResource =>
+          // An obsolete generated file has no content to attest.
         case e => halt(s"Not expecting $e")
       }
     }
