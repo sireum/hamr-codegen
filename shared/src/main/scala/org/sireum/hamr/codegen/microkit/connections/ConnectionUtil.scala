@@ -5,12 +5,23 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlEventPort, AadlFeatureEvent, AadlPort, AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlType
 import org.sireum.hamr.codegen.microkit.plugins.c.types.CTypeProvider
-import org.sireum.hamr.codegen.microkit.plugins.rust.types.CRustTypeProvider
 import org.sireum.hamr.codegen.microkit.types.{MicrokitTypeUtil, QueueTemplate}
 import org.sireum.hamr.codegen.microkit.util._
+import org.sireum.hamr.codegen.microkit.plugins.gumbo.GumboRustUtil
+import org.sireum.hamr.codegen.common.symbols.GclAnnexClauseInfo
 import org.sireum.hamr.ir.{ConnectionInstance, Name}
 
 object ConnectionUtil {
+
+  // The C transport can expose peek for every port, but only components with an R2U2 monitor
+  // consume it (see GumboR2U2Util.peekApiContributions, which gates the Rust side on the same
+  // predicate). Emitting it unconditionally would perturb the generated C API of every model,
+  // so gate per owning thread to keep monitor-free models byte-identical.
+  @pure def needsPeekApi(thread: AadlThread, symbolTable: SymbolTable): B = {
+    return GumboRustUtil.getGumboSubclauseOpt(thread.path, symbolTable).
+      exists((info: GclAnnexClauseInfo) => info.annex.monitor.nonEmpty)
+  }
+
 
   def processInPort(dstThread: AadlThread,
                     dstPort: AadlPort,
@@ -51,26 +62,38 @@ object ConnectionUtil {
     var cMethodApiSigs: ISZ[ST] = ISZ()
     var cMethodApis: ISZ[ST] = ISZ()
 
+    val peekApi: B = needsPeekApi(dstThread, symbolTable)
+
     if (isEventPort || isEventDataPort) {
       cMethodApiSigs = cMethodApiSigs :+
         QueueTemplate.getClientIsEmpty_C_MethodSig(dstPort.identifier) :+
         QueueTemplate.getClientGetter_C_MethodPollSig(dstPort.identifier, cTypeName, isEventPort) :+
-        QueueTemplate.getClientGetter_C_MethodSig(dstPort.identifier, cTypeName, isEventPort) :+
-        QueueTemplate.getClientPeek_C_MethodSig(dstPort.identifier, cTypeName, isEventPort)
+        QueueTemplate.getClientGetter_C_MethodSig(dstPort.identifier, cTypeName, isEventPort)
 
       cMethodApis = cMethodApis :+
         QueueTemplate.getClientIsEmpty_C_Method(dstPort.identifier, cTypeName, dstQueueSize) :+
         QueueTemplate.getClientGetter_C_MethodPoll(dstPort.identifier, cTypeName, dstQueueSize, isEventPort) :+
-        QueueTemplate.getClientGetter_C_Method(dstPort.identifier, cTypeName, isEventPort) :+
-        QueueTemplate.getClientInputPeek_C_Method(dstPort.identifier, cTypeName, dstQueueSize, isEventPort)
+        QueueTemplate.getClientGetter_C_Method(dstPort.identifier, cTypeName, isEventPort)
+
+      if (peekApi) {
+        cMethodApiSigs = cMethodApiSigs :+
+          QueueTemplate.getClientPeek_C_MethodSig(dstPort.identifier, cTypeName, isEventPort)
+        cMethodApis = cMethodApis :+
+          QueueTemplate.getClientInputPeek_C_Method(dstPort.identifier, cTypeName, dstQueueSize, isEventPort)
+      }
     } else {
       cMethodApiSigs = cMethodApiSigs :+
-        QueueTemplate.getClientGetter_C_MethodSig(dstPort.identifier, cTypeName, F) :+
-        QueueTemplate.getClientPeek_C_MethodSig(dstPort.identifier, cTypeName, F)
+        QueueTemplate.getClientGetter_C_MethodSig(dstPort.identifier, cTypeName, F)
 
       cMethodApis = cMethodApis :+
-        QueueTemplate.getClientDataGetter_C_Method(dstPort.identifier, cTypeName, dstQueueSize, aadlType, cTypeNameProvider) :+
-        QueueTemplate.getClientDataPeek_C_Method(dstPort.identifier, cTypeName, dstQueueSize, aadlType, cTypeNameProvider)
+        QueueTemplate.getClientDataGetter_C_Method(dstPort.identifier, cTypeName, dstQueueSize, aadlType, cTypeNameProvider)
+
+      if (peekApi) {
+        cMethodApiSigs = cMethodApiSigs :+
+          QueueTemplate.getClientPeek_C_MethodSig(dstPort.identifier, cTypeName, F)
+        cMethodApis = cMethodApis :+
+          QueueTemplate.getClientDataPeek_C_Method(dstPort.identifier, cTypeName, dstQueueSize, aadlType, cTypeNameProvider)
+      }
     }
 
     var cEntrypointMethodSignatures: ISZ[ST] = ISZ()
@@ -120,9 +143,12 @@ object ConnectionUtil {
     )
   }
 
-  def processOutPort(srcPort: AadlPort,
+  def processOutPort(srcThread: AadlThread,
+                     srcPort: AadlPort,
                      receiverContributions: Map[ISZ[String], UberConnectionContributions],
-                     cTypeProvider: CTypeProvider): UberConnectionContributions = {
+                     cTypeProvider: CTypeProvider,
+                     symbolTable: SymbolTable): UberConnectionContributions = {
+    val peekApi: B = needsPeekApi(srcThread, symbolTable)
     val isEventPort = srcPort.isInstanceOf[AadlEventPort]
 
     var sharedMemoryMappings: ISZ[MemoryRegion] = ISZ()
@@ -160,7 +186,7 @@ object ConnectionUtil {
         queueElementTypeName = cTypeName,
         queueSize = receiverContribution.queueSize,
         isEventPort = isEventPort)
-      if (srcPeekContribution.isEmpty) {
+      if (peekApi && srcPeekContribution.isEmpty) {
         srcPeekContribution = Some(QueueTemplate.getClientOutputPeek_C_Method(
           portName = srcPort.identifier,
           queueElementTypeName = cTypeName,
@@ -208,12 +234,14 @@ object ConnectionUtil {
         queueElementTypeName = cTypeName,
         queueSize = queueSize,
         isEventPort = isEventPort)
-      srcPeekContribution = Some(QueueTemplate.getClientOutputPeek_C_Method(
-        portName = srcPort.identifier,
-        queueElementTypeName = cTypeName,
-        queueSize = queueSize,
-        sharedMemoryVarName = sharedMemVarName,
-        isEventPort = isEventPort))
+      if (peekApi) {
+        srcPeekContribution = Some(QueueTemplate.getClientOutputPeek_C_Method(
+          portName = srcPort.identifier,
+          queueElementTypeName = cTypeName,
+          queueSize = queueSize,
+          sharedMemoryVarName = sharedMemVarName,
+          isEventPort = isEventPort))
+      }
 
       val cPortType: String = cTypeProvider.getTypeNameProvider(senderPortType).mangledName
       val queueType = QueueTemplate.getTypeQueueTypeName(cPortType, queueSize)
@@ -236,8 +264,14 @@ object ConnectionUtil {
 
     val cPortType: String = cTypeProvider.getTypeNameProvider(senderPortType).mangledName
     val cPortApiMethodSig = QueueTemplate.getClientPut_C_MethodSig(srcPort.identifier, cPortType, isEventPort)
-    val cPortPeekMethodSig = QueueTemplate.getClientPeek_C_MethodSig(srcPort.identifier, cPortType, isEventPort)
     val cApiMethod = QueueTemplate.getClientPut_C_Method(srcPort.identifier, cPortType, srcPutContributions, isEventPort)
+
+    val cPortApiMethodSigs: ISZ[ST] =
+      if (peekApi) ISZ(cPortApiMethodSig, QueueTemplate.getClientPeek_C_MethodSig(srcPort.identifier, cPortType, isEventPort))
+      else ISZ(cPortApiMethodSig)
+    val cBridgePortApiMethods: ISZ[ST] =
+      if (peekApi) ISZ(cApiMethod, srcPeekContribution.get)
+      else ISZ(cApiMethod)
 
     return UberConnectionContributions(
       portName = srcPort.path,
@@ -250,8 +284,8 @@ object ConnectionUtil {
         cBridge_EntrypointMethodSignatures = ISZ(),
         cUser_MethodDefaultImpls = ISZ(),
         cBridge_GlobalVarContributions = cSharedMemoryVars,
-        cPortApiMethodSigs = ISZ(cPortApiMethodSig, cPortPeekMethodSig),
-        cBridge_PortApiMethods = ISZ(cApiMethod, srcPeekContribution.get),
+        cPortApiMethodSigs = cPortApiMethodSigs,
+        cBridge_PortApiMethods = cBridgePortApiMethods,
         cBridge_InitContributions = cInitContributions,
         cBridge_ComputeContributions = ISZ())
     )

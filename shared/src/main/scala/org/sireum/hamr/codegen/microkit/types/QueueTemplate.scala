@@ -425,10 +425,38 @@ object QueueTemplate {
   }
 
   def header(queueElementTypeName: String,
-             queueSize: Z): ST = {
+             queueSize: Z,
+             peekApi: B): ST = {
 
     val queueName = getTypeQueueName(queueElementTypeName, queueSize)
     val queueTypeName = getTypeQueueTypeName(queueElementTypeName, queueSize)
+
+    // peek is only consumed by components with an R2U2 monitor; omitting it otherwise keeps
+    // the generated queue API byte-identical for monitor-free models.
+    val peekLatestDeclOpt: ST =
+      if (!peekApi) st""
+      else
+        st"""
+            |
+            |// Copy the most recently enqueued element without modifying the queue.
+            |// Returns false if no element has been enqueued.
+            |bool ${queueName}_peek_latest(
+            |  ${queueTypeName} *queue,
+            |  ${queueElementTypeName} *data);
+            |"""
+    val peekDeclOpt: ST =
+      if (!peekApi) st""
+      else
+        st"""
+            |
+            |// Copy the element that the next dequeue would observe without advancing
+            |// this receiver. With no intervening enqueue, peek and dequeue return the
+            |// same status, dropped count, and data.
+            |bool ${queueName}_peek(
+            |  ${getTypeRecvQueueTypeName(queueElementTypeName, queueSize)} *recvQueue,
+            |  ${MicrokitTypeUtil.eventCounterTypename} *numDropped,
+            |  ${queueElementTypeName} *data);
+            |"""
 
     val recvQueueName = getTypeRecvQueueName(queueElementTypeName, queueSize)
     val recvQueueTypeName = getTypeRecvQueueTypeName(queueElementTypeName, queueSize)
@@ -519,13 +547,7 @@ object QueueTemplate {
           |void ${queueName}_enqueue(
           |  ${queueTypeName} *queue,
           |  ${queueElementTypeName} *data);
-          |
-          |// Copy the most recently enqueued element without modifying the queue.
-          |// Returns false if no element has been enqueued.
-          |bool ${queueName}_peek_latest(
-          |  ${queueTypeName} *queue,
-          |  ${queueElementTypeName} *data);
-          |
+          |$peekLatestDeclOpt
           |//------------------------------------------------------------------------------
           |// Receiver API
           |//
@@ -577,15 +599,7 @@ object QueueTemplate {
           |  ${recvQueueTypeName} *recvQueue,
           |  ${MicrokitTypeUtil.eventCounterTypename} *numDropped,
           |  ${queueElementTypeName} *data);
-          |
-          |// Copy the element that the next dequeue would observe without advancing
-          |// this receiver. With no intervening enqueue, peek and dequeue return the
-          |// same status, dropped count, and data.
-          |bool ${queueName}_peek(
-          |  ${recvQueueTypeName} *recvQueue,
-          |  ${MicrokitTypeUtil.eventCounterTypename} *numDropped,
-          |  ${queueElementTypeName} *data);
-          |
+          |$peekDeclOpt
           |// Is queue empty? If the queue is not empty, it will stay that way until the
           |// receiver dequeues all data. If the queue is empty you can make no
           |// assumptions about how long it will stay empty.
@@ -597,7 +611,8 @@ object QueueTemplate {
   def implementation(aadlType: AadlType,
                      queueElementTypeName: String,
                      queueSize: Z,
-                     cTypeNameProvider: CTypeNameProvider): ST = {
+                     cTypeNameProvider: CTypeNameProvider,
+                     peekApi: B): ST = {
 
     val queueName = getTypeQueueName(queueElementTypeName, queueSize)
     val queueTypeName = getTypeQueueTypeName(queueElementTypeName, queueSize)
@@ -615,6 +630,48 @@ object QueueTemplate {
     val peekLatestMethodName = getQueuePeekLatestMethodName(queueElementTypeName, queueSize)
     val enqueueMethodName = getQueueEnqueueMethodName(queueElementTypeName, queueSize)
     val isEmptyMethodName = getQueueIsEmptyMethodName(queueElementTypeName, queueSize)
+
+    val peekLatestImplOpt: ST =
+      if (!peekApi) st""
+      else
+        st"""
+            |
+            |bool ${peekLatestMethodName}(
+            |  ${queueTypeName} *queue,
+            |  ${queueElementTypeName} *data) {
+            |
+            |  ${MicrokitTypeUtil.eventCounterTypename} numSent = queue->numSent;
+            |  if (0 == numSent) {
+            |    return false;
+            |  }
+            |
+            |  // Position a temporary receiver immediately before the latest committed
+            |  // enqueue. Reading through the dequeue algorithm preserves its coherence
+            |  // checks without changing any real receiver's cursor.
+            |  ${recvQueueTypeName} snapshot = {
+            |    .numRecv = numSent - 1,
+            |    .queue = queue
+            |  };
+            |  ${MicrokitTypeUtil.eventCounterTypename} numDropped;
+            |  return ${dequeueMethodName}(&snapshot, &numDropped, data);
+            |}
+            |"""
+    val peekImplOpt: ST =
+      if (!peekApi) st""
+      else
+        st"""
+            |
+            |bool ${peekMethodName}(
+            |  ${recvQueueTypeName} *recvQueue,
+            |  ${MicrokitTypeUtil.eventCounterTypename} *numDropped,
+            |  ${queueElementTypeName} *data) {
+            |
+            |  // Dequeue against a shallow copy so the real receiver's numRecv is not
+            |  // advanced. The copied queue pointer still observes the same shared data.
+            |  ${recvQueueTypeName} snapshot = *recvQueue;
+            |  return ${dequeueMethodName}(&snapshot, numDropped, data);
+            |}
+            |"""
 
     val enqueue: ST = {
       aadlType match {
@@ -680,27 +737,7 @@ object QueueTemplate {
           |
           |  ++(queue->numSent);
           |}
-          |
-          |bool ${peekLatestMethodName}(
-          |  ${queueTypeName} *queue,
-          |  ${queueElementTypeName} *data) {
-          |
-          |  ${MicrokitTypeUtil.eventCounterTypename} numSent = queue->numSent;
-          |  if (0 == numSent) {
-          |    return false;
-          |  }
-          |
-          |  // Position a temporary receiver immediately before the latest committed
-          |  // enqueue. Reading through the dequeue algorithm preserves its coherence
-          |  // checks without changing any real receiver's cursor.
-          |  ${recvQueueTypeName} snapshot = {
-          |    .numRecv = numSent - 1,
-          |    .queue = queue
-          |  };
-          |  ${MicrokitTypeUtil.eventCounterTypename} numDropped;
-          |  return ${dequeueMethodName}(&snapshot, &numDropped, data);
-          |}
-          |
+          |$peekLatestImplOpt
           |//------------------------------------------------------------------------------
           |// Receiver API
           |//
@@ -764,18 +801,7 @@ object QueueTemplate {
           |    return false;
           |  }
           |}
-          |
-          |bool ${peekMethodName}(
-          |  ${recvQueueTypeName} *recvQueue,
-          |  ${MicrokitTypeUtil.eventCounterTypename} *numDropped,
-          |  ${queueElementTypeName} *data) {
-          |
-          |  // Dequeue against a shallow copy so the real receiver's numRecv is not
-          |  // advanced. The copied queue pointer still observes the same shared data.
-          |  ${recvQueueTypeName} snapshot = *recvQueue;
-          |  return ${dequeueMethodName}(&snapshot, numDropped, data);
-          |}
-          |
+          |$peekImplOpt
           |bool ${isEmptyMethodName}(${recvQueueTypeName} *recvQueue) {
           |  return (recvQueue->queue->numSent == recvQueue->numRecv);
           |}"""

@@ -115,14 +115,14 @@ object MicrokitTypeUtil {
     return ret
   }
 
-  def getTypeApiContributions(aadlType: AadlType, CTypeProvider: CTypeProvider, queueSize: Z): TypeApiContributions = {
+  def getTypeApiContributions(aadlType: AadlType, CTypeProvider: CTypeProvider, queueSize: Z, peekApi: B): TypeApiContributions = {
     val cTypeNameProvider = CTypeProvider.getTypeNameProvider(aadlType)
     val queueElementTypeName = cTypeNameProvider.mangledName
     return DefaultTypeApiContributions(
       aadlType = aadlType,
       simpleFilename = QueueTemplate.getTypeQueueName(queueElementTypeName, queueSize),
-      header = QueueTemplate.header(queueElementTypeName, queueSize),
-      implementation = QueueTemplate.implementation(aadlType, queueElementTypeName, queueSize, cTypeNameProvider))
+      header = QueueTemplate.header(queueElementTypeName, queueSize, peekApi),
+      implementation = QueueTemplate.implementation(aadlType, queueElementTypeName, queueSize, cTypeNameProvider, peekApi))
   }
 
   def translateBaseTypeToC(c: String): String = {

@@ -19,6 +19,14 @@ import org.sireum.hamr.ir.{Aadl, Direction}
 import org.sireum.message.Reporter
 
 object CConnectionProviderPlugin {
+
+  // Queue headers/implementations are per-type and shared across components, so peek is gated
+  // model-wide: emit it only when some component actually has an R2U2 monitor to consume it.
+  @pure def modelHasR2U2Monitor(symbolTable: SymbolTable): B = {
+    return ops.ISZOps(symbolTable.getThreads()).exists((t: AadlThread) =>
+      ConnectionUtil.needsPeekApi(t, symbolTable))
+  }
+
   val KEY_CConnectionProviderPlugin: String = "KEY_CConnectionProviderPlugin"
 
   @strictpure def getCConnectionStore(store: Store): ISZ[ConnectionStore] =
@@ -53,6 +61,7 @@ object CConnectionProviderPlugin {
       !hasHandled(store)
 
   override def handle(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
+    val peekApiModelWide: B = CConnectionProviderPlugin.modelHasR2U2Monitor(symbolTable)
     var localStore = store
     var resources = ISZ[Resource]()
 
@@ -82,12 +91,12 @@ object CConnectionProviderPlugin {
           }
         } // end processing out connections for the source port
 
-        val senderContributions = ConnectionUtil.processOutPort(srcPort, codeContributions, cTypeProvider)
+        val senderContributions = ConnectionUtil.processOutPort(srcThread, srcPort, codeContributions, cTypeProvider, symbolTable)
         codeContributions = codeContributions + srcThread.path ~> senderContributions
 
         val typeApiContributions: ISZ[TypeApiContributions] =
           (Set.empty[TypeApiContributions] ++ (for (rc <- codeContributions.values) yield
-            MicrokitTypeUtil.getTypeApiContributions(rc.aadlType, cTypeProvider, rc.queueSize))).elements
+            MicrokitTypeUtil.getTypeApiContributions(rc.aadlType, cTypeProvider, rc.queueSize, peekApiModelWide))).elements
 
         ret = ret :+
           DefaultConnectionStore(
@@ -115,11 +124,15 @@ object CConnectionProviderPlugin {
               cTypeProvider = cTypeProvider,
               symbolTable = symbolTable)
           } else {
-            ConnectionUtil.processOutPort(unconnectedPort, Map.empty, cTypeProvider)
+            ConnectionUtil.processOutPort(
+              srcThread = srcThread, srcPort = unconnectedPort,
+              receiverContributions = Map.empty,
+              cTypeProvider = cTypeProvider,
+              symbolTable = symbolTable)
           }
 
         val typeApiContributions =
-          MicrokitTypeUtil.getTypeApiContributions(srcThreadContributions.aadlType, cTypeProvider, srcThreadContributions.queueSize)
+          MicrokitTypeUtil.getTypeApiContributions(srcThreadContributions.aadlType, cTypeProvider, srcThreadContributions.queueSize, peekApiModelWide)
 
         val sharedMemoryRegionContributions: ISZ[MemoryRegion] =
           if (isPluginThread) ISZ() else srcThreadContributions.sharedMemoryMapping
@@ -152,7 +165,7 @@ object CConnectionProviderPlugin {
       if (!existingTypeNames.contains(forcedTypeClassifier)) {
         types.typeMap.get(forcedTypeClassifier) match {
           case Some(aadlType) =>
-            val typeApiContrib = MicrokitTypeUtil.getTypeApiContributions(aadlType, cTypeProvider, 1)
+            val typeApiContrib = MicrokitTypeUtil.getTypeApiContributions(aadlType, cTypeProvider, 1, peekApiModelWide)
             ret = ret :+
               DefaultConnectionStore(
                 systemContributions =
