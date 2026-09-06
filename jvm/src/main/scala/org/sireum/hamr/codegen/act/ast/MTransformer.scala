@@ -44,11 +44,11 @@ object MTransformer {
   def transformISZ[T](s: IS[Z, T], f: T => MOption[T]): MOption[IS[Z, T]] = {
     val s2: MS[Z, T] = s.toMS
     var changed: B = F
-    for (i <- s2.indices) {
-      val e: T = s(i)
+    for (i <- 0 until s.size) {
+      val e: T = s.atZ(i)
       val r: MOption[T] = f(e)
       changed = changed || r.nonEmpty
-      s2(i) = r.getOrElse(e)
+      s2.updateZ(i, r.getOrElse(e))
     }
     if (changed) {
       return MSome(s2.toIS)
@@ -151,7 +151,7 @@ object MTransformer {
 
 }
 
-import org.sireum.hamr.codegen.act.ast.MTransformer._
+import MTransformer._
 
 @msig trait MTransformer {
 
@@ -159,8 +159,11 @@ import org.sireum.hamr.codegen.act.ast.MTransformer._
     o match {
       case o: AstBasicComment =>
         val r: PreResult[AstComment] = preAstBasicComment(o) match {
-         case PreResult(continu, MSome(r: AstComment)) => PreResult(continu, MSome[AstComment](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type AstComment")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: AstComment => PreResult(continu, MSome[AstComment](r))
+             case _ => halt("Can only produce object of type AstComment")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[AstComment]())
         }
         return r
@@ -175,155 +178,221 @@ import org.sireum.hamr.codegen.act.ast.MTransformer._
     o match {
       case o: Assembly =>
         val r: PreResult[CommentProvider] = preAssembly(o) match {
-         case PreResult(continu, MSome(r: CommentProvider)) => PreResult(continu, MSome[CommentProvider](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type CommentProvider")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: CommentProvider => PreResult(continu, MSome[CommentProvider](r))
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[CommentProvider]())
         }
         return r
       case o: Composition =>
         val r: PreResult[CommentProvider] = preComposition(o) match {
-         case PreResult(continu, MSome(r: CommentProvider)) => PreResult(continu, MSome[CommentProvider](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type CommentProvider")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: CommentProvider => PreResult(continu, MSome[CommentProvider](r))
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[CommentProvider]())
         }
         return r
       case o: Instance =>
         val r: PreResult[CommentProvider] = preInstance(o) match {
-         case PreResult(continu, MSome(r: CommentProvider)) => PreResult(continu, MSome[CommentProvider](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type CommentProvider")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: CommentProvider => PreResult(continu, MSome[CommentProvider](r))
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[CommentProvider]())
         }
         return r
       case o: Component =>
         val r: PreResult[CommentProvider] = preComponent(o) match {
-         case PreResult(continu, MSome(r: CommentProvider)) => PreResult(continu, MSome[CommentProvider](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type CommentProvider")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: CommentProvider => PreResult(continu, MSome[CommentProvider](r))
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[CommentProvider]())
         }
         return r
       case o: LibraryComponent =>
         val r: PreResult[CommentProvider] = preLibraryComponent(o) match {
-         case PreResult(continu, MSome(r: CommentProvider)) => PreResult(continu, MSome[CommentProvider](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type CommentProvider")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: CommentProvider => PreResult(continu, MSome[CommentProvider](r))
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[CommentProvider]())
         }
         return r
       case o: Uses =>
         val r: PreResult[CommentProvider] = preUses(o) match {
-         case PreResult(continu, MSome(r: CommentProvider)) => PreResult(continu, MSome[CommentProvider](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type CommentProvider")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: CommentProvider => PreResult(continu, MSome[CommentProvider](r))
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[CommentProvider]())
         }
         return r
       case o: Provides =>
         val r: PreResult[CommentProvider] = preProvides(o) match {
-         case PreResult(continu, MSome(r: CommentProvider)) => PreResult(continu, MSome[CommentProvider](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type CommentProvider")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: CommentProvider => PreResult(continu, MSome[CommentProvider](r))
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[CommentProvider]())
         }
         return r
       case o: Emits =>
         val r: PreResult[CommentProvider] = preEmits(o) match {
-         case PreResult(continu, MSome(r: CommentProvider)) => PreResult(continu, MSome[CommentProvider](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type CommentProvider")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: CommentProvider => PreResult(continu, MSome[CommentProvider](r))
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[CommentProvider]())
         }
         return r
       case o: Consumes =>
         val r: PreResult[CommentProvider] = preConsumes(o) match {
-         case PreResult(continu, MSome(r: CommentProvider)) => PreResult(continu, MSome[CommentProvider](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type CommentProvider")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: CommentProvider => PreResult(continu, MSome[CommentProvider](r))
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[CommentProvider]())
         }
         return r
       case o: Dataport =>
         val r: PreResult[CommentProvider] = preDataport(o) match {
-         case PreResult(continu, MSome(r: CommentProvider)) => PreResult(continu, MSome[CommentProvider](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type CommentProvider")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: CommentProvider => PreResult(continu, MSome[CommentProvider](r))
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[CommentProvider]())
         }
         return r
       case o: Connection =>
         val r: PreResult[CommentProvider] = preConnection(o) match {
-         case PreResult(continu, MSome(r: CommentProvider)) => PreResult(continu, MSome[CommentProvider](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type CommentProvider")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: CommentProvider => PreResult(continu, MSome[CommentProvider](r))
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[CommentProvider]())
         }
         return r
       case o: ConnectionEnd =>
         val r: PreResult[CommentProvider] = preConnectionEnd(o) match {
-         case PreResult(continu, MSome(r: CommentProvider)) => PreResult(continu, MSome[CommentProvider](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type CommentProvider")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: CommentProvider => PreResult(continu, MSome[CommentProvider](r))
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[CommentProvider]())
         }
         return r
       case o: Connector =>
         val r: PreResult[CommentProvider] = preConnector(o) match {
-         case PreResult(continu, MSome(r: CommentProvider)) => PreResult(continu, MSome[CommentProvider](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type CommentProvider")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: CommentProvider => PreResult(continu, MSome[CommentProvider](r))
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[CommentProvider]())
         }
         return r
       case o: Procedure =>
         val r: PreResult[CommentProvider] = preProcedure(o) match {
-         case PreResult(continu, MSome(r: CommentProvider)) => PreResult(continu, MSome[CommentProvider](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type CommentProvider")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: CommentProvider => PreResult(continu, MSome[CommentProvider](r))
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[CommentProvider]())
         }
         return r
       case o: Method =>
         val r: PreResult[CommentProvider] = preMethod(o) match {
-         case PreResult(continu, MSome(r: CommentProvider)) => PreResult(continu, MSome[CommentProvider](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type CommentProvider")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: CommentProvider => PreResult(continu, MSome[CommentProvider](r))
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[CommentProvider]())
         }
         return r
       case o: Parameter =>
         val r: PreResult[CommentProvider] = preParameter(o) match {
-         case PreResult(continu, MSome(r: CommentProvider)) => PreResult(continu, MSome[CommentProvider](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type CommentProvider")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: CommentProvider => PreResult(continu, MSome[CommentProvider](r))
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[CommentProvider]())
         }
         return r
       case o: BinarySemaphore =>
         val r: PreResult[CommentProvider] = preBinarySemaphore(o) match {
-         case PreResult(continu, MSome(r: CommentProvider)) => PreResult(continu, MSome[CommentProvider](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type CommentProvider")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: CommentProvider => PreResult(continu, MSome[CommentProvider](r))
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[CommentProvider]())
         }
         return r
       case o: Semaphore =>
         val r: PreResult[CommentProvider] = preSemaphore(o) match {
-         case PreResult(continu, MSome(r: CommentProvider)) => PreResult(continu, MSome[CommentProvider](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type CommentProvider")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: CommentProvider => PreResult(continu, MSome[CommentProvider](r))
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[CommentProvider]())
         }
         return r
       case o: Mutex =>
         val r: PreResult[CommentProvider] = preMutex(o) match {
-         case PreResult(continu, MSome(r: CommentProvider)) => PreResult(continu, MSome[CommentProvider](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type CommentProvider")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: CommentProvider => PreResult(continu, MSome[CommentProvider](r))
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[CommentProvider]())
         }
         return r
       case o: GenericConfiguration =>
         val r: PreResult[CommentProvider] = preGenericConfiguration(o) match {
-         case PreResult(continu, MSome(r: CommentProvider)) => PreResult(continu, MSome[CommentProvider](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type CommentProvider")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: CommentProvider => PreResult(continu, MSome[CommentProvider](r))
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[CommentProvider]())
         }
         return r
       case o: DataPortAccessRestriction =>
         val r: PreResult[CommentProvider] = preDataPortAccessRestriction(o) match {
-         case PreResult(continu, MSome(r: CommentProvider)) => PreResult(continu, MSome[CommentProvider](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type CommentProvider")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: CommentProvider => PreResult(continu, MSome[CommentProvider](r))
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[CommentProvider]())
         }
         return r
       case o: TODO =>
         val r: PreResult[CommentProvider] = preTODO(o) match {
-         case PreResult(continu, MSome(r: CommentProvider)) => PreResult(continu, MSome[CommentProvider](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type CommentProvider")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: CommentProvider => PreResult(continu, MSome[CommentProvider](r))
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[CommentProvider]())
         }
         return r
@@ -334,106 +403,151 @@ import org.sireum.hamr.codegen.act.ast.MTransformer._
     o match {
       case o: Assembly =>
         val r: PreResult[ASTObject] = preAssembly(o) match {
-         case PreResult(continu, MSome(r: ASTObject)) => PreResult(continu, MSome[ASTObject](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type ASTObject")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: ASTObject => PreResult(continu, MSome[ASTObject](r))
+             case _ => halt("Can only produce object of type ASTObject")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[ASTObject]())
         }
         return r
       case o: Composition =>
         val r: PreResult[ASTObject] = preComposition(o) match {
-         case PreResult(continu, MSome(r: ASTObject)) => PreResult(continu, MSome[ASTObject](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type ASTObject")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: ASTObject => PreResult(continu, MSome[ASTObject](r))
+             case _ => halt("Can only produce object of type ASTObject")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[ASTObject]())
         }
         return r
       case o: Instance =>
         val r: PreResult[ASTObject] = preInstance(o) match {
-         case PreResult(continu, MSome(r: ASTObject)) => PreResult(continu, MSome[ASTObject](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type ASTObject")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: ASTObject => PreResult(continu, MSome[ASTObject](r))
+             case _ => halt("Can only produce object of type ASTObject")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[ASTObject]())
         }
         return r
       case o: Component =>
         val r: PreResult[ASTObject] = preComponent(o) match {
-         case PreResult(continu, MSome(r: ASTObject)) => PreResult(continu, MSome[ASTObject](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type ASTObject")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: ASTObject => PreResult(continu, MSome[ASTObject](r))
+             case _ => halt("Can only produce object of type ASTObject")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[ASTObject]())
         }
         return r
       case o: LibraryComponent =>
         val r: PreResult[ASTObject] = preLibraryComponent(o) match {
-         case PreResult(continu, MSome(r: ASTObject)) => PreResult(continu, MSome[ASTObject](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type ASTObject")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: ASTObject => PreResult(continu, MSome[ASTObject](r))
+             case _ => halt("Can only produce object of type ASTObject")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[ASTObject]())
         }
         return r
       case o: Connection =>
         val r: PreResult[ASTObject] = preConnection(o) match {
-         case PreResult(continu, MSome(r: ASTObject)) => PreResult(continu, MSome[ASTObject](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type ASTObject")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: ASTObject => PreResult(continu, MSome[ASTObject](r))
+             case _ => halt("Can only produce object of type ASTObject")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[ASTObject]())
         }
         return r
       case o: ConnectionEnd =>
         val r: PreResult[ASTObject] = preConnectionEnd(o) match {
-         case PreResult(continu, MSome(r: ASTObject)) => PreResult(continu, MSome[ASTObject](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type ASTObject")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: ASTObject => PreResult(continu, MSome[ASTObject](r))
+             case _ => halt("Can only produce object of type ASTObject")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[ASTObject]())
         }
         return r
       case o: Connector =>
         val r: PreResult[ASTObject] = preConnector(o) match {
-         case PreResult(continu, MSome(r: ASTObject)) => PreResult(continu, MSome[ASTObject](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type ASTObject")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: ASTObject => PreResult(continu, MSome[ASTObject](r))
+             case _ => halt("Can only produce object of type ASTObject")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[ASTObject]())
         }
         return r
       case o: Procedure =>
         val r: PreResult[ASTObject] = preProcedure(o) match {
-         case PreResult(continu, MSome(r: ASTObject)) => PreResult(continu, MSome[ASTObject](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type ASTObject")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: ASTObject => PreResult(continu, MSome[ASTObject](r))
+             case _ => halt("Can only produce object of type ASTObject")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[ASTObject]())
         }
         return r
       case o: Method =>
         val r: PreResult[ASTObject] = preMethod(o) match {
-         case PreResult(continu, MSome(r: ASTObject)) => PreResult(continu, MSome[ASTObject](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type ASTObject")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: ASTObject => PreResult(continu, MSome[ASTObject](r))
+             case _ => halt("Can only produce object of type ASTObject")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[ASTObject]())
         }
         return r
       case o: Parameter =>
         val r: PreResult[ASTObject] = preParameter(o) match {
-         case PreResult(continu, MSome(r: ASTObject)) => PreResult(continu, MSome[ASTObject](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type ASTObject")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: ASTObject => PreResult(continu, MSome[ASTObject](r))
+             case _ => halt("Can only produce object of type ASTObject")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[ASTObject]())
         }
         return r
       case o: BinarySemaphore =>
         val r: PreResult[ASTObject] = preBinarySemaphore(o) match {
-         case PreResult(continu, MSome(r: ASTObject)) => PreResult(continu, MSome[ASTObject](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type ASTObject")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: ASTObject => PreResult(continu, MSome[ASTObject](r))
+             case _ => halt("Can only produce object of type ASTObject")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[ASTObject]())
         }
         return r
       case o: Semaphore =>
         val r: PreResult[ASTObject] = preSemaphore(o) match {
-         case PreResult(continu, MSome(r: ASTObject)) => PreResult(continu, MSome[ASTObject](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type ASTObject")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: ASTObject => PreResult(continu, MSome[ASTObject](r))
+             case _ => halt("Can only produce object of type ASTObject")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[ASTObject]())
         }
         return r
       case o: Mutex =>
         val r: PreResult[ASTObject] = preMutex(o) match {
-         case PreResult(continu, MSome(r: ASTObject)) => PreResult(continu, MSome[ASTObject](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type ASTObject")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: ASTObject => PreResult(continu, MSome[ASTObject](r))
+             case _ => halt("Can only produce object of type ASTObject")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[ASTObject]())
         }
         return r
       case o: TODO =>
         val r: PreResult[ASTObject] = preTODO(o) match {
-         case PreResult(continu, MSome(r: ASTObject)) => PreResult(continu, MSome[ASTObject](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type ASTObject")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: ASTObject => PreResult(continu, MSome[ASTObject](r))
+             case _ => halt("Can only produce object of type ASTObject")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[ASTObject]())
         }
         return r
@@ -456,15 +570,21 @@ import org.sireum.hamr.codegen.act.ast.MTransformer._
     o match {
       case o: Component =>
         val r: PreResult[CamkesComponent] = preComponent(o) match {
-         case PreResult(continu, MSome(r: CamkesComponent)) => PreResult(continu, MSome[CamkesComponent](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type CamkesComponent")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: CamkesComponent => PreResult(continu, MSome[CamkesComponent](r))
+             case _ => halt("Can only produce object of type CamkesComponent")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[CamkesComponent]())
         }
         return r
       case o: LibraryComponent =>
         val r: PreResult[CamkesComponent] = preLibraryComponent(o) match {
-         case PreResult(continu, MSome(r: CamkesComponent)) => PreResult(continu, MSome[CamkesComponent](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type CamkesComponent")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: CamkesComponent => PreResult(continu, MSome[CamkesComponent](r))
+             case _ => halt("Can only produce object of type CamkesComponent")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[CamkesComponent]())
         }
         return r
@@ -483,36 +603,51 @@ import org.sireum.hamr.codegen.act.ast.MTransformer._
     o match {
       case o: Uses =>
         val r: PreResult[CAmkESFeature] = preUses(o) match {
-         case PreResult(continu, MSome(r: CAmkESFeature)) => PreResult(continu, MSome[CAmkESFeature](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type CAmkESFeature")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: CAmkESFeature => PreResult(continu, MSome[CAmkESFeature](r))
+             case _ => halt("Can only produce object of type CAmkESFeature")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[CAmkESFeature]())
         }
         return r
       case o: Provides =>
         val r: PreResult[CAmkESFeature] = preProvides(o) match {
-         case PreResult(continu, MSome(r: CAmkESFeature)) => PreResult(continu, MSome[CAmkESFeature](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type CAmkESFeature")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: CAmkESFeature => PreResult(continu, MSome[CAmkESFeature](r))
+             case _ => halt("Can only produce object of type CAmkESFeature")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[CAmkESFeature]())
         }
         return r
       case o: Emits =>
         val r: PreResult[CAmkESFeature] = preEmits(o) match {
-         case PreResult(continu, MSome(r: CAmkESFeature)) => PreResult(continu, MSome[CAmkESFeature](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type CAmkESFeature")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: CAmkESFeature => PreResult(continu, MSome[CAmkESFeature](r))
+             case _ => halt("Can only produce object of type CAmkESFeature")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[CAmkESFeature]())
         }
         return r
       case o: Consumes =>
         val r: PreResult[CAmkESFeature] = preConsumes(o) match {
-         case PreResult(continu, MSome(r: CAmkESFeature)) => PreResult(continu, MSome[CAmkESFeature](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type CAmkESFeature")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: CAmkESFeature => PreResult(continu, MSome[CAmkESFeature](r))
+             case _ => halt("Can only produce object of type CAmkESFeature")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[CAmkESFeature]())
         }
         return r
       case o: Dataport =>
         val r: PreResult[CAmkESFeature] = preDataport(o) match {
-         case PreResult(continu, MSome(r: CAmkESFeature)) => PreResult(continu, MSome[CAmkESFeature](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type CAmkESFeature")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: CAmkESFeature => PreResult(continu, MSome[CAmkESFeature](r))
+             case _ => halt("Can only produce object of type CAmkESFeature")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[CAmkESFeature]())
         }
         return r
@@ -583,15 +718,21 @@ import org.sireum.hamr.codegen.act.ast.MTransformer._
     o match {
       case o: GenericConfiguration =>
         val r: PreResult[Configuration] = preGenericConfiguration(o) match {
-         case PreResult(continu, MSome(r: Configuration)) => PreResult(continu, MSome[Configuration](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type Configuration")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: Configuration => PreResult(continu, MSome[Configuration](r))
+             case _ => halt("Can only produce object of type Configuration")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[Configuration]())
         }
         return r
       case o: DataPortAccessRestriction =>
         val r: PreResult[Configuration] = preDataPortAccessRestriction(o) match {
-         case PreResult(continu, MSome(r: Configuration)) => PreResult(continu, MSome[Configuration](r))
-         case PreResult(_, MSome(_)) => halt("Can only produce object of type Configuration")
+         case PreResult(continu, MSome(r)) =>
+           r match {
+             case r: Configuration => PreResult(continu, MSome[Configuration](r))
+             case _ => halt("Can only produce object of type Configuration")
+           }
          case PreResult(continu, _) => PreResult(continu, MNone[Configuration]())
         }
         return r
@@ -614,8 +755,11 @@ import org.sireum.hamr.codegen.act.ast.MTransformer._
     o match {
       case o: AstBasicComment =>
         val r: MOption[AstComment] = postAstBasicComment(o) match {
-         case MSome(result: AstComment) => MSome[AstComment](result)
-         case MSome(_) => halt("Can only produce object of type AstComment")
+         case MSome(result) =>
+           result match {
+             case result: AstComment => MSome[AstComment](result)
+             case _ => halt("Can only produce object of type AstComment")
+           }
          case _ => MNone[AstComment]()
         }
         return r
@@ -630,155 +774,221 @@ import org.sireum.hamr.codegen.act.ast.MTransformer._
     o match {
       case o: Assembly =>
         val r: MOption[CommentProvider] = postAssembly(o) match {
-         case MSome(result: CommentProvider) => MSome[CommentProvider](result)
-         case MSome(_) => halt("Can only produce object of type CommentProvider")
+         case MSome(result) =>
+           result match {
+             case result: CommentProvider => MSome[CommentProvider](result)
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case _ => MNone[CommentProvider]()
         }
         return r
       case o: Composition =>
         val r: MOption[CommentProvider] = postComposition(o) match {
-         case MSome(result: CommentProvider) => MSome[CommentProvider](result)
-         case MSome(_) => halt("Can only produce object of type CommentProvider")
+         case MSome(result) =>
+           result match {
+             case result: CommentProvider => MSome[CommentProvider](result)
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case _ => MNone[CommentProvider]()
         }
         return r
       case o: Instance =>
         val r: MOption[CommentProvider] = postInstance(o) match {
-         case MSome(result: CommentProvider) => MSome[CommentProvider](result)
-         case MSome(_) => halt("Can only produce object of type CommentProvider")
+         case MSome(result) =>
+           result match {
+             case result: CommentProvider => MSome[CommentProvider](result)
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case _ => MNone[CommentProvider]()
         }
         return r
       case o: Component =>
         val r: MOption[CommentProvider] = postComponent(o) match {
-         case MSome(result: CommentProvider) => MSome[CommentProvider](result)
-         case MSome(_) => halt("Can only produce object of type CommentProvider")
+         case MSome(result) =>
+           result match {
+             case result: CommentProvider => MSome[CommentProvider](result)
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case _ => MNone[CommentProvider]()
         }
         return r
       case o: LibraryComponent =>
         val r: MOption[CommentProvider] = postLibraryComponent(o) match {
-         case MSome(result: CommentProvider) => MSome[CommentProvider](result)
-         case MSome(_) => halt("Can only produce object of type CommentProvider")
+         case MSome(result) =>
+           result match {
+             case result: CommentProvider => MSome[CommentProvider](result)
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case _ => MNone[CommentProvider]()
         }
         return r
       case o: Uses =>
         val r: MOption[CommentProvider] = postUses(o) match {
-         case MSome(result: CommentProvider) => MSome[CommentProvider](result)
-         case MSome(_) => halt("Can only produce object of type CommentProvider")
+         case MSome(result) =>
+           result match {
+             case result: CommentProvider => MSome[CommentProvider](result)
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case _ => MNone[CommentProvider]()
         }
         return r
       case o: Provides =>
         val r: MOption[CommentProvider] = postProvides(o) match {
-         case MSome(result: CommentProvider) => MSome[CommentProvider](result)
-         case MSome(_) => halt("Can only produce object of type CommentProvider")
+         case MSome(result) =>
+           result match {
+             case result: CommentProvider => MSome[CommentProvider](result)
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case _ => MNone[CommentProvider]()
         }
         return r
       case o: Emits =>
         val r: MOption[CommentProvider] = postEmits(o) match {
-         case MSome(result: CommentProvider) => MSome[CommentProvider](result)
-         case MSome(_) => halt("Can only produce object of type CommentProvider")
+         case MSome(result) =>
+           result match {
+             case result: CommentProvider => MSome[CommentProvider](result)
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case _ => MNone[CommentProvider]()
         }
         return r
       case o: Consumes =>
         val r: MOption[CommentProvider] = postConsumes(o) match {
-         case MSome(result: CommentProvider) => MSome[CommentProvider](result)
-         case MSome(_) => halt("Can only produce object of type CommentProvider")
+         case MSome(result) =>
+           result match {
+             case result: CommentProvider => MSome[CommentProvider](result)
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case _ => MNone[CommentProvider]()
         }
         return r
       case o: Dataport =>
         val r: MOption[CommentProvider] = postDataport(o) match {
-         case MSome(result: CommentProvider) => MSome[CommentProvider](result)
-         case MSome(_) => halt("Can only produce object of type CommentProvider")
+         case MSome(result) =>
+           result match {
+             case result: CommentProvider => MSome[CommentProvider](result)
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case _ => MNone[CommentProvider]()
         }
         return r
       case o: Connection =>
         val r: MOption[CommentProvider] = postConnection(o) match {
-         case MSome(result: CommentProvider) => MSome[CommentProvider](result)
-         case MSome(_) => halt("Can only produce object of type CommentProvider")
+         case MSome(result) =>
+           result match {
+             case result: CommentProvider => MSome[CommentProvider](result)
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case _ => MNone[CommentProvider]()
         }
         return r
       case o: ConnectionEnd =>
         val r: MOption[CommentProvider] = postConnectionEnd(o) match {
-         case MSome(result: CommentProvider) => MSome[CommentProvider](result)
-         case MSome(_) => halt("Can only produce object of type CommentProvider")
+         case MSome(result) =>
+           result match {
+             case result: CommentProvider => MSome[CommentProvider](result)
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case _ => MNone[CommentProvider]()
         }
         return r
       case o: Connector =>
         val r: MOption[CommentProvider] = postConnector(o) match {
-         case MSome(result: CommentProvider) => MSome[CommentProvider](result)
-         case MSome(_) => halt("Can only produce object of type CommentProvider")
+         case MSome(result) =>
+           result match {
+             case result: CommentProvider => MSome[CommentProvider](result)
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case _ => MNone[CommentProvider]()
         }
         return r
       case o: Procedure =>
         val r: MOption[CommentProvider] = postProcedure(o) match {
-         case MSome(result: CommentProvider) => MSome[CommentProvider](result)
-         case MSome(_) => halt("Can only produce object of type CommentProvider")
+         case MSome(result) =>
+           result match {
+             case result: CommentProvider => MSome[CommentProvider](result)
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case _ => MNone[CommentProvider]()
         }
         return r
       case o: Method =>
         val r: MOption[CommentProvider] = postMethod(o) match {
-         case MSome(result: CommentProvider) => MSome[CommentProvider](result)
-         case MSome(_) => halt("Can only produce object of type CommentProvider")
+         case MSome(result) =>
+           result match {
+             case result: CommentProvider => MSome[CommentProvider](result)
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case _ => MNone[CommentProvider]()
         }
         return r
       case o: Parameter =>
         val r: MOption[CommentProvider] = postParameter(o) match {
-         case MSome(result: CommentProvider) => MSome[CommentProvider](result)
-         case MSome(_) => halt("Can only produce object of type CommentProvider")
+         case MSome(result) =>
+           result match {
+             case result: CommentProvider => MSome[CommentProvider](result)
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case _ => MNone[CommentProvider]()
         }
         return r
       case o: BinarySemaphore =>
         val r: MOption[CommentProvider] = postBinarySemaphore(o) match {
-         case MSome(result: CommentProvider) => MSome[CommentProvider](result)
-         case MSome(_) => halt("Can only produce object of type CommentProvider")
+         case MSome(result) =>
+           result match {
+             case result: CommentProvider => MSome[CommentProvider](result)
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case _ => MNone[CommentProvider]()
         }
         return r
       case o: Semaphore =>
         val r: MOption[CommentProvider] = postSemaphore(o) match {
-         case MSome(result: CommentProvider) => MSome[CommentProvider](result)
-         case MSome(_) => halt("Can only produce object of type CommentProvider")
+         case MSome(result) =>
+           result match {
+             case result: CommentProvider => MSome[CommentProvider](result)
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case _ => MNone[CommentProvider]()
         }
         return r
       case o: Mutex =>
         val r: MOption[CommentProvider] = postMutex(o) match {
-         case MSome(result: CommentProvider) => MSome[CommentProvider](result)
-         case MSome(_) => halt("Can only produce object of type CommentProvider")
+         case MSome(result) =>
+           result match {
+             case result: CommentProvider => MSome[CommentProvider](result)
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case _ => MNone[CommentProvider]()
         }
         return r
       case o: GenericConfiguration =>
         val r: MOption[CommentProvider] = postGenericConfiguration(o) match {
-         case MSome(result: CommentProvider) => MSome[CommentProvider](result)
-         case MSome(_) => halt("Can only produce object of type CommentProvider")
+         case MSome(result) =>
+           result match {
+             case result: CommentProvider => MSome[CommentProvider](result)
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case _ => MNone[CommentProvider]()
         }
         return r
       case o: DataPortAccessRestriction =>
         val r: MOption[CommentProvider] = postDataPortAccessRestriction(o) match {
-         case MSome(result: CommentProvider) => MSome[CommentProvider](result)
-         case MSome(_) => halt("Can only produce object of type CommentProvider")
+         case MSome(result) =>
+           result match {
+             case result: CommentProvider => MSome[CommentProvider](result)
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case _ => MNone[CommentProvider]()
         }
         return r
       case o: TODO =>
         val r: MOption[CommentProvider] = postTODO(o) match {
-         case MSome(result: CommentProvider) => MSome[CommentProvider](result)
-         case MSome(_) => halt("Can only produce object of type CommentProvider")
+         case MSome(result) =>
+           result match {
+             case result: CommentProvider => MSome[CommentProvider](result)
+             case _ => halt("Can only produce object of type CommentProvider")
+           }
          case _ => MNone[CommentProvider]()
         }
         return r
@@ -789,106 +999,151 @@ import org.sireum.hamr.codegen.act.ast.MTransformer._
     o match {
       case o: Assembly =>
         val r: MOption[ASTObject] = postAssembly(o) match {
-         case MSome(result: ASTObject) => MSome[ASTObject](result)
-         case MSome(_) => halt("Can only produce object of type ASTObject")
+         case MSome(result) =>
+           result match {
+             case result: ASTObject => MSome[ASTObject](result)
+             case _ => halt("Can only produce object of type ASTObject")
+           }
          case _ => MNone[ASTObject]()
         }
         return r
       case o: Composition =>
         val r: MOption[ASTObject] = postComposition(o) match {
-         case MSome(result: ASTObject) => MSome[ASTObject](result)
-         case MSome(_) => halt("Can only produce object of type ASTObject")
+         case MSome(result) =>
+           result match {
+             case result: ASTObject => MSome[ASTObject](result)
+             case _ => halt("Can only produce object of type ASTObject")
+           }
          case _ => MNone[ASTObject]()
         }
         return r
       case o: Instance =>
         val r: MOption[ASTObject] = postInstance(o) match {
-         case MSome(result: ASTObject) => MSome[ASTObject](result)
-         case MSome(_) => halt("Can only produce object of type ASTObject")
+         case MSome(result) =>
+           result match {
+             case result: ASTObject => MSome[ASTObject](result)
+             case _ => halt("Can only produce object of type ASTObject")
+           }
          case _ => MNone[ASTObject]()
         }
         return r
       case o: Component =>
         val r: MOption[ASTObject] = postComponent(o) match {
-         case MSome(result: ASTObject) => MSome[ASTObject](result)
-         case MSome(_) => halt("Can only produce object of type ASTObject")
+         case MSome(result) =>
+           result match {
+             case result: ASTObject => MSome[ASTObject](result)
+             case _ => halt("Can only produce object of type ASTObject")
+           }
          case _ => MNone[ASTObject]()
         }
         return r
       case o: LibraryComponent =>
         val r: MOption[ASTObject] = postLibraryComponent(o) match {
-         case MSome(result: ASTObject) => MSome[ASTObject](result)
-         case MSome(_) => halt("Can only produce object of type ASTObject")
+         case MSome(result) =>
+           result match {
+             case result: ASTObject => MSome[ASTObject](result)
+             case _ => halt("Can only produce object of type ASTObject")
+           }
          case _ => MNone[ASTObject]()
         }
         return r
       case o: Connection =>
         val r: MOption[ASTObject] = postConnection(o) match {
-         case MSome(result: ASTObject) => MSome[ASTObject](result)
-         case MSome(_) => halt("Can only produce object of type ASTObject")
+         case MSome(result) =>
+           result match {
+             case result: ASTObject => MSome[ASTObject](result)
+             case _ => halt("Can only produce object of type ASTObject")
+           }
          case _ => MNone[ASTObject]()
         }
         return r
       case o: ConnectionEnd =>
         val r: MOption[ASTObject] = postConnectionEnd(o) match {
-         case MSome(result: ASTObject) => MSome[ASTObject](result)
-         case MSome(_) => halt("Can only produce object of type ASTObject")
+         case MSome(result) =>
+           result match {
+             case result: ASTObject => MSome[ASTObject](result)
+             case _ => halt("Can only produce object of type ASTObject")
+           }
          case _ => MNone[ASTObject]()
         }
         return r
       case o: Connector =>
         val r: MOption[ASTObject] = postConnector(o) match {
-         case MSome(result: ASTObject) => MSome[ASTObject](result)
-         case MSome(_) => halt("Can only produce object of type ASTObject")
+         case MSome(result) =>
+           result match {
+             case result: ASTObject => MSome[ASTObject](result)
+             case _ => halt("Can only produce object of type ASTObject")
+           }
          case _ => MNone[ASTObject]()
         }
         return r
       case o: Procedure =>
         val r: MOption[ASTObject] = postProcedure(o) match {
-         case MSome(result: ASTObject) => MSome[ASTObject](result)
-         case MSome(_) => halt("Can only produce object of type ASTObject")
+         case MSome(result) =>
+           result match {
+             case result: ASTObject => MSome[ASTObject](result)
+             case _ => halt("Can only produce object of type ASTObject")
+           }
          case _ => MNone[ASTObject]()
         }
         return r
       case o: Method =>
         val r: MOption[ASTObject] = postMethod(o) match {
-         case MSome(result: ASTObject) => MSome[ASTObject](result)
-         case MSome(_) => halt("Can only produce object of type ASTObject")
+         case MSome(result) =>
+           result match {
+             case result: ASTObject => MSome[ASTObject](result)
+             case _ => halt("Can only produce object of type ASTObject")
+           }
          case _ => MNone[ASTObject]()
         }
         return r
       case o: Parameter =>
         val r: MOption[ASTObject] = postParameter(o) match {
-         case MSome(result: ASTObject) => MSome[ASTObject](result)
-         case MSome(_) => halt("Can only produce object of type ASTObject")
+         case MSome(result) =>
+           result match {
+             case result: ASTObject => MSome[ASTObject](result)
+             case _ => halt("Can only produce object of type ASTObject")
+           }
          case _ => MNone[ASTObject]()
         }
         return r
       case o: BinarySemaphore =>
         val r: MOption[ASTObject] = postBinarySemaphore(o) match {
-         case MSome(result: ASTObject) => MSome[ASTObject](result)
-         case MSome(_) => halt("Can only produce object of type ASTObject")
+         case MSome(result) =>
+           result match {
+             case result: ASTObject => MSome[ASTObject](result)
+             case _ => halt("Can only produce object of type ASTObject")
+           }
          case _ => MNone[ASTObject]()
         }
         return r
       case o: Semaphore =>
         val r: MOption[ASTObject] = postSemaphore(o) match {
-         case MSome(result: ASTObject) => MSome[ASTObject](result)
-         case MSome(_) => halt("Can only produce object of type ASTObject")
+         case MSome(result) =>
+           result match {
+             case result: ASTObject => MSome[ASTObject](result)
+             case _ => halt("Can only produce object of type ASTObject")
+           }
          case _ => MNone[ASTObject]()
         }
         return r
       case o: Mutex =>
         val r: MOption[ASTObject] = postMutex(o) match {
-         case MSome(result: ASTObject) => MSome[ASTObject](result)
-         case MSome(_) => halt("Can only produce object of type ASTObject")
+         case MSome(result) =>
+           result match {
+             case result: ASTObject => MSome[ASTObject](result)
+             case _ => halt("Can only produce object of type ASTObject")
+           }
          case _ => MNone[ASTObject]()
         }
         return r
       case o: TODO =>
         val r: MOption[ASTObject] = postTODO(o) match {
-         case MSome(result: ASTObject) => MSome[ASTObject](result)
-         case MSome(_) => halt("Can only produce object of type ASTObject")
+         case MSome(result) =>
+           result match {
+             case result: ASTObject => MSome[ASTObject](result)
+             case _ => halt("Can only produce object of type ASTObject")
+           }
          case _ => MNone[ASTObject]()
         }
         return r
@@ -911,15 +1166,21 @@ import org.sireum.hamr.codegen.act.ast.MTransformer._
     o match {
       case o: Component =>
         val r: MOption[CamkesComponent] = postComponent(o) match {
-         case MSome(result: CamkesComponent) => MSome[CamkesComponent](result)
-         case MSome(_) => halt("Can only produce object of type CamkesComponent")
+         case MSome(result) =>
+           result match {
+             case result: CamkesComponent => MSome[CamkesComponent](result)
+             case _ => halt("Can only produce object of type CamkesComponent")
+           }
          case _ => MNone[CamkesComponent]()
         }
         return r
       case o: LibraryComponent =>
         val r: MOption[CamkesComponent] = postLibraryComponent(o) match {
-         case MSome(result: CamkesComponent) => MSome[CamkesComponent](result)
-         case MSome(_) => halt("Can only produce object of type CamkesComponent")
+         case MSome(result) =>
+           result match {
+             case result: CamkesComponent => MSome[CamkesComponent](result)
+             case _ => halt("Can only produce object of type CamkesComponent")
+           }
          case _ => MNone[CamkesComponent]()
         }
         return r
@@ -938,36 +1199,51 @@ import org.sireum.hamr.codegen.act.ast.MTransformer._
     o match {
       case o: Uses =>
         val r: MOption[CAmkESFeature] = postUses(o) match {
-         case MSome(result: CAmkESFeature) => MSome[CAmkESFeature](result)
-         case MSome(_) => halt("Can only produce object of type CAmkESFeature")
+         case MSome(result) =>
+           result match {
+             case result: CAmkESFeature => MSome[CAmkESFeature](result)
+             case _ => halt("Can only produce object of type CAmkESFeature")
+           }
          case _ => MNone[CAmkESFeature]()
         }
         return r
       case o: Provides =>
         val r: MOption[CAmkESFeature] = postProvides(o) match {
-         case MSome(result: CAmkESFeature) => MSome[CAmkESFeature](result)
-         case MSome(_) => halt("Can only produce object of type CAmkESFeature")
+         case MSome(result) =>
+           result match {
+             case result: CAmkESFeature => MSome[CAmkESFeature](result)
+             case _ => halt("Can only produce object of type CAmkESFeature")
+           }
          case _ => MNone[CAmkESFeature]()
         }
         return r
       case o: Emits =>
         val r: MOption[CAmkESFeature] = postEmits(o) match {
-         case MSome(result: CAmkESFeature) => MSome[CAmkESFeature](result)
-         case MSome(_) => halt("Can only produce object of type CAmkESFeature")
+         case MSome(result) =>
+           result match {
+             case result: CAmkESFeature => MSome[CAmkESFeature](result)
+             case _ => halt("Can only produce object of type CAmkESFeature")
+           }
          case _ => MNone[CAmkESFeature]()
         }
         return r
       case o: Consumes =>
         val r: MOption[CAmkESFeature] = postConsumes(o) match {
-         case MSome(result: CAmkESFeature) => MSome[CAmkESFeature](result)
-         case MSome(_) => halt("Can only produce object of type CAmkESFeature")
+         case MSome(result) =>
+           result match {
+             case result: CAmkESFeature => MSome[CAmkESFeature](result)
+             case _ => halt("Can only produce object of type CAmkESFeature")
+           }
          case _ => MNone[CAmkESFeature]()
         }
         return r
       case o: Dataport =>
         val r: MOption[CAmkESFeature] = postDataport(o) match {
-         case MSome(result: CAmkESFeature) => MSome[CAmkESFeature](result)
-         case MSome(_) => halt("Can only produce object of type CAmkESFeature")
+         case MSome(result) =>
+           result match {
+             case result: CAmkESFeature => MSome[CAmkESFeature](result)
+             case _ => halt("Can only produce object of type CAmkESFeature")
+           }
          case _ => MNone[CAmkESFeature]()
         }
         return r
@@ -1038,15 +1314,21 @@ import org.sireum.hamr.codegen.act.ast.MTransformer._
     o match {
       case o: GenericConfiguration =>
         val r: MOption[Configuration] = postGenericConfiguration(o) match {
-         case MSome(result: Configuration) => MSome[Configuration](result)
-         case MSome(_) => halt("Can only produce object of type Configuration")
+         case MSome(result) =>
+           result match {
+             case result: Configuration => MSome[Configuration](result)
+             case _ => halt("Can only produce object of type Configuration")
+           }
          case _ => MNone[Configuration]()
         }
         return r
       case o: DataPortAccessRestriction =>
         val r: MOption[Configuration] = postDataPortAccessRestriction(o) match {
-         case MSome(result: Configuration) => MSome[Configuration](result)
-         case MSome(_) => halt("Can only produce object of type Configuration")
+         case MSome(result) =>
+           result match {
+             case result: Configuration => MSome[Configuration](result)
+             case _ => halt("Can only produce object of type Configuration")
+           }
          case _ => MNone[Configuration]()
         }
         return r
