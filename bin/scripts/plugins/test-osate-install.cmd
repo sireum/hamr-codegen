@@ -41,7 +41,9 @@ val localUpdateSite = (Os.home / "devel" / "sireum" / "osate-update-site").toUri
 val remoteGumboUpdateSite = "https://raw.githubusercontent.com/sireum/aadl-gumbo-update-site/master"
 val localGumboUpdateSite = (Os.home / "devel" / "sireum" / "aadl-gumbo-update-site").toUri
 
-val osateExe: Os.Path = if(ops.ISZOps(Os.cliArgs).contains("fmide")) fmideLoc else osateLoc
+//val osateExe: Os.Path = if(ops.ISZOps(Os.cliArgs).contains("fmide")) fmideLoc else osateLoc
+//val osateExe: Os.Path = fmideLoc
+val osateExe: Os.Path = osateLoc
 
 val awas = Feature(
   name = "Awas",
