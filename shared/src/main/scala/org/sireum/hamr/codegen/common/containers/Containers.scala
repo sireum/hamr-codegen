@@ -78,6 +78,8 @@ object Marker {
     optEndSuffix = Some("-->"))
 
   @strictpure def createSlashPlaceholderMarker(s: String): PlaceholderMarker = PlaceholderMarker(s, "//", None())
+
+  @strictpure def createHashPlaceholderMarker(s: String): PlaceholderMarker = PlaceholderMarker(s, "#", None())
 }
 
 @sig trait Marker {

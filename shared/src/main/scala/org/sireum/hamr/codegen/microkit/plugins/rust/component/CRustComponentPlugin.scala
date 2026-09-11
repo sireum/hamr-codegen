@@ -3,7 +3,7 @@ package org.sireum.hamr.codegen.microkit.plugins.rust.component
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{BoolValue, IdPath, Store, StoreValue}
-import org.sireum.hamr.codegen.common.containers.{Marker, Resource}
+import org.sireum.hamr.codegen.common.containers.{BlockMarker, Marker, PlaceholderMarker, Resource}
 import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.types.AadlTypes
@@ -21,6 +21,8 @@ object CRustComponentPlugin {
 
   val KEY_CrustComponentPlugin: String = "KEY_CRustComponentPlugin"
   val MarkerR2U2Module: String = "MARKER R2U2 MONITOR MODULE"
+  val MarkerR2U2MakeRules: String = "MARKER FOR R2U2_BUILD_DEPS RULE"
+  val MarkerR2U2CargoDeps: String = "MARKER R2U2 CARGO DEPENDENCIES"
 
   @strictpure def hasCRustComponentContributions(store: Store): B = store.contains(KEY_CrustComponentPlugin)
 
@@ -672,15 +674,24 @@ object ComponentContributions {}
           if (e._2.crateDependencies.nonEmpty) Some(st"${(e._2.crateDependencies, "\n")}")
           else None()
 
-        val r2u2CargoMarker = Marker.createHashMarker("MARKER R2U2 CARGO DEPENDENCIES")
+        // As with the Makefile: emit a placeholder when there is no R2U2 monitor, so
+        // monitor-free crates carry a single comment line rather than an empty BEGIN/END
+        // pair. Promoted to a real block marker as soon as there are dependencies to
+        // inject, at which point its absence becomes an error.
         val r2u2CargoItems: ISZ[RAST.Item] =
           if (e._2.requiresR2U2) ISZ(RAST.ItemST(RustUtil.r2u2CargoDependencies(localStore)))
           else ISZ()
-        val r2u2CargoSection = RAST.MarkerWrap(
-          marker = r2u2CargoMarker,
-          items = r2u2CargoItems,
-          sep = "\n",
-          optLastItemSep = None()).prettyST
+        val r2u2CargoMarker: Marker =
+          if (r2u2CargoItems.nonEmpty) Marker.createHashMarker(CRustComponentPlugin.MarkerR2U2CargoDeps)
+          else Marker.createHashPlaceholderMarker(CRustComponentPlugin.MarkerR2U2CargoDeps)
+        val r2u2CargoSection: ST =
+          if (r2u2CargoItems.nonEmpty)
+            RAST.MarkerWrap(
+              marker = r2u2CargoMarker.asInstanceOf[BlockMarker],
+              items = r2u2CargoItems,
+              sep = "\n",
+              optLastItemSep = None()).prettyST
+          else RAST.MarkerPlaceholder(r2u2CargoMarker.asInstanceOf[PlaceholderMarker]).prettyST
 
         val content =
           st"""${CommentTemplate.safeToEditComment_hash}
@@ -728,18 +739,23 @@ object ComponentContributions {}
       }
 
       { // Makefile
-        val r2u2MakeMarker = Marker.createHashMarker("MARKER R2U2 MAKE RULES")
+        // When the component has no R2U2 monitor there is nothing to inject, so emit a
+        // placeholder rather than an empty BEGIN/END pair. writeOutResources exempts
+        // placeholders from the missing-marker check, which keeps monitor-free Makefiles
+        // free of inert scaffolding; the marker is promoted to a real block marker as soon
+        // as there is content, and from then on its absence is an error. Mirrors how
+        // GumboRustPlugin chooses between requiresMarker/ensuresMarker.
         val r2u2MakeItems: ISZ[RAST.Item] =
           if (e._2.requiresR2U2) {
             ISZ(RAST.ItemST(
               st""".DEFAULT_GOAL := all
-                  |R2U2_SPEC_BIN := src/component/spec.bin
+                  |R2U2_BUILD_DEPS := src/component/spec.bin
                   |
                   |r2u2_cli:
                   |${TAB}@echo "Checking/Updating r2u2_cli from crates.io..."
                   |${TAB}cargo +stable install r2u2_cli --version ${MicrokitUtil.getMicrokitVersions(localStore).get("r2u2").get}
                   |
-                  |$$(R2U2_SPEC_BIN): r2u2_cli
+                  |$$(R2U2_BUILD_DEPS): r2u2_cli
                   |${TAB}mkdir -p .cargo && \
                   |${TAB}cd src/component && \
                   |${TAB}sed '/^--/d' spec.map > temp.map && \
@@ -748,11 +764,17 @@ object ComponentContributions {}
           } else {
             ISZ()
           }
-        val r2u2MakeSection = RAST.MarkerWrap(
-          marker = r2u2MakeMarker,
-          items = r2u2MakeItems,
-          sep = "\n",
-          optLastItemSep = None()).prettyST
+        val r2u2MakeMarker: Marker =
+          if (r2u2MakeItems.nonEmpty) Marker.createHashMarker(CRustComponentPlugin.MarkerR2U2MakeRules)
+          else Marker.createHashPlaceholderMarker(CRustComponentPlugin.MarkerR2U2MakeRules)
+        val r2u2MakeSection: ST =
+          if (r2u2MakeItems.nonEmpty)
+            RAST.MarkerWrap(
+              marker = r2u2MakeMarker.asInstanceOf[BlockMarker],
+              items = r2u2MakeItems,
+              sep = "\n",
+              optLastItemSep = None()).prettyST
+          else RAST.MarkerPlaceholder(r2u2MakeMarker.asInstanceOf[PlaceholderMarker]).prettyST
 
         val content =
           st"""${CommentTemplate.safeToEditComment_hash}
@@ -763,8 +785,6 @@ object ComponentContributions {}
               |                                            $$(microkit_sdk_config_dir)/debug/include))
               |
               |$r2u2MakeSection
-              |
-              |R2U2_BUILD_DEPS = $$(R2U2_SPEC_BIN)
               |
               |# The toolchain is pinned to a stable release channel (see rust-toolchain.toml),
               |# which rejects the #![feature(..)] attributes the generated crates declare, so
