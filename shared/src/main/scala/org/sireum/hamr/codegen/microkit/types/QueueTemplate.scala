@@ -437,7 +437,6 @@ object QueueTemplate {
       if (!peekApi) st""
       else
         st"""
-            |
             |// Copy the most recently enqueued element without modifying the queue.
             |// Returns false if no element has been enqueued.
             |bool ${queueName}_peek_latest(
@@ -448,7 +447,6 @@ object QueueTemplate {
       if (!peekApi) st""
       else
         st"""
-            |
             |// Copy the element that the next dequeue would observe without advancing
             |// this receiver. With no intervening enqueue, peek and dequeue return the
             |// same status, dropped count, and data.
@@ -635,7 +633,6 @@ object QueueTemplate {
       if (!peekApi) st""
       else
         st"""
-            |
             |bool ${peekLatestMethodName}(
             |  ${queueTypeName} *queue,
             |  ${queueElementTypeName} *data) {
@@ -660,7 +657,6 @@ object QueueTemplate {
       if (!peekApi) st""
       else
         st"""
-            |
             |bool ${peekMethodName}(
             |  ${recvQueueTypeName} *recvQueue,
             |  ${MicrokitTypeUtil.eventCounterTypename} *numDropped,

@@ -836,8 +836,8 @@ object GumboRustPlugin {
         val alertPorts: ISZ[ST] = for (alert <- monitor.alerts) yield
           st"old(api).${alert.portId} == final(api).${alert.portId}"
         return ISZ(RAST.ExprST(st"""// guarantee Monitor_Requirement
-                                      |//   Alert ports are reserved for the monitor
-                                      |${(alertPorts, ",\n")}"""))
+                                   |//   Alert ports are reserved for the monitor
+                                   |${(alertPorts, ",\n")}"""))
       case _ => return ISZ()
     }
   }
@@ -845,7 +845,9 @@ object GumboRustPlugin {
   @pure def handleComputePlaceholder(fn: RAST.FnImpl,
                                      thread: AadlThread,
                                      subclauseInfo: GclAnnexClauseInfo): (ISZ[Marker], RAST.FnImpl) = {
-    val requires: ISZ[RAST.Expr] = getAadlRequires(thread)
+    // don't add the AADL requirements (i.e. outgoing ports are empty) when there is no monitor or gumbo
+    // compute clause in the model
+    val requires: ISZ[RAST.Expr] = if (subclauseInfo.annex.monitor.nonEmpty) getAadlRequires(thread) else ISZ()
     val requiresMarker: Marker = if (requires.nonEmpty) {
       Marker.createSlashMarker(GumboRustUtil.GumboMarkers.timeTriggeredRequires)
     } else {
