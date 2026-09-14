@@ -14,10 +14,18 @@ jobs:
       fail-fast: false
       matrix:
         testSuffix:
-          - "BaseBehaviorTestStatic,BaseBehaviorTestDynamic"
-          - "MicrokitBehaviorTests,MicrokitTests,HamrTranspileTests,GumboTest,SysVCTest,SysVCVerusGenTest"
+          # Rows are balanced against per-suite times from the last green Windows run. CodeGenTest_Base
+          # is the longest single suite, so it runs alone and sets the floor for the whole matrix --
+          # adding further rows cannot bring the run in under it.
+          # SymlinkAuxCodeTest is Linux/macOS only: on Windows Os.mklink creates an NTFS junction
+          # for directory targets, which Files.isSymbolicLink reports as false, so its assertions
+          # cannot hold there.
           - "CodeGenTest_Base"
-          - "CodegenTest_CASE,Ros2Tests"
+          - "CodegenTest_CASE"
+          - "BaseBehaviorTestDynamic"
+          - "GumboTest,HamrTranspileTests"
+          - "BaseBehaviorTestStatic,MicrokitBehaviorTests"
+          - "MicrokitTests,R2U2MonitorTests,R2U2MonitorBehaviorTests,SlangExp2RustTests,Ros2Tests,SysVCTest,SysVCVerusGenTest"
     name: '${{ matrix.testSuffix }}'
     steps:
       - name: Support longpaths

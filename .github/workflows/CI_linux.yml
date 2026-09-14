@@ -24,8 +24,13 @@ jobs:
       fail-fast: false
       matrix:
         testSuffix:
-          - "BaseBehaviorTestStatic,BaseBehaviorTestDynamic,CodeGenTest_Base"
-          - "MicrokitBehaviorTests,MicrokitTests,Ros2Tests,HamrTranspileTests,GumboTest,CodegenTest_CASE,SysVCTest,SysVCVerusGenTest"
+          # Rows are balanced against per-suite times from the last green run. CodeGenTest_Base is
+          # the longest single suite, so it runs alone and sets the floor for the whole matrix --
+          # adding further rows cannot bring the run in under it.
+          - "CodeGenTest_Base"
+          - "CodegenTest_CASE"
+          - "BaseBehaviorTestDynamic,GumboTest,HamrTranspileTests,SysVCTest,SysVCVerusGenTest"
+          - "BaseBehaviorTestStatic,MicrokitTests,MicrokitBehaviorTests,R2U2MonitorTests,R2U2MonitorBehaviorTests,SymlinkAuxCodeTest,SlangExp2RustTests,Ros2Tests"
     name: '${{ matrix.testSuffix }}'
     steps:
       - name: Install Required Tools
