@@ -1,0 +1,25 @@
+name: Check Test Suites
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Checkout test submodule
+        # the suites live in jvm/src/test; the other submodules aren't needed for this check
+        run: git submodule update --init jvm/src/test
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Check that every test suite is run by some workflow
+        run: python3 bin/scripts/checkTestSuiteCoverage.py
