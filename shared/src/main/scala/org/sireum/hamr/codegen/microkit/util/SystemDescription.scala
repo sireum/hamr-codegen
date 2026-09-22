@@ -12,7 +12,15 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.{KiBytesToHex, schedul
                                    val protectionDomains: ISZ[ProtectionDomain],
                                    val memoryRegions: ISZ[MemoryRegion],
                                    val channels: ISZ[Channel],
-                                   val templateContributions: ISZ[ST]) {
+                                   val templateContributions: ISZ[ST],
+
+                                   /** Python emitted near the END of the generated meta.py's generate(),
+                                     * after every protection domain has been created and after the
+                                     * user_schedule has been patched in.  templateContributions renders
+                                     * before the protection domains exist, so anything that needs to name
+                                     * a PD -- patching an ELF section, for instance -- belongs here.
+                                     */
+                                   val templateTailContributions: ISZ[ST]) {
 
   val contentMarker: BlockMarker = Marker.createXmlMarker("MSD CONTENT MARKER")
 

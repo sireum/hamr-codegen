@@ -218,7 +218,7 @@ object DomainMonitorPlugin {
           protectionDomains = normalPDs,
           memoryRegions = normalMemoryRegions,
           channels = strippedChannels,
-          templateContributions = ISZ()), localStore)
+          templateContributions = ISZ(), templateTailContributions = ISZ()), localStore)
 
         // Build monitor schedule: pacer → monitor → pacer → component for each component;
         // no monitor after the last component since the frame wraps.
@@ -244,7 +244,7 @@ object DomainMonitorPlugin {
           protectionDomains = MonitorInjector.rekeyObservedUnconnectedInputMaps(rawSd.protectionDomains, localStore),
           memoryRegions = rawSd.memoryRegions,
           channels = rawSd.channels,
-          templateContributions = ISZ()), localStore)
+          templateContributions = ISZ(), templateTailContributions = ISZ()), localStore)
 
       case _ =>
         reporter.error(None(), toolName, "Injected monitor or pacer component was not found")

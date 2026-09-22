@@ -137,6 +137,13 @@ object MakefileTemplate {
           |
           |MICROKIT_TOOL ?= $$(MICROKIT_SDK)/bin/microkit
           |
+          |# Which cargo profile directory the Rust staticlibs land in.  The crate Makefiles'
+          |# default target is build-verus-release, and the *-release targets pass --release, so
+          |# those produce target/<triple>/release; the plain build / build-verus targets do not
+          |# and produce target/<triple>/debug.  The link rules below have to look in whichever
+          |# one RUST_MAKE_TARGET actually populated.
+          |RUST_PROFILE_DIR := $$(if $$(RUST_MAKE_TARGET),$$(if $$(filter %-release,$$(RUST_MAKE_TARGET)),release,debug),release)
+          |
           |CFLAGS := -mcpu=$$(CPU) \
           |${TAB}-mstrict-align \
           |${TAB}-ffreestanding \
@@ -267,6 +274,13 @@ object MakefileTemplate {
           |DTC := dtc
           |PYTHON ?= python3
           |
+          |# Which cargo profile directory the Rust staticlibs land in.  The crate Makefiles'
+          |# default target is build-verus-release, and the *-release targets pass --release, so
+          |# those produce target/<triple>/release; the plain build / build-verus targets do not
+          |# and produce target/<triple>/debug.  The link rules below have to look in whichever
+          |# one RUST_MAKE_TARGET actually populated.
+          |RUST_PROFILE_DIR := $$(if $$(RUST_MAKE_TARGET),$$(if $$(filter %-release,$$(RUST_MAKE_TARGET)),release,debug),release)
+          |
           |SYSTEM_FILE := arinc_scheduling.system
           |IMAGE_FILE := loader.img
           |REPORT_FILE := report.txt
@@ -313,7 +327,11 @@ object MakefileTemplate {
           |# Sentinel file whose name encodes a hash of build-affecting variables.
           |# When any of these change the old sentinel is removed and a new one is created,
           |# forcing dependent targets to rebuild.
-          |CHECK_FLAGS_BOARD_MD5:=.board_cflags-$$(shell echo -- $${CFLAGS} $${BOARD} $${MICROKIT_CONFIG} $${MICROKIT_SDK} $${MSD} $${SCHEDULER_C} $${SCHEDULER_CONFIG_HEADERS}| shasum | sed 's/ *-//')
+          |# TESTS is part of the hash because it is patched into an ELF section by the MSD step
+          |# below.  Without it, changing TESTS leaves this stamp -- and therefore $$(SYSTEM_FILE)
+          |# -- up to date, the metaprogram never re-runs, and the image silently keeps running
+          |# the previous selection.
+          |CHECK_FLAGS_BOARD_MD5:=.board_cflags-$$(shell echo -- $${CFLAGS} $${BOARD} $${MICROKIT_CONFIG} $${MICROKIT_SDK} $${MSD} $${SCHEDULER_C} $${SCHEDULER_CONFIG_HEADERS} $${TESTS}| shasum | sed 's/ *-//')
           |
           |$${CHECK_FLAGS_BOARD_MD5}:
           |${TAB}-rm -f .board_cflags-*
@@ -350,7 +368,7 @@ object MakefileTemplate {
           |
           |$$(SYSTEM_FILE): $$(IMAGES) $$(DTB) $${CHECK_FLAGS_BOARD_MD5}
           |${TAB}$$(PYTHON) $$(SDFGEN_HELPER) --macros "$$(SDFGEN_UNKOWN_MACROS)" --configs "$$(SCHEDULER_CONFIG_HEADERS)" --output $$(TOP_BUILD_DIR)/config_structs.py
-          |${TAB}$$(PYTHON) $$(MSD) --sddf $$(SDDF) --board $$(MICROKIT_BOARD) --dtb $$(DTB) --output . --sdf $$(SYSTEM_FILE) --objcopy $$(OBJCOPY)
+          |${TAB}$$(PYTHON) $$(MSD) --sddf $$(SDDF) --board $$(MICROKIT_BOARD) --dtb $$(DTB) --output . --sdf $$(SYSTEM_FILE) --objcopy $$(OBJCOPY) --tests "$$(TESTS)"
           |${TAB}$$(OBJCOPY) --update-section .device_resources=timer_driver_device_resources.data timer_driver.elf
           |${TAB}$$(OBJCOPY) --update-section .timer_client_config=timer_client_scheduler.data scheduler.elf
           |

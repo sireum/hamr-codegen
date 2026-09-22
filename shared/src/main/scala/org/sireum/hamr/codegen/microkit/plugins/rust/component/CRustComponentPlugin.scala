@@ -77,6 +77,8 @@ object ComponentContributions {}
                                         val libInitializePre: ISZ[RAST.BodyItem],
                                         // after _app.initialize(..), before app = Some(_app)
                                         val libInitializePost: ISZ[RAST.BodyItem],
+                                        // before the compute entrypoint dispatches to the app
+                                        val libComputePre: ISZ[RAST.BodyItem],
                                         // after the compute entrypoint dispatches to the app
                                         val libComputePost: ISZ[RAST.BodyItem],
 
@@ -278,6 +280,7 @@ object ComponentContributions {}
           libModuleLevelEntries = ISZ(),
           libInitializePre = ISZ(),
           libInitializePost = ISZ(),
+          libComputePre = ISZ(),
           libComputePost = ISZ(),
           crateDependencies = ISZ())
 
@@ -359,10 +362,17 @@ object ComponentContributions {}
                                     |_app.r2u2_monitor_initialize();""")
         }
 
-        val computePre: Option[ST] = 
-          if (e._2.requiresR2U2)
-            Some(st"_app.r2u2_monitor_pre_timeTriggered(&compute_api);")
-          else None()
+        var computePre: Option[ST] =
+          if (contribs.libComputePre.isEmpty) None()
+          else Some(st"${(for (i <- contribs.libComputePre) yield i.prettyST, "\n")}")
+
+        if (e._2.requiresR2U2) {
+          computePre = computePre match {
+            case Some(c) => Some(st"""$c
+                                     |_app.r2u2_monitor_pre_timeTriggered(&compute_api);""")
+            case _ => Some(st"_app.r2u2_monitor_pre_timeTriggered(&compute_api);")
+          }
+        }
 
         var computePost: Option[ST] =
           if (contribs.libComputePost.isEmpty) None()

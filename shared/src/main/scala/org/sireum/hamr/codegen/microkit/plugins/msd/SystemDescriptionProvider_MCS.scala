@@ -141,6 +141,7 @@ object SystemDescriptionProvider_MCS {
       // by the runtime monitor plugin).  Template-managed regions have their MemoryRegion
       // creation emitted here; the standard loop only emits their PD add_map calls.
       val templateManagedMapsSt: ISZ[ST] = msd.templateContributions
+
       for (m <- memoryRegions) {
         // Skip regions that no PD in this SD variant maps (e.g. a region belonging to a
         // stripped monitor PD is present in memoryRegions but absent from the normal SD's PDs).
@@ -211,6 +212,15 @@ object SystemDescriptionProvider_MCS {
         else
           st"""with open(f"{output_dir}/{sdf_path}", "w+") as f:
               |    f.write(sdf.render())"""
+
+      // Tail contributions run at the end of generate(), where every protection domain
+      // exists.  They share renderST's template line, so a variant without any (every
+      // variant but the test scheduler) gets no stray blank line.
+      val tailAndRenderST: ST =
+        if (msd.templateTailContributions.isEmpty) renderST
+        else st"""${(msd.templateTailContributions, "\n\n")}
+                 |
+                 |$renderST"""
 
       val marker = Marker.createHashMarker("META MARKER")
 
@@ -328,7 +338,7 @@ object SystemDescriptionProvider_MCS {
             |                       user_schedule.section_name,
             |                       data_path)
             |
-            |    $renderST
+            |    $tailAndRenderST
             |
             |
             |if __name__ == '__main__':
@@ -339,6 +349,9 @@ object SystemDescriptionProvider_MCS {
             |    parser.add_argument("--output", required=True)
             |    parser.add_argument("--sdf", required=True)
             |    parser.add_argument("--objcopy", required=True)
+            |    # Substring filter selecting which system tests to run; empty means all of
+            |    # them.  Only the test scheduler variant consumes it.
+            |    parser.add_argument("--tests", required=False, default="")
             |
             |    args = parser.parse_args()
             |
@@ -353,6 +366,9 @@ object SystemDescriptionProvider_MCS {
             |
             |    global obj_copy
             |    obj_copy = args.objcopy
+            |
+            |    global tests_filter
+            |    tests_filter = args.tests
             |
             |    with open(args.dtb, "rb") as f:
             |        dtb = DeviceTree(f.read())

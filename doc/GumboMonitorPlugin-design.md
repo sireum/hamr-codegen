@@ -100,14 +100,23 @@ The naming convention is the glue: `sv_` prefix on source threads maps to `{proc
 
 ## Bidirectional Use Cases
 
-Because the shared memory regions can be mapped `rw` for both PDs:
+Implemented today (thread -> observer only):
 
 1. **Post-condition checking**: Monitor reads state vars + output ports after a thread runs, evaluates GUMBO post-conditions
 2. **Pre-condition checking**: Monitor reads the receiving thread's state vars + incoming port values, evaluates GUMBO pre-conditions
+
+Requiring a controller -> thread direction that does **not** exist yet:
+
 3. **Unit testing**: A test monitor mutates state vars before dispatching the thread, then checks outputs against expected post-conditions
 4. **Fault injection**: A monitor could inject invalid state to test error handling
 
-Different monitor implementations share the same infrastructure — they differ only in what they do with the get/put APIs during their timeslice.
+The `sv_X` ports are synthetic *outputs* and `lib.rs` emits only `put_sv_*`; there is no
+`get_sv_*` on the thread side, so 3 and 4 cannot be done with what is in the tree. See
+`TestScheduler-design.md` D16, which adds the missing direction as mirrored `inj_sv_X`
+*input* ports rather than by making these regions bidirectional.
+
+Monitor implementations that only read share the same infrastructure — they differ only in
+what they do with the published values during their timeslice.
 
 ## Why Not seL4 Debug Facilities?
 
