@@ -62,7 +62,7 @@ object CParser {
           offset32 = conversions.Z.toU32(offset),
           length32 = conversions.Z.toU32(1))
 
-        reporter.error(posOpt = Some(pos), kind = "RustSimpleParser", message = msg)
+        reporter.error(posOpt = Some(pos), kind = "CParser", message = msg)
 
         halt("")
       }
@@ -241,23 +241,35 @@ object CParser {
               content(offset) == 'b' && content(offset + 1) == 'o' && content(offset + 2) == 'o' &&
               content(offset + 3) == 'l' && isEndOfKeyword(offset + 4)) {
 
-              // bool ...
+              // bool ...  (either a method or a global variable, e.g. the
+              // last_<port>_payload of a Base_Types::Boolean data port)
 
               col = col + 4
               offset = offset + 4
 
-              val methodName = consumeName()
+              val name = consumeName()
               consumeWhiteSpaceAndComments()
 
-              illFormedC ('(')
+              if (offset < content.size && content(offset) != '(') {
+                // bool <name> [= ...];
+                scanToChar(ISZ(';'))
 
-              scanToChar(ISZ('{'))
+                illFormedC (';')
 
-              balanceBrace()
+                cItems = cItems.push(CField(identifier = name, typ = "bool", isVolatile = F,
+                  pos = buildPosition(beginLine = beginLine, beginCol = beginCol, beginOffset = beginOffset,
+                    endLine = line, endCol = col, endOffset = offset)))
+              } else {
+                illFormedC ('(')
 
-              cItems = cItems.push(CMethod(identifier = methodName, returnType = "bool",
-                pos = buildPosition(beginLine = beginLine, beginCol = beginCol, beginOffset = beginOffset,
-                  endLine = line, endCol = col, endOffset = offset)))
+                scanToChar(ISZ('{'))
+
+                balanceBrace()
+
+                cItems = cItems.push(CMethod(identifier = name, returnType = "bool",
+                  pos = buildPosition(beginLine = beginLine, beginCol = beginCol, beginOffset = beginOffset,
+                    endLine = line, endCol = col, endOffset = offset)))
+              }
 
               increment()
             }

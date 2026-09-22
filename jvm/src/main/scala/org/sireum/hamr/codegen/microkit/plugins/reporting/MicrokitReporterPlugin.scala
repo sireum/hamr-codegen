@@ -23,6 +23,9 @@ import org.sireum.message.{Level, Position, Reporter}
 
 object MicrokitReporterPlugin {
   val name: String = "MicrokitReporterPlugin"
+
+  // kind of the warning emitted when a reporting parser fails and the report is suspended
+  val reportSuspendedKind: String = "MicrokitReporterPlugin.ReportSuspended"
 }
 
 @datatype class MicrokitReporterPlugin() extends Plugin {
@@ -118,6 +121,15 @@ object MicrokitReporterPlugin {
       return localStore
     }
 
+    // A reporting parser failed (it already emitted its errors as warnings), so warn that
+    // the report is suspended and refresh the tool report's warnings to include them
+    @pure def suspendReporting(f: Os.Path): Store = {
+      reporter.warn(None(), MicrokitReporterPlugin.reportSuspendedKind, s"Could not parse ${sel4OutputDir.relativize(f)}. Microkit codegen report was not generated")
+      val toolReport = CodegenReporting.getCodegenReport(CodegenReporting.KEY_TOOL_REPORT, localStore).get.asInstanceOf[ToolReport]
+      return CodegenReporting.addCodegenReport(CodegenReporting.KEY_TOOL_REPORT,
+        toolReport(warningMessages = reporter.messages.filter(m => m.level == Level.Warning)), localStore)
+    }
+
     val systemDescription: Os.Path = sel4OutputDir / "microkit.system"
     if (!systemDescription.exists) {
       reporter.warn(None(), name, s"Couldn't find MSD: $systemDescription")
@@ -125,14 +137,10 @@ object MicrokitReporterPlugin {
     }
 
 
-    val msdOpt = Parsers.parseMSD(systemDescription, sel4OutputDir, reporter)
-
-    if (msdOpt.isEmpty) {
-      println(s"Was not able to parse $systemDescription. No report generated")
-      return localStore
+    val msd: system = Parsers.parseMSD(systemDescription, sel4OutputDir, reporter) match {
+      case Some(s) => s
+      case _ => return suspendReporting(systemDescription)
     }
-
-    val msd = msdOpt.get
 
     val workspaceRoot: Os.Path =
       options.workspaceRootDir match {
@@ -175,10 +183,9 @@ object MicrokitReporterPlugin {
       val cBridgeFile = cComponentDir / s"$threadid.c"
       assert (cBridgeFile.exists, cBridgeFile.value)
 
-      val cFile = Parsers.parseC(cBridgeFile, sel4OutputDir, reporter)
-
-      if (reporter.hasError) {
-        return localStore
+      val cFile: CFile = Parsers.parseC(cBridgeFile, sel4OutputDir, reporter) match {
+        case Some(c) => c
+        case _ => return suspendReporting(cBridgeFile)
       }
 
       @pure def addPort(p: AadlPort): Unit = {
@@ -248,7 +255,10 @@ object MicrokitReporterPlugin {
 
         val externApiFile = rustBridgeDir / "extern_c_api.rs"
         assert(externApiFile.exists, externApiFile.value)
-        val parsedExternApiFile = Parsers.parseRust(externApiFile, sel4OutputDir, F, reporter)
+        val parsedExternApiFile: RustFile = Parsers.parseRust(externApiFile, sel4OutputDir, F, reporter) match {
+          case Some(r) => r
+          case _ => return suspendReporting(externApiFile)
+        }
 
         val rustTestDir = sel4OutputDir / "crates" / threadid / "src" / "test"
         val rustTestUtilDir = rustTestDir / "util"
@@ -258,26 +268,32 @@ object MicrokitReporterPlugin {
 
         val rustComponentApiFile = rustBridgeDir / s"${threadid}_api.rs"
         assert(rustComponentApiFile.exists, rustComponentApiFile.value)
-        val parsedRustComponentApiFile = Parsers.parseRust(rustComponentApiFile, sel4OutputDir, F, reporter)
+        val parsedRustComponentApiFile: RustFile = Parsers.parseRust(rustComponentApiFile, sel4OutputDir, F, reporter) match {
+          case Some(r) => r
+          case _ => return suspendReporting(rustComponentApiFile)
+        }
 
         val rustComponentAppFile = rustComponentDir / s"${threadid}_app.rs"
         assert(rustComponentAppFile.exists, rustComponentAppFile.value)
-        val parsedRustComponentAppFile = Parsers.parseRust(rustComponentAppFile, sel4OutputDir, T, reporter)
+        val parsedRustComponentAppFile: RustFile = Parsers.parseRust(rustComponentAppFile, sel4OutputDir, T, reporter) match {
+          case Some(r) => r
+          case _ => return suspendReporting(rustComponentAppFile)
+        }
 
         val componentAppStruct = parsedRustComponentAppFile.structs.get(threadid).get
         val componentAppImpl = parsedRustComponentAppFile.getImpl(threadid).get
         val componentCrateFunctions = parsedRustComponentAppFile.functions
 
         val gumboxFile = rustBridgeDir / s"${threadid}_GUMBOX.rs"
-        val parsedGumboXFile: Option[RustContainers.RustFile] =
-          if (gumboxFile.exists) Some(Parsers.parseRust(gumboxFile, sel4OutputDir, F, reporter))
-          else None()
+        var parsedGumboXFile: Option[RustContainers.RustFile] = None()
+        if (gumboxFile.exists) {
+          parsedGumboXFile = Parsers.parseRust(gumboxFile, sel4OutputDir, F, reporter)
+          if (parsedGumboXFile.isEmpty) {
+            return suspendReporting(gumboxFile)
+          }
+        }
 
         var developerApiReport: HashSMap[String, Position] = HashSMap.empty
-
-        if (reporter.hasError) {
-          return localStore
-        }
 
         val getApiImpl = parsedRustComponentApiFile.getImplH(
           Some(RustContainers.GenericParam("API", s"${threadid}_Get_Api")), s"${threadid}_Application_Api")
@@ -660,11 +676,13 @@ object MicrokitReporterPlugin {
 }
 
 @ext object Parsers {
-  @pure def parseC(f: Os.Path, rootDir: Os.Path, reporter: Reporter): CFile = $
+  // The parsers are hand-written: a parse failure is reported as warnings and yields None
+
+  @pure def parseC(f: Os.Path, rootDir: Os.Path, reporter: Reporter): Option[CFile] = $
 
   @pure def parseMSD(xml: Os.Path, rootDir: Os.Path, reporter: Reporter): Option[system] = $
 
-  @pure def parseRust(f: Os.Path, rootDir: Os.Path, userModifable: B, reporter: Reporter): RustFile = $
+  @pure def parseRust(f: Os.Path, rootDir: Os.Path, userModifable: B, reporter: Reporter): Option[RustFile] = $
 }
 
 
