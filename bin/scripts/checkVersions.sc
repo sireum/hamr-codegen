@@ -422,6 +422,10 @@ compare(phantomVersionsP, phantomCurrentVers)
 
 val microkitVersionsP = SIREUM_HOME / "hamr" / "codegen" / "jvm" / "src" / "main" / "resources" / "microkit_versions.properties"
 
+// Every microkit_versions.properties key some check below looks at.  Each check adds
+// its own keys, so the coverage check at the end cannot drift from the checks.
+var microkitKeysChecked = ISZ[String]()
+
 var proversMisaligned = F
 
 { // provers-env pins the toolchain that generated Microkit systems are built
@@ -439,6 +443,7 @@ var proversMisaligned = F
     ("sdfgen", "SDFGEN_VER"),
     ("verus-release", "VERUS_VER"),
     ("lionsos", "LIONSOS_VER"))
+  microkitKeysChecked = microkitKeysChecked ++ (for (pin <- pins) yield pin._1)
 
   val temp = Os.slashDir / "temp-provers-versions.sh"
   temp.removeOnExit()
@@ -509,6 +514,7 @@ var microkitOutdated = F
   val microkitReleasesUrl = "https://github.com/seL4/microkit/releases"
   val microkitVers = microkitVersionsP.properties
 
+  microkitKeysChecked = microkitKeysChecked :+ "microkit-sdk"
   if (!microkitVers.contains("microkit-sdk")) {
     halt(s"$microkitVersionsP doesn't contain microkit-sdk")
   }
@@ -553,7 +559,7 @@ var cratesOutdated = F
   // published by the Verus release that verus-release pins, so they move with it
   // rather than on their own.
   val cratesIoKeys = ISZ[String](
-    "linux-raw-sys", "log",                                                 // dependencies
+    "linux-raw-sys", "log", "linked_list_allocator",                        // dependencies
     "lazy_static", "once_cell", "serial_test", "proptest", "env_logger")    // dev-dependencies
 
   // sel4 and sel4-logging are git dependencies on rust-sel4 pinned by tag rather
@@ -585,6 +591,7 @@ var cratesOutdated = F
     }
   }
 
+  microkitKeysChecked = microkitKeysChecked ++ cratesIoKeys ++ sel4Keys
   for (key <- cratesIoKeys ++ sel4Keys if !microkitVers.contains(key)) {
     halt(s"$microkitVersionsP doesn't contain $key")
   }
@@ -648,6 +655,7 @@ var verusCratesDrifted = F
     ("vstd", "vstd"), ("builtin", "verus_builtin"), ("builtin_macros", "verus_builtin_macros"))
 
   val microkitVers = microkitVersionsP.properties
+  microkitKeysChecked = microkitKeysChecked ++ ISZ[String]("verus-release") ++ (for (crate <- crates) yield crate._2)
   for (key <- ISZ[String]("verus-release") ++ (for (crate <- crates) yield crate._2) if !microkitVers.contains(key)) {
     halt(s"$microkitVersionsP doesn't contain $key")
   }
@@ -712,6 +720,7 @@ var lionsosDrifted = F
   val paths = ISZ[String]("sddf", "libvmm")
 
   val microkitVers = microkitVersionsP.properties
+  microkitKeysChecked = microkitKeysChecked ++ ISZ[String]("lionsos", "sdfgen")
   for (key <- ISZ[String]("lionsos", "sdfgen") if !microkitVers.contains(key)) {
     halt(s"$microkitVersionsP doesn't contain $key")
   }
@@ -790,6 +799,38 @@ var lionsosDrifted = F
   }
 }
 
+var microkitKeysUnchecked = F
+
+{ // A pin added to microkit_versions.properties without a check -- as
+  // linked_list_allocator first was -- would otherwise drift silently.  Every key
+  // must either be looked at by one of the checks above or be listed here with the
+  // reason it is not.
+  val notChecked: Map[String, String] = Map.empty[String, String] +
+    "r2u2" ~> "published on crates.io as r2u2_core and r2u2_cli rather than under this key, so the crates.io check cannot look it up by name" +
+    "r2u2-c" ~> "a tag in github.com/R2U2/r2u2 rather than a crates.io release, and nothing checks that repository's tags yet"
+
+  val checked = ops.ISZOps(microkitKeysChecked)
+  val missing: ISZ[String] = for (key <- microkitVersionsP.properties.keys
+                                  if !checked.contains(key) && !notChecked.contains(key)) yield key
+  if (missing.nonEmpty) {
+    exclamations()
+    println(
+      st"""WARNING: microkit_versions.properties has entries that no check covers:
+          |
+          |  ${(missing, "\n  ")}
+          |
+          |  Add each to the check that fits it (e.g. cratesIoKeys for a crates.io crate),
+          |  or to notChecked above with the reason it is not checked.
+          |  ${microkitVersionsP.toUri}""".render)
+    exclamations()
+    microkitKeysUnchecked = T
+  }
+  for (key <- notChecked.keys if !microkitVersionsP.properties.contains(key)) {
+    // an exemption for a pin that no longer exists is dead weight
+    println(s"NOTE: notChecked lists $key, which microkit_versions.properties no longer has")
+  }
+}
+
 if (!noUpdate && jitpackFetches.nonEmpty) {
   val scalaKey = ops.StringOps(org.sireum.project.DependencyManager.scalaKey).replaceAllChars(':', '%')
   val scalaVer = versions.get(scalaKey).get
@@ -820,7 +861,8 @@ if (changesDetected && !noUpdate) {
 // the properties files are left as they are, but the drift that was found is just
 // as real -- and no-update is how VersionCheck runs this, so gating the exit on it
 // meant that test could never fail on the versions it exists to watch.
-if (changesDetected || proversMisaligned || microkitOutdated || cratesOutdated || verusCratesDrifted || lionsosDrifted) {
+if (changesDetected || proversMisaligned || microkitOutdated || cratesOutdated || verusCratesDrifted || lionsosDrifted ||
+    microkitKeysUnchecked) {
   Os.exit(1) // versions have changed, or drifted from provers-env or from the latest upstream releases
 } else {
   Os.exit(0)
