@@ -106,7 +106,7 @@ object GumboR2U2Util {
     return contributions
   }
 
-  // Route cached specification verdicts through the generated Rust monitor.
+  // Report R2U2 verdicts in the generated Rust monitor.
   @pure def processRustOutputs(thread: AadlThread,
                                orderedSpecs: ISZ[RAST.R2U2Formula],
                                alerts: ISZ[GclAlert]): (Option[RAST.Item], ISZ[RAST.BodyItem]) = {
@@ -134,19 +134,27 @@ object GumboR2U2Util {
           |        *verdict = None;
           |    }
           |}
-          |// Cache the newest verdict returned for each specification.
+          |// Keep false verdicts visible when a later output replaces the cache entry.
           |let output_buffer = r2u2_core::get_output_buffer(&r2u2_monitor.monitor);
           |let verdict_cache = &mut r2u2_monitor.verdict_cache;
+          |let mut false_verdict_seen = [false; ${orderedSpecs.size}];
           |for out in output_buffer {
-          |    verdict_cache[out.spec_num as usize] = Some(out.verdict);
+          |    let spec_num = out.spec_num as usize;
+          |    if !out.verdict.truth {
+          |        false_verdict_seen[spec_num] = true;
+          |    }
+          |    verdict_cache[spec_num] = Some(out.verdict);
           |}"""))
 
     if (loggedSpecs.nonEmpty) {
       outputItems = outputItems :+ RAST.BodyItemST(
-        st"""// Report the current status of specifications without alert ports.
+        st"""// Report one status for each specification without an alert port.
             |for (spec_num, spec_name) in R2U2_LOGGED_SPECS {
             |    let status = match r2u2_monitor.verdict_cache[spec_num] {
-            |        Some(verdict) => if verdict.truth { "true" } else { "false" },
+            |        Some(verdict) => {
+            |            let truth = verdict.truth && !false_verdict_seen[spec_num];
+            |            if truth { "true" } else { "false" }
+            |        },
             |        None => "unknown",
             |    };
             |    log::info!("{} is currently {}", spec_name, status);
@@ -158,25 +166,26 @@ object GumboR2U2Util {
         val number = alertSpecNumbers.get(port.identifier).get
         val put: ST = port match {
           case _: AadlEventPort =>
-            st"""if !verdict.truth {
+            st"""if !truth {
                 |    api.put_${port.identifier}();
                 |}"""
-          case _: AadlEventDataPort => st"api.put_${port.identifier}(verdict.truth);"
+          case _: AadlEventDataPort => st"api.put_${port.identifier}(truth);"
           case _ => halt("Unexpected R2U2 alert port type")
         }
         alertOutputs = alertOutputs :+ st"""if let Some(verdict) = r2u2_monitor.verdict_cache[$number] {
+                                           |    let truth = verdict.truth && !false_verdict_seen[$number];
                                            |    $put
                                            |}"""
     }
     if (alertOutputs.nonEmpty) {
       outputItems = outputItems :+ RAST.BodyItemST(
-        st"""// Send the latest cached verdict through each mapped alert port.
+        st"""// Send one result through each mapped alert port.
             |${(alertOutputs, "\n")}""")
     }
     return (loggedSpecsConstOpt, outputItems)
   }
 
-  // Route cached specification verdicts through the generated C monitor.
+  // Report R2U2 verdicts in the generated C monitor.
   @pure def processCOutputs(thread: AadlThread,
                             orderedSpecs: ISZ[RAST.R2U2Formula],
                             alerts: ISZ[GclAlert]): (Option[ST], ISZ[ST]) = {
@@ -212,12 +221,14 @@ object GumboR2U2Util {
 
     if (loggedSpecs.nonEmpty) {
       outputItems = outputItems :+
-        st"""// Report the current status of specifications without alert ports.
+        st"""// Report one status for each specification without an alert port.
             |for (size_t i = 0; i < ${loggedSpecs.size}; ++i) {
             |  size_t spec_number = r2u2_logged_specs[i].spec_number;
             |  const char *status = "unknown";
             |  if (r2u2_monitor.verdict_valid[spec_number]) {
-            |    status = get_verdict_truth(r2u2_monitor.verdict_cache[spec_number]) ? "true" : "false";
+            |    bool truth = get_verdict_truth(r2u2_monitor.verdict_cache[spec_number]) &&
+            |        !r2u2_monitor.false_verdict_seen[spec_number];
+            |    status = truth ? "true" : "false";
             |  }
             |  printf("%s is currently %s\n",
             |      r2u2_logged_specs[i].spec_name, status);
@@ -230,13 +241,18 @@ object GumboR2U2Util {
       port match {
         case _: AadlEventPort =>
           alertOutputs = alertOutputs :+
-            st"""if (r2u2_monitor.verdict_valid[$number] && !get_verdict_truth(r2u2_monitor.verdict_cache[$number])) {
-                |  (void) put_${port.identifier}();
+            st"""if (r2u2_monitor.verdict_valid[$number]) {
+                |  bool truth = get_verdict_truth(r2u2_monitor.verdict_cache[$number]) &&
+                |      !r2u2_monitor.false_verdict_seen[$number];
+                |  if (!truth) {
+                |    (void) put_${port.identifier}();
+                |  }
                 |}"""
         case _: AadlEventDataPort =>
           alertOutputs = alertOutputs :+
             st"""if (r2u2_monitor.verdict_valid[$number]) {
-                |  bool truth = get_verdict_truth(r2u2_monitor.verdict_cache[$number]);
+                |  bool truth = get_verdict_truth(r2u2_monitor.verdict_cache[$number]) &&
+                |      !r2u2_monitor.false_verdict_seen[$number];
                 |  (void) put_${port.identifier}(&truth);
                 |}"""
         case _ => halt("Unexpected C R2U2 alert port type")
@@ -244,7 +260,7 @@ object GumboR2U2Util {
     }
     if (alertOutputs.nonEmpty) {
       outputItems = outputItems :+
-        st"""// Send the latest cached verdict through each mapped alert port.
+        st"""// Send one result through each mapped alert port.
             |${(alertOutputs, "\n")}"""
     }
     return (loggedSpecDefinitions, outputItems)
