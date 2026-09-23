@@ -25,7 +25,7 @@ jobs:
           - "CodeGenTest_Base"
           - "CodegenTest_CASE"
           - "BaseBehaviorTestDynamic,GumboTest,HamrTranspileTests,SysVCTest,SysVCVerusGenTest"
-          - "BaseBehaviorTestStatic,MicrokitTests,MicrokitBehaviorTests,R2U2MonitorTests,R2U2MonitorBehaviorTests,SymlinkAuxCodeTest,SlangExp2RustTests,Ros2Tests"
+          - "BaseBehaviorTestStatic,MicrokitTests,MicrokitBehaviorTests,R2U2MonitorTests,R2U2MonitorBehaviorTests,SymlinkAuxCodeTest,CParserTest,SlangExp2RustTests,Ros2Tests"
     name: '${{ matrix.testSuffix }}'
     steps:
       - name: Checkout
