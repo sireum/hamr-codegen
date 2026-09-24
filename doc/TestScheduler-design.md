@@ -284,16 +284,18 @@ wall-clock time differs by stage**, and the two must not be conflated:
   stage B, so padding has no meaning; honouring it would mean reintroducing a timeout purely
   to wait.
 
-A test that steps hyperperiods therefore runs markedly faster once stage B lands, which is
-expected and is the point of stage B.
+Stage B is what is built, so pads are skipped, and a test that steps hyperperiods runs far
+faster than the frame period suggests. That is expected and is the point of stage B.
 
 **Every `RunTo*` command must be bounded.** `RunToThread(ch)` for a channel absent from the
 schedule, `RunToHP(n)` with `n <= hyperperiod_num`, and `RunToState` targeting a state
 already passed all have stop predicates that are never satisfied, so the scheduler would
 dispatch forever. Commands are validated at decode where possible (target channel present in
-the schedule; target hyperperiod in the future), and `try_advance` additionally gives up
-after one full hyperperiod without a match, setting an error flag in `test_status` and
-completing the command.
+the schedule; target hyperperiod in the future), and every `RunTo*` also carries a slot
+budget, set at decode and charged in `advance_position`: one hyperperiod plus one slot for
+`RunToThread` / `RunToSlot`, and enough hyperperiods to reach the target (plus one slot) for
+`RunToHP` / `RunToState`. When the budget runs out without a match, the command completes with
+`TEST_FLAG_UNREACHABLE` in `test_status`.
 
 **Stale watchdog expiries must be filtered.** `sddf_timer_set_timeout` is one-shot and cannot
 be cancelled, so a slot that completes normally leaves its watchdog armed; it fires during a
@@ -566,20 +568,13 @@ hardcoded for R2U2):
 As built, for `tcp_tct`:
 
 ```rust
-extern "C" {
-  fn get_inj_sv_latestTemp(value: *mut TempControl_SysVerif::Temperature) -> bool;
-  // ... one per state var
-  fn is_injection_enabled() -> bool;
-}
-
 pub extern "C" fn tcp_tct_timeTriggered() {
   unsafe {
     if let Some(_app) = app.as_mut() {
       // Injected GUMBO state variables, if the test controller set any.
-      if is_injection_enabled() {                             // libComputePre
-        let mut inj_latestTemp: TempControl_SysVerif::Temperature = Default::default();
-        if get_inj_sv_latestTemp(&mut inj_latestTemp) {
-          _app.latestTemp = inj_latestTemp;                   // absent => keep own state
+      if crate::bridge::extern_c_api::unsafe_is_injection_enabled() {         // libComputePre
+        if let Some(v) = crate::bridge::extern_c_api::unsafe_get_inj_sv_latestTemp() {
+          _app.latestTemp = v;                                                // absent => keep own state
         }
         // ... one per state var
       }
@@ -589,6 +584,15 @@ pub extern "C" fn tcp_tct_timeTriggered() {
   }
 }
 ```
+
+The C functions are declared the way `is_monitoring_enabled` is: as `CRustApiPlugin`
+contributions to the thread's `bridge/extern_c_api.rs`, not by an `extern "C"` block in
+`lib.rs`. That file puts the real declarations behind `#[cfg(not(test))]` and supplies
+`#[cfg(test)]` stand-ins (`INJECTION_ENABLED`, `INJ_SV_<var>` mocks, both defaulting to
+"nothing injected"), plus the `unsafe_` wrappers `lib.rs` calls; `unsafe_get_inj_sv_<var>`
+returns an `Option`. The C bridge exists only in the seL4 image, so a raw extern in `lib.rs`
+builds on target and fails to link under the host `make test` -- see "What building and
+running it corrected".
 
 *Gating:* the `inj_sv_` regions exist only in the test variant, so the ingest is gated by a
 sibling of `is_monitoring_enabled()` — `is_injection_enabled()`, a NULL check on the
@@ -617,8 +621,11 @@ that looks like it works. The `put_` a test calls is the one above, on the `inj_
 Suppressing the `sv_` writer is also what keeps the two from colliding: both would be named
 `test_put_<thread>_sv_<var>`.
 
-This sequencing is what D13 and D14 rest on: enqueue the injected ports and state vars,
-`run_to_thread(T)`, `sstep(1)`, and the thread ingests before it computes. The
+This sequencing is what D13 and D14 rest on: `run_to_thread(T)`, then enqueue the injected
+ports and state vars, then `sstep(1)`, and the thread ingests before it computes. The order
+matters for ports with a real producer -- enqueueing before `run_to_thread` lets that
+producer's own slot overwrite the value on the way -- and is harmless for `inj_sv_` regions and
+unconnected ports, where the controller is the only sender. The
 whole-component setter of D14 is then N port enqueues plus M state var enqueues behind one
 call.
 
@@ -718,13 +725,15 @@ run went without re-reading the log.
 
 **The runtime monitor does not run during system testing, and does not need to.**
 
-`handleForMonitor` computes `otherNonModelPdNames` from every synthetic element that is not
-the variant's own, and filters those PDs and their channels out. Each variant therefore
-contains exactly one injected PD. The test variant keeps the controller and strips
-`userland_monitor`, `gumbo_monitor` and `sys_nominal_monitor`, together with their
-interleaved slots — so the test frame is not extended by monitor time, and the schedule under
-test remains the production schedule. The controller does the checking instead, reusing the
-generated CEP predicates directly (D3).
+`TestSchedulerPlugin.finalizeMicrokit` builds the variant from the pre-monitor MSD snapshot
+(`UserLandMonitorPlugin.MONITOR_ORIG_MSD_KEY`, or `normal` when no monitor ran), so the
+monitors' interleaved slots were never in it. It then drops every other injected protection
+domain (`userland_monitor`, `gumbo_monitor`, `sys_nominal_monitor` and their `_MON`s) with
+their channels, keeping only the controller — one injected PD per variant, as the monitor
+variants have. The test frame is therefore not extended by monitor time, and the schedule
+under test remains the production schedule. The controller is to do the checking instead,
+running the same generated contract checks at every dispatch (D3; planned as stage 7, see
+"Contract observation in the controller").
 
 **`monitoring_enabled` is nonetheless required, and is not about the monitor's existence.**
 `GumboMonitorPlugin` generates:
@@ -758,7 +767,8 @@ The test scheduler must still work there, and mostly does:
 
 Three obligations follow:
 
-1. **`--runtime-monitoring` is required only when the model has state vars.** D5's rationale
+1. **`--runtime-monitoring` is required only when the model has state vars** -- until stage 7,
+   which drops the requirement altogether (D22). D5's rationale
    is that the flag creates the `sv_` plumbing; for a contract-free model it creates none, and
    demanding it would buy nothing but a userland monitor PD that the test variant then strips.
    The check and its diagnostic are conditional on `hasThreadsWithStateVars`.
@@ -766,35 +776,29 @@ Three obligations follow:
    `get_inj_sv_*` accessors are generated only for threads that have state vars. In a mixed
    model, emitting the ingest block for a thread without them would reference symbols that do
    not exist for it.
-3. **`TestSchedulerPlugin` subtypes `UserLandMonitorPlugin`, never `GumboMonitorPlugin`** —
-   and *replicates* the `getRetainedNonModelPorts` override below rather than inheriting it.
-   Inheriting from `GumboMonitorPlugin` would drag in its `hasThreadsWithStateVars` gate and
-   silently disable the test scheduler for precisely the contract-free models this section is
-   about.
+3. **`TestSchedulerPlugin` does not inherit from either monitor plugin.** Inheriting from
+   `GumboMonitorPlugin` would drag in its `hasThreadsWithStateVars` gate and silently disable
+   the test scheduler for precisely the contract-free models this section is about. See
+   "Plugin structure".
 
-#### Required override: retained non-model ports
+#### The `sv_` regions must survive into the variant
 
-`getRetainedNonModelPorts` defaults to `ISZ()`, and anything not retained is placed in
-`excludedMrNames` and stripped from the variant. `GumboMonitorPlugin` overrides it to keep
-the `sv_` ports:
+The monitor variants go through `UserLandMonitorPlugin.handleForMonitor`, which strips every
+non-model memory region not named by `getRetainedNonModelPorts` (default `ISZ()`;
+`GumboMonitorPlugin` overrides it to keep the `sv_` ports). Were the test variant built that
+way without the same override, the `sv_` regions would be stripped, the pointers left NULL,
+`is_monitoring_enabled()` false, and the threads silently not publishing — inspection would
+return stale or zero state with **no crash and no diagnostic**.
 
-```scala
-@strictpure override def getRetainedNonModelPorts(store: Store): ISZ[IdPath] =
-  for (id <- StoreUtil.getSyntheticElements(store)
-       if id.nonEmpty && ops.StringOps(id(id.lastIndex)).startsWith(GumboMonitorPlugin.stateVarPortPrefix)) yield id
-```
+The test variant avoids this by construction rather than by override: it is built from the
+pre-monitor snapshot and removes only injected protection domains and their channels, never
+memory regions, so every `sv_` region is still present. Anyone moving the variant onto
+`handleForMonitor` must add the retention. The `state_vars` tests guard it either way: they
+read back a state var they just injected, which fails loudly if either region is unmapped.
 
-**`TestSchedulerPlugin` must override it as well**, for the `sv_` ports. Inheriting the
-default strips those regions from the test variant, leaving the pointers NULL,
-`is_monitoring_enabled()` false, and the threads silently not publishing. Inspection then
-returns stale or zero state with **no crash and no diagnostic** — the worst failure mode in
-this design, caused by a one-line omission. The `state_vars` tests assert against it directly:
-they read back a state var they just injected, which fails loudly if either region is
-unmapped.
-
-The `inj_sv_` regions of D16 need nothing here. They are not ports (D16a), so they were never
-subject to synthetic-element stripping; they are declared in the MSD template alongside
-`test_cmd` and reach the thread through `setvar_vaddr`.
+The `inj_sv_` regions of D16 are not ports (D16a) and never subject to synthetic-element
+stripping; they are declared in the MSD template alongside `test_cmd` and reach the thread
+through `setvar_vaddr`.
 
 ### How the developer writes a system test
 
@@ -821,26 +825,50 @@ per-crate `cargo test`:
 | `src/test/tests.rs` — the tests themselves | **no, preserved across regen** |
 | `testInitializeCB_macro!` / `testComputeCB_macro!` / `testComputeCBwGSV_macro!` | yes |
 
-The controller crate should present the **same shape one level up**: generated command and
-inspect/mutate APIs under `src/test/util/`, the system test script in a preserved
-`src/test/tests.rs`. A developer who has written a component test already knows the idiom.
+The controller crate presents the **same shape one level up**: generated command and
+inspect/mutate APIs under `src/system_tests/` (`api.rs`, `inspect.rs`, overwritten), the
+system test script in a preserved `src/system_tests/tests.rs`. A developer who has written a
+component test already knows the idiom. As built, for temp-control:
 
 ```rust
-// crates/test_controller/src/test/tests.rs — preserved across regen
-use crate::test::util::*;
+// crates/test_controller/src/system_tests/tests.rs — preserved across regen
+use crate::system_tests::{api, inspect};
+use crate::{system_tests, sys_assert_eq};
+use data::TempControl_SysVerif::*;
 
-fn fan_turns_on_when_too_hot() {
-    hstep(1);                                         // settle
+system_tests! {
+  suite nominal {
+    fn fan_turns_on_when_too_hot() {
+      let _ = api::hstep(1);                                          // settle
 
-    put_setPoint(tcp_tct, SetPoint { low: f(70), high: f(80) });
-    put_currentTemp(tcp_tct, Some(f(95)));            // port region
+      // Park immediately before the consumer: currentTemp has a real producer
+      // (tsp_tst) that runs earlier in the frame and would overwrite the injection.
+      let _ = api::run_to_thread(inspect::channels::tcp_tct_MON);
+      inspect::set_tcp_tct(inspect::tcp_tct_PreState {               // every field (D14)
+        currentTemp: temp(95),                                        // port, via its producer's region
+        setPoint: set_point(70, 80),                                  // unconnected port
+        fanAck: FanAck::Ok,
+        sv_currentSetPoint: set_point(70, 80),                        // state vars, via inj_sv_ regions
+        sv_currentFanState: FanCmd::Off,
+        sv_latestTemp: temp(72),
+        sv_fanError: false,
+      });
+      let _ = api::sstep(1);                                          // tcp_tct runs next and ingests
 
-    hstep(1);                                         // one full frame
-
-    assert_eq!(get_fanCmd(tcp_tct), Some(FanCmd::On));
-    assert_eq!(get_currentFanState(tcp_tct), FanCmd::On);  // sv_ region
+      sys_assert_eq!(inspect::get_tcp_tct_fanCmd(), Some(FanCmd::On));
+      sys_assert_eq!(inspect::get_tcp_tct_sv_currentFanState(), Some(FanCmd::On));  // sv_ region
+    }
+  }
 }
 ```
+
+(`temp` and `set_point` stand for small test-local constructors, as isolette's `tws` is.)
+The shape differs from a component test in three deliberate ways, each covered below:
+tests live in a `system_tests!` block (D11), assertions are the recording `sys_assert*`
+macros rather than `assert!` (D12), and a port with a real producer is only written while
+the schedule is parked immediately before its consumer (D15). `inspect::set_<thread>` and
+`inspect::put_<producer>_<port>` are the generated setters; `get_*` return `Option`, `None`
+when nothing is queued.
 
 Because the controller is Rust (D3), the generated GUMBO CEP-Pre/CEP-Post predicates in the
 component crates are ordinary Rust functions available to it. A system test can therefore
@@ -1096,6 +1124,11 @@ is named after (`put_tsp_tst_currentTemp`), because the container describes one 
 inputs. State vars keep their `sv_` prefix, which also keeps them clear of a port of the same
 name. A thread with no inputs and no state vars gets no container -- `tsp_tst` in this model.
 
+*The setter inherits D15's ordering.* `set_tcp_tct` writes `currentTemp` into `tsp_tst`'s
+region, and `tsp_tst` runs earlier in the frame, so the call is only reliable while the
+schedule is parked immediately before `tcp_tct`: `run_to_thread(channels::tcp_tct_MON)`,
+`set_tcp_tct(..)`, then step. The generated doc comment on every `set_<thread>` says so.
+
 *Direction cannot be read off the region.* For an **unconnected** input the region is named
 after the reader, so its `outgoingPortPath` equals the thread's own port path and is
 indistinguishable from an output's. The AADL feature's direction is asked instead.
@@ -1111,6 +1144,250 @@ This is why the container must not gain `#[derive(Default)]` as a convenience: i
 re-enable `..Default::default()` and reopen the hazard. The existing component-level
 `PreStateContainer{,_wGSV}` derive nothing today, and the controller's analogue should stay
 that way.
+
+### Contract observation in the controller (stage 7, planned)
+
+**Status: designed, not built.**
+
+Today a contract violation cannot fail a system test. The monitors that check contracts are
+stripped from the test variant (see "Relationship to the runtime monitor"), and even where they
+run they report only `log::warn!("*** CONTRACT VIOLATION ...")` lines, which the D18 host
+driver ignores because they lack the `TEST | ` prefix. Stage 7 makes the controller check the
+same contracts at every dispatch and turns a violation into a failure of the test that caused
+it. This is the D3 payoff "every thread's postcondition held at every dispatch", obtained
+without adding a monitor PD to the schedule under test.
+
+#### What requesting system testing generates
+
+Requesting system testing (`ENABLE_TEST_SCHEDULER`) is enough; `--runtime-monitoring` is not
+needed. The test variant gets everything stages 1-5 provide, plus whichever checks the model
+has contracts for:
+
+| Generated into the controller | When the model has |
+|-------------------------------|--------------------|
+| GUMBO checks (the component layer) | any GUMBO thread contracts: `initialize` / `compute` clauses or integration constraints; data invariants once they are implemented |
+| System-verification checks (the system layer) | a composition (`hasCompositions`); one system layer per composition |
+| neither | no contracts at all (vms) |
+
+Integration constraints need no separate treatment: GUMBOX already folds them into the
+checks, `I_Assm_<port>` into CEP_Pre and `I_Guar_<port>` into the IEP/CEP post-conditions
+(isolette's `thermostat_mt_mmi_mmi` and `operator_interface_oip_oit`). Data invariants will
+arrive the same way, through the GUMBOX predicates, when they are implemented.
+
+**Consequence for D5.** The component layer reads GUMBO state variables, and today the `sv_`
+ports, their regions and `is_monitoring_enabled()` exist only when `--runtime-monitoring` is
+given, which is why D5 demands that flag. Under stage 7 system testing brings that plumbing
+itself, so `GumboMonitorPlugin`'s work splits in two: the **`sv_` plumbing** (model transform
+adding the `sv_` ports, the C backend, the `is_monitoring_enabled` gate) runs when
+`--runtime-monitoring` **or** `ENABLE_TEST_SCHEDULER` is given; the **monitor PDs and their
+variant bundles** still require `--runtime-monitoring`. The gate for the component layer also
+widens from today's `hasThreadsWithStateVars` to "has GUMBO thread contracts", since a model
+with contracts but no state variables still has CEP_Pre/CEP_Post to check. D5's diagnostic goes
+away with it.
+
+#### The two monitors are layers, and the design keeps them as layers
+
+`sys_<id>_monitor` is `gumbo_monitor` plus one layer. Its `timeTriggered` calls
+`self.gumbo_monitor(api)` and then `self.sys_assert_monitor(api)`, and its `gumbo_monitor`
+body is identical to the gumbo monitor's apart from the API type. The two cannot run together
+(one injected PD per variant, and each brings its own slots), which costs nothing because the
+system monitor already includes the component checks.
+
+Stage 7 generates the checks once, as two layers, and lets each consumer hold the layers its
+role needs:
+
+| Role | Component layer (IEP_Post, CEP_Pre, CEP_Post) | System layer (Petri-net marking, sys asserts) |
+|------|-----------------------------------------------|-----------------------------------------------|
+| `gumbo_monitor` PD | yes | no |
+| `sys_<id>_monitor` PD | yes | yes, composition `<id>` |
+| test controller | yes, if generated; switchable | yes, one per composition, if generated; switchable |
+
+The monitor PDs are fixed combinations: the system monitor is the only way to get both, and
+the two cannot run together. The controller has neither restriction. Its two layers are
+independent -- the system layer's marking and assertions use nothing from the component
+layer -- so GUMBO checking and system-verification checking are enabled and disabled
+separately, and every combination is available, including system checks alone. Every
+composition's system layer runs, and the component layer runs once however many there are.
+
+#### Step 1: split "where am I" from "what to check"
+
+Each monitor body currently does two jobs:
+
+- **Locate.** Read `sched_state.current_timeslice`, look up `prev_user_ch[idx]` and
+  `next_user_ch[idx]` (tables built from `sched_schedule.is_user_partition`), and detect a new
+  frame from the index wrapping. This belongs to the monitor variants alone: `idx` is the index
+  of a *monitor* slot, and the test variant's schedule has none.
+- **Check.** On the first run, IEP_Post for every thread. On each boundary, CEP_Post for
+  `prev` against its saved pre-state, then save the pre-state of `next` and check its CEP_Pre.
+  The system layer also advances its marking from `prev` and checks the assertions at every
+  place the cascade visits.
+
+The check half needs only `(prev_ch, next_ch)` and a way to read ports and state variables.
+It is generated once, generic over two traits, into a new `crates/observers` crate beside
+`data` and `GUMBO_Library`:
+
+```rust
+pub trait SystemView {                  // one getter per port / state var the checks read
+    fn get_thermostat_rt_mri_mri_displayed_temp(&self) -> Option<Temp_i>;
+    fn get_thermostat_rt_mhs_mhs_sv_lastCmd(&self) -> Option<On_Off>;
+    // ...
+}
+pub trait ViolationSink { fn report(&mut self, v: Violation); }
+
+pub struct ComponentContracts { /* Option<PreState_<thread>> per thread */ }
+impl ComponentContracts {
+    pub fn on_init(&mut self, s: &impl SystemView, out: &mut impl ViolationSink);
+    pub fn on_boundary(&mut self, prev: u32, next: u32,
+                       s: &impl SystemView, out: &mut impl ViolationSink);
+}
+
+pub struct SysAssert_nominal { ready: u64 }          // one struct per composition
+impl SysAssert_nominal {
+    pub fn validate_schedule(sched: &Schedule) -> bool;   // today's validate_schedule_conformance
+    pub fn on_boundary(&mut self, prev: u32,
+                       s: &impl SystemView, out: &mut impl ViolationSink);
+}
+```
+
+`GumboMonitorPlugin` emits `ComponentContracts`; `GumboSysAssertMonitorPlugin` emits one
+`SysAssert_<id>` per composition. `Violation` carries its kind (`IepPost`, `CepPre`, `CepPost`,
+`SysAssert`), the thread or composition and place, the position, and the rendered pre/post
+values, and its message text is produced in the shared code. The `gumbox/*.rs` modules today
+copied into every monitor crate move into `observers` as well.
+
+#### Step 2: the monitor PDs become thin wrappers
+
+```rust
+// gumbo_monitor
+let (prev, next, first) = self.locate(api.get_sched_state(), api.get_sched_schedule());
+if first { self.components.on_init(&view, &mut LogSink) }
+else     { self.components.on_boundary(prev, next, &view, &mut LogSink) }
+
+// sys_<id>_monitor: the same, then its own layer, in today's timeTriggered order
+self.components.on_boundary(prev, next, &view, &mut LogSink);
+self.sys_nominal.on_boundary(prev, &view, &mut LogSink);
+```
+
+`view` implements `SystemView` by delegating to the monitor's existing `api.get_*`; `LogSink`
+reports with `log::warn!` and the existing message text. The monitors behave exactly as
+before, so step 2 is verified by golden diffs showing code moving without changing and by the
+monitor variants' logs on target being unchanged. It is worth landing on its own, before any
+controller work.
+
+#### Step 3: the controller hosts the layers
+
+```rust
+struct Observer {
+    components: ComponentContracts,   // generated when the model has GUMBO thread contracts
+    sys_nominal: SysAssert_nominal,   // generated per composition
+    // ...
+    gumbo_live: bool,                 // build level: is the layer tracked at all this run
+    sysverif_live: bool,
+    gumbo_enabled: bool,              // suite / test level: is a live layer checked right now
+    sysverif_enabled: bool,
+}
+```
+
+The switches work at two depths (see "Enabling and disabling checks"):
+
+- **Build level decides whether a layer is live.** A layer disabled at build level is not
+  tracked at all: no pre-states saved, no marking advanced, and it takes no part in the
+  scheduler's park.
+- **Suite and test level decide whether a live layer checks.** A layer disabled there still
+  saves each thread's pre-state and still advances its marking, so re-enabling it later in the
+  same test, mid-frame included, is immediately correct, with no restart and no pre-state
+  missing.
+
+**`SystemView` for the controller** is built on the `inspect::get_*` accessors, since the
+controller already maps every port and `sv_` region. There is one difference, for state
+variables: a value the controller has injected but the thread has not yet adopted is still
+in the `inj_sv_` queue, while the `sv_` region holds the old value. Recording that old value
+as `In_<var>` would make CEP_Post compare against a pre-state the thread never started from.
+The generated `put_<thread>_sv_<var>` therefore also records a pending value, the view returns
+it in preference to the `sv_` region, and it is cleared once `<thread>` has dispatched. Port
+injections need no such care, because they are written into the producer's region, which is
+what the view reads. A getter returning `None` makes the check skip, matching the monitors'
+existing "post check skipped: no saved pre-state".
+
+**`TestSink`** records a violation against the running test through the same path
+`sys_assert!` uses, so it produces `TEST | FAIL` and keeps D18's counts reconciled; the
+pre/post values go out as `TEST | INFO` lines. Negative tests, which inject invalid inputs on
+purpose and may trip CEP_Pre, declare that with `observe::expect(..)` or inspect
+`observe::take()`. Any other violation fails the test. A violation seen while no test is
+running, during the runner's move to a hyperperiod boundary, fails the run instead of being
+charged to the next test.
+
+#### Step 4: an observation park in the scheduler
+
+The controller is the lowest-priority PD (D4), so during `hstep(n)` it never runs between
+slots and cannot see intermediate dispatches on its own. The scheduler provides the boundary:
+
+- `test_command_t` gains `observe`. When it is set, the scheduler parks before dispatching
+  each user slot (pads and non-user slots excluded), publishing `prev_ch`, `next_ch`,
+  hyperperiod, slot and `obs_seq` in `test_status`, and notifies the controller.
+- The controller's busy-wait loop, which already runs whenever the scheduler is parked,
+  watches `obs_seq` as well as `ack_seq`. On a new `obs_seq` it calls
+  `Observer::on_boundary(prev, next)`, then writes `obs_ack` and notifies the scheduler, which
+  dispatches. This is the D9 sequence-number handshake a second time.
+- The park is taken **when the dispatch is about to start**, not when the previous command
+  completed. A test injects between those two moments, so the pre-state captured for `next`
+  already includes the injection. Parking at command completion would recreate the
+  stale-pre-state problem this design avoids.
+- `observe` is set when at least one layer is **live**: generated, and not disabled at build
+  level. Suite- and test-level switches do not clear it, because a live layer keeps tracking
+  while its checking is off. The cost is two handshakes per dispatch, small beside a dispatch
+  under QEMU.
+- With no live layer the controller never sets `observe`, the scheduler never parks, and the
+  run is exactly stages 2-5. That covers a model with no GUMBO contracts and no composition,
+  which generates no layer, and a model whose layers are all disabled at build level.
+
+`on_init` runs once, from the runner, before any dispatch: the controller is kicked at the
+all-ready point (D4), when every thread has initialized and none has computed, which is the
+point the monitors' first run observes. `SysAssert_<id>::validate_schedule` runs against
+`test_schedule` at the same time; its `is_user_partition` bits are the production schedule's.
+
+Layer state persists across tests. Saved pre-states are per dispatch anyway, and the marking
+must see every dispatch, so observation stays on through the runner's hyperperiod
+normalization rather than pausing between tests.
+
+#### Enabling and disabling checks
+
+Each generated layer is **enabled by default**. The user disables either one at three levels:
+
+| Level | How | Scope |
+|-------|-----|-------|
+| Build | `make CONFIG=test_scheduler.mk GUMBO_CHECKS=off SYSVERIF_CHECKS=off`, new fields of `test_selection_t` patched through the same ELF section as `TESTS=` (D17), and part of the rebuild hash with it | the whole run; the layer is **not live**: not tracked, and not parked for |
+| Suite | `suite fault_injection(gumbo = off) { ... }` in `system_tests!` | every test in the suite; checking only |
+| Test | `observe::set_gumbo(false)` / `observe::set_sysverif(false)` in the test body | the rest of that test; checking only |
+
+Build level is the only way to get the unchecked run at stages 2-5 speed: with both switches
+off, nothing is live, and the scheduler never parks. Suite and test level can turn a live
+layer's checking off and back on, but they **cannot bring a layer back** that build level
+turned off, because it has not been tracking. A suite or test that asks for one --
+`(gumbo = on)`, or `observe::set_gumbo(true)` -- fails at that point with a message naming the
+build switch, rather than running and silently checking nothing. It cannot be a compile error:
+build-level settings are patched into the ELF after compilation, like `TESTS=`.
+
+The runner restores the build-level setting before every test, so a test or suite that turns a
+check off cannot leave it off for the next one -- the same isolation D13 requires of inputs.
+Asking for a layer the model did not generate is a compile error on the per-test API (the
+function is not generated) and a warning on the build variable.
+
+Disabling is the blunt tool. A negative test that trips one particular contract on purpose
+should keep checking on and declare the expectation with `observe::expect(..)`, so every other
+contract is still checked while it runs.
+
+#### What stage 7 does not cover
+
+It tests the *unmonitored* configuration against the contracts; it does not test a monitor PD.
+Whether the monitored configuration, with the monitor's slots in the frame, still meets its
+contracts, and whether the monitor itself is correct, is the separate open item "a variant with
+both the controller and a monitor PD". The steps above are prerequisites for that variant too:
+it needs the same fix for injected state variables (the monitor would read the `inj_sv_` queues
+through its own receiver cursor, without consuming them), and a violation counter the
+controller can read in place of log lines. Its parking points would also have to move to
+before the monitor slot that precedes the target thread, which is where the monitor records
+that thread's pre-state.
 
 ### Interactive CLI (deferred)
 
@@ -1165,7 +1442,7 @@ path and the flush-under-stepped-scheduling problem is the first thing to solve.
 | D2 | Emit a `test_scheduler.*` variant bundle in the existing 5-file shape | C3; no new mechanism |
 | D3 | Controller is Rust | Inherits crate/API/test-harness generation and GUMBO contract reuse |
 | D4 | Controller is a passive child PD with no timeslice, at the **lowest priority in the system**, blocking by busy-wait; the scheduler kicks it at the all-ready point | It must run while the schedule is paused; lowest priority is what lets a busy-wait coexist with thread execution, and the kick is what avoids a boot deadlock |
-| D5 | Gate on experimental option `ENABLE_TEST_SCHEDULER` (`-x`, `;`-separated). Require `--runtime-monitoring` alongside it **only when the model has threads with state vars**, erroring with a diagnostic if absent | No cligen regen, no public flag while the design is in flux. Where it is required, `--runtime-monitoring` is needed not because the monitor runs — it is stripped from the test variant — but because it is what makes `GumboMonitorPlugin` create the `sv_` ports, regions and `is_monitoring_enabled` plumbing. The diagnostic must say so, or the flag reads as spurious and gets dropped. For a contract-free model that plumbing does not exist, so the flag buys nothing and is not demanded |
+| D5 | Gate on experimental option `ENABLE_TEST_SCHEDULER` (`-x`, `;`-separated). Require `--runtime-monitoring` alongside it **only when the model has threads with state vars**, erroring with a diagnostic if absent | No cligen regen, no public flag while the design is in flux. Where it is required, `--runtime-monitoring` is needed not because the monitor runs — it is stripped from the test variant — but because it is what makes `GumboMonitorPlugin` create the `sv_` ports, regions and `is_monitoring_enabled` plumbing. The diagnostic must say so, or the flag reads as spurious and gets dropped. For a contract-free model that plumbing does not exist, so the flag buys nothing and is not demanded. *Stage 7 (D22) removes the `--runtime-monitoring` requirement: system testing will bring the `sv_` plumbing itself* |
 | D6 | Stage A (timer-gated) before Stage B (completion-driven) | Stage A needs no component changes at all |
 | D7 | Scripted controller before serial CLI | Fewest moving parts to a working step/inspect loop. In the event the serial CLI was deferred indefinitely and the scripted controller turned out to cover CI on its own |
 | D8 | Pilot on temp-control | Already carries 3 variant bundles and 3 threads, and has GUMBO state vars for inspect/mutate |
@@ -1180,19 +1457,25 @@ path and the flush-under-stepped-scheduling problem is the first thing to solve.
 | D16a | Those regions are **plugin-declared, not AADL ports** | Model ports leak into the component test harness and the system verification model; see "The regions must not be AADL ports" |
 | D17 | Test selection is a filter string in an ELF section, matched by substring against qualified `suite::test` names | Follows the `user_schedule` objcopy precedent; no manifest to sync; survives reordering; suites and single tests use one mechanism; mirrors `cargo test <filter>` |
 | D18 | Verdict leaves the target as prefixed serial lines with a **mandatory** `DONE matched=/passed=/failed=` terminator, scraped by a host driver with a hard timeout | Serial is the only channel off-target — `test_status` is guest memory the host cannot read. Every real failure mode is silence, so absence of the terminator must fail rather than pass |
+| D19 | Contract checks are generated once, as a component layer and a per-composition system layer, generic over `SystemView` and `ViolationSink`, and shared by the monitor PDs and the controller | The system monitor is already the gumbo monitor plus a layer; making that structural gives one copy of the checks and lets a role be a choice of layers |
+| D20 | The controller observes through a scheduler park taken just before each user dispatch, gated by `observe` in `test_cmd` | The lowest-priority controller cannot otherwise run between slots; parking at dispatch rather than at command completion makes the captured pre-state include the test's injections |
+| D21 | Contract violations fail the running test unless declared with `observe::expect`; violations between tests fail the run | A violation should be a verdict, not a log line; negative tests need a way to state what they expect |
+| D22 | Requesting system testing generates the GUMBO checks when the model has GUMBO thread contracts (integration constraints included, data invariants once implemented) and the system-verification checks when it has a composition, without `--runtime-monitoring`; the `sv_` plumbing follows `--runtime-monitoring` **or** system testing | The user asks for system testing, not for monitoring; the checks belong to it. Supersedes D5's requirement once stage 7 lands |
+| D23 | GUMBO and system-verification checks are separate switches, each on by default when generated. The build-level switch decides whether a layer is live (tracked and parked for); suite- and test-level switches decide only whether a live layer checks, and cannot revive a layer turned off at build level | The layers are independent, so the monitor PDs' fixed combinations need not apply to the controller. Build-level off is a request for the unchecked run, so it restores stage 2-5 behavior with no parks; within a run, tracking regardless of checking keeps re-enabling correct at any point |
 
 ## Implementation Plan
 
 | Stage | Work | Verified by |
 |-------|------|-------------|
 | 1 &#10003; | This document | review |
-| 2 &#10003; | `TestSchedulerPlugin` + the `test_scheduler.*` bundle, and a `scheduler.c` that is a **rewrite of the default, not a copy with a flag** — see below | golden `expected/` diff on temp-control **and** on a contract-free model such as vest; the three existing monitor bundles byte-identical; QEMU boot under `CONFIG=test_scheduler.mk` behaving as the default variant does |
+| 2 &#10003; | `TestSchedulerPlugin` + the `test_scheduler.*` bundle, and a `scheduler.c` that is a **rewrite of the default, not a copy with a flag** — see below | golden `expected/` diff on temp-control **and** on a contract-free model (the vms `data_receiver` model); the three existing monitor bundles byte-identical; QEMU boot under `CONFIG=test_scheduler.mk` behaving as the default variant does |
 | 3 &#10003; | Controller PD injected at lowest priority with the busy-wait blocking loop (volatile `ack_seq` load, run-once guard) and the all-ready kick (D4), channel + region maps, generated Rust command API, `system_tests!` macro (with suites) + in-crate runner + `sys_assert_*` (D11-D12), `TESTS=` filter via ELF section (D17), serial verdict + `run-tests.cmd` host driver forcing `MICROKIT_CONFIG=debug` (D18), `TESTS` added to the rebuild hash and routed to `meta.py` (D17), user-editable `tests.rs` | QEMU boot of temp-control under `CONFIG=test_scheduler.mk`, with a passing test, a deliberately failing test, the two run in both orders (D13), and `TESTS=` selecting a suite, a single test, and a filter matching nothing (D17) |
 | 4 &#10003; | Completion-driven dispatch: bridge notify-back (C2) emitted unconditionally, per-slot timeout dropped, pads skipped, timer demoted to a watchdog at 10x the slot's configured budget (floor 1 s) raising `TEST_FLAG_OVERRUN` | `hstep(20)` inside a 12 s window that also covered build-check, boot and QEMU startup -- timer-gated needs 20 s of guest time alone |
 | 5a &#10003; | Inspection + port injection (D15): observable-region inventory, C accessors in the controller bridge over the generated `sb_queue` API, `system_tests/inspect.rs`, `channels::` constants | 3 tests on target: injected values reach shared memory, state vars observable after a dispatch, reads are cursor-independent |
 | 5c &#10003; | Whole-component setter (D14): one `<thread>_PreState` container per thread with no `Default`, and `set_<thread>` delegating to the existing per-field setters | a test that establishes all 7 of `tcp_tct`'s fields in one call and reads them back; deleting one field is a compile error (`E0063: missing field`) |
 | 5b &#10003; | State var injection (D16/D16a): plugin-declared `inj_<thread>_sv_<var>` regions mapped `r` into the owning thread with `setvar_vaddr` and `rw` into the controller, thread-side `get_inj_sv_*` + `is_injection_enabled()` NULL gate, Rust ingest in `libComputePre`, `put_` suppressed on the `sv_` regions | 2 tests on target: an injected state var is adopted by the next dispatch and observable on its `sv_` region; a following dispatch with nothing set keeps it. Both checked against negative controls |
 | 6 | *Deferred -- possible future work, not planned.* Serial CLI PD + host driver over QEMU stdio. Blocked on UART contention and on whether it earns its cost at all; see "Interactive CLI (deferred)" | n/a |
+| 7 | Contract observation in the controller (D19-D23): (1) observer layers extracted into `crates/observers`; (2) monitor PDs rewritten as thin wrappers; (3) `sv_` plumbing split from the monitor PDs and driven by system testing as well, component-layer gate widened to "has GUMBO thread contracts"; (4) controller `SystemView` with pending-injection values, `TestSink`, `observe::` API; (5) the scheduler's observation park; (6) the two switches at build, suite and test level | (1-2) golden diffs showing code moving without behavior change, and the monitor variants' on-target logs unchanged; (3) golden diffs for a model built with system testing and without `--runtime-monitoring`, which now carries the `sv_` plumbing and no monitor bundles; (4-6) on target: a test that breaks a CEP_Post fails with the violation reported, the same test under `observe::expect` passes, an injected state variable does not produce a false CEP_Post, a run with system testing but without `--runtime-monitoring` still checks state-variable contracts, each switch disables its layer at build, suite and test level without affecting the next test, both switches off at build level gives a run with no parks, and a test that re-enables a layer turned off at build level fails with a message naming the switch |
 
 ### Stage 2 scope
 
@@ -1228,21 +1511,27 @@ reason stage 2 could be verified at all, not because it describes current behavi
 
 ### Plugin structure
 
-`TestSchedulerPlugin` should subtype `UserLandMonitorPlugin` — **not `GumboMonitorPlugin`**,
-whose `hasThreadsWithStateVars` gate would disable the test scheduler for contract-free
-models — to reuse `injectMonitorPDNamed`, `getOriginalMsd`, the MSD filtering/compaction, and
-the bundle emission. Two adjustments are needed in the supertype:
+The first plan was to subtype `UserLandMonitorPlugin` and adjust it in three places (an
+overridable gate in place of the hard-coded `options.runtimeMonitoring`, a way to skip the
+slot interleaving the controller does not want, and a `getRetainedNonModelPorts` override).
+As built, `TestSchedulerPlugin` is instead a standalone
+`@datatype class … extends ModelTransformerPlugin with MicrokitPlugin with MicrokitFinalizePlugin`,
+so none of those adjustments were needed:
 
-- `canHandleModelTransformHelper` and `canHandleHelper` hard-code `options.runtimeMonitoring`.
-  Factor that into an overridable predicate so the test scheduler can gate on
-  `ENABLE_TEST_SCHEDULER` instead.
-- `handleForMonitor` assumes the injected PD gets a scheduling slot (`monitorSlotOpt`), then
-  interleaves it into the frame. The controller takes no slot (D4), so the slot-interleaving
-  step needs to be overridable or skipped.
+- **Model transform** -- `TestControllerInjector` adds the controller process and thread, with
+  no ports (deliberately not `MonitorInjector`).
+- **`handle`** -- C bridge additions through `CConnectionProviderPlugin` (controller wrappers,
+  observable-region accessors, the thread-side `get_inj_sv_*` / `is_injection_enabled`),
+  Rust extern declarations and test stubs through `CRustApiPlugin`, and `lib.rs` weaving
+  through `CRustComponentPlugin` (`libComputePre` ingest, the controller's `system_tests`
+  module). `canHandle` waits for both Rust plugins' contributions to exist.
+- **`finalizeMicrokit`** -- the MSD variant, built from the pre-monitor snapshot (see
+  "Relationship to the runtime monitor"), the five-file bundle, the `system_tests/` modules and
+  the host driver.
 
-- `getRetainedNonModelPorts` must be overridden to retain the `sv_` ports (see "Relationship
-  to the runtime monitor" above). This is the highest-consequence, lowest-visibility
-  obligation in the whole plugin. The `inj_sv_` regions are not ports and need no override.
+The only thing it takes from the monitor plugins is `MONITOR_ORIG_MSD_KEY`. Not inheriting
+from `GumboMonitorPlugin` also keeps its `hasThreadsWithStateVars` gate away from
+contract-free models.
 
 Registration goes in `MicrokitPlugins.defaultMicrokitPlugins`.
 
@@ -1286,6 +1575,7 @@ The constant belongs in `ExperimentalOptions.scala` beside `USE_CASE_CONNECTORS`
 | `crates/test_controller/src/system_tests/tests.rs` | **User-editable**, preserved across regeneration |
 | `crates/test_controller/src/system_tests/tests/*_tests.rs` | **User-created**, optional: one file per test class, pulled in by `system_test_files!` in `tests.rs` |
 | `components/<thread>/src/<thread>.c` | Gains `get_inj_sv_*` + `is_injection_enabled()` in the test variant (D16); the `inj_sv_*_queue` pointers are `setvar_vaddr` targets, NULL elsewhere |
+| `crates/<thread>/src/bridge/extern_c_api.rs`, `crates/<thread>/src/lib.rs` | Rust side of D16 for threads with state vars: extern declarations, `unsafe_` wrappers and `#[cfg(test)]` stubs in `extern_c_api.rs`; the `libComputePre` ingest in `lib.rs` |
 | `bin/run-tests.cmd` | Host driver (D18) |
 
 ### Files this design depends on
@@ -1309,8 +1599,9 @@ The constant belongs in `ExperimentalOptions.scala` beside `USE_CASE_CONNECTORS`
 
 ## Implementation Status
 
-**Stages 1-5 are built and running on seL4, and the design is complete as far as it is
-planned to go.** Stage 6 is deferred indefinitely (see "Interactive CLI (deferred)").
+**Stages 1-5 are built and running on seL4.** Stage 7 (contract observation in the
+controller) is designed and not yet built. Stage 6 is deferred indefinitely (see
+"Interactive CLI (deferred)").
 
 | Stage | State |
 |-------|-------|
@@ -1322,6 +1613,7 @@ planned to go.** Stage 6 is deferred indefinitely (see "Interactive CLI (deferre
 | 5b state var injection (D16/D16a) | done |
 | 5c whole-component setter (D14) | done |
 | 6 serial CLI | deferred -- possible future work |
+| 7 contract observation | designed, not built |
 
 New files: `microkit/plugins/testing/TestSchedulerPlugin.scala` and `TestControllerInjector.scala`;
 `ExperimentalOptions.ENABLE_TEST_SCHEDULER`; registration in `MicrokitPlugins`; two golden tests in
@@ -1346,8 +1638,15 @@ OK: 4 of 4 tests passed
 The two `state_vars` tests are D16's on-target check. They were run against negative controls
 first — one asserting a value that was never injected, one injecting without stepping — and
 both failed, so the passes are not vacuous: the value only appears on the `sv_` region after a
-real dispatch has adopted it. They live outside the repo because `tests.rs` is seeded once per
-model and the results tree is regenerated by `MicrokitTests`.
+real dispatch has adopted it. They live outside the codegen repo because `tests.rs` is seeded
+once per model and the results tree is regenerated by `MicrokitTests`.
+
+**Isolette.** The JVM system tests of `hamr-system-testing-case-studies` are ported to the
+`microkit_mcs` variant of isolette in INSPECTA-models, one file per JVM test class under
+`crates/test_controller/src/system_tests/tests/` (`smoke_`, `illustrations_`, `cat_`,
+`zhaoxiang_tests.rs`), joined by `system_test_files!`. `.ci/ci.cmd` runs them under QEMU via
+`bin/run-tests.cmd` whenever `qemu-system-aarch64` is present. Isolette is also the model on
+which the host `make test` exposed the raw-extern ingest (see the table below).
 
 ### What running it established
 
@@ -1391,6 +1690,7 @@ Findings that no amount of review produced, recorded so they are not rediscovere
 | The controller signals its own `_MON` from `init()` | That reaches the scheduler on the controller channel and is **not** a command; the arm ignores signals before the schedule is live. |
 | **QEMU's serial console emits CRLF** | Every line carries a trailing `\r`, so `Z("0\r")` is `None` and the driver's parse threw a Java trace *after* printing a green-looking log. Output is normalized before parsing, and the numeric parses use `getOrElse(-1)` so a format change reads as a clean `FAILED`. |
 | **QEMU never exits on its own** | Waiting for the timeout made every successful run cost the full bound. Piping into `sed '/DONE/q'` does not help: once the suite ends the guest is idle, so no further write raises SIGPIPE. The driver polls the log and kills the process group; successful runs went from ~300 s to ~13 s. |
+| The D16 ingest declared `get_inj_sv_*` / `is_injection_enabled` in a raw `extern "C"` block in `lib.rs` | The seL4 image linked, but the host `make test` (per-crate `cargo test`) has no C bridge, so every thread with state vars failed with `undefined symbol: is_injection_enabled` -- caught by the isolette CI job, not by the golden tests or the on-target runs. Now routed through `extern_c_api.rs` with `#[cfg(test)]` stubs, as `is_monitoring_enabled` always was. Any new C symbol a component crate calls must take that route. |
 | Synthetic **model ports** reach the component test harness and the verification model | The first D16 implementation added `inj_sv_X` input ports; they surfaced as `api_inj_sv_*` fields in `PreStateContainer_wGSV` and as `// channel` fields in `sys_<id>_proof/system_state.rs`. Reverted: injection regions are plugin-declared, not model ports (D16a). |
 | `MakefileTemplate` has **two** `system.mk` templates | `RUST_PROFILE_DIR` was added only to the MCS one while the link rules come from the shared `MakefileContainer`, leaving domain-scheduled models referencing an undefined variable. Any change touching `system.mk` must be applied to `systemMakefileDomainScheduler` *and* `systemMakefileMCS`. |
 
@@ -1439,7 +1739,8 @@ the monitor bundles came out byte-identical).
   negative testing.
 - `tests.rs` is seeded once and then owned by the developer, but `MicrokitTests` regenerates
   the whole results tree, so the golden baseline can only ever hold the seed. On-target
-  coverage beyond the seed has to live outside the repo or in a harness that does not wipe.
+  coverage beyond the seed lives with the models instead -- isolette's ported suite in
+  INSPECTA-models, preserved by its `clean.cmd` and run by its CI.
 
 ### Only if stage 6 is ever revived
 
@@ -1449,9 +1750,11 @@ the monitor bundles came out byte-identical).
 
 ### Not blocking anything
 
-- The host driver exits **252** rather than 1 on failure; `Os.exit(1)` is remapped somewhere in
-  the Slash launcher, the same class of thing as the `23` already noted in `run-hamr.cmd`.
-  Nonzero is correct for `if ! ./run-tests.cmd`, but an exact code needs chasing.
+- Slash scripts exit **252** rather than 1 on failure -- the host driver, and equally the
+  models' `.ci/ci.cmd` (isolette's CI reports `FAILED (exit 252)` for a `make test` failure).
+  `Os.exit(1)` is remapped somewhere in the Slash launcher, the same class of thing as the `23`
+  already noted in `run-hamr.cmd`. Nonzero is correct for `if ! ./run-tests.cmd`, but an exact
+  code needs chasing.
 - D18's count-reconciliation rule is still unexercised: it needs serial output to be lost
   mid-run, which cannot be staged cheaply. The other two rules are verified on target.
 - Whether a predefined command script loaded at init from a memory region is worth having
@@ -1459,7 +1762,9 @@ the monitor bundles came out byte-identical).
 - How `is_user_partition` should be reported for the controller, which holds no slot.
 - Whether the test scheduler should optionally retain real timer budgets for mixed
   real-time/stepped scenarios, or whether that is better served by the default variant.
-- Whether a variant that keeps *both* the controller and a monitor PD is worth having. The
-  current design tests the unmonitored configuration; testing the monitored one -- does the
-  system still meet its contracts with the monitor's slots in the frame? -- is a different and
-  legitimate question that the one-injected-PD-per-variant rule currently forecloses.
+- Whether a variant that keeps *both* the controller and a monitor PD is worth having. Stage 7
+  checks contracts against the unmonitored configuration; testing the monitored one -- does
+  the system still meet its contracts with the monitor's slots in the frame, and is the monitor
+  itself right? -- is a different and legitimate question that the one-injected-PD-per-variant
+  rule currently forecloses. Stage 7's steps are prerequisites; the remaining work is listed at
+  the end of "Contract observation in the controller".
