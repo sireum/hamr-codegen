@@ -1152,7 +1152,9 @@ that way.
 
 ### Contract observation in the controller (stage 7, planned)
 
-**Status: designed, not built.**
+**Status: steps 1-2 built (the shared `crates/observers` and the thin monitor wrappers); steps
+3-7 designed, not built.** See "As built: steps 1-2" at the end of this section for where the
+implementation departs from the text below.
 
 Today a contract violation cannot fail a system test. The monitors that check contracts are
 stripped from the test variant (see "Relationship to the runtime monitor"), and even where they
@@ -1555,6 +1557,39 @@ dispatch consumed, which the view must answer the way the thread's own `get_` do
 temp-control exercise only data ports, so this is unverified: stage 7's verification includes a
 model with event ports (`gumbo-verus/pure_event_port`).
 
+#### As built: steps 1-2
+
+`ContractObserverPlugin` generates `crates/observers`; `GumboMonitorPlugin` and
+`GumboSysAssertMonitorPlugin` now emit only the schedule-locating code, `thread_of`, a
+`MonitorView` over the monitor's API, and a `LogSink`. Where this departs from the text above:
+
+- **Threads, not channels.** `on_complete` / `on_dispatch` take a generated `Thread` enum, one
+  variant per model thread. Channel ids belong to an MSD variant and the crate is shared by all
+  of them, so each consumer maps its own channels onto `Thread` (`thread_of` in the monitors;
+  the controller's `channels::` in step 4). `COMPONENT_TRANSITIONS` is keyed by `Thread` too.
+- **`SystemView` getters return the monitors' API types**, not `Option<T>`: `T` for data ports
+  and state variables, `Option<T>` for event-data ports, `bool` for event ports -- exactly what
+  the monitors' getters return, so the monitors cannot behave differently. The controller's
+  "never written" case (D25) is for step 4 to represent.
+- **The sink takes an `Event` enum** (`IepPostViolation`, `CepPreViolation`, `CepPostViolation`,
+  `CepPostSkipped`, `CepPostExcused`, `SysAssertViolation`, and the schedule-conformance
+  events), carrying pre/post state as `&dyn Debug`. `LogSink` lives in each monitor's own app
+  module, so the log records keep their target and the monitors' output is unchanged.
+- **The crate is generated only when a monitor consumes it**: `--runtime-monitoring` and some
+  thread with GUMBO state variables, `GumboMonitorPlugin`'s own gate. System testing alone
+  requests it from step 4, when the controller becomes a consumer (D22).
+- **Fully generated crates overwrite their `Cargo.toml`.** A component whose profile is
+  `userEditable = F` -- the gumbo and sys-assert monitors, `domain_monitor`, any synthetic
+  component without an explicit profile -- already had its sources overwritten on every run,
+  but its manifest was written once, so a dependency codegen added later (here `observers`)
+  never reached a tree regenerated in place. The manifest now follows the sources: overwritten,
+  headed "do not edit". User-editable crates are unchanged.
+
+Verified on isolette under QEMU, old code against new, in both the gumbo and the
+sys-assert monitor variants: identical monitor output on a clean run, and identical violation
+messages -- pre/post values included -- with one IEP_Post, one CEP_Pre, one CEP_Post and one
+system property forced to fail in both trees. `make verus` passes on both monitor crates.
+
 #### What stage 7 does not cover
 
 It tests the *unmonitored* configuration against the contracts; it does not test a monitor PD.
@@ -1655,7 +1690,7 @@ path and the flush-under-stepped-scheduling problem is the first thing to solve.
 | 5c &#10003; | Whole-component setter (D14): one `<thread>_PreState` container per thread with no `Default`, and `set_<thread>` delegating to the existing per-field setters | a test that establishes all 7 of `tcp_tct`'s fields in one call and reads them back; deleting one field is a compile error (`E0063: missing field`) |
 | 5b &#10003; | State var injection (D16/D16a): plugin-declared `inj_<thread>_sv_<var>` regions mapped `r` into the owning thread with `setvar_vaddr` and `rw` into the controller, thread-side `get_inj_sv_*` + `is_injection_enabled()` NULL gate, Rust ingest in `libComputePre`, `put_` suppressed on the `sv_` regions | 2 tests on target: an injected state var is adopted by the next dispatch and observable on its `sv_` region; a following dispatch with nothing set keeps it. Both checked against negative controls |
 | 6 | *Deferred -- possible future work, not planned.* Serial CLI PD + host driver over QEMU stdio. Blocked on UART contention and on whether it earns its cost at all; see "Interactive CLI (deferred)" | n/a |
-| 7 | Contract observation in the controller (D19-D24): (1) `ContractObserverPlugin` generating the observer layers into `crates/observers`, with the completion/dispatch split; (2) monitor PDs rewritten as thin wrappers; (3) `sv_` port creation and `handleCBackend` separated from the monitor wiring and driven by system testing as well, component-layer gate widened to "has GUMBO thread contracts"; (4) controller `SystemView` on its own `obs_get_*` cursors with last-value caching, pending-injection values, `TestSink` with `VIOLATION` lines and one `FAIL` per test, the recording window, `observe::` API; (5) the scheduler's observation park, `completed_seq`, and the completion check at command completion; (6) the two switches at build, suite and test level; (7) overrun handling | (1-2) golden diffs showing code moving without behavior change, `make verus` still passing on a model with monitors, and the monitor variants' on-target logs unchanged (they keep checking CEP_Post after a failed CEP_Pre); (3) golden diffs for a model built with system testing and without `--runtime-monitoring`, which now carries the `sv_` plumbing and no monitor bundles; (4-7) on target: a test that breaks a CEP_Post fails with one `FAIL` line and its `VIOLATION` lines, and the host driver's counts reconcile; a test with several violations still prints one `FAIL`; a violation in the last slot of a test's last command is charged to that test; a command that dispatches nothing (`run_to_thread` while already parked before its target, `info_state`) leaves the marking and saved pre-states untouched; the same test under `observe::expect` passes, and fails if the expected violation does not occur; checking does not change what `inspect::get_*` returns to a test, and isolette's initialization tests still see the post-initialization outputs; an injected state variable does not produce a false CEP_Post; an out-of-range injected input is reported as an assumption not met and skips that dispatch's CEP_Post, not a failure; an IEP_Post violation fails the run through `DONE init=failed`; a negative test does not make the next test fail; a run with system testing but without `--runtime-monitoring` still checks state-variable contracts; each switch disables its layer at build, suite and test level without affecting the next test; both switches off at build level gives a run with no parks; a test that re-enables a layer turned off at build level fails with a message naming the switch; a watchdog trip produces one `INFO` and no false violations; and a model with event ports (`gumbo-verus/pure_event_port`) checks the same events the threads saw, including an event port with two consumers |
+| 7 (1-2 &#10003;) | Contract observation in the controller (D19-D24): (1) `ContractObserverPlugin` generating the observer layers into `crates/observers`, with the completion/dispatch split; (2) monitor PDs rewritten as thin wrappers; (3) `sv_` port creation and `handleCBackend` separated from the monitor wiring and driven by system testing as well, component-layer gate widened to "has GUMBO thread contracts"; (4) controller `SystemView` on its own `obs_get_*` cursors with last-value caching, pending-injection values, `TestSink` with `VIOLATION` lines and one `FAIL` per test, the recording window, `observe::` API; (5) the scheduler's observation park, `completed_seq`, and the completion check at command completion; (6) the two switches at build, suite and test level; (7) overrun handling | (1-2) golden diffs showing code moving without behavior change, `make verus` still passing on a model with monitors, and the monitor variants' on-target logs unchanged (they keep checking CEP_Post after a failed CEP_Pre); (3) golden diffs for a model built with system testing and without `--runtime-monitoring`, which now carries the `sv_` plumbing and no monitor bundles; (4-7) on target: a test that breaks a CEP_Post fails with one `FAIL` line and its `VIOLATION` lines, and the host driver's counts reconcile; a test with several violations still prints one `FAIL`; a violation in the last slot of a test's last command is charged to that test; a command that dispatches nothing (`run_to_thread` while already parked before its target, `info_state`) leaves the marking and saved pre-states untouched; the same test under `observe::expect` passes, and fails if the expected violation does not occur; checking does not change what `inspect::get_*` returns to a test, and isolette's initialization tests still see the post-initialization outputs; an injected state variable does not produce a false CEP_Post; an out-of-range injected input is reported as an assumption not met and skips that dispatch's CEP_Post, not a failure; an IEP_Post violation fails the run through `DONE init=failed`; a negative test does not make the next test fail; a run with system testing but without `--runtime-monitoring` still checks state-variable contracts; each switch disables its layer at build, suite and test level without affecting the next test; both switches off at build level gives a run with no parks; a test that re-enables a layer turned off at build level fails with a message naming the switch; a watchdog trip produces one `INFO` and no false violations; and a model with event ports (`gumbo-verus/pure_event_port`) checks the same events the threads saw, including an event port with two consumers |
 
 ### Stage 2 scope
 
@@ -1780,7 +1815,8 @@ The constant belongs in `ExperimentalOptions.scala` beside `USE_CASE_CONNECTORS`
 ## Implementation Status
 
 **Stages 1-5 are built and running on seL4.** Stage 7 (contract observation in the
-controller) is designed and not yet built. Stage 6 is deferred indefinitely (see
+controller) has steps 1-2 built -- the checks shared through `crates/observers` -- and the
+controller work designed. Stage 6 is deferred indefinitely (see
 "Interactive CLI (deferred)").
 
 | Stage | State |
@@ -1793,7 +1829,7 @@ controller) is designed and not yet built. Stage 6 is deferred indefinitely (see
 | 5b state var injection (D16/D16a) | done |
 | 5c whole-component setter (D14) | done |
 | 6 serial CLI | deferred -- possible future work |
-| 7 contract observation | designed, not built |
+| 7 contract observation | steps 1-2 done (shared `crates/observers`, thin monitor wrappers); steps 3-7 designed |
 
 New files: `microkit/plugins/testing/TestSchedulerPlugin.scala` and `TestControllerInjector.scala`;
 `ExperimentalOptions.ENABLE_TEST_SCHEDULER`; registration in `MicrokitPlugins`; two golden tests in

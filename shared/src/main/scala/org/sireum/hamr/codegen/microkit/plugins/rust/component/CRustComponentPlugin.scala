@@ -703,8 +703,15 @@ object ComponentContributions {}
               optLastItemSep = None()).prettyST
           else RAST.MarkerPlaceholder(r2u2CargoMarker.asInstanceOf[PlaceholderMarker]).prettyST
 
+        // As for the app module: a fully-generated component's manifest is overwritten,
+        // so dependencies codegen adds (e.g. crates/observers for the monitors) reach a
+        // tree regenerated in place; a user-editable one keeps user edits.
+        val cargoHeader: String =
+          if (genProfile.userEditable) CommentTemplate.safeToEditComment_hash
+          else CommentTemplate.doNotEditComment_hash
+
         val content =
-          st"""${CommentTemplate.safeToEditComment_hash}
+          st"""$cargoHeader
               |
               |[package]
               |name = "$crateName"
@@ -745,7 +752,7 @@ object ComponentContributions {}
           content = content,
           markers = ISZ(r2u2CargoMarker),
           invertMarkers = F,
-          overwrite = F)
+          overwrite = !genProfile.userEditable)
       }
 
       { // Makefile

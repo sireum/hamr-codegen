@@ -43,24 +43,6 @@ object GumboMonitorPlugin {
     store.get(KEY_RUST_MONITORING).asInstanceOf[Option[RustMonitoringStore]]
 
 
-  @pure def computeMonitorGetterCall(param: GumboXRustUtil.GGParam,
-                                     threadId: String,
-                                     dstPortToMonitorPortName: Map[ISZ[String], String]): ST = {
-    param match {
-      case sv: GumboXRustUtil.GGStateVarParam =>
-        return st"api.get_${threadId}_sv_${sv.originName}()"
-      case pp: GumboXRustUtil.GGPortParam =>
-        if (pp.isIn) {
-          dstPortToMonitorPortName.get(pp.port.path) match {
-            case Some(mn) => return st"api.get_${mn}()"
-            case _ => return st"api.get_UNKNOWN_${pp.originName}()"
-          }
-        } else {
-          return st"api.get_${threadId}_${pp.originName}()"
-        }
-      case _ => return st"api.get_UNKNOWN()"
-    }
-  }
 }
 
 @datatype class RustMonitoringStateVarInfo(val name: String)
@@ -450,6 +432,7 @@ object GumboMonitorPlugin {
       val canDoMonitorMethod: B =
         !haveHandledMonitorMethod(store) &&
           GumboXRustPlugin.getGumboXContributions(store).nonEmpty &&
+          ContractObserverPlugin.hasObservers(store) &&
           CRustComponentPlugin.hasCRustComponentContributions(store)
 
       return canDoBackend || canDoUserLandHandle || canDoMonitorMethod
@@ -741,40 +724,20 @@ object GumboMonitorPlugin {
   // on prev_user_ch to run post-condition checks and on next_user_ch to capture
   // pre-state for each component. Also appends buildUserChannelTables as a
   // module-level function.
+  // The contract checks themselves live in crates/observers (ContractObserverPlugin): this
+  // monitor only locates itself in the schedule -- which thread just yielded, which runs
+  // next, and whether this is its first run -- and hands those to the shared
+  // ComponentContracts, reading through the monitor's own API (MonitorView) and logging
+  // through LogSink exactly as before.
   @pure def handleMonitorMethod(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes,
                                 symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
     var localStore: Store = store + keyMonitorMethod ~> BoolValue(T)
 
     val gumboxContribs = GumboXRustPlugin.getGumboXContributions(localStore).get
+    val info = ContractObserverPlugin.getInfo(localStore).get
+    val obs = ContractObserverPlugin.crateName
 
     if (gumboxContribs.componentContributions.nonEmpty) {
-      // Build destination port path -> monitor port name mapping
-      // (composition-independent — built once, shared by all monitors)
-      var dstPortToMonitorPortName: Map[ISZ[String], String] = Map.empty
-      for (conn <- symbolTable.aadlConnections) {
-        conn match {
-          case pc: AadlPortConnection =>
-            val srcThread = pc.srcComponent.asInstanceOf[AadlThread]
-            val portName = CommonUtil.getLastName(pc.srcFeature.feature.identifier)
-            val monPortName: String = s"${MicrokitUtil.getComponentIdPath(srcThread)}_${portName}"
-            dstPortToMonitorPortName = dstPortToMonitorPortName + pc.dstFeature.path ~> monPortName
-          case _ =>
-        }
-      }
-      // UNCONNECTED inputs are observed directly (the monitor maps the consumer's own
-      // input region -- see MonitorInjector); their monitor port follows the same
-      // <threadId>_<portId> naming, keyed here by the consumer's port so contract
-      // parameters over such inputs resolve to a getter instead of get_UNKNOWN_*.
-      for (t <- symbolTable.getThreads() if !StoreUtil.isSynthetic(t.path, localStore)) {
-        for (p <- t.getPorts()
-             if p.direction == ir.Direction.In &&
-               !symbolTable.inConnections.contains(p.path) &&
-               !StoreUtil.isSynthetic(p.path, localStore)) {
-          dstPortToMonitorPortName = dstPortToMonitorPortName + p.path ~>
-            s"${MicrokitUtil.getComponentIdPath(t)}_${p.identifier}"
-        }
-      }
-
       // One monitor component per name: size-1 for the gumbo monitor, one per
       // composition for the sys-assert monitor (design D8, approach (i)).
       // Re-fetch contributions each iteration since the prior iteration updated
@@ -784,120 +747,6 @@ object GumboMonitorPlugin {
       val contributions = CRustComponentPlugin.getCRustComponentContributions(localStore)
       contributions.componentContributions.get(monitorThreadPath) match {
         case Some(monitorContrib) =>
-          var preStateStructFields: ISZ[RAST.Item] = ISZ()
-          var preStateInitValues: ISZ[ST] = ISZ()
-          var initChecks: ISZ[ST] = ISZ()
-          var postCheckArms: ISZ[ST] = ISZ()
-          var preCheckArms: ISZ[ST] = ISZ()
-          var gumboxUses: ISZ[RAST.Item] = ISZ()
-
-          for (entry <- gumboxContribs.componentContributions.entries) {
-            val thread = symbolTable.componentMap.get(entry._1).get.asInstanceOf[AadlThread]
-            val threadId = MicrokitUtil.getComponentIdPath(thread)
-            val contribs = entry._2
-
-            gumboxUses = gumboxUses :+ RAST.Use(ISZ(), RAST.IdentString(s"crate::gumbox::${threadId}_containers::*"))
-
-            // Pre-state struct field and init (needed for either CEP_Pre or CEP_Post since
-            // post-check references pre-state)
-            val hasPreOrPost: B = contribs.computeContributions.CEP_Pre.nonEmpty ||
-              contribs.computeContributions.CEP_Post.nonEmpty
-            if (hasPreOrPost) {
-              preStateStructFields = preStateStructFields :+
-                RAST.StructField(
-                  visibility = RAST.Visibility.Private, isGhost = F,
-                  ident = RAST.IdentString(s"pre_${threadId}"),
-                  fieldType = RAST.TyPath(ISZ(ISZ("Option"), ISZ(s"PreState_${threadId}")), None()))
-              preStateInitValues = preStateInitValues :+ st"pre_${threadId}: None,"
-            }
-
-            // Init check (IEP_Post)
-            val iepPostParams = GumboXRustUtil.sortParams(contribs.initializeContributions.IEP_Post_Params)
-            if (contribs.initializeContributions.IEP_Guarantee.nonEmpty) {
-              val postFieldInits: ISZ[ST] = for (p <- iepPostParams) yield
-                st"${p.name}: ${GumboMonitorPlugin.computeMonitorGetterCall(p, threadId, dstPortToMonitorPortName)},"
-              val postArgs: ISZ[ST] = for (p <- iepPostParams) yield
-                st"post_${threadId}.${p.name}"
-
-              initChecks = initChecks :+
-                st"""{
-                    |  let post_${threadId} = PostState_${threadId} {
-                    |    ${(postFieldInits, "\n")}
-                    |  };
-                    |  if !crate::gumbox::${threadId}_GUMBOX::${GumboXRustUtil.getInitialize_IEP_Post_MethodName}(
-                    |    ${(postArgs, ", ")}) {
-                    |    log::warn!("*** CONTRACT VIOLATION: ${threadId} IEP_Post not satisfied ***");
-                    |    log::warn!("${threadId} post: {:?}", post_${threadId});
-                    |  }
-                    |}"""
-            }
-
-            // Post-state check match arm (CEP_Post)
-            if (contribs.computeContributions.CEP_Post.nonEmpty) {
-              val cepPostParams = GumboXRustUtil.sortParams(contribs.computeContributions.CEP_Post_Params)
-              val postOnlyParams = cepPostParams.filter(p =>
-                p.kind == GumboXRustUtil.SymbolKind.StateVar || p.isOutPort)
-
-              val postFieldInits: ISZ[ST] = for (p <- postOnlyParams) yield
-                st"${p.name}: ${GumboMonitorPlugin.computeMonitorGetterCall(p, threadId, dstPortToMonitorPortName)},"
-
-              val cepPostArgs: ISZ[ST] = for (p <- cepPostParams) yield
-                st"${if (p.kind == GumboXRustUtil.SymbolKind.StateVarPre || p.isInPort) "pre" else "post"}.${p.name}"
-
-              postCheckArms = postCheckArms :+
-                st"""${threadId}_MON => {
-                    |  let post = PostState_${threadId} {
-                    |    ${(postFieldInits, "\n")}
-                    |  };
-                    |  if let Some(pre) = &self.pre_${threadId} {
-                    |    if !crate::gumbox::${threadId}_GUMBOX::${GumboXRustUtil.getCompute_CEP_Post_MethodName}(
-                    |      ${(cepPostArgs, ", ")}) {
-                    |      log::warn!("*** CONTRACT VIOLATION: ${threadId} CEP_Post not satisfied ***");
-                    |      log::warn!("${threadId} pre: {:?}", pre);
-                    |      log::warn!("${threadId} post: {:?}", post);
-                    |    }
-                    |  } else {
-                    |    log::warn!("${threadId} post check skipped: no saved pre-state");
-                    |  }
-                    |}"""
-            }
-
-            // Pre-state capture match arm (needed for either CEP_Pre or CEP_Post)
-            if (hasPreOrPost) {
-              val hasCepPre: B = contribs.computeContributions.CEP_Pre.nonEmpty
-              val preParams: ISZ[GumboXRustUtil.GGParam] =
-                if (hasCepPre) GumboXRustUtil.sortParams(contribs.computeContributions.CEP_Pre_Params)
-                else GumboXRustUtil.sortParams(contribs.computeContributions.CEP_Post_Params).filter(p =>
-                  p.kind == GumboXRustUtil.SymbolKind.StateVarPre || p.isInPort)
-              val preFieldInits: ISZ[ST] = for (p <- preParams) yield
-                st"${p.name}: ${GumboMonitorPlugin.computeMonitorGetterCall(p, threadId, dstPortToMonitorPortName)},"
-
-              val preCheckBody: ST =
-                if (hasCepPre) {
-                  val preArgs: ISZ[ST] = for (p <- preParams) yield st"pre.${p.name}"
-                  st"""let pre = PreState_${threadId} {
-                      |  ${(preFieldInits, "\n")}
-                      |};
-                      |if !crate::gumbox::${threadId}_GUMBOX::${GumboXRustUtil.getCompute_CEP_Pre_MethodName}(
-                      |  ${(preArgs, ", ")}) {
-                      |  log::warn!("*** CONTRACT VIOLATION: ${threadId} CEP_Pre not satisfied ***");
-                      |  log::warn!("${threadId} pre: {:?}", pre);
-                      |}
-                      |self.pre_${threadId} = Some(pre);"""
-                } else {
-                  st"""let pre = PreState_${threadId} {
-                      |  ${(preFieldInits, "\n")}
-                      |};
-                      |self.pre_${threadId} = Some(pre);"""
-                }
-
-              preCheckArms = preCheckArms :+
-                st"""${threadId}_MON => {
-                    |  $preCheckBody
-                    |}"""
-            }
-          }
-
           // Plain-Rust (non-Verus) monitors get no external_body directive.
           val monitorVerus: B = getMonitorGenProfile.verusVerified
           val externalBodyAttr: String =
@@ -950,27 +799,24 @@ object GumboMonitorPlugin {
                   |}
                   |
                   |let idx = state.current_timeslice as usize;
+                  |let mut view = MonitorView { api: api };
                   |
                   |if self.last_index == u32::MAX {
                   |  // First compute phase, check initialization guarantees
-                  |  ${(initChecks, "\n")}
-                  |} else {
-                  |  let prev_ch = self.prev_user_ch[idx];
-                  |  match prev_ch {
-                  |    ${(postCheckArms, "\n")}
-                  |    _ => {}
-                  |  }
+                  |  self.components.on_init(&mut view, &mut LogSink);
+                  |} else if let Some(prev) = thread_of(self.prev_user_ch[idx]) {
+                  |  // the thread that just yielded: check its post-condition
+                  |  self.components.on_complete(prev, &mut view, &mut LogSink);
                   |}
                   |
-                  |let next_ch = self.next_user_ch[idx];
-                  |match next_ch {
-                  |  ${(preCheckArms, "\n")}
-                  |  _ => {}
+                  |// the thread that runs next: save its pre-state, check its pre-condition
+                  |if let Some(next) = thread_of(self.next_user_ch[idx]) {
+                  |  self.components.on_dispatch(next, &mut view, &mut LogSink);
                   |}
                   |
                   |self.last_index = state.current_timeslice;""")))))
 
-          // Scheduling state struct fields
+          // Scheduling state struct fields, and the shared contract checks
           val schedFields: ISZ[RAST.Item] = ISZ(
             RAST.StructField(visibility = RAST.Visibility.Private, isGhost = F,
               ident = RAST.IdentString("frame_period"),
@@ -983,18 +829,21 @@ object GumboMonitorPlugin {
               fieldType = RAST.TyPath(ISZ(ISZ("hamr", "ScheduleChannels")), None())),
             RAST.StructField(visibility = RAST.Visibility.Private, isGhost = F,
               ident = RAST.IdentString("next_user_ch"),
-              fieldType = RAST.TyPath(ISZ(ISZ("hamr", "ScheduleChannels")), None())))
+              fieldType = RAST.TyPath(ISZ(ISZ("hamr", "ScheduleChannels")), None())),
+            RAST.StructField(visibility = RAST.Visibility.Private, isGhost = F,
+              ident = RAST.IdentString("components"),
+              fieldType = RAST.TyPath(ISZ(ISZ(obs, "components", "ComponentContracts")), None())))
 
           val updatedStruct = monitorContrib.appStructDef(
-            items = monitorContrib.appStructDef.items ++ schedFields ++ preStateStructFields)
+            items = monitorContrib.appStructDef.items ++ schedFields)
 
           // Initializer values for new()
-          val schedInits: ISZ[ST] = ISZ(
+          val allInits: ISZ[ST] = ISZ(
             st"frame_period: 0,",
             st"last_index: u32::MAX,",
             st"prev_user_ch: [0; hamr::hamr_ScheduleChannels_DIM_0],",
-            st"next_user_ch: [0; hamr::hamr_ScheduleChannels_DIM_0],")
-          val allInits = schedInits ++ preStateInitValues
+            st"next_user_ch: [0; hamr::hamr_ScheduleChannels_DIM_0],",
+            st"components: $obs::components::ComponentContracts::new(),")
 
           // Update impl: replace new() and timeTriggered bodies, append monitor method
           val existingImpl = monitorContrib.appStructImpl.asInstanceOf[RAST.ImplBase]
@@ -1058,16 +907,13 @@ object GumboMonitorPlugin {
                 |  }
                 |}""")
 
-          val additionalUses: ISZ[RAST.Item] = gumboxUses
+          val adapters = RAST.ItemST(ContractObserverPlugin.monitorAdapterItems(monitorThreadId, appApiType, info))
 
           val updatedContrib = monitorContrib(
             appStructDef = updatedStruct,
             appStructImpl = updatedImpl,
-            moduleLevelEntries = monitorContrib.moduleLevelEntries :+ buildUserChannelTablesFn,
-            appUses = monitorContrib.appUses ++ additionalUses,
-            // the monitor crate carries a gumbox module; contributing that declaration
-            // is the whole reason its lib.rs used to be re-emitted wholesale
-            libModDecls = monitorContrib.libModDecls :+ RAST.ItemST(st"mod gumbox;"))
+            moduleLevelEntries = monitorContrib.moduleLevelEntries :+ buildUserChannelTablesFn :+ adapters,
+            crateDependencies = monitorContrib.crateDependencies :+ ContractObserverPlugin.crateDependency)
 
           localStore = CRustComponentPlugin.putComponentContributions(
             contributions.replaceComponentContributions(
@@ -1093,67 +939,13 @@ object GumboMonitorPlugin {
         !haveRustFinalized(store))
   }
 
-  // Emits the GUMBOX and container modules into each monitor crate's src/gumbox, and
-  // that directory's mod.rs.  Nothing here writes a crate's src/lib.rs any more: the
-  // observation points that post state vars to shared memory, and the monitor crate's
-  // `mod gumbox;`, are contributed to CRustComponentPlugin during handle (see the lib*
-  // fields of ComponentContributions), rather than regenerating a file this plugin does
-  // not own and winning by running last.
+  // The GUMBOX and container modules the monitor crates used to carry in src/gumbox now
+  // live in crates/observers (ContractObserverPlugin), shared with the test controller.
+  // Nothing here writes a crate's src/lib.rs either: the observation points that post
+  // state vars to shared memory are contributed to CRustComponentPlugin during handle.
   @pure override def finalizeMicrokit(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes,
                                       symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
-    var resources: ISZ[Resource] = ISZ()
-
-    // The monitored components' crates/<component>/src/lib.rs used to be re-emitted
-    // here, duplicating CRustComponentPlugin's template and winning by running later.
-    // The observation points are now contributed to that plugin during handle (see the
-    // lib* fields of ComponentContributions), so there is nothing to emit here.
-
-    // Generate GUMBOX and container modules in each monitor crate under src/gumbox.
-    // One monitor per name: size-1 for the gumbo monitor, one per composition for
-    // the sys-assert monitor (design D8, approach (i)).
-    val gumboxContribsOpt = GumboXRustPlugin.getGumboXContributions(store)
-    if (gumboxContribsOpt.nonEmpty) {
-      for (monitorName <- monitorNames(symbolTable)) {
-      val monitorThreadPath: ISZ[String] = monitorThreadPathNamed(symbolTable.rootSystem.path, monitorName)
-      symbolTable.componentMap.get(monitorThreadPath) match {
-        case Some(monitorComp) =>
-          val monitorThread = monitorComp.asInstanceOf[AadlThread]
-          val monitorCrateDir = CRustComponentPlugin.componentCrateDirectory(monitorThread, options, store)
-          val gumboxDir = s"$monitorCrateDir/src/gumbox"
-
-          var modDecls: ISZ[String] = ISZ()
-
-          for (entry <- gumboxContribsOpt.get.componentContributions.entries) {
-            val thread = symbolTable.componentMap.get(entry._1).get.asInstanceOf[AadlThread]
-            val threadId = MicrokitUtil.getComponentIdPath(thread)
-
-            // Generate GUMBOX module (copy of the thread's contract functions)
-            val gumboxContent = GumboXRustPlugin.generateGumboxModuleContent(entry._2)
-            val gumboxPath = s"$gumboxDir/${threadId}_GUMBOX.rs"
-            resources = resources :+ ResourceUtil.createResource(gumboxPath, gumboxContent, T)
-            modDecls = modDecls :+ s"${threadId}_GUMBOX"
-
-            // Generate PreState/PostState container structs
-            val containerContent = GumboXRustPlugin.generateMonitorContainerContent(threadId, entry._2)
-            val containerPath = s"$gumboxDir/${threadId}_containers.rs"
-            resources = resources :+ ResourceUtil.createResource(containerPath, containerContent, T)
-            modDecls = modDecls :+ s"${threadId}_containers"
-          }
-
-          // Generate gumbox/mod.rs
-          val modEntries: ISZ[ST] = for (m <- modDecls) yield st"pub mod $m;"
-          val modContent =
-            st"""${CommentTemplate.doNotEditComment_slash}
-                |
-                |${(modEntries, "\n")}
-                |"""
-          resources = resources :+ ResourceUtil.createResource(s"$gumboxDir/mod.rs", modContent, T)
-        case _ =>
-      }
-      }
-    }
-
-    return (store + keyRustFinalized ~> BoolValue(T), resources)
+    return (store + keyRustFinalized ~> BoolValue(T), ISZ())
   }
 
   @pure def hasThreadsWithStateVars(symbolTable: SymbolTable): B = {
