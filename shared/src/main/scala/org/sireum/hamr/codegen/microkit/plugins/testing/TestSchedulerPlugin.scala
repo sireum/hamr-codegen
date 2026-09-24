@@ -11,12 +11,13 @@ import org.sireum.hamr.codegen.common.plugin.ModelTransformerPlugin
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen.toolName
 import org.sireum.hamr.codegen.microkit.plugins.{ComponentGenProfile, MicrokitFinalizePlugin, MicrokitPlugin, StoreUtil}
 import org.sireum.hamr.codegen.microkit.plugins.c.connections.CConnectionProviderPlugin
+import org.sireum.hamr.codegen.microkit.plugins.rust.apis.{ComponentApiContributions, CRustApiPlugin}
 import org.sireum.hamr.codegen.microkit.plugins.rust.component.CRustComponentPlugin
 import org.sireum.hamr.codegen.microkit.connections.{ConnectionStore, DefaultConnectionStore, DefaultSystemContributions, UberConnectionContributions, cConnectionContributions}
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, TypeUtil}
 import org.sireum.hamr.codegen.microkit.plugins.c.types.CTypePlugin
 import org.sireum.hamr.codegen.microkit.plugins.rust.types.CRustTypePlugin
-import org.sireum.hamr.codegen.microkit.types.QueueTemplate
+import org.sireum.hamr.codegen.microkit.types.{MicrokitTypeUtil, QueueTemplate}
 import org.sireum.hamr.codegen.microkit.{rust => RAST}
 import org.sireum.hamr.codegen.microkit.plugins.monitors.{SDValue, UserLandMonitorPlugin}
 import org.sireum.hamr.codegen.microkit.plugins.msd.SystemDescriptionProviderPlugin
@@ -430,6 +431,7 @@ object TestSchedulerPlugin {
       enabled(options, symbolTable, store, reporter) &&
         TestSchedulerPlugin.hasTransformed(store) &&
         CRustComponentPlugin.hasCRustComponentContributions(store) &&
+        CRustApiPlugin.getCRustApiContributions(store).nonEmpty &&
         !store.contains(TestSchedulerPlugin.KEY_contributed))
   }
 
@@ -647,43 +649,149 @@ object TestSchedulerPlugin {
     // D16 thread side, Rust half: ingest injected state vars before the app computes, so a
     // test's setup is visible to the very dispatch it is setting up.  An empty queue means
     // nothing was injected, and the thread keeps its own state -- that is the dirty flag.
+    //
+    // The C functions are declared through the thread's extern_c_api.rs (CRustApiPlugin),
+    // as is_monitoring_enabled is, rather than by a raw extern block in lib.rs: the C bridge
+    // only exists in the seL4 image, so a host `cargo test` needs the #[cfg(test)] stubs
+    // extern_c_api.rs provides, which report that nothing is ever injected.
+    var crustApiContribs = CRustApiPlugin.getCRustApiContributions(localStore).get
     for (e <- byThread.entries) {
       val owner = e._1
-      contributions.componentContributions.get(owner) match {
-        case Some(contrib) =>
-          var externs: ISZ[RAST.Item] = ISZ()
+      (contributions.componentContributions.get(owner), crustApiContribs.apiContributions.get(owner)) match {
+        case (Some(contrib), Some(apiContrib)) =>
+          var externCApis: ISZ[RAST.Item] = ISZ(
+            RAST.FnSig(
+              verusHeader = None(), fnHeader = RAST.FnHeader(F),
+              ident = RAST.IdentString("is_injection_enabled"),
+              generics = None(),
+              fnDecl = RAST.FnDecl(
+                inputs = ISZ(),
+                outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType))))
+          var wrappers: ISZ[RAST.Item] = ISZ(
+            RAST.FnImpl(
+              visibility = RAST.Visibility.Public,
+              sig = RAST.FnSig(
+                ident = RAST.IdentString("unsafe_is_injection_enabled"),
+                fnDecl = RAST.FnDecl(
+                  inputs = ISZ(),
+                  outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
+                verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
+              comments = ISZ(), attributes = ISZ(), meta = ISZ(),
+              verusAttributeSyntax = options.verusAttributeSyntax, contract = None(),
+              body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
+                st"""unsafe {
+                    |  return is_injection_enabled();
+                    |}"""))))))
+          var testMockVars: ISZ[RAST.Item] = ISZ(
+            RAST.ItemStatic(
+              ident = RAST.IdentString("INJECTION_ENABLED"),
+              visibility = RAST.Visibility.Public,
+              ty = RAST.TyPath(ISZ(ISZ("Mutex"), ISZ("Option"), ISZ("bool")), None()),
+              mutability = RAST.Mutability.Not,
+              expr = RAST.ExprST(st"Mutex::new(None);")))
+          var testingApis: ISZ[RAST.Item] = ISZ(
+            RAST.FnImpl(
+              attributes = ISZ(RAST.AttributeST(F, st"cfg(test)")),
+              sig = RAST.FnSig(
+                ident = RAST.IdentString("is_injection_enabled"),
+                fnDecl = RAST.FnDecl(
+                  inputs = ISZ(),
+                  outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
+                verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
+              comments = ISZ(), visibility = RAST.Visibility.Public, meta = ISZ(),
+              verusAttributeSyntax = options.verusAttributeSyntax, contract = None(),
+              body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
+                st"""unsafe {
+                    |  match *INJECTION_ENABLED.lock().unwrap_or_else(|e| e.into_inner()) {
+                    |    Some(v) => return v,
+                    |    None => return false,
+                    |  }
+                    |}"""))))))
           var ingest: ISZ[ST] = ISZ()
           for (p <- e._2) {
             val v = p._1
-            externs = externs :+ RAST.ItemST(
-              st"""extern "C" {
-                  |  fn get_inj_sv_${v.varName}(value: *mut ${v.rustTypeName}) -> bool;
-                  |  fn is_injection_enabled() -> bool;
-                  |}""")
+            val getName = s"get_inj_sv_${v.varName}"
+            val mockVar = s"INJ_SV_${v.varName}"
+            val valueTy = RAST.TyPath(ISZ(ISZ(v.rustTypeName)), None())
+            val valueParam: ISZ[RAST.Param] = ISZ(RAST.ParamImpl(
+              ident = RAST.IdentString("value"),
+              kind = RAST.TyPtr(mutty = RAST.MutTy(ty = valueTy, mutbl = RAST.Mutability.Mut))))
+            externCApis = externCApis :+ RAST.FnSig(
+              verusHeader = None(), fnHeader = RAST.FnHeader(F),
+              ident = RAST.IdentString(getName),
+              generics = None(),
+              fnDecl = RAST.FnDecl(
+                inputs = valueParam,
+                outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)))
+            wrappers = wrappers :+ RAST.FnImpl(
+              visibility = RAST.Visibility.Public,
+              sig = RAST.FnSig(
+                ident = RAST.IdentString(s"unsafe_$getName"),
+                fnDecl = RAST.FnDecl(
+                  inputs = ISZ(),
+                  outputs = RAST.FnRetTyImpl(RAST.TyPath(ISZ(ISZ("Option"), ISZ(v.rustTypeName)), None()))),
+                verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
+              comments = ISZ(), attributes = ISZ(), meta = ISZ(),
+              verusAttributeSyntax = options.verusAttributeSyntax, contract = None(),
+              body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
+                st"""unsafe {
+                    |  let mut value: ${v.rustTypeName} = ${v.rustTypeName}::default();
+                    |  if $getName(&mut value) {
+                    |    return Some(value);
+                    |  } else {
+                    |    return None;
+                    |  }
+                    |}""")))))
+            testMockVars = testMockVars :+ RAST.ItemStatic(
+              ident = RAST.IdentString(mockVar),
+              visibility = RAST.Visibility.Public,
+              ty = RAST.TyPath(ISZ(ISZ("Mutex"), ISZ("Option"), ISZ(v.rustTypeName)), None()),
+              mutability = RAST.Mutability.Not,
+              expr = RAST.ExprST(st"Mutex::new(None);"))
+            testingApis = testingApis :+ RAST.FnImpl(
+              attributes = ISZ(RAST.AttributeST(F, st"cfg(test)")),
+              sig = RAST.FnSig(
+                ident = RAST.IdentString(getName),
+                fnDecl = RAST.FnDecl(
+                  inputs = valueParam,
+                  outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
+                verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
+              comments = ISZ(), visibility = RAST.Visibility.Public, meta = ISZ(),
+              verusAttributeSyntax = options.verusAttributeSyntax, contract = None(),
+              body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
+                st"""unsafe {
+                    |  match *$mockVar.lock().unwrap_or_else(|e| e.into_inner()) {
+                    |    Some(v) => {
+                    |      *value = v;
+                    |      return true;
+                    |    },
+                    |    None => return false,
+                    |  }
+                    |}""")))))
             ingest = ingest :+
-              st"""let mut inj_${v.varName}: ${v.rustTypeName} = ${v.rustTypeName}::default();
-                  |if get_inj_sv_${v.varName}(&mut inj_${v.varName}) {
-                  |  _app.${v.varName} = inj_${v.varName};
+              st"""if let Some(v) = crate::bridge::extern_c_api::unsafe_$getName() {
+                  |  _app.${v.varName} = v;
                   |}"""
           }
-          // One extern block is enough; the loop above repeats is_injection_enabled.
-          val externBlock: ISZ[RAST.Item] = ISZ(RAST.ItemST(
-            st"""extern "C" {
-                |  ${(for (p <- e._2) yield st"fn get_inj_sv_${p._1.varName}(value: *mut ${p._1.rustTypeName}) -> bool;", "\n")}
-                |  fn is_injection_enabled() -> bool;
-                |}"""))
+
+          crustApiContribs = crustApiContribs.addApiContributions(owner, apiContrib.combine(
+            ComponentApiContributions.empty(
+              externCApis = externCApis,
+              unsafeExternCApiWrappers = wrappers,
+              externApiTestMockVariables = testMockVars,
+              externApiTestingApis = testingApis)))
 
           contributions = contributions.replaceComponentContributions(
             contributions.componentContributions + owner ~> contrib(
-              libModuleLevelEntries = contrib.libModuleLevelEntries ++ externBlock,
               libComputePre = contrib.libComputePre :+ RAST.BodyItemST(
                 st"""// Injected GUMBO state variables, if the test controller set any.
-                    |if is_injection_enabled() {
+                    |if crate::bridge::extern_c_api::unsafe_is_injection_enabled() {
                     |  ${(ingest, "\n")}
                     |}""")))
         case _ =>
       }
     }
+    localStore = CRustApiPlugin.putCRustApiContributions(crustApiContribs, localStore)
     localStore = CRustComponentPlugin.putComponentContributions(contributions, localStore)
 
     contributions = CRustComponentPlugin.getCRustComponentContributions(localStore)
