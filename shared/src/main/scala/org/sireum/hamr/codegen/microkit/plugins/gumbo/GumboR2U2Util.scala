@@ -106,25 +106,18 @@ object GumboR2U2Util {
     return contributions
   }
 
-  // Report R2U2 verdicts in the generated Rust monitor.
+  @strictpure def rustVerdictVariableName(specId: String): String = s"r2u2_${specId}_verdict"
+
+  @strictpure def cVerdictVariableName(specId: String): String = s"r2u2_${specId}_verdict"
+
+  @strictpure def cPropertyVariantName(specId: String): String = specId
+
+  // Aggregate R2U2 verdicts, delegate policy to the preserved handler,
+  // and publish the monitor-owned alert outputs.
   @pure def processRustOutputs(thread: AadlThread,
                                orderedSpecs: ISZ[RAST.R2U2Formula],
-                               alerts: ISZ[GclAlert]): (Option[RAST.Item], ISZ[RAST.BodyItem]) = {
+                               alerts: ISZ[GclAlert]): ISZ[RAST.BodyItem] = {
     val alertSpecNumbers: Map[String, Z] = getAlertSpecNumbers(orderedSpecs, alerts)
-    val alertedSpecNumbers: Set[Z] = Set.empty[Z] ++ alertSpecNumbers.values
-
-    val loggedSpecs: ISZ[ST] = for (i <- 0 until orderedSpecs.size if !alertedSpecNumbers.contains(i)) yield
-      st"($i, \"${orderedSpecs(i).id}\")"
-    val loggedSpecsConstOpt: Option[RAST.Item] =
-      if (loggedSpecs.nonEmpty) {
-        Some(RAST.ItemST(
-          st"""// Specifications without an alert mapping are logged after every monitor step.
-              |const R2U2_LOGGED_SPECS: [(usize, &'static str); ${loggedSpecs.size}] = [
-              |    ${(loggedSpecs, ",\n")}
-              |];"""))
-      } else {
-        None()
-      }
 
     var outputItems: ISZ[RAST.BodyItem] = ISZ(RAST.BodyItemST(
       st"""let r2u2_time_stamp = r2u2_monitor.monitor.time_stamp;
@@ -146,68 +139,54 @@ object GumboR2U2Util {
           |    verdict_cache[spec_num] = Some(out.verdict);
           |}"""))
 
-    if (loggedSpecs.nonEmpty) {
+    var verdictCallbacks: ISZ[ST] = ISZ()
+    for (i <- 0 until orderedSpecs.size) {
+      val specId = orderedSpecs(i).id
+      val verdictVariable = rustVerdictVariableName(specId)
+      verdictCallbacks = verdictCallbacks :+
+        st"""let $verdictVariable = r2u2_monitor.verdict_cache[$i]
+            |    .map(|verdict| verdict.truth && !false_verdict_seen[$i]);
+            |self.handle_r2u2_verdict(
+            |    api,
+            |    R2U2Property::$specId,
+            |    $verdictVariable);"""
+    }
+    if (verdictCallbacks.nonEmpty) {
       outputItems = outputItems :+ RAST.BodyItemST(
-        st"""// Report one status for each specification without an alert port.
-            |for (spec_num, spec_name) in R2U2_LOGGED_SPECS {
-            |    let status = match r2u2_monitor.verdict_cache[spec_num] {
-            |        Some(verdict) => {
-            |            let truth = verdict.truth && !false_verdict_seen[spec_num];
-            |            if truth { "true" } else { "false" }
-            |        },
-            |        None => "unknown",
-            |    };
-            |    log::info!("{} is currently {}", spec_name, status);
-            |}""")
+        st"""// Delegate each current verdict to the preserved policy handler.
+            |${(verdictCallbacks, "\n")}""")
     }
 
     var alertOutputs: ISZ[ST] = ISZ()
     for (port <- thread.getPorts() if alertSpecNumbers.contains(port.identifier)) {
-        val number = alertSpecNumbers.get(port.identifier).get
-        val put: ST = port match {
-          case _: AadlEventPort =>
-            st"""if !truth {
-                |    api.put_${port.identifier}();
-                |}"""
-          case _: AadlEventDataPort => st"api.put_${port.identifier}(truth);"
-          case _ => halt("Unexpected R2U2 alert port type")
-        }
-        alertOutputs = alertOutputs :+ st"""if let Some(verdict) = r2u2_monitor.verdict_cache[$number] {
-                                           |    let truth = verdict.truth && !false_verdict_seen[$number];
-                                           |    $put
-                                           |}"""
+      val number = alertSpecNumbers.get(port.identifier).get
+      val verdictVariable = rustVerdictVariableName(orderedSpecs(number).id)
+      val put: ST = port match {
+        case _: AadlEventPort =>
+          st"""if !truth {
+              |    api.put_${port.identifier}();
+              |}"""
+        case _: AadlEventDataPort => st"api.put_${port.identifier}(truth);"
+        case _ => halt("Unexpected R2U2 alert port type")
+      }
+      alertOutputs = alertOutputs :+ st"""if let Some(truth) = $verdictVariable {
+                                         |    $put
+                                         |}"""
     }
     if (alertOutputs.nonEmpty) {
       outputItems = outputItems :+ RAST.BodyItemST(
         st"""// Send one result through each mapped alert port.
             |${(alertOutputs, "\n")}""")
     }
-    return (loggedSpecsConstOpt, outputItems)
+    return outputItems
   }
 
-  // Report R2U2 verdicts in the generated C monitor.
+  // Aggregate R2U2 verdicts, delegate policy to the preserved C handler,
+  // and publish the monitor-owned alert outputs.
   @pure def processCOutputs(thread: AadlThread,
                             orderedSpecs: ISZ[RAST.R2U2Formula],
-                            alerts: ISZ[GclAlert]): (Option[ST], ISZ[ST]) = {
+                            alerts: ISZ[GclAlert]): ISZ[ST] = {
     val alertSpecNumbers: Map[String, Z] = getAlertSpecNumbers(orderedSpecs, alerts)
-    val alertedSpecNumbers: Set[Z] = Set.empty[Z] ++ alertSpecNumbers.values
-    val loggedSpecs: ISZ[ST] = for (i <- z"0" until orderedSpecs.size if !alertedSpecNumbers.contains(i)) yield
-      st"{$i, \"${orderedSpecs(i).id}\"}"
-
-    val loggedSpecDefinitions: Option[ST] =
-      if (loggedSpecs.nonEmpty) {
-        Some(st"""typedef struct {
-                   |  size_t spec_number;
-                   |  const char *spec_name;
-                   |} r2u2_logged_spec_t;
-                   |
-                   |// Specifications without an alert mapping are logged after every monitor step.
-                   |static const r2u2_logged_spec_t r2u2_logged_specs[${loggedSpecs.size}] = {
-                   |  ${(loggedSpecs, ",\n")}
-                   |};""")
-      } else {
-        None()
-      }
 
     var outputItems: ISZ[ST] = ISZ(
       st"""// The callback runs during r2u2_step. Expire older cached verdicts
@@ -219,40 +198,42 @@ object GumboR2U2Util {
           |  }
           |}""")
 
-    if (loggedSpecs.nonEmpty) {
+    var verdictCallbacks: ISZ[ST] = ISZ()
+    for (i <- z"0" until orderedSpecs.size) {
+      val specId = orderedSpecs(i).id
+      val verdictVariable = cVerdictVariableName(specId)
+      verdictCallbacks = verdictCallbacks :+
+        st"""r2u2_verdict_status_t $verdictVariable = R2U2_VERDICT_UNKNOWN;
+            |if (r2u2_monitor.verdict_valid[$i]) {
+            |  bool truth = get_verdict_truth(r2u2_monitor.verdict_cache[$i]) &&
+            |      !r2u2_monitor.false_verdict_seen[$i];
+            |  $verdictVariable = truth ? R2U2_VERDICT_TRUE : R2U2_VERDICT_FALSE;
+            |}
+            |handle_r2u2_verdict(${cPropertyVariantName(specId)}, $verdictVariable);"""
+    }
+    if (verdictCallbacks.nonEmpty) {
       outputItems = outputItems :+
-        st"""// Report one status for each specification without an alert port.
-            |for (size_t i = 0; i < ${loggedSpecs.size}; ++i) {
-            |  size_t spec_number = r2u2_logged_specs[i].spec_number;
-            |  const char *status = "unknown";
-            |  if (r2u2_monitor.verdict_valid[spec_number]) {
-            |    bool truth = get_verdict_truth(r2u2_monitor.verdict_cache[spec_number]) &&
-            |        !r2u2_monitor.false_verdict_seen[spec_number];
-            |    status = truth ? "true" : "false";
-            |  }
-            |  printf("%s is currently %s\n",
-            |      r2u2_logged_specs[i].spec_name, status);
-            |}"""
+        st"""// Delegate each current verdict to the preserved policy handler.
+            |${(verdictCallbacks, "\n")}"""
     }
 
     var alertOutputs: ISZ[ST] = ISZ()
     for (port <- thread.getPorts() if alertSpecNumbers.contains(port.identifier)) {
       val number: Z = alertSpecNumbers.get(port.identifier).get
+      val verdictVariable = cVerdictVariableName(orderedSpecs(number).id)
       port match {
         case _: AadlEventPort =>
           alertOutputs = alertOutputs :+
-            st"""if (r2u2_monitor.verdict_valid[$number]) {
-                |  bool truth = get_verdict_truth(r2u2_monitor.verdict_cache[$number]) &&
-                |      !r2u2_monitor.false_verdict_seen[$number];
+            st"""if ($verdictVariable != R2U2_VERDICT_UNKNOWN) {
+                |  bool truth = $verdictVariable == R2U2_VERDICT_TRUE;
                 |  if (!truth) {
                 |    (void) put_${port.identifier}();
                 |  }
                 |}"""
         case _: AadlEventDataPort =>
           alertOutputs = alertOutputs :+
-            st"""if (r2u2_monitor.verdict_valid[$number]) {
-                |  bool truth = get_verdict_truth(r2u2_monitor.verdict_cache[$number]) &&
-                |      !r2u2_monitor.false_verdict_seen[$number];
+            st"""if ($verdictVariable != R2U2_VERDICT_UNKNOWN) {
+                |  bool truth = $verdictVariable == R2U2_VERDICT_TRUE;
                 |  (void) put_${port.identifier}(&truth);
                 |}"""
         case _ => halt("Unexpected C R2U2 alert port type")
@@ -263,7 +244,7 @@ object GumboR2U2Util {
         st"""// Send one result through each mapped alert port.
             |${(alertOutputs, "\n")}"""
     }
-    return (loggedSpecDefinitions, outputItems)
+    return outputItems
   }
 
   // Map alert port identifiers to the specification ordering used by C2PO.

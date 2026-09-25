@@ -3,7 +3,7 @@ package org.sireum.hamr.codegen.microkit.plugins.c.components
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{BoolValue, IdPath, MapValue, Store}
-import org.sireum.hamr.codegen.common.containers.Resource
+import org.sireum.hamr.codegen.common.containers.{Marker, Resource}
 import org.sireum.hamr.codegen.common.plugin.Plugin
 import org.sireum.hamr.codegen.common.properties.{Hamr_Microkit_Properties, PropertyUtil}
 import org.sireum.hamr.codegen.common.symbols.{AadlSystem, AadlThread, SymbolTable}
@@ -21,6 +21,7 @@ import org.sireum.message.Reporter
 
 object CComponentPlugin {
   val name: String = "CComponentPlugin"
+  val MarkerR2U2VerdictHandler: String = "MARKER R2U2 VERDICT HANDLER"
 
   val KEY_CComponentR2U2Contributions: String = "KEY_CComponentR2U2Contributions"
 
@@ -53,7 +54,7 @@ object CComponentPlugin {
         ResourceUtil.createRemoveResource(
           s"$componentDir/${MicrokitCodegen.dirInclude}/r2u2_monitor.h", CommentTemplate.doNotEditComment),
         ResourceUtil.createRemoveResource(
-          s"$componentDir/${MicrokitCodegen.dirSrc}/r2u2_monitor.c", CommentTemplate.doNotEditComment),
+          s"$componentDir/${MicrokitCodegen.dirSrc}/r2u2_monitor.c", CommentTemplate.invertedMarkerComment),
         ResourceUtil.createRemoveResource(
           s"$componentDir/${MicrokitCodegen.dirSrc}/spec.c2po", CommentTemplate.doNotEditComment),
         ResourceUtil.createRemoveResource(
@@ -108,7 +109,7 @@ object CComponentPlugin {
       st"""#include "${MicrokitUtil.getComponentIdPath(component)}.h"
           |#include <r2u2.h>
           |
-          |${CommentTemplate.doNotEditComment_slash}
+          |${CommentTemplate.invertedMarkerComment_slash}
           |
           |extern unsigned char r2u2_spec_bin[];
           |extern unsigned int r2u2_spec_bin_len;
@@ -159,8 +160,12 @@ object CComponentPlugin {
     return ISZ(
       ResourceUtil.createResource(
         s"$componentDir/${MicrokitCodegen.dirInclude}/r2u2_monitor.h", header, T),
-      ResourceUtil.createResource(
-        s"$componentDir/${MicrokitCodegen.dirSrc}/r2u2_monitor.c", source, T),
+      ResourceUtil.createResourceWithMarkers(
+        path = s"$componentDir/${MicrokitCodegen.dirSrc}/r2u2_monitor.c",
+        content = source,
+        markers = ISZ(Marker.createSlashMarker(CComponentPlugin.MarkerR2U2VerdictHandler)),
+        invertMarkers = T,
+        overwrite = T),
       ResourceUtil.createResource(s"$componentDir/${MicrokitCodegen.dirSrc}/spec.c2po",
         st"""${CommentTemplate.doNotEditComment_c2po}
             |${specs.prettyST}""", T),
