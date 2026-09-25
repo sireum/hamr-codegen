@@ -142,7 +142,7 @@ object ComponentApiContributions {
           !StoreUtil.isSynthetic(p.path, localStore))
 
         for (inPort <- apiPorts.filter((p: AadlPort) => p.direction == Direction.In)) {
-          contributions = contributions.combine(CRustApiUtil.processInPort(srcThread, inPort, crustTypeProvider, apiPorts))
+          contributions = contributions.combine(CRustApiUtil.processInPort(srcThread, inPort, crustTypeProvider, apiPorts, T))
         }
         for (outPort <- apiPorts.filter((p: AadlPort) => p.direction == Direction.Out)) {
           contributions = contributions.combine(CRustApiUtil.processOutPort(srcThread, outPort, crustTypeProvider, apiPorts))
@@ -151,7 +151,7 @@ object ComponentApiContributions {
         for (svPort <- srcThread.getPorts().filter((p: AadlPort) =>
           StoreUtil.isSynthetic(p.path, localStore))) {
           val full: ComponentApiContributions = if (svPort.direction == Direction.In) {
-            CRustApiUtil.processInPort(srcThread, svPort, crustTypeProvider, apiPorts)
+            CRustApiUtil.processInPort(srcThread, svPort, crustTypeProvider, apiPorts, F)
           } else {
             CRustApiUtil.processOutPort(srcThread, svPort, crustTypeProvider, apiPorts )
           }

@@ -5,7 +5,7 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlEventPort, AadlFeatureEvent, AadlPort, AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlType
 import org.sireum.hamr.codegen.microkit.plugins.c.types.CTypeProvider
-import org.sireum.hamr.codegen.microkit.types.{MicrokitTypeUtil, QueueTemplate}
+import org.sireum.hamr.codegen.microkit.types.{MicrokitLayout, MicrokitTypeUtil, QueueTemplate}
 import org.sireum.hamr.codegen.microkit.util._
 import org.sireum.hamr.codegen.microkit.plugins.gumbo.GumboRustUtil
 import org.sireum.hamr.codegen.common.symbols.GclAnnexClauseInfo
@@ -42,14 +42,11 @@ object ConnectionUtil {
 
     val cTypeNameProvider = cTypeProvider.getTypeNameProvider(aadlType)
 
-    val memRegionsSize: Z =
-      aadlType.bitSize match {
-        case Some(bits) =>
-          val p = MicrokitUtil.bytesToKiBytes(MicrokitUtil.bitsToBytes(bits))
-          if (p < MicrokitUtil.defaultMemoryRegionSizeInKiBytes) MicrokitUtil.defaultMemoryRegionSizeInKiBytes
-          else p
-        case _ => MicrokitUtil.defaultMemoryRegionSizeInKiBytes
-      }
+    // the whole queue -- counter plus queue size + 1 elements -- in whole pages, from HAMR's
+
+    // own layout; it used to be one element's declared size (SharedMemorySafety-design.md, D4)
+
+    val memRegionsSize: Z = MicrokitLayout.queueRegionKiBytes(aadlType, cTypeProvider.substitutions, dstQueueSize)
 
     val cTypeName = cTypeNameProvider.mangledName
 
@@ -75,6 +72,11 @@ object ConnectionUtil {
         QueueTemplate.getClientGetter_C_MethodPoll(dstPort.identifier, cTypeName, dstQueueSize, isEventPort) :+
         QueueTemplate.getClientGetter_C_Method(dstPort.identifier, cTypeName, isEventPort)
 
+      if (isEventDataPort) {
+        cMethodApiSigs = cMethodApiSigs :+ QueueTemplate.getClientNumInvalid_C_MethodSig(dstPort.identifier)
+        cMethodApis = cMethodApis :+ QueueTemplate.getClientNumInvalid_C_Method(dstPort.identifier, cTypeName, dstQueueSize)
+      }
+
       if (peekApi) {
         cMethodApiSigs = cMethodApiSigs :+
           QueueTemplate.getClientPeek_C_MethodSig(dstPort.identifier, cTypeName, isEventPort)
@@ -87,6 +89,9 @@ object ConnectionUtil {
 
       cMethodApis = cMethodApis :+
         QueueTemplate.getClientDataGetter_C_Method(dstPort.identifier, cTypeName, dstQueueSize, aadlType, cTypeNameProvider)
+
+      cMethodApiSigs = cMethodApiSigs :+ QueueTemplate.getClientNumInvalid_C_MethodSig(dstPort.identifier)
+      cMethodApis = cMethodApis :+ QueueTemplate.getClientNumInvalid_C_Method(dstPort.identifier, cTypeName, dstQueueSize)
 
       if (peekApi) {
         cMethodApiSigs = cMethodApiSigs :+
@@ -171,14 +176,11 @@ object ConnectionUtil {
 
       val cTypeName = cTypeProvider.getTypeNameProvider(receiverContribution.aadlType).mangledName
 
-      val memRegionSize: Z =
-        receiverContribution.aadlType.bitSize match {
-          case Some(bits) =>
-            val p = MicrokitUtil.bytesToKiBytes(MicrokitUtil.bitsToBytes(bits))
-            if (p < MicrokitUtil.defaultMemoryRegionSizeInKiBytes) MicrokitUtil.defaultMemoryRegionSizeInKiBytes
-            else p
-          case _ => MicrokitUtil.defaultMemoryRegionSizeInKiBytes
-        }
+      // the whole queue -- counter plus queue size + 1 elements -- in whole pages, from HAMR's
+
+      // own layout; it used to be one element's declared size (SharedMemorySafety-design.md, D4)
+
+      val memRegionSize: Z = MicrokitLayout.queueRegionKiBytes(receiverContribution.aadlType, cTypeProvider.substitutions, receiverContribution.queueSize)
 
       val sharedMemVarName = QueueTemplate.getClientEnqueueSharedVarName(srcPort.identifier, receiverContribution.queueSize)
       srcPutContributions = srcPutContributions :+ QueueTemplate.getClientPutEntry(
@@ -217,14 +219,11 @@ object ConnectionUtil {
     if (receiverContributions.isEmpty) {
       val cTypeName = cTypeProvider.getTypeNameProvider(senderPortType).mangledName
 
-      val memRegionSize: Z =
-        senderPortType.bitSize match {
-          case Some(bits) =>
-            val p = MicrokitUtil.bytesToKiBytes(MicrokitUtil.bitsToBytes(bits))
-            if (p < MicrokitUtil.defaultMemoryRegionSizeInKiBytes) MicrokitUtil.defaultMemoryRegionSizeInKiBytes
-            else p
-          case _ => MicrokitUtil.defaultMemoryRegionSizeInKiBytes
-        }
+      // the whole queue -- counter plus queue size + 1 elements -- in whole pages, from HAMR's
+
+      // own layout; it used to be one element's declared size (SharedMemorySafety-design.md, D4)
+
+      val memRegionSize: Z = MicrokitLayout.queueRegionKiBytes(senderPortType, cTypeProvider.substitutions, 1)
 
       val queueSize = 1
 

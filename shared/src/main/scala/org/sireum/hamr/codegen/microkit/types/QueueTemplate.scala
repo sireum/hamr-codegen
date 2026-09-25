@@ -206,6 +206,38 @@ object QueueTemplate {
 
 
   //////////////////////////////////////////////////////////////////////////////
+  // BEGIN client num invalid
+  //////////////////////////////////////////////////////////////////////////////
+
+  // The number of messages received on a port that were dropped because they held an
+  // invalid bit pattern -- an out-of-range enum, a bool that is neither 0 nor 1, or a string
+  // with no terminating NUL (SharedMemorySafety-design.md, D6).  Always 0 for a type with no
+  // bool, enum or string in it.
+  def getClientNumInvalidMethodName(portName: String): String = {
+    return s"get_${portName}_num_invalid"
+  }
+
+  def getClientNumInvalid_C_MethodSig(portName: String): ST = {
+    return st"uintmax_t ${getClientNumInvalidMethodName(portName)}(void)"
+  }
+
+  def getClientNumInvalid_C_Method(portName: String,
+                                   queueElementTypeName: String,
+                                   queueSize: Z): ST = {
+    val queueName = getTypeQueueName(queueElementTypeName, queueSize)
+    val recvQueueMemVarName = getClientRecvQueueName(portName)
+    val recvQueueTypeName = getTypeRecvQueueTypeName(queueElementTypeName, queueSize)
+    return st"""${getClientNumInvalid_C_MethodSig(portName)} {
+               |  return ${queueName}_numInvalid(($recvQueueTypeName *) &$recvQueueMemVarName);
+               |}"""
+  }
+
+  //////////////////////////////////////////////////////////////////////////////
+  // END client num invalid
+  //////////////////////////////////////////////////////////////////////////////
+
+
+  //////////////////////////////////////////////////////////////////////////////
   // BEGIN client poll
   //////////////////////////////////////////////////////////////////////////////
   def getClientGetter_C_MethodPollSig(portName: String,
@@ -424,8 +456,11 @@ object QueueTemplate {
           |}""")
   }
 
+  // regionBytes is the shared memory region HAMR allocates for this queue
+  // (MicrokitLayout.queueRegionBytes); the header asserts the queue fits in it.
   def header(queueElementTypeName: String,
              queueSize: Z,
+             regionBytes: Z,
              peekApi: B): ST = {
 
     val queueName = getTypeQueueName(queueElementTypeName, queueSize)
@@ -532,6 +567,12 @@ object QueueTemplate {
           |
           |} ${queueTypeName};
           |
+          |// The shared memory region HAMR allocates for this queue: the whole struct, in whole
+          |// pages.  The build fails if the struct outgrows it.
+          |#define ${ops.StringOps(queueName).toUpper}_REGION_BYTES ${regionBytes}
+          |_Static_assert(sizeof(${queueTypeName}) <= ${ops.StringOps(queueName).toUpper}_REGION_BYTES,
+          |  "${queueTypeName} outgrows its shared memory region");
+          |
           |//------------------------------------------------------------------------------
           |// Sender API
           |//
@@ -565,6 +606,13 @@ object QueueTemplate {
           |  // that is shared by the sender and all receivers.
           |  ${queueTypeName} *queue;
           |
+          |  // Number of elements this receiver rejected because they held an invalid bit
+          |  // pattern -- an out-of-range enum, a bool that is neither 0 nor 1, or a string with
+          |  // no terminating NUL.  Private to the receiver, so not atomic.  Always 0 for an
+          |  // element type with no bool, enum or string in it: every bit pattern of such a type
+          |  // is a value, so its elements are not checked.
+          |  uintmax_t numInvalid;
+          |
           |} ${recvQueueTypeName};
           |
           |// Each receiver must call this exactly once before any calls to other queue
@@ -593,10 +641,18 @@ object QueueTemplate {
           |// numDropped. Since COUNTER_MAX is very large (typically on the order of 2^64,
           |// see ${MicrokitTypeUtil.cEventCounterFilename}), this is very unlikely.  If the sender is ever this far
           |// ahead of a receiver the system is probably in a very bad state.
+          |//
+          |// An element holding an invalid bit pattern (see ${queueName}_numInvalid) is never
+          |// copied to *data: the dequeue returns false and counts it.
           |bool ${queueName}_dequeue(
           |  ${recvQueueTypeName} *recvQueue,
           |  ${MicrokitTypeUtil.eventCounterTypename} *numDropped,
           |  ${queueElementTypeName} *data);
+          |
+          |// Number of elements this receiver has rejected as invalid.
+          |static inline uintmax_t ${queueName}_numInvalid(${recvQueueTypeName} *recvQueue) {
+          |  return recvQueue->numInvalid;
+          |}
           |$peekDeclOpt
           |// Is queue empty? If the queue is not empty, it will stay that way until the
           |// receiver dequeues all data. If the queue is empty you can make no
@@ -610,6 +666,7 @@ object QueueTemplate {
                      queueElementTypeName: String,
                      queueSize: Z,
                      cTypeNameProvider: CTypeNameProvider,
+                     validate: B,
                      peekApi: B): ST = {
 
     val queueName = getTypeQueueName(queueElementTypeName, queueSize)
@@ -676,12 +733,47 @@ object QueueTemplate {
       }
     }
 
-    val dequeue: ST = {
-      aadlType match {
-        case a: ArrayType => st"memcpy(data, &queue->elt[index], ${CTypePlugin.getArrayStringByteSizeDefineName(cTypeNameProvider)})"
-        case _ => st"*data = queue->elt[index]"
+    // How the dequeue reads the element out of shared memory.  When some bit pattern of the
+    // element's bytes is not a value of its type (validate: a bool or an enum somewhere
+    // inside it), the element is copied into a staging buffer and checked there, and only a
+    // valid one reaches *data (SharedMemorySafety-design.md, D6).  Otherwise every bit
+    // pattern is a value, there is nothing to check, and the element is copied straight to
+    // *data as it always was -- the staging copy would cost one more pass over the element
+    val readElement: ST =
+      if (validate) {
+        // A byte copy for every type: a typed load of, say, a bool holding 2 is itself
+        // undefined in C, and the validator inspects the raw bytes
+        st"""// Copy into a staging buffer, never straight into *data: the element came from
+            |// another protection domain, and nothing reaches the caller until it is known to
+            |// be coherent and valid.  Static rather than on the stack because an element can be
+            |// larger than a protection domain's stack; a protection domain is single-threaded,
+            |// so one buffer per queue type suffices.
+            |static ${queueElementTypeName} staging;
+            |memcpy(&staging, &queue->elt[index], sizeof(staging));"""
+      } else {
+        aadlType match {
+          case a: ArrayType => st"memcpy(data, &queue->elt[index], ${CTypePlugin.getArrayStringByteSizeDefineName(cTypeNameProvider)}); // Copy data"
+          case _ => st"*data = queue->elt[index]; // Copy data"
+        }
       }
-    }
+
+    val deliverElement: ST =
+      if (validate) {
+        val fromStaging: ST = aadlType match {
+          case a: ArrayType => st"memcpy(data, &staging, ${CTypePlugin.getArrayStringByteSizeDefineName(cTypeNameProvider)})"
+          case _ => st"*data = staging"
+        }
+        st"""// Validate the staged copy -- not shared memory, which the sender could change
+            |// between a check and a copy.
+            |if (!${CTypePlugin.validatorName(queueElementTypeName)}(&staging)) {
+            |  ++(recvQueue->numInvalid);
+            |  return false;
+            |}
+            |$fromStaging;
+            |return true;"""
+      } else {
+        st"return true;"
+      }
 
     val r =
       st"""/*
@@ -745,6 +837,7 @@ object QueueTemplate {
           |
           |  recvQueue->numRecv = 0;
           |  recvQueue->queue = queue;
+          |  recvQueue->numInvalid = 0;
           |}
           |
           |bool ${dequeueMethodName}(
@@ -782,14 +875,14 @@ object QueueTemplate {
           |  //${MicrokitTypeUtil.eventCounterTypename} numRemaining = numSent - *numRecv;
           |
           |  size_t index = (*numRecv - 1) % ${queueSizeMacroName};
-          |  $dequeue; // Copy data
+          |  $readElement
           |
           |  // Acquire memory fence - ensure read of data BEFORE reading queue->numSent again
           |  __atomic_thread_fence(__ATOMIC_ACQUIRE);
           |
           |  if (queue->numSent - *numRecv + 1 < ${queueSizeMacroName}) {
           |    // Sender did not write element we were reading. Copied data is coherent.
-          |    return true;
+          |    $deliverElement
           |  } else {
           |    // Sender may have written element we were reading. Copied data may be incoherent.
           |    // We dropped the element we were trying to read, so increment *numDropped.

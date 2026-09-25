@@ -4,6 +4,7 @@ package org.sireum.hamr.codegen.microkit.util
 import org.sireum._
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen
+import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.TAB
 
 object MakefileTemplate {
@@ -168,6 +169,8 @@ object MakefileTemplate {
           |TYPES_DIR = $$(TOP_DIR)/types
           |TYPE_OBJS := ${(typeObjectNames, " ")}
           |
+          |${MicrokitTypeUtil.typesLibDecl}
+          |
           |# exporting TOP_TYPES_INCLUDE in case other makefiles need it
           |export TOP_TYPES_INCLUDE = -I$$(TYPES_DIR)/include
           |
@@ -182,6 +185,8 @@ object MakefileTemplate {
           |
           |%.o: $${TOP_DIR}/util/src/%.c Makefile
           |${TAB}$$(CC) -c $$(CFLAGS) $$< -o $$@ -I$$(TOP_DIR)/util/include
+          |
+          |${MicrokitTypeUtil.typesLibRule}
           |
           |${(uniqueBuildEntries, "\n\n")}
           |
@@ -229,11 +234,15 @@ object MakefileTemplate {
         st"""TYPE_OBJS := \
             |${TAB}${(typeObjectNames, s" \\\n${TAB}")}
             |
+            |${MicrokitTypeUtil.typesLibDecl}
+            |
             |${MicrokitUtil.make_AUX_OBJS} := \
             |${TAB}${(auxObjectNames, s" \\\n${TAB}")}"""
       else
         st"""TYPE_OBJS := \
-            |${TAB}${(typeObjectNames, s" \\\n${TAB}")}"""
+            |${TAB}${(typeObjectNames, s" \\\n${TAB}")}
+            |
+            |${MicrokitTypeUtil.typesLibDecl}"""
 
     val buildEntriesOpt: Option[ST] =
       if(buildEntries.isEmpty) None()
@@ -359,8 +368,10 @@ object MakefileTemplate {
           |$$(SCHEDULER_OBJ): $$(SCHEDULER_C) $${SDDF}/include
           |${TAB}$${CC} $${CFLAGS} -c -o $$@ $$<
           |
-          |scheduler.elf: $$(UTIL_OBJS) $$(TYPE_OBJS) $$(SCHEDULER_OBJ) $${CHECK_FLAGS_BOARD_MD5}
-          |${TAB}$$(LD) $$(LDFLAGS) $$(filter %.o, $$^) $$(LIBS) -o $$@
+          |${MicrokitTypeUtil.typesLibRule}
+          |
+          |scheduler.elf: $$(UTIL_OBJS) $$(SCHEDULER_OBJ) $$(TYPES_LIB) $${CHECK_FLAGS_BOARD_MD5}
+          |${TAB}$$(LD) $$(LDFLAGS) $$(filter %.o, $$^) $$(TYPES_LIB) $$(LIBS) -o $$@
           |
           |${(elfEntries, "\n\n")}
           |

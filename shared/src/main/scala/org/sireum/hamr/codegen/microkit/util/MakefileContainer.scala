@@ -147,10 +147,10 @@ import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
     if (hasUserContent) {
       val elfEntry: ST =
         if (isRustic) {
-          st"""$elfName: $$(${MicrokitUtil.make_UTIL_OBJS}) $$(${MicrokitTypeUtil.make_TYPE_OBJS}) $userRusticName $objName
-              |${TAB}$$(LD) $$(LDFLAGS) -L $${CRATES_DIR}/$crateName/target/aarch64-unknown-none/$$(RUST_PROFILE_DIR) $$(filter %.o, $$^) $$(LIBS) -l$crateName -o $$@"""
+          st"""$elfName: $$(${MicrokitUtil.make_UTIL_OBJS}) $userRusticName $objName $$(${MicrokitTypeUtil.make_TYPES_LIB})
+              |${TAB}$$(LD) $$(LDFLAGS) -L $${CRATES_DIR}/$crateName/target/aarch64-unknown-none/$$(RUST_PROFILE_DIR) $$(filter %.o, $$^) $$(${MicrokitTypeUtil.make_TYPES_LIB}) $$(LIBS) -l$crateName -o $$@"""
         } else {
-          st"""$elfName: $$(${MicrokitUtil.make_UTIL_OBJS}) $$(${MicrokitTypeUtil.make_TYPE_OBJS})$auxObjs$r2u2Objs $userObjName $objName
+          st"""$elfName: $$(${MicrokitUtil.make_UTIL_OBJS})$auxObjs$r2u2Objs $userObjName $objName $$(${MicrokitTypeUtil.make_TYPES_LIB})
               |${TAB}$$(LD) $$(LDFLAGS) $$^ $$(LIBS) -o $$@"""
         }
 
@@ -179,13 +179,13 @@ import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
         st"""$monElfName: $monCompanion$monObjName$monAuxObjs
             |${TAB}$$(LD) $$(LDFLAGS) $$^ $$(LIBS) -o $$@
             |
-            |$elfName: $$(${MicrokitTypeUtil.make_TYPE_OBJS})$r2u2Objs $vmArchive
-            |${TAB}$$(LD) $$(LDFLAGS) $$^ --start-group -lmicrokit -Tmicrokit.ld $vmArchive --end-group -o $$@"""
+            |$elfName: $$(${MicrokitTypeUtil.make_TYPES_LIB})$r2u2Objs $vmArchive
+            |${TAB}$$(LD) $$(LDFLAGS) $$^ --start-group -lmicrokit -Tmicrokit.ld $vmArchive $$(${MicrokitTypeUtil.make_TYPES_LIB}) --end-group -o $$@"""
       return ret
     }
     else {
       val ret =
-        st"""$elfName: $$(${MicrokitUtil.make_UTIL_OBJS}) $$(${MicrokitTypeUtil.make_TYPE_OBJS}) $objName
+        st"""$elfName: $$(${MicrokitUtil.make_UTIL_OBJS}) $objName $$(${MicrokitTypeUtil.make_TYPES_LIB})
             |${TAB}$$(LD) $$(LDFLAGS) $$^ $$(LIBS) -o $$@"""
       return ret
     }

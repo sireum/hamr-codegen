@@ -13,7 +13,7 @@ import org.sireum.hamr.codegen.common.util.HamrCli.CodegenHamrPlatform
 import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.plugins.MicrokitTypePlugin
 import org.sireum.hamr.codegen.microkit.plugins.linters.MicrokitLinterPlugin
-import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
+import org.sireum.hamr.codegen.microkit.types.{MicrokitLayout, MicrokitTypeUtil}
 import org.sireum.hamr.ir.Aadl
 import org.sireum.message.Reporter
 
@@ -50,6 +50,45 @@ object CTypePlugin {
 
   @strictpure def getArrayStringDimDefineName(arrayTypeNampeProvider: CTypeNameProvider, dim: Z): String = st"${(arrayTypeNampeProvider.mangledName, "_")}_DIM_$dim".render
 
+  // Every value that crosses a shared memory region is validated before a receiver uses it
+  // (SharedMemorySafety-design.md, D6): <T>_is_valid is generated for each type.
+  @strictpure def validatorName(cTypeName: String): String = s"${cTypeName}_is_valid"
+
+  // The C base types HAMR uses on Microkit, with their AArch64 layout.  Asserted so that a
+  // compiler or flag that disagrees with HAMR's layout (D5) fails the build.
+  val baseCTypes: ISZ[(String, String)] = ISZ(
+    ("bool", "Base_Types::Boolean"), ("char", "Base_Types::Character"),
+    ("int8_t", "Base_Types::Integer_8"), ("int16_t", "Base_Types::Integer_16"),
+    ("int32_t", "Base_Types::Integer_32"), ("int64_t", "Base_Types::Integer_64"),
+    ("uint8_t", "Base_Types::Unsigned_8"), ("uint16_t", "Base_Types::Unsigned_16"),
+    ("uint32_t", "Base_Types::Unsigned_32"), ("uint64_t", "Base_Types::Unsigned_64"),
+    ("float", "Base_Types::Float_32"), ("double", "Base_Types::Float_64"))
+
+  @pure def layoutAsserts(cTypeName: String, layout: org.sireum.hamr.codegen.microkit.types.Layout): ST = {
+    val msg = s"$cTypeName: memory layout differs from HAMR's"
+    val fieldAsserts: ISZ[ST] = for (f <- layout.fieldOffsets) yield
+      st"""_Static_assert(offsetof($cTypeName, ${f._1}) == ${f._2}, "$msg");"""
+    return (
+      st"""_Static_assert(sizeof($cTypeName) == ${layout.size}, "$msg");
+          |_Static_assert(_Alignof($cTypeName) == ${layout.align}, "$msg");
+          |${(fieldAsserts, "\n")}""")
+  }
+
+  val baseTypeLayoutAndValidators: ST = {
+    val asserts: ISZ[ST] = for (b <- baseCTypes) yield layoutAsserts(b._1, MicrokitLayout.baseTypeLayout(b._2))
+    val validators: ISZ[ST] = for (b <- baseCTypes if b._1 != "bool") yield
+      st"static inline bool ${validatorName(b._1)}(const ${b._1} *v) { (void) v; return true; }"
+    st"""// The C base types, laid out as HAMR computes them
+        |${(asserts, "\n")}
+        |
+        |// Validity of a value read from shared memory (D6).  Only bool, and the enums and the
+        |// records and arrays containing them, have invalid bit patterns; the rest are always
+        |// valid.  A bool is read as a byte, since reading a bool object that holds neither 0 nor
+        |// 1 is itself undefined.
+        |static inline bool ${validatorName("bool")}(const bool *v) { return *(const uint8_t *) v <= 1; }
+        |${(validators, "\n")}"""
+  }
+
 }
 
 @sig trait CTypeNameProvider {
@@ -59,6 +98,9 @@ object CTypePlugin {
 @datatype class DefaultCTypeNameProvider(val mangledName: String) extends CTypeNameProvider
 
 @sig trait CTypeProvider extends StoreValue {
+
+  // Microkit type substitutions (Base_Types::String -> its HAMR-sized Character array)
+  @pure def substitutions: Map[String, AadlType]
 
   @pure def getRepresentativeType(aadlType: AadlType): AadlType
 
@@ -111,9 +153,12 @@ object CTypePlugin {
       st"""#pragma once
           |
           |#include <stdbool.h>
+          |#include <stddef.h>
           |#include <stdint.h>
           |
           |${CommentTemplate.doNotEditComment_slash}
+          |
+          |${CTypePlugin.baseTypeLayoutAndValidators}
           |
           |${(defs, "\n\n")}
           |"""
@@ -147,18 +192,35 @@ object CTypePlugin {
       }
     }
 
+    val layout = MicrokitLayout.layoutOf(aadlType, substitutions)
+
     substitutions.getOrElse (aadlType.name, aadlType) match {
       case rt: RecordType =>
         val fields: ISZ[ST] = for (field <- rt.fields.entries) yield st"${processType(field._2)} ${field._1};"
         val name = nameProvider.get(rt.name).get.mangledName
+        val fieldChecks: ISZ[ST] = for (field <- rt.fields.entries) yield
+          st"${CTypePlugin.validatorName(processType(field._2))}(&v->${field._1})"
         return (
           st"""typedef struct $name {
               |  ${(fields, "\n")}
-              |} $name;""")
+              |} $name;
+              |
+              |${CTypePlugin.layoutAsserts(name, layout)}
+              |
+              |static inline bool ${CTypePlugin.validatorName(name)}(const $name *v) {
+              |  return ${(fieldChecks, " &&\n         ")};
+              |}""")
       case e: EnumType =>
+        val name = nameProvider.get(e.name).get.mangledName
         return (
           st"""typedef
-              |  enum {${(e.values, ", ")}} ${nameProvider.get(e.name).get.mangledName};""")
+              |  enum {${(e.values, ", ")}} $name;
+              |
+              |${CTypePlugin.layoutAsserts(name, layout)}
+              |
+              |static inline bool ${CTypePlugin.validatorName(name)}(const $name *v) {
+              |  return (uint32_t) *v < ${e.values.size};
+              |}""")
       case a : ArrayType =>
         val np = nameProvider.get(a.name).get
 
@@ -167,15 +229,43 @@ object CTypePlugin {
         assert (a.dimensions.size == 1 && a.dimensions(0) >=0, "Linter should have disallowed other variants")
         val dim = a.dimensions(0)
 
-        val byteSize: Z = a.bitSize.get / 8 // linter guarantees bit size will be > 0
-
         val byteSizeName = CTypePlugin.getArrayStringByteSizeDefineName(np)
         val dimName = CTypePlugin.getArrayStringDimDefineName(np, 0)
 
-        return (st"""#define $byteSizeName $byteSize
-                    |#define $dimName $dim
+        // A string is valid only if it is terminated within its bounds: a receiver that
+        // treats it as a C string (strlen, printf "%s") would otherwise read past it
+        // (SharedMemorySafety-design.md, D6).  Any other array is valid when its elements are.
+        val validator: ST =
+          if (a.name == MicrokitLayout.stringTypeName)
+            st"""static inline bool ${CTypePlugin.validatorName(np.mangledName)}(const ${np.mangledName} *v) {
+                |  for (size_t i = 0; i < $dimName; i++) {
+                |    if ((*v)[i] == '\0') {
+                |      return true;
+                |    }
+                |  }
+                |  return false;
+                |}"""
+          else
+            st"""static inline bool ${CTypePlugin.validatorName(np.mangledName)}(const ${np.mangledName} *v) {
+                |  for (size_t i = 0; i < $dimName; i++) {
+                |    if (!${CTypePlugin.validatorName(baseType)}(&(*v)[i])) {
+                |      return false;
+                |    }
+                |  }
+                |  return true;
+                |}"""
+
+        // The byte size is the type's own sizeof, never a model property: every generated
+        // memcpy of an array value uses it (SharedMemorySafety-design.md, D1).
+        return (st"""#define $dimName $dim
                     |
-                    |typedef $baseType ${np.mangledName} [$dimName];""")
+                    |typedef $baseType ${np.mangledName} [$dimName];
+                    |
+                    |#define $byteSizeName (sizeof(${np.mangledName}))
+                    |
+                    |${CTypePlugin.layoutAsserts(np.mangledName, layout)}
+                    |
+                    |$validator""")
 
       case t => halt(s"Unexpected Type: $t")
     }

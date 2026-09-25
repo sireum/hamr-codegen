@@ -17,7 +17,7 @@ import org.sireum.hamr.codegen.microkit.connections.{ConnectionStore, DefaultCon
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, TypeUtil}
 import org.sireum.hamr.codegen.microkit.plugins.c.types.CTypePlugin
 import org.sireum.hamr.codegen.microkit.plugins.rust.types.CRustTypePlugin
-import org.sireum.hamr.codegen.microkit.types.{MicrokitTypeUtil, QueueTemplate}
+import org.sireum.hamr.codegen.microkit.types.{MicrokitLayout, MicrokitTypeUtil, QueueTemplate}
 import org.sireum.hamr.codegen.microkit.{rust => RAST}
 import org.sireum.hamr.codegen.microkit.plugins.monitors.{SDValue, UserLandMonitorPlugin}
 import org.sireum.hamr.codegen.microkit.plugins.msd.SystemDescriptionProviderPlugin
@@ -140,10 +140,14 @@ object TestSchedulerPlugin {
     */
   val observableBaseVaddrKiB: Z = 524288 // 0x20_000_000
 
-  /** The controller's vaddr for the i-th observable region.  Regions are 4 KiB-aligned;
-    * KiBytesToHex rounds up, so anything finer silently aliases (learned the hard way).
+  /** The controller's vaddr for the i-th observable region.  Regions are placed back to back
+    * by their real size, each followed by a guard page (SharedMemorySafety-design.md, D4, D7);
+    * a fixed 4 KiB stride assumed every region fit in one page, which a large element
+    * outgrows.  Sizes are whole pages, since KiBytesToHex rounds up and anything finer
+    * silently aliases.
     */
-  @strictpure def observableVaddrKiB(i: Z): Z = observableBaseVaddrKiB + i * 4
+  @strictpure def observableVaddrKiB(regions: ISZ[ObservableRegion], i: Z): Z =
+    MicrokitUtil.packedVaddrKiB(observableBaseVaddrKiB, for (r <- regions) yield r.sizeInKiBytes, i)
 
   /** Prefix for the synthetic *input* ports that carry injected state var values, mirroring
     * GumboMonitorPlugin's `sv_` outputs.  See TestScheduler-design.md D16: the queue's
@@ -189,7 +193,10 @@ object TestSchedulerPlugin {
               regionName = s"inj_${threadId}_sv_${sv.name}",
               cTypeName = cTypeProvider.getTypeNameProvider(rep).mangledName,
               rustTypeName = rustTypeProvider.getTypeNameProvider(
-                rustTypeProvider.getRepresentativeType(aadlType)).qualifiedRustName)
+                rustTypeProvider.getRepresentativeType(aadlType)).qualifiedRustName,
+              // the whole injection queue (queue size 1), from HAMR's layout -- not a fixed
+              // page, which a large state variable outgrew (SharedMemorySafety-design.md, D4)
+              sizeInKiBytes = MicrokitLayout.queueRegionKiBytes(aadlType, cTypeProvider.substitutions, 1))
           case _ =>
         }
       }
@@ -282,14 +289,16 @@ object TestSchedulerPlugin {
     */
   val injectBaseVaddrKiB: Z = 528384 // 0x20_400_000
 
-  @strictpure def injectVaddrKiB(i: Z): Z = injectBaseVaddrKiB + i * 4
+  @strictpure def injectVaddrKiB(vars: ISZ[InjectableStateVar], i: Z): Z =
+    MicrokitUtil.packedVaddrKiB(injectBaseVaddrKiB, for (v <- vars) yield v.sizeInKiBytes, i)
 
   /** Where the owning thread maps its own injection region.  Distinct from the controller's
     * view, and clear of the port regions the thread already maps from 0x10_000_000.
     */
   val injectThreadBaseVaddrKiB: Z = 532480 // 0x20_800_000
 
-  @strictpure def injectThreadVaddrKiB(i: Z): Z = injectThreadBaseVaddrKiB + i * 4
+  @strictpure def injectThreadVaddrKiB(vars: ISZ[InjectableStateVar], i: Z): Z =
+    MicrokitUtil.packedVaddrKiB(injectThreadBaseVaddrKiB, for (v <- vars) yield v.sizeInKiBytes, i)
 
   @pure def hasThreadsWithStateVars(symbolTable: SymbolTable): B = {
     for (thread <- symbolTable.getThreads()) {
@@ -331,7 +340,8 @@ object TestSchedulerPlugin {
                                    val varName: String,
                                    val regionName: String,
                                    val cTypeName: String,
-                                   val rustTypeName: String) {
+                                   val rustTypeName: String,
+                                   val sizeInKiBytes: Z) {
   /** The C global microkit patches with this region's address via setvar_vaddr. */
   @strictpure def queueVar: String = s"inj_sv_${varName}_queue"
 }
@@ -482,7 +492,7 @@ object TestSchedulerPlugin {
       val qt = QueueTemplate.getTypeQueueTypeName(r.cTypeName, r.queueSize)
       val rt = QueueTemplate.getClientRecvQueueTypeName(r.cTypeName, r.queueSize)
       val qn = QueueTemplate.getTypeQueueName(r.cTypeName, r.queueSize)
-      val vaddr = MicrokitUtil.KiBytesToHexH(TestSchedulerPlugin.observableVaddrKiB(i), F)
+      val vaddr = MicrokitUtil.KiBytesToHexH(TestSchedulerPlugin.observableVaddrKiB(regions, i), F)
       val getSig = st"bool test_get_${r.accessor}(${r.cTypeName} *value)"
       val putSig = st"void test_put_${r.accessor}(${r.cTypeName} *value)"
 
@@ -528,7 +538,7 @@ object TestSchedulerPlugin {
     for (v <- injectables) {
       val qt = QueueTemplate.getTypeQueueTypeName(v.cTypeName, 1)
       val qn = QueueTemplate.getTypeQueueName(v.cTypeName, 1)
-      val vaddr = MicrokitUtil.KiBytesToHexH(TestSchedulerPlugin.injectVaddrKiB(ki), F)
+      val vaddr = MicrokitUtil.KiBytesToHexH(TestSchedulerPlugin.injectVaddrKiB(injectables, ki), F)
       val sig = st"void test_put_${v.threadId}_sv_${v.varName}(${v.cTypeName} *value)"
       injSigs = injSigs :+ sig
       injImpls = injImpls :+
@@ -893,10 +903,23 @@ object TestSchedulerPlugin {
     for (r <- observable) {
       observableMaps = observableMaps :+ MemoryMap(
         memoryRegion = r.regionName,
-        vaddrInKiBytes = TestSchedulerPlugin.observableVaddrKiB(oi),
+        vaddrInKiBytes = TestSchedulerPlugin.observableVaddrKiB(observable, oi),
         perms = ISZ(Perm.READ, Perm.WRITE),
         varAddr = None(), cached = None())
       oi = oi + 1
+    }
+    // The observable, injection and thread-side injection blocks sit at fixed bases; now
+    // that regions are sized by their contents, check none runs into the next.
+    val injectablesForCheck = TestSchedulerPlugin.getInjectable(localStore)
+    // (block, base, end, limit) in KiB
+    val blocks: ISZ[(String, Z, Z, Z)] = ISZ(
+      ("observable", TestSchedulerPlugin.observableBaseVaddrKiB,
+        TestSchedulerPlugin.observableVaddrKiB(observable, observable.size), TestSchedulerPlugin.injectBaseVaddrKiB),
+      ("injection", TestSchedulerPlugin.injectBaseVaddrKiB,
+        TestSchedulerPlugin.injectVaddrKiB(injectablesForCheck, injectablesForCheck.size), TestSchedulerPlugin.injectThreadBaseVaddrKiB))
+    for (b <- blocks if b._3 > b._4) {
+      reporter.error(None(), toolName,
+        s"The test controller's ${b._1} regions need ${b._3 - b._2} KiB of address space, more than the ${b._4 - b._2} KiB reserved for them")
     }
 
     // D16a: the injection regions are declared here rather than by any AADL port, so the
@@ -908,18 +931,18 @@ object TestSchedulerPlugin {
     var injectControllerMaps: ISZ[MemoryMap] = ISZ()
     var ji: Z = 0
     for (v <- injectables) {
-      injectRegions = injectRegions :+ GenericMemoryRegion(name = v.regionName, sizeInKiBytes = 4)
+      injectRegions = injectRegions :+ GenericMemoryRegion(name = v.regionName, sizeInKiBytes = v.sizeInKiBytes)
       injectPy = injectPy :+
-        st"""${v.regionName} = MemoryRegion(sdf, "${v.regionName}", 0x1000)
+        st"""${v.regionName} = MemoryRegion(sdf, "${v.regionName}", ${MicrokitUtil.KiBytesToHexH(v.sizeInKiBytes, F)})
             |sdf.add_mr(${v.regionName})"""
       injectThreadMaps = injectThreadMaps + v.threadId ~> (
         injectThreadMaps.getOrElse(v.threadId, ISZ()) :+ MemoryMap(
           memoryRegion = v.regionName,
-          vaddrInKiBytes = TestSchedulerPlugin.injectThreadVaddrKiB(ji),
+          vaddrInKiBytes = TestSchedulerPlugin.injectThreadVaddrKiB(injectables, ji),
           perms = ISZ(Perm.READ), varAddr = Some(v.queueVar), cached = None()))
       injectControllerMaps = injectControllerMaps :+ MemoryMap(
         memoryRegion = v.regionName,
-        vaddrInKiBytes = TestSchedulerPlugin.injectVaddrKiB(ji),
+        vaddrInKiBytes = TestSchedulerPlugin.injectVaddrKiB(injectables, ji),
         perms = ISZ(Perm.READ, Perm.WRITE), varAddr = None(), cached = None())
       ji = ji + 1
     }
@@ -1264,6 +1287,9 @@ object StaticContent {
           |pub const TEST_STATUS_VADDR: usize = 0x400_3000;
           |pub const TEST_SCHEDULE_VADDR: usize = 0x400_4000;
           |
+          |// Must match TEST_*_SIZE in $v.scheduler_config.h and $v.meta.py.
+          |pub const TEST_REGION_SIZE: usize = 0x1000;
+          |
           |pub const MAX_SCHEDULE_SLOTS: usize = 128;
           |
           |pub const CMD_SSTEP: u32 = 2;
@@ -1308,6 +1334,11 @@ object StaticContent {
           |  pub timeslices: [u64; MAX_SCHEDULE_SLOTS],
           |  pub is_user_partition: [bool; MAX_SCHEDULE_SLOTS],
           |}
+          |
+          |// Each struct fills a fixed region; one that outgrew it would spill into the next.
+          |const _: () = assert!(core::mem::size_of::<TestCommand>() <= TEST_REGION_SIZE);
+          |const _: () = assert!(core::mem::size_of::<TestStatus>() <= TEST_REGION_SIZE);
+          |const _: () = assert!(core::mem::size_of::<TestSchedule>() <= TEST_REGION_SIZE);
           |
           |static mut NEXT_SEQ: u32 = 0;
           |
@@ -2146,7 +2177,12 @@ object StaticContent {
         |    uint32_t timeslice_ch[MAX_SCHEDULE_SLOTS];
         |    uint64_t timeslices[MAX_SCHEDULE_SLOTS];
         |    bool is_user_partition[MAX_SCHEDULE_SLOTS];
-        |} test_schedule_t;""")
+        |} test_schedule_t;
+        |
+        |// Each struct fills a fixed region; one that outgrew it would spill into the next.
+        |_Static_assert(sizeof(test_command_t) <= TEST_CMD_SIZE, "test_command_t outgrows its shared memory region");
+        |_Static_assert(sizeof(test_status_t) <= TEST_STATUS_SIZE, "test_status_t outgrows its shared memory region");
+        |_Static_assert(sizeof(test_schedule_t) <= TEST_SCHEDULE_SIZE, "test_schedule_t outgrows its shared memory region");""")
   }
 
   val scheduler_c: ST =

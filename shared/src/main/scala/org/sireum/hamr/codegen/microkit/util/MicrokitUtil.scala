@@ -24,6 +24,21 @@ object MicrokitUtil {
 
   val defaultMemoryRegionSizeInKiBytes: Z = 4
 
+  // One unmapped page left between consecutive memory regions in a protection domain's
+  // address space, so an access past the end of a region faults instead of reaching the next
+  // (SharedMemorySafety-design.md, D7).
+  val guardPageKiBytes: Z = 4
+
+  // The vaddr of the i-th region of a block placed back to back by size, each followed by a
+  // guard page (D4, D7).
+  @pure def packedVaddrKiB(baseKiB: Z, sizesInKiB: ISZ[Z], i: Z): Z = {
+    var v = baseKiB
+    for (k <- 0 until i) {
+      v = v + sizesInKiB(k) + guardPageKiBytes
+    }
+    return v
+  }
+
   val MemAlignmentInKiBytes: Z = 4
 
   /** Number of seL4 (security) scheduling domains, i.e. the KernelNumDomains configuration

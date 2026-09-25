@@ -15,25 +15,37 @@ object CRustApiUtil {
   //   return-value naming have attribute-syntax equivalents
   val WRAPPED_IN_VERUS_MACRO: B = F
 
+  // numInvalidApi: expose the port's invalid-message counter, whose C getter the connection
+  // code generates for every port it receives on (not for synthetic ports such as a state
+  // variable's injection port, whose getters come from elsewhere)
   def processInPort(dstThread: AadlThread, dstPort: AadlPort,
                     crustTypeProvider: CRustTypeProvider,
-                    apiPorts: ISZ[AadlPort]): ComponentApiContributions = {
+                    apiPorts: ISZ[AadlPort],
+                    numInvalidApi: B): ComponentApiContributions = {
     val portType: AadlType = crustTypeProvider.getRepresentativeType(MicrokitTypeUtil.getPortType(dstPort))
     val portTypeNameProvider = crustTypeProvider.getTypeNameProvider(portType)
 
     val (externApiTestVariable, externApiMethod) = getCrustTestingArtifacts(dstPort, portType.classifier, portTypeNameProvider)
 
+    // event ports carry no data, so nothing they receive can be invalid
+    val hasNumInvalid: B = numInvalidApi && !dstPort.isInstanceOf[AadlEventPort]
+
     return ComponentApiContributions.empty(
-      externCApis = ISZ(getCExternMethodSig(dstPort, portType, portTypeNameProvider)),
-      unsafeExternCApiWrappers = ISZ(getUnsafeGetWrapper(dstPort, portType, crustTypeProvider)),
+      externCApis = ISZ[RAST.Item](getCExternMethodSig(dstPort, portType, portTypeNameProvider)) ++
+        (if (hasNumInvalid) ISZ[RAST.Item](getCNumInvalidExternMethodSig(dstPort)) else ISZ[RAST.Item]()),
+      unsafeExternCApiWrappers = ISZ[RAST.Item](getUnsafeGetWrapper(dstPort, portType, crustTypeProvider)) ++
+        (if (hasNumInvalid) ISZ[RAST.Item](getUnsafeNumInvalidWrapper(dstPort)) else ISZ[RAST.Item]()),
       externApiTestMockVariables = ISZ(externApiTestVariable),
-      externApiTestingApis = ISZ(externApiMethod),
+      externApiTestingApis = ISZ[RAST.Item](externApiMethod) ++
+        (if (hasNumInvalid) ISZ[RAST.Item](getNumInvalidTestingApi(dstPort)) else ISZ[RAST.Item]()),
 
       //putApis = ISZ(),
-      unverifiedGetApis = ISZ(getBridgeGetApi(dstPort, portType, crustTypeProvider)),
+      unverifiedGetApis = ISZ[RAST.Item](getBridgeGetApi(dstPort, portType, crustTypeProvider)) ++
+        (if (hasNumInvalid) ISZ[RAST.Item](getBridgeNumInvalidApi(dstPort)) else ISZ[RAST.Item]()),
 
       //appApiDefaultPutters = ISZ(),
-      appApiDefaultGetters = ISZ(getApiDefaultGetter(dstPort, portType, crustTypeProvider, apiPorts)),
+      appApiDefaultGetters = ISZ[RAST.Item](getApiDefaultGetter(dstPort, portType, crustTypeProvider, apiPorts)) ++
+        (if (hasNumInvalid) ISZ[RAST.Item](getApiDefaultNumInvalid(dstPort)) else ISZ[RAST.Item]()),
 
       ghostVariables = ISZ(getGhostVariable(dstPort, portType, portTypeNameProvider)),
       ghostInitializations = ISZ(getGhostInitializations(dstPort, portType, crustTypeProvider))
@@ -76,6 +88,85 @@ object CRustApiUtil {
       externApiTestingApis = ISZ(getPeekTestingApi(port, portType.classifier, portTypeNameProvider)),
       unverifiedGetApis = ISZ(getBridgePeekApi(port, portType, crustTypeProvider)),
       appApiDefaultGetters = ISZ(getApiDefaultPeek(port, portType, crustTypeProvider)))
+  }
+
+  // The number of messages received on a port that were dropped because they held an invalid
+  // bit pattern (SharedMemorySafety-design.md, D6), from the C getter
+  // QueueTemplate.getClientNumInvalid_C_Method.  Not a port value, so it has no ghost state
+  // and no contract.
+
+  val numInvalidRustType: RAST.Ty = RAST.TyPath(ISZ(ISZ("u64")), None())
+
+  @strictpure def numInvalidMethodName(port: AadlPort): String = s"get_${port.identifier}_num_invalid"
+
+  @pure def getCNumInvalidExternMethodSig(port: AadlPort): RAST.FnSig = {
+    return RAST.FnSig(
+      verusHeader = None(),
+      fnHeader = RAST.FnHeader(F),
+      ident = RAST.IdentString(numInvalidMethodName(port)),
+      generics = None(),
+      fnDecl = RAST.FnDecl(inputs = ISZ(), outputs = RAST.FnRetTyImpl(numInvalidRustType)))
+  }
+
+  @pure def getUnsafeNumInvalidWrapper(port: AadlPort): RAST.Fn = {
+    return RAST.FnImpl(
+      visibility = RAST.Visibility.Public,
+      sig = RAST.FnSig(
+        ident = RAST.IdentString(s"unsafe_${numInvalidMethodName(port)}"),
+        fnDecl = RAST.FnDecl(inputs = ISZ(), outputs = RAST.FnRetTyImpl(numInvalidRustType)),
+        verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
+      comments = ISZ(), attributes = ISZ(), meta = ISZ(),
+      verusAttributeSyntax = WRAPPED_IN_VERUS_MACRO, contract = None(),
+      body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
+        st"""unsafe {
+            |  return ${numInvalidMethodName(port)}();
+            |}""")))))
+  }
+
+  // Tests set port values through the mock variables, which hold only valid values
+  @pure def getNumInvalidTestingApi(port: AadlPort): RAST.Item = {
+    return RAST.FnImpl(
+      attributes = ISZ(RAST.AttributeST(F, st"cfg(test)")),
+      sig = RAST.FnSig(
+        ident = RAST.IdentString(numInvalidMethodName(port)),
+        fnDecl = RAST.FnDecl(inputs = ISZ(), outputs = RAST.FnRetTyImpl(numInvalidRustType)),
+        verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
+      comments = ISZ(), visibility = RAST.Visibility.Public, meta = ISZ(),
+      verusAttributeSyntax = WRAPPED_IN_VERUS_MACRO, contract = None(),
+      body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(st"return 0;")))))
+  }
+
+  @pure def getBridgeNumInvalidApi(port: AadlPort): RAST.FnImpl = {
+    return RAST.FnImpl(
+      attributes = ISZ(RAST.AttributeST(F, st"verifier::external_body")),
+      sig = RAST.FnSig(
+        ident = RAST.IdentString(s"unverified_${numInvalidMethodName(port)}"),
+        fnDecl = RAST.FnDecl(
+          inputs = ISZ(RAST.ParamFixMe(st"&self")),
+          outputs = RAST.FnRetTyImpl(numInvalidRustType)),
+        verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
+      verusAttributeSyntax = WRAPPED_IN_VERUS_MACRO, contract = None(),
+      comments = ISZ(), visibility = RAST.Visibility.Private, meta = ISZ(),
+      body = Some(RAST.MethodBody(ISZ(
+        RAST.BodyItemST(st"return extern_api::unsafe_${numInvalidMethodName(port)}();")))))
+  }
+
+  @pure def getApiDefaultNumInvalid(port: AadlPort): RAST.Item = {
+    return RAST.FnImpl(
+      sig = RAST.FnSig(
+        ident = RAST.IdentString(numInvalidMethodName(port)),
+        fnDecl = RAST.FnDecl(
+          inputs = ISZ(RAST.ParamFixMe(st"&self")),
+          outputs = RAST.FnRetTyImpl(numInvalidRustType)),
+        verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
+      verusAttributeSyntax = WRAPPED_IN_VERUS_MACRO, contract = None(),
+      comments = ISZ(RAST.CommentRustDoc(ISZ(
+        st"The number of messages received on ${port.identifier} that were dropped because they held",
+        st"an invalid bit pattern (an out-of-range enum, a bool that is neither 0 nor 1, or a",
+        st"string with no terminating NUL)"))),
+      attributes = ISZ(), visibility = RAST.Visibility.Public, meta = ISZ(),
+      body = Some(RAST.MethodBody(ISZ(
+        RAST.BodyItemST(st"self.api.unverified_${numInvalidMethodName(port)}()")))))
   }
 
   @pure def getGhostInitializations(port: AadlPort, a: AadlType, crustTypeProvider: CRustTypeProvider): RAST.Item = {

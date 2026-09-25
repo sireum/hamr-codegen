@@ -11,6 +11,7 @@ import org.sireum.hamr.codegen.microkit.MicrokitCodegen
 import org.sireum.hamr.codegen.microkit.connections._
 import org.sireum.hamr.codegen.microkit.plugins.c.types.{CTypePlugin, CTypeProvider}
 import org.sireum.hamr.codegen.microkit.plugins.rust.types.{CRustTypePlugin, CRustTypeProvider}
+import org.sireum.hamr.codegen.microkit.util.MicrokitUtil
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.brand
 import org.sireum.hamr.ir
 import org.sireum.hamr.ir.{GclMethod, GclStateVar}
@@ -32,6 +33,21 @@ object MicrokitTypeUtil {
   val cAadlTypesFilename: String = s"${aadlTypesFilenamePrefix}.h"
 
   val make_TYPE_OBJS: String = "TYPE_OBJS"
+
+  val make_TYPES_LIB: String = "TYPES_LIB"
+
+  // TYPE_OBJS as an archive, which protection domains link against: the linker pulls in only
+  // the queue objects a protection domain uses, so it does not carry every other queue's
+  // code and staging buffer (SharedMemorySafety-design.md, D6)
+  @strictpure def typesLibDecl: ST =
+    st"""# The queue objects as an archive: each protection domain's link pulls in only the
+        |# queues it uses, not every queue in the system
+        |$make_TYPES_LIB := libhamr_types.a"""
+
+  @strictpure def typesLibRule: ST =
+    st"""$$($make_TYPES_LIB): $$($make_TYPE_OBJS)
+        |${MicrokitUtil.TAB}rm -f $$@
+        |${MicrokitUtil.TAB}$$(AR) rcs $$@ $$^"""
 
   val eventPortTypeName: String = "AADL_EVENT_PORT_TYPE"
 
@@ -121,8 +137,15 @@ object MicrokitTypeUtil {
     return DefaultTypeApiContributions(
       aadlType = aadlType,
       simpleFilename = QueueTemplate.getTypeQueueName(queueElementTypeName, queueSize),
-      header = QueueTemplate.header(queueElementTypeName, queueSize, peekApi),
-      implementation = QueueTemplate.implementation(aadlType, queueElementTypeName, queueSize, cTypeNameProvider, peekApi))
+      header = QueueTemplate.header(queueElementTypeName, queueSize,
+        MicrokitLayout.queueRegionBytes(aadlType, CTypeProvider.substitutions, queueSize), peekApi),
+      implementation = QueueTemplate.implementation(
+        aadlType = aadlType,
+        queueElementTypeName = queueElementTypeName,
+        queueSize = queueSize,
+        cTypeNameProvider = cTypeNameProvider,
+        validate = MicrokitLayout.hasInvalidBitPatterns(aadlType, CTypeProvider.substitutions),
+        peekApi = peekApi))
   }
 
   def translateBaseTypeToC(c: String): String = {
@@ -287,12 +310,16 @@ object MicrokitTypeUtil {
     }
   }
 
-  /** @return a tuple. First is an ordered sequence of types based on their dependencies (e.g. field types
+  /** Also lints the touched types for Microkit (SharedMemorySafety-design.md, D1-D3).
+    *
+    * @param maxStringSize the string length when no String in the model declares a dimension
+    *                      (--max-string-size)
+    * @return a tuple. First is an ordered sequence of types based on their dependencies (e.g. field types
     *         appear before records that use them). Second is a substitution map (e.g. Base_Types::String
     *         will be mapped to an array based version where the dimension is the largest String dimension
-    *         seen in the model, default is 100)
+    *         seen in the model, or maxStringSize when none declares one)
     */
-  @pure def getAllTouchedTypes(aadlTypes: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): (ISZ[String], Map[String, AadlType]) = {
+  @pure def getAllTouchedTypes(aadlTypes: AadlTypes, symbolTable: SymbolTable, maxStringSize: Z, store: Store, reporter: Reporter): (ISZ[String], Map[String, AadlType]) = {
     var ret: Set[AadlType] = Set.empty
 
     var maxStringDim: Z = 0
@@ -326,28 +353,25 @@ object MicrokitTypeUtil {
                 case x =>
                   reporter.error(posOpt, MicrokitCodegen.toolName, s"Only Fixed arrays are currently supported: ${t.name} (attach 'HAMR::Array_Size_Kind => Fixed' to the data component)")
               }
+              // A missing dimension arrives as no dimension, or as 0 when the type resolver has
+              // already classified the array as unbounded (SharedMemorySafety-design.md, D3).
+              val noDimension: String = s"Array ${t.name} does not declare its dimension; unbounded arrays are not supported on Microkit, so attach Data_Model::Dimension to the data component"
               t.dimensions match {
                 case ISZ() =>
-                  reporter.error(posOpt, MicrokitCodegen.toolName, s"Unbounded arrays are not currently supported: ${t.name}")
+                  reporter.error(posOpt, MicrokitCodegen.toolName, noDimension)
                 case ISZ(dim) =>
-                  if (dim <= 0) {
+                  if (dim == 0) {
+                    reporter.error(posOpt, MicrokitCodegen.toolName, noDimension)
+                  } else if (dim < 0) {
                     reporter.error(posOpt, MicrokitCodegen.toolName, s"Array dimension must by >= 1: ${t.name}")
                   }
                 case _ =>
                   reporter.error(posOpt, MicrokitCodegen.toolName, s"Multi dimensional arrays are not currently supported: ${t.name}")
               }
-              PropertyUtil.getUnitPropZ(aadlType.properties, OsateProperties.MEMORY_PROPERTIES__DATA_SIZE) match {
-                case None() =>
-                  reporter.error(posOpt, MicrokitCodegen.toolName, s"${OsateProperties.MEMORY_PROPERTIES__DATA_SIZE} must be specified for ${t.name}")
-                case _ =>
-                  PropertyUtil.getUnitPropZ(aadlType.properties, HamrProperties.HAMR__BIT_CODEC_MAX_SIZE) match {
-                    case Some(_) =>
-                      reporter.error(posOpt, MicrokitCodegen.toolName, s"Microkit codegen does not currently support both ${OsateProperties.MEMORY_PROPERTIES__DATA_SIZE} and ${HamrProperties.HAMR__BIT_CODEC_MAX_SIZE} being specified for ${t.name}")
-                    case _ =>
-                      if (t.bitSize.isEmpty || t.bitSize.get <= 0) {
-                        reporter.error(posOpt, MicrokitCodegen.toolName, s"Bit size > 0 must be specified for ${t.name}")
-                      }
-                  }
+              // No Data_Size is required: HAMR computes every Microkit size itself (D1), and a
+              // declared one is only checked against it, below.
+              if (PropertyUtil.getUnitPropZ(aadlType.properties, HamrProperties.HAMR__BIT_CODEC_MAX_SIZE).nonEmpty) {
+                reporter.error(posOpt, MicrokitCodegen.toolName, s"${HamrProperties.HAMR__BIT_CODEC_MAX_SIZE} is not supported on Microkit: ${t.name}")
               }
 
               add(posOpt, t.baseType)
@@ -443,7 +467,7 @@ object MicrokitTypeUtil {
       }
 
       // +1 for the null character
-      val size: Z = 1 + (if (maxStringDim == 0) 100 else maxStringDim)
+      val size: Z = 1 + (if (maxStringDim == 0) maxStringSize else maxStringDim)
       var container = max.container.get
       container = container(properties = ir.Property(
         name = ir.Name(ISZ("Data_Model::Dimension"), None()),
@@ -464,6 +488,35 @@ object MicrokitTypeUtil {
           slangType = SlangType.C))
       ret = ret + arrayString
       subs = subs + "Base_Types::String" ~> arrayString
+    }
+
+    // A declared Memory_Properties::Data_Size is checked against HAMR's own layout.  It used
+    // to be trusted: array copies used it as their byte count, so a wrong value overflowed or
+    // truncated shared memory (F1).  The AADL frontend flattens inherited properties and
+    // records no origin, so a type extending a base type carries the base type's Data_Size;
+    // only a value that differs from the computed size is an error.
+    for (t <- ret.elements if !subs.contains(t.name)) {
+      val declared: Option[Z] = t match {
+        case _: BaseType => t.bitSize
+        case _: EnumType => t.bitSize
+        case _: ArrayType => t.bitSize
+        case _: RecordType => t.bitSize
+        case _ => None()
+      }
+      declared match {
+        case Some(bits) =>
+          val computed = MicrokitLayout.layoutOf(t, subs).size
+          if (bits != computed * 8) {
+            val declaredText: String = if (bits % 8 == 0) s"${bits / 8} bytes" else s"$bits bits"
+            val posOpt: Option[Position] = t.container match {
+              case Some(c) => c.identifier.pos
+              case _ => None()
+            }
+            reporter.error(posOpt, MicrokitCodegen.toolName,
+              s"${OsateProperties.MEMORY_PROPERTIES__DATA_SIZE} of ${t.name} is $declaredText, but its Microkit size is $computed bytes. HAMR computes Microkit sizes itself: remove the property or correct it")
+          }
+        case _ =>
+      }
     }
 
     return (TypeUtil.orderTypeDependencies(ret.elements), subs)

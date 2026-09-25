@@ -13,7 +13,7 @@ import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.plugins.linters.MicrokitLinterPlugin
 import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, MicrokitPlugin, MicrokitTypePlugin}
 import org.sireum.hamr.codegen.microkit.rust.Visibility
-import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
+import org.sireum.hamr.codegen.microkit.types.{MicrokitLayout, MicrokitTypeUtil}
 import org.sireum.hamr.codegen.microkit.util.RustUtil
 import org.sireum.hamr.codegen.microkit.{rust => RAST}
 import org.sireum.hamr.ir.Aadl
@@ -34,7 +34,6 @@ object CRustTypePlugin {
   val usePath: String = "data::*"
 
   // TODO: maybe move everything below into the Store
-  @strictpure def getArraySizeName(arrayTypeNampeProvider: CRustTypeNameProvider): String = st"${(arrayTypeNampeProvider.qualifiedRustNameS, "_")}_BYTE_SIZE".render
 
   @strictpure def getArrayDimName(arrayTypeNampeProvider: CRustTypeNameProvider, dim: Z): String = st"${(arrayTypeNampeProvider.qualifiedRustNameS, "_")}_DIM_$dim".render
 
@@ -363,8 +362,8 @@ object CRustTypePlugin {
         val np = typeNameProvider.get(at.name).get
         var dims: ISZ[RAST.Ident] = ISZ()
         var companions: ISZ[RAST.Item] = ISZ()
-        val byteSize = at.bitSize.get / 8
-        companions = companions :+ RAST.ItemString(s"pub const ${CRustTypePlugin.getArraySizeName(np)}: usize = $byteSize;")
+        // No <T>_BYTE_SIZE constant: it used to carry the model's declared Data_Size, which
+        // nothing in Rust read and which could disagree with the type (SharedMemorySafety-design.md, D1).
         for (i <- 0 until at.dimensions.size) {
           val dimName = CRustTypePlugin.getArrayDimName(np, i)
           companions = companions :+ RAST.ItemString(s"pub const $dimName: usize = ${at.dimensions(i)};")
@@ -406,7 +405,21 @@ object CRustTypePlugin {
             body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(implBody.get)))))),
           comments = ISZ(),attributes = ISZ())
     }
-    return ret :+ RAST.MacCall("verus", inVerusItems)
+    // The memory layout HAMR computed, asserted at compile time.  C components see the same
+    // bytes through shared memory and assert the same numbers, so a compiler or flag that
+    // lays the type out differently fails the build instead of the two sides silently
+    // disagreeing (SharedMemorySafety-design.md, D5).  Outside verus!: plain Rust.
+    val simpleName = getTypeSimpleName(substituteType)
+    val layout = MicrokitLayout.layoutOf(substituteType, substitutions)
+    val fieldAsserts: ISZ[ST] = for (f <- layout.fieldOffsets) yield
+      st"const _: () = assert!(core::mem::offset_of!($simpleName, ${f._1}) == ${f._2});"
+    val layoutAsserts = RAST.ItemST(
+      st"""// Memory layout as HAMR computes it
+          |const _: () = assert!(core::mem::size_of::<$simpleName>() == ${layout.size});
+          |const _: () = assert!(core::mem::align_of::<$simpleName>() == ${layout.align});
+          |${(fieldAsserts, "\n")}""")
+
+    return ret :+ RAST.MacCall("verus", inVerusItems) :+ layoutAsserts
   }
 }
 

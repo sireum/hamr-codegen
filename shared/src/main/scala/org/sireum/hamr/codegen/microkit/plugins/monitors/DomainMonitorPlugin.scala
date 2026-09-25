@@ -188,7 +188,9 @@ object DomainMonitorPlugin {
           var shift: Z = 0
           for (m <- maps) {
             if (names.contains(m.memoryRegion)) {
-              shift = shift + sizes.get(m.memoryRegion).getOrElse(MicrokitUtil.defaultMemoryRegionSizeInKiBytes)
+              // the stripped region and the guard page after it (SharedMemorySafety-design.md, D7)
+              shift = shift + sizes.get(m.memoryRegion).getOrElse(MicrokitUtil.defaultMemoryRegionSizeInKiBytes) +
+                MicrokitUtil.guardPageKiBytes
             } else {
               result = result :+ m(vaddrInKiBytes = m.vaddrInKiBytes - shift)
             }

@@ -1590,6 +1590,41 @@ sys-assert monitor variants: identical monitor output on a clean run, and identi
 messages -- pre/post values included -- with one IEP_Post, one CEP_Pre, one CEP_Post and one
 system property forced to fail in both trees. `make verus` passes on both monitor crates.
 
+#### Where stage 7 stands (paused 2026-09-25)
+
+Work stopped here to switch to something else. Everything so far is pushed: `hamr/codegen`
+through `ce7f7b71` (steps 1-2) with its test submodule at `ffe7a7bb`, kekinian's pointer update
+`e4aeb17b`, and INSPECTA-models `ca831072` (report path fix), `4fe6d903` (CI simulation of the
+monitor images) and `015c225a` (models regenerated for the observers crate).
+
+**Known bug, fix first when resuming.** `ContractObserverPlugin.isRequested` generates the crate
+for `--runtime-monitoring` plus state variables, but the gumbo monitor is also gated on the MCS
+(user-land) scheduler. A domain-scheduled model with state variables therefore gets an
+`observers` crate nothing uses: INSPECTA's `structs_arrays/hamr/microkit_sysml` (commit
+`015c225a` says so). The golden tests miss it because none runs structs_arrays with
+`--runtime-monitoring`. Fix: generate the crate only when the gumbo monitor was injected
+(`store.contains("KEY_gumbo_monitor_Model_Transformed")`, i.e. its `keyModelTransformed`), then
+regenerate structs_arrays and add a golden case that covers it.
+
+**CI simulation of the monitor images (INSPECTA `4fe6d903`).** Separate from system testing:
+isolette's and temp-control's `ci.cmd` now boot the `gumbo_monitor.mk` and
+`sys_nominal_monitor.mk` images under QEMU for 60 s after each successful build and fail on any
+contract, system-assertion or schedule-conformance violation, a panic, or a monitor that never
+logged. All three CI flavours (linux, docker, mac) have QEMU. Both models' monitors run clean.
+
+**Not yet true: contract checking in system tests.** The test variant still strips the monitor
+PDs, and the controller does not use `crates/observers`. A system test cannot fail on a
+contract violation until steps 4-5.
+
+**Next, in order.** (1) The gate fix above. (2) Step 3: move `sv_` port creation and
+`handleCBackend` out of `wireMonitorStateVars` so system testing gets state-variable plumbing
+without `--runtime-monitoring`, and widen the crate's gate to system testing. (3) Steps 4-5:
+the controller's `SystemView` on `obs_get_*` cursors, `TestSink`, `observe::` API, the
+scheduler's observation park and `completed_seq`. (4) Steps 6-7: switches and overrun handling.
+Unrelated open items: `timeout-minutes` for INSPECTA's `hamr-codegen-linux` workflow (a hang in
+the Sireum build ran to GitHub's 6 h limit on 2026-09-23); stale `src/gumbox/` directories left
+in monitor crates of trees regenerated without `clean.cmd`.
+
 #### What stage 7 does not cover
 
 It tests the *unmonitored* configuration against the contracts; it does not test a monitor PD.

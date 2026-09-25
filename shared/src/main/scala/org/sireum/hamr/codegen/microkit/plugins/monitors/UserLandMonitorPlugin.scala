@@ -311,7 +311,9 @@ object UserLandMonitorPlugin {
           var shift: Z = 0
           for (m <- maps) {
             if (names.contains(m.memoryRegion)) {
-              shift = shift + sizes.get(m.memoryRegion).getOrElse(MicrokitUtil.defaultMemoryRegionSizeInKiBytes)
+              // the stripped region and the guard page after it (SharedMemorySafety-design.md, D7)
+              shift = shift + sizes.get(m.memoryRegion).getOrElse(MicrokitUtil.defaultMemoryRegionSizeInKiBytes) +
+                MicrokitUtil.guardPageKiBytes
             } else {
               result = result :+ m(vaddrInKiBytes = m.vaddrInKiBytes - shift)
             }
@@ -612,6 +614,10 @@ object StaticContent {
         |
         |hamr_Schedule sched_schedule = {0};
         |
+        |// Both queues fill fixed regions; one that outgrew its region would spill into the next.
+        |_Static_assert(sizeof(sb_queue_hamr_SchedState_1_t) <= SCHED_STATE_SIZE, "sb_queue_hamr_SchedState_1_t outgrows its shared memory region");
+        |_Static_assert(sizeof(sb_queue_hamr_Schedule_1_t) <= SCHED_SCHEDULE_SIZE, "sb_queue_hamr_Schedule_1_t outgrows its shared memory region");
+        |
         |bool put_sched_schedule() {
         |  sb_queue_hamr_Schedule_1_enqueue((sb_queue_hamr_Schedule_1_t *) sb_queue_sched_schedule, (hamr_Schedule *) &sched_schedule);
         |
@@ -738,7 +744,8 @@ object StaticContent {
         |
         |// Maximum number of timeslice slots in a schedule.  A thread may appear
         |// in multiple slots per frame period, so this can exceed MAX_PARTITIONS.
-        |// Must fit within the 4 KB shared-memory page (struct ≈ 13*N + 4 bytes).
+        |// Must fit within the 4 KB shared-memory page (struct ≈ 13*N + 4 bytes); the scheduler
+        |// asserts that its queue does.
         |#define MAX_SCHEDULE_SLOTS 128
         |
         |// Virtual address at which the schedule state shared memory region is mapped.

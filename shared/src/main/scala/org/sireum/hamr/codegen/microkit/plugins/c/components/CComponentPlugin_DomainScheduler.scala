@@ -312,7 +312,9 @@ import org.sireum.message.Reporter
               perms = p.perms,
               varAddr = Some(p.varAddr),
               cached = None())
-            nextMemAddressInKiBytes = nextMemAddressInKiBytes + p.sizeInKiBytes
+            // each region is followed by an unmapped guard page, so an access past its end
+            // faults instead of reaching the next region (SharedMemorySafety-design.md, D7)
+            nextMemAddressInKiBytes = nextMemAddressInKiBytes + p.sizeInKiBytes + MicrokitUtil.guardPageKiBytes
           case _ => halt("")
         }
       }
