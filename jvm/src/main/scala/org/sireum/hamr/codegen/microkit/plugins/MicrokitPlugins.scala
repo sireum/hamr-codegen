@@ -16,6 +16,7 @@ import org.sireum.hamr.codegen.microkit.plugins.rust.apis.DefaultCRustApiPlugin
 import org.sireum.hamr.codegen.microkit.plugins.rust.component.DefaultCRustComponentPlugin
 import org.sireum.hamr.codegen.microkit.plugins.rust.testing.DefaultCRustTestingPlugin
 import org.sireum.hamr.codegen.microkit.plugins.rust.types.DefaultCRustTypePlugin
+import org.sireum.hamr.codegen.microkit.plugins.testing.TestSchedulerPlugin
 
 object MicrokitPlugins {
 
@@ -42,6 +43,11 @@ object MicrokitPlugins {
     // monitors
     DefaultDomainMonitorPlugin(),
     DefaultUserLandMonitorPlugin(),
+
+    // Must be registered before the system description providers: it is a finalize plugin
+    // that adds an MSD variant, and SystemDescriptionProvider_MCS renders whatever variants
+    // are present when it runs.
+    TestSchedulerPlugin(),
 
     MicrokitReporterPlugin(),
     AttestationPlugin(),

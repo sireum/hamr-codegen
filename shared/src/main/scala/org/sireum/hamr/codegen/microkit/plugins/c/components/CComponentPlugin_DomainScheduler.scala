@@ -598,7 +598,7 @@ import org.sireum.message.Reporter
       protectionDomains = xmlProtectionDomains,
       memoryRegions = xmlMemoryRegions,
       channels = xmlChannels,
-      templateContributions = ISZ())
+      templateContributions = ISZ(), templateTailContributions = ISZ())
     localStore = SystemDescriptionProviderPlugin.putMSD(normalName, normalSd, localStore)
 
     localStore = StoreUtil.addMakefileContainers(makefileContainers, localStore)

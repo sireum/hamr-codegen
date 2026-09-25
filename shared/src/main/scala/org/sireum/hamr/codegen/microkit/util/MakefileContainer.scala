@@ -148,7 +148,7 @@ import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
       val elfEntry: ST =
         if (isRustic) {
           st"""$elfName: $$(${MicrokitUtil.make_UTIL_OBJS}) $$(${MicrokitTypeUtil.make_TYPE_OBJS}) $userRusticName $objName
-              |${TAB}$$(LD) $$(LDFLAGS) -L $${CRATES_DIR}/$crateName/target/aarch64-unknown-none/release $$(filter %.o, $$^) $$(LIBS) -l$crateName -o $$@"""
+              |${TAB}$$(LD) $$(LDFLAGS) -L $${CRATES_DIR}/$crateName/target/aarch64-unknown-none/$$(RUST_PROFILE_DIR) $$(filter %.o, $$^) $$(LIBS) -l$crateName -o $$@"""
         } else {
           st"""$elfName: $$(${MicrokitUtil.make_UTIL_OBJS}) $$(${MicrokitTypeUtil.make_TYPE_OBJS})$auxObjs$r2u2Objs $userObjName $objName
               |${TAB}$$(LD) $$(LDFLAGS) $$^ $$(LIBS) -o $$@"""

@@ -342,7 +342,7 @@ object UserLandMonitorPlugin {
           protectionDomains = normalPDs,
           memoryRegions = normalMemoryRegions,
           channels = strippedChannels,
-          templateContributions = ISZ()), localStore)
+          templateContributions = ISZ(), templateTailContributions = ISZ()), localStore)
 
         // "monitor" SD: [pad?,] monitor before each thread; no monitor after the
         // last thread since the frame wraps and the monitor runs first next frame.
@@ -492,7 +492,7 @@ object UserLandMonitorPlugin {
           memoryRegions = monitorMemoryRegions,
           channels = rawSd.channels.filter(c =>
             !otherNonModelPdNames.contains(c.firstPD) && !otherNonModelPdNames.contains(c.secondPD)),
-          templateContributions = schedTemplateContributions), localStore)
+          templateContributions = schedTemplateContributions, templateTailContributions = ISZ()), localStore)
 
 
         // Generate channel assignment constants so the monitor behavior code can

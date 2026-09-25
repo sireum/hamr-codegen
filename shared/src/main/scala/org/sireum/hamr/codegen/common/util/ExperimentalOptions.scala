@@ -20,6 +20,11 @@ object ExperimentalOptions {
 
   val PROYEK_IVE_OPTIONS: String = "PROYEK_IVE_OPTIONS"
 
+  // Emits the Microkit test-scheduler variant bundle (test_scheduler.meta.py,
+  // test_scheduler.scheduler.c, its config headers, and test_scheduler.mk).
+  // See hamr/codegen/doc/TestScheduler-design.md, D5.
+  val ENABLE_TEST_SCHEDULER: String = "ENABLE_TEST_SCHEDULER"
+
   def proyekIveOptions(experimentalOptions: ISZ[String]): Option[ISZ[String]] = {
     for (e <- experimentalOptions) {
       val o = ops.StringOps(e)
@@ -91,5 +96,9 @@ object ExperimentalOptions {
 
   def generateRefinementProof(experimentalOptions: ISZ[String]): B = {
     return ops.ISZOps(experimentalOptions).exists(e => e == GENERATE_REFINEMENT_PROOF)
+  }
+
+  def enableTestScheduler(experimentalOptions: ISZ[String]): B = {
+    return ops.ISZOps(experimentalOptions).exists(e => e == ENABLE_TEST_SCHEDULER)
   }
 }

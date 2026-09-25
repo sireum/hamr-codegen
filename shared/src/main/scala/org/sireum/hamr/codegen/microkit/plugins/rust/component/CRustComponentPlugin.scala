@@ -78,6 +78,8 @@ object ComponentContributions {}
                                         val libInitializePre: ISZ[RAST.BodyItem],
                                         // after _app.initialize(..), before app = Some(_app)
                                         val libInitializePost: ISZ[RAST.BodyItem],
+                                        // before the compute entrypoint dispatches to the app
+                                        val libComputePre: ISZ[RAST.BodyItem],
                                         // after the compute entrypoint dispatches to the app
                                         val libComputePost: ISZ[RAST.BodyItem],
 
@@ -279,6 +281,7 @@ object ComponentContributions {}
           libModuleLevelEntries = ISZ(),
           libInitializePre = ISZ(),
           libInitializePost = ISZ(),
+          libComputePre = ISZ(),
           libComputePost = ISZ(),
           crateDependencies = ISZ())
 
@@ -360,10 +363,17 @@ object ComponentContributions {}
                                     |_app.r2u2_monitor_initialize();""")
         }
 
-        val computePre: Option[ST] = 
-          if (e._2.requiresR2U2)
-            Some(st"_app.r2u2_monitor_pre_timeTriggered(&compute_api);")
-          else None()
+        var computePre: Option[ST] =
+          if (contribs.libComputePre.isEmpty) None()
+          else Some(st"${(for (i <- contribs.libComputePre) yield i.prettyST, "\n")}")
+
+        if (e._2.requiresR2U2) {
+          computePre = computePre match {
+            case Some(c) => Some(st"""$c
+                                     |_app.r2u2_monitor_pre_timeTriggered(&compute_api);""")
+            case _ => Some(st"_app.r2u2_monitor_pre_timeTriggered(&compute_api);")
+          }
+        }
 
         var computePost: Option[ST] =
           if (contribs.libComputePost.isEmpty) None()
@@ -703,8 +713,15 @@ object ComponentContributions {}
               optLastItemSep = None()).prettyST
           else RAST.MarkerPlaceholder(r2u2CargoMarker.asInstanceOf[PlaceholderMarker]).prettyST
 
+        // As for the app module: a fully-generated component's manifest is overwritten,
+        // so dependencies codegen adds (e.g. crates/observers for the monitors) reach a
+        // tree regenerated in place; a user-editable one keeps user edits.
+        val cargoHeader: String =
+          if (genProfile.userEditable) CommentTemplate.safeToEditComment_hash
+          else CommentTemplate.doNotEditComment_hash
+
         val content =
-          st"""${CommentTemplate.safeToEditComment_hash}
+          st"""$cargoHeader
               |
               |[package]
               |name = "$crateName"
@@ -745,7 +762,7 @@ object ComponentContributions {}
           content = content,
           markers = ISZ(r2u2CargoMarker),
           invertMarkers = F,
-          overwrite = F)
+          overwrite = !genProfile.userEditable)
       }
 
       { // Makefile

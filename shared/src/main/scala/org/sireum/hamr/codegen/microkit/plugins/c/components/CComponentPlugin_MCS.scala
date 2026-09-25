@@ -475,6 +475,13 @@ import org.sireum.message.Reporter
             |  switch (channel) {
             |    case PORT_FROM_MON:
             |      ${(cCodeContributions.cBridge_ComputeContributions, "\n\n")}
+            |      // Report that this dispatch has finished.  The _MON wrapper forwards it to
+            |      // the scheduler.  The default scheduler ignores runtime signals from
+            |      // partitions -- the schedule is static and each partition runs for its full
+            |      // allotted time -- so this is inert there; the test scheduler uses it as the
+            |      // slot-complete event, which is what lets it step as fast as threads run
+            |      // rather than waiting out each slot's wall-clock budget.
+            |      microkit_notify(PORT_FROM_MON);
             |      break;
             |    default:
             |      ${cUserNotifyMethodName}(channel);
@@ -582,7 +589,7 @@ import org.sireum.message.Reporter
       protectionDomains = xmlProtectionDomains,
       memoryRegions = xmlMemoryRegions,
       channels = xmlChannels,
-      templateContributions = ISZ())
+      templateContributions = ISZ(), templateTailContributions = ISZ())
 
     localStore = SystemDescriptionProviderPlugin.putMSD(sdName, sd, localStore)
     localStore = StoreUtil.addMakefileContainers(makefileContainers, localStore)
