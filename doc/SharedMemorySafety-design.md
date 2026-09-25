@@ -454,8 +454,10 @@ the text above:
   chosen to hit every defect -- a 4400-byte array, a record holding a 5000-byte array, and a
   padded record with a `bool` and a 3-value enum: a wrong `Data_Size` is a codegen error and a
   matching one is accepted; an undimensioned array is rejected on both paths; the generated C
-  compiles with every layout and region assertion holding; `-fshort-enums` and `-fpack-struct`
-  fail the build with the layout message; a host-run C harness (`harness/harness.c`) round-trips
+  compiles with every layout and region assertion holding; `#pragma pack(1)` fails the build with
+  the layout message on every compiler, and so does `-fshort-enums` wherever the compiler honors
+  it (clang targeting the MSVC ABI ignores it, so HAMR's layout holds there and the header
+  compiles, as it should); a host-run C harness (`harness/harness.c`) round-trips
   the large queues with canaries around each region and destination, and writes an out-of-range
   enum, a `bool` of 2 and an enum of -1 into a region, each rejected and counted with the
   receiver's buffer untouched, and an unterminated string likewise; only the queues of the
