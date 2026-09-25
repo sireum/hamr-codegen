@@ -23,6 +23,7 @@ object CRustComponentPlugin {
   val MarkerR2U2Module: String = "MARKER R2U2 MONITOR MODULE"
   val MarkerR2U2MakeRules: String = "MARKER FOR R2U2_BUILD_DEPS RULE"
   val MarkerR2U2CargoDeps: String = "MARKER R2U2 CARGO DEPENDENCIES"
+  val MarkerR2U2VerdictHandler: String = "MARKER R2U2 VERDICT HANDLER"
 
   @strictpure def hasCRustComponentContributions(store: Store): B = store.contains(KEY_CrustComponentPlugin)
 
@@ -613,17 +614,23 @@ object ComponentContributions {}
               |
               |${monitorImpl.prettyST}"""
         val content =
-          st"""${CommentTemplate.doNotEditComment_slash}
+          st"""${CommentTemplate.invertedMarkerComment_slash}
               |
               |use crate::bridge::${CRustApiPlugin.apiModuleName(thread)}::*;
               |use crate::bridge::${threadId}_GUMBOX as GUMBOX;
               |use data::*;
-              |use super::$modName::$threadId;
+              |use super::$modName::{$threadId, log_info};
+              |use vstd::prelude::*;
               |
               |$monitorBody
               |"""
         val path = s"$componentDir/r2u2_monitor.rs"
-        resources = resources :+ ResourceUtil.createResource(path, content, T)
+        resources = resources :+ ResourceUtil.createResourceWithMarkers(
+          path = path,
+          content = content,
+          markers = ISZ(Marker.createSlashMarker(CRustComponentPlugin.MarkerR2U2VerdictHandler)),
+          invertMarkers = T,
+          overwrite = T)
       }
 
       { // src/component/mod.rs
@@ -669,7 +676,10 @@ object ComponentContributions {}
           val map_path = s"$componentDir/spec.map"
           resources = resources :+ ResourceUtil.createResource(map_path, map_content, T)
         } else {
-          for (filename <- ISZ("r2u2_monitor.rs", "spec.c2po", "spec.map")) {
+          resources = resources :+ ResourceUtil.createRemoveResource(
+            s"$componentDir/r2u2_monitor.rs",
+            CommentTemplate.invertedMarkerComment)
+          for (filename <- ISZ("spec.c2po", "spec.map")) {
             resources = resources :+ ResourceUtil.createRemoveResource(
               s"$componentDir/$filename",
               CommentTemplate.doNotEditComment)

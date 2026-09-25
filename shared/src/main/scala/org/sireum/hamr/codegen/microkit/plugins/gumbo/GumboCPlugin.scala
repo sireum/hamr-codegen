@@ -23,7 +23,7 @@ package org.sireum.hamr.codegen.microkit.plugins.gumbo
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{BoolValue, Store}
-import org.sireum.hamr.codegen.common.containers.Resource
+import org.sireum.hamr.codegen.common.containers.{Marker, Resource}
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, ArrayType}
 import org.sireum.hamr.codegen.common.util.HamrCli
@@ -368,10 +368,62 @@ object GumboCPlugin {
       return CComponentR2U2Contributions.empty
     }
 
-    val (loggedSpecDefinitions, outputItems) = GumboR2U2Util.processCOutputs(
+    val orderedSpecs = specs.ftspecs ++ specs.ptspecs
+    val outputItems = GumboR2U2Util.processCOutputs(
       thread = component,
-      orderedSpecs = specs.ftspecs ++ specs.ptspecs,
+      orderedSpecs = orderedSpecs,
       alerts = monitor.alerts)
+
+    val propertyVariants: ISZ[ST] = for (spec <- orderedSpecs) yield
+      st"${GumboR2U2Util.cPropertyVariantName(spec.id)},"
+    val alertSpecNumbers = GumboR2U2Util.getAlertSpecNumbers(orderedSpecs, monitor.alerts)
+    var nonAlertHandlerCases: ISZ[ST] = ISZ()
+    for (i <- z"0" until orderedSpecs.size
+         if !ops.ISZOps(alertSpecNumbers.values).contains(i)) {
+        val specId = orderedSpecs(i).id
+        nonAlertHandlerCases = nonAlertHandlerCases :+ st"""case ${GumboR2U2Util.cPropertyVariantName(specId)}:
+            |  switch (verdict) {
+            |    case R2U2_VERDICT_TRUE:
+            |      printf("$specId is currently True\n");
+            |      break;
+            |    case R2U2_VERDICT_FALSE:
+            |      printf("$specId is currently False\n");
+            |      break;
+            |    case R2U2_VERDICT_UNKNOWN:
+            |      printf("$specId is currently unknown\n");
+            |      break;
+            |  }
+            |  break;"""
+    }
+    val verdictApi: ST =
+      st"""typedef enum {
+          |  ${(propertyVariants, "\n")}
+          |} r2u2_property_t;
+          |
+          |typedef enum {
+          |  R2U2_VERDICT_UNKNOWN,
+          |  R2U2_VERDICT_FALSE,
+          |  R2U2_VERDICT_TRUE
+          |} r2u2_verdict_status_t;
+          |
+          |void handle_r2u2_verdict(
+          |    r2u2_property_t property,
+          |    r2u2_verdict_status_t verdict);"""
+
+    val verdictHandlerMarker = Marker.createSlashMarker(CComponentPlugin.MarkerR2U2VerdictHandler)
+    val verdictHandler: ST =
+      st"""void handle_r2u2_verdict(
+          |    r2u2_property_t property,
+          |    r2u2_verdict_status_t verdict) {
+          |  ${verdictHandlerMarker.beginMarker}
+          |  // Optional implementation placeholder for handling R2U2 verdicts.
+          |  switch (property) {
+          |    ${(nonAlertHandlerCases, "\n")}
+          |    default:
+          |      break;
+          |  }
+          |  ${verdictHandlerMarker.endMarker}
+          |}"""
 
     val stateDeclarations: ISZ[ST] = for (state <- subclauseInfo.annex.state) yield
       st"extern ${getCTypeName(types.typeMap.get(state.classifier).get)} r2u2_state_${state.name};"
@@ -392,9 +444,7 @@ object GumboCPlugin {
     if (definitions.nonEmpty) {
       monitorItems = monitorItems :+ st"${(definitions, "\n\n")}"
     }
-    if (loggedSpecDefinitions.nonEmpty) {
-      monitorItems = monitorItems :+ loggedSpecDefinitions.get
-    }
+    monitorItems = monitorItems :+ verdictHandler
 
     var preItems: ISZ[ST] = ISZ()
     if (preSnapshots.nonEmpty) {
@@ -416,7 +466,7 @@ object GumboCPlugin {
       requiresR2U2 = T,
       r2u2SpecDef = Some(specs),
       inputGets = inputGets,
-      r2u2HeaderItems = stateDeclarations,
+      r2u2HeaderItems = stateDeclarations :+ verdictApi,
       r2u2MonitorItems = monitorItems,
       r2u2PreItems = preItems,
       r2u2PostItems = postItems,

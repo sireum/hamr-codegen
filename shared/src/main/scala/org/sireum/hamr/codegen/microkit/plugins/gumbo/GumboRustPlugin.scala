@@ -996,11 +996,67 @@ object GumboRustPlugin {
 
     if (postItems.nonEmpty) { postItems = postItems :+ RAST.BodyItemST(st"") }
     postItems = postItems :+ RAST.BodyItemST(st"r2u2_core::monitor_step(&mut r2u2_monitor.monitor);")
-    val (loggedSpecsConstOpt, outputItems) = GumboR2U2Util.processRustOutputs(
+    val orderedSpecs = specs.ftspecs ++ specs.ptspecs
+    val outputItems = GumboR2U2Util.processRustOutputs(
       thread = thread,
-      orderedSpecs = specs.ftspecs ++ specs.ptspecs,
+      orderedSpecs = orderedSpecs,
       alerts = subclauseInfo.annex.monitor.get.alerts)
     postItems = postItems ++ outputItems
+
+    val propertyVariants: ISZ[ST] = for (spec <- orderedSpecs) yield st"${spec.id},"
+    val alertSpecNumbers = GumboR2U2Util.getAlertSpecNumbers(
+      orderedSpecs, subclauseInfo.annex.monitor.get.alerts)
+    var nonAlertHandlerCases: ISZ[ST] = ISZ()
+    for (i <- 0 until orderedSpecs.size
+         if !ops.ISZOps(alertSpecNumbers.values).contains(i)) {
+        val specId = orderedSpecs(i).id
+        nonAlertHandlerCases = nonAlertHandlerCases :+ st"""R2U2Property::$specId => {
+            |  match verdict {
+            |    Some(true) => log_info("$specId is currently True"),
+            |    Some(false) => log_info("$specId is currently False"),
+            |    None => log_info("$specId is currently unknown"),
+            |  }
+            |},"""
+    }
+    val threadId = MicrokitUtil.getComponentIdPath(thread)
+    val verdictHandlerMarker = Marker.createSlashMarker(CRustComponentPlugin.MarkerR2U2VerdictHandler)
+    val verdictHandler = fn(
+      sig = fn.sig(
+        ident = RAST.IdentString("handle_r2u2_verdict"),
+        fnDecl = fn.sig.fnDecl(
+          inputs = fn.sig.fnDecl.inputs ++ ISZ[RAST.Param](
+            RAST.ParamFixMe(st"property: R2U2Property"),
+            RAST.ParamFixMe(st"verdict: Option<bool>")),
+          outputs = RAST.FnRetTyDefault())),
+      comments = ISZ(),
+      attributes = ISZ(),
+      visibility = RAST.Visibility.Public,
+      meta = ISZ(),
+      verusAttributeSyntax = F,
+      contract = Some(RAST.FnContract(
+        optRequiresMarker = None(),
+        requires = ISZ(),
+        optEnsuresMarker = None(),
+        ensures = getAlertEnsures(subclauseInfo))),
+      body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
+        st"""${verdictHandlerMarker.beginMarker}
+            |// Optional implementation placeholder for handling R2U2 verdicts.
+            |match property {
+            |  ${(nonAlertHandlerCases, "\n")}
+            |  _ => {}
+            |}
+            |${verdictHandlerMarker.endMarker}""")))))
+    val monitorApiItems = RAST.ItemST(
+      st"""#[allow(non_camel_case_types)]
+          |pub enum R2U2Property {
+          |  ${(propertyVariants, "\n")}
+          |}
+          |
+          |verus! {
+          |  impl $threadId {
+          |    ${verdictHandler.prettyST}
+          |  }
+          |}""")
 
     var preInputs: ISZ[RAST.Param] = ISZ()
     for (input <- fn.sig.fnDecl.inputs) {
@@ -1040,10 +1096,7 @@ object GumboRustPlugin {
       contract = None(),
       body = Some(RAST.MethodBody(postItems)))
 
-    val monitorMethods: ISZ[RAST.Item] = loggedSpecsConstOpt match {
-      case Some(loggedSpecsConst) => ISZ(loggedSpecsConst, initializeFn, preFn, postFn)
-      case _ => ISZ(initializeFn, preFn, postFn)
-    }
+    val monitorMethods: ISZ[RAST.Item] = ISZ(monitorApiItems, initializeFn, preFn, postFn)
       
     var timeTriggered: RAST.FnImpl = fn
     if (inputGets.nonEmpty) {
