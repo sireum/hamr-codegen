@@ -1047,12 +1047,12 @@ object GumboRustPlugin {
             |}
             |${verdictHandlerMarker.endMarker}""")))))
     val monitorApiItems = RAST.ItemST(
-      st"""#[allow(non_camel_case_types)]
-          |pub enum R2U2Property {
-          |  ${(propertyVariants, "\n")}
-          |}
+      st"""verus! {
+          |  #[allow(non_camel_case_types)]
+          |  pub enum R2U2Property {
+          |    ${(propertyVariants, "\n")}
+          |  }
           |
-          |verus! {
           |  impl $threadId {
           |    ${verdictHandler.prettyST}
           |  }
