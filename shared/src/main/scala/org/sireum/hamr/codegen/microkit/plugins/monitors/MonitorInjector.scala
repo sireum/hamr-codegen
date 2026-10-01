@@ -24,6 +24,8 @@ object MonitorInjector {
   // suppressed for synthetic threads). This registry maps that bogus region name to the
   // consumer's existing region name so the monitor plugins can re-key the MemoryMap when
   // they assemble their system-description variants (see rekeyObservedUnconnectedInputMaps).
+  // Unconnected OUTPUT ports are registered here too, keyed the same way to the producer's
+  // own region.
   val KEY_ObservedUnconnectedInputRegions: String = "KEY_MonitorObservedUnconnectedInputRegions"
 
   @strictpure def getObservedUnconnectedInputRegions(store: Store): Map[String, String] =
@@ -268,6 +270,37 @@ object MonitorInjector {
         localStore = addObservedUnconnectedInputRegion(
           monitorPortRegionName = portRegionName(monitorThreadPortPath, queueSize),
           observedRegionName = portRegionName(p.path, queueSize),
+          store = localStore)
+      }
+    }
+
+    // Observe UNCONNECTED output ports the same way: an output with no outgoing connection
+    // still has its own region -- a depth-1 queue the producer writes (see
+    // ConnectionUtil.processOutPort with no receivers) -- and a contract may read it (e.g.
+    // MustSend/NoSend on a port nothing consumes).  The monitor maps that region.  The
+    // queue depth is always 1 here, whatever the port's Queue_Size says, so no Queue_Size
+    // property is copied.
+    for (t <- symbolTable.getThreads() if !StoreUtil.isSynthetic(t.path, localStore)) {
+      for (p <- t.getPorts()
+           if p.direction == ir.Direction.Out &&
+             !symbolTable.outConnections.contains(p.path) &&
+             !StoreUtil.isSynthetic(p.path, localStore)) {
+
+        val monitorPortName: String = s"${MicrokitUtil.getComponentIdPath(t)}_${p.identifier}"
+        val monitorThreadPortPath: ISZ[String] = monitorThreadPath :+ monitorPortName
+        val observedFeatureEnd: ir.FeatureEnd = p.feature
+
+        monitorThreadFeatures = monitorThreadFeatures :+ ir.FeatureEnd(
+          identifier = ir.Name(name = monitorThreadPortPath, pos = None()),
+          direction = ir.Direction.In,
+          category = observedFeatureEnd.category,
+          classifier = observedFeatureEnd.classifier,
+          properties = ISZ(),
+          uriFrag = "")
+
+        localStore = addObservedUnconnectedInputRegion(
+          monitorPortRegionName = portRegionName(monitorThreadPortPath, 1),
+          observedRegionName = portRegionName(p.path, 1),
           store = localStore)
       }
     }

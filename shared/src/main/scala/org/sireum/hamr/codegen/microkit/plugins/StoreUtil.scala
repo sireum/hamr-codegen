@@ -3,6 +3,8 @@ package org.sireum.hamr.codegen.microkit.plugins
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{ISZValue, IdPath, MapValue, Store}
+import org.sireum.hamr.codegen.common.symbols._
+import org.sireum.hamr.ir
 import org.sireum.hamr.codegen.microkit.util._
 
 // Per-component code-generation policy (orthogonal to element provenance, which
@@ -54,6 +56,75 @@ object StoreUtil {
   @strictpure def addSyntheticElement(id: IdPath, store: Store): Store = {
     val pluginGenerated: ISZ[IdPath] = store.getOrElse(KEY_SyntheticElement, ISZValue[IdPath](ISZ())).asInstanceOf[ISZValue[IdPath]].elements
     store + KEY_SyntheticElement ~> ISZValue(pluginGenerated :+ id)
+  }
+
+  // The symbol table as the model was written: synthetic components (injected monitors,
+  // the test controller), synthetic ports (e.g. the sv_ state-variable mirrors) and every
+  // connection touching one are removed. For consumers that reason about the model rather
+  // than the built image, e.g. the system VC generator.
+  @pure def modelSymbolTable(symbolTable: SymbolTable, store: Store): SymbolTable = {
+    if (getSyntheticElements(store).isEmpty) {
+      return symbolTable
+    }
+    // A synthetic thread port (e.g. an sv_ mirror) reaches the process boundary through a
+    // same-named process port and a delegation; only the thread port is registered, so its
+    // process twin is derived: <process> :+ <port name>.
+    var processTwins: Set[IdPath] = Set.empty
+    for (sp <- getSyntheticElements(store) if sp.size >= 3) {
+      // only a port of a thread has a process twin (a synthetic thread itself has none)
+      symbolTable.componentMap.get(ops.ISZOps(sp).dropRight(1)) match {
+        case Some(_: AadlThread) =>
+          processTwins = processTwins + (ops.ISZOps(sp).dropRight(2) :+ sp(sp.size - 1))
+        case _ =>
+      }
+    }
+    @strictpure def isSyntheticFeature(path: IdPath): B =
+      isSynthetic(path, store) || processTwins.contains(path)
+    @strictpure def keepEnd(e: ir.EndPoint): B =
+      !isSynthetic(e.component.name, store) && (e.feature.isEmpty || !isSyntheticFeature(e.feature.get.name))
+    @strictpure def keepConn(c: ir.ConnectionInstance): B = keepEnd(c.src) && keepEnd(c.dst)
+    @strictpure def keepFeature(path: IdPath): B =
+      !isSyntheticFeature(path) && !isSynthetic(ops.ISZOps(path).dropRight(1), store)
+    @strictpure def keepComp(c: AadlComponent): B = !isSynthetic(c.path, store)
+    // the whole tree below c, so a walk from the root sees the same model as componentMap
+    def prune(c: AadlComponent): AadlComponent = {
+      val subs: ISZ[AadlComponent] = for (sc <- c.subComponents if keepComp(sc)) yield prune(sc)
+      val features: ISZ[AadlFeature] = c.features.filter((f: AadlFeature) => keepFeature(f.path))
+      c match {
+        case t: AadlThread =>
+          return t(features = features, subComponents = subs,
+            connectionInstances = t.connectionInstances.filter(keepConn _))
+        case p: AadlProcess =>
+          return p(features = features, subComponents = subs,
+            connectionInstances = p.connectionInstances.filter(keepConn _))
+        case s: AadlSystem =>
+          return s(features = features, subComponents = subs,
+            connectionInstances = s.connectionInstances.filter(keepConn _))
+        case _ => return c
+      }
+    }
+    @strictpure def keepPortConn(c: AadlConnection): B =
+      c match {
+        case pc: AadlPortConnection => keepConn(pc.connectionInstance)
+        case _ => T
+      }
+    val rootSystem: AadlSystem = prune(symbolTable.rootSystem).asInstanceOf[AadlSystem]
+    val componentMap: HashSMap[IdPath, AadlComponent] = HashSMap.empty[IdPath, AadlComponent] ++
+      (for (e <- symbolTable.componentMap.entries if !isSynthetic(e._1, store)) yield (e._1, prune(e._2)))
+    val featureMap: HashSMap[IdPath, AadlFeature] = HashSMap.empty[IdPath, AadlFeature] ++
+      symbolTable.featureMap.entries.filter((e: (IdPath, AadlFeature)) => keepFeature(e._1))
+    val inConnections: HashSMap[IdPath, ISZ[ir.ConnectionInstance]] = HashSMap.empty[IdPath, ISZ[ir.ConnectionInstance]] ++
+      (for (e <- symbolTable.inConnections.entries if keepFeature(e._1)) yield (e._1, e._2.filter(keepConn _)))
+    val outConnections: HashSMap[IdPath, ISZ[ir.ConnectionInstance]] = HashSMap.empty[IdPath, ISZ[ir.ConnectionInstance]] ++
+      (for (e <- symbolTable.outConnections.entries if keepFeature(e._1)) yield (e._1, e._2.filter(keepConn _)))
+    return symbolTable(
+      rootSystem = rootSystem,
+      componentMap = componentMap,
+      featureMap = featureMap,
+      aadlConnections = symbolTable.aadlConnections.filter(keepPortConn _),
+      connections = symbolTable.connections.filter(keepConn _),
+      inConnections = inConnections,
+      outConnections = outConnections)
   }
 
 

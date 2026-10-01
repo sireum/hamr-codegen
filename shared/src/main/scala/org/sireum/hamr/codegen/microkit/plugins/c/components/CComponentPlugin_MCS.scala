@@ -108,9 +108,14 @@ import org.sireum.message.Reporter
         case _ => defaultComputeExecutionTime
       }
 
-      usedBudgetInMilli = usedBudgetInMilli + computeExecutionTimeinMilli
-
       val isUserPartition = !StoreUtil.isSynthetic(t.path, localStore)
+
+      // An injected thread (a runtime monitor, the test controller) is not part of the image
+      // this budget is about: the plugin that injected it rebuilds "normal" without its slot,
+      // and schedules its own variant.  Counting it would reject a model that fits its frame.
+      if (isUserPartition) {
+        usedBudgetInMilli = usedBudgetInMilli + computeExecutionTimeinMilli
+      }
 
       xmlSchedulingDomains = xmlSchedulingDomains :+
         SchedulingDomain(id = schedulingDomain, componentName = threadMonId.render, length = computeExecutionTimeinMilli * 1_000_000, isUserPartition = isUserPartition)

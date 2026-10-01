@@ -13,6 +13,8 @@ import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.plugins.{MicrokitPlugin, StoreUtil}
 import org.sireum.hamr.codegen.microkit.plugins.rust.types.CRustTypePlugin
+import org.sireum.hamr.codegen.microkit.plugins.testing.TestSchedulerPlugin
+import org.sireum.hamr.codegen.microkit.types.MicrokitTypeUtil
 import org.sireum.hamr.codegen.microkit.util.{MicrokitUtil, RustUtil}
 import org.sireum.hamr.ir
 import org.sireum.hamr.ir.{Aadl, GclBodyMethod, GclComposition, GclSpecMethod}
@@ -22,18 +24,41 @@ import org.sireum.message.Reporter
 // system-assertion checks, generated once into crates/observers as two layers --
 // ComponentContracts and one SysAssert_<id> per composition -- generic over SystemView
 // (how a consumer reads ports and state variables) and ViolationSink (what it does with
-// a violation).  The gumbo and sys-assert monitor PDs are thin wrappers over them; the
-// test controller will be another consumer.
+// a violation).  The gumbo and sys-assert monitor PDs are thin wrappers over them, and the
+// test controller hosts them too (step 4).
 //
 // Threads are identified by the generated `Thread` enum rather than by channel id:
 // channel ids belong to an MSD variant, and the crate is shared by all of them.  Each
 // consumer maps its own channels onto Thread.
 
+/** A composition's alias of a CONNECTED input port `reader.port`: the system assertions read
+  * what `reader` received there -- latched at its dispatch -- not what the producer last sent,
+  * which on a feedback edge is the following frame's.  `underlying` is the getter of the
+  * region the reader reads through (named after the producer's output). */
+@datatype class ReceivedGetter(val name: String,
+                               val reader: String,
+                               val underlying: String,
+                               val isEvent: B)
+
 @datatype class ContractObserverInfo(val threads: ISZ[String],
                                      val hasComponentLayer: B,
                                      val compositionIds: ISZ[String],
+                                     // the (non-abstract) property ids of each composition, in
+                                     // compositionIds order
+                                     val compositionProperties: ISZ[ISZ[String]],
                                      // (getter name, rust return type): every SystemView method
-                                     val getters: ISZ[(String, String)]) extends StoreValue
+                                     val getters: ISZ[(String, String)],
+                                     // the getters that read an event or event-data port
+                                     val eventGetters: ISZ[String],
+                                     // those of eventGetters that read a pure event port: typed
+                                     // Option<T> like an event-data port, but polled through a
+                                     // monitor API that returns bool
+                                     val pureEventGetters: ISZ[String],
+                                     // aliases of connected inputs, read as the reader received them
+                                     val receivedGetters: ISZ[ReceivedGetter]) extends StoreValue {
+  @strictpure def receivedNames: ISZ[String] = for (g <- receivedGetters) yield g.name
+  @strictpure def hasLayers: B = hasComponentLayer || compositionIds.nonEmpty
+}
 
 object ContractObserverPlugin {
 
@@ -57,20 +82,17 @@ object ContractObserverPlugin {
 
   @strictpure def sysAssertTypeName(compositionId: String): String = s"SysAssert_$compositionId"
 
-  // Generated only when something consumes it: today the gumbo / sys-assert monitor PDs,
-  // which exist under --runtime-monitoring when some thread has GUMBO state variables
-  // (GumboMonitorPlugin's gate).  The test controller becomes the second consumer in
-  // stage 7 step 4, when system testing alone will request it (design D22).
-  @pure def isRequested(options: HamrCli.CodegenOption, symbolTable: SymbolTable): B = {
-    if (!options.runtimeMonitoring) {
-      return F
-    }
-    for (t <- symbolTable.getThreads()) {
-      if (stateVarsOf(t.path, symbolTable).nonEmpty) {
-        return T
-      }
-    }
-    return F
+  // Generated only when something consumes it: the gumbo / sys-assert monitor PDs, or the
+  // test controller.  Ask whether a consumer was actually injected rather than re-deriving its
+  // gate: a monitor needs --runtime-monitoring, GUMBO state variables AND the MCS user-land
+  // scheduler, so testing only the first two gave a domain-scheduled model an observers crate
+  // nothing used.  Model transforms run before this plugin, so the consumers' keys are already
+  // in the store.  System testing alone requests it (design D22); the test scheduler is
+  // MCS-only too.
+  @pure def isRequested(store: Store): B = {
+    return DefaultGumboMonitorPlugin().haveHandledModelTransform(store) ||
+      DefaultGumboSysAssertMonitorPlugin().haveHandledModelTransform(store) ||
+      TestSchedulerPlugin.hasTransformed(store)
   }
 
   // The monitor-API getter a contract parameter is read through, e.g. get_<threadId>_sv_<var>.
@@ -130,6 +152,10 @@ object ContractObserverPlugin {
       yield MicrokitUtil.getComponentIdPath(t)
   }
 
+  // How a monitor's timeTriggered starts each run: the schedule and the timeslice it runs
+  // in let the adapter tell when a new frame has started.
+  val beginMonitorRunCall: String = "begin_monitor_run(api);"
+
   // Module-level items for a monitor PD's app module: the channel -> Thread map, the
   // SystemView adapter over the monitor's API, and the sink that logs exactly what the
   // monitors logged before the checks moved into crates/observers.  Kept in the monitor's
@@ -139,8 +165,240 @@ object ContractObserverPlugin {
                                 info: ContractObserverInfo): ST = {
     val threadArms: ISZ[ST] = for (t <- info.threads) yield
       st"${t}_MON => Some($crateName::Thread::$t),"
-    val getterImpls: ISZ[ST] = for (g <- info.getters) yield
-      st"fn ${g._1}(&mut self) -> ${g._2} { self.api.${g._1}() }"
+    // The monitor's API dequeues on every call, through one cursor per port.
+    //  - Data ports and state variables: the first read of a run is cached for the rest of
+    //    it -- within a run the checks describe one instant.
+    //  - Event ports: each reader (a thread whose check reads the port, or the system layer)
+    //    sees an event once, at its first check after the event arrived -- the semantics the
+    //    thread itself has.  One cursor cannot give that: the producer's check would consume
+    //    the event before a consumer's check in a later run.  So every event port is polled
+    //    into an event count at the start of each run, and each thread keeps the count it
+    //    last saw (EventTrack).  The poll drains the port -- a region deeper than one holds
+    //    every element sent since the last run -- and keeps the latest, as the controller
+    //    does; taking one per run would leave the rest to arrive, as new events, later.
+    //  - The system layer reads an event port as what its producer's latest dispatch in the
+    //    current frame sent -- nothing, if it sent nothing -- whichever of its assertions reads
+    //    it, at whichever place, as the test controller does.  Polling at the start of every
+    //    run stamps an event with the frame it arrived in; producer_completed records a
+    //    dispatch that sent nothing; the frame advances when the composition's frame ends
+    //    (frame_ended -- a monitor checks one composition).
+    val readers: Z = info.threads.size + 1
+    var getterImpls: ISZ[ST] = ISZ()
+    var cacheFields: ISZ[ST] = ISZ()
+    var cacheInits: ISZ[ST] = ISZ()
+    var tracks: ISZ[ST] = ISZ()
+    var polls: ISZ[ST] = ISZ()
+    var initMarks: ISZ[ST] = ISZ()
+    var dispatchNotes: Map[String, ISZ[ST]] = Map.empty
+    var completionNotes: Map[String, ISZ[ST]] = Map.empty
+    val receivedNames: ISZ[String] = info.receivedNames
+    for (g <- info.getters if !ops.ISZOps(receivedNames).contains(g._1)) {
+      val name = g._1
+      val ty = g._2
+      if (ops.ISZOps(info.eventGetters).contains(name)) {
+        // Every event getter is Option<T> (a pure event port's T is its empty payload, as
+        // GUMBOX reads it); a pure event port's monitor API returns bool, so it is polled as a
+        // flag.
+        val isFlag: B = ops.ISZOps(info.pureEventGetters).contains(name)
+        val inner: String = ops.StringOps(ty).substring(7, ty.size - 1) // Option<T> -> T
+        polls = polls :+ (
+          if (isFlag)
+            st"""while api.$name() {
+                |  EV_$name.seq += 1;
+                |  EV_$name.value = Some(Default::default());
+                |  EV_$name.sys_frame = Some(FRAME);
+                |  EV_$name.sys_value = Some(Default::default());
+                |}"""
+          else
+            st"""while let Some(v) = api.$name() {
+                |  EV_$name.seq += 1;
+                |  EV_$name.value = Some(v.clone());
+                |  EV_$name.sys_frame = Some(FRAME);
+                |  EV_$name.sys_value = Some(v);
+                |}""")
+        // the thread whose output this is (the getter is named after it): what it sent while
+        // initializing is not its first dispatch's output
+        var producer: String = ""
+        for (t <- info.threads if ops.StringOps(name).startsWith(s"get_${t}_") && t.size > producer.size) {
+          producer = t
+        }
+        if (producer.size > 0) {
+          initMarks = initMarks :+ st"EV_$name.seen[$crateName::Thread::$producer as usize] = EV_$name.seq;"
+          dispatchNotes = dispatchNotes + producer ~> (dispatchNotes.getOrElse(producer, ISZ()) :+
+            st"EV_$name.dispatch_seq = EV_$name.seq;")
+          completionNotes = completionNotes + producer ~> (completionNotes.getOrElse(producer, ISZ()) :+
+            st"""if EV_$name.seq == EV_$name.dispatch_seq {
+                |  EV_$name.sys_frame = Some(FRAME);
+                |  EV_$name.sys_value = None;
+                |}""")
+        }
+        val result: ST = st"value"
+        tracks = tracks :+ st"static mut EV_$name: EventTrack<$inner> = EventTrack { seq: 0, dispatch_seq: 0, value: None, sys_frame: None, sys_value: None, seen: [0; READERS] };"
+        cacheFields = cacheFields :+ st"$name: [Option<$ty>; READERS],"
+        cacheInits = cacheInits :+ st"$name: [None; READERS],"
+        getterImpls = getterImpls :+
+          st"""fn $name(&mut self) -> $ty {
+              |  let r = reader_index(self.focus);
+              |  unsafe {
+              |    if let Some(v) = &VIEW_CACHE.$name[r] {
+              |      return v.clone();
+              |    }
+              |    let (present, value) = if r == READERS - 1 {
+              |      let p = EV_$name.sys_frame == Some(FRAME) && EV_$name.sys_value.is_some();
+              |      (p, if p { EV_$name.sys_value.clone() } else { None })
+              |    } else {
+              |      let p = EV_$name.seen[r] < EV_$name.seq;
+              |      (p, if p { EV_$name.value.clone() } else { None })
+              |    };
+              |    let _ = (&present, &value);
+              |    EV_$name.seen[r] = EV_$name.seq;
+              |    let v: $ty = $result;
+              |    VIEW_CACHE.$name[r] = Some(v.clone());
+              |    v
+              |  }
+              |}"""
+      } else {
+        cacheFields = cacheFields :+ st"$name: Option<$ty>,"
+        cacheInits = cacheInits :+ st"$name: None,"
+        getterImpls = getterImpls :+
+          st"""fn $name(&mut self) -> $ty {
+              |  unsafe {
+              |    if let Some(v) = &VIEW_CACHE.$name {
+              |      return v.clone();
+              |    }
+              |  }
+              |  let v = self.api.$name();
+              |  unsafe { VIEW_CACHE.$name = Some(v.clone()); }
+              |  v
+              |}"""
+      }
+    }
+    // Aliases of connected inputs: what the reader received, latched just before its dispatch
+    // through the reader's own view -- the same read its own checks make in that run -- and,
+    // for an event, only for the frame it was received in.
+    var recvStatics: ISZ[ST] = ISZ()
+    var recvArms: Map[String, ISZ[ST]] = Map.empty
+    for (rg <- info.receivedGetters) {
+      val ty: String = info.getters.filter((g: (String, String)) => g._1 == rg.name)(0)._2
+      recvStatics = recvStatics :+ st"static mut RECV_${rg.name}: Option<(u32, $ty)> = None;"
+      val stamp: String = if (rg.isEvent) "FRAME" else "0"
+      recvArms = recvArms + rg.reader ~> (recvArms.getOrElse(rg.reader, ISZ()) :+
+        st"""{
+            |  let v = $crateName::SystemView::${rg.underlying}(view);
+            |  unsafe { RECV_${rg.name} = Some(($stamp, v)); }
+            |}""")
+      val result: ST =
+        if (!rg.isEvent)
+          st"""match &RECV_${rg.name} {
+              |  Some((_, v)) => v.clone(),
+              |  None => Default::default(),
+              |}"""
+        else
+          st"""match &RECV_${rg.name} {
+              |  Some((f, v)) if *f == FRAME => v.clone(),
+              |  _ => None,
+              |}"""
+      getterImpls = getterImpls :+
+        st"""fn ${rg.name}(&mut self) -> $ty {
+            |  unsafe {
+            |    $result
+            |  }
+            |}"""
+    }
+    val latchArms: ISZ[ST] =
+      for (e <- recvArms.entries) yield
+        st"""$crateName::Thread::${e._1} => {
+            |  view.focus = Some($crateName::Thread::${e._1});
+            |  ${(e._2, "\n")}
+            |}"""
+    val latchBody: ST =
+      if (latchArms.isEmpty) st"let _ = (t, view); // no alias of a connected input"
+      else
+        st"""let focus = view.focus;
+            |match t {
+            |  ${(latchArms :+ st"_ => {}", "\n")}
+            |}
+            |view.focus = focus;"""
+
+    def threadFn(fnName: String, doc: String, arms: Map[String, ISZ[ST]]): ST = {
+      val armSts: ISZ[ST] = for (e <- arms.entries) yield
+        st"""$crateName::Thread::${e._1} => {
+            |  ${(e._2, "\n")}
+            |}"""
+      val body: ST =
+        if (arms.isEmpty) st"let _ = t;"
+        else
+          st"""unsafe {
+              |  match t {
+              |    ${(armSts :+ st"_ => {}", "\n")}
+              |  }
+              |}"""
+      return (
+        st"""/// $doc
+            |pub fn $fnName(t: $crateName::Thread) {
+            |  $body
+            |}""")
+    }
+    val dispatchFns: ST = threadFn("note_dispatch",
+      "`t` is about to be dispatched: what its outputs carry from here on is its next dispatch's.",
+      dispatchNotes)
+    val completionFns: ST = threadFn("producer_completed",
+      "`t` has completed: an output it sent nothing on since its dispatch carries nothing this frame.",
+      completionNotes)
+
+    val initBody: ST =
+      if (initMarks.isEmpty) st"// no thread's own event output is read"
+      else
+        st"""unsafe {
+            |  ${(initMarks, "\n")}
+            |}"""
+    val runStart: ST =
+      if (polls.isEmpty) st"let _ = api; // no event port is read"
+      else st"${(polls, "\n")}"
+    // The system reader's reads cached in this run describe the frame that just ended; the
+    // START checks that follow in the same run must read afresh.
+    val sysCacheResets: ISZ[ST] =
+      for (g <- info.getters if ops.ISZOps(info.eventGetters).contains(g._1)) yield st"VIEW_CACHE.${g._1}[READERS - 1] = None;"
+    val frameEndedFns: ISZ[ST] =
+      if (tracks.isEmpty) ISZ()
+      else ISZ(
+        st"""fn frame_ended(&mut self, _composition: usize) {
+            |  unsafe {
+            |    FRAME = FRAME.wrapping_add(1);
+            |    ${(sysCacheResets, "\n")}
+            |  }
+            |}""")
+    val eventTrackDecls: ST =
+      if (tracks.isEmpty) st""
+      else
+        st"""
+            |/// One reader per thread, plus the system layer.
+            |const READERS: usize = $readers;
+            |
+            |fn reader_index(focus: Option<$crateName::Thread>) -> usize {
+            |  match focus {
+            |    Some(t) => t as usize,
+            |    None => READERS - 1,
+            |  }
+            |}
+            |
+            |/// An event port's events so far and the latest, the count each reader last saw, and,
+            |/// for the system layer, what the producer's latest dispatch sent and in which frame.
+            |struct EventTrack<T> {
+            |  seq: u32,
+            |  /// seq when the producer was last dispatched
+            |  dispatch_seq: u32,
+            |  value: Option<T>,
+            |  sys_frame: Option<u32>,
+            |  sys_value: Option<T>,
+            |  seen: [u32; READERS],
+            |}
+            |
+            |/// The system layer's frame, counted from the first.
+            |static mut FRAME: u32 = 0;
+            |
+            |${(tracks, "\n")}
+            |"""
     return (
       st"""// Maps a schedule channel to the thread it dispatches.  Channel ids belong to this
           |// variant's system description; the checks in crates/$crateName identify threads
@@ -152,13 +410,57 @@ object ContractObserverPlugin {
           |  }
           |}
           |
+          |$eventTrackDecls
+          |// What this monitor run has read: one value per getter, and per reader for an event
+          |// port.  Cleared by begin_monitor_run at the start of every run.
+          |struct ViewCache {
+          |  ${(cacheFields, "\n")}
+          |}
+          |
+          |static mut VIEW_CACHE: ViewCache = ViewCache {
+          |  ${(cacheInits, "\n")}
+          |};
+          |
+          |pub fn begin_monitor_run<API: ${monitorThreadId}_Full_Api>(api: &mut $appApiType<API>) {
+          |  unsafe {
+          |    $runStart
+          |    VIEW_CACHE = ViewCache {
+          |      ${(cacheInits, "\n")}
+          |    };
+          |  }
+          |}
+          |
           |// The contract checks read ports and state variables through this monitor's API.
           |pub struct MonitorView<'a, API: ${monitorThreadId}_Full_Api> {
           |  pub api: &'a mut $appApiType<API>,
+          |  /// the thread whose check is reading, or None for the system layer
+          |  pub focus: Option<$crateName::Thread>,
+          |}
+          |
+          |${(recvStatics, "\n")}
+          |
+          |/// `t` is about to be dispatched: latch what it receives on each connected input a
+          |/// composition aliases, for the system assertions (see ReceivedGetter).
+          |pub fn latch_received<'a, API: ${monitorThreadId}_Full_Api>(t: $crateName::Thread, view: &mut MonitorView<'a, API>) {
+          |  $latchBody
+          |}
+          |
+          |$dispatchFns
+          |
+          |$completionFns
+          |
+          |/// The initialization checks are done: what a thread sent while initializing that they
+          |/// did not read is not its first dispatch's output.
+          |pub fn init_checked() {
+          |  $initBody
           |}
           |
           |impl<'a, API: ${monitorThreadId}_Full_Api> $crateName::SystemView for MonitorView<'a, API> {
-          |  ${(getterImpls, "\n")}
+          |  fn focus(&mut self, t: Option<$crateName::Thread>) {
+          |    self.focus = t;
+          |  }
+          |
+          |  ${((frameEndedFns ++ getterImpls), "\n\n")}
           |}
           |
           |// Reports a violation the way the monitors always have: as log lines.
@@ -186,6 +488,8 @@ object ContractObserverPlugin {
           |      $crateName::Event::CepPostExcused { thread } => {
           |        log::warn!("{} post check skipped: assumption not met", thread);
           |      }
+          |      // never raised here: the monitor's reads are never "missing"
+          |      $crateName::Event::CheckSkipped { .. } => {}
           |      $crateName::Event::SysAssertViolation { property, point } => {
           |        log::warn!("*** SYS ASSERT VIOLATION: property {}, {} ***", property, point);
           |      }
@@ -279,7 +583,7 @@ object ContractObserverPlugin {
       options.platform == HamrCli.CodegenHamrPlatform.Microkit &&
         !isDisabled(store) &&
         !reporter.hasError &&
-        ContractObserverPlugin.isRequested(options, symbolTable) &&
+        ContractObserverPlugin.isRequested(store) &&
         CRustTypePlugin.hasCRustTypeProvider(store) &&
         GumboXRustPlugin.getGumboXContributions(store).nonEmpty &&
         !ContractObserverPlugin.hasObservers(store))
@@ -307,6 +611,38 @@ object ContractObserverPlugin {
       }
     }
 
+    // the getters that read an event or event-data port (see monitorAdapterItems)
+    var eventGetterNames: ISZ[String] = ISZ()
+    var pureEventGetterNames: ISZ[String] = ISZ()
+    def notePureEvent(name: String): Unit = {
+      if (!ops.ISZOps(pureEventGetterNames).contains(name)) {
+        pureEventGetterNames = pureEventGetterNames :+ name
+      }
+    }
+    // aliases of connected inputs (see ReceivedGetter)
+    var receivedGetters: ISZ[ReceivedGetter] = ISZ()
+    def noteEventGetter(name: String): Unit = {
+      if (!ops.ISZOps(eventGetterNames).contains(name)) {
+        eventGetterNames = eventGetterNames :+ name
+      }
+    }
+
+    // Event ports whose queue holds more than one element (TestScheduler-design.md, "Event
+    // ports").  A consumer's checks read one element per check -- the controller the next
+    // one through the reader's own cursor, a monitor the latest it polled -- which is what
+    // the thread sees only if it consumes one per dispatch.  A producer's own check takes
+    // what it sent last in both, so only the consuming side is warned.  Once per port.
+    var deepQueuesWarned: Set[ISZ[String]] = Set.empty
+    def noteDeepQueue(threadId: String, port: AadlPort): Unit = {
+      port match {
+        case e: AadlFeatureEvent if port.direction == ir.Direction.In && e.queueSize > 1 && !deepQueuesWarned.contains(port.path) =>
+          deepQueuesWarned = deepQueuesWarned + port.path
+          reporter.warn(port.feature.identifier.pos, "ContractObserverPlugin",
+            s"The run-time contract checks of $threadId read event port ${port.identifier}, whose queue holds ${e.queueSize} elements. They see one element per dispatch, which matches the thread only if it consumes exactly one per dispatch; a thread that drains the queue, or leaves elements queued, may be checked against an element other than the one it used.")
+        case _ =>
+      }
+    }
+
     def add(path: String, content: ST): Unit = {
       resources = resources :+ ResourceUtil.createResource(path = s"$crateDir/$path", content = content, overwrite = T)
     }
@@ -315,18 +651,20 @@ object ContractObserverPlugin {
     // Component layer: GUMBOX modules, containers, and ComponentContracts
     // ---------------------------------------------------------------------------------
 
-    val hasComponentLayer: B = gumboxContribs.componentContributions.nonEmpty
+    // every thread with checkable contracts, Rust or C
+    val hasComponentLayer: B = gumboxContribs.allComponentContributions.nonEmpty
     var gumboxModDecls: ISZ[String] = ISZ()
 
     if (hasComponentLayer) {
       var fields: ISZ[ST] = ISZ()
       var fieldInits: ISZ[ST] = ISZ()
+      var forgets: ISZ[ST] = ISZ()
       var initChecks: ISZ[ST] = ISZ()
       var completeArms: ISZ[ST] = ISZ()
       var dispatchArms: ISZ[ST] = ISZ()
       var containerUses: ISZ[ST] = ISZ()
 
-      for (entry <- gumboxContribs.componentContributions.entries) {
+      for (entry <- gumboxContribs.allComponentContributions.entries) {
         val thread = symbolTable.componentMap.get(entry._1).get.asInstanceOf[AadlThread]
         val threadId = MicrokitUtil.getComponentIdPath(thread)
         val contribs = entry._2
@@ -339,6 +677,17 @@ object ContractObserverPlugin {
         def fieldInit(p: GumboXRustUtil.GGParam): ST = {
           val g = ContractObserverPlugin.getterName(p, threadId, dstMap)
           addGetter(g, ContractObserverPlugin.paramType(p))
+          p match {
+            case pp: GumboXRustUtil.GGPortParam =>
+              noteDeepQueue(threadId, pp.port)
+              if (pp.isEvent) {
+                noteEventGetter(g)
+              }
+              if (pp.port.isInstanceOf[AadlEventPort]) {
+                notePureEvent(g)
+              }
+            case _ =>
+          }
           return st"${p.name}: s.$g(),"
         }
 
@@ -349,6 +698,7 @@ object ContractObserverPlugin {
           fields = fields :+ st"pre_$threadId: Option<PreState_$threadId>,"
           fields = fields :+ st"pre_ok_$threadId: bool,"
           fieldInits = fieldInits :+ st"pre_$threadId: None," :+ st"pre_ok_$threadId: true,"
+          forgets = forgets :+ st"self.pre_$threadId = None;"
         }
 
         // IEP_Post: initialization guarantees
@@ -358,10 +708,13 @@ object ContractObserverPlugin {
           val postArgs: ISZ[ST] = for (p <- iepPostParams) yield st"post_$threadId.${p.name}"
           initChecks = initChecks :+
             st"""{
+                |  s.focus(Some(crate::Thread::$threadId));
                 |  let post_$threadId = PostState_$threadId {
                 |    ${(postFieldInits, "\n")}
                 |  };
-                |  if !crate::gumbox::${threadId}_GUMBOX::${GumboXRustUtil.getInitialize_IEP_Post_MethodName}(
+                |  if s.missing() {
+                |    out.report(crate::Event::CheckSkipped { thread: "$threadId", check: "IEP_Post" });
+                |  } else if !crate::gumbox::${threadId}_GUMBOX::${GumboXRustUtil.getInitialize_IEP_Post_MethodName}(
                 |    ${(postArgs, ", ")}) {
                 |    out.report(crate::Event::IepPostViolation { thread: "$threadId", post: &post_$threadId });
                 |  }
@@ -378,10 +731,13 @@ object ContractObserverPlugin {
             st"${if (p.kind == GumboXRustUtil.SymbolKind.StateVarPre || p.isInPort) "pre" else "post"}.${p.name}"
           completeArms = completeArms :+
             st"""crate::Thread::$threadId => {
+                |  s.focus(Some(crate::Thread::$threadId));
                 |  let post = PostState_$threadId {
                 |    ${(postFieldInits, "\n")}
                 |  };
-                |  if let Some(pre) = &self.pre_$threadId {
+                |  if s.missing() {
+                |    out.report(crate::Event::CheckSkipped { thread: "$threadId", check: "CEP_Post" });
+                |  } else if let Some(pre) = &self.pre_$threadId {
                 |    if self.excuse_post_on_failed_pre && !self.pre_ok_$threadId {
                 |      out.report(crate::Event::CepPostExcused { thread: "$threadId" });
                 |    } else if !crate::gumbox::${threadId}_GUMBOX::${GumboXRustUtil.getCompute_CEP_Post_MethodName}(
@@ -416,11 +772,18 @@ object ContractObserverPlugin {
             }
           dispatchArms = dispatchArms :+
             st"""crate::Thread::$threadId => {
+                |  s.focus(Some(crate::Thread::$threadId));
                 |  let pre = PreState_$threadId {
                 |    ${(preFieldInits, "\n")}
                 |  };
-                |  $preCheck
-                |  self.pre_$threadId = Some(pre);
+                |  if s.missing() {
+                |    // no pre-state to hold the completion to
+                |    out.report(crate::Event::CheckSkipped { thread: "$threadId", check: "CEP_Pre" });
+                |    self.pre_$threadId = None;
+                |  } else {
+                |    $preCheck
+                |    self.pre_$threadId = Some(pre);
+                |  }
                 |}"""
         }
       }
@@ -468,6 +831,13 @@ object ContractObserverPlugin {
             |    }
             |  }
             |
+            |  /// Drops every saved pre-state, so each thread's next completion is skipped rather
+            |  /// than checked against a dispatch it no longer describes -- after a dispatch went
+            |  /// unobserved, or a thread overran its slot.
+            |  pub fn forget(&mut self) {
+            |    ${(forgets, "\n")}
+            |  }
+            |
             |  /// `next` is about to be dispatched: save its pre-state and check its CEP_Pre.
             |  pub fn on_dispatch<V: SystemView, S: ViolationSink>(&mut self, next: crate::Thread, s: &mut V, out: &mut S) {
             |    match next {
@@ -492,6 +862,7 @@ object ContractObserverPlugin {
 
     val compositions: ISZ[GclComposition] = VCGenerator.getCompositions(symbolTable)
     var compositionIds: ISZ[String] = ISZ()
+    var compositionProperties: ISZ[ISZ[String]] = ISZ()
 
     if (compositions.nonEmpty) {
       val resolvedAliasMap = GclResolver.getResolvedComponentAliasMap(store)
@@ -503,18 +874,63 @@ object ContractObserverPlugin {
         }
       }
 
-      // the getter a port alias reads, typed as the monitor API's getter returns it
+      // the getter a port alias reads, typed as the monitor API's getter returns it -- except
+      // a pure event port's, which is Option of its empty payload, as a contract reads it.  An
+      // alias of a CONNECTED input reads what the reader received there, latched at its
+      // dispatch (ReceivedGetter): its own getter, get_recv_<reader>_<port>, backed by the
+      // getter of the region the reader reads through, which is named after the producer's
+      // output.  An unconnected input's region is the reader's own, so it is read directly.
       def portGetter(thread: AadlThread, portName: String): String = {
         val threadId = MicrokitUtil.getComponentIdPath(thread)
-        val name = s"get_${threadId}_$portName"
+        val own = s"${threadId}_$portName"
+        var name = s"get_$own"
+        var underlyingOpt: Option[String] = None()
+        for (p <- thread.getPorts() if p.identifier == portName && p.direction == ir.Direction.In) {
+          dstMap.get(p.path) match {
+            case Some(observed) if observed != own =>
+              underlyingOpt = Some(s"get_$observed")
+              name = s"get_recv_$own"
+            case _ =>
+          }
+        }
         for (p <- thread.getPorts() if p.identifier == portName) {
-          p match {
+          val tyOpt: Option[(String, B)] = p match {
             case dp: AadlDataPort =>
-              addGetter(name, crustTypeProvider.getTypeNameProvider(dp.aadlType).qualifiedRustName)
+              Some((crustTypeProvider.getTypeNameProvider(dp.aadlType).qualifiedRustName, F))
             case edp: AadlEventDataPort =>
-              addGetter(name, s"Option<${crustTypeProvider.getTypeNameProvider(edp.aadlType).qualifiedRustName}>")
-            case _: AadlEventPort =>
-              addGetter(name, "bool")
+              noteDeepQueue(threadId, edp)
+              Some((s"Option<${crustTypeProvider.getTypeNameProvider(edp.aadlType).qualifiedRustName}>", T))
+            case ep: AadlEventPort =>
+              noteDeepQueue(threadId, ep)
+              // as a contract reads it (GUMBOX): Option of the empty payload, so a port read by
+              // both a contract and a composition has one getter type
+              Some((s"Option<${crustTypeProvider.getTypeNameProvider(crustTypeProvider.getRepresentativeType(MicrokitTypeUtil.getPortType(ep))).qualifiedRustName}>", T))
+            case _ => None()
+          }
+          tyOpt match {
+            case Some((ty, isEvent)) =>
+              addGetter(name, ty)
+              if (p.isInstanceOf[AadlEventPort]) {
+                notePureEvent(name)
+                underlyingOpt match {
+                  case Some(u) => notePureEvent(u)
+                  case _ =>
+                }
+              }
+              underlyingOpt match {
+                case Some(u) =>
+                  addGetter(u, ty)
+                  if (isEvent) {
+                    noteEventGetter(u)
+                  }
+                  if (!ops.ISZOps(receivedGetters).exists((g: ReceivedGetter) => g.name == name)) {
+                    receivedGetters = receivedGetters :+ ReceivedGetter(name = name, reader = threadId, underlying = u, isEvent = isEvent)
+                  }
+                case _ =>
+                  if (isEvent) {
+                    noteEventGetter(name)
+                  }
+              }
             case _ =>
           }
         }
@@ -535,8 +951,14 @@ object ContractObserverPlugin {
         return name
       }
 
+      var compositionIndex: Z = 0
       for (composition <- compositions) {
+        // this composition's index among the model's, for SystemView::focus_system/frame_ended
+        val compIdx: Z = compositionIndex
+        compositionIndex = compositionIndex + 1
         compositionIds = compositionIds :+ composition.id
+        compositionProperties = compositionProperties :+
+          (for (property <- composition.properties if !property.isAbstract) yield property.id)
         val modName = ContractObserverPlugin.sysAssertModuleName(composition.id)
         val typeName = ContractObserverPlugin.sysAssertTypeName(composition.id)
 
@@ -596,6 +1018,7 @@ object ContractObserverPlugin {
             componentArms = componentArms :+
               st"""crate::Thread::$threadId => {
                   |  self.ready = (self.ready & !${transitions(0)._1}) | ${transitions(0)._2};
+                  |  ${transitions(0)._2}
                   |}"""
           } else {
             var ifChain: ISZ[ST] = ISZ()
@@ -603,11 +1026,14 @@ object ContractObserverPlugin {
               val keyword: String = if (j == z"0") "if" else "} else if"
               ifChain = ifChain :+
                 st"""$keyword self.ready & ${transitions(j)._1} != 0 {
-                    |  self.ready = (self.ready & !${transitions(j)._1}) | ${transitions(j)._2};"""
+                    |  self.ready = (self.ready & !${transitions(j)._1}) | ${transitions(j)._2};
+                    |  ${transitions(j)._2}"""
             }
             componentArms = componentArms :+
               st"""crate::Thread::$threadId => {
                   |  ${(ifChain, "\n")}
+                  |  } else {
+                  |    0
                   |  }
                   |}"""
           }
@@ -645,6 +1071,7 @@ object ContractObserverPlugin {
         // (property, point) -- the coordinates of the proof crate's VC names.  Abstract
         // bases are not instantiated (D9).
         var assertionChecks: ISZ[ST] = ISZ()
+        var renderedChecks: ISZ[String] = ISZ()
         for (property <- composition.properties if !property.isAbstract) {
           val decoration = ScheduleNextRel.decorate(nextRel, property, reporter)
           for (e <- decoration.entries) {
@@ -663,12 +1090,65 @@ object ContractObserverPlugin {
               aadlTypes = types,
               store = store,
               reporter = reporter)
+            renderedChecks = renderedChecks :+ rustExp.render
             assertionChecks = assertionChecks :+
               st"""if visited & ${ContractObserverPlugin.placeConstName(e._1)} != 0 {
-                  |  if !($rustExp) {
+                  |  s.focus(None);
+                  |  s.focus_system($compIdx);
+                  |  if !($rustExp) && !s.missing() {
                   |    out.report(crate::Event::SysAssertViolation { property: "${property.id}", point: "${b.point.prettyST.render}" });
                   |  }
                   |}"""
+          }
+        }
+
+        // A composition may leave threads out: it is about part of the system, and its proof
+        // is about its schema.  But a left-out thread that feeds a thread whose values the
+        // composition reads runs, on the deployed schedule, between steps the schema treats
+        // as adjacent -- the proof's conclusion need not hold there, and the run-time checks
+        // may report violations where the schema has none.  And a component the composition
+        // names but its schema never fires is read without being tracked at all.  Say so.
+        // Only the aliases the checks actually read count: an alias no concrete property uses
+        // is never read, so its thread's values need no tracking.  A check reads an alias
+        // through the getter `substitutions` maps it to; the trailing "()" keeps one getter
+        // from matching as a prefix of another.
+        @strictpure def isRead(alias: String): B =
+          substitutions.get(alias) match {
+            case Some(getter) => ops.ISZOps(renderedChecks).exists((c: String) => ops.StringOps(c).contains(getter))
+            case _ => F
+          }
+        var aliasedThreads: Set[String] = Set.empty
+        for (pa <- composition.portAliases if pa.portPath.name.size >= z"2" && isRead(pa.name)) {
+          aliasToThread.get(pa.portPath.name(0)) match {
+            case Some(t) => aliasedThreads = aliasedThreads + MicrokitUtil.getComponentIdPath(t)
+            case _ =>
+          }
+        }
+        for (sva <- composition.stateVarAliases if sva.stateVarPath.name.size >= z"2" && isRead(sva.name)) {
+          aliasToThread.get(sva.stateVarPath.name(0)) match {
+            case Some(t) => aliasedThreads = aliasedThreads + MicrokitUtil.getComponentIdPath(t)
+            case _ =>
+          }
+        }
+        for (tId <- aliasedThreads.elements if !threadTransitions.contains(tId)) {
+          reporter.warn(None(), name,
+            st"Thread $tId is named in composition '${composition.id}' but its schema never fires it: the values the composition reads from it are not tracked, and change wherever $tId runs".render)
+        }
+        for (t <- symbolTable.getThreads() if !StoreUtil.isSynthetic(t.path, store)) {
+          val tId = MicrokitUtil.getComponentIdPath(t)
+          if (!threadTransitions.contains(tId)) {
+            for (c <- symbolTable.aadlConnections) {
+              c match {
+                case pc: AadlPortConnection if pc.srcComponent.path == t.path =>
+                  val dstId = MicrokitUtil.getComponentIdPath(pc.dstComponent)
+                  // only a member whose values the composition reads is affected
+                  if (threadTransitions.contains(dstId) && aliasedThreads.contains(dstId)) {
+                    reporter.warn(None(), name,
+                      st"Thread $tId is not in composition '${composition.id}' but writes ${CommonUtil.getLastName(pc.srcFeature.feature.identifier)}, which $dstId in it reads: the composition's proof does not account for it, and its run-time checks may fail where $tId runs".render)
+                  }
+                case _ =>
+              }
+            }
           }
         }
 
@@ -711,22 +1191,23 @@ object ContractObserverPlugin {
               |  ready
               |}
               |
-              |/// As [`cascade`], also returning the union of every intermediate marking --
-              |/// each assertion place the cascade passed through.
+              |/// As [`cascade`], also returning every place it entered -- the out-places of
+              |/// each transition it fired.  A place that was already marked and stays marked
+              |/// (waiting at a join, say) is not among them.
               |fn cascade_acc(mut ready: u64) -> (u64, u64) {
-              |  let mut accumulated = ready;
+              |  let mut entered = 0u64;
               |  let mut changed = true;
               |  while changed {
               |    changed = false;
               |    for &(in_mask, out_mask) in CP_TRANSITIONS.iter() {
               |      if (ready & in_mask) == in_mask {
               |        ready = (ready & !in_mask) | out_mask;
-              |        accumulated |= ready;
+              |        entered |= out_mask;
               |        changed = true;
               |      }
               |    }
               |  }
-              |  (ready, accumulated)
+              |  (ready, entered)
               |}
               |
               |pub struct $typeName {
@@ -738,22 +1219,34 @@ object ContractObserverPlugin {
               |    $typeName { ready: 0 }
               |  }
               |
-              |  /// Walks the whole net over one hyperperiod of `sched`, checking that every
-              |  /// user slot's thread has an enabled transition and that the walk reaches END.
-              |  pub fn validate_schedule<S: ViolationSink>(sched: &hamr::Schedule,
+              |  /// Walks the whole net over one hyperperiod of the schedule -- its first
+              |  /// `num_timeslices` slots' channels and user-partition bits -- checking that every
+              |  /// user slot of a thread in the composition has an enabled transition and that the
+              |  /// walk reaches END.  Threads the composition leaves out are passed over.
+              |  /// Takes plain slices rather than a `hamr::Schedule`: the test controller has its
+              |  /// own copy of the schedule, and without runtime monitoring the data crate has no
+              |  /// `hamr` module at all.
+              |  pub fn validate_schedule<S: ViolationSink>(num_timeslices: usize,
+              |                                            timeslice_ch: &[u32],
+              |                                            is_user_partition: &[bool],
               |                                            thread_of: fn(u32) -> Option<crate::Thread>,
               |                                            out: &mut S) {
-              |    let n = sched.num_timeslices as usize;
+              |    let n = core::cmp::min(num_timeslices, core::cmp::min(timeslice_ch.len(), is_user_partition.len()));
               |    let mut ready: u64 = $startConst;
               |    ready = cascade(ready);
               |    let mut violations = 0u32;
               |
               |    for i in 0..n {
-              |      if !sched.is_user_partition[i] {
+              |      if !is_user_partition[i] {
               |        continue;
               |      }
-              |      let ch = sched.timeslice_ch[i];
+              |      let ch = timeslice_ch[i];
               |      let th = thread_of(ch);
+              |      // A thread the composition leaves out is not part of what it claims, so its
+              |      // slots are passed over: the composition may describe part of the system.
+              |      if !COMPONENT_TRANSITIONS.iter().any(|&(t_th, _, _)| th == Some(t_th)) {
+              |        continue;
+              |      }
               |
               |      let mut fired = false;
               |      for &(t_th, in_mask, out_mask) in COMPONENT_TRANSITIONS.iter() {
@@ -779,31 +1272,63 @@ object ContractObserverPlugin {
               |    out.report(Event::ScheduleConformance { violations: violations });
               |  }
               |
-              |  /// Puts the marking at START and fires the initial cascade.
-              |  pub fn on_init(&mut self) {
-              |    self.ready = $startConst;
-              |    self.ready = cascade(self.ready);
+              |  /// Puts the marking at START, fires the initial cascade, and checks the
+              |  /// assertions at the places it entered.
+              |  pub fn on_init<V: SystemView, S: ViolationSink>(&mut self, s: &mut V, out: &mut S) {
+              |    let entered = self.restart();
+              |    Self::check(entered, s, out);
+              |  }
+              |
+              |  /// Marks START and cascades; returns the places entered.
+              |  fn restart(&mut self) -> u64 {
+              |    let (ready, entered) = cascade_acc($startConst);
+              |    self.ready = ready;
+              |    $startConst | entered
               |  }
               |
               |  /// `prev` has completed a dispatch: fire its transition, cascade, and check
-              |  /// the assertions at every place the cascade visited.
+              |  /// the assertions at every place entered on the way -- the places this completion
+              |  /// reached, not every place still marked.  An assertion "after X" is about the
+              |  /// moment X completes; checking it again at later, unrelated completions while its
+              |  /// place waits at a join would compare X's outputs with inputs that have moved on.
+              |  ///
+              |  /// When this completion ends the frame, the next one starts here.  Events belong to
+              |  /// the frame they arrived in, so what START sees is only what arrives from here on.
               |  pub fn on_complete<V: SystemView, S: ViolationSink>(&mut self, prev: crate::Thread, s: &mut V, out: &mut S) {
-              |    match prev {
+              |    if self.complete(prev, s, out) {
+              |      s.frame_ended($compIdx);
+              |      self.restart_frame(s, out);
+              |    }
+              |  }
+              |
+              |  /// The first half of `on_complete`: fire, cascade and check; returns whether the
+              |  /// marking reached END.  Each composition keeps its own frame: its end is reported
+              |  /// to the view as `frame_ended` for this composition alone, before `restart_frame`.
+              |  pub fn complete<V: SystemView, S: ViolationSink>(&mut self, prev: crate::Thread, s: &mut V, out: &mut S) -> bool {
+              |    // the out-places of the transition this completion fired
+              |    let entered: u64 = match prev {
               |      ${(componentArms, "\n")}
               |      _ => {
-              |        return;
+              |        return false;
               |      }
-              |    }
+              |    };
               |
-              |    let (final_ready, visited) = cascade_acc(self.ready);
+              |    let (final_ready, cascaded) = cascade_acc(self.ready);
               |    self.ready = final_ready;
+              |    Self::check(entered | cascaded, s, out);
+              |    self.ready == $endConst
+              |  }
               |
+              |  /// The second half of `on_complete`, once the frame has ended: mark START, cascade,
+              |  /// and check the assertions at the places entered.
+              |  pub fn restart_frame<V: SystemView, S: ViolationSink>(&mut self, s: &mut V, out: &mut S) {
+              |    let started = self.restart();
+              |    Self::check(started, s, out);
+              |  }
+              |
+              |  /// Checks the assertions at the places in `visited`.
+              |  fn check<V: SystemView, S: ViolationSink>(visited: u64, s: &mut V, out: &mut S) {
               |    ${(assertionChecks, "\n")}
-              |
-              |    if self.ready == $endConst {
-              |      self.ready = $startConst;
-              |      self.ready = cascade(self.ready);
-              |    }
               |  }
               |}
               |""")
@@ -880,9 +1405,30 @@ object ContractObserverPlugin {
           |}
           |
           |/// How the checks read ports and state variables.  Each getter returns what the
-          |/// monitors' API getter of the same name returns.
+          |/// monitors' API getter of the same name returns (a `get_recv_` alias: what the getter it
+          |/// latches returns), except for a pure event port: its getter is `Option` of the empty
+          |/// payload, as GUMBOX reads it, where the API's is `bool`.
           |pub trait SystemView {
           |  ${(getterSigs, "\n")}
+          |
+          |  /// Called before the reads of one check: `Some(t)` for a check of thread `t`'s
+          |  /// contract, `None` for a system assertion.  A view whose reads depend on who is
+          |  /// reading (the test controller's event-port cursors) switches on it, and it
+          |  /// clears `missing`.
+          |  fn focus(&mut self, _t: Option<Thread>) {}
+          |
+          |  /// Whether a read since the last `focus` found a region that was never written, so
+          |  /// the value it returned describes nothing and the check is skipped.
+          |  fn missing(&self) -> bool { false }
+          |
+          |  /// Called after `focus(None)` before a system assertion: the index of the composition
+          |  /// it belongs to.  Each composition has its own frame (they need not end at the same
+          |  /// completion), and a view that keeps per-frame values answers for that one.
+          |  fn focus_system(&mut self, _composition: usize) {}
+          |
+          |  /// Composition `composition`'s frame is over, and its next one starts: from here its
+          |  /// assertions see only events that arrive in the new frame.
+          |  fn frame_ended(&mut self, _composition: usize) {}
           |}
           |
           |/// A check's outcome worth reporting.
@@ -894,6 +1440,8 @@ object ContractObserverPlugin {
           |  CepPostSkipped { thread: &'static str },
           |  /// The dispatch's CEP_Pre failed and excuse_post_on_failed_pre is set.
           |  CepPostExcused { thread: &'static str },
+          |  /// A value the check reads was never written (`SystemView::missing`).
+          |  CheckSkipped { thread: &'static str, check: &'static str },
           |  SysAssertViolation { property: &'static str, point: &'static str },
           |  ScheduleNoTransition { ch: u32, timeslice: usize },
           |  ScheduleNoEnd { ready: u64 },
@@ -932,7 +1480,11 @@ object ContractObserverPlugin {
       threads = threads,
       hasComponentLayer = hasComponentLayer,
       compositionIds = compositionIds,
-      getters = getters)
+      compositionProperties = compositionProperties,
+      getters = getters,
+      eventGetters = eventGetterNames,
+      pureEventGetters = pureEventGetterNames,
+      receivedGetters = receivedGetters)
 
     return (store + ContractObserverPlugin.KEY_ContractObserverPlugin ~> info, resources)
   }

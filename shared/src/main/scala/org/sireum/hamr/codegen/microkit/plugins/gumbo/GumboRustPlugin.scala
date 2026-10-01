@@ -2,6 +2,7 @@
 package org.sireum.hamr.codegen.microkit.plugins.gumbo
 
 import org.sireum._
+import org.sireum.hamr.codegen.microkit.plugins.testing.TestSchedulerPlugin
 import org.sireum.hamr.codegen.common.CommonUtil._
 import org.sireum.hamr.codegen.common.containers.{Marker, Resource}
 import org.sireum.hamr.codegen.common.resolvers.GclResolver
@@ -25,10 +26,16 @@ object GumboRustPlugin {
   val KEY_GumboRustPlugin: String = "KEY_GumboRustPlugin"
   val KEY_twc: String = s"${KEY_GumboRustPlugin}_threads_with_contracts"
   val KEY_dwc: String = s"${KEY_GumboRustPlugin}_datatypes_with_contracts"
+  val KEY_ctwc: String = s"${KEY_GumboRustPlugin}_c_threads_with_contracts"
 
   @strictpure def getGumboRustContributions(store: Store): Option[GumboRustContributions] = store.get(KEY_GumboRustPlugin).asInstanceOf[Option[GumboRustContributions]]
   @strictpure def getThreadsWithContracts(store: Store): ISZ[ThreadIdPath] = store.getOrElse(KEY_twc, ISZValue[ThreadIdPath](ISZ())).asInstanceOf[ISZValue[ThreadIdPath]].elements
   @strictpure def getDatatypesWithContracts(store: Store): ISZ[DataIdPath] = store.getOrElse(KEY_dwc, ISZValue[DataIdPath](ISZ())).asInstanceOf[ISZValue[DataIdPath]].elements
+  /** Threads implemented in C that have a GUMBO subclause.  They get no Rust crate, so no
+    * Verus contracts or component test harness, but their contracts are still checked at
+    * run time -- by the monitors and the test controller, through crates/observers --
+    * from the executable GUMBOX predicates GumboXRustPlugin generates for them. */
+  @strictpure def getCThreadsWithContracts(store: Store): ISZ[ThreadIdPath] = store.getOrElse(KEY_ctwc, ISZValue[ThreadIdPath](ISZ())).asInstanceOf[ISZValue[ThreadIdPath]].elements
 
   @strictpure def putGumboRustContributions(contributions: GumboRustContributions, store: Store): Store = store + KEY_GumboRustPlugin ~> contributions
   @strictpure def putThreadsWithContracts(i: ISZ[ThreadIdPath], store: Store): Store = store + KEY_twc ~> ISZValue(i)
@@ -73,10 +80,15 @@ object GumboRustPlugin {
       return localStore
     }
     var threadsWithContracts: ISZ[ThreadIdPath] = ISZ()
+    var cThreadsWithContracts: ISZ[ThreadIdPath] = ISZ()
     var datatypesWithContracts: ISZ[DataIdPath] = ISZ()
-    for (t <- symbolTable.getThreads() if MicrokitUtil.isRusty(t)) {
+    for (t <- symbolTable.getThreads()) {
       if(ops.ISZOps(t.annexes()).exists(p => p.clause.isInstanceOf[GclSubclause])) {
-        threadsWithContracts = threadsWithContracts :+ t.path
+        if (MicrokitUtil.isRusty(t)) {
+          threadsWithContracts = threadsWithContracts :+ t.path
+        } else if (!t.toVirtualMachine(symbolTable)) {
+          cThreadsWithContracts = cThreadsWithContracts :+ t.path
+        }
       }
     }
 
@@ -97,6 +109,14 @@ object GumboRustPlugin {
     if (threadsWithContracts.nonEmpty || datatypesWithContracts.nonEmpty) {
       reporter.reports(errorMsgs)
     }
+
+    // C threads' contracts are checked through Rust predicates, which the float restriction
+    // above applies to as well; rather than fail a model whose Rust side is fine, leave them
+    // unchecked when it bites.
+    if (errorMsgs.nonEmpty) {
+      cThreadsWithContracts = ISZ()
+    }
+    localStore = localStore + GumboRustPlugin.KEY_ctwc ~> ISZValue(cThreadsWithContracts)
 
     return (
       GumboRustPlugin.putThreadsWithContracts(threadsWithContracts,
@@ -544,7 +564,10 @@ object GumboRustPlugin {
               crateDependencies = crateDependencies)),
         localStore)
 
-      makefileVerusItems = makefileVerusItems :+ st"make -C $${CRATES_DIR}/${CRustComponentPlugin.componentCrateName(thread, localStore)} verus"
+      // the test controller has no contracts to verify, and is not part of the shipped build
+      if (thread.path != TestSchedulerPlugin.controllerThreadPath(symbolTable.rootSystem.path)) {
+        makefileVerusItems = makefileVerusItems :+ st"make -C $${CRATES_DIR}/${CRustComponentPlugin.componentCrateName(thread, localStore)} verus"
+      }
     } // end processing thread's contracts
 
     localStore = MakefileUtil.addMakefileTargets(ISZ("system.mk"), ISZ(MakefileTarget(name = "verus", allowMultiple = F, dependencies = ISZ(), body = makefileVerusItems)), localStore)

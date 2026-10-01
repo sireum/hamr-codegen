@@ -376,6 +376,15 @@ object GclResolver {
                     case _ => // expected value can be any legal Ident
                   }
 
+                  // The expected value is an ordinary expression, and may name a port: rewrite it
+                  // as every other expression is (port -> api.port).  Returning PreResult(F, ..)
+                  // below stops the transformer from descending into it, so without this a port
+                  // was left as a bare name the generated Verus and GUMBOX code cannot resolve.
+                  val rewrittenExpectedValue: Exp = transform_langastExp(expectedValue) match {
+                    case MSome(e) => e
+                    case _ => expectedValue
+                  }
+
                   // api
                   val api: Exp = Exp.Ident(id = AST.Id(value = apiName, attr = emptyAttr), attr = emptyRAttr)
 
@@ -406,7 +415,7 @@ object GclResolver {
                   }
 
                   // api.portid.get == expectedValue
-                  val be = Exp.Binary(api_portid_get, "==", expectedValue, o.attr, o.attr.posOpt)
+                  val be = Exp.Binary(api_portid_get, "==", rewrittenExpectedValue, o.attr, o.attr.posOpt)
 
                   // api.portid.nonempty
                   val api_portid_nonempty: Exp = {

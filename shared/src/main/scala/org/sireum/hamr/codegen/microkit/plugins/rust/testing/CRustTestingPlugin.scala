@@ -80,7 +80,7 @@ object CRustTestingPlugin {
 
       val testApiEntries =
         genTestApiConcreteInputsEntries(thread, options, crustTypeProvider) ++
-          genTestApiGetterSettersEntries(thread, options, crustTypeProvider)
+          genTestApiGetterSettersEntries(thread, options, crustTypeProvider, localStore)
 
       val touchedTypes = MicrokitLinterPlugin.getTouchedTypes(localStore)
       val proptestGenerators = genProptestGenerators(touchedTypes, thread, crustTypeProvider, model, options, types, symbolTable, store, reporter)
@@ -101,9 +101,11 @@ object CRustTestingPlugin {
     return (CRustTestingPlugin.putCRustTestingContributions(CRustTestingPlugin.CRustTestingContributions(ret), localStore), resources)
   }
 
-  @pure def genTestApiGetterSettersEntries(thread: AadlThread, options: HamrCli.CodegenOption, crustTypeProvider: CRustTypeProvider): ISZ[RAST.Item] = {
+  @pure def genTestApiGetterSettersEntries(thread: AadlThread, options: HamrCli.CodegenOption, crustTypeProvider: CRustTypeProvider, store: Store): ISZ[RAST.Item] = {
     var ret: ISZ[RAST.Item] = ISZ()
-    for (p <- thread.getPorts()) {
+    // synthetic ports (e.g. the sv_ state-variable mirrors a monitor reads) are not
+    // part of the component's model interface, so they get no test accessors
+    for (p <- thread.getPorts() if !StoreUtil.isSynthetic(p.path, store)) {
       val portType: AadlType = crustTypeProvider.getRepresentativeType(MicrokitTypeUtil.getPortType(p))
       val portTypeNameProvider = crustTypeProvider.getTypeNameProvider(portType)
 

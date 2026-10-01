@@ -216,13 +216,36 @@ object SystemDescriptionProvider_MCS {
       // Tail contributions run at the end of generate(), where every protection domain
       // exists.  They share renderST's template line, so a variant without any (every
       // variant but the test scheduler) gets no stray blank line.
+      val marker = Marker.createHashMarker("META MARKER")
+      // Plugin contributions are generated too, so each sits in a marker region of its own
+      // and is rewritten on regeneration like the main one -- they can depend on the model
+      // (the test variant's state-variable injection regions, its test-selection block).
+      // A variant without any gets no marker, so its meta.py is unchanged.
+      val templateMarker = Marker.createHashMarker("META TEMPLATE MARKER")
+      val tailMarker = Marker.createHashMarker("META TAIL MARKER")
+      var usedMarkers: ISZ[Marker] = ISZ(marker)
+      if (templateManagedMapsSt.nonEmpty) {
+        usedMarkers = usedMarkers :+ templateMarker
+      }
+      if (msd.templateTailContributions.nonEmpty) {
+        usedMarkers = usedMarkers :+ tailMarker
+      }
+
+      // a list, not an empty ST, so a variant without contributions renders as before: an
+      // empty list's template line is dropped, an empty ST's is not
+      val templateSectionST: ISZ[ST] =
+        if (templateManagedMapsSt.isEmpty) ISZ()
+        else ISZ(st"""${templateMarker.beginMarker}
+                     |${(templateManagedMapsSt, "\n")}
+                     |${templateMarker.endMarker}""")
+
       val tailAndRenderST: ST =
         if (msd.templateTailContributions.isEmpty) renderST
-        else st"""${(msd.templateTailContributions, "\n\n")}
+        else st"""${tailMarker.beginMarker}
+                 |${(msd.templateTailContributions, "\n\n")}
+                 |${tailMarker.endMarker}
                  |
                  |$renderST"""
-
-      val marker = Marker.createHashMarker("META MARKER")
 
       val tq = "\"\"\""
       val metaContent: ST =
@@ -288,7 +311,7 @@ object SystemDescriptionProvider_MCS {
             |
             |    scheduler = ProtectionDomain("scheduler", "scheduler.elf", priority=200)
             |
-            |    ${(templateManagedMapsSt, "\n")}
+            |    ${(templateSectionST, "\n")}
             |
             |    ${marker.beginMarker}
             |
@@ -377,7 +400,7 @@ object SystemDescriptionProvider_MCS {
             |"""
 
       val sdScheduleXmlPath = s"${options.sel4OutputDir.get}/${msd.prefix}meta.py"
-      resources = resources :+ ResourceUtil.createResourceWithMarkers(sdScheduleXmlPath, metaContent, ISZ(marker), F, F)
+      resources = resources :+ ResourceUtil.createResourceWithMarkers(sdScheduleXmlPath, metaContent, usedMarkers, F, F)
     }
 
 

@@ -2,6 +2,7 @@
 package org.sireum.hamr.codegen.microkit.plugins.linters
 
 import org.sireum._
+import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.CommonUtil.{Store, StoreValue}
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes}
@@ -125,6 +126,14 @@ object MicrokitLinterPlugin {
           case Direction.In =>
             for (inConn <- symbolTable.getInConnections(p.path)) {
               checkConnection(inConn, symbolTable, reporter)
+
+              // A thread's output feeding its own input is state the thread keeps across
+              // dispatches (use a GUMBO state variable instead).  Checked here, at the input
+              // end only, so the error is reported once.
+              if (inConn.src.component.name == thread.path) {
+                reporter.error(inConn.name.pos, MicrokitCodegen.toolName,
+                  s"A component cannot be connected directly to itself but ${thread.identifier} is (${CommonUtil.getLastName(inConn.src.feature.get)} -> ${p.identifier})")
+              }
 
               if (symbolTable.getInConnections(p.path).size > 1) {
                 reporter.error(p.feature.identifier.pos, MicrokitCodegen.toolName, "Fan in connections (including event ports) are disallowed for Microkit")

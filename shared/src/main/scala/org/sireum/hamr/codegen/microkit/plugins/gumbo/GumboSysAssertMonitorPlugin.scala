@@ -19,7 +19,6 @@ import org.sireum.message.Reporter
 
 object GumboSysAssertMonitorPlugin {
 
-  val GUMBO_MONITOR_CBACKEND_KEY: String = "KEY_gumbo_monitor_CBackend"
 
   @strictpure def hasCompositions(symbolTable: SymbolTable): B =
     VCGenerator.hasCompositions(symbolTable)
@@ -69,18 +68,6 @@ object GumboSysAssertMonitorPlugin {
   }
 
 
-  // The C backend phase adds state var guards and is_monitoring_enabled() to thread
-  // components. These are shared infrastructure — they only need to be added once
-  // regardless of how many monitor plugins are active. Skip if the gumbo monitor
-  // already set it up; otherwise run normally (e.g. if gumbo monitor is disabled).
-  @pure override def handleCBackend(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes,
-                                     symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
-    if (store.contains(GumboSysAssertMonitorPlugin.GUMBO_MONITOR_CBACKEND_KEY)) {
-      return (store + keyCBackend ~> BoolValue(T), ISZ())
-    }
-    return super.handleCBackend(model, options, types, symbolTable, store, reporter)
-  }
-
   @pure override def canHandle(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes,
                                 symbolTable: SymbolTable, store: Store, reporter: Reporter): B = {
     return super.canHandle(model, options, types, symbolTable, store, reporter) &&
@@ -128,22 +115,38 @@ object GumboSysAssertMonitorPlugin {
               |  let schedule = api.get_sched_schedule();
               |  buildUserChannelTables(
               |    &schedule, &mut self.prev_user_ch, &mut self.next_user_ch);
-              |  $sysType::validate_schedule(&schedule, thread_of, &mut LogSink);
+              |  $sysType::validate_schedule(schedule.num_timeslices as usize, &schedule.timeslice_ch,
+              |    &schedule.is_user_partition, thread_of, &mut LogSink);
               |}
               |
               |let idx = state.current_timeslice as usize;
               |
               |if self.sys_assert_last_index == u32::MAX {
               |  // First compute phase — initialize ready set and cascade
-              |  self.sys_assert.on_init();
+              |  let mut view = MonitorView { api: api, focus: None };
+              |  self.sys_assert.on_init(&mut view, &mut LogSink);
+              |  if let Some(next) = thread_of(self.next_user_ch[idx]) {
+              |    note_dispatch(next);
+              |    latch_received(next, &mut view);
+              |  }
               |  self.sys_assert_last_index = state.current_timeslice;
               |  return;
               |}
               |
               |// the thread that just yielded: fire its transition and check the assertions
-              |let mut view = MonitorView { api: api };
+              |let mut view = MonitorView { api: api, focus: None };
               |if let Some(prev) = thread_of(self.prev_user_ch[idx]) {
+              |  producer_completed(prev);
               |  self.sys_assert.on_complete(prev, &mut view, &mut LogSink);
+              |}
+              |
+              |// the thread that runs next: what it receives on an input a composition aliases is
+              |// latched now, once the completion above has ended the frame if it was the last --
+              |// so it belongs to the frame the thread runs in (the GUMBO layer read it earlier in
+              |// this run; the per-run cache gives the same value)
+              |if let Some(next) = thread_of(self.next_user_ch[idx]) {
+              |  note_dispatch(next);
+              |  latch_received(next, &mut view);
               |}
               |
               |self.sys_assert_last_index = state.current_timeslice;"""
@@ -168,8 +171,14 @@ object GumboSysAssertMonitorPlugin {
                 case Some(mb) => mb.items
                 case _ => ISZ()
               }
+              // The run starts with begin_monitor_run.  The gumbo layer's body already does
+              // that when the model has thread contracts; otherwise it is added here.
+              val startsRun: B = ops.ISZOps(existingItems).exists((i: RAST.BodyItem) =>
+                ops.StringOps(i.prettyST.render).contains("begin_monitor_run("))
+              val runStart: ISZ[RAST.BodyItem] =
+                if (startsRun) ISZ() else ISZ(RAST.BodyItemST(st"${ContractObserverPlugin.beginMonitorRunCall}"))
               updatedImplItems = updatedImplItems :+ fn(
-                body = Some(RAST.MethodBody(existingItems :+
+                body = Some(RAST.MethodBody((runStart ++ existingItems) :+
                   RAST.BodyItemST(st"self.sys_assert_monitor(api);"))))
             case fn: RAST.FnImpl if fn.sig.ident.prettyST.render == "new" =>
               var updatedBodyItems: ISZ[RAST.BodyItem] = ISZ()
@@ -199,6 +208,11 @@ object GumboSysAssertMonitorPlugin {
               sig = monitorFn.sig(ident = RAST.IdentString("sys_assert_monitor")),
               body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(sysAssertBody)))))
           case _ =>
+            // The sys-assert monitor builds on the GUMBO monitor's method, adapter and
+            // schedule tables, which exist only when some thread has GUMBO contracts.
+            reporter.error(None(), name,
+              s"Runtime monitoring of composition '${composition.id}' needs at least one thread with GUMBO contracts; none has any")
+            return (localStore, parentResources)
         }
 
         val updatedStruct = monitorContrib.appStructDef(

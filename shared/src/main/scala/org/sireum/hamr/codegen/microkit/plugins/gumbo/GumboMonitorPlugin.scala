@@ -67,8 +67,6 @@ object GumboMonitorPlugin {
 
   @strictpure def keyModelHandled: String = s"KEY_${getMonitorName}_Model_handled"
 
-  @strictpure def keyCBackend: String = s"KEY_${getMonitorName}_CBackend"
-
   @strictpure def keyRustFinalized: String = s"KEY_${getMonitorName}_RustFinalized"
 
   @strictpure def keyMonitorMethod: String = s"KEY_${getMonitorName}_MonitorMethod"
@@ -76,8 +74,6 @@ object GumboMonitorPlugin {
   @strictpure def haveHandledModelTransform(store: Store): B = store.contains(keyModelTransformed)
 
   @strictpure def hasHandled(store: Store): B = store.contains(keyModelHandled)
-
-  @strictpure def haveHandledCBackend(store: Store): B = store.contains(keyCBackend)
 
   @strictpure def haveRustFinalized(store: Store): B = store.contains(keyRustFinalized)
 
@@ -218,46 +214,14 @@ object GumboMonitorPlugin {
               val threadPortPath: ISZ[String] = thread.path :+ svPortName
               val processPortPath: ISZ[String] = srcProcess.path :+ svPortName
 
-              // Thread-side and process-side sv_ ports are shared across
-              // monitor instances — only add them once
+              // Thread-side and process-side sv_ ports are shared across monitor instances and
+              // normally created already by StateVarPortsPlugin -- only add them if missing
               if (!existingThreadFeatureNames.contains(svPortName)) {
-                // Output data port on source thread
+                val (tf, pf, deleg) = StateVarPortsPlugin.sourcePortElements(thread.path, srcProcess.path, sv)
                 localStore = StoreUtil.addSyntheticElement(threadPortPath, localStore)
-                additionalThreadFeatures = additionalThreadFeatures :+ ir.FeatureEnd(
-                  identifier = ir.Name(name = threadPortPath, pos = None()),
-                  direction = ir.Direction.Out,
-                  category = ir.FeatureCategory.DataPort,
-                  classifier = classifier,
-                  properties = ISZ(),
-                  uriFrag = "")
-
-                // Output data port on source process
-                additionalProcessFeatures = additionalProcessFeatures :+ ir.FeatureEnd(
-                  identifier = ir.Name(name = processPortPath, pos = None()),
-                  direction = ir.Direction.Out,
-                  category = ir.FeatureCategory.DataPort,
-                  classifier = classifier,
-                  properties = ISZ(),
-                  uriFrag = "")
-
-                // Delegation: srcThread.svPort → srcProcess.svPort (Out-to-Out going up)
-                val srcDelegConnName: ISZ[String] = srcProcess.path :+ s"deleg_${svPortName}"
-                additionalProcessConnections = additionalProcessConnections :+
-                  ir.Connection(
-                    name = ir.Name(name = srcDelegConnName, pos = None()),
-                    src = ISZ(ir.EndPoint(
-                      component = ir.Name(name = thread.path, pos = None()),
-                      feature = Some(ir.Name(name = threadPortPath, pos = None())),
-                      direction = Some(ir.Direction.Out))),
-                    dst = ISZ(ir.EndPoint(
-                      component = ir.Name(name = srcProcess.path, pos = None()),
-                      feature = Some(ir.Name(name = processPortPath, pos = None())),
-                      direction = Some(ir.Direction.Out))),
-                    kind = ir.ConnectionKind.Port,
-                    isBiDirectional = F,
-                    connectionInstances = ISZ(),
-                    properties = ISZ(),
-                    uriFrag = "")
+                additionalThreadFeatures = additionalThreadFeatures :+ tf
+                additionalProcessFeatures = additionalProcessFeatures :+ pf
+                additionalProcessConnections = additionalProcessConnections :+ deleg
               }
 
               // Monitor-side ports, delegations, fan-out connections, and
@@ -354,7 +318,7 @@ object GumboMonitorPlugin {
             }
 
             // Update the source thread and process with the new state var ports
-            updatedSubComponents = updateThreadInModel(
+            updatedSubComponents = StateVarPortsPlugin.updateThreadInModel(
               subComponents = updatedSubComponents,
               processPath = srcProcess.path,
               threadPath = thread.path,
@@ -390,13 +354,11 @@ object GumboMonitorPlugin {
   }
 
 
-  // The plugin's handle method executes in 3 phases, each gated by a store key
+  // The plugin's handle method executes in 2 phases, each gated by a store key
   // so it runs exactly once per phase. Multiple phases are needed because each
-  // depends on contributions from other plugins that run between phases.
-  //
-  // Phase 1 (C Backend): Runs after CConnectionProviderPlugin and CTypePlugin have
-  //   populated the store. Adds monitoring guards to state variable put methods in
-  //   the C connection layer and registers is_monitoring_enabled() in the API.
+  // depends on contributions from other plugins that run between phases.  The
+  // thread side of state-variable observation (is_monitoring_enabled() and the
+  // guarded put_sv_* methods) is StateVarPortsPlugin's, shared with system testing.
   //
   // Phase 2 (UserLand): Runs after the connection store is ready. Delegates to
   //   UserLandMonitorPlugin.handle to inject the monitor protection domain, its
@@ -420,11 +382,6 @@ object GumboMonitorPlugin {
     if (!commonBase) {
       return F
     } else {
-      val canDoBackend: B =
-        CConnectionProviderPlugin.getCConnectionStoreOpt(store).nonEmpty &&
-          CTypePlugin.getCTypeProvider(store).nonEmpty &&
-          !haveHandledCBackend(store)
-
       val canDoUserLandHandle: B =
         !hasHandled(store) &&
           canHandleHelper(model, options, types, symbolTable, store, reporter)
@@ -435,7 +392,7 @@ object GumboMonitorPlugin {
           ContractObserverPlugin.hasObservers(store) &&
           CRustComponentPlugin.hasCRustComponentContributions(store)
 
-      return canDoBackend || canDoUserLandHandle || canDoMonitorMethod
+      return canDoUserLandHandle || canDoMonitorMethod
     }
   }
 
@@ -443,12 +400,6 @@ object GumboMonitorPlugin {
                             symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
     var localStore: Store = store
     var resources: ISZ[Resource] = ISZ()
-
-    if (!haveHandledCBackend(localStore)) {
-      val r = handleCBackend(model, options, types, symbolTable, localStore, reporter)
-      localStore = r._1
-      resources = resources ++ r._2
-    }
 
     if (!hasHandled(localStore) &&
       canHandleHelper(model, options, types, symbolTable, localStore, reporter)) {
@@ -473,249 +424,6 @@ object GumboMonitorPlugin {
     return (localStore, resources)
   }
 
-  // Phase 1: Post-processes the C connection layer for runtime monitoring. For each
-  // thread with GUMBO state variables, wraps the state variable put methods with an
-  // is_monitoring_enabled() guard so state var values are only forwarded to the monitor
-  // when monitoring is active. Also adds the is_monitoring_enabled() function itself
-  // (which returns true when all state var shared memory regions are mapped). On the
-  // Rust side, registers the is_monitoring_enabled extern C API and its unsafe wrapper
-  // so Rust components can query monitoring status.
-  @pure def handleCBackend(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes,
-                           symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
-    var localStore: Store = store + keyCBackend ~> BoolValue(T)
-
-    val cTypeProvider = CTypePlugin.getCTypeProvider(localStore).get
-    val existingConnectionStore = CConnectionProviderPlugin.getCConnectionStore(localStore)
-
-    var threadSvPorts: Map[ISZ[String], ISZ[GclStateVar]] = Map.empty
-    for (thread <- symbolTable.getThreads()) {
-      val stateVars = getStateVars(thread.path, symbolTable)
-      if (stateVars.nonEmpty) {
-        threadSvPorts = threadSvPorts + thread.path ~> stateVars
-      }
-    }
-
-    // Post-process: wrap sv_ put methods with if (is_monitoring_enabled()) guard
-    var updatedConnectionStore: ISZ[ConnectionStore] = ISZ()
-    for (entry <- existingConnectionStore) {
-      val senderPath = entry.senderName
-      entry.codeContributions.get(senderPath) match {
-        case Some(senderCC) =>
-          val pn = senderCC.portName
-          if (pn.nonEmpty &&
-            ops.StringOps(pn(pn.size - 1)).startsWith(GumboMonitorPlugin.stateVarPortPrefix) &&
-            threadSvPorts.contains(senderPath)) {
-
-            val portIdentifier = pn(pn.size - 1)
-            val cTypeName = cTypeProvider.getTypeNameProvider(senderCC.aadlType).mangledName
-            val queueSize: Z = 1
-
-            val queueTypeName = QueueTemplate.getTypeQueueTypeName(cTypeName, queueSize)
-            val enqueueName = QueueTemplate.getQueueEnqueueMethodName(cTypeName, queueSize)
-            val sharedVarName = QueueTemplate.getClientEnqueueSharedVarName(portIdentifier, queueSize)
-            val methodSig = QueueTemplate.getClientPut_C_MethodSig(portIdentifier, cTypeName, F)
-
-            val guardedMethod: ST =
-              st"""$methodSig {
-                  |  if (is_monitoring_enabled()) {
-                  |    $enqueueName(($queueTypeName *) $sharedVarName, ($cTypeName *) data);
-                  |  }
-                  |
-                  |  return true;
-                  |}"""
-
-            val oldCContribs = senderCC.cContributions.asInstanceOf[cConnectionContributions]
-            val newCContribs = oldCContribs(cBridge_PortApiMethods = ISZ(guardedMethod))
-            val newSenderCC = senderCC(cContributions = newCContribs)
-            val newCodeContribs = entry.codeContributions + senderPath ~> newSenderCC
-
-            updatedConnectionStore = updatedConnectionStore :+
-              entry.asInstanceOf[DefaultConnectionStore](codeContributions = newCodeContribs)
-          } else {
-            updatedConnectionStore = updatedConnectionStore :+ entry
-          }
-        case _ =>
-          updatedConnectionStore = updatedConnectionStore :+ entry
-      }
-    }
-
-    // Add is_monitoring_enabled() for each thread with state vars
-    var additionalEntries: ISZ[ConnectionStore] = ISZ()
-    for (threadEntry <- threadSvPorts.entries) {
-      val threadPath = threadEntry._1
-      val stateVars = threadEntry._2
-
-      val svChecks: ISZ[ST] = for (sv <- stateVars) yield
-        st"${GumboMonitorPlugin.stateVarPortName(sv.name)}_queue_1 != NULL"
-
-      val headerSig: ST = st"bool is_monitoring_enabled(void)"
-      val impl: ST =
-        st"""bool is_monitoring_enabled(void) {
-            |  return ${(svChecks, " && ")};
-            |}"""
-
-      val cContribs = cConnectionContributions(
-        cPortApiMethodSigs = ISZ(headerSig),
-        cBridge_EntrypointMethodSignatures = ISZ(),
-        cBridge_GlobalVarContributions = ISZ(),
-        cBridge_PortApiMethods = ISZ(impl),
-        cBridge_InitContributions = ISZ(),
-        cBridge_ComputeContributions = ISZ(),
-        cUser_MethodDefaultImpls = ISZ())
-
-      additionalEntries = additionalEntries :+
-        DefaultConnectionStore(
-          systemContributions = DefaultSystemContributions(
-            sharedMemoryRegionContributions = ISZ(),
-            channelContributions = ISZ()),
-          typeApiContributions = ISZ(),
-          senderName = threadPath,
-          codeContributions = Map.empty[ISZ[String], UberConnectionContributions] +
-            threadPath ~> UberConnectionContributions(
-              portName = ISZ(),
-              portPriority = None(),
-              aadlType = TypeUtil.EmptyType,
-              queueSize = 0,
-              sharedMemoryMapping = ISZ(),
-              cContributions = cContribs))
-    }
-
-    localStore = CConnectionProviderPlugin.putCConnectionStore(
-      updatedConnectionStore ++ additionalEntries, localStore)
-
-    // Rust backend: add is_monitoring_enabled to extern_c_api.rs and record which
-    // threads have state vars so finalizeMicrokit can generate monitoring lib.rs
-    val crustApiContribsOpt = CRustApiPlugin.getCRustApiContributions(localStore)
-
-    if (crustApiContribsOpt.nonEmpty) {
-      var crustApiContribs = crustApiContribsOpt.get
-      var monitoringEntries: HashSMap[ISZ[String], ISZ[RustMonitoringStateVarInfo]] = HashSMap.empty
-
-      for (threadEntry <- threadSvPorts.entries) {
-        val threadPath = threadEntry._1
-        val stateVars = threadEntry._2
-        val thread = symbolTable.componentMap.get(threadPath).get.asInstanceOf[AadlThread]
-
-        if (MicrokitUtil.isRusty(thread)) {
-          crustApiContribs.apiContributions.get(threadPath) match {
-            case Some(existing) =>
-              val monExternCApis: ISZ[RAST.Item] = ISZ(
-                RAST.FnSig(
-                  verusHeader = None(), fnHeader = RAST.FnHeader(F),
-                  ident = RAST.IdentString("is_monitoring_enabled"),
-                  generics = None(),
-                  fnDecl = RAST.FnDecl(
-                    inputs = ISZ(),
-                    outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType))))
-
-              val monWrappers: ISZ[RAST.Item] = ISZ(
-                RAST.FnImpl(
-                  visibility = RAST.Visibility.Public,
-                  sig = RAST.FnSig(
-                    ident = RAST.IdentString("unsafe_is_monitoring_enabled"),
-                    fnDecl = RAST.FnDecl(
-                      inputs = ISZ(),
-                      outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
-                    verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
-                  comments = ISZ(), attributes = ISZ(), meta = ISZ(),
-                  verusAttributeSyntax = options.verusAttributeSyntax, contract = None(),
-                  body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
-                    st"""unsafe {
-                        |  return is_monitoring_enabled();
-                        |}"""))))))
-
-              val monTestMockVars: ISZ[RAST.Item] = ISZ(
-                RAST.ItemStatic(
-                  ident = RAST.IdentString("MONITORING_ENABLED"),
-                  visibility = RAST.Visibility.Public,
-                  ty = RAST.TyPath(ISZ(ISZ("Mutex"), ISZ("Option"), ISZ("bool")), None()),
-                  mutability = RAST.Mutability.Not,
-                  expr = RAST.ExprST(st"Mutex::new(None);")))
-
-              val monTestingApis: ISZ[RAST.Item] = ISZ(
-                RAST.FnImpl(
-                  attributes = ISZ(RAST.AttributeST(F, st"cfg(test)")),
-                  sig = RAST.FnSig(
-                    ident = RAST.IdentString("is_monitoring_enabled"),
-                    fnDecl = RAST.FnDecl(
-                      inputs = ISZ(),
-                      outputs = RAST.FnRetTyImpl(MicrokitTypeUtil.rustBoolType)),
-                    verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
-                  comments = ISZ(), visibility = RAST.Visibility.Public, meta = ISZ(),
-                  verusAttributeSyntax = options.verusAttributeSyntax, contract = None(),
-                  body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
-                    st"""unsafe {
-                        |  match *MONITORING_ENABLED.lock().unwrap_or_else(|e| e.into_inner()) {
-                        |    Some(v) => return v,
-                        |    None => return false,
-                        |  }
-                        |}"""))))))
-
-              val svInfos: ISZ[RustMonitoringStateVarInfo] = for (sv <- stateVars) yield
-                RustMonitoringStateVarInfo(name = sv.name)
-
-              val combined = existing.combine(ComponentApiContributions.empty(
-                externCApis = monExternCApis,
-                unsafeExternCApiWrappers = monWrappers,
-                externApiTestMockVariables = monTestMockVars,
-                externApiTestingApis = monTestingApis))
-
-              crustApiContribs = crustApiContribs.addApiContributions(threadPath, combined)
-              monitoringEntries = monitoringEntries + threadPath ~> svInfos
-
-            case _ =>
-          }
-        }
-      }
-
-      localStore = CRustApiPlugin.putCRustApiContributions(crustApiContribs, localStore)
-      if (monitoringEntries.nonEmpty) {
-        localStore = localStore + GumboMonitorPlugin.KEY_RUST_MONITORING ~> RustMonitoringStore(monitoringEntries)
-
-        // Contribute the monitoring observation points into each monitored component's
-        // crate root.  This used to be done by re-emitting crates/<component>/src/lib.rs
-        // wholesale from finalizeMicrokit, which meant maintaining a second near-copy of
-        // CRustComponentPlugin's ~80-line template and winning by running last.  The
-        // guarded blocks are contributed whole, so CRustComponentPlugin needs to know
-        // nothing about monitoring.
-        if (CRustComponentPlugin.hasCRustComponentContributions(localStore)) {
-          val contributions = CRustComponentPlugin.getCRustComponentContributions(localStore)
-          var updated = contributions.componentContributions
-          for (entry <- monitoringEntries.entries) {
-            val threadPath = entry._1
-            val svInfos = entry._2
-            updated.get(threadPath) match {
-              case Some(contrib) =>
-                val puts: ISZ[ST] = for (sv <- svInfos) yield
-                  st"extern_c_api::unsafe_put_${GumboMonitorPlugin.stateVarPortName(sv.name)}(&_app.${sv.name});"
-                updated = updated + threadPath ~> contrib(
-                  libUses = contrib.libUses :+ RAST.ItemST(st"use crate::bridge::extern_c_api;"),
-                  libModuleLevelEntries = contrib.libModuleLevelEntries :+
-                    RAST.ItemST(st"static mut monitoring_enabled: bool = false;"),
-                  libInitializePre = contrib.libInitializePre :+
-                    RAST.BodyItemST(st"monitoring_enabled = extern_c_api::unsafe_is_monitoring_enabled();"),
-                  libInitializePost = contrib.libInitializePost :+
-                    RAST.BodyItemST(
-                      st"""if monitoring_enabled {
-                          |  ${(puts, "\n")}
-                          |}"""),
-                  libComputePost = contrib.libComputePost :+
-                    RAST.BodyItemST(
-                      st"""if monitoring_enabled {
-                          |  ${(puts, "\n")}
-                          |}"""))
-              case _ =>
-            }
-          }
-          localStore = CRustComponentPlugin.putComponentContributions(
-            contributions.replaceComponentContributions(updated), localStore)
-        }
-      }
-    }
-
-    return (localStore, ISZ())
-  }
-
   // Phase 3: Modifies the monitor thread's Rust ComponentContributions to add
   // per-component contract checking. Adds scheduling state fields (frame_period,
   // last_index, prev/next user channel tables) and pre-state fields to the struct,
@@ -737,7 +445,7 @@ object GumboMonitorPlugin {
     val info = ContractObserverPlugin.getInfo(localStore).get
     val obs = ContractObserverPlugin.crateName
 
-    if (gumboxContribs.componentContributions.nonEmpty) {
+    if (gumboxContribs.allComponentContributions.nonEmpty) {
       // One monitor component per name: size-1 for the gumbo monitor, one per
       // composition for the sys-assert monitor (design D8, approach (i)).
       // Re-fetch contributions each iteration since the prior iteration updated
@@ -799,11 +507,12 @@ object GumboMonitorPlugin {
                   |}
                   |
                   |let idx = state.current_timeslice as usize;
-                  |let mut view = MonitorView { api: api };
+                  |let mut view = MonitorView { api: api, focus: None };
                   |
                   |if self.last_index == u32::MAX {
                   |  // First compute phase, check initialization guarantees
                   |  self.components.on_init(&mut view, &mut LogSink);
+                  |  init_checked();
                   |} else if let Some(prev) = thread_of(self.prev_user_ch[idx]) {
                   |  // the thread that just yielded: check its post-condition
                   |  self.components.on_complete(prev, &mut view, &mut LogSink);
@@ -857,7 +566,8 @@ object GumboMonitorPlugin {
                 } else if (fn.sig.ident.prettyST.render == "timeTriggered") {
                   updatedImplItems = updatedImplItems :+ fn(
                     body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
-                      st"self.gumbo_monitor(api);")))))
+                      st"""${ContractObserverPlugin.beginMonitorRunCall}
+                          |self.gumbo_monitor(api);""")))))
                 } else {
                   updatedImplItems = updatedImplItems :+ item
                 }
@@ -970,42 +680,6 @@ object GumboMonitorPlugin {
         return ISZ()
       case _ => return ISZ()
     }
-  }
-
-  @pure def updateThreadInModel(subComponents: ISZ[ir.Component],
-                                processPath: ISZ[String],
-                                threadPath: ISZ[String],
-                                additionalThreadFeatures: ISZ[ir.Feature],
-                                additionalProcessFeatures: ISZ[ir.Feature],
-                                additionalProcessConnections: ISZ[ir.Connection]): ISZ[ir.Component] = {
-    var result: ISZ[ir.Component] = ISZ()
-    for (comp <- subComponents) {
-      if (comp.identifier.name == processPath) {
-        var updatedSubs: ISZ[ir.Component] = ISZ()
-        for (sub <- comp.subComponents) {
-          if (sub.identifier.name == threadPath) {
-            updatedSubs = updatedSubs :+ sub(features = sub.features ++ additionalThreadFeatures)
-          } else {
-            updatedSubs = updatedSubs :+ sub
-          }
-        }
-        result = result :+ comp(
-          features = comp.features ++ additionalProcessFeatures,
-          subComponents = updatedSubs,
-          connections = comp.connections ++ additionalProcessConnections)
-      } else if (comp.subComponents.nonEmpty) {
-        result = result :+ comp(subComponents = updateThreadInModel(
-          subComponents = comp.subComponents,
-          processPath = processPath,
-          threadPath = threadPath,
-          additionalThreadFeatures = additionalThreadFeatures,
-          additionalProcessFeatures = additionalProcessFeatures,
-          additionalProcessConnections = additionalProcessConnections))
-      } else {
-        result = result :+ comp
-      }
-    }
-    return result
   }
 
   @pure def updateMonitorProcess(subComponents: ISZ[ir.Component],

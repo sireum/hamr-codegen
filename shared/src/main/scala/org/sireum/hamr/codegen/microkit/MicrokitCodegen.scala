@@ -2,6 +2,7 @@
 package org.sireum.hamr.codegen.microkit
 
 import org.sireum._
+import org.sireum.hamr.codegen.microkit.plugins.testing.TestSchedulerPlugin
 import org.sireum.hamr.codegen.common.CommonUtil.{BoolValue, Store}
 import org.sireum.hamr.codegen.common.containers.Resource
 import org.sireum.hamr.codegen.common.plugin.Plugin
@@ -181,8 +182,10 @@ object MicrokitCodegen {
     }
     val auxIncludeFlags: ISZ[String] = for (d <- auxHeaderDirs.elements) yield s"-I$$(TOP_DIR)/$d"
 
+    // The test controller is built only for the test variant (test_scheduler.mk adds its ELFs
+    // through EXTRA_IMAGES): the shipped build must not depend on the test script compiling.
     var elfFiles: Set[String] = Set.empty[String]
-    for (mk <- makefileContainers) {
+    for (mk <- makefileContainers if mk.crateName != TestSchedulerPlugin.controllerName) {
       elfFiles = elfFiles ++ mk.getElfNames
     }
 

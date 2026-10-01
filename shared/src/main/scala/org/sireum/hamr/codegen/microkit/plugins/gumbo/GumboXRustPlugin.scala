@@ -131,10 +131,20 @@ object GumboXRustPlugin {
 }
 
 @sig trait GumboXContributions extends StoreValue {
+  /** Rust threads: the predicates are also woven into the thread's own crate. */
   @pure def componentContributions: Map[ThreadIdPath, GumboXComponentContributions]
+
+  /** C threads (GumboRustPlugin.getCThreadsWithContracts): only the executable predicates,
+    * for the run-time checks in crates/observers; there is no crate to put anything else in. */
+  @pure def cComponentContributions: Map[ThreadIdPath, GumboXComponentContributions]
+
+  /** Every thread whose contracts can be checked at run time, whatever its language. */
+  @strictpure def allComponentContributions: Map[ThreadIdPath, GumboXComponentContributions] =
+    componentContributions ++ cComponentContributions.entries
 }
 
-@datatype class DefaultGumboXContributions(val componentContributions: Map[ThreadIdPath, GumboXComponentContributions]) extends GumboXContributions
+@datatype class DefaultGumboXContributions(val componentContributions: Map[ThreadIdPath, GumboXComponentContributions],
+                                           val cComponentContributions: Map[ThreadIdPath, GumboXComponentContributions]) extends GumboXContributions
 
 object GumboXComponentContributions {
   @strictpure def empty: GumboXComponentContributions = GumboXComponentContributions(
@@ -195,6 +205,7 @@ object GumboXComputeContributions {
       // gumbo rust plugin provides datatype invariant rust methods
       GumboRustPlugin.getGumboRustContributions(store).nonEmpty &&
       (GumboRustPlugin.getThreadsWithContracts(store).nonEmpty ||
+        GumboRustPlugin.getCThreadsWithContracts(store).nonEmpty ||
         GumboRustPlugin.getDatatypesWithContracts(store).nonEmpty ||
         GumboRustPlugin.getGclLibraryAnnexes(symbolTable).nonEmpty)
 
@@ -316,7 +327,26 @@ object GumboXComputeContributions {
     localStore = GumboRustPlugin.putGumboRustContributions(
       GumboRustPlugin.getGumboRustContributions(localStore).get.setTheLibraryAnnexes(libraryAnnexes), localStore)
 
-    return (GumboXRustPlugin.putGumboXContributions(DefaultGumboXContributions(items), localStore), resources)
+    // C threads: the same contract analysis, for the run-time checks only.  None of it
+    // touches a thread crate -- no bridge module, test harness, cb_apis or developer UIFs.
+    var cItems: Map[ThreadIdPath, GumboXComponentContributions] = Map.empty
+    for (threadPath <- GumboRustPlugin.getCThreadsWithContracts(localStore)
+         if !StoreUtil.isSynthetic(threadPath, localStore)) {
+      val thread = symbolTable.componentMap.get(threadPath).get.asInstanceOf[AadlThread]
+      val subclauseInfoOpt = GumboRustUtil.getGumboSubclauseOpt(thread.path, symbolTable)
+      val integrationConstraints = processIntegrationConstraints(thread, subclauseInfoOpt, options, crustTypeProvider, types, localStore, reporter)
+      val initializeContributions = processInitialize(thread, datatypeInvariants, integrationConstraints, subclauseInfoOpt, options, crustTypeProvider, types, localStore, reporter)
+      val computeContributions = processCompute(thread, datatypeInvariants, integrationConstraints, subclauseInfoOpt, options, crustTypeProvider, types, localStore, reporter)
+      val (verusMethods, _) = processGumboSubclauseMethods(thread, subclauseInfoOpt, options, crustTypeProvider, types, localStore, reporter)
+      cItems = cItems + thread.path ~> GumboXComponentContributions(
+        integrationConstraints = integrationConstraints,
+        initializeContributions = initializeContributions,
+        computeContributions = computeContributions,
+        gumboMethods = verusMethods,
+        cb_apis = ISZ())
+    }
+
+    return (GumboXRustPlugin.putGumboXContributions(DefaultGumboXContributions(items, cItems), localStore), resources)
   }
 
   @pure def handleGclLibrary(gclLib: GclAnnexLibInfo,

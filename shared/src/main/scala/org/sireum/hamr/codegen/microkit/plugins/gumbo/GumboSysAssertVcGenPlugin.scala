@@ -9,7 +9,7 @@ import org.sireum.hamr.codegen.common.symbols.SymbolTable
 import org.sireum.hamr.codegen.common.sysvc.{MHIPComputer, ScheduleNextRel, VCGenerator}
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
-import org.sireum.hamr.codegen.microkit.plugins.MicrokitPlugin
+import org.sireum.hamr.codegen.microkit.plugins.{MicrokitPlugin, StoreUtil}
 import org.sireum.hamr.codegen.microkit.plugins.rust.types.CRustTypePlugin
 import org.sireum.hamr.codegen.microkit.util.{MakefileTarget, MakefileUtil, RustUtil}
 import org.sireum.hamr.ir.Aadl
@@ -42,9 +42,12 @@ import org.sireum.message.Reporter
   @pure override def handle(model: Aadl,
                             options: HamrCli.CodegenOption,
                             types: AadlTypes,
-                            symbolTable: SymbolTable,
+                            fullSymbolTable: SymbolTable,
                             store: Store,
                             reporter: Reporter): (Store, ISZ[Resource]) = {
+    // the system proof is about the model as written: injected components (monitors, the
+    // test controller) and synthetic ports (sv_ mirrors) are not part of it
+    val symbolTable = StoreUtil.modelSymbolTable(fullSymbolTable, store)
     // Mark handled so the Microkit handle fixpoint loop does not re-invoke this plugin
     // every pass (canHandle gates on !alreadyHandled). Without this the loop never
     // terminates because the plugin otherwise always reports it can handle.
