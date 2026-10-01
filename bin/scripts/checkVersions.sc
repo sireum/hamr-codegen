@@ -190,11 +190,42 @@ def latestCrateVersion(name: String): Option[String] = {
   return Some(latest)
 }
 
+// A GitHub API token, if one is at hand: GITHUB_TOKEN (set in GitHub Actions), else
+// the gh CLI's when it is installed and logged in.
+def githubToken(): Option[String] = {
+  Os.env("GITHUB_TOKEN") match {
+    case Some(t) if ops.StringOps(t).trim != "" => return Some(ops.StringOps(t).trim)
+    case _ =>
+  }
+  val r = Os.proc(ISZ[String]("gh", "auth", "token")).run()
+  val t = ops.StringOps(r.out).trim
+  return if (r.ok && t != "") Some(t) else None()
+}
+
+// Downloads a GitHub API url into temp.  GitHub allows 60 unauthenticated API
+// requests an hour per IP address -- shared by a whole campus or CI runner pool --
+// and 5000 authenticated ones, so a token is used when one is at hand.  It reaches
+// curl on stdin (-H @-), not on the command line, where other users could see it.
+// Without a token, or if curl fails, the plain download is used, as before.
+def githubApiDownload(temp: Os.Path, apiUrl: String): B = {
+  githubToken() match {
+    case Some(token) =>
+      val r = Os.proc(ISZ[String]("curl", "-sfL", "-H", "@-", "-o", temp.string, apiUrl))
+        .input(s"Authorization: Bearer $token\n").run()
+      if (r.ok) {
+        return T
+      }
+    case _ =>
+  }
+  return temp.downloadFrom(apiUrl)
+}
+
 // the commit each of the given submodule paths points at in one GitHub tree, e.g.
 // submoduleTips("au-ts/lionsos", "main:dep", ISZ("sddf")).  None() means the tree
 // could not be fetched -- GitHub's API allows 60 unauthenticated requests an hour
 // per IP address, which CI runners share, so that is a real outcome rather than a
-// hypothetical one.
+// hypothetical one; githubApiDownload authenticates when it can, which raises that
+// to 5000.
 def submoduleTips(repo: String, treeIsh: String, paths: ISZ[String]): Option[Map[String, String]] = {
   // GitHub can take seconds to resolve a tree it has not served recently, and
   // answers 504 when that outruns its gateway; the retry then hits the warm cache.
@@ -210,7 +241,7 @@ def submoduleTips(repo: String, treeIsh: String, paths: ISZ[String]): Option[Map
 def readSubmoduleTips(repo: String, treeIsh: String, paths: ISZ[String]): Option[Map[String, String]] = {
   val temp = Os.tempFix("tree-", ".json")
   temp.removeOnExit()
-  if (!temp.downloadFrom(s"https://api.github.com/repos/$repo/git/trees/$treeIsh")) {
+  if (!githubApiDownload(temp, s"https://api.github.com/repos/$repo/git/trees/$treeIsh")) {
     return None()
   }
   // Each entry lists its path before its sha, so the most recent path seen is the
@@ -445,7 +476,9 @@ var proversMisaligned = F
     ("lionsos", "LIONSOS_VER"))
   microkitKeysChecked = microkitKeysChecked ++ (for (pin <- pins) yield pin._1)
 
-  val temp = Os.slashDir / "temp-provers-versions.sh"
+  // in the system temp dir, like the script's other downloads -- not next to the
+  // script, where a run that ends before the exit hook leaves it in the repo
+  val temp = Os.tempFix("provers-versions-", ".sh")
   temp.removeOnExit()
   if (!temp.downloadFrom(proversVersionsUrl)) {
     // Not a mismatch, so not a failure: an unreachable GitHub says nothing about
@@ -466,6 +499,7 @@ var proversMisaligned = F
         }
       }
     }
+    temp.remove()
 
     val microkitVers = microkitVersionsP.properties
     var mismatches = ISZ[ST]()
