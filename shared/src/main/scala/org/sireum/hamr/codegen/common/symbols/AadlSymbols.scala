@@ -109,22 +109,8 @@ import org.sireum.message.Position
 
   @pure def slotTimePs: Option[Z]
 
-  // TODO(exact time, step 8): remove; floors to whole ms as the old accessor did
-  @pure def getFramePeriod(): Option[Z] = {
-    return AadlSymbols.floorToMs(framePeriodPs)
-  }
-
-  // TODO(exact time, step 8): remove; floors to whole ms as the old accessor did
-  @pure def getClockPeriod(): Option[Z] = {
-    return AadlSymbols.floorToMs(clockPeriodPs)
-  }
-
   @pure def getMaxDomain(): Option[Z] = {
     return PropertyUtil.getUnitPropZ(component.properties, CaseSchedulingProperties.MAX_DOMAIN)
-  }
-
-  @pure def getSlotTime(): Option[Z] = {
-    return PropertyUtil.getUnitPropZ(component.properties, OsateProperties.TIMING_PROPERTIES__SLOT_TIME)
   }
 
   @pure def getScheduleSourceText(): Option[String] = {
@@ -152,11 +138,6 @@ import org.sireum.message.Position
 
   // Period in picoseconds, parsed once by SymbolResolver (doc/ExactTime-design.md, D3)
   @pure def periodPs: Option[Z]
-
-  // TODO(exact time, step 8): remove; floors to whole ms as the old period field did
-  @pure def period: Option[Z] = {
-    return AadlSymbols.floorToMs(periodPs)
-  }
 
   @pure def isPeriodic(): B = {
     return dispatchProtocol == Dispatch_Protocol.Periodic
@@ -251,28 +232,12 @@ import org.sireum.message.Position
   // (doc/ExactTime-design.md, D3)
   @pure def computeExecutionTimePs: Option[(Z, Z)]
 
-  // TODO(exact time, step 8): remove; floors to whole ms as the old accessor did
-  @pure def getComputeExecutionTime(): Option[(Z, Z)] = {
-    computeExecutionTimePs match {
-      case Some((low, high)) => return Some((low / TimeUtil.psPerMs, high / TimeUtil.psPerMs))
-      case _ => return None()
-    }
-  }
-
   // the high end of Compute_Execution_Time in picoseconds, 0 if it is not set
   @pure def getMaxComputeExecutionTimePs(): Z = {
     computeExecutionTimePs match {
       case Some((_, high)) => return high
       case _ => return 0
     }
-  }
-
-  @pure def getMaxComputeExecutionTime(): Z = {
-    val ret: Z = getComputeExecutionTime() match {
-      case Some((low, high)) => high
-      case _ => z"0"
-    }
-    return ret
   }
 
   @pure def getParent(symbolTable: SymbolTable): AadlProcess = {
@@ -584,13 +549,3 @@ import org.sireum.message.Position
                              val btsSymbolTable: BTSSymbolTable) extends AnnexClauseInfo
 
 @datatype class TodoAnnexInfo(val annex: AnnexClause) extends AnnexClauseInfo
-
-object AadlSymbols {
-  // TODO(exact time, step 8): remove with the millisecond accessors; floors to whole ms as
-  // PropertyUtil.convertToMS did
-  @strictpure def floorToMs(ps: Option[Z]): Option[Z] =
-    ps match {
-      case Some(v) => Some(v / TimeUtil.psPerMs)
-      case _ => None()
-    }
-}

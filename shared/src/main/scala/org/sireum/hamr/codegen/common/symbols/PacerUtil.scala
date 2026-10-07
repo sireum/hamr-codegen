@@ -145,12 +145,12 @@ object PacerUtil {
       //      - Frame_Period
       //		  - Clock_Period
 
-      if (b.getClockPeriod().isEmpty) {
+      if (b.clockPeriodPs.isEmpty) {
         canUseDomainScheduling = F
         mesg = mesg :+ st"Bound processor missing Clock_Period annotation: ${b.path}"
       }
 
-      if (b.getFramePeriod().isEmpty) {
+      if (b.framePeriodPs.isEmpty) {
         canUseDomainScheduling = F
         mesg = mesg :+ st"Bound processor missing Frame_Period annotation: ${b.path}"
       }

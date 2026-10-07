@@ -150,16 +150,6 @@ object PropertyUtil {
     return ret
   }
 
-  def getPeriod(c: ir.Component): Option[Z] = {
-    val ret: Option[Z] = getDiscreetPropertyValue(c.properties, OsateProperties.TIMING_PROPERTIES__PERIOD) match {
-      case Some(ir.UnitProp(z, u)) =>
-        assert(u.nonEmpty, s"period's unit not provided for ${CommonUtil.getName(c.identifier)}")
-        Some(convertToMS(z, u.get))
-      case _ => None[Z]()
-    }
-    return ret
-  }
-
   def getActualProcessorBinding(c: ir.Component): ISZ[IdPath] = {
     val ps = getPropertyValues(c.properties, OsateProperties.DEPLOYMENT_PROPERTIES__ACTUAL_PROCESSOR_BINDING)
     var ret: ISZ[IdPath] = ISZ()
@@ -296,27 +286,5 @@ object PropertyUtil {
         return toPicoseconds(value, Some("ps"), what, c.identifier.pos, reporter)
       case _ => return getTimePs(c, OsateProperties.TIMING_PROPERTIES__SLOT_TIME, what, reporter)
     }
-  }
-
-  def convertToMS(value: String, unit: String): Z = {
-    val ret: Z = R(value) match {
-      case Some(v) =>
-        val _v = conversions.R.toZ(v)
-        val ret: Z = unit match {
-          case "ps" => _v / (z"1000" * z"1000" * z"1000")
-          case "ns" => _v / (z"1000" * z"1000")
-          case "us" => _v / z"1000"
-          case "ms" => _v
-          case "sec" => _v * z"1000"
-          case "min" => _v * z"1000" * z"60"
-          case "hr" => _v * z"1000" * z"60" * z"60"
-          case _ =>
-            halt(s"Unexpected time unit ${unit}")
-        }
-        ret
-      case _ =>
-        halt(s"Could not convert the string '${value}' to Z")
-    }
-    return ret
   }
 }

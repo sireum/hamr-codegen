@@ -147,14 +147,6 @@ object CommonUtil {
     return ops.ISZOps(zs).foldLeft((a: Z, b: Z) => if (a > b) a else b, zs(0))
   }
 
-  def getPeriod(m: AadlThreadOrDevice): Z = {
-    val ret: Z = m.period match {
-      case Some(p) => p
-      case _ => z"1"
-    }
-    return ret
-  }
-
   // the Period in picoseconds, or the default period if the model has none (doc/ExactTime-design.md, D3)
   @pure def getPeriodPs(m: AadlDispatchableComponent): Z = {
     m.periodPs match {

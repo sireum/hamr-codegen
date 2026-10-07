@@ -82,8 +82,8 @@ import org.sireum.hamr.codegen.common.symbols._
         val periodPs: Z = aadlThread.periodPs match {
           case Some(_period) => _period
           case _ =>
-            reporter.warn(None(), Util.toolName, s"Period not provided for periodic component ${classifier}, using ${TimeUtil.format(Util.DEFAULT_PERIOD_PS)}")
-            Util.DEFAULT_PERIOD_PS
+            reporter.warn(None(), Util.toolName, s"Period not provided for periodic component ${classifier}, using ${TimeUtil.format(TimeUtil.defaultPeriodPs)}")
+            TimeUtil.defaultPeriodPs
         }
         val period: Z = TimeUtil.fromPicoseconds(periodPs, TimeUtil.psPerMs, PeriodicDispatcherTemplate.maxPeriodMs,
           s"Period of ${aadlThread.pathAsString(".")} (${OsateProperties.TIMING_PROPERTIES__PERIOD})",

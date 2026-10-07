@@ -31,7 +31,7 @@ object Linter {
               reporter.error(thread.component.identifier.pos, CommonUtil.toolName, mesg)
           }
         } else {
-          if (thread.dispatchProtocol == Dispatch_Protocol.Periodic && thread.period.isEmpty) {
+          if (thread.dispatchProtocol == Dispatch_Protocol.Periodic && thread.periodPs.isEmpty) {
             val mesg = s"Must specify ${OsateProperties.TIMING_PROPERTIES__PERIOD} for periodic thread ${thread.identifier}"
             reporter.error(thread.component.identifier.pos, CommonUtil.toolName, mesg)
           }

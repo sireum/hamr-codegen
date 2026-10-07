@@ -12,7 +12,7 @@ import org.sireum.hamr.codegen.common.containers.FileResource
 import org.sireum.hamr.codegen.common.properties.PropertyUtil
 import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
-import org.sireum.hamr.codegen.common.util.{ResourceUtil, TimeUtil}
+import org.sireum.hamr.codegen.common.util.ResourceUtil
 import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
 import org.sireum.hamr.ir
 import org.sireum.message.Reporter
@@ -54,8 +54,6 @@ object Util {
   val DEFAULT_QUEUE_SIZE: Z = z"1"
   val DEFAULT_PRIORITY: Z = z"201"
   val DEFAULT_STACK_SIZE: Z = z"1024"
-  // 1 ms (doc/ExactTime-design.md, D8)
-  val DEFAULT_PERIOD_PS: Z = TimeUtil.psPerMs
 
   val DIR_SRC: String = "src"
   //val DIR_INCLUDES: String = "includes"
