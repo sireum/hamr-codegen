@@ -125,6 +125,15 @@ object Util {
     return ports
   }
 
+  /** The base of the System V IPC keys a Linux system's apps use (each key is the base plus a port
+    * id): a multiple of 0x10000, derived from the package name so that different systems do not
+    * share keys, and never 0 so that no key is IPC_PRIVATE */
+  @pure def ipcKeyBase(packageName: String): Z = {
+    val h = packageName.hash
+    val nonNeg: Z = if (h < 0) -h else h
+    return (nonNeg % 0x7FFF + 1) * 0x10000
+  }
+
   @pure def getIpc(ipcmech: IpcMechanism.Type, packageName: String): ST = {
     val PACKAGE_PLACEHOLDER = "PACKAGE_NAME"
     val r: String = ipcmech match {
@@ -132,7 +141,8 @@ object Util {
       case x => halt("Unexpected IPC mechanism ${x}")
     }
     val lib = Util.getLibraryFile(r).render
-    val c = StringUtil.replaceAll(lib, PACKAGE_PLACEHOLDER, packageName)
+    val c = StringUtil.replaceAll(StringUtil.replaceAll(lib, PACKAGE_PLACEHOLDER, packageName),
+      "IPC_KEY_BASE_VALUE", ipcKeyBase(packageName).string)
     return (
       st"""${CommentTemplate.doNotEditComment_slash}
           |

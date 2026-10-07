@@ -13,6 +13,9 @@ object TranspilerTemplate {
 
   val SCRIPT_HOME: String = "SCRIPT_HOME"
 
+  // default set in org.sireum.transpilers.cli.cTranspiler
+  val defaultStackSizeInBytes: Z = 16 * 1024 * 1024
+
   @pure def transpiler(verbose: B,
                        libraryName: String,
                        sourcepaths: ISZ[String],
@@ -32,7 +35,7 @@ object TranspilerTemplate {
                        cmakeIncludes: ISZ[String]): (ST, SireumSlangTranspilersCOption) = {
 
     val _stackSizeInBytes: String = if (stackSizeInBytes < 0) {
-      "16*1024*1024" // default set in org.sireum.transpilers.cli.cTranspiler
+      "16*1024*1024" // defaultStackSizeInBytes, written as the transpiler's own default is
     } else {
       stackSizeInBytes.string
     }

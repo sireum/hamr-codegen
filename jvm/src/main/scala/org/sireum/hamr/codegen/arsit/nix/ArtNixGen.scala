@@ -16,6 +16,7 @@ import org.sireum.hamr.codegen.common.symbols._
 import org.sireum.hamr.codegen.common.templates.TemplateUtil
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.ResourceUtil
+import org.sireum.hamr.ir
 import org.sireum.hamr.ir.Direction
 
 @record class ArtNixGen() extends NixGen {
@@ -27,6 +28,8 @@ import org.sireum.hamr.ir.Direction
   var maxPortsForComponents: Z = 0
   var numConnections: Z = 0
   var maxStackSize: Z = -1
+  var maxStackSizeThread: Option[ir.Component] = None() // the thread whose Stack_Size is maxStackSize
+  var threadStackSizes: ISZ[(String, Z)] = ISZ() // (thread, Stack_Size in bytes) for threads that set it
 
   var portId: Z = -1
 
@@ -94,9 +97,12 @@ import org.sireum.hamr.ir.Direction
       var appCases: ISZ[ST] = ISZ()
 
       PropertyUtil.getStackSizeInBytes(component) match {
-        case Some(bytes) => if (bytes > maxStackSize) {
-          maxStackSize = bytes
-        }
+        case Some(bytes) =>
+          threadStackSizes = threadStackSizes :+ ((CommonUtil.getName(component.identifier), bytes))
+          if (bytes > maxStackSize) {
+            maxStackSize = bytes
+            maxStackSizeThread = Some(component)
+          }
         case _ =>
       }
 
@@ -307,6 +313,39 @@ import org.sireum.hamr.ir.Direction
       s"art.Art.numConnections=${numConnections}"
     )
 
+    // The nix apps run components and ART in one process, so a thread's Stack_Size is not
+    // the process's stack size: use the transpiler's default (-1) unless a thread needs more
+    val processStackSize: Z =
+      if (maxStackSize > TranspilerTemplate.defaultStackSizeInBytes) maxStackSize
+      else -1
+
+    // Report how the threads' Stack_Size values were used, since unlike on seL4 they are not
+    // each a stack of their own
+    var stackSizeComment: Option[ST] = None()
+    if (threadStackSizes.nonEmpty) {
+      val used: String =
+        if (processStackSize < 0) s"the transpiler default of ${TranspilerTemplate.defaultStackSizeInBytes} bytes (16 MiB), as it exceeds every Stack_Size specified in the model"
+        else s"the largest Stack_Size, $processStackSize bytes"
+      val thread = CommonUtil.getName(maxStackSizeThread.get.identifier)
+      val msg =
+        st"""The Linux apps run every component and ART in a single process, so the threads' Stack_Size
+            |values are not each a stack of their own as they are on seL4. The largest is $maxStackSize bytes
+            |(thread $thread); the process stack is $used. See the comments in transpile.cmd""".render
+      // a warning when the model's values are not used at all, info when the largest one is
+      if (processStackSize < 0) {
+        reporter.warn(maxStackSizeThread.get.identifier.pos, Util.toolName, msg)
+      } else {
+        reporter.info(maxStackSizeThread.get.identifier.pos, Util.toolName, msg)
+      }
+      stackSizeComment = Some(
+        st"""// Stack size
+            |//   The Linux apps run every component and ART in a single process, so a thread's Stack_Size
+            |//   is not used as its own stack as it is on seL4.  The process stack (--stack-size) is
+            |//   $used.
+            |//   Stack_Size per thread:
+            |${(threadStackSizes.map((p: (String, Z)) => st"//     ${p._1}: ${p._2} bytes"), "\n")}""")
+    }
+
     val _legacyextensions: ISZ[String] = ISZ(dirs.cExt_c_Dir, dirs.cEtcDir) ++ arsitOptions.auxCodeDirs
 
     val legacyTranspiler: (ST, SireumSlangTranspilersCOption) = TranspilerTemplate.transpiler(
@@ -322,7 +361,7 @@ import org.sireum.hamr.ir.Direction
       maxStringSize = arsitOptions.maxStringSize,
       customArraySizes = customSequenceSizes.map(m => m._1),
       customConstants = customConstants,
-      stackSizeInBytes = maxStackSize,
+      stackSizeInBytes = processStackSize,
       extensions = _legacyextensions,
       excludes = excludes,
       buildApps = buildApps,
@@ -368,7 +407,7 @@ import org.sireum.hamr.ir.Direction
       maxStringSize = arsitOptions.maxStringSize,
       customArraySizes = customSequenceSizes.map(m => m._1),
       customConstants = customConstants,
-      stackSizeInBytes = maxStackSize,
+      stackSizeInBytes = processStackSize,
       extensions = _extensions,
       excludes = excludes,
       buildApps = buildApps,
@@ -377,7 +416,8 @@ import org.sireum.hamr.ir.Direction
 
     transpilerOptions = transpilerOptions :+ transpiler._2
 
-    val comments = ISZ(st"// If you want to make changes to this script, make a copy of it and edit that version", custSeqSizeComment)
+    val comments = ISZ(st"// If you want to make changes to this script, make a copy of it and edit that version", custSeqSizeComment) ++
+      stackSizeComment.toIS
 
     val slashTranspileScript = TranspilerTemplate.transpilerSlashScriptPreamble(legacyTranspiler._1, transpiler._1, comments)
     resources = resources :+ ResourceUtil.createExeCrlfResource(Util.pathAppend(dirs.slangBinDir, ISZ("transpile.cmd")), slashTranspileScript, T)

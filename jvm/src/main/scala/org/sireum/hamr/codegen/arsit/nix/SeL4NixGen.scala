@@ -23,8 +23,6 @@ import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
 
   var transpilerOptions: ISZ[SireumSlangTranspilersCOption] = ISZ()
 
-  val defaultMaxStackSizeInBytes: Z = z"16" * z"1024" * z"1024"
-
   @pure def useArm(symbolTable: SymbolTable): B = {
     return ops.ISZOps(symbolTable.getProcesses()).exists(p => p.toVirtualMachine(symbolTable))
   }
@@ -162,7 +160,7 @@ import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
 
       val stackSizeInBytes: Z = PropertyUtil.getStackSizeInBytes(component.component) match {
         case Some(size) => size
-        case _ => defaultMaxStackSizeInBytes
+        case _ => TranspilerTemplate.defaultStackSizeInBytes
       }
 
       val settingsFilename = s"${dirs.slangBinDir}/${CMakeTemplate.cmake_settingsFilename(instanceSingletonName)}"
@@ -253,7 +251,7 @@ import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
 
         customSequenceSizes = customSequenceSizes,
         customConstants = ISZ(),
-        maxStackSizeInBytes = defaultMaxStackSizeInBytes,
+        maxStackSizeInBytes = TranspilerTemplate.defaultStackSizeInBytes,
 
         extensions = ISZ(),
         excludes = ISZ(),
