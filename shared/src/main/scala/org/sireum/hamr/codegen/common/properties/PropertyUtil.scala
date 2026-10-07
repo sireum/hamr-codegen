@@ -8,6 +8,8 @@ import org.sireum.hamr.codegen.common._
 import org.sireum.hamr.codegen.common.symbols.Dispatch_Protocol
 import org.sireum.hamr.ir
 import org.sireum.hamr.ir.Property
+import org.sireum.hamr.codegen.common.util.TimeUtil
+import org.sireum.message.{Position, Reporter}
 
 object PropertyUtil {
   @pure def hasProperty(properties: ISZ[ir.Property], propertyName: String): B = {
@@ -198,6 +200,102 @@ object PropertyUtil {
       case _ => F
     }
     return ret
+  }
+
+  /** Parses a time property value to picoseconds (doc/ExactTime-design.md, D2).
+    *
+    * The value is scaled exactly (Slang R) and rounded to the nearest picosecond. That is silent
+    * when the value is within double precision of a whole picosecond (OSATE writes times as doubles,
+    * e.g. 33.3 ms as "3.3299999999999996E10" ps); a larger fraction, which only a decimal SysML
+    * value can have, is rounded with a time-rounding warning.
+    *
+    * @param what names the value for messages, e.g. "Period of top.proc.worker (Timing_Properties::Period)"
+    * @return None, after reporting an error, if the unit is missing or unknown or the value does
+    *         not parse */
+  def toPicoseconds(value: String, unitOpt: Option[String], what: String, pos: Option[Position],
+                    reporter: Reporter): Option[Z] = {
+    val unit: String = unitOpt match {
+      case Some(u) => u
+      case _ =>
+        reporter.error(pos, CommonUtil.toolName, s"$what has no time unit")
+        return None()
+    }
+    val factor: Z = unit match {
+      case "ps" => 1
+      case "ns" => TimeUtil.psPerNs
+      case "us" => TimeUtil.psPerUs
+      case "ms" => TimeUtil.psPerMs
+      case "sec" => TimeUtil.psPerS
+      case "min" => 60 * TimeUtil.psPerS
+      case "hr" => 3600 * TimeUtil.psPerS
+      case _ =>
+        reporter.error(pos, CommonUtil.toolName, s"$what has an unknown time unit '$unit'")
+        return None()
+    }
+    val r: R = R(value) match {
+      case Some(v) => v
+      case _ =>
+        reporter.error(pos, CommonUtil.toolName, s"$what has a value, '$value', that is not a number")
+        return None()
+    }
+    val exact: R = r * conversions.Z.toR(factor)
+    val half = R("0.5").get
+    val ps: Z = if (exact < R("0").get) conversions.R.toZ(exact - half) else conversions.R.toZ(exact + half)
+    val diff: R = exact - conversions.Z.toR(ps)
+    val absDiff: R = if (diff < R("0").get) -diff else diff
+    val absExact: R = if (exact < R("0").get) -exact else exact
+    // 2^-50: a few times the 2^-53 rounding error of the one double multiplication OSATE does
+    val noise: R = absExact / R("1125899906842624").get
+    if (absDiff > noise) {
+      TimeUtil.warnOnce(pos, TimeUtil.timeRoundingKind,
+        s"$what is $value $unit, which is not a whole number of picoseconds; it is rounded to ${TimeUtil.format(ps)}",
+        reporter)
+    }
+    return Some(ps)
+  }
+
+  /** Parses the time property propName of c to picoseconds (D2); None if c does not set it */
+  def getTimePs(c: ir.Component, propName: String, what: String, reporter: Reporter): Option[Z] = {
+    getDiscreetPropertyValue(c.properties, propName) match {
+      case Some(ir.UnitProp(value, unitOpt)) =>
+        return toPicoseconds(value, unitOpt, what, c.identifier.pos, reporter)
+      case Some(x) =>
+        reporter.error(c.identifier.pos, CommonUtil.toolName, s"$what must be a time value, found $x")
+        return None()
+      case _ => return None()
+    }
+  }
+
+  /** Parses c's Compute_Execution_Time range to picoseconds (D2); None if c does not set it */
+  def getComputeExecutionTimePs(c: ir.Component, path: String, reporter: Reporter): Option[(Z, Z)] = {
+    val what = s"Compute_Execution_Time of $path (${OsateProperties.TIMING_PROPERTIES__COMPUTE_EXECUTION_TIME})"
+    getDiscreetPropertyValue(c.properties, OsateProperties.TIMING_PROPERTIES__COMPUTE_EXECUTION_TIME) match {
+      case Some(ir.RangeProp(low, high)) =>
+        val lowPs = toPicoseconds(low.value, low.unit, s"$what (low)", c.identifier.pos, reporter)
+        val highPs = toPicoseconds(high.value, high.unit, s"$what (high)", c.identifier.pos, reporter)
+        if (lowPs.nonEmpty && highPs.nonEmpty) {
+          return Some((lowPs.get, highPs.get))
+        }
+        return None()
+      case Some(x) =>
+        reporter.error(c.identifier.pos, CommonUtil.toolName, s"$what must be a time range, found $x")
+        return None()
+      case _ => return None()
+    }
+  }
+
+  /** Parses c's Slot_Time to picoseconds (D2, D5). A Slot_Time without a unit keeps its old meaning:
+    * its number was passed through as is, and AIR gives times in picoseconds, so it is read as
+    * picoseconds, with a warning that the unit is missing. */
+  def getSlotTimePs(c: ir.Component, path: String, reporter: Reporter): Option[Z] = {
+    val what = s"Slot_Time of $path (${OsateProperties.TIMING_PROPERTIES__SLOT_TIME})"
+    getDiscreetPropertyValue(c.properties, OsateProperties.TIMING_PROPERTIES__SLOT_TIME) match {
+      case Some(ir.UnitProp(value, None())) =>
+        TimeUtil.warnOnce(c.identifier.pos, CommonUtil.toolName,
+          s"$what has no time unit; it is read as $value ps", reporter)
+        return toPicoseconds(value, Some("ps"), what, c.identifier.pos, reporter)
+      case _ => return getTimePs(c, OsateProperties.TIMING_PROPERTIES__SLOT_TIME, what, reporter)
+    }
   }
 
   def convertToMS(value: String, unit: String): Z = {

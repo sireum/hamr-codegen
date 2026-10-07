@@ -9,7 +9,7 @@ import org.sireum.hamr.codegen.common.properties.{CasePropertiesProperties, Case
 import org.sireum.hamr.codegen.common.util.HamrCli.{CodegenHamrPlatform, CodegenOption}
 import org.sireum.hamr.ir
 import org.sireum.hamr.codegen.common.types.{BaseType, BitType, TypeUtil}
-import org.sireum.hamr.codegen.common.util.ExperimentalOptions
+import org.sireum.hamr.codegen.common.util.{ExperimentalOptions, TimeUtil}
 
 object Linter {
   @pure def lint(options: CodegenOption, symbolTable: SymbolTable, reporter: Reporter): Unit = {
@@ -219,7 +219,56 @@ object Linter {
       }
     }
 
+    // doc/ExactTime-design.md, D5: backend-independent checks of the time values SymbolResolver parsed
+    @pure def lint_TimeValues(): Unit = {
+      def positive(c: AadlComponent, name: String, ps: Option[Z]): Unit = {
+        ps match {
+          case Some(v) if v <= 0 =>
+            reporter.error(c.component.identifier.pos, CommonUtil.toolName,
+              s"$name of ${st"${(c.path, ".")}".render} is ${TimeUtil.format(v)}, but must be greater than 0")
+          case _ =>
+        }
+      }
+      for (c <- symbolTable.componentMap.values) {
+        c match {
+          case p: Processor =>
+            positive(c, "Frame_Period", p.framePeriodPs)
+            positive(c, "Clock_Period", p.clockPeriodPs)
+            positive(c, "Slot_Time", p.slotTimePs)
+          case _ =>
+        }
+        c match {
+          case d: AadlDispatchableComponent => positive(c, "Period", d.periodPs)
+          case _ =>
+        }
+        c match {
+          case t: AadlThreadOrDevice =>
+            t.computeExecutionTimePs match {
+              case Some((low, high)) =>
+                // a low end of 0 is valid ("up to high") and unused; the high end becomes a schedule slot
+                val pathName = st"${(c.path, ".")}".render
+                if (low < 0) {
+                  reporter.error(c.component.identifier.pos, CommonUtil.toolName,
+                    s"Compute_Execution_Time of $pathName has a low end of ${TimeUtil.format(low)}, but it must not be negative")
+                }
+                if (high <= 0) {
+                  reporter.error(c.component.identifier.pos, CommonUtil.toolName,
+                    s"Compute_Execution_Time of $pathName has a high end of ${TimeUtil.format(high)}, but it must be greater than 0")
+                }
+                if (low > high) {
+                  reporter.error(c.component.identifier.pos, CommonUtil.toolName,
+                    s"Compute_Execution_Time of $pathName has a low end (${TimeUtil.format(low)}) greater than its high end (${TimeUtil.format(high)})")
+                }
+              case _ =>
+            }
+          case _ =>
+        }
+      }
+    }
+
     lint_Threads()
+
+    lint_TimeValues()
 
     lint_WireProtocol_CakeML()
 

@@ -365,7 +365,10 @@ object SymbolResolver {
               protocol
           }
 
-          val period = PropertyUtil.getPeriod(c)
+          val pathName = st"${(path, ".")}".render
+          val periodPs = PropertyUtil.getTimePs(c, OsateProperties.TIMING_PROPERTIES__PERIOD,
+            s"Period of $pathName (${OsateProperties.TIMING_PROPERTIES__PERIOD})", reporter)
+          val computeExecutionTimePs = PropertyUtil.getComputeExecutionTimePs(c, pathName, reporter)
 
           val ret: AadlThreadOrDevice = if (c.category == ir.ComponentCategory.Device) {
             val dev = AadlDevice(
@@ -374,7 +377,8 @@ object SymbolResolver {
               path = path,
               identifier = identifier,
               dispatchProtocol = dispatchProtocol,
-              period = period,
+              periodPs = periodPs,
+              computeExecutionTimePs = computeExecutionTimePs,
               features = aadlFeatures,
               subComponents = subComponents,
               connectionInstances = c.connectionInstances)
@@ -392,7 +396,8 @@ object SymbolResolver {
               path = path,
               identifier = identifier,
               dispatchProtocol = dispatchProtocol,
-              period = period,
+              periodPs = periodPs,
+              computeExecutionTimePs = computeExecutionTimePs,
               features = aadlFeatures,
               subComponents = subComponents,
               connectionInstances = c.connectionInstances)
@@ -443,6 +448,7 @@ object SymbolResolver {
         }
         case ir.ComponentCategory.Processor => {
           assert(c.subComponents.isEmpty, s"Need to handle subcomponents of ${c.category}: ${identifier}")
+          val pathName = st"${(path, ".")}".render
           val proc = AadlProcessor(
             component = c,
             parent = ISZ(),
@@ -450,7 +456,12 @@ object SymbolResolver {
             identifier = identifier,
             features = aadlFeatures,
             subComponents = ISZ(),
-            connectionInstances = c.connectionInstances)
+            connectionInstances = c.connectionInstances,
+            framePeriodPs = PropertyUtil.getTimePs(c, OsateProperties.TIMING_PROPERTIES__FRAME_PERIOD,
+              s"Frame_Period of $pathName (${OsateProperties.TIMING_PROPERTIES__FRAME_PERIOD})", reporter),
+            clockPeriodPs = PropertyUtil.getTimePs(c, OsateProperties.TIMING_PROPERTIES__CLOCK_PERIOD,
+              s"Clock_Period of $pathName (${OsateProperties.TIMING_PROPERTIES__CLOCK_PERIOD})", reporter),
+            slotTimePs = PropertyUtil.getSlotTimePs(c, pathName, reporter))
 
           checkSubcomponents(proc, ISZ())
 
@@ -469,7 +480,9 @@ object SymbolResolver {
               Dispatch_Protocol.Periodic
           }
 
-          val period = PropertyUtil.getPeriod(c)
+          val pathName = st"${(path, ".")}".render
+          val periodPs = PropertyUtil.getTimePs(c, OsateProperties.TIMING_PROPERTIES__PERIOD,
+            s"Period of $pathName (${OsateProperties.TIMING_PROPERTIES__PERIOD})", reporter)
 
           val vproc = AadlVirtualProcessor(
             component = c,
@@ -480,7 +493,12 @@ object SymbolResolver {
             subComponents = ISZ(),
             connectionInstances = c.connectionInstances,
             dispatchProtocol = dispatchProtocol,
-            period = period
+            periodPs = periodPs,
+            framePeriodPs = PropertyUtil.getTimePs(c, OsateProperties.TIMING_PROPERTIES__FRAME_PERIOD,
+              s"Frame_Period of $pathName (${OsateProperties.TIMING_PROPERTIES__FRAME_PERIOD})", reporter),
+            clockPeriodPs = PropertyUtil.getTimePs(c, OsateProperties.TIMING_PROPERTIES__CLOCK_PERIOD,
+              s"Clock_Period of $pathName (${OsateProperties.TIMING_PROPERTIES__CLOCK_PERIOD})", reporter),
+            slotTimePs = PropertyUtil.getSlotTimePs(c, pathName, reporter)
           )
 
           checkSubcomponents(vproc, ISZ())

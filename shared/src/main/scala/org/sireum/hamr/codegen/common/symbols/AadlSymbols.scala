@@ -6,6 +6,7 @@ import org.sireum.hamr.codegen.common.CommonUtil.IdPath
 import org.sireum.hamr.codegen.common.properties.{CasePropertiesProperties, CaseSchedulingProperties, OsateProperties, PropertyUtil}
 import org.sireum.hamr.codegen.common.types.AadlType
 import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
+import org.sireum.hamr.codegen.common.util.TimeUtil
 import org.sireum.hamr.ir
 import org.sireum.hamr.ir._
 import org.sireum.message.Position
@@ -100,24 +101,22 @@ import org.sireum.message.Position
 
   @pure def connectionInstances: ISZ[ir.ConnectionInstance]
 
+  // Frame_Period, Clock_Period and Slot_Time in picoseconds, parsed once by SymbolResolver
+  // (doc/ExactTime-design.md, D3)
+  @pure def framePeriodPs: Option[Z]
+
+  @pure def clockPeriodPs: Option[Z]
+
+  @pure def slotTimePs: Option[Z]
+
+  // TODO(exact time, step 8): remove; floors to whole ms as the old accessor did
   @pure def getFramePeriod(): Option[Z] = {
-    val ret: Option[Z] = PropertyUtil.getDiscreetPropertyValue(component.properties, OsateProperties.TIMING_PROPERTIES__FRAME_PERIOD) match {
-      case Some(ir.UnitProp(value, unit)) =>
-        assert(unit.nonEmpty, s"frame period's unit not provided for ${identifier}")
-        Some(PropertyUtil.convertToMS(value, unit.get))
-      case _ => None()
-    }
-    return ret
+    return AadlSymbols.floorToMs(framePeriodPs)
   }
 
+  // TODO(exact time, step 8): remove; floors to whole ms as the old accessor did
   @pure def getClockPeriod(): Option[Z] = {
-    val ret: Option[Z] = PropertyUtil.getDiscreetPropertyValue(component.properties, OsateProperties.TIMING_PROPERTIES__CLOCK_PERIOD) match {
-      case Some(ir.UnitProp(value, unit)) =>
-        assert(unit.nonEmpty, s"clock period's unit not provided for ${identifier}")
-        Some(PropertyUtil.convertToMS(value, unit.get))
-      case _ => None()
-    }
-    return ret
+    return AadlSymbols.floorToMs(clockPeriodPs)
   }
 
   @pure def getMaxDomain(): Option[Z] = {
@@ -151,7 +150,13 @@ import org.sireum.message.Position
 @sig trait AadlDispatchableComponent {
   @pure def dispatchProtocol: Dispatch_Protocol.Type
 
-  @pure def period: Option[Z]
+  // Period in picoseconds, parsed once by SymbolResolver (doc/ExactTime-design.md, D3)
+  @pure def periodPs: Option[Z]
+
+  // TODO(exact time, step 8): remove; floors to whole ms as the old period field did
+  @pure def period: Option[Z] = {
+    return AadlSymbols.floorToMs(periodPs)
+  }
 
   @pure def isPeriodic(): B = {
     return dispatchProtocol == Dispatch_Protocol.Periodic
@@ -168,7 +173,11 @@ import org.sireum.message.Position
                               val identifier: String,
                               val features: ISZ[AadlFeature],
                               val subComponents: ISZ[AadlComponent],
-                              val connectionInstances: ISZ[ir.ConnectionInstance]) extends Processor
+                              val connectionInstances: ISZ[ir.ConnectionInstance],
+
+                              val framePeriodPs: Option[Z],
+                              val clockPeriodPs: Option[Z],
+                              val slotTimePs: Option[Z]) extends Processor
 
 @datatype class AadlVirtualProcessor(val component: ir.Component,
                                      val parent: IdPath,
@@ -179,7 +188,11 @@ import org.sireum.message.Position
                                      val connectionInstances: ISZ[ir.ConnectionInstance],
 
                                      val dispatchProtocol: Dispatch_Protocol.Type,
-                                     val period: Option[Z]) extends Processor with AadlDispatchableComponent
+                                     val periodPs: Option[Z],
+
+                                     val framePeriodPs: Option[Z],
+                                     val clockPeriodPs: Option[Z],
+                                     val slotTimePs: Option[Z]) extends Processor with AadlDispatchableComponent
 
 @datatype class AadlProcess(val component: ir.Component,
                             val parent: IdPath,
@@ -234,21 +247,24 @@ import org.sireum.message.Position
 
 @sig trait AadlThreadOrDevice extends AadlComponent with AadlDispatchableComponent {
 
-  @pure def period: Option[Z]
+  // Compute_Execution_Time (low, high) in picoseconds, parsed once by SymbolResolver
+  // (doc/ExactTime-design.md, D3)
+  @pure def computeExecutionTimePs: Option[(Z, Z)]
 
+  // TODO(exact time, step 8): remove; floors to whole ms as the old accessor did
   @pure def getComputeExecutionTime(): Option[(Z, Z)] = {
-    val ret: Option[(Z, Z)] = PropertyUtil.getDiscreetPropertyValue(component.properties, OsateProperties.TIMING_PROPERTIES__COMPUTE_EXECUTION_TIME) match {
-      case Some(ir.RangeProp(low, high)) =>
-        assert(low.unit.nonEmpty, s"unit not provided for min compute execution time for ${identifier}")
-        assert(high.unit.nonEmpty, s"unit not provided for max compute execution time for ${identifier}")
-
-        val _low = PropertyUtil.convertToMS(low.value, low.unit.get)
-        val _high = PropertyUtil.convertToMS(high.value, high.unit.get)
-
-        Some((_low, _high))
-      case _ => None()
+    computeExecutionTimePs match {
+      case Some((low, high)) => return Some((low / TimeUtil.psPerMs, high / TimeUtil.psPerMs))
+      case _ => return None()
     }
-    return ret
+  }
+
+  // the high end of Compute_Execution_Time in picoseconds, 0 if it is not set
+  @pure def getMaxComputeExecutionTimePs(): Z = {
+    computeExecutionTimePs match {
+      case Some((_, high)) => return high
+      case _ => return 0
+    }
   }
 
   @pure def getMaxComputeExecutionTime(): Z = {
@@ -306,7 +322,8 @@ import org.sireum.message.Position
                            val connectionInstances: ISZ[ir.ConnectionInstance],
 
                            val dispatchProtocol: Dispatch_Protocol.Type,
-                           val period: Option[Z],
+                           val periodPs: Option[Z],
+                           val computeExecutionTimePs: Option[(Z, Z)],
 
                            val features: ISZ[AadlFeature]) extends AadlThreadOrDevice
 
@@ -318,7 +335,8 @@ import org.sireum.message.Position
                            val connectionInstances: ISZ[ir.ConnectionInstance],
 
                            val dispatchProtocol: Dispatch_Protocol.Type,
-                           val period: Option[Z],
+                           val periodPs: Option[Z],
+                           val computeExecutionTimePs: Option[(Z, Z)],
 
                            val features: ISZ[AadlFeature]) extends AadlThreadOrDevice
 
@@ -566,3 +584,13 @@ import org.sireum.message.Position
                              val btsSymbolTable: BTSSymbolTable) extends AnnexClauseInfo
 
 @datatype class TodoAnnexInfo(val annex: AnnexClause) extends AnnexClauseInfo
+
+object AadlSymbols {
+  // TODO(exact time, step 8): remove with the millisecond accessors; floors to whole ms as
+  // PropertyUtil.convertToMS did
+  @strictpure def floorToMs(ps: Option[Z]): Option[Z] =
+    ps match {
+      case Some(v) => Some(v / TimeUtil.psPerMs)
+      case _ => None()
+    }
+}

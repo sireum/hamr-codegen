@@ -3,7 +3,8 @@
 package org.sireum.hamr.codegen.common
 
 import org.sireum._
-import org.sireum.hamr.codegen.common.symbols.{AadlThreadOrDevice, Dispatch_Protocol}
+import org.sireum.hamr.codegen.common.symbols.{AadlDispatchableComponent, AadlThreadOrDevice, Dispatch_Protocol}
+import org.sireum.hamr.codegen.common.util.TimeUtil
 import org.sireum.hamr.ir
 import org.sireum.hamr.ir.{Direction, Feature, FeatureEnd}
 
@@ -152,6 +153,14 @@ object CommonUtil {
       case _ => z"1"
     }
     return ret
+  }
+
+  // the Period in picoseconds, or the default period if the model has none (doc/ExactTime-design.md, D3)
+  @pure def getPeriodPs(m: AadlDispatchableComponent): Z = {
+    m.periodPs match {
+      case Some(p) => return p
+      case _ => return TimeUtil.defaultPeriodPs
+    }
   }
 }
 

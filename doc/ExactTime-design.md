@@ -427,14 +427,17 @@ A new `common/util/TimeUtil.scala` provides:
   * rounding to nearest (ties away from zero).  Reports a warning if the result is not
   * exact and an error if it is 0 (or less) or greater than maxValue (the largest value
   * the target's integer type holds, e.g. S64.Max for ART); returns the converted value. */
-def fromPicoseconds(ps: Z, resolutionPs: Z, maxValue: Z, what: String, pos: Option[Position], reporter: Reporter): Z
+def fromPicoseconds(ps: Z, resolutionPs: Z, maxValue: Z, what: String, target: String,
+                    pos: Option[Position], reporter: Reporter): Z
 
 /** As fromPicoseconds, but a result of 0 is clamped to 1 with a time-rounding warning saying so,
   * instead of an error.  Only for codegen's own constants (the CAmkES pacer's fixed slots, D7). */
-def fromPicosecondsAtLeastOne(ps: Z, resolutionPs: Z, maxValue: Z, what: String, pos: Option[Position], reporter: Reporter): Z
+def fromPicosecondsAtLeastOne(ps: Z, resolutionPs: Z, maxValue: Z, what: String, target: String,
+                              pos: Option[Position], reporter: Reporter): Z
 ```
 
-The enum is named `HamrTimeUnit` to avoid confusion with `java.util.concurrent.TimeUnit`, which ART
+`target` names what the value is converted for (e.g. "the Microkit domain schedule"), for the
+messages below. The enum is named `HamrTimeUnit` to avoid confusion with `java.util.concurrent.TimeUnit`, which ART
 uses. The resolution is given in picoseconds, so the same function converts to a fixed unit
 (`1000` for ns) or to a model-defined tick (the CAmkES `Clock_Period`, D7).
 
