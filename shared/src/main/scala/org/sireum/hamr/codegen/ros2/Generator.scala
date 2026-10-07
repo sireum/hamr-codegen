@@ -2686,20 +2686,20 @@ object Generator {
     return timer
   }
 
-  def genCppTimeTriggeredTimer(nodeName: String, component: AadlThread): ST = {
-    val period = component.period.get
+  def genCppTimeTriggeredTimer(nodeName: String, component: AadlThread, reporter: Reporter): ST = {
+    val periodNs = RosUtil.periodNs(component, reporter)
 
     val timer: ST =
-      st"""periodTimer_ = this->create_wall_timer(std::chrono::milliseconds(${period}),
+      st"""periodTimer_ = this->create_wall_timer(std::chrono::nanoseconds(${periodNs}),
           |    std::bind(&${nodeName}::timeTriggered, this), ${callback_group_name});"""
     return timer
   }
 
-  def genCppTimeTriggeredTimerStrict(nodeName: String, component: AadlThread): ST = {
-    val period = component.period.get
+  def genCppTimeTriggeredTimerStrict(nodeName: String, component: AadlThread, reporter: Reporter): ST = {
+    val periodNs = RosUtil.periodNs(component, reporter)
 
     val timer: ST =
-      st"""periodTimer_ = this->create_wall_timer(std::chrono::milliseconds(${period}),
+      st"""periodTimer_ = this->create_wall_timer(std::chrono::nanoseconds(${periodNs}),
           |    std::bind(&${nodeName}::timeTriggeredCaller, this), ${callback_group_name});"""
     return timer
   }
@@ -3325,14 +3325,14 @@ object Generator {
         fileBody =
           st"""${fileBody}
               |    // timeTriggeredCaller callback timer
-              |    ${genCppTimeTriggeredTimerStrict(nodeName, component)}
+              |    ${genCppTimeTriggeredTimerStrict(nodeName, component, reporter)}
             """
       }
       else {
         fileBody =
           st"""${fileBody}
               |    // timeTriggered callback timer
-              |    ${genCppTimeTriggeredTimer(nodeName, component)}
+              |    ${genCppTimeTriggeredTimer(nodeName, component, reporter)}
             """
       }
     }
@@ -5469,7 +5469,7 @@ object Generator {
             |${(putImpls, "\n")}${getSection}
           """
       } else {
-        val period = component.period.get
+        val periodNs = RosUtil.periodNs(component, reporter)
         // One handle for the period timer, plus one per subscription.
         val numHandles: Z = inPorts.size + 1
 
@@ -5578,7 +5578,7 @@ object Generator {
             |    RCL_CHECK(rclc_timer_init_default(
             |        &self->period_timer,
             |        &self->support,
-            |        RCL_MS_TO_NS(${period}),
+            |        ${periodNs}, // ns
             |        period_timer_callback));
             |
             |    ${genMicroRosUserInit()}

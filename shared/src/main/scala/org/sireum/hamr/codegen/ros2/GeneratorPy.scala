@@ -5,6 +5,7 @@ package org.sireum.hamr.codegen.ros2
 import org.sireum._
 import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlPort, AadlThread, Dispatch_Protocol}
 import org.sireum.hamr.ir.Direction
+import org.sireum.message.Reporter
 
 object GeneratorPy {
   val node_executable_filename_suffix: String = "_exe"
@@ -510,19 +511,25 @@ object GeneratorPy {
     return callbackGroup
   }
 
-  def genPyTimeTriggeredStrict(nodeName: String, component: AadlThread): ST = {
-    val period = component.period.get
+  // rclpy's create_timer takes seconds and truncates int(sec * 1e9), so the period is passed as
+  // (ns + 0.5) / 1e9, which truncates back to exactly ns (rclpy has no create_wall_timer)
+  @pure def pyTimerPeriodSec(periodNs: Z): ST = {
+    return st"($periodNs + 0.5) / 1e9"
+  }
+
+  def genPyTimeTriggeredStrict(nodeName: String, component: AadlThread, reporter: Reporter): ST = {
+    val periodNs = RosUtil.periodNs(component, reporter)
 
     val timer: ST =
-      st"""self.periodTimer_ = self.create_wall_timer(${period}, self.timeTriggeredCaller, ${callback_group_name})"""
+      st"""self.periodTimer_ = self.create_timer(${pyTimerPeriodSec(periodNs)}, self.timeTriggeredCaller, ${callback_group_name})"""
     return timer
   }
 
-  def genPyTimeTriggeredTimer(nodeName: String, component: AadlThread): ST = {
-    val period = component.period.get
+  def genPyTimeTriggeredTimer(nodeName: String, component: AadlThread, reporter: Reporter): ST = {
+    val periodNs = RosUtil.periodNs(component, reporter)
 
     val timer: ST =
-      st"""self.periodTimer_ = self.create_wall_timer(${period}, self.timeTriggered, ${callback_group_name})"""
+      st"""self.periodTimer_ = self.create_timer(${pyTimerPeriodSec(periodNs)}, self.timeTriggered, ${callback_group_name})"""
     return timer
   }
 
@@ -645,7 +652,7 @@ object GeneratorPy {
   }
 
   def genPyBaseNodePyFile(packageName: String, component: AadlThread, connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
-                          strictAADLMode: B): (ISZ[String], ST) = {
+                          strictAADLMode: B, reporter: Reporter): (ISZ[String], ST) = {
     val nodeName = s"${component.pathAsString("_")}_base"
     val fileName = genPyNodeSourceName(nodeName)
 
@@ -746,14 +753,14 @@ object GeneratorPy {
         fileBody =
           st"""${fileBody}
              |  // timeTriggeredCaller callback timer
-             |  ${genPyTimeTriggeredStrict(nodeName, component)}
+             |  ${genPyTimeTriggeredStrict(nodeName, component, reporter)}
            """
       }
       else {
         fileBody =
           st"""${fileBody}
              |  // timeTriggered callback timer
-             |  ${genPyTimeTriggeredTimer(nodeName, component)}
+             |  ${genPyTimeTriggeredTimer(nodeName, component, reporter)}
            """
       }
     }
@@ -962,12 +969,12 @@ object GeneratorPy {
   }
 
   def genPyNodeFiles(modelName: String, threadComponents: ISZ[AadlThread], connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
-                     strictAADLMode: B): ISZ[(ISZ[String], ST)] = {
+                     strictAADLMode: B, reporter: Reporter): ISZ[(ISZ[String], ST)] = {
     val top_level_package_nameT: String = genPyPackageName(modelName)
     var py_files: ISZ[(ISZ[String], ST)] = IS()
     for (comp <- threadComponents) {
       py_files =
-        py_files :+ genPyBaseNodePyFile(top_level_package_nameT, comp, connectionMap, strictAADLMode)
+        py_files :+ genPyBaseNodePyFile(top_level_package_nameT, comp, connectionMap, strictAADLMode, reporter)
       py_files =
         py_files :+ genPyUserNodePyFile(top_level_package_nameT, comp, strictAADLMode)
       py_files :+ genPyNodeRunnerFile(top_level_package_nameT, comp)
@@ -981,13 +988,13 @@ object GeneratorPy {
 
   // TODO: Python pkgs
   def genPyNodePkg(modelName: String, threadComponents: ISZ[AadlThread], connectionMap: Map[ISZ[String], ISZ[ISZ[String]]],
-                   strictAADLMode: B): ISZ[(ISZ[String], ST)] = {
+                   strictAADLMode: B, reporter: Reporter): ISZ[(ISZ[String], ST)] = {
     var files: ISZ[(ISZ[String], ST)] = IS()
 
     files = files :+ genPyFormatLaunchFile(modelName, threadComponents)
     files = files :+ genPySetupFile(modelName, threadComponents)
 
-    for(file <- genPyNodeFiles(modelName, threadComponents, connectionMap, strictAADLMode)) {
+    for(file <- genPyNodeFiles(modelName, threadComponents, connectionMap, strictAADLMode, reporter)) {
       files = files :+ file
     }
 

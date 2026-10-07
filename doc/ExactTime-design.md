@@ -457,8 +457,9 @@ uses. The resolution is given in picoseconds, so the same function converts to a
   (Microkit parses a `u64`); `S32.Max` for the CAmkES calendar period and pacer ticks, a safe
   common bound for the generated C, which compares the period against a `uint32_t` counter
   (`PeriodicDispatcherTemplate.scala:36-38,60-61`) and stores ticks in `dschedule_t.length`, a
-  `word_t`, 32 bits on 32-bit targets; and the range of a double's exact integers (2^53) for
-  the ROS 2 Python seconds literal (open question 1).
+  `word_t`, 32 bits on 32-bit targets. The ROS 2 timers share one ns conversion, bounded by
+  `S64.Max`; the (unreachable) Python timer's seconds expression is exact up to 10^15 ns (open
+  question 1).
 
 Each backend calls it once per value, at the point where the value leaves codegen's internal
 representation. Sums, comparisons and padding are done on the converted values, so the generated
@@ -697,7 +698,7 @@ Message timestamps and the `ArtDebug` callbacks become nanoseconds with no API c
 | CAmkES pacer | `Clock_Period` | See below |
 | ROS 2 C++ | ns | `std::chrono::nanoseconds(<ns>)` |
 | micro-ROS | ns | `<ns>` passed directly instead of `RCL_MS_TO_NS(<ms>)` |
-| ROS 2 Python | ns → decimal seconds | `create_timer(<seconds>, ...)` with the period written as an exact decimal literal (e.g. `0.0001`), after verifying F7.3 |
+| ROS 2 Python | ns → seconds | `create_timer((<ns> + 0.5) / 1e9, ...)` (open question 1); Python node generation is not reachable today |
 
 **`SchedulingDomain` gets an explicit unit.** Today its single `length` field means ms for
 domain scheduling and ns for MCS, which only its doc comment records. It is replaced by an
@@ -755,7 +756,7 @@ therefore generate behaviourally identical systems, with only the units of the n
 generated code changing, **except for the deliberate changes**:
 
 - SysML `us` values are now correct (F7.1, D9);
-- the ROS 2 Python timer period is now in seconds (F7.3), once verified;
+- the (unreachable) ROS 2 Python timer uses rclpy's `create_timer` with seconds (F7.3);
 - `ArtTimer` delays are nanoseconds (D6);
 - same-urgency event ports are dispatched in true arrival order, by sequence number, where today's
   millisecond timestamps tied and fell back to declaration order (F15, D6). Generated tests that
@@ -985,11 +986,15 @@ Each step type-checks and compiles before the next.
 
 ## Open questions
 
-1. **rclpy timer API (F7.3):** confirm the generated Python's `create_wall_timer` call and the
-   unit rclpy expects, before changing it. Also check how rclpy turns the float into nanoseconds:
-   if it truncates `float(sec) * 1e9`, an exact decimal such as `0.0003` can become 299999 ns. Codegen
-   then checks the round trip (`(long) (literal * 1e9) == ns`, computed with doubles as Python
-   would) and warns, or adjusts the literal, when it would not be exact.
+1. **rclpy timer API (F7.3): resolved in step 7.** rclpy (Humble, Jazzy and Rolling) has no
+   `create_wall_timer`, so the generated call would fail; its `create_timer(timer_period_sec, ...)`
+   takes seconds and computes `int(float(timer_period_sec) * S_TO_NS)`, which truncates: a plain
+   `ns / 1e9` loses a nanosecond for about 2% of values. The generator emits
+   `create_timer((<ns> + 0.5) / 1e9, ...)`, which truncates back to exactly `<ns>` (checked for
+   3.5 million values up to 10^15 ns, about 11.5 days; beyond that the half nanosecond is lost to
+   the double's precision).
+   Python node generation is itself unreachable (`Ros2Codegen` reports it as not supported), so
+   this keeps the dormant generator correct for whoever wires it up.
 2. **arsit static schedule (F7.4, F14):** confirm the intent of `maxExecutionTime` and the
    hard-coded C `ScheduleProvider` before touching them.
 3. **Strict mode (D11):** whether codegen should offer an option that turns `time-rounding`

@@ -6,6 +6,7 @@ import org.sireum.hamr.ir
 import org.sireum.hamr.codegen.common.properties._
 import org.sireum.hamr.codegen.common.symbols.{AadlEventDataPort, AadlFeatureData, AadlPort, AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.types.{AadlType, AadlTypes, ArrayType, RecordType, TypeUtil}
+import org.sireum.hamr.codegen.common.util.TimeUtil
 import org.sireum.message.{Position, Reporter}
 
 // A ROS 2 message type as seen by the generated code.
@@ -33,6 +34,19 @@ import org.sireum.message.{Position, Reporter}
 }
 
 object RosUtil {
+
+  /** The Period of periodic thread t in ns, for the ROS 2 timers (doc/ExactTime-design.md, D7).
+    * Every timer site converts through here, so a period that has to be rounded is reported once. */
+  def periodNs(t: AadlThread, reporter: Reporter): Z = {
+    t.periodPs match {
+      case Some(ps) =>
+        return TimeUtil.fromPicoseconds(ps, TimeUtil.psPerNs, TimeUtil.maxS64,
+          s"Period of ${t.pathAsString(".")} (${OsateProperties.TIMING_PROPERTIES__PERIOD})",
+          "ROS 2 timers", t.component.identifier.pos, reporter)
+      case _ => halt(s"Infeasible: linter should have ensured periodic thread ${t.pathAsString(".")} has a period")
+    }
+  }
+
   val toolName: String = "Ros2Codegen"
 
   @pure def isMicroRos(aadlThread: AadlThread): B = {
