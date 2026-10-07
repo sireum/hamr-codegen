@@ -32,6 +32,10 @@ object PeriodicDispatcherTemplate {
   val DISPATCH_TIMER_ID: String = "timer"
 
 
+  // the calendar compares against a uint32_t counter
+  val maxPeriodMs: Z = 2147483647
+
+  // period is in ms, a multiple of aadl_tick_interval (1 ms)
   def calendar(camkesComponentId: String, period: Z): ST = {
     val notifName = componentNotificationName(Some(camkesComponentId))
     val st =

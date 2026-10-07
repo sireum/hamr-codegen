@@ -948,7 +948,10 @@ Each step type-checks and compiles before the next.
   - with a `Clock_Period` over 20 ms, the 10 ms fixed slots are clamped to one tick with a warning;
   - a thread without `Compute_Execution_Time`, and a process/VM whose threads all lack it, get the
     50 ms default with a warning, and no zero-length entry is generated;
-  - entries that exceed the frame (a pad below 0) give an error; a pad of exactly 0 is omitted;
+  - entries that exceed the frame (a pad below 0) give an error, from a small dedicated model whose
+    entries do not fit its `Frame_Period`; a pad of exactly 0 is omitted. (`VPM_ben`, which
+    generated a pad of -55 ticks, had its `Frame_Period` raised from 500 ms to 700 ms so that it
+    still tests a valid schedule);
   - the generated entries, pad included, add up to the frame in ticks.
 - **ROS 2:** expected timers in ns (C++, micro-ROS) and decimal seconds (Python).
 - **Expectations:** most expected files change (ns periods, ART sources, Microkit schedules). The

@@ -9,7 +9,8 @@ import org.sireum.hamr.codegen.act.util.Util.reporter
 import org.sireum.hamr.codegen.act.util._
 import org.sireum.hamr.codegen.common.containers.FileResource
 import org.sireum.hamr.codegen.common.symbols._
-import org.sireum.hamr.codegen.common.util.ResourceUtil
+import org.sireum.hamr.codegen.common.properties.OsateProperties
+import org.sireum.hamr.codegen.common.util.{ResourceUtil, TimeUtil}
 
 @datatype class SelfPacer(val actOptions: ActOptions) extends PeriodicImpl {
 
@@ -191,52 +192,55 @@ import org.sireum.hamr.codegen.common.util.ResourceUtil
       case _ =>
         var entries: ISZ[ST] = ISZ()
 
-        val clockPeriod: Z = aadlProcessor.getClockPeriod() match {
-          case Some(z) => z
-          case _ => halt("Unexpected: Clock_Period not specified")
-        }
+        // all lengths below are in Clock_Period ticks (PacerTimeUtil)
+        val clockPeriodPs: Z = PacerTimeUtil.clockPeriodPs(aadlProcessor, reporter)
+        val framePeriodPs: Z = PacerTimeUtil.framePeriodPs(aadlProcessor)
+        val frameTicks: Z = PacerTimeUtil.toTicks(framePeriodPs, clockPeriodPs,
+          PacerTimeUtil.processorWhat(aadlProcessor, "Frame_Period", OsateProperties.TIMING_PROPERTIES__FRAME_PERIOD),
+          aadlProcessor.component.identifier.pos, reporter)
 
-        val framePeriod: Z = aadlProcessor.getFramePeriod() match {
-          case Some(z) => z
-          case _ => halt("Unexpected: Frame_Period not specified")
-        }
+        val otherTicks = PacerTimeUtil.fixedTicks(PacerTimeUtil.otherLenPs, clockPeriodPs, "all other seL4 threads and init", reporter)
+        entries = entries :+ PacerTemplate.pacerScheduleEntry(z"0", otherTicks,
+          Some(st" // all other seL4 threads, init, ${TimeUtil.format(otherTicks * clockPeriodPs)}"))
 
-        val otherLen = z"200"
-        entries = entries :+ PacerTemplate.pacerScheduleEntry(z"0", otherLen / clockPeriod,
-          Some(st" // all other seL4 threads, init, ${otherLen}ms"))
-
-        val domainZeroLen: Z = z"10"
-        val domainZeroEntry = PacerTemplate.pacerScheduleEntry(z"0", domainZeroLen / clockPeriod,
+        val domainZeroTicks: Z = PacerTimeUtil.fixedTicks(PacerTimeUtil.domainZeroLenPs, clockPeriodPs, "domain 0 between components", reporter)
+        val domainZeroEntry = PacerTemplate.pacerScheduleEntry(z"0", domainZeroTicks,
           Some(st" // switch to domain 0 to allow seL4 to deliver messages"))
 
         var threadComments: ISZ[ST] = ISZ()
-        var sumExecutionTime = z"0"
+        var usedTicks: Z = otherTicks
         for (index <- 0 until allThreads.size) {
           val p = allThreads(index)
           val threadName = Util.getCamkesComponentIdentifier(p, symbolTable)
 
           val domain = p.getDomain(symbolTable).get
-          val computeExecutionTime = p.getMaxComputeExecutionTime()
-          val comment = Some(st" // ${threadName} ${computeExecutionTime} ms")
+          val computeExecutionTimePs = PacerTimeUtil.threadComputeExecutionTimePs(p, reporter)
+          val ticks = PacerTimeUtil.toTicks(computeExecutionTimePs, clockPeriodPs, PacerTimeUtil.cetWhat(p),
+            p.component.identifier.pos, reporter)
+          val comment = Some(st" // ${threadName} ${TimeUtil.format(ticks * clockPeriodPs)}")
+          val origin: String = if (p.computeExecutionTimePs.isEmpty) " (default)" else ""
 
           threadComments = threadComments :+
             PacerTemplate.pacerScheduleThreadPropertyComment(threadName, "Thread",
-              domain, p.dispatchProtocol, s"${computeExecutionTime} ms", p.period)
+              domain, p.dispatchProtocol, s"${TimeUtil.format(computeExecutionTimePs)}$origin", p.periodPs)
 
-          entries = entries :+ PacerTemplate.pacerScheduleEntry(domain, computeExecutionTime / clockPeriod, comment)
+          entries = entries :+ PacerTemplate.pacerScheduleEntry(domain, ticks, comment)
 
-          sumExecutionTime = sumExecutionTime + computeExecutionTime
+          usedTicks = usedTicks + ticks
 
           if (index < allThreads.size - 1) {
             entries = entries :+ domainZeroEntry
-            sumExecutionTime = sumExecutionTime + domainZeroLen
+            usedTicks = usedTicks + domainZeroTicks
           }
         }
 
-        val pad: Z = (framePeriod - (otherLen + sumExecutionTime)) / clockPeriod
-        entries = entries :+ PacerTemplate.pacerScheduleEntry(z"0", pad, Some(st" // pad rest of frame period"))
+        // a zero pad is omitted: seL4 cannot run a zero-length domain entry safely
+        val pad: Z = PacerTimeUtil.padTicks(frameTicks, usedTicks, clockPeriodPs, aadlProcessor, reporter)
+        if (pad > 0) {
+          entries = entries :+ PacerTemplate.pacerScheduleEntry(z"0", pad, Some(st" // pad rest of frame period"))
+        }
 
-        (PacerTemplate.pacerExampleSchedule(clockPeriod, framePeriod, threadComments, entries, F), F)
+        (PacerTemplate.pacerExampleSchedule(clockPeriodPs, framePeriodPs, threadComments, entries, F), F)
     }
 
     if (userSupplied) {

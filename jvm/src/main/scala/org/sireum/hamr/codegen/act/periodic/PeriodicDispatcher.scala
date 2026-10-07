@@ -12,7 +12,8 @@ import org.sireum.hamr.codegen.act.util.Util.reporter
 import org.sireum.hamr.codegen.act.util._
 import org.sireum.hamr.codegen.common.CommonUtil
 import org.sireum.hamr.codegen.common.containers.FileResource
-import org.sireum.hamr.codegen.common.properties.PropertyUtil
+import org.sireum.hamr.codegen.common.properties.OsateProperties
+import org.sireum.hamr.codegen.common.util.TimeUtil
 import org.sireum.hamr.codegen.common.symbols._
 
 @datatype class PeriodicDispatcher(val actOptions: ActOptions) extends PeriodicImpl {
@@ -77,12 +78,16 @@ import org.sireum.hamr.codegen.common.symbols._
           PeriodicDispatcherTemplate.DISPATCH_PERIODIC_INSTANCE, dispatcherNotificationName,
           camkesComponentId, componentNotificationName)
 
-        val period: Z = PropertyUtil.getPeriod(aadlThread.component) match {
+        // in ms, the dispatcher calendar's tick (aadl_tick_interval)
+        val periodPs: Z = aadlThread.periodPs match {
           case Some(_period) => _period
           case _ =>
-            reporter.warn(None(), Util.toolName, s"Period not provided for periodic component ${classifier}, using ${Util.DEFAULT_PERIOD}")
-            Util.DEFAULT_PERIOD
+            reporter.warn(None(), Util.toolName, s"Period not provided for periodic component ${classifier}, using ${TimeUtil.format(Util.DEFAULT_PERIOD_PS)}")
+            Util.DEFAULT_PERIOD_PS
         }
+        val period: Z = TimeUtil.fromPicoseconds(periodPs, TimeUtil.psPerMs, PeriodicDispatcherTemplate.maxPeriodMs,
+          s"Period of ${aadlThread.pathAsString(".")} (${OsateProperties.TIMING_PROPERTIES__PERIOD})",
+          "the CAmkES periodic dispatcher's 1 ms calendar", aadlThread.component.identifier.pos, reporter)
 
         periodicDispatcherCalendars = periodicDispatcherCalendars :+ PeriodicDispatcherTemplate.calendar(camkesComponentId, period)
       }

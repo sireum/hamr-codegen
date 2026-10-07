@@ -10,6 +10,7 @@ import org.sireum.hamr.codegen.act.util._
 import org.sireum.hamr.codegen.common.properties.{CaseSchedulingProperties, OsateProperties}
 import org.sireum.hamr.codegen.common.symbols.Dispatch_Protocol
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
+import org.sireum.hamr.codegen.common.util.TimeUtil
 
 object PacerTemplate {
 
@@ -130,8 +131,9 @@ object PacerTemplate {
     return st"{ .domain = ${domain}, .length = ${length} }, ${comment}"
   }
 
-  def pacerExampleSchedule(clock_period: Z,
-                           frame_period: Z,
+  // clockPeriodPs and framePeriodPs are in picoseconds
+  def pacerExampleSchedule(clockPeriodPs: Z,
+                           framePeriodPs: Z,
                            threadProperties: ISZ[ST],
                            entries: ISZ[ST],
                            usesPacerComponent: B): ST = {
@@ -146,7 +148,7 @@ object PacerTemplate {
           |/************************************************************
           |
           |   This is a kernel data structure containing an example schedule.
-          |   The length is in seL4 ticks (${clock_period} ms).
+          |   The length is in seL4 ticks (${TimeUtil.format(clockPeriodPs)}).
           |   This schedule should be generated from the AADL model
           |   using execution time and data flow latency specifications.
           |
@@ -155,8 +157,8 @@ object PacerTemplate {
           |   Properties from AADL Model
           |   --------------------------
           |
-          |     Timing_Properties::Clock_Period : ${clock_period} ms
-          |     Timing_Properties::Frame_Period : ${frame_period} ms
+          |     Timing_Properties::Clock_Period : ${TimeUtil.format(clockPeriodPs)}
+          |     Timing_Properties::Frame_Period : ${TimeUtil.format(framePeriodPs)}
           |
           |     ${(threadProperties, "\n\n")}
           |
@@ -176,7 +178,7 @@ object PacerTemplate {
                                          domain: Z,
                                          dispatchProtocol: Dispatch_Protocol.Type,
                                          computeExecutionTime: String,
-                                         period: Option[Z]): ST = {
+                                         periodPs: Option[Z]): ST = {
     val title = s"$componentId : $componentType"
     var dashes: String = s""
     for (x <- 0 until title.size) {
@@ -184,8 +186,8 @@ object PacerTemplate {
     }
 
     val _period: Option[ST] =
-      period match {
-        case Some(p) => Some(st"${OsateProperties.TIMING_PROPERTIES__PERIOD} : ${p} ms")
+      periodPs match {
+        case Some(p) => Some(st"${OsateProperties.TIMING_PROPERTIES__PERIOD} : ${TimeUtil.format(p)}")
         case _ => None()
       }
 
