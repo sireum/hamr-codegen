@@ -8,7 +8,7 @@ import org.sireum.hamr.codegen.common.plugin.ModelTransformerPlugin
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.HamrCli.CodegenHamrPlatform
-import org.sireum.hamr.codegen.common.util.{HamrCli, ModelUtil}
+import org.sireum.hamr.codegen.common.util.{HamrCli, HamrTimeUnit, ModelUtil}
 import org.sireum.hamr.codegen.microkit.plugins.msd.SystemDescriptionProviderPlugin
 import org.sireum.hamr.codegen.microkit.plugins.rust.component.CRustComponentPlugin
 import org.sireum.hamr.codegen.microkit.plugins.{MicrokitPlugin, StoreUtil}
@@ -145,13 +145,8 @@ object DomainMonitorPlugin {
           c.firstPD != monitorMonPdName && c.secondPD != monitorMonPdName &&
             c.firstPD != monitorIdPath && c.secondPD != monitorIdPath)
 
-        val boundProcessors = symbolTable.getAllActualBoundProcessors()
-        assert(boundProcessors.size == 1, "Linter should have ensured there is exactly one bound processor")
-        var framePeriod: Z = 0
-        boundProcessors(0).getFramePeriod() match {
-          case Some(z) => framePeriod = z
-          case _ => halt("Infeasible: linter should have ensured bound processor has frame period")
-        }
+        // in us, like the slots CComponentPlugin_DomainScheduler built
+        val framePeriod: Z = MicrokitUtil.frameTimeUs(symbolTable, reporter)
 
         val regularCount = regularSlots.size
 
@@ -165,7 +160,7 @@ object DomainMonitorPlugin {
         val normalUsedBudget: Z = regularBudget + regularCount * pacerSlot.length
         val normalPadding: Z = framePeriod - normalUsedBudget
         if (normalPadding > 0) {
-          normalScheds = normalScheds :+ SchedulingDomain(id = 0, componentName = "padding", length = normalPadding, isUserPartition = F)
+          normalScheds = normalScheds :+ SchedulingDomain(id = 0, componentName = "padding", length = normalPadding, unit = HamrTimeUnit.us, isUserPartition = F)
         }
         var nonModelMrNames: Set[String] = Set.empty
         var mrSizes: Map[String, Z] = Map.empty
@@ -230,13 +225,13 @@ object DomainMonitorPlugin {
         }
         val monitorUsedBudget: Z = regularBudget + 2 * regularCount * pacerSlot.length + regularCount * monitorSlot.length
         if (monitorUsedBudget > framePeriod) {
-          val overrunMs = monitorUsedBudget - framePeriod
+          val overrun = monitorUsedBudget - framePeriod
           reporter.warn(None(), name,
-            s"The inclusion of the runtime monitor extends the frame schedule by ${overrunMs} ms beyond the configured ${framePeriod} ms frame period. Consider increasing the frame period to accommodate monitor execution.")
+            s"The inclusion of the runtime monitor extends the frame schedule by ${MicrokitUtil.formatScheduleTime(overrun, HamrTimeUnit.us)} beyond the configured ${MicrokitUtil.formatScheduleTime(framePeriod, HamrTimeUnit.us)} frame period. Consider increasing the frame period to accommodate monitor execution.")
         }
         val monitorPadding: Z = framePeriod - monitorUsedBudget
         if (monitorPadding > 0) {
-          monitorScheds = monitorScheds :+ SchedulingDomain(id = 0, componentName = "padding", length = monitorPadding, isUserPartition = F)
+          monitorScheds = monitorScheds :+ SchedulingDomain(id = 0, componentName = "padding", length = monitorPadding, unit = HamrTimeUnit.us, isUserPartition = F)
         }
         localStore = SystemDescriptionProviderPlugin.putMSD("monitor", SystemDescription(
           name = "monitor",

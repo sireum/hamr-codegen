@@ -9,7 +9,7 @@ import org.sireum.hamr.codegen.common.plugin.Plugin
 import org.sireum.hamr.codegen.common.reporting.{CodegenReporting, CodegenReports, JSON, ResourceReport, Status, ToolReport}
 import org.sireum.hamr.codegen.common.symbols.{AadlDataPort, AadlEventDataPort, AadlEventPort, AadlPort, AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.types.AadlTypes
-import org.sireum.hamr.codegen.common.util.{CodeGenResults, HamrCli}
+import org.sireum.hamr.codegen.common.util.{CodeGenResults, HamrCli, TimeUtil}
 import org.sireum.hamr.codegen.microkit.plugins.StoreUtil
 import org.sireum.hamr.codegen.microkit.plugins.gumbo.GumboRustUtil
 import org.sireum.hamr.codegen.microkit.plugins.reporting.CContainers.CFile
@@ -589,8 +589,8 @@ object MicrokitReporterPlugin {
 
       val properties: String = {
         val typ: String = if (t.isPeriodic()) "Periodic " else "Sporadic "
-        if (t.getMaxComputeExecutionTime() > 0)
-          s"$typ: ${t.getMaxComputeExecutionTime()} ms"
+        if (t.getMaxComputeExecutionTimePs() > 0)
+          s"$typ: ${TimeUtil.format(t.getMaxComputeExecutionTimePs())}"
         else typ
       }
 

@@ -702,9 +702,9 @@ Message timestamps and the `ArtDebug` callbacks become nanoseconds with no API c
 **`SchedulingDomain` gets an explicit unit.** Today its single `length` field means ms for
 domain scheduling and ns for MCS, which only its doc comment records. It is replaced by an
 explicit duration: `length: Z` plus `unit: HamrTimeUnit.Type` (us for domain scheduling, ns for
-MCS), so each slot carries its unit. The domain renderer (`prettyST`, which is `@strictpure`) checks
-its unit as an expression, `if (unit != HamrTimeUnit.us) halt(...) else st"..."`, and the MCS
-renderer checks for ns. The class's doc comment (`SystemDescription.scala:147-157`), which still
+MCS), so each slot carries its unit. The domain renderer (`prettyST`) halts unless its unit is us;
+Slang allows `halt` only as a statement, so `prettyST` becomes a `@pure` method instead of
+`@strictpure`. The MCS renderer checks for ns. The class's doc comment (`SystemDescription.scala:147-157`), which still
 says "milliseconds for domain scheduling", is updated.
 
 **CAmkES pacer.** The pacer's domain schedule is in `Clock_Period` ticks (F11):

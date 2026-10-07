@@ -9,7 +9,7 @@ import org.sireum.hamr.codegen.common.symbols.SymbolTable
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.HamrCli.CodegenHamrPlatform
-import org.sireum.hamr.codegen.common.util.{HamrCli, ModelUtil, ResourceUtil}
+import org.sireum.hamr.codegen.common.util.{HamrCli, HamrTimeUnit, ModelUtil, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.plugins.{ComponentGenProfile, MicrokitPlugin, StoreUtil}
 import org.sireum.hamr.codegen.microkit.plugins.msd.SystemDescriptionProviderPlugin
 import org.sireum.hamr.codegen.microkit.plugins.rust.component.CRustComponentPlugin
@@ -260,14 +260,7 @@ object UserLandMonitorPlugin {
           !allNonModelPdNames.contains(c.firstPD) && !allNonModelPdNames.contains(c.secondPD))
 
         // MCS scheduling: no pacer; each thread has its own time budget via scheduling domains.
-        val boundProcessors = symbolTable.getAllActualBoundProcessors()
-        assert(boundProcessors.size == 1, "Linter should have ensured there is exactly one bound processor")
-        var framePeriodMs: Z = 0
-        boundProcessors(0).getFramePeriod() match {
-          case Some(z) => framePeriodMs = z
-          case _ => halt("Infeasible: linter should have ensured bound processor has frame period")
-        }
-        val framePeriodNano: Z = framePeriodMs * 1_000_000
+        val framePeriodNano: Z = MicrokitUtil.frameTimeNs(symbolTable, reporter)
 
         // Strip the originally-computed pad from regularSlots; pads are recomputed per SD below
         val regularThreadSlots: ISZ[SchedulingDomain] = regularSlots.filter((sd: SchedulingDomain) => sd.componentName != "pad")
@@ -283,7 +276,7 @@ object UserLandMonitorPlugin {
         val normalRemainder: Z = framePeriodNano - normalUsedNano
         val normalScheds: ISZ[SchedulingDomain] =
           if (normalRemainder > 0)
-            SchedulingDomain(id = 0, componentName = "pad", length = normalRemainder, isUserPartition = F) +: normalThreadSlots
+            SchedulingDomain(id = 0, componentName = "pad", length = normalRemainder, unit = HamrTimeUnit.ns, isUserPartition = F) +: normalThreadSlots
           else normalThreadSlots
 
         val retainedPorts: ISZ[IdPath] = getRetainedNonModelPorts(localStore)
@@ -358,14 +351,14 @@ object UserLandMonitorPlugin {
           monitorUsedNano = monitorUsedNano + s.length
         }
         if (monitorUsedNano > framePeriodNano) {
-          val overrunMs = (monitorUsedNano - framePeriodNano) / 1_000_000
+          val overrunNano = monitorUsedNano - framePeriodNano
           reporter.warn(None(), name,
-            s"The inclusion of the runtime monitor extends the frame schedule by ${overrunMs} ms beyond the configured ${framePeriodMs} ms frame period. Consider increasing the frame period to accommodate monitor execution.")
+            s"The inclusion of the runtime monitor extends the frame schedule by ${MicrokitUtil.formatScheduleTime(overrunNano, HamrTimeUnit.ns)} beyond the configured ${MicrokitUtil.formatScheduleTime(framePeriodNano, HamrTimeUnit.ns)} frame period. Consider increasing the frame period to accommodate monitor execution.")
         }
         val monitorRemainder: Z = framePeriodNano - monitorUsedNano
         val monitorScheds: ISZ[SchedulingDomain] =
           if (monitorRemainder > 0)
-            SchedulingDomain(id = 0, componentName = "pad", length = monitorRemainder, isUserPartition = F) +: monitorInterleavedScheds
+            SchedulingDomain(id = 0, componentName = "pad", length = monitorRemainder, unit = HamrTimeUnit.ns, isUserPartition = F) +: monitorInterleavedScheds
           else monitorInterleavedScheds
 
         // Add read-only mappings of the sched_state and sched_schedule regions

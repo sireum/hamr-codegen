@@ -5,6 +5,7 @@ import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.IdPath
 import org.sireum.hamr.codegen.common.containers.{BlockMarker, Marker}
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
+import org.sireum.hamr.codegen.common.util.HamrTimeUnit
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.{KiBytesToHex, schedulingDomainName}
 
 @datatype class SystemDescription (val name: String,
@@ -70,8 +71,10 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.{KiBytesToHex, schedul
 
   // The <schedule_end_marker /> is what the kernel wraps on, and is emitted explicitly so
   // that the cycle boundary does not depend on the residual contents of the kernel's domain
-  // schedule array.  It occupies an entry against KernelNumDomainSchedules.
-  val stSchedulingDomain: Option[ST] =
+  // schedule array.  It occupies an entry against KernelNumDomainSchedules.  Only domain-scheduling
+  // MSDs are rendered this way (their slots are in us), so it is computed on demand rather than
+  // for every SystemDescription (MCS slots are in ns).
+  @strictpure def stSchedulingDomain: Option[ST] =
     if (schedulingDomains.nonEmpty) Some(
       st"""<domains>
           |  ${(for (id <- distinctSchedulingDomainIds) yield st"""<domain name="${schedulingDomainName(id)}" id="$id" />""", "\n")}
@@ -145,21 +148,26 @@ import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.{KiBytesToHex, schedul
   }
 }
 
-/** One slot of a cyclic schedule.  The unit of @param length depends on the scheduling
-  * approach: milliseconds for domain scheduling (rendered as SDF XML by prettyST) and
-  * nanoseconds for MCS/user-land scheduling (rendered as a Python schedule table by
-  * SystemDescriptionProvider_MCS, which does not use prettyST).
+/** One slot of a cyclic schedule, lasting @param length @param unit.  The unit depends on the
+  * scheduling approach (doc/ExactTime-design.md, D7): microseconds for domain scheduling
+  * (rendered as SDF XML by prettyST) and nanoseconds for MCS/user-land scheduling (rendered as a
+  * Python schedule table by SystemDescriptionProvider_MCS, which does not use prettyST).
   */
 @datatype class SchedulingDomain (val id: Z,
                                   val isUserPartition: B, // true if this belongs to a model component
                                   val componentName: String,
-                                  val length: Z) {
+                                  val length: Z,
+                                  val unit: HamrTimeUnit.Type) {
   /** Renders this slot as a Microkit 2.3.0 &lt;schedule_entry&gt;.  Only meaningful for
-    * domain-scheduling MSDs, where 'length' is in milliseconds; Microkit expresses
+    * domain-scheduling MSDs, where 'length' is in microseconds; Microkit expresses
     * durations as a value and a unit and requires the value to be non-zero.
     */
-  @strictpure def prettyST: ST =
-    st"""<schedule_entry domain="${schedulingDomainName(id)}" duration="${length * 1000} us" /> <!-- $componentName -->"""
+  @pure def prettyST: ST = {
+    if (unit != HamrTimeUnit.us) {
+      halt(s"Infeasible: domain schedule entry for $componentName is not in us")
+    }
+    return st"""<schedule_entry domain="${schedulingDomainName(id)}" duration="$length us" /> <!-- $componentName -->"""
+  }
 }
 
 @sig trait MicrokitDomain {

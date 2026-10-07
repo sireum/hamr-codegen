@@ -56,7 +56,7 @@ import org.sireum.message.Reporter
 
     for (sd <- msd.schedulingDomains if sd.length <= 0) {
       reporter.error(None(), name,
-        s"Scheduling domain ${sd.id} (${sd.componentName}) has a duration of ${sd.length}ms; Microkit requires schedule entry durations to be non-zero")
+        s"Scheduling domain ${sd.id} (${sd.componentName}) has a duration of ${sd.length} ${sd.unit.name}; Microkit requires schedule entry durations to be non-zero")
     }
 
     val declaredIds = msd.distinctSchedulingDomainIds

@@ -8,7 +8,7 @@ import org.sireum.hamr.codegen.common.properties.Hamr_Microkit_Properties
 import org.sireum.hamr.codegen.common.symbols.{AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.types.AadlTypes
-import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
+import org.sireum.hamr.codegen.common.util.{HamrCli, HamrTimeUnit, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen.toolName
 import org.sireum.hamr.codegen.microkit.connections.{ConnectionStore, VMRamVaddr, cConnectionContributions}
@@ -26,7 +26,6 @@ import org.sireum.message.Reporter
 
   val name: String = "CComponentPlugin_MCS"
 
-  val defaultComputeExecutionTime: Z = 50
 
   override def canHandle(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): B = {
     return super.canHandle(model, options, types, symbolTable, store, reporter) &&
@@ -38,7 +37,7 @@ import org.sireum.message.Reporter
 
     var resources = ISZ[Resource]()
 
-    var usedBudgetInMilli: Z = 0
+    var usedBudgetNs: Z = 0
 
 
     var makefileContainers: ISZ[MakefileContainer] = ISZ()
@@ -101,12 +100,7 @@ import org.sireum.message.Reporter
         requiresR2U2 = r2u2Contributions.requiresR2U2)
       makefileContainers = makefileContainers :+ mk
 
-      val computeExecutionTimeinMilli: Z = t.getComputeExecutionTime() match {
-        case Some((l, h)) =>
-          assert(l <= h, s"low must be <= high: $l <= $h")
-          h
-        case _ => defaultComputeExecutionTime
-      }
+      val computeExecutionTimeNs: Z = MicrokitUtil.computeExecutionTime(t, HamrTimeUnit.ns, reporter)
 
       val isUserPartition = !StoreUtil.isSynthetic(t.path, localStore)
 
@@ -114,11 +108,11 @@ import org.sireum.message.Reporter
       // this budget is about: the plugin that injected it rebuilds "normal" without its slot,
       // and schedules its own variant.  Counting it would reject a model that fits its frame.
       if (isUserPartition) {
-        usedBudgetInMilli = usedBudgetInMilli + computeExecutionTimeinMilli
+        usedBudgetNs = usedBudgetNs + computeExecutionTimeNs
       }
 
       xmlSchedulingDomains = xmlSchedulingDomains :+
-        SchedulingDomain(id = schedulingDomain, componentName = threadMonId.render, length = computeExecutionTimeinMilli * 1_000_000, isUserPartition = isUserPartition)
+        SchedulingDomain(id = schedulingDomain, componentName = threadMonId.render, length = computeExecutionTimeNs, unit = HamrTimeUnit.ns, isUserPartition = isUserPartition)
 
       var childMemMaps: ISZ[MemoryMap] = ISZ()
       var childIrqs: ISZ[IRQ] = ISZ()
@@ -562,25 +556,17 @@ import org.sireum.message.Reporter
       processThread(t, connectionStore)
     }
 
-    val boundProcessors = symbolTable.getAllActualBoundProcessors()
-    assert (boundProcessors.size == 1, "Linter should have ensured there is exactly one bound processor")
+    val framePeriodNs: Z = MicrokitUtil.frameTimeNs(symbolTable, reporter)
 
-    var framePeriod: Z = 0
-    boundProcessors(0).getFramePeriod() match {
-      case Some(z) => framePeriod = z
-      case _ => halt("Infeasible: linter should have ensured bound processor has frame period")
-    }
-
-    if (usedBudgetInMilli > framePeriod) {
-      reporter.error(None(), toolName, s"Frame period ${framePeriod} is too small for the used budget ${usedBudgetInMilli}")
+    if (usedBudgetNs > framePeriodNs) {
+      reporter.error(None(), toolName, s"Frame period ${MicrokitUtil.formatScheduleTime(framePeriodNs, HamrTimeUnit.ns)} is too small for the used budget ${MicrokitUtil.formatScheduleTime(usedBudgetNs, HamrTimeUnit.ns)}")
       return (localStore, resources)
     }
 
     var xmlScheds: ISZ[SchedulingDomain] = ops.ISZOps(xmlSchedulingDomains).sortWith((a, b) => a.id < b.id)
 
-    if (xmlScheds.nonEmpty && framePeriod - usedBudgetInMilli > 0) {
-      val remainderInNano = (framePeriod - usedBudgetInMilli) * 1_000_000
-      xmlScheds = xmlScheds :+ SchedulingDomain(id = 0, componentName = "pad", length = remainderInNano, isUserPartition = F)
+    if (xmlScheds.nonEmpty && framePeriodNs - usedBudgetNs > 0) {
+      xmlScheds = xmlScheds :+ SchedulingDomain(id = 0, componentName = "pad", length = framePeriodNs - usedBudgetNs, unit = HamrTimeUnit.ns, isUserPartition = F)
     }
 
     for (e <- connectionStore;

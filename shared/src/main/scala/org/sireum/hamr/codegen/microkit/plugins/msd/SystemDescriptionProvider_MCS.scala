@@ -7,7 +7,7 @@ import org.sireum.hamr.codegen.common.containers.{Marker, Resource}
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.types.AadlTypes
-import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
+import org.sireum.hamr.codegen.common.util.{HamrCli, HamrTimeUnit, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.plugins.MicrokitFinalizePlugin
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil.KiBytesToHex
 import org.sireum.hamr.codegen.microkit.util.{MemoryMap, MicrokitUtil, ProtectionDomain, SystemDescription, VirtualMachine}
@@ -125,6 +125,9 @@ object SystemDescriptionProvider_MCS {
       var schedule: ISZ[ST] = ISZ()
       var seenPairNames: Set[String] = Set.empty
       for (sd <- schedulingDomains) {
+        if (sd.unit != HamrTimeUnit.ns) {
+          halt(s"Infeasible: MCS schedule entry for ${sd.componentName} is not in ns")
+        }
         val channelName: String = if (sd.componentName == "pad") "0" else s"channel_${sd.componentName}"
         val varName: String = s"ts_${sd.componentName}"
         if (!seenPairNames.contains(varName)) {

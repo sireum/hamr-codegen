@@ -3,11 +3,12 @@ package org.sireum.hamr.codegen.microkit.util
 
 import org.sireum._
 import org.sireum.hamr.codegen.common.CommonUtil.{MapValue, Store}
-import org.sireum.hamr.codegen.common.properties.{HamrProperties, Hamr_Microkit_Properties, PropertyUtil}
-import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlSystem, AadlThread}
+import org.sireum.hamr.codegen.common.properties.{HamrProperties, Hamr_Microkit_Properties, OsateProperties, PropertyUtil}
+import org.sireum.hamr.codegen.common.symbols.{AadlComponent, AadlProcessor, AadlSystem, AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
-import org.sireum.hamr.codegen.common.util.HamrCli
+import org.sireum.hamr.codegen.common.util.{HamrCli, HamrTimeUnit, TimeUtil}
 import org.sireum.hamr.ir
+import org.sireum.message.{Position, Reporter}
 
 
 object MicrokitUtil {
@@ -23,6 +24,78 @@ object MicrokitUtil {
   val make_AUX_INCLUDES: String = "AUX_INCLUDES"
 
   val defaultMemoryRegionSizeInKiBytes: Z = 4
+
+  // Schedule times (doc/ExactTime-design.md, D7): the Microkit domain schedule is in us (a
+  // schedule_entry's duration is a non-zero u64 of us), and MCS/user-land scheduling is in ns.
+  // Every conversion of a model value goes through the helpers below, so that the plugins that
+  // re-convert the same value produce identical, and hence de-duplicated, warnings.
+
+  val domainScheduleTarget: String = "the Microkit domain schedule"
+
+  val mcsScheduleTarget: String = "the Microkit MCS schedule"
+
+  // a schedule_entry's duration is a u64
+  val maxDomainScheduleUs: Z = z"18446744073709551615"
+
+  // MCS timeslices are programmed in ns as a 64-bit signed value
+  val maxMcsScheduleNs: Z = TimeUtil.maxS64
+
+  // used for a thread without Compute_Execution_Time
+  val defaultComputeExecutionTimePs: Z = 50 * TimeUtil.psPerMs
+
+  @pure def scheduleUnitTarget(unit: HamrTimeUnit.Type): (Z, Z, String) = {
+    unit match {
+      case HamrTimeUnit.us => return (TimeUtil.psPerUs, maxDomainScheduleUs, domainScheduleTarget)
+      case HamrTimeUnit.ns => return (TimeUtil.psPerNs, maxMcsScheduleNs, mcsScheduleTarget)
+      case x => halt(s"Infeasible: Microkit schedules are in us or ns, not $x")
+    }
+  }
+
+  /** Converts ps to the schedule's unit (us for domain scheduling, ns for MCS) */
+  def toScheduleUnit(ps: Z, unit: HamrTimeUnit.Type, what: String, pos: Option[Position], reporter: Reporter): Z = {
+    val (resolutionPs, maxValue, target) = scheduleUnitTarget(unit)
+    return TimeUtil.fromPicoseconds(ps, resolutionPs, maxValue, what, target, pos, reporter)
+  }
+
+  /** The Frame_Period of the single bound processor in the schedule's unit */
+  def frameTime(symbolTable: SymbolTable, unit: HamrTimeUnit.Type, reporter: Reporter): Z = {
+    val boundProcessors: ISZ[AadlProcessor] = symbolTable.getAllActualBoundProcessors()
+    assert(boundProcessors.size == 1, "Linter should have ensured there is exactly one bound processor")
+    val p = boundProcessors(0)
+    p.framePeriodPs match {
+      case Some(ps) =>
+        return toScheduleUnit(ps, unit,
+          s"Frame_Period of ${p.pathAsString(".")} (${OsateProperties.TIMING_PROPERTIES__FRAME_PERIOD})",
+          p.component.identifier.pos, reporter)
+      case _ => halt("Infeasible: linter should have ensured bound processor has frame period")
+    }
+  }
+
+  def frameTimeUs(symbolTable: SymbolTable, reporter: Reporter): Z = {
+    return frameTime(symbolTable, HamrTimeUnit.us, reporter)
+  }
+
+  def frameTimeNs(symbolTable: SymbolTable, reporter: Reporter): Z = {
+    return frameTime(symbolTable, HamrTimeUnit.ns, reporter)
+  }
+
+  /** The high end of t's Compute_Execution_Time in the schedule's unit, or the default (50 ms) */
+  def computeExecutionTime(t: AadlThread, unit: HamrTimeUnit.Type, reporter: Reporter): Z = {
+    t.computeExecutionTimePs match {
+      case Some((l, h)) =>
+        assert(l <= h, s"low must be <= high: $l <= $h")
+        return toScheduleUnit(h, unit,
+          s"Compute_Execution_Time of ${t.pathAsString(".")} (${OsateProperties.TIMING_PROPERTIES__COMPUTE_EXECUTION_TIME})",
+          t.component.identifier.pos, reporter)
+      case _ =>
+        return toScheduleUnit(defaultComputeExecutionTimePs, unit, "the default Compute_Execution_Time", None(), reporter)
+    }
+  }
+
+  /** Renders a schedule time with its unit, e.g. 1.5 ms */
+  @pure def formatScheduleTime(value: Z, unit: HamrTimeUnit.Type): String = {
+    return TimeUtil.format(value * TimeUtil.unitPs(unit))
+  }
 
   // One unmapped page left between consecutive memory regions in a protection domain's
   // address space, so an access past the end of a region faults instead of reaching the next

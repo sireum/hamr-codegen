@@ -6,7 +6,7 @@ import org.sireum.hamr.codegen.common.CommonUtil.{BoolValue, Store, StoreValue}
 import org.sireum.hamr.codegen.common.containers.Resource
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
-import org.sireum.hamr.codegen.common.util.{ExperimentalOptions, HamrCli, ModelUtil, ResourceUtil}
+import org.sireum.hamr.codegen.common.util.{ExperimentalOptions, HamrCli, HamrTimeUnit, ModelUtil, ResourceUtil}
 import org.sireum.hamr.codegen.common.plugin.ModelTransformerPlugin
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen.toolName
 import org.sireum.hamr.codegen.microkit.plugins.{ComponentGenProfile, MicrokitFinalizePlugin, MicrokitPlugin, StoreUtil}
@@ -1136,13 +1136,7 @@ object TestSchedulerPlugin {
 
     // The controller holds no timeslice (D4), so drop its scheduling slot and any other
     // injected PD's, then recompute the pad so the frame still sums to the frame period.
-    val boundProcessors = symbolTable.getAllActualBoundProcessors()
-    assert(boundProcessors.size == 1, "Linter should have ensured there is exactly one bound processor")
-    var framePeriodNano: Z = 0
-    boundProcessors(0).getFramePeriod() match {
-      case Some(ms) => framePeriodNano = ms * 1_000_000
-      case _ => halt("Infeasible: linter should have ensured bound processor has frame period")
-    }
+    val framePeriodNano: Z = MicrokitUtil.frameTimeNs(symbolTable, reporter)
 
     def isPad(sd: SchedulingDomain): B = {
       return sd.componentName == "pad" || sd.componentName == "padding"
@@ -1160,7 +1154,7 @@ object TestSchedulerPlugin {
       if (remainder <= 0) {
         return slots
       }
-      val pad = SchedulingDomain(id = 0, componentName = "pad", length = remainder, isUserPartition = F)
+      val pad = SchedulingDomain(id = 0, componentName = "pad", length = remainder, unit = HamrTimeUnit.ns, isUserPartition = F)
       return if (padFirst) pad +: slots else slots :+ pad
     }
 

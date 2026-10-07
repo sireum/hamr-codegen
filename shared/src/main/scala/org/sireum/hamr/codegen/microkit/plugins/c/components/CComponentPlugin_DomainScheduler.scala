@@ -8,7 +8,7 @@ import org.sireum.hamr.codegen.common.properties.Hamr_Microkit_Properties
 import org.sireum.hamr.codegen.common.symbols.{AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.types.AadlTypes
-import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
+import org.sireum.hamr.codegen.common.util.{HamrCli, HamrTimeUnit, ResourceUtil, TimeUtil}
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen.toolName
 import org.sireum.hamr.codegen.microkit.connections.{ConnectionStore, VMRamVaddr, cConnectionContributions}
@@ -29,9 +29,8 @@ import org.sireum.message.Reporter
 
   val pacerSchedulingDomain: Z = 1
 
-  val pacerComputeExecutionTime: Z = 30
-
-  val defaultComputeExecutionTime: Z = 50
+  // the pacer's slot; schedule times are in us (MicrokitUtil.domainScheduleTarget)
+  val pacerComputeExecutionTimePs: Z = 30 * TimeUtil.psPerMs
 
   override def canHandle(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): B = {
     return super.canHandle(model, options, types, symbolTable, store, reporter) &&
@@ -171,17 +170,13 @@ import org.sireum.message.Reporter
         requiresR2U2 = r2u2Contributions.requiresR2U2)
       makefileContainers = makefileContainers :+ mk
 
-      val computeExecutionTime: Z = t.getComputeExecutionTime() match {
-        case Some((l, h)) =>
-          assert(l <= h, s"low must be <= high: $l <= $h")
-          h
-        case _ => defaultComputeExecutionTime
-      }
+      // in us
+      val computeExecutionTime: Z = MicrokitUtil.computeExecutionTime(t, HamrTimeUnit.us, reporter)
 
       val isUserPartition = !StoreUtil.isSynthetic(t.path, localStore)
 
       xmlSchedulingDomains = xmlSchedulingDomains :+
-        SchedulingDomain(id = schedulingDomain, componentName = threadMonId.render, length = computeExecutionTime, isUserPartition = isUserPartition)
+        SchedulingDomain(id = schedulingDomain, componentName = threadMonId.render, length = computeExecutionTime, unit = HamrTimeUnit.us, isUserPartition = isUserPartition)
 
       var childMemMaps: ISZ[MemoryMap] = ISZ()
       var childIrqs: ISZ[IRQ] = ISZ()
@@ -556,7 +551,9 @@ import org.sireum.message.Reporter
 
     addPacerComponent()
 
-    val pacerSlot = SchedulingDomain(id = pacerSchedulingDomain, componentName = "pacer", length = pacerComputeExecutionTime, isUserPartition = F)
+    // all budgets below are in us
+    val pacerComputeExecutionTime: Z = MicrokitUtil.toScheduleUnit(pacerComputeExecutionTimePs, HamrTimeUnit.us, "the pacer's slot", None(), reporter)
+    val pacerSlot = SchedulingDomain(id = pacerSchedulingDomain, componentName = "pacer", length = pacerComputeExecutionTime, unit = HamrTimeUnit.us, isUserPartition = F)
     val componentCount = xmlSchedulingDomains.size
 
     val componentUsage = usedBudget
@@ -564,17 +561,12 @@ import org.sireum.message.Reporter
 
     usedBudget = usedBudget + pacerUsage
 
-    val boundProcessors = symbolTable.getAllActualBoundProcessors()
-    assert(boundProcessors.size == 1, "Linter should have ensured there is exactly one bound processor")
+    val framePeriod: Z = MicrokitUtil.frameTimeUs(symbolTable, reporter)
 
-    var framePeriod: Z = 0
-    boundProcessors(0).getFramePeriod() match {
-      case Some(z) => framePeriod = z
-      case _ => halt("Infeasible: linter should have ensured bound processor has frame period")
-    }
+    @strictpure def fmt(us: Z): String = MicrokitUtil.formatScheduleTime(us, HamrTimeUnit.us)
 
     if (usedBudget > framePeriod && !options.runtimeMonitoring) {
-      reporter.error(None(), toolName, s"Frame period ${framePeriod}ms is too small for the used budget ${usedBudget}ms (${componentUsage} for components, ${pacerUsage}ms for Pacer)")
+      reporter.error(None(), toolName, s"Frame period ${fmt(framePeriod)} is too small for the used budget ${fmt(usedBudget)} (${fmt(componentUsage)} for components, ${fmt(pacerUsage)} for Pacer)")
       return (localStore, resources)
     }
 
@@ -585,7 +577,7 @@ import org.sireum.message.Reporter
 
     val padding: Z = framePeriod - usedBudget
     if (padding > 0) {
-      xmlScheds = xmlScheds :+ SchedulingDomain(id = 0, componentName = "padding", length = padding, isUserPartition = F)
+      xmlScheds = xmlScheds :+ SchedulingDomain(id = 0, componentName = "padding", length = padding, unit = HamrTimeUnit.us, isUserPartition = F)
     }
 
     for (e <- connectionStore;

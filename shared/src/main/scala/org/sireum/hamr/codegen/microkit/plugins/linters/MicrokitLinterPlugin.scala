@@ -69,10 +69,10 @@ object MicrokitLinterPlugin {
                 }
               case ap: AadlProcessor => ap
             }
-          if (actualProcessor.getClockPeriod().isEmpty) {
+          if (actualProcessor.clockPeriodPs.isEmpty) {
             reporter.error(actualProcessor.component.identifier.pos, MicrokitCodegen.toolName, "Bound processors must be assigned a clock period.")
           }
-          if (actualProcessor.getFramePeriod().isEmpty) {
+          if (actualProcessor.framePeriodPs.isEmpty) {
             reporter.error(actualProcessor.component.identifier.pos, MicrokitCodegen.toolName, "Bound processors must be assigned a frame period.")
           }
         case _ =>
@@ -113,7 +113,7 @@ object MicrokitLinterPlugin {
     for (thread <- symbolTable.getThreads()) {
       thread.dispatchProtocol match {
         case Dispatch_Protocol.Periodic =>
-          if (thread.period.isEmpty) {
+          if (thread.periodPs.isEmpty) {
             reporter.error(thread.component.identifier.pos, MicrokitCodegen.toolName, s"Periodic threads must be assigned a period property.")
           }
         case Dispatch_Protocol.Sporadic =>
