@@ -2,7 +2,10 @@
 package org.sireum.hamr.codegen.arsit.util
 
 import org.sireum._
+import org.sireum.hamr.codegen.arsit.Util
+import org.sireum.hamr.codegen.common.properties.OsateProperties
 import org.sireum.hamr.codegen.common.symbols._
+import org.sireum.hamr.codegen.common.util.TimeUtil
 
 object SchedulerUtil {
 
@@ -35,9 +38,12 @@ object SchedulerUtil {
       else symbolTable.getThreads().map(m => m.asInstanceOf[AadlThreadOrDevice])
 
     return components.map((t: AadlThreadOrDevice) => {
-      val computeExecutionTime: String = t.getComputeExecutionTime() match {
-        case Some((low, high)) => s"Some((${low}, ${high}))"
-        case _ => "None()"
+      val what = s"Compute_Execution_Time of ${t.pathAsString(".")} (${OsateProperties.TIMING_PROPERTIES__COMPUTE_EXECUTION_TIME})"
+      val computeExecutionTime: ST = t.computeExecutionTimePs match {
+        case Some((low, high)) =>
+          val pos = t.component.identifier.pos
+          st"Some((${Util.artTimeLiteral(Util.toArtNs(low, s"$what (low)", pos))}, ${Util.artTimeLiteral(Util.toArtNs(high, s"$what (high)", pos))}))"
+        case _ => st"None()"
       }
       val domain: String = t.getDomain(symbolTable) match {
         case Some(z) => s"Some(${z})"
@@ -65,22 +71,16 @@ object SchedulerUtil {
 
   def getProcessorTimingProperties(symbolTable: SymbolTable): ISZ[ST] = {
     return getThreadReachableProcessors(symbolTable).map((p: AadlProcessor) => {
-      val clockPeriod: String = p.getClockPeriod() match {
-        case Some(z) => s"Some(${z})"
-        case _ => "None()"
-      }
-      val framePeriod: String = p.getFramePeriod() match {
-        case Some(z) => s"Some(${z})"
-        case _ => "None()"
-      }
+      val clockPeriod: ST = timeOpt(p.clockPeriodPs,
+        s"Clock_Period of ${p.pathAsString(".")} (${OsateProperties.TIMING_PROPERTIES__CLOCK_PERIOD})", p)
+      val framePeriod: ST = timeOpt(p.framePeriodPs,
+        s"Frame_Period of ${p.pathAsString(".")} (${OsateProperties.TIMING_PROPERTIES__FRAME_PERIOD})", p)
       val maxDomain: String = p.getMaxDomain() match {
         case Some(z) => s"Some(${z})"
         case _ => "None()"
       }
-      val slotTime: String = p.getSlotTime() match {
-        case Some(z) => s"Some(${z})"
-        case _ => "None()"
-      }
+      val slotTime: ST = timeOpt(p.slotTimePs,
+        s"Slot_Time of ${p.pathAsString(".")} (${OsateProperties.TIMING_PROPERTIES__SLOT_TIME})", p)
       val name = getProcessorTimingPropertiesName(p)
       st"""val ${name}: ProcessorTimingProperties = ProcessorTimingProperties(
           |  clockPeriod = ${clockPeriod},
@@ -90,17 +90,28 @@ object SchedulerUtil {
     })
   }
 
-  val defaultFramePeriod: Z = 1000 // 1000 ms
+  // an optional time value as an Option[Art.Time] in ns
+  def timeOpt(ps: Option[Z], what: String, p: AadlProcessor): ST = {
+    ps match {
+      case Some(v) => return st"Some(${Util.artTimeLiteral(Util.toArtNs(v, what, p.component.identifier.pos))})"
+      case _ => return st"None()"
+    }
+  }
 
+  val defaultFramePeriodPs: Z = 1000 * TimeUtil.psPerMs // 1000 ms
 
-  def getFramePeriod(symbolTable: SymbolTable): Z = {
+  /** The Frame_Period, in ns, of the single processor threads are bound to, else the default */
+  def getFramePeriodNs(symbolTable: SymbolTable): Z = {
     val processors: ISZ[AadlProcessor] = getThreadReachableProcessors(symbolTable)
     if (processors.size == 1) {
-      processors(0).getFramePeriod() match {
-        case Some(z) => return z
+      processors(0).framePeriodPs match {
+        case Some(ps) =>
+          return Util.toArtNs(ps,
+            s"Frame_Period of ${processors(0).pathAsString(".")} (${OsateProperties.TIMING_PROPERTIES__FRAME_PERIOD})",
+            processors(0).component.identifier.pos)
         case _ =>
       }
     }
-    return defaultFramePeriod
+    return Util.toArtNs(defaultFramePeriodPs, "the default Frame_Period", None())
   }
 }

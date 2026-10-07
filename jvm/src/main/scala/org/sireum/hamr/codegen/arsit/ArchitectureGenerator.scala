@@ -207,7 +207,7 @@ object ArchitectureGenerator {
     val schedulers = SchedulerTemplate.schedulers(basePackage, components,
       SchedulerUtil.getProcessorTimingProperties(symbolTable),
       SchedulerUtil.getThreadTimingProperties(symbolTable, arsitOptions.devicesAsThreads),
-      SchedulerUtil.getFramePeriod(symbolTable))
+      SchedulerUtil.getFramePeriodNs(symbolTable))
     addResource(directories.architectureDir, ISZ(basePackage, "Schedulers.scala"), schedulers, T)
 
     val scheduleProvider = SchedulerTemplate.scheduleProvider(basePackage)
@@ -293,11 +293,11 @@ object ArchitectureGenerator {
 
     val id = getComponentId()
 
-    val period: Z = CommonUtil.getPeriod(m)
+    val periodNs: Z = Util.getPeriodNs(m)
 
     val dispatchProtocol: Dispatch_Protocol.Type = m.dispatchProtocol
 
-    val dispatchProtocolST: ST = ArchitectureTemplate.dispatchProtocol(dispatchProtocol, period)
+    val dispatchProtocolST: ST = ArchitectureTemplate.dispatchProtocol(dispatchProtocol, periodNs)
 
     val dispatchTriggers: Option[ISZ[String]] = Util.getDispatchTriggers(m.component)
 

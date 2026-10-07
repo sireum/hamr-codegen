@@ -75,7 +75,7 @@ object ArtNixTemplate {
   @pure def app(packageName: String,
                 objectName: String,
                 IPCPort_Id: String,
-                period: Z,
+                periodNs: Z,
                 bridge: String,
                 component: AadlThreadOrDevice,
                 isPeriodic: B,
@@ -145,7 +145,7 @@ object ArtNixTemplate {
           st"""
               |${(receiveOnInPorts, "\n")}
               |entryPoints.compute()
-              |${basePackage}.Process.sleep($period)"""
+              |${basePackage}.Process.sleep(${Util.artTimeLiteral(periodNs)})"""
         } else {
 
           st"""var dispatch = F
@@ -153,9 +153,9 @@ object ArtNixTemplate {
               |${(receiveOnInPorts, "\n")}
               |if (dispatch) {
               |  entryPoints.compute()
-              |  ${basePackage}.Process.sleep($period)
+              |  ${basePackage}.Process.sleep(${Util.artTimeLiteral(periodNs)})
               |} else {
-              |  ${basePackage}.Process.sleep(10)
+              |  ${basePackage}.Process.sleep(${Util.artTimeLiteral(10000000)}) // 10 ms
               |}"""
         }
       }
@@ -181,6 +181,7 @@ object ArtNixTemplate {
           |package $packageName
           |
           |import org.sireum._
+          |import org.sireum.S64._
           |import art._
           |import art.Art.PortId._
           |import art.scheduling.nop.NopScheduler
@@ -631,7 +632,8 @@ object ArtNixTemplate {
           |${CommentTemplate.doNotEditComment_slash}
           |
           |@ext object Process {
-          |  def sleep(n: Z): Unit = $$
+          |  // sleeps n nanoseconds
+          |  def sleep(n: Art.Time): Unit = $$
           |
           |  def time(): Art.Time = $$
           |}
@@ -649,7 +651,7 @@ object ArtNixTemplate {
           |${CommentTemplate.doNotEditComment_slash}
           |
           |object Process_Ext {
-          |  def sleep(millis: Z): Unit = halt("stub")
+          |  def sleep(n: Art.Time): Unit = halt("stub")
           |
           |  def time(): Art.Time = halt("stub")
           |}"""

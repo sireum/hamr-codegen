@@ -81,7 +81,7 @@ import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
 
       val sendOutput: ST = genSendOutput(ports, names)
 
-      val period: Z = CommonUtil.getPeriod(component)
+      val periodNs: Z = Util.getPeriodNs(component)
 
       val dispatchProtocol: Dispatch_Protocol.Type = component.dispatchProtocol
       val dispatchStatus = genDispatchStatus(names, ports, dispatchProtocol)
@@ -94,7 +94,7 @@ import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
         names.instanceName,
         names.bridgeTypeName,
         z"0",
-        ArchitectureTemplate.dispatchProtocol(dispatchProtocol, period),
+        ArchitectureTemplate.dispatchProtocol(dispatchProtocol, periodNs),
         Util.getDispatchTriggers(component.component),
         _ports,
         _portArgs)

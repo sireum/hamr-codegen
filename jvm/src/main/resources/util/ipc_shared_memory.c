@@ -6,9 +6,17 @@
 #include <sys/types.h>
 #include <sys/shm.h>
 #include <sys/sem.h>
+#include <time.h>
 #include <unistd.h>
 
 // This file is auto-generated.  Do not edit
+
+// sleeps ns nanoseconds, resuming after signals (the C scheduler installs handlers)
+static void sleep_ns(int64_t ns) {
+    struct timespec req = { .tv_sec = (time_t) (ns / 1000000000), .tv_nsec = (long) (ns % 1000000000) };
+    struct timespec rem;
+    while (nanosleep(&req, &rem) == -1 && errno == EINTR) req = rem;
+}
 
 // System V IPC keys are this system's base key plus the port id, so that different systems, and
 // stale objects left by other systems, do not share keys.  The base is derived from the system's
@@ -99,7 +107,7 @@ Unit PACKAGE_NAME_SharedMemory_receive(STACK_FRAME Z port, MBox2_43CC67 out) {
 
     while (p->type != TSome_D29615) { // wait until there is data
         unlock(CALLER sid, port);
-        usleep((useconds_t) 10 * 1000);
+        sleep_ns(10000000); // 10 ms
         lock(CALLER sid, port);
     }
 
@@ -140,7 +148,7 @@ Unit PACKAGE_NAME_SharedMemory_send(STACK_FRAME Z appPortId, Z componentPortId, 
 
     while (p->type == TSome_D29615) {
         unlock(CALLER sid, componentPortId);
-        usleep((useconds_t) 10 * 1000);
+        sleep_ns(10000000); // 10 ms
         lock(CALLER sid, componentPortId);
     }
 
@@ -172,6 +180,7 @@ Unit PACKAGE_NAME_SharedMemory_remove(STACK_FRAME Z id) {
     shmctl(shmget(ipc_key(id), sizeof(union Option_8E9F45), 0666), IPC_RMID, NULL);
 }
 
-Unit PACKAGE_NAME_Process_sleep(STACK_FRAME Z n) {
-    usleep((useconds_t) n * 1000);
+// n is in nanoseconds (Art.Time)
+Unit PACKAGE_NAME_Process_sleep(STACK_FRAME S64 n) {
+    sleep_ns(n);
 }

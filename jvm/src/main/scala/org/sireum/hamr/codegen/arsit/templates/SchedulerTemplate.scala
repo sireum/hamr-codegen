@@ -3,6 +3,7 @@
 package org.sireum.hamr.codegen.arsit.templates
 
 import org.sireum._
+import org.sireum.hamr.codegen.arsit.Util
 import org.sireum.hamr.codegen.common.templates.{CommentTemplate, StackFrameTemplate}
 
 object SchedulerTemplate {
@@ -10,7 +11,7 @@ object SchedulerTemplate {
                  bridges: ISZ[String],
                  processorTimingProperties: ISZ[ST],
                  threadTimingProperties: ISZ[ST],
-                 framePeriod: Z): ST = {
+                 framePeriodNs: Z): ST = {
     var slots: ISZ[ST] = ISZ()
     var domainToBridgeMap: ISZ[ST] = ISZ()
     var threadNickNames: ISZ[ST] = ISZ()
@@ -25,6 +26,7 @@ object SchedulerTemplate {
           |package ${packageName}
           |
           |import org.sireum._
+          |import org.sireum.S64._
           |import art.Art
           |import art.scheduling.legacy.Legacy
           |import art.scheduling.roundrobin.RoundRobin
@@ -33,13 +35,14 @@ object SchedulerTemplate {
           |
           |${CommentTemplate.doNotEditComment_slash}
           |
-          |@datatype class ProcessorTimingProperties(val clockPeriod: Option[Z],
-          |                                          val framePeriod: Option[Z],
+          |// times are in nanoseconds
+          |@datatype class ProcessorTimingProperties(val clockPeriod: Option[Art.Time],
+          |                                          val framePeriod: Option[Art.Time],
           |                                          val maxDomain: Option[Z],
-          |                                          val slotTime: Option[Z])
+          |                                          val slotTime: Option[Art.Time])
           |
           |@datatype class ThreadTimingProperties(val domain: Option[Z],
-          |                                       val computeExecutionTime: Option[(Z, Z)])
+          |                                       val computeExecutionTime: Option[(Art.Time, Art.Time)])
           |
           |object Schedulers {
           |
@@ -82,9 +85,10 @@ object SchedulerTemplate {
           |   * Static Scheduler
           |   *********************************************************************/
           |
-          |  val framePeriod: Z = ${framePeriod}
+          |  val framePeriod: Art.Time = ${Util.artTimeLiteral(framePeriodNs)} // in nanoseconds
           |  val numComponents: Z = Arch.ad.components.size
-          |  val maxExecutionTime: Z = numComponents / framePeriod
+          |  // numComponents / (framePeriod in ms), computed in S64 so that framePeriod is not narrowed to Z
+          |  val maxExecutionTime: Z = conversions.S64.toZ(conversions.Z.toS64(numComponents) * s64"1000000" / framePeriod)
           |
           |  // defaultStaticSchedule represents the component dispatch order
           |  val defaultStaticSchedule: DScheduleSpec = DScheduleSpec(0, 0, DSchedule(ISZ(
@@ -359,21 +363,25 @@ object SchedulerTemplate {
     val ret: ST =
       st"""#include <all.h>
           |
-          |#include <sys/time.h>
           |#include <time.h>
           |
           |${CommentTemplate.doNotEditComment_slash}
           |
-          |/** Returns current system time in milliseconds
-          |  * NOTE: this requires returning 64bit ints
-          |  */
+          |static int64_t now_ns(void) {
+          |  struct timespec ts;
+          |  clock_gettime(CLOCK_MONOTONIC, &ts);
+          |  // widen before multiplying: tv_sec may be a 32-bit time_t
+          |  return (int64_t) ts.tv_sec * 1000000000 + ts.tv_nsec;
+          |}
+          |
+          |/** Returns the nanoseconds since the first call, i.e. since ART's clock started (Art.Time) */
           |S64 art_Process_time(STACK_FRAME_ONLY) {
-          |  struct timeval tv; //Get a time structure
-          |  gettimeofday(&tv, NULL); //Get the current time
-          |  int64_t t = tv.tv_sec;
-          |  t *= 1000;
-          |  t += tv.tv_usec/1000;
-          |  return  t;
+          |  static int64_t start = -1;
+          |  int64_t now = now_ns();
+          |  if (start < 0) {
+          |    start = now;
+          |  }
+          |  return now - start;
           |}
           |
           |Unit Os_Ext_exit(STACK_FRAME Z code) {

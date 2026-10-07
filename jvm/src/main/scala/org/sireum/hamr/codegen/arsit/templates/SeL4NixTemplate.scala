@@ -231,6 +231,7 @@ object SeL4NixTemplate {
           |package ${packageName}.${instanceName}
           |
           |import org.sireum._
+          |import org.sireum.S64._
           |import art._
           |import art.Art.BridgeId._
           |import art.Art.PortId._

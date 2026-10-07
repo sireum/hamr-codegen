@@ -161,7 +161,7 @@ import org.sireum.hamr.ir.Direction
         packageName = basePackage,
         objectName = App_Id,
         IPCPort_Id = App_Id,
-        period = CommonUtil.getPeriod(threadOrDevice),
+        periodNs = Util.getPeriodNs(threadOrDevice),
         bridge = bridgeInstanceVarName,
         component = threadOrDevice,
         isPeriodic = isPeriodic,

@@ -26,6 +26,9 @@ object TimeUtil {
   val psPerMs: Z = 1000 * psPerUs
   val psPerS: Z = 1000 * psPerMs
 
+  // largest S64, e.g. for ART's Art.Time
+  val maxS64: Z = z"9223372036854775807"
+
   // the period used when a thread or device has none (was 1 ms)
   val defaultPeriodPs: Z = psPerMs
 

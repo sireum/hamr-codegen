@@ -10,10 +10,12 @@ import org.sireum.hamr.ir.{Direction, FeatureCategory}
 
 object ArchitectureTemplate {
 
-  @pure def dispatchProtocol(dp: Dispatch_Protocol.Type, period: Z): ST = {
+  // periodNs is in nanoseconds and is emitted as an Art.Time (S64) literal, so the generated file
+  // needs import org.sireum.S64._
+  @pure def dispatchProtocol(dp: Dispatch_Protocol.Type, periodNs: Z): ST = {
     val ret: ST = dp match {
-      case Dispatch_Protocol.Sporadic => st"Sporadic(min = $period)"
-      case Dispatch_Protocol.Periodic => st"Periodic(period = $period)"
+      case Dispatch_Protocol.Sporadic => st"Sporadic(min = ${Util.artTimeLiteral(periodNs)})"
+      case Dispatch_Protocol.Periodic => st"Periodic(period = ${Util.artTimeLiteral(periodNs)})"
     }
     return ret
   }
@@ -256,6 +258,7 @@ object ArchitectureTemplate {
           |package $packageName
           |
           |import org.sireum._
+          |import org.sireum.S64._
           |import art._
           |import art.PortMode._
           |import art.DispatchPropertyProtocol._

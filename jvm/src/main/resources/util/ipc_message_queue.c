@@ -1,8 +1,16 @@
 #include <all.h>
+#include <errno.h>
 #include <sys/msg.h>
-#include <unistd.h>
+#include <time.h>
 
 // This file is auto-generated.  Do not edit
+
+// sleeps ns nanoseconds, resuming after signals (the C scheduler installs handlers)
+static void sleep_ns(int64_t ns) {
+  struct timespec req = { .tv_sec = (time_t) (ns / 1000000000), .tv_nsec = (long) (ns % 1000000000) };
+  struct timespec rem;
+  while (nanosleep(&req, &rem) == -1 && errno == EINTR) req = rem;
+}
 
 struct Message {
   long mtype;
@@ -35,6 +43,7 @@ Unit PACKAGE_NAME_MessageQueue_send(STACK_FRAME Z msgid, Z port, art_DataContent
   msgsnd(msgget((key_t) msgid, 0644), &m, sizeof(union art_DataContent), 0);
 }
 
-Unit PACKAGE_NAME_Process_sleep(STACK_FRAME Z n) {
-  usleep((useconds_t) n * 1000);
+// n is in nanoseconds (Art.Time)
+Unit PACKAGE_NAME_Process_sleep(STACK_FRAME S64 n) {
+  sleep_ns(n);
 }

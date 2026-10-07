@@ -4,15 +4,17 @@ package org.sireum.hamr.codegen.arsit
 
 import org.sireum._
 import org.sireum.hamr.codegen.arsit.util.{ArsitLibrary, ArsitOptions, ArsitPlatform, IpcMechanism}
+import org.sireum.hamr.codegen.arsit.util.ReporterUtil.reporter
 import org.sireum.hamr.codegen.common.containers.{FileResource, Resource}
 import org.sireum.hamr.codegen.common.properties.{OsateProperties, PropertyUtil}
 import org.sireum.hamr.codegen.common.symbols.{AadlFeature, AadlThreadOrDevice}
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.types._
 import org.sireum.hamr.codegen.common.util.NameUtil.NameProvider
-import org.sireum.hamr.codegen.common.util.{NameUtil, PathUtil}
+import org.sireum.hamr.codegen.common.util.{NameUtil, PathUtil, TimeUtil}
 import org.sireum.hamr.codegen.common.{CommonUtil, StringUtil}
 import org.sireum.hamr.ir
+import org.sireum.message.Position
 import org.sireum.ops._
 
 object Util {
@@ -24,6 +26,30 @@ object Util {
   val ARSIT_INSTRUCTIONS_MESSAGE_KIND: String = "Arsit - Instructions"
 
   val SCRIPT_HOME: String = "SCRIPT_HOME"
+
+  // what time values are converted for in messages; ART's resolution is ns (doc/ExactTime-design.md, D6)
+  val artTimeTarget: String = "ART"
+
+  /** Converts ps to ART's nanoseconds (Art.Time), with a time-rounding warning if that is not exact.
+    * A value of 0 stays 0 (a Compute_Execution_Time's low end may be 0); any other value that is 0
+    * in ns is an error. */
+  def toArtNs(ps: Z, what: String, pos: Option[Position]): Z = {
+    if (ps == 0) {
+      return 0
+    }
+    return TimeUtil.fromPicoseconds(ps, TimeUtil.psPerNs, TimeUtil.maxS64, what, artTimeTarget, pos, reporter)
+  }
+
+  /** The Period of m in ns, or the default period if it has none */
+  def getPeriodNs(m: AadlThreadOrDevice): Z = {
+    return toArtNs(CommonUtil.getPeriodPs(m),
+      s"Period of ${m.pathAsString(".")} (${OsateProperties.TIMING_PROPERTIES__PERIOD})", m.component.identifier.pos)
+  }
+
+  /** An Art.Time literal; generated files that use it need import org.sireum.S64._ */
+  @pure def artTimeLiteral(ns: Z): ST = {
+    return st"""s64"$ns""""
+  }
 
   def nameProvider(c: ir.Component,
                    basePackage: String): NameProvider = {
