@@ -25,7 +25,7 @@ jobs:
           - "BaseBehaviorTestDynamic"
           - "GumboTest,HamrTranspileTests"
           - "BaseBehaviorTestStatic,MicrokitBehaviorTests"
-          - "MicrokitTests,SharedMemorySafetyTests,SystemTestingTests,R2U2MonitorTests,R2U2MonitorBehaviorTests,CParserTest,TimeUtilTests,SlangExp2RustTests,Ros2Tests,SysVCTest,SysVCVerusGenTest"
+          - "MicrokitTests,SharedMemorySafetyTests,SystemTestingTests,R2U2MonitorTests,R2U2MonitorBehaviorTests,CParserTest,TimeUtilTests,ExactTimeTests,ExactTimeResolveTests,SlangExp2RustTests,Ros2Tests,SysVCTest,SysVCVerusGenTest"
     name: '${{ matrix.testSuffix }}'
     steps:
       - name: Support longpaths

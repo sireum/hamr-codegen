@@ -959,6 +959,29 @@ Each step type-checks and compiles before the next.
   suites are run and the diffs reported for review; expectations are regenerated only once the diffs
   are accepted.
 
+**Where the tests live (step 9).**
+
+- `ExactTimeTests`: one small AADL model per scenario under `resources/models/ExactTimeTests`
+  (AIR generated with phantom), run through codegen with expected errors and expected warnings. The
+  harness's `test` gained an `expectedWarnings` parameter (`CodegenTest.ExpectedWarnings`: message
+  kind, a text fragment and an exact count), checked whether or not errors are expected.
+- `ExactTimeResolveTests`: what AADL cannot express, on those models' AIR patched in memory and
+  resolved directly (so phantom mode, which regenerates AIR from the AADL, does not bypass the
+  patch): an inverted `Compute_Execution_Time` (OSATE rejects `5 ms .. 2 ms` itself), a `Period`
+  that does not parse, and `Slot_Time` with and without a unit.
+- `HamrTranspileTests`: the #12 model (`period-100us`), a 32-bit `--bit-width` model with a 3 s
+  period and `Frame_Period` (`long-period-32bit`), and the default period on a periodic device and
+  a sporadic thread (`default-period`), each built and run through the Linux Demo and legacy apps.
+- `TimeUtilTests` and the ART unit tests (`art/shared/src/test/scala`), as above.
+- SysML: `TestFrontEnd_TimeUnits` (every unit, and a decimal value) and `TestFrontEnd_TwoSystems`.
+  Writing the latter found that the front end stopped on any decimal time value (`1.5[ms]`): it
+  parsed the literal's printed form, which `R` cannot read. It now reads the literal's value.
+- Two items need behaviour code in a generated project, which the harness does not provide, and are
+  covered at another level instead: `ArtTime.millis(3000)` in a 32-bit build (`ArtTime` is unit
+  tested, and `long-period-32bit` carries 3 s values through a 32-bit build), and event-port order
+  in the transpiled Demo (`ArtNativeSlang`'s ordering is unit tested on the JVM through
+  `sendOutput` with crosswise connections).
+
 ## Compatibility
 
 - **Generated code:** times in generated code change units: ART ns, Microkit domain us, MCS ns,

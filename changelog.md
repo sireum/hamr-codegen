@@ -42,6 +42,20 @@ cd kekinian
 
   * The model URI a component's codegen-report entry carries is now relativized against the report directory, as every other position in a report already was.  ``componentReport``'s ``modelImplementation`` was built straight from the position the front end recorded rather than through ``ReportUtil.buildPosA``, so each component kept one unresolved URI -- the OSATE workspace path for AADL, and the absolute ``file://`` URI of the model on the generating machine for SysML.  Neither resolves from where the report sits, and a report builds its own links as ``uriOpt#Lbegin``, so those entries led nowhere
 
+**Timing** ([#12](https://github.com/sireum/hamr-codegen/issues/12))
+
+  * Time properties are carried exactly from the model to every backend instead of being floored to whole milliseconds, which turned a 100 us ``Period`` into 0.  ``SymbolResolver`` parses ``Period``, ``Frame_Period``, ``Clock_Period``, ``Slot_Time`` and ``Compute_Execution_Time`` once, to picoseconds, rounding OSATE's double noise silently and any genuine sub-picosecond fraction to nearest with a warning, and each backend converts once to its own resolution -- ART and ROS 2 in nanoseconds, Microkit domain scheduling in microseconds, MCS in nanoseconds, the CAmkES dispatcher in milliseconds and the CAmkES pacer in ``Clock_Period`` ticks.  A value that is not exact at a backend's resolution is rounded to nearest with a ``time-rounding`` warning naming the instance by its path, a value that rounds to 0 or exceeds the target's range is an error, and each warning is reported once however many times the model is resolved.  ``doc/ExactTime-design.md`` has the details
+
+  * A value linter rejects a zero ``Period``, ``Frame_Period``, ``Clock_Period`` or ``Slot_Time``, and a ``Compute_Execution_Time`` whose high end is 0 or whose low end exceeds its high end, on every platform.  A ``Slot_Time`` without a unit is read as picoseconds, with a warning
+
+  * ART keeps time in nanoseconds since the process's ART clock started (``System.nanoTime`` on the JVM, ``clock_gettime(CLOCK_MONOTONIC)`` in transpiled C), so periods over 2.1 s survive a 32-bit ``--bit-width`` build and the clock is unaffected by the 2038 overflow of a 32-bit ``time_t``.  Same-urgency event ports are dispatched in true arrival order, by a per-process sequence number, rather than by millisecond timestamps whose ties fell back to declaration order.  The legacy Linux apps sleep with ``nanosleep``, resuming after signals, and the new ``ArtTime.millis``/``micros`` helpers convert to ``Art.Time``
+
+  * The CAmkES pacer rounds entries to the nearest ``Clock_Period`` tick instead of flooring, clamps its own 200/10/10 ms slots to at least one tick, gives a thread or process without ``Compute_Execution_Time`` the 50 ms default (with a warning) instead of a 0-tick entry, which seL4 cannot run safely, and computes the pad from the converted entries; the CAmkES periodic dispatcher reports a sub-ms ``Period`` instead of generating a modulo by zero
+
+  * SysML microsecond values were 10^6 times too small (``1 us`` became 1.06 ps), and a decimal time value such as ``1.5[ms]`` stopped the front end; both are fixed
+
+  * The C transpiler emits a range type's ``apply(String)`` only when ``Some[T]`` and ``None[T]`` are both specialized; a program that only ever used ``None[S64]()`` -- as the generated timing properties of a model without timing values do -- got C that did not compile
+
 **General**
 
   * Codegen now reports when the same resource path is emitted more than once: differing content means two generators disagree and the last write would silently win, while identical content is a redundant write and a duplicated codegen-report entry.  The check surfaced the C queue wrappers, which are per (type, queue size) but were emitted once per connection carrying the type -- isolette wrote one of them five times -- so they are now collected by filename in the connection provider
@@ -51,6 +65,16 @@ cd kekinian
   * The ``structs_arrays`` SysMLv2 model is now exercised by ``MicrokitBehaviorTests``; its expected results were already checked in, but nothing was running them
 
 **Backward Incompatibilities**
+
+  * **Timing** ([#12](https://github.com/sireum/hamr-codegen/issues/12))
+
+    * ``Art.Time`` is nanoseconds: ``DispatchPropertyProtocol.Periodic.period`` and ``Sporadic.min`` are ``Art.Time`` (``S64``) rather than ``Z``, and ``ArtTimer.schedule``/``scheduleTrait`` take ``delayNs`` -- code that passed a millisecond count fires 10^6 times sooner, so use ``ArtTime.millis(n)``.  ``Art.time()`` counts from the start of each process's ART clock rather than the epoch, and message timestamps and ART's JSON log ``"time"`` are nanoseconds.  Generated ``Schedulers.scala`` timing properties are ``Option[Art.Time]`` in nanoseconds
+
+    * Generated times change units: ART and ROS 2 timers in nanoseconds, Microkit domain schedule entries in microseconds; models whose times are whole milliseconds generate behaviourally identical systems apart from the deliberate changes below
+
+    * A zero time value, an inverted ``Compute_Execution_Time``, a value that rounds to 0 at a backend's resolution, a CAmkES ``Clock_Period`` that is not a whole number of milliseconds, and a CAmkES pacer schedule whose entries exceed the ``Frame_Period`` (previously emitted with a negative pad) are now codegen errors.  The CAmkES pacer rounds to the nearest tick rather than flooring, so a ``Compute_Execution_Time`` that is not a whole number of ticks gets a different schedule (5 ms with a 2 ms clock was 2 ticks and is now 3)
+
+    * Same-urgency event ports that arrive in the same clock tick are dispatched in arrival order rather than declaration order
 
   * **Microkit**
 

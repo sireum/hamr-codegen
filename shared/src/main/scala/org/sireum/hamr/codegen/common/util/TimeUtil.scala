@@ -40,8 +40,12 @@ object TimeUtil {
       case HamrTimeUnit.ms => psPerMs
     }
 
-  /** Renders ps in the largest unit (s, ms, us, ns, ps) that shows it exactly, e.g. 1.5 ms */
+  /** Renders ps in the largest unit (s, ms, us, ns, ps) that shows it exactly, e.g. 1.5 ms; 0 is
+    * rendered without a unit */
   @pure def format(ps: Z): String = {
+    if (ps == 0) {
+      return "0"
+    }
     val units: ISZ[(Z, String)] = ISZ((psPerS, "s"), (psPerMs, "ms"), (psPerUs, "us"), (psPerNs, "ns"))
     for (u <- units) {
       val (factor, name) = u
@@ -108,7 +112,7 @@ object TimeUtil {
     if (rounded == 0) {
       if (atLeastOne) {
         warnOnce(pos, timeRoundingKind,
-          s"$what is ${format(ps)}, which is less than half the ${format(resolutionPs)} resolution of $target; $target uses ${format(resolutionPs)}",
+          s"$what is ${format(ps)}, which is 0 at the ${format(resolutionPs)} resolution of $target; it is given the minimum, ${format(resolutionPs)}",
           reporter)
         return 1
       }

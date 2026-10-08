@@ -203,7 +203,10 @@ import org.sireum.hamr.codegen.common.util.{ResourceUtil, TimeUtil}
         entries = entries :+ PacerTemplate.pacerScheduleEntry(z"0", otherTicks,
           Some(st" // all other seL4 threads, init, ${TimeUtil.format(otherTicks * clockPeriodPs)}"))
 
-        val domainZeroTicks: Z = PacerTimeUtil.fixedTicks(PacerTimeUtil.domainZeroLenPs, clockPeriodPs, "domain 0 between components", reporter)
+        // only converted (and any rounding reported) when there is more than one component to switch between
+        val domainZeroTicks: Z =
+          if (allThreads.size > 1) PacerTimeUtil.fixedTicks(PacerTimeUtil.domainZeroLenPs, clockPeriodPs, "domain 0 between components", reporter)
+          else 0
         val domainZeroEntry = PacerTemplate.pacerScheduleEntry(z"0", domainZeroTicks,
           Some(st" // switch to domain 0 to allow seL4 to deliver messages"))
 

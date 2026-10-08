@@ -104,7 +104,7 @@ object PacerTimeUtil {
     val pad = frameTicks - usedTicks
     if (pad < 0) {
       reporter.error(p.component.identifier.pos, Util.toolName,
-        s"${target} needs $usedTicks ticks (${TimeUtil.format(usedTicks * clockPs)}), which does not fit in ${processorWhat(p, "Frame_Period", OsateProperties.TIMING_PROPERTIES__FRAME_PERIOD)} ($frameTicks ticks, ${TimeUtil.format(frameTicks * clockPs)})")
+        s"The CAmkES pacer's domain schedule needs $usedTicks ticks (${TimeUtil.format(usedTicks * clockPs)}), which does not fit in ${processorWhat(p, "Frame_Period", OsateProperties.TIMING_PROPERTIES__FRAME_PERIOD)} ($frameTicks ticks, ${TimeUtil.format(frameTicks * clockPs)})")
       return 0
     }
     return pad
