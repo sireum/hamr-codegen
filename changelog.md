@@ -1,4 +1,4 @@
-*Last Updated 2026-08-24*
+*Last Updated 2026-10-08*
 
 <!-- begin pre-release -->
 # Pre-Release
@@ -20,27 +20,39 @@ cd kekinian
 <!-- end pre-release -->
 
 <!-- begin dev -->
-# [dev](https://github.com/sireum/kekinian/releases/tag/dev)  <font size=3>as of 2026-08-22 (kekinian commit tip [c570e409](https://github.com/sireum/kekinian/tree/c570e409b9b669a6f5361a52b76f7c97abdae444))</font>
+# [dev](https://github.com/sireum/kekinian/releases/tag/dev)  <font size=3>as of 2026-10-08 (kekinian commit tip [b2359da0](https://github.com/sireum/kekinian/tree/b2359da06f72e226fef68c118603923dbbe0f43a))</font>
 
 **Microkit**
 
-  * Upgraded to the Microkit 2.3.0 SDK and the 2026.08 Verus toolchain: Verus ``0.2026.01.23`` -> ``0.2026.08.09`` with ``vstd``/``verus_builtin`` bumped to match, the Rust toolchain pinned to the release channel (1.97.1) that the Verus release was built against rather than to a nightly date, ``sel4``/``sel4-logging`` v2.0.0 -> v5.0.0, and the ``microkit-sdk`` (2.3.0) and ``sdfgen`` (0.33.0) tool versions recorded alongside the other pins.  The Verus API changes that upgrade requires are now emitted: post-state field references in an ``ensures`` on a ``&mut self`` method are written ``final(self).<field>`` (an in-ensures/is-guarantee-ensures flag is threaded through GUMBO spec rewriting so the expression emitter knows which half of the enclosing contract a spec lands in), and ghost tracking field updates are placed inside a ``proof { }`` block
+  * Upgraded to the Microkit 2.3.1 SDK and the 2026.09 Verus toolchain: Verus ``0.2026.01.23`` -> ``0.2026.09.27.3cf1832`` with ``vstd``/``verus_builtin`` bumped to match, the Rust toolchain pinned to the release channel (1.98.1) that the Verus release was built against rather than to a nightly date, ``sel4``/``sel4-logging`` v2.0.0 -> v5.0.0, and the ``microkit-sdk`` (2.3.1), LionsOS (``7554a0f``) and ``sdfgen`` (0.35.0) tool versions recorded alongside the other pins.  The Verus API changes that upgrade requires are now emitted: post-state field references in an ``ensures`` on a ``&mut self`` method are written ``final(self).<field>`` (an in-ensures/is-guarantee-ensures flag is threaded through GUMBO spec rewriting so the expression emitter knows which half of the enclosing contract a spec lands in), and ghost tracking field updates are placed inside a ``proof { }`` block
 
-  * Domain scheduling now emits the stock ``<domains>`` element -- deduped ``<domain name id>`` declarations followed by a ``<domain_schedule>`` holding a ``<schedule_entry domain duration>`` per slot and an explicit ``<schedule_end_marker />`` -- replacing the ``<domain name length>`` form of the patched 1.4.1-dev SDK, with slot durations converted from the model's milliseconds to microseconds.  Codegen now validates at generation time what the microkit tool would otherwise only reject at build time: non-positive durations, and protection domains that are missing or misreference a scheduling domain, are errors, while ``KernelNumDomains`` and ``KernelNumDomainSchedules`` are advisory warnings, since the real bounds belong to the kernel the SDK was built with and codegen is given neither the SDK path nor the target board
+  * Domain scheduling now emits the stock ``<domains>`` element -- deduped ``<domain name id>`` declarations followed by a ``<domain_schedule>`` holding a ``<schedule_entry domain duration>`` per slot and an explicit ``<schedule_end_marker />`` -- replacing the ``<domain name length>`` form of the patched 1.4.1-dev SDK, with slot durations given in microseconds.  Codegen now validates at generation time what the microkit tool would otherwise only reject at build time: non-positive durations, and protection domains that are missing or misreference a scheduling domain, are errors, while ``KernelNumDomains`` and ``KernelNumDomainSchedules`` are advisory warnings, since the real bounds belong to the kernel the SDK was built with and codegen is given neither the SDK path nor the target board
 
-  * VM support migrated to the current libvmm API, so generated code builds against the libvmm and sDDF that LionsOS 3945dc5 vendors, which is recorded alongside the other tool pins: ``guest_init`` declares the guest's RAM layout up front, bringing up the virtual GIC and registering the regions guest physical addresses resolve against, so the addresses handed to it are named ``*_GPA`` rather than ``*_VADDR`` and the config header gains ``GUEST_RAM_START_GPA``/``GUEST_RAM_SIZE``; ``virq_register_passthrough`` replaces ``virq_register`` plus its ack handler, since libvmm acks a pass-through hardware IRQ itself once the guest acks the virtual one; the vCPU id is no longer threaded through the guest and vIRQ calls; ``guest_start`` reports failure; and the guest addresses become named constants that the DTS overlay reads too, so the initrd window cannot drift between the two
+  * VM support migrated to the current libvmm API, so generated code builds against the libvmm and sDDF that LionsOS ``7554a0f`` vendors, which is recorded alongside the other tool pins: ``guest_init`` declares the guest's RAM layout up front, bringing up the virtual GIC and registering the regions guest physical addresses resolve against, so the addresses handed to it are named ``*_GPA`` rather than ``*_VADDR`` and the config header gains ``GUEST_RAM_START_GPA``/``GUEST_RAM_SIZE``; ``virq_register_passthrough`` replaces ``virq_register`` plus its ack handler, since libvmm acks a pass-through hardware IRQ itself once the guest acks the virtual one; the vCPU id is no longer threaded through the guest and vIRQ calls; ``guest_start`` reports failure; and the guest addresses become named constants that the DTS overlay reads too, so the initrd window cannot drift between the two
 
   * VM makefiles take ``LIBVMM`` and ``SDDF`` from ``LIONSOS`` rather than requiring ``VMM_DIR``, and link ``libsddf_util_debug.a``: libvmm routes ``printf`` through sDDF, and the non-debug ``putchar`` writes into a serial transmit queue that a generated system has no virtualiser to supply, so the first ``LOG_VMM`` faulted the whole component.  The arinc makefile likewise lets ``SDDF`` be set directly, defaulting to ``$(LIONSOS)/dep/sddf``.  Two malformed include flags are fixed -- ``$(TOP_INCLUDE)`` already carries its own ``-I``, so the extra one turned the types include into a nonexistent directory, and under MCS, where ``TOP_INCLUDE`` expands to nothing, the bare ``-I`` swallowed the component's own include directory
 
   * The vendored ``util.h`` is no longer emitted.  All it supplied was a ``printf`` declaration, so that cascade moves into the generated headers, ordered most-specific first and tested with ``<>`` rather than ``""`` -- a component built against sDDF has ``$(SDDF)/include/sddf/util`` on its include path, so ``"util.h"`` would resolve to sDDF's copy, which declares no ``printf`` at all.  ``memcpy`` and ``memset`` are declared beside it, since none of the three ``util.h`` variants declares them and a ``-ffreestanding -nostdlib`` build has no ``<string.h>`` to fall back on
 
-  * Added an ``SMT_OPTS`` make variable that forwards extra arguments to Verus, defaulting to ``--rlimit 100 --smt-option smt.random_seed=7``.  Both settings are needed for ``vstd`` itself, which cargo-verus builds from source as a dependency of every generated crate: ``GhostSubseq::agree_map`` fails its postcondition under Z3's default random seed, and ``endian.rs`` exceeds Verus' default resource limit of 10, both becoming reachable with the Verus 0.2026.08 and Z3 4.16.0 upgrade.  ``?=`` is kept, so an exported ``SMT_OPTS`` still wins -- which is how the seed had been supplied until now, from a developer's shell profile, and why local builds passed while CI did not
+  * Added an ``SMT_OPTS`` make variable that forwards extra arguments to Verus, defaulting to ``--rlimit 100 --smt-option smt.random_seed=7``.  Both settings are needed for ``vstd`` itself, which cargo-verus builds from source as a dependency of every generated crate: ``GhostSubseq::agree_map`` fails its postcondition under Z3's default random seed, and ``endian.rs`` exceeds Verus' default resource limit of 10, both of which surfaced with the move off Verus ``0.2026.01.23`` and its newer Z3.  ``?=`` is kept, so an exported ``SMT_OPTS`` still wins -- which is how the seed had been supplied until now, from a developer's shell profile, and why local builds passed while CI did not
 
   * Generated Rust crates put ``RUSTC_BOOTSTRAP=1`` on the test and coverage targets as well as the build ones, since the pinned stable channel rejects the ``#![feature(..)]`` attributes they declare on every cargo invocation, and allow ``unused_features`` and ``unexpected_cfgs``, which fire only on the non-Verus path
 
   * A component's ``src/lib.rs`` is now a contribution target rather than something a later plugin re-emits wholesale: ``ComponentContributions`` gains slots for mod declarations, uses, module-level entries, and positions inside the generated initialize and compute entrypoints, so the runtime-monitoring observation points and the monitor crate's ``mod gumbox;`` are woven into the file its owner generates.  Each slot renders to nothing when unused, so a component with no contributors emits exactly the text it did before
 
   * The model URI a component's codegen-report entry carries is now relativized against the report directory, as every other position in a report already was.  ``componentReport``'s ``modelImplementation`` was built straight from the position the front end recorded rather than through ``ReportUtil.buildPosA``, so each component kept one unresolved URI -- the OSATE workspace path for AADL, and the absolute ``file://`` URI of the model on the generating machine for SysML.  Neither resolves from where the report sits, and a report builds its own links as ``uriOpt#Lbegin``, so those entries led nowhere
+
+  * Runtime verification monitors generated from GUMBO with [R2U2](https://github.com/R2U2/r2u2) ([#8](https://github.com/sireum/hamr-codegen/pull/8)): a component's GUMBO ``monitor`` clause is translated to a C2PO specification, unary and binary operators, ``if``/``else``, quantifiers, ``In(...)``, enums, arrays, records and GUMBO functions included, and run by an R2U2 monitor in the component's Rust or C code, with its verdicts tied to output ports.  The C peek API, the AADL-port ``requires`` and the R2U2 build glue are emitted only when a model has a monitor, so monitor-free models generate what they did before.  A false verdict is no longer overwritten by a later true one in the same step ([#9](https://github.com/sireum/hamr-codegen/pull/9)), and users can implement what is done with the verdicts in generated verdict handler hooks ([#10](https://github.com/sireum/hamr-codegen/pull/10), [#11](https://github.com/sireum/hamr-codegen/pull/11))
+
+  * A command-driven test scheduler for Microkit system testing, enabled with the ``ENABLE_TEST_SCHEDULER`` experimental option (``doc/TestScheduler-design.md``).  A lowest-priority test controller protection domain runs ``system_tests!`` suites under QEMU, stepping the system by slot, hyperperiod, thread or state, inspecting and injecting ports and GUMBO state variables, and running proptest on target; ``bin/run-tests.cmd`` turns the results into an exit code.  The controller also checks the components' GUMBO contracts and each composition's system assertions at every dispatch, sharing a generated ``observers`` crate with the runtime monitors, so a violation fails the running test.  The shipped image leaves the test controller out
+
+  * The GUMBO and system-assertion runtime monitors are now thin wrappers over a generated ``observers`` crate that the test controller shares, with unchanged output; system proofs and component test APIs leave out synthetic (injected) components and ports; partial-composition warnings count only the port aliases a check reads; and fully generated components (``userEditable = F``) now overwrite their ``Cargo.toml`` like their sources, so dependencies codegen adds reach a project regenerated in place
+
+  * Microkit shared memory is hardened (``doc/SharedMemorySafety-design.md``): HAMR computes every type's layout itself and copies arrays by the generated type's size rather than the model's ``Data_Size``; each queue's region is sized for the whole queue and placed with an unmapped guard page after it; the generated C and Rust assert the layout at compile time; and received enums, booleans and strings are validated before they reach the receiver, with invalid messages dropped and counted (``get_<port>_num_invalid()``)
+
+  * The generated top-level Makefile exports ``AR := llvm-ar`` rather than ``ar``.  On macOS ``ar`` is Apple's, which drops non-Mach-O members without failing, leaving a VM component's ``libsddf_util_debug.a`` and ``libvmm.a`` empty
+
+  * A parse failure in the Microkit codegen report no longer fails codegen: every artifact has already been written by then, so the report is suspended with a warning instead
 
 **Timing** ([#12](https://github.com/sireum/hamr-codegen/issues/12))
 
@@ -56,6 +68,16 @@ cd kekinian
 
   * The C transpiler emits a range type's ``apply(String)`` only when ``Some[T]`` and ``None[T]`` are both specialized; a program that only ever used ``None[S64]()`` -- as the generated timing properties of a model without timing values do -- got C that did not compile
 
+**Linux (transpiled C)**
+
+  * ART no longer concatenates a thread's event and data output port ids when sending, which could exceed the ``IS[Z,art.Art.PortId]`` capacity codegen derives from the largest port partition and halt the generated program ([#13](https://github.com/sireum/hamr-codegen/issues/13))
+
+  * The nix apps run every component in one process, so the C stack is now the transpiler's 16 MiB default unless a thread's ``Stack_Size`` is larger (isolette's 224 KiB overflowed before ``main`` printed anything); codegen says which was used, and ``transpile.cmd`` lists each thread's ``Stack_Size``
+
+  * Shared memory IPC keys are a per-system base derived from the package name plus the port id, rather than the bare port ids every system shared, and every System V call is checked, aborting with the call, port, key and ``errno`` rather than crashing on a failed attach
+
+  * The transpiler builds the generated C with ``-fno-strict-aliasing``: the runtime reads values such as string literals through a different struct type than the one they were written as, and gcc's type-based alias analysis dropped the stores, so the generated Demo apps rejected every command-line option
+
 **General**
 
   * Codegen now reports when the same resource path is emitted more than once: differing content means two generators disagree and the last write would silently win, while identical content is a redundant write and a duplicated codegen-report entry.  The check surfaced the C queue wrappers, which are per (type, queue size) but were emitted once per connection carrying the type -- isolette wrote one of them five times -- so they are now collected by filename in the connection provider
@@ -64,13 +86,23 @@ cd kekinian
 
   * The ``structs_arrays`` SysMLv2 model is now exercised by ``MicrokitBehaviorTests``; its expected results were already checked in, but nothing was running them
 
+  * GUMBO expressions over named types type-check again: the GCL resolver now builds its type hierarchy, without which every comparison of two values of a named type, ``X == X`` included, was an error
+
+  * Generated Slang projects pin a kekinian whose published test artifact has ``org.sireum.test.ScalaTestReporter``, which ``proyek test`` now passes; with the older pin every generated project's tests aborted with ``ClassNotFoundException``.  The GUMBO OSATE plugin is bumped to match AIR's ``GclSubclause``
+
+  * ``bin/scripts/checkVersions.sc`` checks that INSPECTA-models' ``provers-env`` pins agree with ``microkit_versions.properties``, reports drift from the latest upstream releases codegen builds against (the Microkit SDK, crates.io and Verus crates, sDDF, libvmm, sdfgen), flags pins no check covers, and now fails when it finds drift under ``no-update`` too
+
+  * CI runs every test suite on Linux, macOS and Windows, which a new check enforces (four suites had never been in a matrix); Windows gets Linux's 4 MB thread stack; superseded runs are cancelled; and macOS runs as three jobs, as the organization has five macOS runners
+
+  * ``bin/scripts/updateChangelog.cmd`` regenerates every release section from git, keeping only the hand-written notes, and adds install instructions to the releases that publish ``install.cmd``
+
 **Backward Incompatibilities**
 
   * **Timing** ([#12](https://github.com/sireum/hamr-codegen/issues/12))
 
     * ``Art.Time`` is nanoseconds: ``DispatchPropertyProtocol.Periodic.period`` and ``Sporadic.min`` are ``Art.Time`` (``S64``) rather than ``Z``, and ``ArtTimer.schedule``/``scheduleTrait`` take ``delayNs`` -- code that passed a millisecond count fires 10^6 times sooner, so use ``ArtTime.millis(n)``.  ``Art.time()`` counts from the start of each process's ART clock rather than the epoch, and message timestamps and ART's JSON log ``"time"`` are nanoseconds.  Generated ``Schedulers.scala`` timing properties are ``Option[Art.Time]`` in nanoseconds
 
-    * Generated times change units: ART and ROS 2 timers in nanoseconds, Microkit domain schedule entries in microseconds; models whose times are whole milliseconds generate behaviourally identical systems apart from the deliberate changes below
+    * Generated ART and ROS 2 times are now in nanoseconds (Microkit and CAmkES schedules keep their units); models whose times are whole milliseconds generate behaviourally identical systems apart from the deliberate changes below
 
     * A zero time value, an inverted ``Compute_Execution_Time``, a value that rounds to 0 at a backend's resolution, a CAmkES ``Clock_Period`` that is not a whole number of milliseconds, and a CAmkES pacer schedule whose entries exceed the ``Frame_Period`` (previously emitted with a negative pad) are now codegen errors.  The CAmkES pacer rounds to the nearest tick rather than flooring, so a ``Compute_Execution_Time`` that is not a whole number of ticks gets a different schedule (5 ms with a 2 ms clock was 2 ticks and is now 3)
 
@@ -78,11 +110,19 @@ cd kekinian
 
   * **Microkit**
 
-    * Generated systems now require the Microkit 2.3.0 SDK -- the ``<domains>``/``<domain_schedule>`` form emitted for domain scheduling is not accepted by the patched 1.4.1-dev SDK -- along with Verus 0.2026.08.09 and the 1.97.1 Rust release channel it was built against
+    * Generated systems now require the Microkit 2.3.1 SDK -- the ``<domains>``/``<domain_schedule>`` form emitted for domain scheduling is not accepted by the patched 1.4.1-dev SDK, and domain-scheduled VMs need 2.3.1's fix placing a VM's vCPU in its protection domain's scheduling domain ([seL4/microkit#586](https://github.com/seL4/microkit/pull/586)) -- along with LionsOS ``7554a0f``, sdfgen 0.35.0, and Verus ``0.2026.09.27.3cf1832`` with the 1.98.1 Rust release channel it was built against
 
     * VM builds now take ``LIBVMM`` and ``SDDF`` from ``LIONSOS`` instead of ``VMM_DIR``, and target the current libvmm API; the guest addresses handed to ``guest_init`` are renamed ``*_GPA`` from ``*_VADDR``.  ``sdf-gen`` is referred to as ``sdfgen``, matching the package the generated metaprogram imports and asserts against
 
     * The vendored ``util.h`` and the dead ``vmm_c`` template are no longer emitted
+
+    * A ``Data_Size`` that disagrees with the size HAMR computes for a type, and an array without a dimension, are now lint errors; so is a thread connected directly to itself
+
+    * The R2U2 Makefile marker is renamed (``MARKER FOR R2U2_BUILD_DEPS RULE``), so Makefiles generated with the old marker need regenerating rather than updating in place
+
+  * **Linux (transpiled C)**
+
+    * Shared memory IPC uses per-system keys rather than the port ids; set ``HAMR_IPC_KEY_BASE`` to choose the base, e.g. to run two copies of one system at once
 
 <details><summary>How to install</summary>
 
@@ -104,6 +144,110 @@ cd kekinian
 </details>
 
 <details><summary>Commits</summary>
+
+* [5a80e82](https://github.com/sireum/hamr-codegen/commit/5a80e82) CI: run the macOS tests as three jobs instead of four
+
+* [d93909f](https://github.com/sireum/hamr-codegen/commit/d93909f) Bump test submodule: ExactTimeTests models with connected ports
+
+* [fbfafbc](https://github.com/sireum/hamr-codegen/commit/fbfafbc) CI: cancel a workflow's in-progress run on the same ref when a new one starts
+
+* [459c13c](https://github.com/sireum/hamr-codegen/commit/459c13c) Use ART 6b080e0 (nanosecond time) and kekinian fc2d799566 (hamr-codegen#12)
+
+* [99e9255](https://github.com/sireum/hamr-codegen/commit/99e9255) Exact time tests, changelog and fixes they found (hamr-codegen#12)
+
+* [a27570a](https://github.com/sireum/hamr-codegen/commit/a27570a) Remove the millisecond time accessors (hamr-codegen#12)
+
+* [c9efe30](https://github.com/sireum/hamr-codegen/commit/c9efe30) Use nanosecond ROS 2 timers (hamr-codegen#12)
+
+* [c78931a](https://github.com/sireum/hamr-codegen/commit/c78931a) Convert CAmkES times to the dispatcher calendar and pacer ticks (hamr-codegen#12)
+
+* [d75c414](https://github.com/sireum/hamr-codegen/commit/d75c414) Schedule Microkit in us (domain) and ns (MCS) (hamr-codegen#12)
+
+* [99ffcda](https://github.com/sireum/hamr-codegen/commit/99ffcda) Emit ART times in nanoseconds (hamr-codegen#12)
+
+* [e3d5a65](https://github.com/sireum/hamr-codegen/commit/e3d5a65) Parse time properties to exact picoseconds once, in SymbolResolver
+
+* [78e6451](https://github.com/sireum/hamr-codegen/commit/78e6451) Add the exact time design for hamr-codegen#12
+
+* [47b5a9c](https://github.com/sireum/hamr-codegen/commit/47b5a9c) Fix Linux C stack size and shared memory IPC; test the legacy build
+
+* [72fb62a](https://github.com/sireum/hamr-codegen/commit/72fb62a) Fix #13: bump art to 1075e9d and the test submodule
+
+* [64ca61c](https://github.com/sireum/hamr-codegen/commit/64ca61c) Move to Microkit 2.3.1, LionsOS 7554a0f, sdfgen 0.35.0 and Verus 0.2026.09.27
+
+* [f17fa27](https://github.com/sireum/hamr-codegen/commit/f17fa27) Test scheduler stage 7: contract observation in the test controller, and its review fixes
+
+* [50ef8bb](https://github.com/sireum/hamr-codegen/commit/50ef8bb) Update the test submodule: R2U2 verdict handler verus fix expectations
+
+* [aae0807](https://github.com/sireum/hamr-codegen/commit/aae0807) Fix verus for verifying R2U2 monitor handler (#11)
+
+* [20c5073](https://github.com/sireum/hamr-codegen/commit/20c5073) Update the test submodule for the r2u2 verdict handler expectations and the portable layout-guard test
+
+* [4791665](https://github.com/sireum/hamr-codegen/commit/4791665) Add r2u2_monitor verdict handler (#10)
+
+* [434b76b](https://github.com/sireum/hamr-codegen/commit/434b76b) Harden Microkit shared memory: computed sizes, checked layouts, validated reads
+
+* [ce7f7b7](https://github.com/sireum/hamr-codegen/commit/ce7f7b7) Share the monitors' contract checks through a generated observers crate
+
+* [f28809b](https://github.com/sireum/hamr-codegen/commit/f28809b) Refine the stage 7 contract observation plan after review
+
+* [f4d6be6](https://github.com/sireum/hamr-codegen/commit/f4d6be6) Update the test scheduler design doc and plan contract observation
+
+* [23b8df5](https://github.com/sireum/hamr-codegen/commit/23b8df5) Route test scheduler state var injection through extern_c_api.rs
+
+* [f2eb533](https://github.com/sireum/hamr-codegen/commit/f2eb533) Check linked_list_allocator, and flag microkit pins that no check covers
+
+* [a6a2b9e](https://github.com/sireum/hamr-codegen/commit/a6a2b9e) Add a command-driven test scheduler for Microkit system testing
+
+* [5801330](https://github.com/sireum/hamr-codegen/commit/5801330) update submodule
+
+* [d672a68](https://github.com/sireum/hamr-codegen/commit/d672a68) Keep an R2U2 false verdict from being overwritten by a later true one (#9)
+
+* [ad318e4](https://github.com/sireum/hamr-codegen/commit/ad318e4) Run CParserTest in the Linux, macOS and Windows CI matrices
+
+* [dec344b](https://github.com/sireum/hamr-codegen/commit/dec344b) Update test submodule for the reporter parse-failure checks
+
+* [b661b8b](https://github.com/sireum/hamr-codegen/commit/b661b8b) Keep Microkit reporter parse failures from failing codegen
+
+* [7c89f75](https://github.com/sireum/hamr-codegen/commit/7c89f75) Regenerate Act visitors for nested container traversal
+
+* [4041a40](https://github.com/sireum/hamr-codegen/commit/4041a40) Give Windows CI the same 4MB thread stack as Linux
+
+* [46f948d](https://github.com/sireum/hamr-codegen/commit/46f948d) update submodule
+
+* [62ab9d6](https://github.com/sireum/hamr-codegen/commit/62ab9d6) Bump the test submodule for the SysVC Isolette resolution
+
+* [b56f9b0](https://github.com/sireum/hamr-codegen/commit/b56f9b0) Add a CI check that every test suite is run on every platform
+
+* [61dad8c](https://github.com/sireum/hamr-codegen/commit/61dad8c) Add the unlisted test suites to CI and rebalance the matrices
+
+* [736ab8b](https://github.com/sireum/hamr-codegen/commit/736ab8b) update submodule
+
+* [14022f8](https://github.com/sireum/hamr-codegen/commit/14022f8) Bump the GUMBO OSATE plugin to 1.2026.09042016.febee0d9
+
+* [e1b9939](https://github.com/sireum/hamr-codegen/commit/e1b9939) Use placeholder markers for the R2U2 build glue when there is no monitor
+
+* [028ee15](https://github.com/sireum/hamr-codegen/commit/028ee15) Only add the AADL port requires when a monitor is present
+
+* [9e58a35](https://github.com/sireum/hamr-codegen/commit/9e58a35) Emit the C peek API only when an R2U2 monitor is present
+
+* [1e50e91](https://github.com/sireum/hamr-codegen/commit/1e50e91) Generate R2U2 Monitors with HAMR
+
+* [b18aff5](https://github.com/sireum/hamr-codegen/commit/b18aff5) checkVersions: report drift from the upstream releases codegen builds against
+
+* [3651f1e](https://github.com/sireum/hamr-codegen/commit/3651f1e) Bump the pinned kekinian version to d7ce8d3dcb
+
+* [91cd991](https://github.com/sireum/hamr-codegen/commit/91cd991) Build the GCL type hierarchy poset, and export AR := llvm-ar
+
+* [9a18d10](https://github.com/sireum/hamr-codegen/commit/9a18d10) Fixed tipe.
+
+* [d45ea9a](https://github.com/sireum/hamr-codegen/commit/d45ea9a) update repo check
+
+* [56535af](https://github.com/sireum/hamr-codegen/commit/56535af) checkVersions: check the provers-env pins, and fail under no-update
+
+* [2ed68f0](https://github.com/sireum/hamr-codegen/commit/2ed68f0) changelog: regenerate every section, and add install instructions
+
+* [d9eefa6](https://github.com/sireum/hamr-codegen/commit/d9eefa6) update changelog
 
 * [f5d792a](https://github.com/sireum/hamr-codegen/commit/f5d792a) microkit: relativize the model URI a component report carries
 
