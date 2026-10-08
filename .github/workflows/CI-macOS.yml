@@ -25,13 +25,15 @@ jobs:
       fail-fast: false
       matrix:
         testSuffix:
-          # Rows are balanced against per-suite times from the last green run. CodeGenTest_Base is
-          # the longest single suite, so it runs alone and sets the floor for the whole matrix --
-          # adding further rows cannot bring the run in under it.
+          # Three rows, as the organization has only five macOS runners. They are balanced against
+          # the job times of recent green runs (minutes, excluding ~5 min of setup per job):
+          # CodeGenTest_Base ~110, CodegenTest_CASE ~63, BaseBehaviorTestDynamic ~36, GumboTest ~24,
+          # HamrTranspileTests ~25, SysVCTest/SysVCVerusGenTest ~1, and the BaseBehaviorTestStatic
+          # row ~54. CodeGenTest_Base is the longest single suite, so it runs alone and sets the
+          # floor for the whole matrix; the other two rows come to ~100 min each.
           - "CodeGenTest_Base"
-          - "CodegenTest_CASE"
-          - "BaseBehaviorTestDynamic,GumboTest,HamrTranspileTests,SysVCTest,SysVCVerusGenTest"
-          - "BaseBehaviorTestStatic,MicrokitTests,MicrokitBehaviorTests,SharedMemorySafetyTests,SystemTestingTests,R2U2MonitorTests,R2U2MonitorBehaviorTests,SymlinkAuxCodeTest,CParserTest,TimeUtilTests,ExactTimeTests,ExactTimeResolveTests,SlangExp2RustTests,Ros2Tests"
+          - "CodegenTest_CASE,BaseBehaviorTestDynamic"
+          - "BaseBehaviorTestStatic,MicrokitTests,MicrokitBehaviorTests,SharedMemorySafetyTests,SystemTestingTests,R2U2MonitorTests,R2U2MonitorBehaviorTests,SymlinkAuxCodeTest,CParserTest,TimeUtilTests,ExactTimeTests,ExactTimeResolveTests,SlangExp2RustTests,Ros2Tests,GumboTest,HamrTranspileTests,SysVCTest,SysVCVerusGenTest"
     name: '${{ matrix.testSuffix }}'
     steps:
       - name: Checkout
