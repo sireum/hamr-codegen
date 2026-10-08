@@ -16,6 +16,12 @@ on:
         description: Enable verbose testing output
         default: false
 
+# a new run of this workflow on the same ref cancels the one in progress, so superseded
+# pushes do not hold runners (in particular the organization's few macOS runners)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   container:
     runs-on: ubuntu-latest
