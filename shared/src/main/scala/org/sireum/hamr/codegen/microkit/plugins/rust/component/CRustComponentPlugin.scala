@@ -825,6 +825,8 @@ object ComponentContributions {}
               |              -Z build-std-features=compiler-builtins-mem \
               |              --target aarch64-unknown-none
               |
+              |${RustUtil.cargoVerusOptsMakeVar}
+              |
               |${RustUtil.smtOptsMakeVar}
               |
               |all: build-verus-release
@@ -835,10 +837,10 @@ object ComponentContributions {}
               |#       holds the Verus-irrelevant options, so it must come last.
               |
               |build-verus-release: $$(R2U2_BUILD_DEPS)
-              |${TAB}$$(BUILD_ENV_VARS) cargo-verus build --features sel4 --release $$(CARGO_FLAGS) -- $$(SMT_OPTS)
+              |${TAB}$$(BUILD_ENV_VARS) cargo-verus build $$(CARGO_VERUS_OPTS) --features sel4 --release $$(CARGO_FLAGS) -- $$(SMT_OPTS)
               |
               |build-verus: $$(R2U2_BUILD_DEPS)
-              |${TAB}$$(BUILD_ENV_VARS) cargo-verus build --features sel4 $$(CARGO_FLAGS) -- $$(SMT_OPTS)
+              |${TAB}$$(BUILD_ENV_VARS) cargo-verus build $$(CARGO_VERUS_OPTS) --features sel4 $$(CARGO_FLAGS) -- $$(SMT_OPTS)
               |
               |build-release: $$(R2U2_BUILD_DEPS)
               |${TAB}$$(BUILD_ENV_VARS) cargo build --features sel4 $$(CARGO_FLAGS) --release
@@ -847,10 +849,10 @@ object ComponentContributions {}
               |${TAB}$$(BUILD_ENV_VARS) cargo build --features sel4 $$(CARGO_FLAGS)
               |
               |verus: $$(R2U2_BUILD_DEPS)
-              |${TAB}$$(ENV_VARS) cargo-verus verify $$(CARGO_FLAGS) -- $$(SMT_OPTS)
+              |${TAB}$$(ENV_VARS) cargo-verus verify $$(CARGO_VERUS_OPTS) $$(CARGO_FLAGS) -- $$(SMT_OPTS)
               |
               |verus-json: $$(R2U2_BUILD_DEPS)
-              |${TAB}$$(ENV_VARS) cargo-verus verify $$(CARGO_FLAGS) -- $$(SMT_OPTS) --output-json --time > verus_results.json
+              |${TAB}$$(ENV_VARS) cargo-verus verify $$(CARGO_VERUS_OPTS) $$(CARGO_FLAGS) -- $$(SMT_OPTS) --output-json --time > verus_results.json
               |
               |# Test Example:
               |#   Run all unit tests

@@ -190,6 +190,36 @@ def latestCrateVersion(name: String): Option[String] = {
   return Some(latest)
 }
 
+// an exact Cargo requirement (=1.2.3) without its operator
+@strictpure def dropEq(req: String): String =
+  if (ops.StringOps(req).startsWith("=")) ops.StringOps(req).substring(1, req.size) else req
+
+// The dependency requirements (name -> req) that the given vest_lib release declares
+// in the crates.io sparse index; Some(empty) when the release is not in the index,
+// None() when the index could not be fetched.
+def vestLibRequirements(version: String): Option[Map[String, String]] = {
+  val name = "vest_lib"
+  val temp = Os.tempFix(s"crates-index-", s"-$name.json")
+  temp.removeOnExit()
+  if (!temp.downloadFrom(s"https://index.crates.io/${cratesIndexPath(name)}")) {
+    return None()
+  }
+  var reqs = Map.empty[String, String]
+  for (l <- temp.readLines if jsonField(l, "vers") == version) {
+    // each dependency is an object that begins {"name":"<crate>","req":"<req>",...
+    val entries = ops.StringOps(l).split((c: C) => c == '{')
+    for (e <- entries) {
+      val dep = jsonField(e, "name")
+      val req = jsonField(e, "req")
+      if (dep != "" && req != "") {
+        reqs = reqs + dep ~> req
+      }
+    }
+  }
+  temp.remove()
+  return Some(reqs)
+}
+
 // A GitHub API token, if one is at hand: GITHUB_TOKEN (set in GitHub Actions), else
 // the gh CLI's when it is installed and logged in.
 def githubToken(): Option[String] = {
@@ -468,12 +498,15 @@ var proversMisaligned = F
   val proversVersionsUrl = "https://raw.githubusercontent.com/loonwerks/INSPECTA-models/main/provers-env/bin/versions.sh"
 
   // codegen's key, and the variable versions.sh pins the same tool as
-  val pins: ISZ[(String, String)] = ISZ(
-    ("microkit-sdk", "MICROKIT_SDK_VER"),
-    ("rust-channel", "RUST_TOOLCHAIN_VER"),
-    ("sdfgen", "SDFGEN_VER"),
-    ("verus-release", "VERUS_VER"),
-    ("lionsos", "LIONSOS_VER"))
+  // and the prefix versions.sh writes before the version (Z3_VER is the z3 repository
+  // tag, z3-<version>)
+  val pins: ISZ[(String, String, String)] = ISZ(
+    ("microkit-sdk", "MICROKIT_SDK_VER", ""),
+    ("rust-channel", "RUST_TOOLCHAIN_VER", ""),
+    ("sdfgen", "SDFGEN_VER", ""),
+    ("verus-release", "VERUS_VER", ""),
+    ("z3", "Z3_VER", "z3-"),
+    ("lionsos", "LIONSOS_VER", ""))
   microkitKeysChecked = microkitKeysChecked ++ (for (pin <- pins) yield pin._1)
 
   // in the system temp dir, like the script's other downloads -- not next to the
@@ -515,10 +548,10 @@ var proversMisaligned = F
         exclamations()
         proversMisaligned = T
       } else {
-        val ours = microkitVers.get(key).get
+        val ours = s"${pin._3}${microkitVers.get(key).get}"
         val theirs = proversVers.get(envVar).get
         if (ours != theirs) {
-          mismatches = mismatches :+ st"$key = $ours, but versions.sh pins $envVar = $theirs"
+          mismatches = mismatches :+ st"$key = ${microkitVers.get(key).get}, but versions.sh pins $envVar = $theirs"
         }
       }
     }
@@ -592,9 +625,13 @@ var cratesOutdated = F
   // vstd, verus_builtin and verus_builtin_macros are deliberately left out: they are
   // published by the Verus release that verus-release pins, so they move with it
   // rather than on their own.
+  //
+  // vest_lib and vest are included: a newer Vest release usually means a newer
+  // Verus, which verus-release follows (see the Vest check below).
   val cratesIoKeys = ISZ[String](
     "linux-raw-sys", "log", "linked_list_allocator",                        // dependencies
-    "lazy_static", "once_cell", "serial_test", "proptest", "env_logger")    // dev-dependencies
+    "lazy_static", "once_cell", "serial_test", "proptest", "env_logger",    // dev-dependencies
+    "vest_lib", "vest")                                                     // Vest runtime library and generator
 
   // sel4 and sel4-logging are git dependencies on rust-sel4 pinned by tag rather
   // than crates.io releases -- RustUtil.sel4CargoDependencies emits them as
@@ -718,10 +755,35 @@ var verusCratesDrifted = F
     }
   }
 
+  // Verus refuses to run against any Z3 but the one it was released with, and not
+  // every release asset bundles it (0.2026.09.06's do not), so the z3 pin -- which
+  // provers-env installs when the asset has none -- must be that version.
+  // tools/get-z3.sh is where Verus records it.
+  if (!microkitVers.contains("z3")) {
+    halt(s"$microkitVersionsP doesn't contain z3")
+  }
+  rawLines(verusRepo, ref, "source/tools/get-z3.sh") match {
+    case Some(lines) =>
+      var z3Ver: String = ""
+      for (l <- lines) {
+        val o = ops.StringOps(ops.StringOps(l).trim)
+        if (o.startsWith("z3_version=")) {
+          z3Ver = ops.StringOps(o.substring(11, o.size)).replaceAllLiterally("\"", "")
+        }
+      }
+      val recorded = microkitVers.get("z3").get
+      if (z3Ver == "") {
+        mismatches = mismatches :+ st"source/tools/get-z3.sh declares no z3_version at $ref"
+      } else if (z3Ver != recorded) {
+        mismatches = mismatches :+ st"z3 = $recorded, but Verus $release requires $z3Ver"
+      }
+    case _ => unchecked = unchecked :+ "z3"
+  }
+
   if (mismatches.nonEmpty) {
     exclamations()
     println(
-      st"""WARNING: the recorded Verus crates are not the ones the pinned Verus release declares:
+      st"""WARNING: the recorded Verus crates and Z3 are not the ones the pinned Verus release declares:
           |
           |  ${(mismatches, "\n")}
           |
@@ -735,8 +797,59 @@ var verusCratesDrifted = F
     // Not drift, so not a failure: an unreachable GitHub says nothing about whether
     // the crates agree.
     exclamations()
-    println(st"WARNING: could not read the Cargo.toml of ${(unchecked, ", ")} at $ref, so they were not checked".render)
+    println(st"WARNING: could not read the Verus release files for ${(unchecked, ", ")} at $ref, so they were not checked".render)
     exclamations()
+  }
+}
+
+var vestMisaligned = F
+
+{ // verus-release follows Vest rather than the latest Verus: vest_lib pins vstd (and
+  // the builtin crates) exactly, so a developer crate generated from a .vest format
+  // can only be a dependency of a generated component when both sides use the same
+  // Verus crates.  The pinned vest_lib release's own requirements are read from the
+  // crates.io index and compared with the Verus crates recorded above.
+  val verusCrates = ISZ[String]("vstd", "verus_builtin", "verus_builtin_macros")
+  val microkitVers = microkitVersionsP.properties
+  for (key <- ISZ[String]("vest_lib", "vest") if !microkitVers.contains(key)) {
+    halt(s"$microkitVersionsP doesn't contain $key")
+  }
+  val vestLib = microkitVers.get("vest_lib").get
+
+  vestLibRequirements(vestLib) match {
+    case Some(reqs) =>
+      var mismatches = ISZ[ST]()
+      for (crate <- verusCrates) {
+        reqs.get(crate) match {
+          case Some(req) =>
+            val recorded = microkitVers.get(crate).get
+            if (dropEq(req) != recorded) {
+              mismatches = mismatches :+ st"$crate = $recorded, but vest_lib $vestLib requires $req"
+            }
+          case _ => // vest_lib does not depend on this crate directly, so it cannot conflict
+        }
+      }
+      if (reqs.isEmpty) {
+        mismatches = mismatches :+ st"vest_lib $vestLib was not found in the crates.io index"
+      }
+      if (mismatches.nonEmpty) {
+        exclamations()
+        println(
+          st"""WARNING: the recorded Verus crates are not the ones Vest requires, so Vest-generated
+              |crates cannot be used by generated components:
+              |
+              |  ${(mismatches, "\n")}
+              |
+              |  ${microkitVersionsP.toUri}
+              |  https://crates.io/crates/vest_lib/$vestLib/dependencies""".render)
+        exclamations()
+        vestMisaligned = T
+      }
+    case _ =>
+      // Not drift, so not a failure: an unreachable index says nothing about alignment.
+      exclamations()
+      println(s"WARNING: could not fetch the crates.io index entry for vest_lib, so its Verus crates were not checked")
+      exclamations()
   }
 }
 
@@ -895,8 +1008,8 @@ if (changesDetected && !noUpdate) {
 // the properties files are left as they are, but the drift that was found is just
 // as real -- and no-update is how VersionCheck runs this, so gating the exit on it
 // meant that test could never fail on the versions it exists to watch.
-if (changesDetected || proversMisaligned || microkitOutdated || cratesOutdated || verusCratesDrifted || lionsosDrifted ||
-    microkitKeysUnchecked) {
+if (changesDetected || proversMisaligned || microkitOutdated || cratesOutdated || verusCratesDrifted || vestMisaligned ||
+    lionsosDrifted || microkitKeysUnchecked) {
   Os.exit(1) // versions have changed, or drifted from provers-env or from the latest upstream releases
 } else {
   Os.exit(0)

@@ -2060,7 +2060,7 @@ object VerusVCSerializer {
         st"""# verify only property '$p'
             |.PHONY: $p
             |$p: warm-deps
-            |${TAB}$$(ENV_VARS) cargo-verus verify $$(CARGO_FLAGS) -- $$(SMT_OPTS) ${(for (m <- vcModules) yield st"--verify-module $p::$m", " ")}"""
+            |${TAB}$$(ENV_VARS) cargo-verus verify $$(CARGO_VERUS_OPTS) $$(CARGO_FLAGS) -- $$(SMT_OPTS) ${(for (m <- vcModules) yield st"--verify-module $p::$m", " ")}"""
 
     // re-surface the trusted (non-Rust) component contracts on every `make`/`make all`
     // so the assumption is not overlooked (single quotes: no shell/Make expansion needed)
@@ -2103,12 +2103,14 @@ object VerusVCSerializer {
           |              -Z build-std-features=compiler-builtins-mem \
           |              --target aarch64-unknown-none
           |
+          |${RustUtil.cargoVerusOptsMakeVar}
+          |
           |${RustUtil.smtOptsMakeVar}
           |
           |# verify the entire crate (every property plus the shared Commutativity VCs)
           |.PHONY: all
           |all:$allDeps
-          |${TAB}$$(ENV_VARS) cargo-verus verify $$(CARGO_FLAGS) -- $$(SMT_OPTS)
+          |${TAB}$$(ENV_VARS) cargo-verus verify $$(CARGO_VERUS_OPTS) $$(CARGO_FLAGS) -- $$(SMT_OPTS)
           |
           |# Compile every crate WITHOUT verification so the dependency crates (vstd,
           |# data, the GUMBO library crates) are cached as Verus import libraries before
@@ -2116,7 +2118,7 @@ object VerusVCSerializer {
           |# to the dependency crates too and fails on a clean build (see header note).
           |.PHONY: warm-deps
           |warm-deps:
-          |${TAB}$$(ENV_VARS) cargo-verus verify $$(CARGO_FLAGS) -- $$(SMT_OPTS) --no-verify
+          |${TAB}$$(ENV_VARS) cargo-verus verify $$(CARGO_VERUS_OPTS) $$(CARGO_FLAGS) -- $$(SMT_OPTS) --no-verify
           |
           |${(allTargets, "\n\n")}
           |

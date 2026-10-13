@@ -52,6 +52,18 @@ object RustUtil {
         |#   be off the default and identical on every machine, not this number.
         |SMT_OPTS ?= --rlimit 100 --smt-option smt.random_seed=7"""
 
+  // Extra options for cargo-verus itself, placed right after its subcommand by every
+  // cargo-verus target in the generated Makefiles (cargo-verus requires its own and the
+  // Verus-relevant cargo options to precede CARGO_FLAGS). Empty by default; exposed as
+  // a Make variable so a developer can add options without restating CARGO_FLAGS.
+  val cargoVerusOptsMakeVar: ST =
+    st"""# Extra options for cargo-verus itself, for every cargo-verus target below.
+        |# Empty by default. For example
+        |#   CARGO_VERUS_OPTS="--fwd-verus-args-to roots"
+        |# forwards SMT_OPTS to this crate only, so its dependencies (notably vstd) are
+        |# verified with Verus' defaults rather than with options meant for this crate.
+        |CARGO_VERUS_OPTS ?="""
+
   @pure def defaultRustToolChainToml(store: Store): ST = {
     val versions = MicrokitUtil.getMicrokitVersions(store)
     val channel = versions.get("rust-channel").get
