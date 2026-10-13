@@ -8,7 +8,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
 import org.sireum.hamr.codegen.common.sysvc.{MHIPComputer, ScheduleNextRel, VCGenerator}
 import org.sireum.hamr.codegen.common.types.AadlTypes
-import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
+import org.sireum.hamr.codegen.common.util.{ExperimentalOptions, HamrCli, ResourceUtil}
 import org.sireum.hamr.codegen.microkit.plugins.{MicrokitPlugin, StoreUtil}
 import org.sireum.hamr.codegen.microkit.plugins.rust.types.CRustTypePlugin
 import org.sireum.hamr.codegen.microkit.util.{MakefileTarget, MakefileUtil, RustUtil}
@@ -29,6 +29,7 @@ import org.sireum.message.Reporter
       !reporter.hasError &&
       !isDisabled(store) &&
       !alreadyHandled(store) &&
+      !ExperimentalOptions.disableSystemVerification(options.experimentalOptions) &&
       VCGenerator.hasCompositions(symbolTable) &&
       // For a rusty model, run after GumboRustPlugin so its component `verus` makefile
       // target is registered before this plugin appends the `verus-sys-proof` call to

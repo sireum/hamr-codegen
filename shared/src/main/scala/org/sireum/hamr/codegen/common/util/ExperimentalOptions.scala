@@ -25,6 +25,10 @@ object ExperimentalOptions {
   // See hamr/codegen/doc/TestScheduler-design.md, D5.
   val ENABLE_TEST_SCHEDULER: String = "ENABLE_TEST_SCHEDULER"
 
+  // Skips the Microkit system-level verification crate (crates/sys_nominal_proof) that is
+  // otherwise generated whenever the model has GUMBO system compositions.
+  val DISABLE_SYSTEM_VERIFICATION: String = "DISABLE_SYSTEM_VERIFICATION"
+
   def proyekIveOptions(experimentalOptions: ISZ[String]): Option[ISZ[String]] = {
     for (e <- experimentalOptions) {
       val o = ops.StringOps(e)
@@ -100,5 +104,9 @@ object ExperimentalOptions {
 
   def enableTestScheduler(experimentalOptions: ISZ[String]): B = {
     return ops.ISZOps(experimentalOptions).exists(e => e == ENABLE_TEST_SCHEDULER)
+  }
+
+  def disableSystemVerification(experimentalOptions: ISZ[String]): B = {
+    return ops.ISZOps(experimentalOptions).exists(e => e == DISABLE_SYSTEM_VERIFICATION)
   }
 }
