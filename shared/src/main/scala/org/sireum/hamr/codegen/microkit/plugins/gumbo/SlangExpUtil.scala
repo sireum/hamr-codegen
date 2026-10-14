@@ -349,7 +349,8 @@ object SlangExpUtil {
 
           return BinaryPrettyST(
             slangParentOp = exp.op, parentPos = exp.posOpt,
-            left = applyTrigger(nestedRewriteExp(exp.left, sep), exp.left.posOpt), leftSlangOp = leftOpOpt, isLeftIf = exp.left.isInstanceOf[Exp.If], leftPos = leftPosOpt,
+            left = applyTrigger(nestedRewriteExp(exp.left, sep), exp.left.posOpt), leftSlangOp = leftOpOpt, isLeftIf = exp.left.isInstanceOf[Exp.If],
+            leftEndsWithQuant = endsWithVerusQuant(exp.left), leftPos = leftPosOpt,
             right = applyTrigger(nestedRewriteExp(exp.right, sep), exp.right.posOpt), rightSlangOp = rightOpOpt, isRightIf = exp.right.isInstanceOf[Exp.If], rightPos = rightPosOpt)
 
         case exp: Exp.Invoke =>
@@ -695,18 +696,42 @@ object SlangExpUtil {
           val lo = nestedRewriteExp(exp.lo, None())
           val hi = nestedRewriteExp(exp.hi, None())
 
+          // Trigger inference is per quantifier: each quantifier's body gets its own
+          // trigger, and the enclosing expression's inference state is restored after it.
+          val (savedContainsQuantifier, savedUsedInIndexingExpr, savedAppliedTrigger) =
+            (expressionContainsQuantifier, quantifierUsedInIndexingExpr, appliedTrigger)
+          expressionContainsQuantifier = F
+          quantifierUsedInIndexingExpr = F
+          appliedTrigger = F
+
           quantifiers = quantifiers.push(param)
           val body = nestedRewriteExp(bodyExp, None())
           quantifiers = quantifiers.pop.get._2
 
+          expressionContainsQuantifier = savedContainsQuantifier
+          quantifierUsedInIndexingExpr = savedUsedInIndexingExpr
+          appliedTrigger = savedAppliedTrigger
+
           if (target == TargetLanguage.verus) {
             val quantType: String = if (exp.isForall) "forall" else "exists"
 
-            val op: String = if (exp.isForall) "==>" else "&&"
+            // the range guard is joined to the body by `==>` (forall) or `&&` (exists)
+            val guardOp: String = if (exp.isForall) Exp.BinaryOp.CondImply else Exp.BinaryOp.CondAnd
+            val op: String = convertBinaryOp(guardOp)
 
             val range = st"$lo <= $param ${if (exp.hiExact) "<=" else "<"} $hi"
 
-            return st"$quantType|$param:int| $range $op $body"
+            // The body is the guard op's right operand, so it needs parens when its top-level
+            // op binds looser than the guard op -- e.g. an `exists` body `A || B` must be
+            // emitted as `range && (A || B)`, not `range && A || B`, which Verus parses as
+            // `(range && A) || B`.  A body op at the guard op's own level needs none: `==>`
+            // is right-associative, and `range && A && B` means the same either way.
+            val parenBody: B = bodyExp match {
+              case b: Exp.Binary => targetPrecedenceLevel(b.op) > targetPrecedenceLevel(guardOp)
+              case _ => F
+            }
+
+            return st"$quantType|$param:int| $range $op ${if (parenBody) st"($body)" else body}"
           } else if (target == TargetLanguage.rust) {
             return st"""($lo..${if (exp.hiExact) "=" else ""}$hi).${if(exp.isForall) "all" else "any"}(|${param}| $body)"""
           } else {
@@ -878,15 +903,14 @@ object SlangExpUtil {
 
     @pure def shouldParenthesize(slangParentOp: String,
                                  slangChildOp: String, isRightChild: B): B = {
-      val slangParentPrecedence = Exp.BinaryOp.precendenceLevel(slangParentOp)
-      val targetParentPrecedence: Z =
-        if (target == TargetLanguage.C2PO) c2poPrecedenceLevel(slangParentOp)
-        else rustPrecedenceLevel(slangParentOp)
-
-      val slangChildPrecedence = Exp.BinaryOp.precendenceLevel(slangChildOp)
-      val targetChildPrecedence: Z =
-        if (target == TargetLanguage.C2PO) c2poPrecedenceLevel(slangChildOp)
-        else rustPrecedenceLevel(slangChildOp)
+      // The decision depends only on the target language's precedence: the child is an
+      // operand of the parent in the Slang AST, so it needs parens exactly when the target
+      // would otherwise group it differently.  Slang's precedence must not be consulted --
+      // Slang orders operators by their first character, so e.g. && binds tighter than |
+      // in Slang but looser than | in Rust, and `(a && b) | c` would be emitted as
+      // `a && b | c`, which Rust parses as `a && (b | c)`.
+      val targetParentPrecedence: Z = targetPrecedenceLevel(slangParentOp)
+      val targetChildPrecedence: Z = targetPrecedenceLevel(slangChildOp)
 
       // rust requires comparison expressions to be explicitly parenthesized
       slangChildOp match {
@@ -910,41 +934,40 @@ object SlangExpUtil {
           }
       }
 
-      if (slangChildPrecedence >= slangParentPrecedence) {
-        // in Slang, either
-        //   a) the child's op either binds looser than the parent op
-        //      so would need parens in Slang, or
-        //   b) the child and parent ops have the same precedence
-        //      in which case we only potentially need parens in Slang
-        //      due to right associativity
-
-        if (targetChildPrecedence > targetParentPrecedence) {
-          // in Rust the child's Rust op also binds looser than the
-          // parent's Rust op so need parens in Rust
-          return T
-        } else if (targetChildPrecedence == targetParentPrecedence) {
-          // same precedence in Rust so may need parens due to
-          // right associativity
-          // C2PO declares all of its binary precedence levels left-associative, including ->.
-          var isParentRightAssoc: B = F
-          if (target != TargetLanguage.C2PO) {
-            slangParentOp match {
-              case Exp.BinaryOp.Imply => isParentRightAssoc = T
-              case Exp.BinaryOp.CondImply => isParentRightAssoc = T
-              case _ =>
-            }
+      if (targetChildPrecedence > targetParentPrecedence) {
+        // the child's target op binds looser than the parent's target op
+        return T
+      } else if (targetChildPrecedence == targetParentPrecedence) {
+        // same precedence in the target so may need parens due to
+        // associativity
+        // C2PO declares all of its binary precedence levels left-associative, including ->.
+        var isParentRightAssoc: B = F
+        if (target != TargetLanguage.C2PO) {
+          slangParentOp match {
+            case Exp.BinaryOp.Imply => isParentRightAssoc = T
+            case Exp.BinaryOp.CondImply => isParentRightAssoc = T
+            case _ =>
           }
-          return isRightChild != isParentRightAssoc
-        } else {
-          // in Rust the child's Rust op binds tighter than the
-          // parent Rust op so don't need parens
         }
+        return isRightChild != isParentRightAssoc
       } else {
-        // in Slang the child's op binds tighter than the parent so
-        // wouldn't need parens in Slang
+        // the child's target op binds tighter than the parent's target op
+        return F
       }
+    }
 
-      return F
+    // The precedence level of the target op that convertBinaryOp emits for a Slang op
+    // (Verus emits & and | as && and ||)
+    @pure def targetPrecedenceLevel(slangOp: String): Z = {
+      if (target == TargetLanguage.C2PO) {
+        return c2poPrecedenceLevel(slangOp)
+      } else if (target == TargetLanguage.verus && slangOp == Exp.BinaryOp.And) {
+        return rustPrecedenceLevel(Exp.BinaryOp.CondAnd)
+      } else if (target == TargetLanguage.verus && slangOp == Exp.BinaryOp.Or) {
+        return rustPrecedenceLevel(Exp.BinaryOp.CondOr)
+      } else {
+        return rustPrecedenceLevel(slangOp)
+      }
     }
 
     @pure def convertBinaryOp(op: String): String = {
@@ -1102,8 +1125,25 @@ object SlangExpUtil {
       }
     }
 
+    // A Verus quantifier's body extends as far right as possible, so a left operand whose
+    // rendering ends in a quantifier (the quantifier itself, or a binary whose right operand
+    // ends in one) would otherwise capture the parent op and its right operand -- e.g.
+    // `(forall|i| A) ==> B` must not be emitted as `forall|i| A ==> B`.  A right operand
+    // ending in a quantifier is safe: nothing follows it.
+    @pure def endsWithVerusQuant(e: Exp): B = {
+      if (target != TargetLanguage.verus) {
+        return F
+      }
+      e match {
+        case _: Exp.QuantRange => return T
+        case b: Exp.Binary => return endsWithVerusQuant(b.right)
+        case _ => return F
+      }
+    }
+
     @pure def BinaryPrettyST(slangParentOp: String, parentPos: Option[Position],
-                             left: ST, leftSlangOp: Option[String], isLeftIf: B, leftPos: Option[Position],
+                             left: ST, leftSlangOp: Option[String], isLeftIf: B,
+                             leftEndsWithQuant: B, leftPos: Option[Position],
                              right: ST, rightSlangOp: Option[String], isRightIf: B, rightPos: Option[Position]): ST = {
       // Parenthesize native C expressions so Slang and C precedence differences cannot alter their meaning.
       if (target == TargetLanguage.C) {
@@ -1124,8 +1164,10 @@ object SlangExpUtil {
             singleLine = F
           }
 
-          if (shouldParenthesize(slangParentOp, leftOp, F)) st"($left)"
+          if (leftEndsWithQuant || shouldParenthesize(slangParentOp, leftOp, F)) st"($left)"
           else left
+        case _ if leftEndsWithQuant =>
+          st"($left)"
         case _ if isLeftIf =>
           singleLine = F
           st"($left)"
