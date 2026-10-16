@@ -79,8 +79,15 @@ jobs:
           DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get install software-properties-common -y
           add-apt-repository -y universe
           apt-get update -y
-          export ROS_APT_SOURCE_VERSION=$(curl -s https://api.github.com/repos/ros-infrastructure/ros-apt-source/releases/latest | grep -F "tag_name" | awk -F\" '{print $4}')
-          curl -L -o /tmp/ros2-apt-source.deb "https://github.com/ros-infrastructure/ros-apt-source/releases/download/${ROS_APT_SOURCE_VERSION}/ros2-apt-source_${ROS_APT_SOURCE_VERSION}.$(. /etc/os-release && echo ${UBUNTU_CODENAME:-${VERSION_CODENAME}})_all.deb"
+          # The tag comes from the releases/latest redirect rather than the API: the API
+          # allows 60 unauthenticated requests an hour per IP, which GitHub's runners
+          # share, and an exhausted limit left the version empty and the .deb a 404 page.
+          ROS_APT_SOURCE_VERSION=$(curl -fsSL -o /dev/null -w '%{url_effective}' https://github.com/ros-infrastructure/ros-apt-source/releases/latest)
+          export ROS_APT_SOURCE_VERSION=${ROS_APT_SOURCE_VERSION##*/}
+          case "$ROS_APT_SOURCE_VERSION" in
+            ''|latest) echo "::error::could not determine the latest ros-apt-source release"; exit 1 ;;
+          esac
+          curl -fL -o /tmp/ros2-apt-source.deb "https://github.com/ros-infrastructure/ros-apt-source/releases/download/${ROS_APT_SOURCE_VERSION}/ros2-apt-source_${ROS_APT_SOURCE_VERSION}.$(. /etc/os-release && echo ${UBUNTU_CODENAME:-${VERSION_CODENAME}})_all.deb"
           dpkg -i /tmp/ros2-apt-source.deb
           apt-get update -y
           apt-get install ros-dev-tools ros-jazzy-ros-base -y
