@@ -245,9 +245,9 @@ object ProjectTemplate {
           |//   sbt assembly
           |//
           |// To skip running the unit tests while building the executable jar:
-          |//   sbt 'set test in assembly := {}' assembly
+          |//   sbt 'set assembly / test := {}' assembly
           |// on Linux/Mac, or
-          |//   sbt "set test in assembly := {}" assembly
+          |//   sbt "set assembly / test := {}" assembly
           |// on Windows
           |//
           |// Sireum IVE: Installation instructions available at https://sireum.org/getting-started/
@@ -311,11 +311,11 @@ object ProjectTemplate {
           |
           |  mainClass in (Compile, run) := Some("${basePackageName}.Demo"),
           |
-          |  mainClass in assembly := Some("${basePackageName}.Demo"),
-          |  assemblyJarName in assembly := "${projectName}.jar",
-          |  assemblyOption in assembly := (assemblyOption in assembly).value.copy(prependShellScript = Some(defaultUniversalScript(shebang = false))),
+          |  assembly / mainClass := Some("${basePackageName}.Demo"),
+          |  assembly / assemblyJarName := "${projectName}.jar",
+          |  assembly / assemblyOption := (assembly / assemblyOption).value.withPrependShellScript(Some(defaultUniversalScript(shebang = false))),
           |
-          |  assemblyMergeStrategy in assembly := {
+          |  assembly / assemblyMergeStrategy := {
           |    case PathList("META-INF", xs @ _*) => MergeStrategy.discard
           |    case x => MergeStrategy.first
           |  }

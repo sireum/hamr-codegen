@@ -39,6 +39,8 @@ var phantomCurrentVers: Map[String, String] = Map.empty
     ("org.sireum.version.scala" ~> versions.get("org.scala-lang%scala-library%").get) +
     ("org.sireum.version.scalac-plugin" ~> versions.get("org.sireum%%scalac-plugin%").get) +
     ("org.sireum.version.scalatest" ~> versions.get("org.scalatest%%scalatest%%").get) +
+    // the sbt arsit's generated sbt projects use (project/build.properties)
+    ("org.sireum.version.sbt" ~> versions.get("org.sireum.version.sbt").get) +
     ("art.version" ~> runGit(ISZ("git", "log", "-n", "1", "--pretty=format:%h"), SIREUM_HOME / "hamr" / "codegen" / "art"))
 
   println(codegenCurrentVers)
@@ -361,6 +363,55 @@ def rawLines(repo: String, ref: String, path: String): Option[ISZ[String]] = {
   return (name, version)
 }
 
+// the channel a rust-toolchain.toml's [toolchain] names, "" when it names none
+@pure def toolchainChannel(lines: ISZ[String]): String = {
+  var channel: String = ""
+  var inToolchain = F
+  for (l <- lines) {
+    val o = ops.StringOps(ops.StringOps(l).trim)
+    if (o.startsWith("[")) {
+      inToolchain = o.startsWith("[toolchain]")
+    } else if (inToolchain && channel == "" && o.startsWith("channel")) {
+      channel = quoted(l)
+    }
+  }
+  return channel
+}
+
+// The Verus release a Vest ref pins in its verus.json, with that release's Rust
+// toolchain and Z3: (version, rust, z3), "" for any it does not declare.  None()
+// when the file could not be fetched.
+def vestVerusPin(ref: String): Option[(String, String, String)] = {
+  rawLines("secure-foundations/vest", ref, "verus.json") match {
+    case Some(lines) =>
+      // verus.json puts one key per line and opens each object on its key's line,
+      // so the enclosing keys are tracked to tell Verus' "version" from Z3's
+      var path = ISZ[String]()
+      var version: String = ""
+      var rust: String = ""
+      var z3: String = ""
+      for (l <- lines) {
+        val o = ops.StringOps(ops.StringOps(l).trim)
+        if (o.endsWith("{")) {
+          path = path :+ quoted(l) // "" for the outermost object
+        } else if (o.startsWith("}")) {
+          path = ops.ISZOps(path).dropRight(1)
+        } else if (path == ISZ[String]("")) {
+          if (version == "") {
+            version = jsonField(l, "version")
+          }
+          if (rust == "") {
+            rust = jsonField(l, "rust")
+          }
+        } else if (path == ISZ[String]("", "z3") && z3 == "") {
+          z3 = jsonField(l, "version")
+        }
+      }
+      return Some((version, rust, z3))
+    case _ => return None()
+  }
+}
+
 // the sdfgen release lionsos builds its examples against at the given commit-ish.
 // It declares that in two places -- an env var in its examples workflow and a tag
 // in its flake -- so the workflow is read first and the flake stands in should
@@ -407,6 +458,84 @@ def lionsosSdfgenVersion(ref: String): Option[String] = {
   }
 
   return if (fetched) Some("") else None()
+}
+
+// The release an artifact's Maven Central metadata names as its newest.  None()/Some("")
+// carry the same meanings as latestGitHubRelease's.
+def latestMavenRelease(group: String, artifact: String): Option[String] = {
+  val temp = Os.tempFix("maven-metadata-", ".xml")
+  temp.removeOnExit()
+  val groupPath = ops.StringOps(group).replaceAllChars('.', '/')
+  if (!temp.downloadFrom(s"https://repo1.maven.org/maven2/$groupPath/$artifact/maven-metadata.xml")) {
+    return None()
+  }
+  // <versioning><latest>..</latest><release>2.5.0</release>..., where release excludes
+  // snapshots and latest does not
+  var release: String = ""
+  for (l <- temp.readLines if release == "") {
+    val o = ops.StringOps(ops.StringOps(l).trim)
+    if (o.startsWith("<release>") && o.endsWith("</release>")) {
+      release = o.substring(9, o.size - 10)
+    }
+  }
+  temp.remove()
+  return Some(release)
+}
+
+var sbtAssemblyUnchecked = F
+
+{ // sbt-assembly is the one plugin arsit's generated sbt projects add
+  // (ProjectTemplate.sbtPluginsSbtContents).  It is versioned on its own rather than
+  // with kekinian, so sbtassembly.version follows its latest release, and is updated
+  // like the versions above.  The sbt 1.x plugin is published under the Scala 2.12 /
+  // sbt 1.0 cross-version suffix.
+  latestMavenRelease("com.eed3si9n", "sbt-assembly_2.12_1.0") match {
+    case Some(latest) =>
+      if (latest == "") {
+        // fetched but with no release in it, so this check has gone blind
+        exclamations()
+        println("WARNING: the Maven Central metadata for sbt-assembly names no release, so sbtassembly.version was not checked")
+        exclamations()
+        sbtAssemblyUnchecked = T
+      } else {
+        codegenCurrentVers = codegenCurrentVers + ("sbtassembly.version" ~> latest)
+      }
+    case _ =>
+      // Not drift, so not a failure: an unreachable Maven Central says nothing about
+      // whether the pin is current.
+      exclamations()
+      println("WARNING: could not fetch the Maven Central metadata for sbt-assembly, so sbtassembly.version was not checked")
+      exclamations()
+  }
+}
+
+var artBehind = F
+
+{ // art.version is the commit the hamr/codegen/art submodule is at, so it is the
+  // latest ART only if the submodule is.  The tip of slang-embedded-art's master is
+  // what it is compared with.  Reported rather than fixed: moving the submodule is a
+  // commit of its own, after which this script picks the new commit up.
+  val artRepo = "sireum/slang-embedded-art"
+  val artVer = codegenCurrentVers.get("art.version").get
+  latestCommit(artRepo, "master") match {
+    case Some(tip) =>
+      if (!ops.StringOps(tip).startsWith(artVer)) {
+        exclamations()
+        println(
+          st"""WARNING: art.version is not the latest ART:
+              |
+              |  the hamr/codegen/art submodule is at $artVer, but $artRepo master is at ${ops.StringOps(tip).substring(0, 7)}
+              |
+              |  ${(SIREUM_HOME / "hamr" / "codegen" / "art").toUri}
+              |  https://github.com/$artRepo/compare/$artVer...$tip""".render)
+        exclamations()
+        artBehind = T
+      }
+    case _ =>
+      exclamations()
+      println(s"WARNING: could not fetch the latest commit of $artRepo master, so art.version was not checked")
+      exclamations()
+  }
 }
 
 // tags carry a leading v in microkit_versions.properties, release titles do not
@@ -780,15 +909,34 @@ var verusCratesDrifted = F
     case _ => unchecked = unchecked :+ "z3"
   }
 
+  // Likewise the Rust toolchain: Verus is built against one, named by the
+  // rust-toolchain.toml at the release tag, and rust-channel -- what the generated
+  // crates select through their own rust-toolchain.toml -- must be that one.
+  if (!microkitVers.contains("rust-channel")) {
+    halt(s"$microkitVersionsP doesn't contain rust-channel")
+  }
+  microkitKeysChecked = microkitKeysChecked ++ ISZ[String]("z3", "rust-channel")
+  rawLines(verusRepo, ref, "rust-toolchain.toml") match {
+    case Some(lines) =>
+      val channel = toolchainChannel(lines)
+      val recorded = microkitVers.get("rust-channel").get
+      if (channel == "") {
+        mismatches = mismatches :+ st"rust-toolchain.toml declares no channel at $ref"
+      } else if (channel != recorded) {
+        mismatches = mismatches :+ st"rust-channel = $recorded, but Verus $release requires Rust $channel"
+      }
+    case _ => unchecked = unchecked :+ "rust-channel"
+  }
+
   if (mismatches.nonEmpty) {
     exclamations()
     println(
-      st"""WARNING: the recorded Verus crates and Z3 are not the ones the pinned Verus release declares:
+      st"""WARNING: the recorded Verus crates, Z3 and Rust toolchain are not the ones the pinned Verus release declares:
           |
           |  ${(mismatches, "\n")}
           |
           |  ${microkitVersionsP.toUri}
-          |  https://github.com/$verusRepo/tree/$ref/source""".render)
+          |  https://github.com/$verusRepo/tree/$ref""".render)
     exclamations()
     verusCratesDrifted = T
   }
@@ -803,6 +951,7 @@ var verusCratesDrifted = F
 }
 
 var vestMisaligned = F
+var vestVerusMoved = F
 
 { // verus-release follows Vest rather than the latest Verus: vest_lib pins vstd (and
   // the builtin crates) exactly, so a developer crate generated from a .vest format
@@ -849,6 +998,82 @@ var vestMisaligned = F
       // Not drift, so not a failure: an unreachable index says nothing about alignment.
       exclamations()
       println(s"WARNING: could not fetch the crates.io index entry for vest_lib, so its Verus crates were not checked")
+      exclamations()
+  }
+
+  // Vest also records the Verus release itself, with that release's Rust toolchain
+  // and Z3, in verus.json.  At the pinned vest_lib release's tag it is what
+  // verus-release, rust-channel and z3 must match; main is where Vest moves to a
+  // newer Verus first, before releasing it, so a difference there is the warning
+  // that verus-release is about to have to follow.
+  val vestRepo = "secure-foundations/vest"
+  val vestTag = s"vest_lib-v$vestLib"
+  for (key <- ISZ[String]("verus-release", "rust-channel", "z3") if !microkitVers.contains(key)) {
+    halt(s"$microkitVersionsP doesn't contain $key")
+  }
+  val verusRelease = microkitVers.get("verus-release").get
+  val rustChannel = microkitVers.get("rust-channel").get
+  val z3Pin = microkitVers.get("z3").get
+
+  vestVerusPin(vestTag) match {
+    case Some((version, rust, z3)) =>
+      var mismatches = ISZ[ST]()
+      if (version == "") {
+        mismatches = mismatches :+ st"verus.json declares no Verus version at $vestTag"
+      } else if (version != verusRelease) {
+        mismatches = mismatches :+ st"verus-release = $verusRelease, but vest_lib $vestLib pins Verus $version"
+      }
+      if (rust != "" && rust != rustChannel) {
+        mismatches = mismatches :+ st"rust-channel = $rustChannel, but vest_lib $vestLib pins Rust $rust"
+      }
+      if (z3 != "" && z3 != z3Pin) {
+        mismatches = mismatches :+ st"z3 = $z3Pin, but vest_lib $vestLib pins Z3 $z3"
+      }
+      if (mismatches.nonEmpty) {
+        exclamations()
+        println(
+          st"""WARNING: the pinned Verus is not the one Vest is built against:
+              |
+              |  ${(mismatches, "\n")}
+              |
+              |  ${microkitVersionsP.toUri}
+              |  https://github.com/$vestRepo/blob/$vestTag/verus.json""".render)
+        exclamations()
+        vestMisaligned = T
+      }
+    case _ =>
+      exclamations()
+      println(s"WARNING: could not fetch verus.json at $vestRepo $vestTag, so verus-release was not checked against Vest")
+      exclamations()
+  }
+
+  vestVerusPin("main") match {
+    case Some((version, rust, _)) =>
+      if (version == "") {
+        // fetched but unreadable, so this check has gone blind in a way a retry will not fix
+        exclamations()
+        println(s"WARNING: verus.json on $vestRepo main declares no Verus version, so Vest's next Verus was not checked")
+        exclamations()
+        vestVerusMoved = T
+      } else if (version != verusRelease) {
+        exclamations()
+        println(
+          st"""WARNING: Vest has moved to a different Verus than verus-release pins:
+              |
+              |  verus-release = $verusRelease, but Vest main pins Verus $version${if (rust == "") "" else s" (Rust $rust)"}
+              |
+              |  Bumping verus-release goes with the vest_lib release that pins it, and with
+              |  the Verus crates, z3 and rust-channel recorded above, and provers-env's
+              |  VERUS_VER, Z3_VER and RUST_TOOLCHAIN_VER.
+              |
+              |  ${microkitVersionsP.toUri}
+              |  https://github.com/$vestRepo/blob/main/verus.json""".render)
+        exclamations()
+        vestVerusMoved = T
+      }
+    case _ =>
+      exclamations()
+      println(s"WARNING: could not fetch verus.json on $vestRepo main, so Vest's next Verus was not checked")
       exclamations()
   }
 }
@@ -1009,7 +1234,7 @@ if (changesDetected && !noUpdate) {
 // as real -- and no-update is how VersionCheck runs this, so gating the exit on it
 // meant that test could never fail on the versions it exists to watch.
 if (changesDetected || proversMisaligned || microkitOutdated || cratesOutdated || verusCratesDrifted || vestMisaligned ||
-    lionsosDrifted || microkitKeysUnchecked) {
+    vestVerusMoved || lionsosDrifted || microkitKeysUnchecked || sbtAssemblyUnchecked || artBehind) {
   Os.exit(1) // versions have changed, or drifted from provers-env or from the latest upstream releases
 } else {
   Os.exit(0)
