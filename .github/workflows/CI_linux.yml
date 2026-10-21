@@ -115,3 +115,53 @@ jobs:
           echo "ALSO_TRANSPILE_VIA_CALLBACKS=${ALSO_TRANSPILE_VIA_CALLBACKS}"
           
           bin/build.cmd test --suffixes ${{ matrix. testSuffix }}
+
+  # SystemTestingTests' QEMU half (HAMR_ST_QEMU): it builds the generated Microkit images and
+  # runs the system tests and the monitor images under QEMU.  The job above runs the same suite
+  # without it, since its container has no Microkit SDK, sDDF, QEMU or aarch64 Rust toolchain;
+  # this one runs in the provers image INSPECTA-models' Docker CI uses, which has them -- as of
+  # when that image was last published, which is the SDK this job tests against.
+  microkit-qemu:
+    runs-on: ubuntu-latest
+    container:
+      image: jasonbelt/microkit_provers:latest
+    name: 'SystemTestingTests under QEMU'
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - name: Retrieve versions.properties
+        run: |
+          wget -q https://raw.githubusercontent.com/sireum/kekinian/master/versions.properties
+      - name: Cache Java
+        uses: actions/cache@v5
+        with:
+          path: bin/linux/java
+          key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-java
+      - name: Cache Scala
+        uses: actions/cache@v5
+        with:
+          path: bin/scala
+          key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-scala
+      - name: Cache Coursier
+        uses: actions/cache@v5
+        with:
+          path: cache/coursier
+          key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-coursier
+      - name: Test
+        shell: bash
+        run: |
+          # The image's own environment: MICROKIT_SDK, MICROKIT_BOARD, LIONSOS and the tools'
+          # PATH, as INSPECTA-models' Docker CI uses it
+          export HOME=/home/microkit
+          source ${HOME}/bin/env.sh
+
+          # x86_64 JVM defaults to 1MB thread stack; scalac plugin 4.20260224+ overflows during Erasure phase
+          export JAVA_OPTS="-Xss4m"
+          export COURSIER_CACHE=$GITHUB_WORKSPACE/cache/coursier
+          cd $GITHUB_WORKSPACE
+
+          export HAMR_ST_QEMU=1
+          bin/build.cmd test --suffixes SystemTestingTests

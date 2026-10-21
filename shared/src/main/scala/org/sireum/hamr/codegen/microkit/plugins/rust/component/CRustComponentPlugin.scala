@@ -461,11 +461,17 @@ object ComponentContributions {}
               |  }
               |}
               |
-              |// Need a Panic handler in a no_std environment
+              |// Need a Panic handler in a no_std environment.  On the target it stops the thread with a
+              |// fault rather than spinning: its _MON reports the fault, and in the runtime-monitoring
+              |// variants answers the thread's dispatches, so a panic does not leave the scheduler
+              |// counting a dispatch that never completes (which would stop every monitor check).
               |#[panic_handler]
               |#[cfg(not(test))]
+              |#[allow(unreachable_code)]
               |fn panic(info: &core::panic::PanicInfo) -> ! {
               |  log::error!("PANIC: {info:#?}");
+              |  #[cfg(target_arch = "aarch64")]
+              |  unsafe { core::arch::asm!("udf #0", options(noreturn)); }
               |  loop {}
               |}
               |"""

@@ -316,7 +316,7 @@ object ContractObserverPlugin {
       else
         st"""let focus = view.focus;
             |match t {
-            |  ${(latchArms :+ st"_ => {}", "\n")}
+            |  ${(latchArms ++ otherThreadsArm(latchArms, info.threads), "\n")}
             |}
             |view.focus = focus;"""
 
@@ -330,7 +330,7 @@ object ContractObserverPlugin {
         else
           st"""unsafe {
               |  match t {
-              |    ${(armSts :+ st"_ => {}", "\n")}
+              |    ${(armSts ++ otherThreadsArm(armSts, info.threads), "\n")}
               |  }
               |}"""
       return (
@@ -485,9 +485,6 @@ object ContractObserverPlugin {
           |      $crateName::Event::CepPostSkipped { thread } => {
           |        log::warn!("{} post check skipped: no saved pre-state", thread);
           |      }
-          |      $crateName::Event::CepPostExcused { thread } => {
-          |        log::warn!("{} post check skipped: assumption not met", thread);
-          |      }
           |      // never raised here: the monitor's reads are never "missing"
           |      $crateName::Event::CheckSkipped { .. } => {}
           |      $crateName::Event::SysAssertViolation { property, point } => {
@@ -562,6 +559,30 @@ object ContractObserverPlugin {
     }
   }
 
+  /** Whether some thread has a GUMBO subclause, i.e. contracts the run-time checks can
+    * evaluate -- with or without state variables, which only some of them read. */
+  @pure def hasThreadContracts(symbolTable: SymbolTable): B = {
+    for (thread <- symbolTable.getThreads()) {
+      symbolTable.annexClauseInfos.get(thread.path) match {
+        case Some(clauses) =>
+          for (clause <- clauses) {
+            clause match {
+              case _: GclAnnexClauseInfo => return T
+              case _ =>
+            }
+          }
+        case _ =>
+      }
+    }
+    return F
+  }
+
+  /** The catch-all arm of a generated match on `Thread` whose `arms` (at most one per thread)
+    * may leave threads out: empty when they cover all `threads`, where rustc would warn that
+    * it is unreachable. */
+  @strictpure def otherThreadsArm(arms: ISZ[ST], threads: ISZ[String]): ISZ[ST] =
+    if (arms.size < threads.size) ISZ(st"_ => {}") else ISZ()
+
   @strictpure def placeConstName(p: ScheduleNextRel.PlaceId): String =
     s"PLACE_${ops.StringOps(p.name).toUpper}"
 
@@ -585,7 +606,9 @@ object ContractObserverPlugin {
         !reporter.hasError &&
         ContractObserverPlugin.isRequested(store) &&
         CRustTypePlugin.hasCRustTypeProvider(store) &&
-        GumboXRustPlugin.getGumboXContributions(store).nonEmpty &&
+        GumboXRustPlugin.contractsOrNone(symbolTable, store).nonEmpty &&
+        // without GUMBOX's contracts only a composition leaves anything to check
+        (GumboXRustPlugin.getGumboXContributions(store).nonEmpty || VCGenerator.hasCompositions(symbolTable)) &&
         !ContractObserverPlugin.hasObservers(store))
   }
 
@@ -593,7 +616,7 @@ object ContractObserverPlugin {
                             symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
     val crateName = ContractObserverPlugin.crateName
     val crateDir = ContractObserverPlugin.crateDirectory(options)
-    val gumboxContribs = GumboXRustPlugin.getGumboXContributions(store).get
+    val gumboxContribs = GumboXRustPlugin.contractsOrNone(symbolTable, store).get
     val crustTypeProvider = CRustTypePlugin.getCRustTypeProvider(store).get
     val dstMap = ContractObserverPlugin.dstPortToMonitorPortName(symbolTable, store)
     val threads = ContractObserverPlugin.modelThreadIds(symbolTable, store)
@@ -627,22 +650,6 @@ object ContractObserverPlugin {
       }
     }
 
-    // Event ports whose queue holds more than one element (TestScheduler-design.md, "Event
-    // ports").  A consumer's checks read one element per check -- the controller the next
-    // one through the reader's own cursor, a monitor the latest it polled -- which is what
-    // the thread sees only if it consumes one per dispatch.  A producer's own check takes
-    // what it sent last in both, so only the consuming side is warned.  Once per port.
-    var deepQueuesWarned: Set[ISZ[String]] = Set.empty
-    def noteDeepQueue(threadId: String, port: AadlPort): Unit = {
-      port match {
-        case e: AadlFeatureEvent if port.direction == ir.Direction.In && e.queueSize > 1 && !deepQueuesWarned.contains(port.path) =>
-          deepQueuesWarned = deepQueuesWarned + port.path
-          reporter.warn(port.feature.identifier.pos, "ContractObserverPlugin",
-            s"The run-time contract checks of $threadId read event port ${port.identifier}, whose queue holds ${e.queueSize} elements. They see one element per dispatch, which matches the thread only if it consumes exactly one per dispatch; a thread that drains the queue, or leaves elements queued, may be checked against an element other than the one it used.")
-        case _ =>
-      }
-    }
-
     def add(path: String, content: ST): Unit = {
       resources = resources :+ ResourceUtil.createResource(path = s"$crateDir/$path", content = content, overwrite = T)
     }
@@ -662,6 +669,7 @@ object ContractObserverPlugin {
       var initChecks: ISZ[ST] = ISZ()
       var completeArms: ISZ[ST] = ISZ()
       var dispatchArms: ISZ[ST] = ISZ()
+      var preFailedArms: ISZ[ST] = ISZ()
       var containerUses: ISZ[ST] = ISZ()
 
       for (entry <- gumboxContribs.allComponentContributions.entries) {
@@ -679,7 +687,6 @@ object ContractObserverPlugin {
           addGetter(g, ContractObserverPlugin.paramType(p))
           p match {
             case pp: GumboXRustUtil.GGPortParam =>
-              noteDeepQueue(threadId, pp.port)
               if (pp.isEvent) {
                 noteEventGetter(g)
               }
@@ -699,6 +706,7 @@ object ContractObserverPlugin {
           fields = fields :+ st"pre_ok_$threadId: bool,"
           fieldInits = fieldInits :+ st"pre_$threadId: None," :+ st"pre_ok_$threadId: true,"
           forgets = forgets :+ st"self.pre_$threadId = None;"
+          preFailedArms = preFailedArms :+ st"crate::Thread::$threadId => !self.pre_ok_$threadId,"
         }
 
         // IEP_Post: initialization guarantees
@@ -738,9 +746,7 @@ object ContractObserverPlugin {
                 |  if s.missing() {
                 |    out.report(crate::Event::CheckSkipped { thread: "$threadId", check: "CEP_Post" });
                 |  } else if let Some(pre) = &self.pre_$threadId {
-                |    if self.excuse_post_on_failed_pre && !self.pre_ok_$threadId {
-                |      out.report(crate::Event::CepPostExcused { thread: "$threadId" });
-                |    } else if !crate::gumbox::${threadId}_GUMBOX::${GumboXRustUtil.getCompute_CEP_Post_MethodName}(
+                |    if !crate::gumbox::${threadId}_GUMBOX::${GumboXRustUtil.getCompute_CEP_Post_MethodName}(
                 |      ${(cepPostArgs, ", ")}) {
                 |      out.report(crate::Event::CepPostViolation { thread: "$threadId", pre: pre, post: &post });
                 |    }
@@ -777,9 +783,10 @@ object ContractObserverPlugin {
                 |    ${(preFieldInits, "\n")}
                 |  };
                 |  if s.missing() {
-                |    // no pre-state to hold the completion to
+                |    // no pre-state to hold the completion to, and no CEP_Pre that failed
                 |    out.report(crate::Event::CheckSkipped { thread: "$threadId", check: "CEP_Pre" });
                 |    self.pre_$threadId = None;
+                |    self.pre_ok_$threadId = true;
                 |  } else {
                 |    $preCheck
                 |    self.pre_$threadId = Some(pre);
@@ -800,18 +807,12 @@ object ContractObserverPlugin {
             |${(containerUses, "\n")}
             |
             |pub struct ComponentContracts {
-            |  /// When set, a dispatch whose CEP_Pre failed is excused from its CEP_Post
-            |  /// (reported as CepPostExcused instead of being checked).  GUMBO is
-            |  /// assume-guarantee: a component owes nothing when its assumptions fail.
-            |  /// The monitor PDs leave it off.
-            |  pub excuse_post_on_failed_pre: bool,
             |  ${(fields, "\n")}
             |}
             |
             |impl ComponentContracts {
             |  pub const fn new() -> Self {
             |    ComponentContracts {
-            |      excuse_post_on_failed_pre: false,
             |      ${(fieldInits, "\n")}
             |    }
             |  }
@@ -826,8 +827,7 @@ object ContractObserverPlugin {
             |  /// saved when it was dispatched.
             |  pub fn on_complete<V: SystemView, S: ViolationSink>(&mut self, prev: crate::Thread, s: &mut V, out: &mut S) {
             |    match prev {
-            |      ${(completeArms, "\n")}
-            |      _ => {}
+            |      ${(completeArms ++ ContractObserverPlugin.otherThreadsArm(completeArms, threads), "\n")}
             |    }
             |  }
             |
@@ -841,8 +841,16 @@ object ContractObserverPlugin {
             |  /// `next` is about to be dispatched: save its pre-state and check its CEP_Pre.
             |  pub fn on_dispatch<V: SystemView, S: ViolationSink>(&mut self, next: crate::Thread, s: &mut V, out: &mut S) {
             |    match next {
-            |      ${(dispatchArms, "\n")}
-            |      _ => {}
+            |      ${(dispatchArms ++ ContractObserverPlugin.otherThreadsArm(dispatchArms, threads), "\n")}
+            |    }
+            |  }
+            |
+            |  /// Whether `t`'s CEP_Pre failed at its latest dispatch check -- the sender did not
+            |  /// meet `t`'s contract.  A host that rejects such a dispatch (the test controller)
+            |  /// asks this after `on_dispatch`.
+            |  pub fn pre_failed(&self, t: crate::Thread) -> bool {
+            |    match t {
+            |      ${(preFailedArms ++ (if (preFailedArms.size < threads.size) ISZ(st"_ => false,") else ISZ[ST]()), "\n")}
             |    }
             |  }
             |}
@@ -898,10 +906,8 @@ object ContractObserverPlugin {
             case dp: AadlDataPort =>
               Some((crustTypeProvider.getTypeNameProvider(dp.aadlType).qualifiedRustName, F))
             case edp: AadlEventDataPort =>
-              noteDeepQueue(threadId, edp)
               Some((s"Option<${crustTypeProvider.getTypeNameProvider(edp.aadlType).qualifiedRustName}>", T))
             case ep: AadlEventPort =>
-              noteDeepQueue(threadId, ep)
               // as a contract reads it (GUMBOX): Option of the empty payload, so a port read by
               // both a contract and a composition has one getter type
               Some((s"Option<${crustTypeProvider.getTypeNameProvider(crustTypeProvider.getRepresentativeType(MicrokitTypeUtil.getPortType(ep))).qualifiedRustName}>", T))
@@ -1438,8 +1444,6 @@ object ContractObserverPlugin {
           |  CepPostViolation { thread: &'static str, pre: &'a dyn core::fmt::Debug, post: &'a dyn core::fmt::Debug },
           |  /// No pre-state was saved for the completing dispatch.
           |  CepPostSkipped { thread: &'static str },
-          |  /// The dispatch's CEP_Pre failed and excuse_post_on_failed_pre is set.
-          |  CepPostExcused { thread: &'static str },
           |  /// A value the check reads was never written (`SystemView::missing`).
           |  CheckSkipped { thread: &'static str, check: &'static str },
           |  SysAssertViolation { property: &'static str, point: &'static str },

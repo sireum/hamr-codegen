@@ -177,10 +177,10 @@ object MakefileTemplate {
           |TOP_INCLUDE = $$(TOP_TYPES_INCLUDE) -I$$(TOP_DIR)/util/include$auxIncludesRef
           |
           |all: $$(IMAGE_FILE)
-          |${TAB}CHECK_FLAGS_BOARD_MD5:=.board_cflags-$$(shell echo -- $${CFLAGS} $${MICROKIT_BOARD} $${MICROKIT_CONFIG}| shasum | sed 's/ *-//')
+          |${TAB}CHECK_FLAGS_BOARD_MD5:=.hamr_flags-$$(shell echo -- $${CFLAGS} $${MICROKIT_BOARD} $${MICROKIT_CONFIG}| shasum | sed 's/ *-//')
           |
           |$${CHECK_FLAGS_BOARD_MD5}:
-          |${TAB}-rm -f .board_cflags-*
+          |${TAB}-rm -f .hamr_flags-*
           |${TAB}touch $$@
           |
           |%.o: $${TOP_DIR}/util/src/%.c Makefile
@@ -323,6 +323,7 @@ object MakefileTemplate {
           |${TAB}-I$$(SDDF)/include/microkit \
           |${TAB}-I$$(TOP_DIR)/scheduler/include \
           |${TAB}$$(TOP_TYPES_INCLUDE) \
+          |${TAB}$$(MON_CFLAGS) \
           |${TAB}${(includePaths, s" \\\n${TAB}")}
           |
           |
@@ -336,7 +337,7 @@ object MakefileTemplate {
           |# Sentinel file whose name encodes a hash of build-affecting variables.
           |# When any of these change the old sentinel is removed and a new one is created,
           |# forcing dependent targets to rebuild.
-          |# TESTS, LIST_TESTS, GUMBO_CHECKS and SYSVERIF_CHECKS are part of the hash because they
+          |# TESTS, LIST_TESTS, GUMBO_CHECKS, SYSVERIF_CHECKS and PROPTEST_SEED are part of the hash because they
           |# are patched into an ELF section by the MSD step below (all but TESTS through its
           |# environment, so a meta.py written before they existed still runs).  Without them,
           |# changing one leaves this stamp -- and therefore $$(SYSTEM_FILE) -- up to date, the
@@ -347,11 +348,26 @@ object MakefileTemplate {
           |# re-parsed by the shell; in the hash, a quote is replaced (after %, so no two filters hash
           |# alike) so it cannot end the quoting.
           |export TESTS
-          |CHECK_FLAGS_BOARD_MD5:=.board_cflags-$$(shell echo -- $${CFLAGS} $${BOARD} $${MICROKIT_CONFIG} $${MICROKIT_SDK} $${MSD} $${SCHEDULER_C} $${SCHEDULER_CONFIG_HEADERS} 'TESTS=$$(subst ',%27,$$(subst %,%25,$$(TESTS)))' LIST_TESTS=$${LIST_TESTS} GUMBO_CHECKS=$${GUMBO_CHECKS} SYSVERIF_CHECKS=$${SYSVERIF_CHECKS}| shasum | sed 's/ *-//')
+          |CHECK_FLAGS_BOARD_MD5:=.hamr_flags-$$(shell echo -- $${CFLAGS} $${BOARD} $${MICROKIT_CONFIG} $${MICROKIT_SDK} $${MSD} $${SCHEDULER_C} $${SCHEDULER_CONFIG_HEADERS} 'TESTS=$$(subst ',%27,$$(subst %,%25,$$(TESTS)))' LIST_TESTS=$${LIST_TESTS} GUMBO_CHECKS=$${GUMBO_CHECKS} SYSVERIF_CHECKS=$${SYSVERIF_CHECKS} PROPTEST_SEED=$${PROPTEST_SEED}| shasum | sed 's/ *-//')
           |
           |$${CHECK_FLAGS_BOARD_MD5}:
-          |${TAB}-rm -f .board_cflags-*
+          |${TAB}-rm -f .hamr_flags-*
           |${TAB}touch $$@
+          |
+          |# The stamp above relinks the images.  It is named .hamr_flags-*, not .board_cflags-*:
+          |# sDDF's own stamp (board/common.mk), which every C object depends on, has that name, and
+          |# each rule deletes its name's stamps, so sharing it made each delete the other and every
+          |# make rebuild everything.  sDDF's hash is taken before CFLAGS is extended above, so it
+          |# does not see a variant's MON_CFLAGS, and every variant builds here: an object compiled
+          |# for one could be linked into another.  So when the final CFLAGS changes, every object
+          |# and archive compiled here is removed before anything is built -- only in the build
+          |# directory, where the top Makefile runs this one (make -C), never in a tree it is run
+          |# from by hand.  sDDF's stamp is created with it: made only once objects exist, it would
+          |# otherwise be newer than all of them on the build after a clean one, and recompile them.
+          |CHECK_CFLAGS_MD5:=.cflags-$$(shell echo -- $${CFLAGS} | shasum | sed 's/ *-//')
+          |ifeq ($$(CURDIR)$$(wildcard $$(CHECK_CFLAGS_MD5)),$$(abspath $$(TOP_BUILD_DIR)))
+          |$$(shell find . \( -name '*.o' -o -name '*.a' -o -name '.cflags-*' \) -delete; touch $$(CHECK_CFLAGS_MD5) $$(CHECK_FLAGS_BOARD_HASH))
+          |endif
           |
           |
           |vpath %.c $$(SDDF) \
@@ -389,7 +405,7 @@ object MakefileTemplate {
           |
           |$$(SYSTEM_FILE): $$(IMAGES) $$(DTB) $${CHECK_FLAGS_BOARD_MD5}
           |${TAB}$$(PYTHON) $$(SDFGEN_HELPER) --macros "$$(SDFGEN_UNKOWN_MACROS)" --configs "$$(SCHEDULER_CONFIG_HEADERS)" --output $$(TOP_BUILD_DIR)/config_structs.py
-          |${TAB}LIST_TESTS="$$(LIST_TESTS)" GUMBO_CHECKS="$$(GUMBO_CHECKS)" SYSVERIF_CHECKS="$$(SYSVERIF_CHECKS)" $$(PYTHON) $$(MSD) --sddf $$(SDDF) --board $$(MICROKIT_BOARD) --dtb $$(DTB) --output . --sdf $$(SYSTEM_FILE) --objcopy $$(OBJCOPY) --tests="$$$$TESTS"
+          |${TAB}LIST_TESTS="$$(LIST_TESTS)" GUMBO_CHECKS="$$(GUMBO_CHECKS)" SYSVERIF_CHECKS="$$(SYSVERIF_CHECKS)" PROPTEST_SEED="$$(PROPTEST_SEED)" $$(PYTHON) $$(MSD) --sddf $$(SDDF) --board $$(MICROKIT_BOARD) --dtb $$(DTB) --output . --sdf $$(SYSTEM_FILE) --objcopy $$(OBJCOPY) --tests="$$$$TESTS"
           |${TAB}$$(OBJCOPY) --update-section .device_resources=timer_driver_device_resources.data timer_driver.elf
           |${TAB}$$(OBJCOPY) --update-section .timer_client_config=timer_client_scheduler.data scheduler.elf
           |

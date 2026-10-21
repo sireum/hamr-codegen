@@ -167,7 +167,11 @@ object UserLandMonitorInjector {
     val u32Classifier: String = "Base_Types::Unsigned_32"
 
     // Build the synthetic hamr::SchedState record type.  Its Unsigned_32 fields mirror
-    // the sched_state_t struct in scheduler_config.h.  The type is added to
+    // the sched_state_t struct in scheduler_config.h: current_timeslice is the slot being
+    // dispatched, last_yielded_ch the channel of the user slot dispatched before it once
+    // that thread has completed (0 while it is still running), and outstanding the number of
+    // dispatches, of every thread, not yet completed.
+    // The type is added to
     // model.dataComponents so that TypeResolver builds it into the AadlTypes map and the
     // Rust/C type generators produce corresponding struct definitions.
     var newDataComponents: ISZ[ir.Component] = dataComponents
@@ -187,7 +191,7 @@ object UserLandMonitorInjector {
       category = ir.ComponentCategory.Data,
       classifier = Some(ir.Classifier(schedStateClassifier)),
       features = ISZ(),
-      subComponents = ISZ(makeFieldComp("last_yielded_ch"), makeFieldComp("next_dispatch_ch"), makeFieldComp("current_timeslice")),
+      subComponents = ISZ(makeFieldComp("last_yielded_ch"), makeFieldComp("outstanding"), makeFieldComp("current_timeslice")),
       connections = ISZ(), connectionInstances = ISZ(), properties = ISZ(),
       flows = ISZ(), modes = ISZ(), annexes = ISZ(), uriFrag = "")
 

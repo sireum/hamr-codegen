@@ -531,7 +531,10 @@ object UserLandMonitorPlugin {
                   |# Usage: make CONFIG=monitor.mk
                   |export MSD := $$(TOP_DIR)/$monitorName.meta.py
                   |export SCHEDULER_C := $$(TOP_DIR)/scheduler/src/$monitorName.scheduler.c
-                  |export SCHEDULER_CONFIG_HEADERS := $$(TOP_DIR)/scheduler/include/$monitorName.user_config.h"""
+                  |export SCHEDULER_CONFIG_HEADERS := $$(TOP_DIR)/scheduler/include/$monitorName.user_config.h
+                  |# a faulted thread's _MON answers its dispatches, so this scheduler's count of them
+                  |# stays balanced and the monitor keeps checking the other threads
+                  |export MON_CFLAGS := -DHAMR_MON_FAULTED_COMPLETES"""
 
             resources = resources :+ ResourceUtil.createResourceH(
               path = s"${options.sel4OutputDir.get}/${monitorName}.mk",
@@ -617,12 +620,37 @@ object StaticContent {
         |  return true;
         |}
         |
+        |// The user slot most recently dispatched, and per channel the dispatches its thread has
+        |// not yet reported completing (the bridge's notify-back after each dispatch) -- a count,
+        |// so a late completion is not taken for the next dispatch's.  Published to the monitors
+        |// as sched_state.last_yielded_ch: that channel once its thread has completed every
+        |// dispatch, 0 while it is still running; and as sched_state.outstanding: the dispatches
+        |// of every thread not yet completed.  So a monitor can tell a thread that overran its
+        |// slot, whose outputs it would read mid-dispatch, from one that finished -- the one just
+        |// before it, or any earlier one still running past later slots.  A channel counts at most
+        |// 2: the run in progress and one pending dispatch are all the kernel holds, since further
+        |// dispatches of a thread still running merge into its one pending notification bit and
+        |// complete once.  A thread that faults is answered for by its _MON in these variants
+        |// (HAMR_MON_FAULTED_COMPLETES), so its count does not grow either.
+        |microkit_channel last_user_ch = 0;
+        |uint32_t outstanding[64];
+        |uint32_t total_outstanding = 0;
+        |
         |void notify() {
         |    microkit_channel ch = user_schedule.timeslice_ch[current_timeslice];
         |    if (ch != 0) { // channel 0 is used to pad out a schedule
         |        sched_state.current_timeslice = current_timeslice;
+        |        sched_state.last_yielded_ch = (last_user_ch != 0 && outstanding[last_user_ch] == 0) ? last_user_ch : 0;
+        |        sched_state.outstanding = total_outstanding;
         |        put_sched_state();
         |
+        |        if (user_schedule.is_user_partition[current_timeslice]) {
+        |            last_user_ch = ch;
+        |            if (outstanding[ch] < 2) {
+        |                outstanding[ch]++;
+        |                total_outstanding++;
+        |            }
+        |        }
         |        microkit_notify(ch);
         |    }
         |    // Set a timeout for the length of this partition's timeslice
@@ -645,20 +673,25 @@ object StaticContent {
         |        } else {
         |            next_partition();
         |        }
-        |    } else if ((part_ready_check & (1 << ch)) != 0) {
+        |    } else if ((part_ready_check & (1ULL << ch)) != 0) {
         |        // Channel not yet marked ready — this is the partition's first notification
         |        // during the initialisation handshake (before the schedule starts running).
-        |        if ((part_ready & (1 << ch)) == 0) {
+        |        if ((part_ready & (1ULL << ch)) == 0) {
         |            sddf_dprintf("SCHEDULER | Marking partition %d as ready\n", ch);
-        |            part_ready |= (1 << ch);  // Set this channel's bit in the readiness bitstring
+        |            part_ready |= (1ULL << ch);  // Set this channel's bit in the readiness bitstring
         |            if (part_ready == part_ready_check) {  // All expected partitions have reported ready
         |                sddf_dprintf("SCHEDULER | All partitions ready, beginning schedule\n");
         |                // Timeout to let the last partition become passive before starting
         |                sddf_timer_set_timeout(config.driver_id, NS_IN_S);
         |            }
+        |        } else if (scheduler_running && outstanding[ch] > 0) {
+        |            // A dispatched thread reports completing a dispatch.  The schedule does not
+        |            // advance on it -- it is static, and each partition keeps its full allotted
+        |            // time -- but the next monitor learns the thread finished (last_yielded_ch).
+        |            outstanding[ch]--;
+        |            total_outstanding--;
         |        }
-        |        // Runtime signals from partitions are ignored: the schedule is static and each
-        |        // partition runs for its full allotted time regardless of early completion.
+        |        // Any other runtime signal from a partition is ignored.
         |    } else {
         |        sddf_dprintf("SCHEDULER |received unknown notification on channel: %d\n", ch);
         |    }
@@ -673,8 +706,8 @@ object StaticContent {
         |
         |    scheduler_running = false;
         |
-        |    part_ready |= (1 << 0); // ch 0 is always 'ready'
-        |    part_ready_check |= (1 << 0); // ch 0 is always 'ready' -- keeps padding optional
+        |    part_ready |= (1ULL << 0); // ch 0 is always 'ready'
+        |    part_ready_check |= (1ULL << 0); // ch 0 is always 'ready' -- keeps padding optional
         |
         |    // Build a bitmask of all channels that must report ready before the schedule
         |    // can start. Each bit position corresponds to a channel ID. During the
@@ -682,7 +715,7 @@ object StaticContent {
         |    // accumulates those bits and is compared against this mask to detect when
         |    // every scheduled partition has checked in.
         |    for (int i = 0; i < user_schedule.num_timeslices; i++) {
-        |        part_ready_check |= (1 << user_schedule.timeslice_ch[i]);
+        |        part_ready_check |= (1ULL << user_schedule.timeslice_ch[i]);
         |    }
         |
         |    // Publish the full schedule so monitors can correlate timeslice indices with channels.
@@ -753,8 +786,11 @@ object StaticContent {
         |
         |// Schedule state broadcast: written by the scheduler before every dispatch.
         |// Monitors that map this region (read-only) can inspect it to determine
-        |// the current timeslice index.
+        |// the current timeslice index, and whether the threads dispatched before it completed.
+        |// The layout of hamr_SchedState, which the scheduler publishes (sb_types.h).
         |typedef struct sched_state {
+        |    uint32_t last_yielded_ch;   // the previous user slot's channel once its thread completed, else 0
+        |    uint32_t outstanding;       // the dispatches, of every thread, not yet completed
         |    uint32_t current_timeslice; // index into the schedule of the current timeslice
         |} sched_state_t;
         |

@@ -88,9 +88,12 @@ object GumboMonitorPlugin {
                                              symbolTable: SymbolTable,
                                              store: Store,
                                              reporter: Reporter): B = {
+    // Gated on contracts, not on state variables: a monitor checks a thread's contracts over
+    // its ports alone when it has no state variables, and wires sv_ ports only for those
+    // that do (wireMonitorStateVars).
     return (
       canHandleModelTransformHelper(model, options, types, symbolTable, store, reporter) &&
-        hasThreadsWithStateVars(symbolTable) &&
+        ContractObserverPlugin.hasThreadContracts(symbolTable) &&
         !haveHandledModelTransform(store))
   }
 
@@ -364,11 +367,12 @@ object GumboMonitorPlugin {
   //   UserLandMonitorPlugin.handle to inject the monitor protection domain, its
   //   channels, and shared memory regions into the Microkit system description.
   //
-  // Phase 3 (Monitor Method): Runs after GumboXRustPlugin and CRustComponentPlugin
-  //   have produced their contributions. Modifies the monitor thread's Rust
-  //   ComponentContributions to add scheduling state fields to the struct, update
+  // Phase 3 (Monitor Method): Runs once ContractObserverPlugin has generated the observers
+  //   crate (after GumboXRustPlugin, or without it when nothing has contracts) and
+  //   CRustComponentPlugin has produced its contributions. Modifies the monitor thread's
+  //   Rust ComponentContributions to add scheduling state fields to the struct, update
   //   new() and timeTriggered(), and append the monitor method with the per-component
-  //   contract checking dispatch logic.
+  //   contract checking dispatch logic (see handleMonitorMethod).
   @pure override def canHandle(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes,
                                symbolTable: SymbolTable, store: Store, reporter: Reporter): B = {
 
@@ -388,7 +392,6 @@ object GumboMonitorPlugin {
 
       val canDoMonitorMethod: B =
         !haveHandledMonitorMethod(store) &&
-          GumboXRustPlugin.getGumboXContributions(store).nonEmpty &&
           ContractObserverPlugin.hasObservers(store) &&
           CRustComponentPlugin.hasCRustComponentContributions(store)
 
@@ -414,7 +417,7 @@ object GumboMonitorPlugin {
     }
 
     if (!haveHandledMonitorMethod(localStore) &&
-      GumboXRustPlugin.getGumboXContributions(localStore).nonEmpty &&
+      ContractObserverPlugin.hasObservers(localStore) &&
       CRustComponentPlugin.hasCRustComponentContributions(localStore)) {
       val r = handleMonitorMethod(model, options, types, symbolTable, localStore, reporter)
       localStore = r._1
@@ -424,14 +427,17 @@ object GumboMonitorPlugin {
     return (localStore, resources)
   }
 
-  // Phase 3: Modifies the monitor thread's Rust ComponentContributions to add
-  // per-component contract checking. Adds scheduling state fields (frame_period,
-  // last_index, prev/next user channel tables) and pre-state fields to the struct,
-  // updates new() with their initializers, replaces timeTriggered() to call
-  // self.gumbo_monitor(api), and appends the gumbo_monitor method. The method dispatches
-  // on prev_user_ch to run post-condition checks and on next_user_ch to capture
-  // pre-state for each component. Also appends buildUserChannelTables as a
-  // module-level function.
+  // Phase 3: Modifies the monitor thread's Rust ComponentContributions.  The scheduling
+  // scaffolding is always added: the prev/next user channel tables (struct fields, their
+  // initializers in new(), and the module-level buildUserChannelTables), and the
+  // MonitorView/LogSink adapter over the monitor's API.  The GUMBO layer -- the
+  // frame_period and last_index fields, the shared ComponentContracts, a timeTriggered()
+  // that calls self.gumbo_monitor(api), and the gumbo_monitor method, which dispatches on
+  // prev_user_ch to check post-conditions and on next_user_ch to capture pre-state -- is
+  // added only when some thread has contracts GUMBOX compiled (hasComponentLayer).  A
+  // monitor that does not require it (requiresComponentLayer: the sys-assert monitor)
+  // builds its own method on the scaffolding with monitorFn, so a composition is monitored
+  // whether or not its threads have contracts.
   // The contract checks themselves live in crates/observers (ContractObserverPlugin): this
   // monitor only locates itself in the schedule -- which thread just yielded, which runs
   // next, and whether this is its first run -- and hands those to the shared
@@ -441,11 +447,11 @@ object GumboMonitorPlugin {
                                 symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
     var localStore: Store = store + keyMonitorMethod ~> BoolValue(T)
 
-    val gumboxContribs = GumboXRustPlugin.getGumboXContributions(localStore).get
     val info = ContractObserverPlugin.getInfo(localStore).get
     val obs = ContractObserverPlugin.crateName
+    val gumboLayer: B = info.hasComponentLayer
 
-    if (gumboxContribs.allComponentContributions.nonEmpty) {
+    if (gumboLayer || !requiresComponentLayer) {
       // One monitor component per name: size-1 for the gumbo monitor, one per
       // composition for the sys-assert monitor (design D8, approach (i)).
       // Re-fetch contributions each iteration since the prior iteration updated
@@ -456,9 +462,8 @@ object GumboMonitorPlugin {
       contributions.componentContributions.get(monitorThreadPath) match {
         case Some(monitorContrib) =>
           // Plain-Rust (non-Verus) monitors get no external_body directive.
-          val monitorVerus: B = getMonitorGenProfile.verusVerified
           val externalBodyAttr: String =
-            if (!monitorVerus) ""
+            if (!getMonitorGenProfile.verusVerified) ""
             else if (options.verusAttributeSyntax) "#[verus_verify(external_body)]"
             else "#[verifier::external_body]"
 
@@ -466,33 +471,8 @@ object GumboMonitorPlugin {
           val monitorThreadId = MicrokitUtil.getComponentIdPath(monitorThread)
           val appApiType = CRustApiPlugin.applicationApiType(monitorThread)
 
-          val externalBodyAttrContent: ST =
-            if (options.verusAttributeSyntax) st"verus_verify(external_body)"
-            else st"verifier::external_body"
-          val externalBodyAttributes: ISZ[RAST.Attribute] =
-            if (!monitorVerus) ISZ()
-            else ISZ(RAST.AttributeST(inner = F, content = externalBodyAttrContent))
-
-          val monitorMethod = RAST.FnImpl(
-            sig = RAST.FnSig(
-              ident = RAST.IdentString("gumbo_monitor"),
-              generics = Some(RAST.Generics(ISZ(RAST.GenericParam(
-                ident = RAST.IdentString("API"),
-                attributes = ISZ(),
-                bounds = RAST.GenericBoundFixMe(st"${monitorThreadId}_Full_Api"))))),
-              fnDecl = RAST.FnDecl(
-                inputs = ISZ(
-                  RAST.ParamFixMe(st"&mut self"),
-                  RAST.ParamImpl(
-                    ident = RAST.IdentString("api"),
-                    kind = RAST.TyRef(None(), RAST.MutTy(
-                      ty = RAST.TyPath(ISZ(ISZ(appApiType), ISZ("API")), None()), mutbl = RAST.Mutability.Mut)))),
-                outputs = RAST.FnRetTyDefault()),
-              verusHeader = None(), fnHeader = RAST.FnHeader(F)),
-            comments = ISZ(), attributes = externalBodyAttributes, visibility = RAST.Visibility.Public, meta = ISZ(),
-            verusAttributeSyntax = options.verusAttributeSyntax && monitorVerus, contract = None(),
-            body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
-              st"""let state = api.get_sched_state();
+          val gumboMonitorBody: ST =
+            st"""let state = api.get_sched_state();
                   |
                   |if self.last_index == u32::MAX {
                   |  let schedule = api.get_sched_schedule();
@@ -509,52 +489,67 @@ object GumboMonitorPlugin {
                   |let idx = state.current_timeslice as usize;
                   |let mut view = MonitorView { api: api, focus: None };
                   |
+                  |// Whether every thread dispatched before this slot completed: the scheduler
+                  |// publishes the previous one's channel once it has, 0 while it is still running,
+                  |// and how many dispatches of any thread are still running.  A thread that overran
+                  |// its slot -- the previous one, or an earlier one still running past later slots --
+                  |// is still writing what this run would read.
+                  |let prev_ch = self.prev_user_ch[idx];
+                  |let prev_running = state.last_yielded_ch != prev_ch;
+                  |let overran = self.last_index != u32::MAX && prev_ch != 0 && (prev_running || state.outstanding != 0);
+                  |
                   |if self.last_index == u32::MAX {
                   |  // First compute phase, check initialization guarantees
                   |  self.components.on_init(&mut view, &mut LogSink);
                   |  init_checked();
-                  |} else if let Some(prev) = thread_of(self.prev_user_ch[idx]) {
+                  |} else if overran {
+                  |  // Its completion is not checked, and no saved pre-state describes what runs from
+                  |  // here: every one is dropped, so each thread's next completion is skipped
+                  |  match thread_of(prev_ch) {
+                  |    Some(prev) if prev_running =>
+                  |      log::warn!("*** OVERRUN: {:?} did not complete within its slot: its completion is not checked ***", prev),
+                  |    _ =>
+                  |      log::warn!("*** OVERRUN: an earlier thread is still running past its slot: completions are not checked until it finishes ***"),
+                  |  }
+                  |  self.components.forget();
+                  |} else if let Some(prev) = thread_of(prev_ch) {
                   |  // the thread that just yielded: check its post-condition
                   |  self.components.on_complete(prev, &mut view, &mut LogSink);
                   |}
                   |
-                  |// the thread that runs next: save its pre-state, check its pre-condition
-                  |if let Some(next) = thread_of(self.next_user_ch[idx]) {
-                  |  self.components.on_dispatch(next, &mut view, &mut LogSink);
+                  |// the thread that runs next: save its pre-state, check its pre-condition -- unless
+                  |// the overran thread may still be writing what it reads
+                  |if !overran {
+                  |  if let Some(next) = thread_of(self.next_user_ch[idx]) {
+                  |    self.components.on_dispatch(next, &mut view, &mut LogSink);
+                  |  }
                   |}
                   |
-                  |self.last_index = state.current_timeslice;""")))))
+                  |self.last_index = state.current_timeslice;"""
 
-          // Scheduling state struct fields, and the shared contract checks
-          val schedFields: ISZ[RAST.Item] = ISZ(
+          @strictpure def field(name: String, ty: ISZ[String]): RAST.Item =
             RAST.StructField(visibility = RAST.Visibility.Private, isGhost = F,
-              ident = RAST.IdentString("frame_period"),
-              fieldType = RAST.TyPath(ISZ(ISZ("i32")), None())),
-            RAST.StructField(visibility = RAST.Visibility.Private, isGhost = F,
-              ident = RAST.IdentString("last_index"),
-              fieldType = RAST.TyPath(ISZ(ISZ("u32")), None())),
-            RAST.StructField(visibility = RAST.Visibility.Private, isGhost = F,
-              ident = RAST.IdentString("prev_user_ch"),
-              fieldType = RAST.TyPath(ISZ(ISZ("hamr", "ScheduleChannels")), None())),
-            RAST.StructField(visibility = RAST.Visibility.Private, isGhost = F,
-              ident = RAST.IdentString("next_user_ch"),
-              fieldType = RAST.TyPath(ISZ(ISZ("hamr", "ScheduleChannels")), None())),
-            RAST.StructField(visibility = RAST.Visibility.Private, isGhost = F,
-              ident = RAST.IdentString("components"),
-              fieldType = RAST.TyPath(ISZ(ISZ(obs, "components", "ComponentContracts")), None())))
+              ident = RAST.IdentString(name), fieldType = RAST.TyPath(ISZ(ty), None()))
+
+          // Scheduling state struct fields -- the GUMBO layer's around the channel tables --
+          // and the shared contract checks
+          val schedFields: ISZ[RAST.Item] =
+            (if (gumboLayer) ISZ(field("frame_period", ISZ("i32")), field("last_index", ISZ("u32"))) else ISZ[RAST.Item]()) ++
+              ISZ(field("prev_user_ch", ISZ("hamr", "ScheduleChannels")), field("next_user_ch", ISZ("hamr", "ScheduleChannels"))) ++
+              (if (gumboLayer) ISZ(field("components", ISZ(obs, "components", "ComponentContracts"))) else ISZ[RAST.Item]())
 
           val updatedStruct = monitorContrib.appStructDef(
             items = monitorContrib.appStructDef.items ++ schedFields)
 
           // Initializer values for new()
-          val allInits: ISZ[ST] = ISZ(
-            st"frame_period: 0,",
-            st"last_index: u32::MAX,",
-            st"prev_user_ch: [0; hamr::hamr_ScheduleChannels_DIM_0],",
-            st"next_user_ch: [0; hamr::hamr_ScheduleChannels_DIM_0],",
-            st"components: $obs::components::ComponentContracts::new(),")
+          val allInits: ISZ[ST] =
+            (if (gumboLayer) ISZ(st"frame_period: 0,", st"last_index: u32::MAX,") else ISZ[ST]()) ++
+              ISZ(st"prev_user_ch: [0; hamr::hamr_ScheduleChannels_DIM_0],",
+                st"next_user_ch: [0; hamr::hamr_ScheduleChannels_DIM_0],") ++
+              (if (gumboLayer) ISZ(st"components: $obs::components::ComponentContracts::new(),") else ISZ[ST]())
 
-          // Update impl: replace new() and timeTriggered bodies, append monitor method
+          // Update impl: replace new() and, with the GUMBO layer, timeTriggered bodies, and
+          // append the gumbo_monitor method
           val existingImpl = monitorContrib.appStructImpl.asInstanceOf[RAST.ImplBase]
           var updatedImplItems: ISZ[RAST.Item] = ISZ()
           for (item <- existingImpl.items) {
@@ -563,7 +558,7 @@ object GumboMonitorPlugin {
                 if (fn.sig.ident.prettyST.render == "new") {
                   updatedImplItems = updatedImplItems :+ fn(
                     body = Some(RAST.MethodBody(ISZ(RAST.BodyItemSelf(allInits)))))
-                } else if (fn.sig.ident.prettyST.render == "timeTriggered") {
+                } else if (gumboLayer && fn.sig.ident.prettyST.render == "timeTriggered") {
                   updatedImplItems = updatedImplItems :+ fn(
                     body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(
                       st"""${ContractObserverPlugin.beginMonitorRunCall}
@@ -575,11 +570,13 @@ object GumboMonitorPlugin {
                 updatedImplItems = updatedImplItems :+ item
             }
           }
-          updatedImplItems = updatedImplItems :+ monitorMethod
+          if (gumboLayer) {
+            updatedImplItems = updatedImplItems :+
+              monitorFn(options, monitorThreadId, appApiType, "gumbo_monitor", gumboMonitorBody)
+          }
 
           val updatedImpl = existingImpl(items = updatedImplItems)
 
-          // buildUserChannelTables standalone function
           val buildUserChannelTablesFn = RAST.ItemST(
             st"""// For each timeslice index, finds the nearest preceding and following user
                 |// partition channels. This lets the monitor know which thread just yielded
@@ -638,6 +635,43 @@ object GumboMonitorPlugin {
     return (localStore, ISZ())
   }
 
+  /** Whether this monitor needs the GUMBO layer (thread contracts GUMBOX compiled) to have
+    * anything to check: the GUMBO monitor does, the sys-assert monitor does not. */
+  @strictpure def requiresComponentLayer: B = T
+
+  /** A monitor method `fnName(&mut self, api: &mut <application API><API>)` with `body`: the
+    * shape of gumbo_monitor and of the sys-assert monitor's sys_assert_monitor. */
+  @pure def monitorFn(options: HamrCli.CodegenOption, monitorThreadId: String, appApiType: String,
+                      fnName: String, body: ST): RAST.FnImpl = {
+    // Plain-Rust (non-Verus) monitors get no external_body directive.
+    val monitorVerus: B = getMonitorGenProfile.verusVerified
+    val externalBodyAttrContent: ST =
+      if (options.verusAttributeSyntax) st"verus_verify(external_body)"
+      else st"verifier::external_body"
+    val externalBodyAttributes: ISZ[RAST.Attribute] =
+      if (!monitorVerus) ISZ()
+      else ISZ(RAST.AttributeST(inner = F, content = externalBodyAttrContent))
+    return RAST.FnImpl(
+      sig = RAST.FnSig(
+        ident = RAST.IdentString(fnName),
+        generics = Some(RAST.Generics(ISZ(RAST.GenericParam(
+          ident = RAST.IdentString("API"),
+          attributes = ISZ(),
+          bounds = RAST.GenericBoundFixMe(st"${monitorThreadId}_Full_Api"))))),
+        fnDecl = RAST.FnDecl(
+          inputs = ISZ(
+            RAST.ParamFixMe(st"&mut self"),
+            RAST.ParamImpl(
+              ident = RAST.IdentString("api"),
+              kind = RAST.TyRef(None(), RAST.MutTy(
+                ty = RAST.TyPath(ISZ(ISZ(appApiType), ISZ("API")), None()), mutbl = RAST.Mutability.Mut)))),
+          outputs = RAST.FnRetTyDefault()),
+        verusHeader = None(), fnHeader = RAST.FnHeader(F)),
+      comments = ISZ(), attributes = externalBodyAttributes, visibility = RAST.Visibility.Public, meta = ISZ(),
+      verusAttributeSyntax = options.verusAttributeSyntax && monitorVerus, contract = None(),
+      body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(body)))))
+  }
+
   @pure override def canFinalizeMicrokit(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes,
                                          symbolTable: SymbolTable, store: Store, reporter: Reporter): B = {
     return (
@@ -656,15 +690,6 @@ object GumboMonitorPlugin {
   @pure override def finalizeMicrokit(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes,
                                       symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, ISZ[Resource]) = {
     return (store + keyRustFinalized ~> BoolValue(T), ISZ())
-  }
-
-  @pure def hasThreadsWithStateVars(symbolTable: SymbolTable): B = {
-    for (thread <- symbolTable.getThreads()) {
-      if (getStateVars(thread.path, symbolTable).nonEmpty) {
-        return T
-      }
-    }
-    return F
   }
 
   @pure def getStateVars(threadPath: ISZ[String], symbolTable: SymbolTable): ISZ[GclStateVar] = {

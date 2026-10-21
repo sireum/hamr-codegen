@@ -10,6 +10,7 @@ import org.sireum.hamr.codegen.common.symbols.{AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
 import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.{HamrCli, ResourceUtil}
+import org.sireum.hamr.codegen.microkit.plugins.rust.apis.CRustApiPlugin
 import org.sireum.hamr.codegen.microkit.plugins.rust.component.CRustComponentPlugin
 import org.sireum.hamr.codegen.microkit.plugins.rust.types.CRustTypePlugin
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil
@@ -44,8 +45,9 @@ object GumboSysAssertMonitorPlugin {
 // from GumboMonitorPlugin — each plugin instance gets its own store key namespace
 // via getMonitorName, so the two monitors operate independently. Overrides
 // handleMonitorMethod to generate the sys assert dispatch logic derived from
-// the schedule's Petri net walk. Only activates when the root system implementation
-// has a schedule block in its GUMBO subclause.
+// the schedule's Petri net walk. Activates when the root system implementation has a
+// composition in its GUMBO subclause, whether or not any thread has contracts: the system
+// layer reads ports and state variables, not the threads' contracts.
 @sig trait GumboSysAssertMonitorPlugin extends GumboMonitorPlugin {
 
   @strictpure override def getMonitorName: String = "sys_assert_monitor"
@@ -63,9 +65,16 @@ object GumboSysAssertMonitorPlugin {
                                               symbolTable: SymbolTable,
                                               store: Store,
                                               reporter: Reporter): B = {
-    return super.canHandleModelTransform(model, options, types, symbolTable, store, reporter) &&
-      GumboSysAssertMonitorPlugin.hasCompositions(symbolTable)
+    // not super's gate: that one asks for thread contracts, which the system layer does not need
+    return (
+      canHandleModelTransformHelper(model, options, types, symbolTable, store, reporter) &&
+        GumboSysAssertMonitorPlugin.hasCompositions(symbolTable) &&
+        !haveHandledModelTransform(store))
   }
+
+  // The scheduling scaffolding is enough: with no thread contracts the monitor checks the
+  // compositions alone.
+  @strictpure override def requiresComponentLayer: B = F
 
 
   @pure override def canHandle(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes,
@@ -104,6 +113,8 @@ object GumboSysAssertMonitorPlugin {
         val existingImpl = monitorContrib.appStructImpl.asInstanceOf[RAST.ImplBase]
         val sysType: String =
           s"$obs::${ContractObserverPlugin.sysAssertModuleName(composition.id)}::${ContractObserverPlugin.sysAssertTypeName(composition.id)}"
+        // this composition's index among the model's, for SystemView::frame_ended
+        val compIdx: Z = ops.ISZOps(ContractObserverPlugin.getInfo(localStore).get.compositionIds).indexOf(composition.id)
 
         // Uses its own sys_assert_last_index sentinel (independent of gumbo_monitor's
         // last_index) so initialization and conformance checking run correctly even
@@ -133,9 +144,36 @@ object GumboSysAssertMonitorPlugin {
               |  return;
               |}
               |
-              |// the thread that just yielded: fire its transition and check the assertions
+              |// A new hyperperiod: the current timeslice index is not past the last one seen
+              |let wrapped = state.current_timeslice <= self.sys_assert_last_index;
+              |// Whether every thread dispatched before this slot completed: the scheduler
+              |// publishes the previous one's channel once it has, 0 while it is still running,
+              |// and how many dispatches of any thread are still running
+              |let prev_ch = self.prev_user_ch[idx];
+              |let prev_running = state.last_yielded_ch != prev_ch;
+              |let overran = prev_ch != 0 && (prev_running || state.outstanding != 0);
+              |
               |let mut view = MonitorView { api: api, focus: None };
-              |if let Some(prev) = thread_of(self.prev_user_ch[idx]) {
+              |if self.sys_assert_suspended {
+              |  // An overrun's late output reaches its consumers in the frame it ran in, which then
+              |  // mixes two dispatches of the thread; checking resumes with the next hyperperiod,
+              |  // whose frame starts here
+              |  if wrapped && !overran {
+              |    self.sys_assert_suspended = false;
+              |    $obs::SystemView::frame_ended(&mut view, $compIdx);
+              |    self.sys_assert.restart_frame(&mut view, &mut LogSink);
+              |    log::warn!("system assertions of composition ${composition.id} resumed");
+              |  }
+              |} else if overran {
+              |  self.sys_assert_suspended = true;
+              |  match thread_of(prev_ch) {
+              |    Some(prev) if prev_running =>
+              |      log::warn!("*** OVERRUN: {:?} did not complete within its slot: the system assertions of composition ${composition.id} are suspended until a hyperperiod with nothing outstanding ***", prev),
+              |    _ =>
+              |      log::warn!("*** OVERRUN: an earlier thread is still running past its slot: the system assertions of composition ${composition.id} are suspended until a hyperperiod with nothing outstanding ***"),
+              |  }
+              |} else if let Some(prev) = thread_of(prev_ch) {
+              |  // the thread that just yielded: fire its transition and check the assertions
               |  producer_completed(prev);
               |  self.sys_assert.on_complete(prev, &mut view, &mut LogSink);
               |}
@@ -151,16 +189,6 @@ object GumboSysAssertMonitorPlugin {
               |
               |self.sys_assert_last_index = state.current_timeslice;"""
 
-        // Find the gumbo_monitor method so we can copy its signature
-        var monitorMethodOpt: Option[RAST.FnImpl] = None()
-        for (item <- existingImpl.items) {
-          item match {
-            case fn: RAST.FnImpl if fn.sig.ident.prettyST.render == "gumbo_monitor" =>
-              monitorMethodOpt = Some(fn)
-            case _ =>
-          }
-        }
-
         // Update impl: append sys_assert_monitor call to timeTriggered,
         // add the sys-assert field inits to new(), add sys_assert_monitor method
         var updatedImplItems: ISZ[RAST.Item] = ISZ()
@@ -171,15 +199,15 @@ object GumboSysAssertMonitorPlugin {
                 case Some(mb) => mb.items
                 case _ => ISZ()
               }
-              // The run starts with begin_monitor_run.  The gumbo layer's body already does
-              // that when the model has thread contracts; otherwise it is added here.
+              // The run starts with begin_monitor_run.  The GUMBO layer's body already does
+              // that, and then runs gumbo_monitor; without the layer the body is the
+              // component's default one, which this replaces.
               val startsRun: B = ops.ISZOps(existingItems).exists((i: RAST.BodyItem) =>
                 ops.StringOps(i.prettyST.render).contains("begin_monitor_run("))
               val runStart: ISZ[RAST.BodyItem] =
-                if (startsRun) ISZ() else ISZ(RAST.BodyItemST(st"${ContractObserverPlugin.beginMonitorRunCall}"))
+                if (startsRun) existingItems else ISZ(RAST.BodyItemST(st"${ContractObserverPlugin.beginMonitorRunCall}"))
               updatedImplItems = updatedImplItems :+ fn(
-                body = Some(RAST.MethodBody((runStart ++ existingItems) :+
-                  RAST.BodyItemST(st"self.sys_assert_monitor(api);"))))
+                body = Some(RAST.MethodBody(runStart :+ RAST.BodyItemST(st"self.sys_assert_monitor(api);"))))
             case fn: RAST.FnImpl if fn.sig.ident.prettyST.render == "new" =>
               var updatedBodyItems: ISZ[RAST.BodyItem] = ISZ()
               fn.body match {
@@ -188,7 +216,8 @@ object GumboSysAssertMonitorPlugin {
                     bi match {
                       case bis: RAST.BodyItemSelf =>
                         updatedBodyItems = updatedBodyItems :+ bis(items = bis.items :+
-                          st"sys_assert_last_index: u32::MAX," :+ st"sys_assert: $sysType::new(),")
+                          st"sys_assert_last_index: u32::MAX," :+ st"sys_assert: $sysType::new()," :+
+                          st"sys_assert_suspended: false,")
                       case other =>
                         updatedBodyItems = updatedBodyItems :+ other
                     }
@@ -202,18 +231,11 @@ object GumboSysAssertMonitorPlugin {
           }
         }
 
-        monitorMethodOpt match {
-          case Some(monitorFn) =>
-            updatedImplItems = updatedImplItems :+ monitorFn(
-              sig = monitorFn.sig(ident = RAST.IdentString("sys_assert_monitor")),
-              body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(sysAssertBody)))))
-          case _ =>
-            // The sys-assert monitor builds on the GUMBO monitor's method, adapter and
-            // schedule tables, which exist only when some thread has GUMBO contracts.
-            reporter.error(None(), name,
-              s"Runtime monitoring of composition '${composition.id}' needs at least one thread with GUMBO contracts; none has any")
-            return (localStore, parentResources)
-        }
+        // built on the scheduling scaffolding (channel tables, adapter), which the parent adds
+        // whether or not the GUMBO layer is there
+        val monitorThread = symbolTable.componentMap.get(monitorThreadPath).get.asInstanceOf[AadlThread]
+        updatedImplItems = updatedImplItems :+ monitorFn(options, MicrokitUtil.getComponentIdPath(monitorThread),
+          CRustApiPlugin.applicationApiType(monitorThread), "sys_assert_monitor", sysAssertBody)
 
         val updatedStruct = monitorContrib.appStructDef(
           items = monitorContrib.appStructDef.items :+
@@ -224,7 +246,12 @@ object GumboSysAssertMonitorPlugin {
             RAST.StructField(
               visibility = RAST.Visibility.Private, isGhost = F,
               ident = RAST.IdentString("sys_assert"),
-              fieldType = RAST.TyPath(ISZ(ISZ(sysType)), None())))
+              fieldType = RAST.TyPath(ISZ(ISZ(sysType)), None())) :+
+            // after a thread overran its slot, until the next hyperperiod
+            RAST.StructField(
+              visibility = RAST.Visibility.Private, isGhost = F,
+              ident = RAST.IdentString("sys_assert_suspended"),
+              fieldType = RAST.TyPath(ISZ(ISZ("bool")), None())))
 
         val updatedContrib = monitorContrib(
           appStructDef = updatedStruct,

@@ -344,22 +344,7 @@ object TestSchedulerPlugin {
     * first handle pass -- before the observers crate that says exactly what is read exists.
     */
   @pure def checksRequested(symbolTable: SymbolTable): B = {
-    if (VCGenerator.getCompositions(symbolTable).nonEmpty) {
-      return T
-    }
-    for (thread <- symbolTable.getThreads()) {
-      symbolTable.annexClauseInfos.get(thread.path) match {
-        case Some(clauses) =>
-          for (clause <- clauses) {
-            clause match {
-              case _: GclAnnexClauseInfo => return T
-              case _ =>
-            }
-          }
-        case _ =>
-      }
-    }
-    return F
+    return VCGenerator.getCompositions(symbolTable).nonEmpty || ContractObserverPlugin.hasThreadContracts(symbolTable)
   }
 
   /** The observers crate is ready and has something for the controller to host. */
@@ -666,6 +651,23 @@ object TestSchedulerPlugin {
                 |  sb_event_counter_t numDropped;
                 |  return ${qn}_dequeue(&tc_obs_${cursor}_recv, &numDropped, value);
                 |}"""
+          if (r.isEvent) {
+            // A rejected dispatch (D36) consumes nothing: the controller puts its reader
+            // cursors back where they stood before the dispatch check read them.
+            val markSig = st"void test_obs_mark_$cursor(void)"
+            val rewindSig = st"void test_obs_rewind_$cursor(void)"
+            accessorSigs = accessorSigs :+ markSig :+ rewindSig
+            accessorImpls = accessorImpls :+
+              st"""$rt tc_obs_${cursor}_mark;
+                  |
+                  |$markSig {
+                  |  tc_obs_${cursor}_mark = tc_obs_${cursor}_recv;
+                  |}
+                  |
+                  |$rewindSig {
+                  |  tc_obs_${cursor}_recv = tc_obs_${cursor}_mark;
+                  |}"""
+          }
           accessorInits = accessorInits :+
             st"${qn}_Recv_init(&tc_obs_${cursor}_recv, ($qt *) tc_${r.accessor}_queue);"
         }
@@ -1435,14 +1437,17 @@ object StaticContent {
         |//! Which tests to run, patched into the controller ELF at image build time.
         |//!
         |//! An all-zero filter -- the default when nothing has been patched in -- means run
-        |//! everything.  The build populates it from the TESTS make variable.
+        |//! everything.  The build populates it from the TESTS make variable, and the property
+        |//! tests' seed from PROPTEST_SEED (all zero: the built-in default).
         |
         |pub const FILTER_LEN: usize = 256;
+        |pub const SEED_LEN: usize = 32;
         |
         |#[repr(C)]
         |pub struct TestSelection {
         |  pub filter: [u8; FILTER_LEN],
         |  pub flags: u32,
+        |  pub seed: [u8; SEED_LEN],
         |}
         |
         |#[no_mangle]
@@ -1450,6 +1455,7 @@ object StaticContent {
         |pub static mut TEST_SELECTION: TestSelection = TestSelection {
         |  filter: [0u8; FILTER_LEN],
         |  flags: 0,
+        |  seed: [0u8; SEED_LEN],
         |};
         |
         |/// Bits of `flags`, set at image build time: a contract-checking layer turned off for
@@ -1463,6 +1469,13 @@ object StaticContent {
         |/// the ELF after compilation, so the compiler must not assume the initializer.
         |pub fn flags() -> u32 {
         |  unsafe { core::ptr::read_volatile(core::ptr::addr_of!(TEST_SELECTION.flags)) }
+        |}
+        |
+        |/// The property tests' seed patched in at image build time (PROPTEST_SEED), or
+        |/// `default` when none was -- all zero.  Read volatile, like the flags.
+        |pub fn proptest_seed(default: [u8; SEED_LEN]) -> [u8; SEED_LEN] {
+        |  let seed = unsafe { core::ptr::read_volatile(core::ptr::addr_of!(TEST_SELECTION.seed)) };
+        |  if seed.iter().all(|b| *b == 0) { default } else { seed }
         |}
         |
         |/// The filter as a string slice, empty when unset.  A filter that is not UTF-8 --
@@ -1518,7 +1531,10 @@ object StaticContent {
             |    // The scheduler is parked before a dispatch: check, then let it go ahead.
             |    fence(Ordering::Acquire);
             |    LAST_OBS_SEQ = obs;
-            |    crate::system_tests::observe::at_park(&read_volatile(status));
+            |    if crate::system_tests::observe::at_park(&read_volatile(status)) {
+            |      // rejected (D36): the scheduler passes the slot without dispatching it
+            |      write_volatile(addr_of_mut!((*cmd).obs_skip), obs);
+            |    }
             |    fence(Ordering::Release);
             |    write_volatile(addr_of_mut!((*cmd).obs_ack), obs);
             |    ${controllerName}_notify_scheduler();
@@ -1585,6 +1601,7 @@ object StaticContent {
           |  target_slot: u32,
           |  observe: u32,
           |  obs_ack: u32,
+          |  obs_skip: u32,
           |}
           |
           |#[repr(C)]
@@ -2071,7 +2088,9 @@ object StaticContent {
           |//
           |// proptest needs only alloc, so the controller gets a heap, set up on the first
           |// property test.  There is no OS entropy on target, so the generator is seeded from
-          |// PROPTEST_SEED: every run explores the same cases, and a failure is reproducible.
+          |// the seed patched in at image build time (PROPTEST_SEED; run-tests.cmd picks a new
+          |// one each run), or DEFAULT_PROPTEST_SEED without one.  Every line a property test
+          |// prints names the seed, so passing it back as PROPTEST_SEED reproduces the run.
           |// ---------------------------------------------------------------------------------
           |
           |const HEAP_SIZE: usize = 256 * 1024;
@@ -2094,7 +2113,19 @@ object StaticContent {
           |  }
           |}
           |
-          |pub const PROPTEST_SEED: [u8; 32] = *b"hamr-microkit-system-test-seed!!";
+          |pub const DEFAULT_PROPTEST_SEED: [u8; 32] = *b"hamr-microkit-system-test-seed!!";
+          |
+          |/// A seed as the 64 hex digits PROPTEST_SEED takes.
+          |struct SeedHex([u8; 32]);
+          |
+          |impl core::fmt::Display for SeedHex {
+          |  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+          |    for b in self.0.iter() {
+          |      write!(f, "{:02x}", b)?;
+          |    }
+          |    Ok(())
+          |  }
+          |}
           |
           |/// Runs `cases` generated cases of `test` over the strategy `make_strategy` builds,
           |/// shrinking on failure.  Returns whether every case passed; a failure's message and
@@ -2112,11 +2143,12 @@ object StaticContent {
           |  use proptest::test_runner::{Config, RngAlgorithm, TestError, TestRng, TestRunner};
           |  ensure_heap();
           |  let strategy = make_strategy();
-          |  let rng = TestRng::from_seed(RngAlgorithm::ChaCha, &PROPTEST_SEED);
+          |  let seed = selection::proptest_seed(DEFAULT_PROPTEST_SEED);
+          |  let rng = TestRng::from_seed(RngAlgorithm::ChaCha, &seed);
           |  let mut runner = TestRunner::new_with_rng(Config::with_cases(cases), rng);
           |  match runner.run(&strategy, test) {
           |    Ok(()) => {
-          |      line(format_args!("TEST | INFO  {} generated cases passed", cases));
+          |      line(format_args!("TEST | INFO  {} generated cases passed (PROPTEST_SEED={})", cases, SeedHex(seed)));
           |      true
           |    }
           |    Err(TestError::Fail(reason, minimal)) => {
@@ -2127,6 +2159,7 @@ object StaticContent {
           |        line(format_args!("TEST | INFO  {}", l));
           |      }
           |      line(format_args!("TEST | INFO  minimal failing input: {:?}", minimal));
+          |      line(format_args!("TEST | INFO  reproduce with PROPTEST_SEED={}", SeedHex(seed)));
           |      false
           |    }
           |    Err(TestError::Abort(reason)) => {
@@ -2226,8 +2259,9 @@ object StaticContent {
     * of generate(), because it has to name the controller's protection domain.
     *
     * Layout must match TestSelection in the controller's system_tests/selection.rs:
-    * filter: [u8; 256] then flags: u32, so 260 bytes.  An all-zero filter means run
-    * everything, which is what an unpatched image already contains.
+    * filter: [u8; 256], flags: u32, then seed: [u8; 32], so 292 bytes.  An all-zero filter
+    * means run everything, and an all-zero seed the built-in default, which is what an
+    * unpatched image already contains.
     */
   @pure def testSelection_py(controllerPdName: String, hasGumbo: B, hasSysverif: B): ST = {
     @strictpure def py(b: B): String = if (b) "True" else "False"
@@ -2242,8 +2276,10 @@ object StaticContent {
           |# "off" turns it off -- not tracked, and no scheduler park taken for it.  They
           |# go into the flags word after the filter: bit 0 GUMBO off, bit 1 SYSVERIF off.
           |# LIST_TESTS=1 sets bit 2: list the selected tests without running them (D17).
+          |# PROPTEST_SEED, 64 hex digits, seeds the property tests; empty keeps the
+          |# built-in default.
           |#######################################
-          |test_selection = bytearray(260)
+          |test_selection = bytearray(292)
           |try:
           |    _filter = tests_filter.encode()
           |except UnicodeEncodeError:
@@ -2270,6 +2306,16 @@ object StaticContent {
           |if _list == "1":
           |    _flags |= 0x4
           |test_selection[256:260] = _flags.to_bytes(4, "little")
+          |# PROPTEST_SEED: the property tests' seed (bytes 260-291; all zero keeps the default).
+          |_seed = os.environ.get("PROPTEST_SEED", "")
+          |if _seed != "":
+          |    try:
+          |        _seed_bytes = bytes.fromhex(_seed)
+          |    except ValueError:
+          |        _seed_bytes = b""
+          |    if len(_seed_bytes) != 32:
+          |        raise SystemExit(f"PROPTEST_SEED must be 64 hex digits, not '{_seed}'")
+          |    test_selection[260:292] = _seed_bytes
           |test_selection_path = output_dir + "/test_selection.data"
           |with open(test_selection_path, "wb+") as f:
           |    f.write(bytes(test_selection))
@@ -2327,6 +2373,15 @@ object StaticContent {
           |val filter: String = if (filterArgs.nonEmpty) filterArgs(0) else ""
           |val listArg: String = if (listOnly) "LIST_TESTS=1" else "LIST_TESTS=0"
           |
+          |// The property tests' seed: PROPTEST_SEED if set, else a fresh one each run, so every
+          |// run explores new cases.  It is printed below and in the property tests' own lines;
+          |// passing it back as PROPTEST_SEED reproduces the run.
+          |val seed: String = Os.env("PROPTEST_SEED") match {
+          |  case Some(s) => s
+          |  case _ =>
+          |    ops.StringOps(Os.proc(ISZ[String]("sh", "-c", "od -An -N32 -tx1 /dev/urandom | tr -dc 0-9a-f")).run().out).trim
+          |}
+          |
           |// make expands a `$$` in a variable's value, in the rebuild hash and in what it hands the
           |// build, and the hash is echoed, which reads `\`: a filter holding either would select
           |// something other than what was typed.  No test name can contain them.
@@ -2343,9 +2398,10 @@ object StaticContent {
           |  "MICROKIT_CONFIG=debug",
           |  "RUST_MAKE_TARGET=build-release",
           |  s"TESTS=$$filter",
-          |  listArg)
+          |  listArg,
+          |  s"PROPTEST_SEED=$$seed")
           |
-          |println(s"Building $$microkitDir (TESTS='$$filter', $$listArg) ...")
+          |println(s"Building $$microkitDir (TESTS='$$filter', $$listArg, PROPTEST_SEED=$$seed) ...")
           |val build = Os.proc(commonArgs).console.run()
           |if (!build.ok) {
           |  eprintln("Build failed")
@@ -2360,7 +2416,12 @@ object StaticContent {
           |// into `sed /DONE/q` does not work here -- with the guest idle there is no further
           |// write to raise SIGPIPE -- so the process group has to be killed explicitly.  The
           |// console writes a line a character at a time, so DONE can be seen before the rest of
-          |// its line is out: QEMU is given another second before it is stopped.
+          |// its line is out: QEMU is given another second before it is stopped.  Two failures
+          |// end the run early too, since nothing after them can reach DONE: a protection domain
+          |// that faults or panics before the schedule starts (it never reports ready, so the
+          |// test scheduler never hands over), and a panic in the test controller itself.  A
+          |// thread that faults or panics once the schedule runs is not one of them: its dispatch
+          |// trips the watchdog, which fails the test, and the run goes on to DONE.
           |val logFile: Os.Path = Os.temp()
           |
           |val driver: String =
@@ -2370,6 +2431,8 @@ object StaticContent {
           |      |waited=0
           |      |while kill -0 $$$$mpid 2>/dev/null; do
           |      |  grep -q 'TEST | DONE' "$$$$LOG" && { sleep 1; break; }
+          |      |  if ! grep -q 'All partitions ready' "$$$$LOG" && grep -q -e 'FAULT in user PD' -e 'PANIC' "$$$$LOG"; then sleep 1; break; fi
+          |      |  grep -q '${TestSchedulerPlugin.controllerName}.*PANIC' "$$$$LOG" && { sleep 1; break; }
           |      |  [ $$$$waited -ge $$$$TIMEOUT ] && break
           |      |  sleep 1
           |      |  waited=$$$$((waited + 1))
@@ -2432,6 +2495,14 @@ object StaticContent {
           |// Absence of evidence is failure.  A hang, a panicking protection domain, or a
           |// controller that never ran all produce a well-formed-looking log with no DONE.
           |if (!sawDone) {
+          |  val stops = ops.StringOps(normalized).split((c: C) => c == '\n').filter((l: String) =>
+          |    ops.StringOps(l).contains("FAULT in user PD") || ops.StringOps(l).contains("PANIC"))
+          |  if (stops.nonEmpty) {
+          |    eprintln("FAILED: a protection domain faulted or panicked, and the run produced no 'TEST | DONE' line:")
+          |    for (l <- stops) {
+          |      eprintln(s"  $$l")
+          |    }
+          |  }
           |  eprintln("FAILED: the run produced no 'TEST | DONE' line (hang, panic, or the test controller never ran)")
           |  eprintln("---- captured output ----")
           |  eprintln(out)
@@ -2770,6 +2841,22 @@ object StaticContent {
             |  ${(e._2, "\n")}
             |}"""
 
+    // A dispatch the controller rejects (D36) consumes nothing, so the cursors its check read
+    // on the thread's behalf -- its event inputs, which latch_received also reads -- are put
+    // back: the thread's next check sees what the thread will.  So are the cells
+    // latch_received wrote (below): the thread received nothing.
+    var markArms: Map[String, ISZ[ST]] = Map.empty
+    var rewindArms: Map[String, ISZ[ST]] = Map.empty
+    for (r <- regions if r.isEvent; reader <- r.readers
+         if isThread.contains(reader) && !(r.isProducerOutput && reader == r.readers(0))) {
+      val c = r.obsCursor(reader)
+      if (!externed.contains(s"mark:$c")) {
+        externed = externed + s"mark:$c"
+        externs = externs :+ st"fn test_obs_mark_$c();" :+ st"fn test_obs_rewind_$c();"
+      }
+      markArms = markArms + reader ~> (markArms.getOrElse(reader, ISZ()) :+ st"unsafe { test_obs_mark_$c() };")
+      rewindArms = rewindArms + reader ~> (rewindArms.getOrElse(reader, ISZ()) :+ st"unsafe { test_obs_rewind_$c() };")
+    }
     // What producers sent while initializing is the first frame's value, as it is for the
     // monitors, until they send again -- taken before the START checks, which may read it.
     val initFrameCalls: ISZ[ST] =
@@ -2805,9 +2892,14 @@ object StaticContent {
           val cell = s"recv_${acc}__${rg.reader}"
           if (!aliasedPairs.contains(s"${acc}__${rg.reader}")) {
             aliasedPairs = aliasedPairs + s"${acc}__${rg.reader}"
+            markArms = markArms + rg.reader ~> (markArms.getOrElse(rg.reader, ISZ()) :+
+              st"self.saved_$cell = self.$cell.clone();")
+            rewindArms = rewindArms + rg.reader ~> (rewindArms.getOrElse(rg.reader, ISZ()) :+
+              st"self.$cell = self.saved_$cell.clone();")
             if (r.isEvent) {
-              fields = fields :+ st"$cell: Stamped<${r.rustTypeName}>,"
-              fieldInits = fieldInits :+ st"$cell: Stamped::empty(),"
+              fields = fields :+ st"$cell: Stamped<${r.rustTypeName}>," :+
+                st"saved_$cell: Stamped<${r.rustTypeName}>,"
+              fieldInits = fieldInits :+ st"$cell: Stamped::empty()," :+ st"saved_$cell: Stamped::empty(),"
               val c = r.obsCursor(rg.reader)
               extern(r, c)
               latchArms = latchArms + rg.reader ~> (latchArms.getOrElse(rg.reader, ISZ()) :+
@@ -2817,8 +2909,9 @@ object StaticContent {
                     |  self.$cell = Stamped { at: tick(), value: if got { Some(v) } else { None }, injected: false };
                     |}""")
             } else {
-              fields = fields :+ st"$cell: Option<${r.rustTypeName}>,"
-              fieldInits = fieldInits :+ st"$cell: None,"
+              fields = fields :+ st"$cell: Option<${r.rustTypeName}>," :+
+                st"saved_$cell: Option<${r.rustTypeName}>,"
+              fieldInits = fieldInits :+ st"$cell: None," :+ st"saved_$cell: None,"
               latchArms = latchArms + rg.reader ~> (latchArms.getOrElse(rg.reader, ISZ()) :+
                 st"self.$cell = Some(self.${rg.underlying}());")
             }
@@ -2844,6 +2937,16 @@ object StaticContent {
                 |}"""
       }
     }
+    val markCursorArms: ISZ[ST] =
+      for (e <- markArms.entries) yield
+        st"""Thread::${e._1} => {
+            |  ${(e._2, "\n")}
+            |}"""
+    val rewindCursorArms: ISZ[ST] =
+      for (e <- rewindArms.entries) yield
+        st"""Thread::${e._1} => {
+            |  ${(e._2, "\n")}
+            |}"""
     val latchReceivedArms: ISZ[ST] =
       for (e <- latchArms.entries) yield
         st"""Thread::${e._1} => {
@@ -3013,10 +3116,7 @@ object StaticContent {
       initCalls = initCalls :+
         st"""if GUMBO_LIVE {
             |  REC.layer = Layer::Gumbo;
-            |  let c = &mut *addr_of_mut!(COMPONENTS);
-            |  // GUMBO is assume-guarantee: a dispatch whose assumption failed owes no guarantee (D24)
-            |  c.excuse_post_on_failed_pre = true;
-            |  c.on_init(&mut *addr_of_mut!(VIEW), &mut TestSink);
+            |  (&mut *addr_of_mut!(COMPONENTS)).on_init(&mut *addr_of_mut!(VIEW), &mut TestSink);
             |}"""
       completeCalls = completeCalls :+
         st"""if GUMBO_LIVE {
@@ -3029,6 +3129,11 @@ object StaticContent {
             |  (&mut *addr_of_mut!(COMPONENTS)).on_dispatch(t, &mut *addr_of_mut!(VIEW), &mut TestSink);
             |}"""
     }
+    // A dispatch whose CEP_Pre failed is rejected (D36) while the GUMBO checks are on:
+    // off, nothing is checked, so nothing is rejected either
+    val rejectCondition: ST =
+      if (info.hasComponentLayer) st"GUMBO_LIVE && GUMBO_ON && (&*addr_of_mut!(COMPONENTS)).pre_failed(t)"
+      else st"false"
     var sysMods: ISZ[ST] = ISZ()
     // Each composition completes on its own: its frame values are its own (focus_system,
     // frame_ended), so one composition ending its frame does not touch another's.
@@ -3114,6 +3219,11 @@ object StaticContent {
           |//! ```ignore
           |//! observe::expect(observe::Expect::CepPost(observe::Thread::some_thread));
           |//! ```
+          |//!
+          |//! A failed CEP_Pre is a violation too -- the sender did not meet the thread's contract --
+          |//! and the dispatch is rejected: the thread does not run, and its input is not pushed
+          |//! through (D36).  A robustness test that injects such an input on purpose declares it
+          |//! with `Expect::CepPre(thread)`; the dispatch is still rejected.
           |//!
           |//! `observe::take()` hands the test the violations recorded so far instead, for it to
           |//! assert on; taken violations do not fail the test.
@@ -3220,14 +3330,31 @@ object StaticContent {
           |  /// for the system assertions.
           |  fn producer_completed(&mut self, t: Thread) {
           |    match t {
-          |      ${(producerCompletedArms :+ st"_ => {}", "\n")}
+          |      ${(producerCompletedArms ++ ContractObserverPlugin.otherThreadsArm(producerCompletedArms, info.threads), "\n")}
           |    }
           |  }
           |
           |  /// `t` overran: skip every event its unobserved dispatch consumed or sent.
           |  fn drain_cursors(&mut self, t: Thread) {
           |    match t {
-          |      ${(drainCursorArms :+ st"_ => {}", "\n")}
+          |      ${(drainCursorArms ++ ContractObserverPlugin.otherThreadsArm(drainCursorArms, info.threads), "\n")}
+          |    }
+          |  }
+          |
+          |  /// `t` is about to be checked for dispatch: remember where the cursors read on its
+          |  /// behalf stand, and what it last received on each aliased input, so a rejected
+          |  /// dispatch can put them back (`rewind_cursors`).
+          |  fn mark_cursors(&mut self, t: Thread) {
+          |    match t {
+          |      ${(markCursorArms ++ ContractObserverPlugin.otherThreadsArm(markCursorArms, info.threads), "\n")}
+          |    }
+          |  }
+          |
+          |  /// `t`'s dispatch was rejected (D36): it consumed nothing, so neither have its checks,
+          |  /// and it received nothing a composition could see.
+          |  fn rewind_cursors(&mut self, t: Thread) {
+          |    match t {
+          |      ${(rewindCursorArms ++ ContractObserverPlugin.otherThreadsArm(rewindCursorArms, info.threads), "\n")}
           |    }
           |  }
           |
@@ -3235,7 +3362,7 @@ object StaticContent {
           |  /// composition aliases (see ContractObserverPlugin.ReceivedGetter).
           |  fn latch_received(&mut self, t: Thread) {
           |    match t {
-          |      ${(latchReceivedArms :+ st"_ => {}", "\n")}
+          |      ${(latchReceivedArms ++ ContractObserverPlugin.otherThreadsArm(latchReceivedArms, info.threads), "\n")}
           |    }
           |  }
           |
@@ -3253,8 +3380,7 @@ object StaticContent {
           |  /// carry them from here on.
           |  fn clear_pending(&mut self, t: Thread) {
           |    match t {
-          |      ${(clears, "\n")}
-          |      _ => {}
+          |      ${(clears ++ ContractObserverPlugin.otherThreadsArm(clears, info.threads), "\n")}
           |    }
           |  }
           |}
@@ -3289,6 +3415,7 @@ object StaticContent {
           |#[derive(Clone, Copy, PartialEq, Eq, Debug)]
           |pub enum Kind {
           |  IepPost,
+          |  CepPre,
           |  CepPost,
           |  SysAssert,
           |  Schedule,
@@ -3298,7 +3425,7 @@ object StaticContent {
           |#[derive(Clone, Copy, Debug)]
           |pub struct Violation {
           |  pub kind: Kind,
-          |  /// The thread whose guarantee was broken (IepPost, CepPost).
+          |  /// The thread whose contract was broken (IepPost, CepPre, CepPost).
           |  pub thread: Option<Thread>,
           |  /// The composition, property and point of a broken system assertion (SysAssert).
           |  pub composition: &'static str,
@@ -3314,6 +3441,9 @@ object StaticContent {
           |/// through DONE's init=.)
           |#[derive(Clone, Copy, Debug)]
           |pub enum Expect {
+          |  /// A thread's CEP_Pre: a test that injects an input outside the thread's contract on
+          |  /// purpose (a robustness test).  The dispatch is still rejected.
+          |  CepPre(Thread),
           |  CepPost(Thread),
           |  /// (composition, property), named by the constants in [`sys`].
           |  SysAssert(&'static str, &'static str),
@@ -3325,7 +3455,7 @@ object StaticContent {
           |  fn layer_on(&self) -> bool {
           |    unsafe {
           |      match *self {
-          |        Expect::CepPost(_) => GUMBO_ON,
+          |        Expect::CepPre(_) | Expect::CepPost(_) => GUMBO_ON,
           |        Expect::SysAssert(_, _) => SYSVERIF_ON,
           |      }
           |    }
@@ -3333,13 +3463,14 @@ object StaticContent {
           |
           |  fn layer(&self) -> &'static str {
           |    match *self {
-          |      Expect::CepPost(_) => "GUMBO",
+          |      Expect::CepPre(_) | Expect::CepPost(_) => "GUMBO",
           |      Expect::SysAssert(_, _) => "system-verification",
           |    }
           |  }
           |
           |  fn matches(&self, v: &Violation) -> bool {
           |    match *self {
+          |      Expect::CepPre(t) => v.kind == Kind::CepPre && v.thread == Some(t),
           |      Expect::CepPost(t) => v.kind == Kind::CepPost && v.thread == Some(t),
           |      Expect::SysAssert(c, p) => v.kind == Kind::SysAssert && v.composition == c && v.property == p,
           |    }
@@ -3506,9 +3637,10 @@ object StaticContent {
           |  }
           |}
           |
-          |/// Reports what the checks find as test output.  IEP_Post, CEP_Post and system
-          |/// assertions are violations; a failed CEP_Pre is information -- the dispatch's
-          |/// assumption did not hold, so it owes no guarantee (D24).
+          |/// Reports what the checks find as test output.  IEP_Post, CEP_Pre, CEP_Post and system
+          |/// assertions are violations.  A failed CEP_Pre means the sender did not meet the
+          |/// thread's contract; that dispatch is rejected (on_dispatch), so it owes no guarantee
+          |/// either (D36).
           |pub struct TestSink;
           |
           |impl ViolationSink for TestSink {
@@ -3524,8 +3656,10 @@ object StaticContent {
           |        }
           |      }
           |      Event::CepPreViolation { thread, pre } => {
-          |        harness::line(format_args!("TEST | INFO  {} assumption not met (CEP_Pre) {}", thread, Position));
-          |        harness::line(format_args!("TEST | INFO  {} pre: {:?}", thread, pre));
+          |        let v = new_violation(Kind::CepPre, thread_named(thread), "", "");
+          |        if violation(v, format_args!("CEP_Pre {} {}", thread, Position)) {
+          |          harness::line(format_args!("TEST | INFO  {} pre: {:?}", thread, pre));
+          |        }
           |      }
           |      Event::CepPostViolation { thread, pre, post } => {
           |        let v = new_violation(Kind::CepPost, thread_named(thread), "", "");
@@ -3536,9 +3670,6 @@ object StaticContent {
           |      }
           |      // no saved pre-state: the thread's first completion observed, or after a resync
           |      Event::CepPostSkipped { .. } => {}
-          |      Event::CepPostExcused { thread } => {
-          |        harness::line(format_args!("TEST | INFO  {} CEP_Post not checked: its assumption was not met", thread));
-          |      }
           |      Event::CheckSkipped { thread, check } => {
           |        harness::line(format_args!("TEST | INFO  {} {} not checked: a value it reads was never written", thread, check));
           |      }
@@ -3635,17 +3766,26 @@ object StaticContent {
           |  }
           |}
           |
-          |/// The thread over channel `ch` is about to be dispatched at (`hp`, `slot`).
-          |pub(crate) fn on_dispatch(ch: u32, hp: u32, slot: u32) {
+          |/// The thread over channel `ch` is about to be dispatched at (`hp`, `slot`).  Returns
+          |/// whether the dispatch is rejected: its CEP_Pre failed while the GUMBO checks are on,
+          |/// so the sender did not meet the thread's contract and the input is not pushed through
+          |/// (D36).  A rejected dispatch consumes nothing, its checks included.
+          |pub(crate) fn on_dispatch(ch: u32, hp: u32, slot: u32) -> bool {
           |  if let Some(t) = thread_of(ch) {
           |    unsafe {
-          |      DISPATCHED_HP[thread_index(t)] = Some(hp);
           |      REC.hp = hp;
           |      REC.slot = slot;
+          |      (&mut *addr_of_mut!(VIEW)).mark_cursors(t);
           |      (&mut *addr_of_mut!(VIEW)).latch_received(t);
           |      ${(dispatchCalls, "\n")}
+          |      if $rejectCondition {
+          |        (&mut *addr_of_mut!(VIEW)).rewind_cursors(t);
+          |        return true;
+          |      }
+          |      DISPATCHED_HP[thread_index(t)] = Some(hp);
           |    }
           |  }
+          |  false
           |}
           |
           |/// The hyperperiod in which the system layers lost their place in the workflow net --
@@ -3792,8 +3932,9 @@ object StaticContent {
           |}
           |
           |/// The scheduler is parked before dispatching `st.next_ch` at (hyperperiod, slot): the
-          |/// dispatch before it, if any, has completed.
-          |pub(crate) fn at_park(st: &api::TestStatus) {
+          |/// dispatch before it, if any, has completed.  Returns whether the parked dispatch is
+          |/// rejected (see on_dispatch), which the scheduler then passes over.
+          |pub(crate) fn at_park(st: &api::TestStatus) -> bool {
           |  account_completion(st);
           |  roll_frame(st);
           |  unsafe {
@@ -3814,8 +3955,22 @@ object StaticContent {
           |      }
           |    }
           |  }
-          |  on_dispatch(st.next_ch, st.hyperperiod_num, st.current_timeslice);
+          |  if on_dispatch(st.next_ch, st.hyperperiod_num, st.current_timeslice) {
+          |    unsafe {
+          |      // The thread does not run, so the workflow net's transition for it never fires:
+          |      // the system layers resume with the next hyperperiod, as after an overrun.
+          |      let suspend = ${if (info.compositionIds.nonEmpty) "SYSVERIF_LIVE && SYS_SUSPENDED.is_none()" else "false"};
+          |      if suspend {
+          |        SYS_SUSPENDED = Some((st.hyperperiod_num, false));
+          |      }
+          |      harness::line(format_args!("TEST | INFO  channel {} not dispatched at hp={} slot={}: its inputs did not meet its CEP_Pre{}",
+          |        st.next_ch, st.hyperperiod_num, st.current_timeslice,
+          |        if suspend { "; system assertions suspended until the next frame" } else { "" }));
+          |    }
+          |    return true;
+          |  }
           |  unsafe { IN_FLIGHT = Some((st.next_ch, st.hyperperiod_num, st.current_timeslice)); }
+          |  false
           |}
           |
           |/// A command has completed, so its last dispatch has too -- unless it overran, in which
@@ -3866,8 +4021,8 @@ object StaticContent {
           |  }
           |}
           |
-          |/// Closes the test's recording window, and fails the test for violations it did not
-          |/// expect or take, and for expectations never met.
+          |/// Closes the test's recording window, fails the test for violations it did not expect
+          |/// or take and for expectations never met, and restores the build's switches.
           |pub(crate) fn end_test() {
           |  unsafe {
           |    REC.phase = Phase::Between;
@@ -3883,6 +4038,10 @@ object StaticContent {
           |    if REC.unhandled > 0 {
           |      harness::fail_with(format_args!("contract violation ({} in this test)", REC.unhandled));
           |    }
+          |    // the runner's normalization before the next test checks, and so rejects, as the
+          |    // build says, not as this test left the switches
+          |    GUMBO_ON = GUMBO_LIVE;
+          |    SYSVERIF_ON = SYSVERIF_LIVE;
           |  }
           |}
           |
@@ -3958,6 +4117,9 @@ object StaticContent {
         |export MSD := $$(TOP_DIR)/$v.meta.py
         |export SCHEDULER_C := $$(TOP_DIR)/scheduler/src/$v.scheduler.c
         |export SCHEDULER_CONFIG_HEADERS := $$(TOP_DIR)/scheduler/include/$v.user_config.h
+        |# not the monitor variants' fault answer: here a faulted thread's dispatch must trip the
+        |# watchdog and fail the test
+        |export MON_CFLAGS :=
         |# the test controller is built only for this variant
         |export EXTRA_IMAGES := ${TestSchedulerPlugin.controllerName}_process_${TestSchedulerPlugin.controllerName}_thread.elf ${TestSchedulerPlugin.controllerName}_process_${TestSchedulerPlugin.controllerName}_thread_MON.elf"""
 
@@ -4056,6 +4218,10 @@ object StaticContent {
         |    // Echoes test_status.obs_seq once the controller has checked a park; that is
         |    // what lets the parked dispatch go ahead.
         |    uint32_t obs_ack;
+        |    // Equal to obs_ack when the controller rejects the parked dispatch: the thread's
+        |    // inputs failed its CEP_Pre, so it is not dispatched and the slot passes (D36).
+        |    // Stored before obs_ack.
+        |    uint32_t obs_skip;
         |} test_command_t;
         |
         |// Written by the scheduler, read by the controller.  ack_seq is stored last and
@@ -4454,6 +4620,12 @@ object StaticContent {
         |            }
         |            __atomic_thread_fence(__ATOMIC_ACQUIRE);
         |            obs_pending = false;
+        |            if (test_cmd->obs_skip == obs_seq) {
+        |                // rejected: the slot passes without dispatching its thread, so nothing
+        |                // completes and completed_seq stays where it is
+        |                advance_position();
+        |                continue;
+        |            }
         |        }
         |
         |        last_dispatched_ch = ch;

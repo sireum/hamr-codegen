@@ -31,6 +31,23 @@ object GumboXRustPlugin {
 
   @strictpure def putGumboXContributions(contributions: GumboXContributions, store: Store): Store = store + KEY_GumboXPlugin ~> contributions
 
+  /** Whether the plugin has anything to generate (its canHandle trigger).  Meaningful once
+    * GumboRustPlugin has recorded the threads and datatypes with contracts. */
+  @strictpure def hasWork(symbolTable: SymbolTable, store: Store): B =
+    GumboRustPlugin.getThreadsWithContracts(store).nonEmpty ||
+      GumboRustPlugin.getCThreadsWithContracts(store).nonEmpty ||
+      GumboRustPlugin.getDatatypesWithContracts(store).nonEmpty ||
+      GumboRustPlugin.getGclLibraryAnnexes(symbolTable).nonEmpty
+
+  /** The contributions once the plugin has run, or none -- an empty set -- once it is known
+    * that it never will: with no contracts anywhere it stores nothing, and a consumer that
+    * also serves compositions (ContractObserverPlugin) must not wait for it forever. */
+  @strictpure def contractsOrNone(symbolTable: SymbolTable, store: Store): Option[GumboXContributions] =
+    if (getGumboXContributions(store).nonEmpty) getGumboXContributions(store)
+    else if (GumboRustPlugin.getGumboRustContributions(store).nonEmpty && !hasWork(symbolTable, store))
+      Some(DefaultGumboXContributions(Map.empty, Map.empty))
+    else None()
+
   @pure def generateGumboxModuleContent(contribs: GumboXComponentContributions): ST = {
     var entries: ISZ[ST] = ISZ()
 
@@ -204,10 +221,7 @@ object GumboXComputeContributions {
       CRustTestingPlugin.getCRustTestingContributions(store).nonEmpty &&
       // gumbo rust plugin provides datatype invariant rust methods
       GumboRustPlugin.getGumboRustContributions(store).nonEmpty &&
-      (GumboRustPlugin.getThreadsWithContracts(store).nonEmpty ||
-        GumboRustPlugin.getCThreadsWithContracts(store).nonEmpty ||
-        GumboRustPlugin.getDatatypesWithContracts(store).nonEmpty ||
-        GumboRustPlugin.getGclLibraryAnnexes(symbolTable).nonEmpty)
+      GumboXRustPlugin.hasWork(symbolTable, store)
 
   @pure override def canFinalizeMicrokit(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): B = {
     return (

@@ -82,10 +82,10 @@ object VmMakefileTemplate {
           |${TAB}-MP \
           |${TAB}-target $$(TARGET)
           |
-          |CHECK_FLAGS_BOARD_MD5:=.board_cflags-$$(shell echo -- $$(CFLAGS) $$(MICROKIT_BOARD) $$(MICROKIT_CONFIG) | shasum | sed 's/ *-//')
+          |CHECK_FLAGS_BOARD_MD5:=.hamr_flags-$$(shell echo -- $$(CFLAGS) $$(MICROKIT_BOARD) $$(MICROKIT_CONFIG) | shasum | sed 's/ *-//')
           |
           |$$(CHECK_FLAGS_BOARD_MD5):
-          |${TAB}-rm -f .board_cflags-*
+          |${TAB}-rm -f .hamr_flags-*
           |${TAB}touch $$@
           |
           |${threadId}_INCLUDE = -I$$(${threadId}_DIR)/include

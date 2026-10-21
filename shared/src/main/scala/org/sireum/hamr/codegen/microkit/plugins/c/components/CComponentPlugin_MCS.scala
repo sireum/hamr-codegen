@@ -315,6 +315,19 @@ import org.sireum.message.Reporter
             |void partition_init();
             |void partition_startup();
             |
+            |#if defined(HAMR_MON_FAULTED_COMPLETES)
+            |// Runtime-monitoring variants only: their scheduler counts each dispatch until the thread
+            |// notifies back.  A faulted thread never will, so this monitor answers for it -- once for
+            |// each dispatch still in flight when it faulted, and at once for every later one, which
+            |// it completes doing nothing -- and the monitors keep checking the other threads.
+            |static int faulted = 0;
+            |// dispatches forwarded and not yet completed: at most 2, as the scheduler counts them
+            |static unsigned in_flight = 0;
+            |// whether the thread has signalled that it initialized: the schedule starts only once
+            |// every thread has
+            |static int ready = 0;
+            |#endif
+            |
             |void init(void) {
             |  printf("%s | INIT!\n", microkit_name);
             |  partition_init();
@@ -323,11 +336,28 @@ import org.sireum.message.Reporter
             |void notified(microkit_channel channel) {
             |  switch (channel) {
             |    case SCHEDULER_CH:
+            |#if defined(HAMR_MON_FAULTED_COMPLETES)
+            |      if (faulted) {
+            |        microkit_notify(SCHEDULER_CH);
+            |        break;
+            |      }
+            |      if (in_flight < 2) {
+            |        in_flight++;
+            |      }
+            |#endif
             |      partition_startup();
             |      microkit_notify(USER_PD);
             |      break;
             |    case USER_PD:
-            |      // Signal only used during initialisation (thread signals it has finished init)
+            |      // The thread signals once it has initialized, and again each time it completes a
+            |      // dispatch: the scheduler's start handshake, then its completion notify-back
+            |#if defined(HAMR_MON_FAULTED_COMPLETES)
+            |      if (!ready) {
+            |        ready = 1;
+            |      } else if (in_flight > 0) {
+            |        in_flight--;
+            |      }
+            |#endif
             |      microkit_notify(SCHEDULER_CH);
             |      break;
             |  }
@@ -348,7 +378,8 @@ import org.sireum.message.Reporter
             |// (which identifies the wrapped thread) and decoded fault details, then leave the
             |// partition suspended: returning seL4_False does not reply to the fault, so the
             |// faulted thread stays stopped while the rest of the schedule keeps running (the
-            |// scheduler handshake above is a non-blocking signal).
+            |// scheduler handshake above is a non-blocking signal).  In the runtime-monitoring
+            |// variants this monitor then also answers the thread's dispatches (see faulted above).
             |seL4_Bool fault(microkit_child child, microkit_msginfo msginfo, microkit_msginfo *reply_msginfo) {
             |  (void) reply_msginfo;
             |  seL4_Word label = microkit_msginfo_get_label(msginfo);
@@ -375,6 +406,20 @@ import org.sireum.message.Reporter
             |             seL4_GetMR(seL4_UnknownSyscall_FaultIP), seL4_GetMR(seL4_UnknownSyscall_Syscall));
             |      break;
             |  }
+            |#if defined(HAMR_MON_FAULTED_COMPLETES)
+            |  // a thread that faulted while initializing never says so: say it for it, or the schedule
+            |  // never starts
+            |  if (!ready) {
+            |    ready = 1;
+            |    microkit_notify(SCHEDULER_CH);
+            |  }
+            |  // the faulted dispatch, and one pending behind it, will never complete
+            |  faulted = 1;
+            |  while (in_flight > 0) {
+            |    in_flight--;
+            |    microkit_notify(SCHEDULER_CH);
+            |  }
+            |#endif
             |  return seL4_False;
             |}
             |"""

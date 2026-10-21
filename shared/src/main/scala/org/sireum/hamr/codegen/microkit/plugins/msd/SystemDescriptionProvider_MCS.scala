@@ -943,13 +943,13 @@ object StaticContent {
         |        } else {
         |            next_partition();
         |        }
-        |    } else if ((part_ready_check & (1 << ch)) != 0) { // valid channel belonging to  partition
-        |        if ((part_ready & (1 << ch)) == 0) {
+        |    } else if ((part_ready_check & (1ULL << ch)) != 0) { // valid channel belonging to  partition
+        |        if ((part_ready & (1ULL << ch)) == 0) {
         |            // Channel not yet marked ready — this is the partition's first notification
         |            // during the initialisation handshake (before the schedule starts running).
         |
         |            sddf_dprintf("SCHEDULER | Marking partition %d as ready\n", ch);
-        |            part_ready |= (1 << ch);  // Set this channel's bit in the readiness bitstring
+        |            part_ready |= (1ULL << ch);  // Set this channel's bit in the readiness bitstring
         |
         |            if (part_ready == part_ready_check) {  // All expected partitions have reported ready
         |                sddf_dprintf("SCHEDULER | All partitions ready, beginning schedule\n");
@@ -971,8 +971,8 @@ object StaticContent {
         |
         |    scheduler_running = false;
         |
-        |    part_ready |= (1 << 0); // ch 0 is always 'ready'
-        |    part_ready_check |= (1 << 0); // ch 0 is always 'ready' -- keeps padding optional
+        |    part_ready |= (1ULL << 0); // ch 0 is always 'ready'
+        |    part_ready_check |= (1ULL << 0); // ch 0 is always 'ready' -- keeps padding optional
         |
         |    // Build a bitmask of all channels that must report ready before the schedule
         |    // can start. Each bit position corresponds to a channel ID. During the
@@ -980,7 +980,7 @@ object StaticContent {
         |    // accumulates those bits and is compared against this mask to detect when
         |    // every scheduled partition has checked in.
         |    for (int i = 0; i < user_schedule.num_timeslices; i++) {
-        |        part_ready_check |= (1 << user_schedule.timeslice_ch[i]);
+        |        part_ready_check |= (1ULL << user_schedule.timeslice_ch[i]);
         |    }
         |}
         |"""

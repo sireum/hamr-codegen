@@ -396,6 +396,22 @@ import org.sireum.message.Reporter
             |      microkit_notify(PORT_PACER);
             |      break;
             |  }
+            |}
+            |
+            |// This monitor is the parent protection domain of its thread, so the kernel delivers the
+            |// thread's faults -- a Rust panic traps into one -- here.  Report it with this monitor's
+            |// name (which identifies the thread) and leave the thread suspended: returning seL4_False
+            |// does not reply to the fault.  Without this entry point libmicrokit's default would
+            |// fault this monitor too, and the report would name it instead of its thread.
+            |seL4_Bool fault(microkit_child child, microkit_msginfo msginfo, microkit_msginfo *reply_msginfo) {
+            |  (void) reply_msginfo;
+            |  microkit_dbg_puts(microkit_name);
+            |  microkit_dbg_puts(" | FAULT in user PD (child ");
+            |  microkit_dbg_put32(child);
+            |  microkit_dbg_puts("): seL4 fault label ");
+            |  microkit_dbg_put32(microkit_msginfo_get_label(msginfo));
+            |  microkit_dbg_puts("\n");
+            |  return seL4_False;
             |}"""
 
       val cMonitorPath = s"${options.sel4OutputDir.get}/${mk.relativePathSrcDir}/${mk.monImplFilename}"
