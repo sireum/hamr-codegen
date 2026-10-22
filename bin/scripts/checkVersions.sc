@@ -1138,7 +1138,7 @@ var verusCratesDrifted = F
   }
 
   // Verus refuses to run against any Z3 but the one it was released with, and not
-  // every release asset bundles it (0.2026.09.06's do not), so the z3 pin -- which
+  // every release asset bundles it (0.2026.09.06's did not), so the z3 pin -- which
   // provers-env installs when the asset has none -- must be that version.
   // tools/get-z3.sh is where Verus records it.
   if (!microkitVers.contains("z3")) {
