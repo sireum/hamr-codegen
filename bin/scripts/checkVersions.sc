@@ -700,15 +700,122 @@ var proversMisaligned = F
   }
 }
 
+// The text of an HTML page with its tags dropped.  The documentation sites
+// syntax-highlight their code blocks, which splits e.g. sdfgen==0.35.0 across three
+// spans, so what a reader sees is only found once the tags are gone.
+@pure def stripTags(html: String): String = {
+  val cis = conversions.String.toCis(html)
+  val buf = MSZ.create(cis.size, ' ')
+  var n: Z = 0
+  var inTag = F
+  for (c <- cis) {
+    if (c == '<') {
+      inTag = T
+    } else if (c == '>' && inTag) {
+      inTag = F
+    } else if (!inTag) {
+      buf(n) = c
+      n = n + 1
+    }
+  }
+  return ops.StringOps(conversions.String.fromCms(buf)).substring(0, n)
+}
+
+// The distinct values text shows right after prefix, in order: the longest run of
+// digits and dots, and of hex letters too when hex is set (a commit, or a version
+// ending in one).  A run that ends a sentence would otherwise keep its full stop.
+@pure def valuesAfter(text: String, prefix: String, hex: B): ISZ[String] = {
+  val textOps = ops.StringOps(text)
+  val cis = conversions.String.toCis(text)
+  var r = ISZ[String]()
+  var i = textOps.stringIndexOf(prefix)
+  while (i >= 0) {
+    val start = i + prefix.size
+    var j = start
+    while (j < cis.size && (('0' <= cis(j) && cis(j) <= '9') || cis(j) == '.' ||
+      (hex && 'a' <= cis(j) && cis(j) <= 'f'))) {
+      j = j + 1
+    }
+    while (j > start && cis(j - 1) == '.') {
+      j = j - 1
+    }
+    if (j > start) {
+      val v = textOps.substring(start, j)
+      if (!ops.ISZOps(r).contains(v)) {
+        r = r :+ v
+      }
+    }
+    i = textOps.stringIndexOfFrom(prefix, start)
+  }
+  return r
+}
+
+// The distinct Sireum release tags text shows -- 4.<yyyymmdd>.<commit>, e.g.
+// 4.20261021.b1efad5d -- so that neither dev nor master, nor a version such as
+// Cosmopolitan's 4.0.2, is mistaken for one.
+@pure def releaseTags(text: String): ISZ[String] = {
+  @strictpure def isTag(v: String): B = {
+    val parts = ops.StringOps(v).split((c: C) => c == '.')
+    parts.size == 2 && parts(0).size == 8 && parts(1).size >= 7 &&
+      ops.ISZOps(conversions.String.toCis(parts(0))).forall((c: C) => '0' <= c && c <= '9')
+  }
+  return for (v <- valuesAfter(text, "4.", T) if isTag(v)) yield s"4.$v"
+}
+
+// The release GitHub marks as kekinian's latest, which both documentation sites
+// show as the one to install.  The API rather than latestGitHubRelease's atom feed:
+// the feed lists the moving dev pre-release too, and titles each entry with the
+// release's name, not its tag.  None() when it could not be fetched.
+def fetchLatestSireumRelease(): Option[String] = {
+  val temp = Os.tempFix("kekinian-latest-", ".json")
+  temp.removeOnExit()
+  var tag: String = ""
+  if (githubApiDownload(temp, "https://api.github.com/repos/sireum/kekinian/releases/latest")) {
+    for (l <- temp.readLines if tag == "") {
+      tag = jsonField(l, "tag_name")
+    }
+  }
+  temp.remove()
+  if (tag == "") {
+    exclamations()
+    println("WARNING: could not look up kekinian's latest release, so the release the documentation shows was not checked")
+    exclamations()
+    return None()
+  }
+  return Some(tag)
+}
+val latestSireumRelease: Option[String] = fetchLatestSireumRelease()
+
+// a line saying what is wrong with the release tags a page shows, if anything
+def releaseTagProblem(text: String, placeholder: String): Option[ST] = {
+  latestSireumRelease match {
+    case Some(latest) =>
+      if (ops.StringOps(text).contains(placeholder)) {
+        return Some(st"Sireum release: the page shows the placeholder $placeholder; publish.sh could not resolve it")
+      }
+      val tags = releaseTags(text)
+      if (tags.isEmpty) {
+        // reworded on the page, so this check has gone blind to it
+        return Some(st"Sireum release: the page no longer shows a release tag; update this check")
+      } else if (tags != ISZ(latest)) {
+        return Some(st"the latest Sireum release is $latest, but the page shows ${(tags, ", ")}")
+      }
+      return None()
+    case _ => return None()
+  }
+}
+
 var installationPageStale = F
 
 { // The HAMR installation page tells readers which Verus, Rust toolchain, Microkit
-  // SDK, sdfgen and LionsOS to install.  Those are not hand-written: website-hamr's
-  // publish.sh fills them in from this file (Rust from the Verus release's
-  // rust-toolchain.toml, which the Verus check below holds rust-channel to), so the
-  // page cannot disagree with the pins it was published from.  But it is only as
-  // current as its last publish, and nothing republishes it when a pin moves -- so
-  // what the live page shows is compared with the pins here.
+  // SDK, sdfgen and LionsOS to install, and gives the latest Sireum release as its
+  // example of a numbered one.  None of it is hand-written: website-hamr's
+  // publish.sh fills the tools in from this file (Rust from the Verus release's
+  // rust-toolchain.toml, which the Verus check below holds rust-channel to) and the
+  // release from GitHub, so the page cannot disagree with what it was published
+  // from.  But it is only as current as its last publish, and nothing republishes it
+  // when a pin moves or a release is cut -- so what the live page shows is compared
+  // with the pins here and with the latest release.
   val installationUrl = "https://hamr.sireum.org/hamr-doc/installation/"
   // codegen's key; the text the page puts right before the value; whether the value
   // may contain hex letters (a commit, or Verus's trailing commit) rather than only
@@ -728,53 +835,8 @@ var installationPageStale = F
     println(s"WARNING: could not fetch $installationUrl, so the versions it documents were not checked")
     exclamations()
   } else {
-    // Tags are dropped first: the page's code blocks are syntax-highlighted, which
-    // splits e.g. sdfgen==0.35.0 across three spans.
-    val html = conversions.String.toCis(temp.read)
+    val text = stripTags(temp.read)
     temp.remove()
-    val buf = MSZ.create(html.size, ' ')
-    var n: Z = 0
-    var inTag = F
-    for (c <- html) {
-      if (c == '<') {
-        inTag = T
-      } else if (c == '>' && inTag) {
-        inTag = F
-      } else if (!inTag) {
-        buf(n) = c
-        n = n + 1
-      }
-    }
-    val text = ops.StringOps(conversions.String.fromCms(buf)).substring(0, n)
-    val textOps = ops.StringOps(text)
-    val textCis = conversions.String.toCis(text)
-
-    // the distinct values the page shows right after prefix, in page order
-    def valuesAfter(prefix: String, hex: B): ISZ[String] = {
-      var r = ISZ[String]()
-      var i = textOps.stringIndexOf(prefix)
-      while (i >= 0) {
-        val start = i + prefix.size
-        var j = start
-        while (j < textCis.size && (('0' <= textCis(j) && textCis(j) <= '9') || textCis(j) == '.' ||
-          (hex && 'a' <= textCis(j) && textCis(j) <= 'f'))) {
-          j = j + 1
-        }
-        // a value that ends a sentence would otherwise keep its full stop
-        while (j > start && textCis(j - 1) == '.') {
-          j = j - 1
-        }
-        if (j > start) {
-          val v = textOps.substring(start, j)
-          if (!ops.ISZOps(r).contains(v)) {
-            r = r :+ v
-          }
-        }
-        i = textOps.stringIndexOfFrom(prefix, start)
-      }
-      return r
-    }
-
     val microkitVers = microkitVersionsP.properties
     var stale = ISZ[ST]()
     for (s <- shown) {
@@ -783,10 +845,10 @@ var installationPageStale = F
         halt(s"$microkitVersionsP doesn't contain $key")
       }
       val ours = microkitVers.get(key).get
-      if (textOps.contains(s._4)) {
+      if (ops.StringOps(text).contains(s._4)) {
         stale = stale :+ st"$key: the page shows the placeholder ${s._4}; publish.sh could not resolve it"
       } else {
-        val values = valuesAfter(s._2, s._3)
+        val values = valuesAfter(text, s._2, s._3)
         if (values.isEmpty) {
           // reworded on the page, so this check has gone blind to that tool
           stale = stale :+ st"""$key: the page no longer shows a version after "${s._2}"; update this check"""
@@ -795,11 +857,16 @@ var installationPageStale = F
         }
       }
     }
+    releaseTagProblem(text, "SIREUM-RELEASE-VERSION") match {
+      case Some(p) => stale = stale :+ p
+      case _ =>
+    }
 
     if (stale.nonEmpty) {
       exclamations()
       println(
-        st"""WARNING: the HAMR installation page documents different versions than codegen pins:
+        st"""WARNING: the HAMR installation page documents different versions than codegen pins
+            |or than the latest Sireum release:
             |
             |  ${(stale, "\n")}
             |
@@ -809,6 +876,67 @@ var installationPageStale = F
             |  ${microkitVersionsP.toUri}""".render)
       exclamations()
       installationPageStale = T
+    }
+  }
+}
+
+var sireumOrgStale = F
+
+{ // sireum.org's getting-started page gives the latest release's install commands.
+  // Its tag is not hand-written either -- website-sireum's publish.sh replaces the
+  // XX.YY.ZZ placeholder with the release GitHub marks as latest -- but the page
+  // keeps the tag it was published with until it is published again, so a release
+  // cut since then leaves it pointing at the previous one.
+  //
+  // Only the two "Latest Release" sections are compared: the binary distributions
+  // (#latest-release-bin) and the installer scripts (#latest-release), which take
+  // the same placeholder.  The rest of the page pins releases deliberately -- a
+  // course's section names the one its students use.
+  val gettingStartedUrl = "https://sireum.org/getting-started/"
+  val sections: ISZ[String] = ISZ("latest-release-bin", "latest-release")
+  if (latestSireumRelease.nonEmpty) {
+    val temp = Os.tempFix("sireum-getting-started-", ".html")
+    temp.removeOnExit()
+    if (!temp.downloadFrom(gettingStartedUrl)) {
+      exclamations()
+      println(s"WARNING: could not fetch $gettingStartedUrl, so the release it documents was not checked")
+      exclamations()
+    } else {
+      val html = temp.read
+      temp.remove()
+      val htmlOps = ops.StringOps(html)
+      var stale = ISZ[ST]()
+      for (id <- sections) {
+        // A section runs from its heading to the next heading of the same or a
+        // higher level; both sections are h5, and their subsections h6.
+        val i = htmlOps.stringIndexOf(s"""id="$id"""")
+        if (i < 0) {
+          stale = stale :+ st"#$id: the page no longer has this section; update this check"
+        } else {
+          val ends: ISZ[Z] = for (h <- ISZ[String]("<h5", "<h4", "<h3", "<h2")) yield htmlOps.stringIndexOfFrom(h, i)
+          var end = html.size
+          for (e <- ends if e >= 0 && e < end) {
+            end = e
+          }
+          releaseTagProblem(stripTags(htmlOps.substring(i, end)), "XX.YY.ZZ") match {
+            case Some(p) => stale = stale :+ st"#$id: $p"
+            case _ =>
+          }
+        }
+      }
+
+      if (stale.nonEmpty) {
+        exclamations()
+        println(
+          st"""WARNING: sireum.org's getting-started page does not show the latest Sireum release:
+              |
+              |  ${(stale, "\n")}
+              |
+              |  Republish sireum.org with website-sireum's publish.sh.
+              |  $gettingStartedUrl""".render)
+        exclamations()
+        sireumOrgStale = T
+      }
     }
   }
 }
@@ -1348,8 +1476,8 @@ if (changesDetected && !noUpdate) {
 // meant that test could never fail on the versions it exists to watch.
 if (changesDetected || proversMisaligned || microkitOutdated || cratesOutdated || verusCratesDrifted || vestMisaligned ||
     vestVerusMoved || lionsosDrifted || microkitKeysUnchecked || sbtAssemblyUnchecked || artBehind ||
-    installationPageStale) {
-  Os.exit(1) // versions have changed, or drifted from provers-env, the installation page or the latest upstream releases
+    installationPageStale || sireumOrgStale) {
+  Os.exit(1) // versions have changed, or drifted from provers-env, the documentation sites or the latest upstream releases
 } else {
   Os.exit(0)
 }
