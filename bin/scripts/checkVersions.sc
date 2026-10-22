@@ -7,7 +7,19 @@ val sireum = SIREUM_HOME / "bin" / (if (Os.isWin) "sireum.bat" else "sireum")
 
 val versions = (SIREUM_HOME / "versions.properties").properties
 
-val noUpdate: B = ops.ISZOps(Os.cliArgs).contains("no-update")
+// ci: what the Version alignment workflow runs.  It implies no-update, fails only on
+// what this project has to fix itself (see the end of the script), and with
+// report=<file> writes what upstream has moved on to that file instead of failing.
+val ciMode: B = ops.ISZOps(Os.cliArgs).contains("ci")
+def reportArg(): Option[Os.Path] = {
+  for (a <- Os.cliArgs if ops.StringOps(a).startsWith("report=")) {
+    return Some(Os.path(ops.StringOps(a).substring(7, a.size)))
+  }
+  return None()
+}
+val reportOpt: Option[Os.Path] = reportArg()
+
+val noUpdate: B = ciMode || ops.ISZOps(Os.cliArgs).contains("no-update")
 
 val useBleedingEdgeSireum: B = T
 
@@ -1468,6 +1480,47 @@ if (!noUpdate && jitpackFetches.nonEmpty) {
 if (changesDetected && !noUpdate) {
   val hamrCodegenModule = SIREUM_HOME / "hamr" / "codegen" / "jvm"
   println(s"\nVersion changes detected: rebuild the hamr-codegen module to force macro expansion: ${hamrCodegenModule.toUri}")
+}
+
+// In CI only what this project has to fix itself fails: the documentation sites or
+// provers-env disagreeing with what codegen pins.  Everything else is upstream
+// moving on -- a newer crate, Microkit, ART or LionsOS, Vest taking a newer Verus --
+// which is worth hearing about but not worth a red build, so it goes to the report
+// for the workflow to file as an issue.  changesDetected is left out altogether:
+// the properties it rewrites follow the local kekinian checkout, which in CI is
+// always newer than what was last committed.
+if (ciMode) {
+  val upstream: ISZ[(B, String)] = ISZ(
+    (microkitOutdated, "microkit-sdk is not the latest Microkit release"),
+    (cratesOutdated, "pinned crates have newer crates.io releases"),
+    (verusCratesDrifted, "the recorded Verus crates, Z3 or Rust toolchain are not the ones verus-release declares"),
+    (vestMisaligned, "the pinned Verus or Verus crates are not the ones Vest is built against"),
+    (vestVerusMoved, "Vest has moved to a different Verus than verus-release"),
+    (lionsosDrifted, "the LionsOS dependencies have moved"),
+    (artBehind, "art.version is not the latest ART"),
+    (sbtAssemblyUnchecked, "sbt-assembly could not be checked"),
+    (microkitKeysUnchecked, "microkit_versions.properties has entries no check covers"))
+  val moved: ISZ[String] = for (u <- upstream if u._1) yield u._2
+  reportOpt match {
+    case Some(report) =>
+      if (moved.isEmpty) {
+        report.writeOver("")
+      } else {
+        report.writeOver(st"""${(for (m <- moved) yield st"- $m", "\n")}
+                             |""".render)
+      }
+    case _ =>
+  }
+  if (moved.nonEmpty) {
+    println(st"""
+                |Upstream has moved on (reported, not failed, in CI):
+                |  ${(moved, "\n")}""".render)
+  }
+  if (proversMisaligned || installationPageStale || sireumOrgStale) {
+    Os.exit(1) // provers-env or a documentation site disagrees with codegen's pins
+  } else {
+    Os.exit(0)
+  }
 }
 
 // changesDetected on its own, not 'changesDetected && !noUpdate'.  Under no-update

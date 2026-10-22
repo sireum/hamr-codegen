@@ -1,0 +1,168 @@
+name: Version alignment
+
+# Runs bin/scripts/checkVersions.sc in its ci mode against this commit of hamr-codegen.
+#
+# It fails only on what this project has to fix itself: provers-env's versions.sh, or
+# the HAMR installation page or sireum.org's getting-started page, disagreeing with
+# what codegen pins (the pages: until they are republished).  GitHub emails a failed
+# run to whoever pushed, or for the schedule to whoever last edited the cron line.
+#
+# Upstream moving on -- a newer crate, Microkit, ART or LionsOS, Vest taking a newer
+# Verus -- does not fail the run.  It is emailed instead, but only when it changes:
+# when drift first appears, when the list changes, and when it clears.  The last list
+# reported is kept in the Actions cache between runs, so an unchanged one sends
+# nothing.  (The cache drops entries unused for a week; the daily run keeps it, and
+# if it is ever lost the only cost is one repeat email.)
+#
+# The email goes out over SMTP with curl, using these repository settings, which
+# keep the address and credentials out of this public file:
+#
+#   secrets.SMTP_URL       smtps://host:465, or smtp://host:587 for STARTTLS
+#   secrets.SMTP_USERNAME  the account to send as
+#   secrets.SMTP_PASSWORD  its password, or an app password where the provider
+#                          requires one (Gmail does, with two-step verification)
+#   vars.DRIFT_EMAIL_TO    where to send it
+#
+# Until they are set the drift is still printed in the run's log and summary; only
+# the email is skipped, with a warning.
+
+on:
+  push:
+    branches: [ master ]
+  schedule:
+    - cron: "0 12 * * *" # daily, 12:00 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Set up kekinian at this hamr-codegen commit
+        # checkVersions.sc reads a kekinian checkout -- its versions.properties and git
+        # remote, hamr/phantom's cli.scala, bin/install's fmide-cli.sc and hamr/codegen
+        # with its art submodule -- so a shallow clone with just those submodules.
+        # hamr/codegen is then moved to the commit this run is for.
+        run: |
+          git clone --depth 1 https://github.com/sireum/kekinian "$GITHUB_WORKSPACE/Sireum"
+          cd "$GITHUB_WORKSPACE/Sireum"
+          git submodule update --init --depth 1 hamr/codegen hamr/phantom bin/install
+          git -C hamr/codegen fetch --depth 1 origin "$GITHUB_SHA"
+          git -C hamr/codegen -c advice.detachedHead=false checkout "$GITHUB_SHA"
+          git -C hamr/codegen submodule update --init --depth 1 art
+      - name: Bootstrap Sireum
+        # The prebuilt jar is enough to run a Slang script; nothing is built.
+        run: |
+          cd "$GITHUB_WORKSPACE/Sireum"
+          SIREUM_NO_SETUP=true bin/init.sh
+      - name: Check versions
+        id: check
+        env:
+          SIREUM_HOME: ${{ github.workspace }}/Sireum
+          SIREUM_NATIVE: "false"
+          # raises checkVersions' GitHub API allowance from 60 to 5000 requests an hour
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -o pipefail
+          "$SIREUM_HOME/bin/sireum" slang run "$SIREUM_HOME/hamr/codegen/bin/scripts/checkVersions.sc" \
+            ci "report=$RUNNER_TEMP/drift.md" 2>&1 | tee "$RUNNER_TEMP/check.log"
+      - name: Restore the last drift report
+        if: always()
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ github.workspace }}/.drift-state
+          # never an exact hit: restore-keys picks the most recently saved report
+          key: drift-${{ github.run_id }}
+          restore-keys: drift-
+      - name: Email upstream drift when it changes
+        id: email
+        # also after a failed check, as long as it got far enough to write the report
+        if: always()
+        env:
+          SMTP_URL: ${{ secrets.SMTP_URL }}
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          DRIFT_EMAIL_TO: ${{ vars.DRIFT_EMAIL_TO }}
+        run: |
+          drift="$RUNNER_TEMP/drift.md"
+          last="$GITHUB_WORKSPACE/.drift-state/last.md"
+          if [ ! -f "$drift" ]; then
+            echo "checkVersions.sc stopped before writing its report; nothing to compare"
+            exit 0
+          fi
+          if [ -s "$drift" ]; then
+            { echo "### Upstream version drift"; echo; cat "$drift"; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          # nothing restored on the first run, or after the cache dropped it
+          mkdir -p "$(dirname "$last")"
+          touch "$last"
+          if cmp -s "$drift" "$last"; then
+            echo "Drift unchanged since the last report; no email"
+            exit 0
+          fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          if [ -s "$drift" ]; then
+            subject="[hamr-codegen] Upstream version drift: $(sed -n '1s/^- //p' "$drift")"
+            [ "$(grep -c '^- ' "$drift")" -gt 1 ] && subject="$subject, and more"
+          else
+            subject="[hamr-codegen] Upstream version drift cleared"
+          fi
+          mail="$RUNNER_TEMP/mail.txt"
+          {
+            echo "From: $SMTP_USERNAME"
+            echo "To: $DRIFT_EMAIL_TO"
+            echo "Subject: $subject"
+            echo "Date: $(date -R)"
+            echo "Content-Type: text/plain; charset=utf-8"
+            echo ""
+            if [ -s "$drift" ]; then
+              echo "checkVersions.sc reports that upstream has moved on.  This does not fail CI."
+              echo ""
+              cat "$drift"
+              if [ -s "$last" ]; then
+                echo ""
+                echo "Previously reported:"
+                echo ""
+                cat "$last"
+              fi
+              echo ""
+              echo "Warnings:"
+              echo ""
+              # the script's warning blocks, each fenced by two lines of '!'
+              awk '/^!+$/ { n++; next } n % 4 == 2' "$RUNNER_TEMP/check.log"
+            else
+              echo "checkVersions.sc no longer reports any upstream drift.  Previously reported:"
+              echo ""
+              cat "$last"
+            fi
+            echo ""
+            echo "$run_url"
+          } > "$mail"
+
+          if [ -z "$SMTP_URL" ] || [ -z "$SMTP_USERNAME" ] || [ -z "$SMTP_PASSWORD" ] || [ -z "$DRIFT_EMAIL_TO" ]; then
+            echo "::warning::The drift changed, but SMTP_URL, SMTP_USERNAME, SMTP_PASSWORD or DRIFT_EMAIL_TO is not set, so no email was sent"
+            cat "$mail"
+            exit 0
+          fi
+          # the password reaches curl through a config file on stdin, not the command line
+          printf 'user = "%s:%s"\n' "$SMTP_USERNAME" "$SMTP_PASSWORD" |
+            curl --silent --show-error --ssl-reqd --config - --url "$SMTP_URL" \
+              --mail-from "$SMTP_USERNAME" --mail-rcpt "$DRIFT_EMAIL_TO" --upload-file "$mail"
+          echo "Emailed the drift report"
+          cp "$drift" "$last"
+          echo "sent=true" >> "$GITHUB_OUTPUT"
+      - name: Remember the drift report
+        # only once it has been emailed, so a report that could not be sent is tried again
+        if: always() && steps.email.outputs.sent == 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ github.workspace }}/.drift-state
+          key: drift-${{ github.run_id }}-${{ github.run_attempt }}
