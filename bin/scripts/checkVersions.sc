@@ -700,6 +700,119 @@ var proversMisaligned = F
   }
 }
 
+var installationPageStale = F
+
+{ // The HAMR installation page tells readers which Verus, Rust toolchain, Microkit
+  // SDK, sdfgen and LionsOS to install.  Those are not hand-written: website-hamr's
+  // publish.sh fills them in from this file (Rust from the Verus release's
+  // rust-toolchain.toml, which the Verus check below holds rust-channel to), so the
+  // page cannot disagree with the pins it was published from.  But it is only as
+  // current as its last publish, and nothing republishes it when a pin moves -- so
+  // what the live page shows is compared with the pins here.
+  val installationUrl = "https://hamr.sireum.org/hamr-doc/installation/"
+  // codegen's key; the text the page puts right before the value; whether the value
+  // may contain hex letters (a commit, or Verus's trailing commit) rather than only
+  // digits and dots; and the placeholder publish.sh replaces with it
+  val shown: ISZ[(String, String, B, String)] = ISZ(
+    ("verus-release", "Version: ", T, "VERUS-RELEASE-VERSION"),
+    ("rust-channel", "--toolchain ", F, "RUST-TOOLCHAIN-VERSION"),
+    ("microkit-sdk", "microkit-sdk-", F, "MICROKIT-SDK-VERSION"),
+    ("sdfgen", "sdfgen==", F, "SDFGEN-VERSION"),
+    ("lionsos", "git checkout ", T, "LIONSOS-COMMIT"))
+  val temp = Os.tempFix("hamr-installation-", ".html")
+  temp.removeOnExit()
+  if (!temp.downloadFrom(installationUrl)) {
+    // Not stale, so not a failure: an unreachable site says nothing about whether
+    // it is current.
+    exclamations()
+    println(s"WARNING: could not fetch $installationUrl, so the versions it documents were not checked")
+    exclamations()
+  } else {
+    // Tags are dropped first: the page's code blocks are syntax-highlighted, which
+    // splits e.g. sdfgen==0.35.0 across three spans.
+    val html = conversions.String.toCis(temp.read)
+    temp.remove()
+    val buf = MSZ.create(html.size, ' ')
+    var n: Z = 0
+    var inTag = F
+    for (c <- html) {
+      if (c == '<') {
+        inTag = T
+      } else if (c == '>' && inTag) {
+        inTag = F
+      } else if (!inTag) {
+        buf(n) = c
+        n = n + 1
+      }
+    }
+    val text = ops.StringOps(conversions.String.fromCms(buf)).substring(0, n)
+    val textOps = ops.StringOps(text)
+    val textCis = conversions.String.toCis(text)
+
+    // the distinct values the page shows right after prefix, in page order
+    def valuesAfter(prefix: String, hex: B): ISZ[String] = {
+      var r = ISZ[String]()
+      var i = textOps.stringIndexOf(prefix)
+      while (i >= 0) {
+        val start = i + prefix.size
+        var j = start
+        while (j < textCis.size && (('0' <= textCis(j) && textCis(j) <= '9') || textCis(j) == '.' ||
+          (hex && 'a' <= textCis(j) && textCis(j) <= 'f'))) {
+          j = j + 1
+        }
+        // a value that ends a sentence would otherwise keep its full stop
+        while (j > start && textCis(j - 1) == '.') {
+          j = j - 1
+        }
+        if (j > start) {
+          val v = textOps.substring(start, j)
+          if (!ops.ISZOps(r).contains(v)) {
+            r = r :+ v
+          }
+        }
+        i = textOps.stringIndexOfFrom(prefix, start)
+      }
+      return r
+    }
+
+    val microkitVers = microkitVersionsP.properties
+    var stale = ISZ[ST]()
+    for (s <- shown) {
+      val key = s._1
+      if (!microkitVers.contains(key)) {
+        halt(s"$microkitVersionsP doesn't contain $key")
+      }
+      val ours = microkitVers.get(key).get
+      if (textOps.contains(s._4)) {
+        stale = stale :+ st"$key: the page shows the placeholder ${s._4}; publish.sh could not resolve it"
+      } else {
+        val values = valuesAfter(s._2, s._3)
+        if (values.isEmpty) {
+          // reworded on the page, so this check has gone blind to that tool
+          stale = stale :+ st"""$key: the page no longer shows a version after "${s._2}"; update this check"""
+        } else if (values != ISZ(ours)) {
+          stale = stale :+ st"$key = $ours, but the page shows ${(values, ", ")}"
+        }
+      }
+    }
+
+    if (stale.nonEmpty) {
+      exclamations()
+      println(
+        st"""WARNING: the HAMR installation page documents different versions than codegen pins:
+            |
+            |  ${(stale, "\n")}
+            |
+            |  Once the pins are on kekinian master (publish.sh reads them from there),
+            |  republish the site with website-hamr's publish.sh.
+            |  $installationUrl
+            |  ${microkitVersionsP.toUri}""".render)
+      exclamations()
+      installationPageStale = T
+    }
+  }
+}
+
 var microkitOutdated = F
 
 { // codegen generates Microkit systems against the SDK that microkit-sdk pins, so
@@ -1234,8 +1347,9 @@ if (changesDetected && !noUpdate) {
 // as real -- and no-update is how VersionCheck runs this, so gating the exit on it
 // meant that test could never fail on the versions it exists to watch.
 if (changesDetected || proversMisaligned || microkitOutdated || cratesOutdated || verusCratesDrifted || vestMisaligned ||
-    vestVerusMoved || lionsosDrifted || microkitKeysUnchecked || sbtAssemblyUnchecked || artBehind) {
-  Os.exit(1) // versions have changed, or drifted from provers-env or from the latest upstream releases
+    vestVerusMoved || lionsosDrifted || microkitKeysUnchecked || sbtAssemblyUnchecked || artBehind ||
+    installationPageStale) {
+  Os.exit(1) // versions have changed, or drifted from provers-env, the installation page or the latest upstream releases
 } else {
   Os.exit(0)
 }
