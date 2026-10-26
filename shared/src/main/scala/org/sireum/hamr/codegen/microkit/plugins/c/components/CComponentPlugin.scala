@@ -100,6 +100,7 @@ object CComponentPlugin {
             |  r2u2_monitor.verdict_updated[i] = false;
             |  r2u2_monitor.false_verdict_seen[i] = false;
             |}
+            |r2u2_time r2u2_time_stamp = r2u2_monitor.monitor.time_stamp; 
             |r2u2_status_t status = r2u2_step(&r2u2_monitor.monitor);
             |if (status != R2U2_OK) {
             |  printf("R2U2 monitor step failed: %d\n", (int) status);

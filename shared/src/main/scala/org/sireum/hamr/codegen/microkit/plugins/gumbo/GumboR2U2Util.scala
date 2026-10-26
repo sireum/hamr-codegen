@@ -121,6 +121,7 @@ object GumboR2U2Util {
 
     var outputItems: ISZ[RAST.BodyItem] = ISZ(RAST.BodyItemST(
       st"""let r2u2_time_stamp = r2u2_monitor.monitor.time_stamp;
+          |r2u2_core::monitor_step(&mut r2u2_monitor.monitor);
           |// Expire cached verdicts before applying this step's new outputs.
           |for verdict in r2u2_monitor.verdict_cache.iter_mut() {
           |    if verdict.is_some() && r2u2_time_stamp > verdict.unwrap().time {
@@ -193,7 +194,7 @@ object GumboR2U2Util {
           |// against the new timestamp without discarding this step's outputs.
           |for (size_t i = 0; i < R2U2_SPEC_COUNT; ++i) {
           |  if (r2u2_monitor.verdict_valid[i] && !r2u2_monitor.verdict_updated[i] &&
-          |      r2u2_monitor.monitor.time_stamp > get_verdict_time(r2u2_monitor.verdict_cache[i])) {
+          |      r2u2_time_stamp > get_verdict_time(r2u2_monitor.verdict_cache[i])) {
           |    r2u2_monitor.verdict_valid[i] = false;
           |  }
           |}""")

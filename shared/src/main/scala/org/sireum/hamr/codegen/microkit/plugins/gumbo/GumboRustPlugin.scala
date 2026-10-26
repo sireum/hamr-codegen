@@ -1018,7 +1018,6 @@ object GumboRustPlugin {
     }
 
     if (postItems.nonEmpty) { postItems = postItems :+ RAST.BodyItemST(st"") }
-    postItems = postItems :+ RAST.BodyItemST(st"r2u2_core::monitor_step(&mut r2u2_monitor.monitor);")
     val orderedSpecs = specs.ftspecs ++ specs.ptspecs
     val outputItems = GumboR2U2Util.processRustOutputs(
       thread = thread,
