@@ -43,11 +43,18 @@ object TestSchedulerPlugin {
   val KEY_contributed: String = "KEY_TestSchedulerPlugin_contributed"
   val KEY_observable: String = "KEY_TestSchedulerPlugin_observable"
   val KEY_injectable: String = "KEY_TestSchedulerPlugin_injectable"
+  val KEY_clearable: String = "KEY_TestSchedulerPlugin_clearable"
   val KEY_observersWired: String = "KEY_TestSchedulerPlugin_observersWired"
 
   @strictpure def getInjectable(store: Store): ISZ[InjectableStateVar] =
     store.get(KEY_injectable) match {
       case Some(v) => v.asInstanceOf[InjectableStateVars].vars
+      case _ => ISZ()
+    }
+
+  @strictpure def getClearable(store: Store): ISZ[ClearableThread] =
+    store.get(KEY_clearable) match {
+      case Some(v) => v.asInstanceOf[ClearableThreads].threads
       case _ => ISZ()
     }
 
@@ -291,7 +298,9 @@ object TestSchedulerPlugin {
                     (existing :+ PreStateField(
                       fieldName = fieldName,
                       rustTypeName = r.rustTypeName,
-                      setter = s"put_${r.accessor}"))
+                      setter = s"put_${r.accessor}",
+                      accessor = r.accessor,
+                      isEvent = r.isEvent))
                 case _ =>
               }
             case _ =>
@@ -312,7 +321,9 @@ object TestSchedulerPlugin {
         for (v <- injectables if v.threadPath == thread.path) yield PreStateField(
           fieldName = s"sv_${v.varName}",
           rustTypeName = v.rustTypeName,
-          setter = s"put_${v.threadId}_sv_${v.varName}")
+          setter = s"put_${v.threadId}_sv_${v.varName}",
+          accessor = "",
+          isEvent = F)
       // A thread with neither is not worth a container: an empty struct and an empty
       // setter would only be noise in the generated API.
       if (ports.nonEmpty || svs.nonEmpty) {
@@ -337,6 +348,73 @@ object TestSchedulerPlugin {
 
   @strictpure def injectThreadVaddrKiB(vars: ISZ[InjectableStateVar], i: Z): Z =
     MicrokitUtil.packedVaddrKiB(injectThreadBaseVaddrKiB, for (v <- vars) yield v.sizeInKiBytes, i)
+
+  /** The clear-request regions (D39) are packed after the state variable injection regions,
+    * in both the controller's and the threads' injection blocks. */
+  @strictpure def injectionSizes(vars: ISZ[InjectableStateVar], clears: ISZ[ClearableThread]): ISZ[Z] =
+    (for (v <- vars) yield v.sizeInKiBytes) ++ (for (c <- clears) yield c.sizeInKiBytes)
+
+  @strictpure def clearVaddrKiB(vars: ISZ[InjectableStateVar], clears: ISZ[ClearableThread], k: Z): Z =
+    MicrokitUtil.packedVaddrKiB(injectBaseVaddrKiB, injectionSizes(vars, clears), vars.size + k)
+
+  @strictpure def clearThreadVaddrKiB(vars: ISZ[InjectableStateVar], clears: ISZ[ClearableThread], k: Z): Z =
+    MicrokitUtil.packedVaddrKiB(injectThreadBaseVaddrKiB, injectionSizes(vars, clears), vars.size + k)
+
+  /** The global the consumer's bridge reads its clear requests through, patched by microkit
+    * via setvar_vaddr where the region is mapped and NULL everywhere else (D39). */
+  val clearRequestsVar: String = "inj_clr_requests"
+
+  /** Every thread's event and event data inputs that a test can clear (design D39), with the
+    * region each one reads through.  The same inputs, in the same order, as the event fields of
+    * threadPreStates: both come from the C connection store's input ports.
+    */
+  @pure def clearableEventInputs(regions: ISZ[ObservableRegion],
+                                 symbolTable: SymbolTable,
+                                 store: Store): ISZ[ClearableThread] = {
+    var byRegionName = Map.empty[String, ObservableRegion]
+    for (r <- regions) {
+      byRegionName = byRegionName + r.regionName ~> r
+    }
+    var portsByThread = Map.empty[IdPath, ISZ[ClearableEventInput]]
+    var seen = Set.empty[String]
+    for (entry <- CConnectionProviderPlugin.getCConnectionStore(store);
+         e <- entry.codeContributions.entries) {
+      val threadPath = e._1
+      val cc = e._2
+      val isInput: B = symbolTable.featureMap.get(cc.portName) match {
+        case Some(f: AadlDirectedFeature) => f.direction == Direction.In
+        case _ => F
+      }
+      if (isInput && !StoreUtil.isSynthetic(threadPath, store)) {
+        for (mr <- cc.sharedMemoryMapping) {
+          mr match {
+            case p: PortSharedMemoryRegion =>
+              val portName = cc.portName(cc.portName.lastIndex)
+              val key = st"${(threadPath, "_")}_$portName".render
+              byRegionName.get(p.name) match {
+                case Some(r) if r.isEvent && !seen.contains(key) =>
+                  seen = seen + key
+                  portsByThread = portsByThread + threadPath ~>
+                    (portsByThread.getOrElse(threadPath, ISZ()) :+
+                      ClearableEventInput(portName = portName, accessor = r.accessor))
+                case _ =>
+              }
+            case _ =>
+          }
+        }
+      }
+    }
+    var ret = ISZ[ClearableThread]()
+    for (thread <- symbolTable.getThreads() if !StoreUtil.isSynthetic(thread.path, store)) {
+      portsByThread.get(thread.path) match {
+        case Some(ports) =>
+          ret = ret :+ ClearableThread(
+            threadPath = thread.path, threadId = MicrokitUtil.getComponentIdPath(thread), ports = ports)
+        case _ =>
+      }
+    }
+    return ret
+  }
 
   /** Whether the model has anything for the controller to check (stage 7): a thread with a
     * GUMBO subclause, or a system composition.  Decided from the symbol table because the
@@ -401,6 +479,26 @@ object TestSchedulerPlugin {
   @strictpure def queueVar: String = s"inj_sv_${varName}_queue"
 }
 
+@datatype class ClearableThreads(val threads: ISZ[ClearableThread]) extends StoreValue
+
+/** A thread's event and event data inputs that a test can clear (design D39), and the region
+  * the clear requests travel through: a `{seq, cutoff}` pair of event counters per port, in
+  * `ports` order.  The controller is the region's only writer; the thread maps it read-only
+  * and remembers privately which request it last applied, so nothing in it is ever cleared.
+  */
+@datatype class ClearableThread(val threadPath: ISZ[String],
+                                val threadId: String,
+                                val ports: ISZ[ClearableEventInput]) {
+  @strictpure def regionName: String = s"inj_${threadId}_clr"
+  /** Two 64-bit counters per port: far less than the smallest region, a page. */
+  @strictpure def sizeInKiBytes: Z = 4
+}
+
+/** One clearable input: the port, as the consumer names it, and the accessor of the region it
+  * reads through -- the producer's output region, or its own for an unconnected input. */
+@datatype class ClearableEventInput(val portName: String,
+                                    val accessor: String)
+
 @datatype class ObservableRegion(val accessor: String,
                                  val regionName: String,
                                  val cTypeName: String,
@@ -439,7 +537,13 @@ object TestSchedulerPlugin {
   */
 @datatype class PreStateField(val fieldName: String,
                               val rustTypeName: String,
-                              val setter: String)
+                              val setter: String,
+                              // the accessor of the region a port field is set through ("" for a
+                              // state variable): consumers of one connection share it (D39)
+                              val accessor: String,
+                              // an event or event data input: the field is an Option, and None
+                              // clears what is pending for the thread (design D39)
+                              val isEvent: B)
 
 /** Every input port and GUMBO state variable of one thread (design D14). */
 @datatype class ThreadPreState(val threadId: String,
@@ -705,11 +809,75 @@ object TestSchedulerPlugin {
       ki = ki + 1
     }
 
+    // Controller side of D39: a clear request records a cutoff in the consumer's slot of its
+    // clear region, then bumps the request's sequence number.  The consumer reads the two in
+    // the opposite order.
+    val clearables = TestSchedulerPlugin.clearableEventInputs(regions, symbolTable, localStore)
+    localStore = localStore + TestSchedulerPlugin.KEY_clearable ~> ClearableThreads(clearables)
+    var clrSigs: ISZ[ST] = ISZ()
+    var clrImpls: ISZ[ST] = ISZ()
+    // The cutoff is the caller's: the setup batches (D39) give a consumer set to Some the
+    // position before the batch's injection, and one set to None the position after it.
+    // test_sent_ reports a region's position for them to choose from.
+    var sentAccessors: ISZ[String] = ISZ()
+    for (c <- clearables; port <- c.ports if !ops.ISZOps(sentAccessors).contains(port.accessor)) {
+      sentAccessors = sentAccessors :+ port.accessor
+    }
+    for (a <- sentAccessors) {
+      val sig = st"sb_event_counter_t test_sent_$a(void)"
+      clrSigs = clrSigs :+ sig
+      clrImpls = clrImpls :+
+        st"""$sig {
+            |  return tc_${a}_queue->numSent;
+            |}"""
+    }
+    var ck: Z = 0
+    for (c <- clearables) {
+      val vaddr = MicrokitUtil.KiBytesToHexH(TestSchedulerPlugin.clearVaddrKiB(injectables, clearables, ck), F)
+      val regionVar = s"tc_inj_${c.threadId}_clr"
+      var fns: ISZ[ST] = ISZ()
+      var slot: Z = 0
+      for (port <- c.ports) {
+        val sig = st"void test_clear_${c.threadId}_${port.portName}(sb_event_counter_t cutoff)"
+        clrSigs = clrSigs :+ sig
+        // D39 stage 3: the contract checks must not see what the consumer will not.  Its own
+        // checks cursor -- which its saved pre-state and its received-input latch read through
+        // -- moves with it.  So does the system assertions' cursor, but only for an unconnected
+        // input, whose system value is what its one reader received; a producer output's is what
+        // the frame carried, which a clear does not change (D27).
+        var cursorMoves: ISZ[ST] = ISZ()
+        if (checks) {
+          val r = ops.ISZOps(regions).filter((o: ObservableRegion) => o.accessor == port.accessor)(0)
+          val movedFor: ISZ[String] = if (r.isProducerOutput) ISZ(c.threadId) else ISZ(c.threadId, "sys")
+          for (reader <- movedFor if ops.ISZOps(r.obsReaders).contains(reader)) {
+            val cursor = r.obsCursor(reader)
+            cursorMoves = cursorMoves :+
+              st"""if ((intmax_t) (cutoff - tc_obs_${cursor}_recv.numRecv) > 0) {
+                  |  tc_obs_${cursor}_recv.numRecv = cutoff;
+                  |}"""
+          }
+        }
+        fns = fns :+
+          st"""$sig {
+              |  $regionVar[${2 * slot + 1}] = cutoff;
+              |  __atomic_thread_fence(__ATOMIC_RELEASE);
+              |  $regionVar[${2 * slot}] = $regionVar[${2 * slot}] + 1;
+              |  ${(cursorMoves, "\n")}
+              |}"""
+        slot = slot + 1
+      }
+      clrImpls = clrImpls :+
+        st"""volatile sb_event_counter_t *$regionVar = (volatile sb_event_counter_t *) $vaddr;
+            |
+            |${(fns, "\n\n")}"""
+      ck = ck + 1
+    }
+
     val cContribs = cConnectionContributions(
-      cPortApiMethodSigs = ISZ(notifySig, printSig) ++ accessorSigs ++ injSigs,
+      cPortApiMethodSigs = ISZ(notifySig, printSig) ++ accessorSigs ++ injSigs ++ clrSigs,
       cBridge_EntrypointMethodSignatures = ISZ(),
       cBridge_GlobalVarContributions = ISZ(),
-      cBridge_PortApiMethods = ISZ(notifyImpl, printImpl) ++ accessorImpls ++ injImpls,
+      cBridge_PortApiMethods = ISZ(notifyImpl, printImpl) ++ accessorImpls ++ injImpls ++ clrImpls,
       cBridge_InitContributions = accessorInits,
       cBridge_ComputeContributions = ISZ(),
       cUser_MethodDefaultImpls = ISZ())
@@ -803,8 +971,61 @@ object TestSchedulerPlugin {
           sharedMemoryMapping = ISZ(),
           cContributions = cContribs))
 
+    // D39, the consumer side: before anything in a dispatch reads a port -- a sporadic
+    // thread's emptiness check included -- apply the newest clear request for each event
+    // input, moving the port's own receive cursor up to the cutoff.  The cursor is in the
+    // consumer's protection domain, which the controller cannot write, so the consumer moves
+    // it itself.  These entries are put first in the connection store because a thread's
+    // compute contributions are emitted in store order, and this one must precede the reads.
+    var clearEntries: ISZ[ConnectionStore] = ISZ()
+    for (c <- clearables) {
+      val req = TestSchedulerPlugin.clearRequestsVar
+      var applies: ISZ[ST] = ISZ()
+      var slot: Z = 0
+      for (port <- c.ports) {
+        val recv = QueueTemplate.getClientRecvQueueName(port.portName)
+        applies = applies :+
+          st"""if ($req[${2 * slot}] != inj_clr_applied[$slot]) {
+              |  inj_clr_applied[$slot] = $req[${2 * slot}];
+              |  __atomic_thread_fence(__ATOMIC_ACQUIRE);
+              |  sb_event_counter_t cutoff = $req[${2 * slot + 1}];
+              |  // behind the cutoff: the difference taken as signed survives a wrap
+              |  if ((intmax_t) (cutoff - $recv.numRecv) > 0) {
+              |    $recv.numRecv = cutoff;
+              |  }
+              |}"""
+        slot = slot + 1
+      }
+      // Left uninitialized on purpose, like the state variable injection queues: microkit
+      // patches it where the region is mapped, and it stays NULL in every other variant.
+      val globals: ST =
+        st"""volatile sb_event_counter_t *$req;
+            |static sb_event_counter_t inj_clr_applied[${c.ports.size}];"""
+      val compute: ST =
+        st"""if ($req != NULL) {
+            |  ${(applies, "\n")}
+            |}"""
+      clearEntries = clearEntries :+ DefaultConnectionStore(
+        systemContributions = DefaultSystemContributions(
+          sharedMemoryRegionContributions = ISZ(), channelContributions = ISZ()),
+        typeApiContributions = ISZ(),
+        senderName = c.threadPath,
+        codeContributions = Map.empty[ISZ[String], UberConnectionContributions] +
+          c.threadPath ~> UberConnectionContributions(
+            portName = ISZ(), portPriority = None(), aadlType = TypeUtil.EmptyType,
+            queueSize = 0, sharedMemoryMapping = ISZ(),
+            cContributions = cConnectionContributions(
+              cPortApiMethodSigs = ISZ(),
+              cBridge_EntrypointMethodSignatures = ISZ(),
+              cBridge_GlobalVarContributions = ISZ(),
+              cBridge_PortApiMethods = ISZ(globals),
+              cBridge_InitContributions = ISZ(),
+              cBridge_ComputeContributions = ISZ(compute),
+              cUser_MethodDefaultImpls = ISZ())))
+    }
+
     localStore = CConnectionProviderPlugin.putCConnectionStore(
-      (CConnectionProviderPlugin.getCConnectionStore(localStore) :+ entry) ++ injectEntries, localStore)
+      clearEntries ++ ((CConnectionProviderPlugin.getCConnectionStore(localStore) :+ entry) ++ injectEntries), localStore)
 
     // Weave the generated test module into the controller crate lib.rs.  CRustComponentPlugin
     // owns that file skeleton, so the module declaration and the call that runs the suite are
@@ -1064,12 +1285,14 @@ object TestSchedulerPlugin {
     // The observable, injection and thread-side injection blocks sit at fixed bases; now
     // that regions are sized by their contents, check none runs into the next.
     val injectablesForCheck = TestSchedulerPlugin.getInjectable(localStore)
-    // (block, base, end, limit) in KiB
+    val clearables = TestSchedulerPlugin.getClearable(localStore)
+    // (block, base, end, limit) in KiB.  The injection block holds the clear-request regions
+    // (D39) after the state variable injection regions.
     val blocks: ISZ[(String, Z, Z, Z)] = ISZ(
       ("observable", TestSchedulerPlugin.observableBaseVaddrKiB,
         TestSchedulerPlugin.observableVaddrKiB(observable, observable.size), TestSchedulerPlugin.injectBaseVaddrKiB),
       ("injection", TestSchedulerPlugin.injectBaseVaddrKiB,
-        TestSchedulerPlugin.injectVaddrKiB(injectablesForCheck, injectablesForCheck.size), TestSchedulerPlugin.injectThreadBaseVaddrKiB))
+        TestSchedulerPlugin.clearVaddrKiB(injectablesForCheck, clearables, clearables.size), TestSchedulerPlugin.injectThreadBaseVaddrKiB))
     for (b <- blocks if b._3 > b._4) {
       reporter.error(None(), toolName,
         s"The test controller's ${b._1} regions need ${b._3 - b._2} KiB of address space, more than the ${b._4 - b._2} KiB reserved for them")
@@ -1098,6 +1321,26 @@ object TestSchedulerPlugin {
         vaddrInKiBytes = TestSchedulerPlugin.injectVaddrKiB(injectables, ji),
         perms = ISZ(Perm.READ, Perm.WRITE), varAddr = None(), cached = None())
       ji = ji + 1
+    }
+    // D39: the clear-request regions, the same way -- read-write for the controller, which is
+    // their only writer, and read-only for the consumer, which remembers privately what it
+    // applied.
+    var cj: Z = 0
+    for (c <- clearables) {
+      injectRegions = injectRegions :+ GenericMemoryRegion(name = c.regionName, sizeInKiBytes = c.sizeInKiBytes)
+      injectPy = injectPy :+
+        st"""${c.regionName} = MemoryRegion(sdf, "${c.regionName}", ${MicrokitUtil.KiBytesToHexH(c.sizeInKiBytes, F)})
+            |sdf.add_mr(${c.regionName})"""
+      injectThreadMaps = injectThreadMaps + c.threadId ~> (
+        injectThreadMaps.getOrElse(c.threadId, ISZ()) :+ MemoryMap(
+          memoryRegion = c.regionName,
+          vaddrInKiBytes = TestSchedulerPlugin.clearThreadVaddrKiB(injectables, clearables, cj),
+          perms = ISZ(Perm.READ), varAddr = Some(TestSchedulerPlugin.clearRequestsVar), cached = None()))
+      injectControllerMaps = injectControllerMaps :+ MemoryMap(
+        memoryRegion = c.regionName,
+        vaddrInKiBytes = TestSchedulerPlugin.clearVaddrKiB(injectables, clearables, cj),
+        perms = ISZ(Perm.READ, Perm.WRITE), varAddr = None(), cached = None())
+      cj = cj + 1
     }
 
     // Channel per thread: SystemDescriptionProvider_MCS renders `channel_<pd> = <domain>`
@@ -1645,6 +1888,9 @@ object StaticContent {
           |/// Issues a command and waits for it; a command that did not do what it was asked fails
           |/// the running test (see `harness::command_outcome`).
           |fn issue(typ: u32, count: u32, target_ch: u32, target_hp: u32, target_slot: u32) -> TestStatus {
+          |  // Every command ends the setup batches (D39), including one that dispatches nothing,
+          |  // so where a batch ends does not depend on what a command happened to do.
+          |  crate::system_tests::inspect::end_setup_batches();
           |  let st = exchange(typ, count, target_ch, target_hp, target_slot);
           |  crate::system_tests::harness::command_outcome(command_name(typ), st.flags);
           |  st
@@ -1924,6 +2170,8 @@ object StaticContent {
           |      CURRENT_FAILED = false;
           |      FAIL_PRINTED = false;
           |    }
+          |    // a batch never spans two tests, even with no command between them (D39)
+          |    crate::system_tests::inspect::end_setup_batches();
           |    line(format_args!("TEST | BEGIN {}", name));
           |    unsafe { IN_TEST = true; }
           |    // A test that cannot run as written is failed without running it: after api::stop()
@@ -2364,6 +2612,11 @@ object StaticContent {
           |//
           |// --list builds an image that prints the test table and runs nothing (LIST_TESTS=1).
           |//
+          |// RUN_TESTS_TARGET_CMD is for HAMR's own tests of this script: a shell command run in
+          |// place of building the image and booting it under QEMU, whose output stands in for
+          |// the serial console.  It lets those tests drive the stop condition and the verdict
+          |// below with crafted output, without an SDK or QEMU.
+          |//
           |// The filter is a substring match against the qualified suite::test name, so
           |// "nominal::" selects a suite and "fan_turns" selects a single test.
           |
@@ -2401,14 +2654,18 @@ object StaticContent {
           |  listArg,
           |  s"PROPTEST_SEED=$$seed")
           |
-          |println(s"Building $$microkitDir (TESTS='$$filter', $$listArg, PROPTEST_SEED=$$seed) ...")
-          |val build = Os.proc(commonArgs).console.run()
-          |if (!build.ok) {
-          |  eprintln("Build failed")
-          |  Os.exit(1)
+          |val targetCmd: Option[String] = Os.env("RUN_TESTS_TARGET_CMD")
+          |if (targetCmd.isEmpty) {
+          |  println(s"Building $$microkitDir (TESTS='$$filter', $$listArg, PROPTEST_SEED=$$seed) ...")
+          |  val build = Os.proc(commonArgs).console.run()
+          |  if (!build.ok) {
+          |    eprintln("Build failed")
+          |    Os.exit(1)
+          |  }
+          |  println("Running under QEMU ...")
+          |} else {
+          |  println(s"Running RUN_TESTS_TARGET_CMD in place of the build and QEMU: $${targetCmd.get}")
           |}
-          |
-          |println("Running under QEMU ...")
           |
           |// QEMU never exits on its own: once the suite is done the scheduler idles and the
           |// guest goes quiet.  Waiting for the timeout would make every successful run cost
@@ -2416,7 +2673,9 @@ object StaticContent {
           |// into `sed /DONE/q` does not work here -- with the guest idle there is no further
           |// write to raise SIGPIPE -- so the process group has to be killed explicitly.  The
           |// console writes a line a character at a time, so DONE can be seen before the rest of
-          |// its line is out: QEMU is given another second before it is stopped.  Two failures
+          |// its line is out: QEMU is given another second before it is stopped.  DONE counts only
+          |// at the start of a line, as it does for the verdict below: a test's own message that
+          |// mentions it must not stop the run before the real one.  Two failures
           |// end the run early too, since nothing after them can reach DONE: a protection domain
           |// that faults or panics before the schedule starts (it never reports ready, so the
           |// test scheduler never hands over), and a panic in the test controller itself.  A
@@ -2430,7 +2689,7 @@ object StaticContent {
           |      |mpid=$$$$!
           |      |waited=0
           |      |while kill -0 $$$$mpid 2>/dev/null; do
-          |      |  grep -q 'TEST | DONE' "$$$$LOG" && { sleep 1; break; }
+          |      |  grep -q '^TEST | DONE' "$$$$LOG" && { sleep 1; break; }
           |      |  if ! grep -q 'All partitions ready' "$$$$LOG" && grep -q -e 'FAULT in user PD' -e 'PANIC' "$$$$LOG"; then sleep 1; break; fi
           |      |  grep -q '${TestSchedulerPlugin.controllerName}.*PANIC' "$$$$LOG" && { sleep 1; break; }
           |      |  [ $$$$waited -ge $$$$TIMEOUT ] && break
@@ -2442,7 +2701,11 @@ object StaticContent {
           |      |wait $$$$mpid 2>/dev/null
           |      |exit 0$tq.render
           |
-          |Os.proc(ISZ[String]("sh", "-c", driver, "sh") ++ (commonArgs :+ "qemu"))
+          |val target: ISZ[String] = targetCmd match {
+          |  case Some(c) => ISZ[String]("sh", "-c", c)
+          |  case _ => commonArgs :+ "qemu"
+          |}
+          |Os.proc(ISZ[String]("sh", "-c", driver, "sh") ++ target)
           |  .env(ISZ(("LOG", logFile.string), ("TIMEOUT", "$qemuTimeoutSeconds")))
           |  .timeout(($qemuTimeoutSeconds + 30) * 1000).run()
           |
@@ -2459,6 +2722,7 @@ object StaticContent {
           |var sawDone: B = F
           |var seenPass: Z = 0
           |var seenFail: Z = 0
+          |var seenListed: Z = 0
           |
           |// The QEMU serial console emits CRLF, so every line arrives with a trailing \r.
           |// Left in place it makes Z("0\r") a None and the parse below blows up.
@@ -2472,6 +2736,8 @@ object StaticContent {
           |      seenPass = seenPass + 1
           |    } else if (l.startsWith("TEST | FAIL")) {
           |      seenFail = seenFail + 1
+          |    } else if (l.startsWith("TEST | LIST") && !l.endsWith("(not selected)")) {
+          |      seenListed = seenListed + 1
           |    } else if (l.startsWith("TEST | DONE")) {
           |      sawDone = T
           |      for (tok <- ops.StringOps(line).split((c: C) => c == ' ')) {
@@ -2521,8 +2787,34 @@ object StaticContent {
           |  Os.exit(1)
           |}
           |
-          |// A listing runs nothing; the table above is its output.
+          |// What was asked for and what the image did have to agree.  LIST_TESTS is part of the
+          |// build's rebuild hash, so a listing image should never be reused for a run -- but if
+          |// one were, its list=1 verdict would pass having run nothing, so it is checked.
+          |if (listed != listOnly) {
+          |  if (listed) {
+          |    eprintln("FAILED: the image only listed the tests (DONE list=1), but a run was requested; nothing was run")
+          |  } else {
+          |    eprintln("FAILED: --list was requested, but the image ran the tests (DONE has no list=1)")
+          |  }
+          |  Os.exit(1)
+          |}
+          |
+          |// A listing runs nothing; the table above is its output.  It still has to be a listing:
+          |// nothing run, every selected test in the table, and initialization intact -- a broken
+          |// initialization guarantee is a fault in the system whether or not tests then run.
           |if (listed) {
+          |  if (passed != 0 || failed != 0 || seenPass != 0 || seenFail != 0) {
+          |    eprintln(s"FAILED: a listing reports tests as run (passed=$$passed failed=$$failed, $$seenPass PASS and $$seenFail FAIL lines)")
+          |    Os.exit(1)
+          |  }
+          |  if (seenListed != matched) {
+          |    eprintln(s"FAILED: DONE reports matched=$$matched but the table lists $$seenListed selected test(s); output was lost")
+          |    Os.exit(1)
+          |  }
+          |  if (!initOk) {
+          |    eprintln("FAILED: an initialization guarantee was violated, or DONE's init= was lost (DONE init=failed or missing)")
+          |    Os.exit(1)
+          |  }
           |  println(s"OK: listed $$matched test(s) matching '$$filter'; none were run")
           |  Os.exit(0)
           |}
@@ -2570,6 +2862,15 @@ object StaticContent {
                                   hasObserve: B): ST = {
     var externs: ISZ[ST] = ISZ()
     var wrappers: ISZ[ST] = ISZ()
+    // D39: the event connections the setup containers set -- by the accessor of the region
+    // each reads through, which its consumers share -- and the consumers of each.
+    var batchConsumers: Map[String, ISZ[(String, String)]] = Map.empty
+    var batchTypes: Map[String, String] = Map.empty
+    for (ps <- preStates; f <- ps.fields if f.isEvent) {
+      batchConsumers = batchConsumers + f.accessor ~>
+        (batchConsumers.getOrElse(f.accessor, ISZ()) :+ ((ps.threadId, f.fieldName)))
+      batchTypes = batchTypes + f.accessor ~> f.rustTypeName
+    }
     for (r <- regions) {
       externs = externs :+ st"fn test_get_${r.accessor}(value: *mut ${r.rustTypeName}) -> bool;"
       if (!r.isStateVar) {
@@ -2600,11 +2901,28 @@ object StaticContent {
                   |  let mut v = value;
                   |  test_put_${r.accessor}(&mut v);
                   |}""")
-        wrappers = wrappers :+
-          st"""/// Publish `value` to the port `${r.accessor}`, as its producer would.
-              |pub fn put_${r.accessor}(value: ${r.rustTypeName}) {
-              |  ${(body, "\n")}
-              |}"""
+        if (batchConsumers.contains(r.accessor)) {
+          // An explicit put_ is a deliberate send, which every consumer receives; it also moves
+          // the queue past the batch's saved position, so it ends the connection's batch (D39).
+          wrappers = wrappers :+
+            st"""/// Publish `value` to the port `${r.accessor}`, as its producer would.  Every consumer
+                |/// receives it, and it ends this connection's setup batch (D39).
+                |pub fn put_${r.accessor}(value: ${r.rustTypeName}) {
+                |  end_setup_batch_${r.accessor}();
+                |  inject_${r.accessor}(value);
+                |}
+                |
+                |/// The send itself, without ending the setup batch: what the setters use.
+                |fn inject_${r.accessor}(value: ${r.rustTypeName}) {
+                |  ${(body, "\n")}
+                |}"""
+        } else {
+          wrappers = wrappers :+
+            st"""/// Publish `value` to the port `${r.accessor}`, as its producer would.
+                |pub fn put_${r.accessor}(value: ${r.rustTypeName}) {
+                |  ${(body, "\n")}
+                |}"""
+        }
       }
     }
 
@@ -2632,15 +2950,123 @@ object StaticContent {
     // field out. Adding a state variable to the model then breaks stale tests at compile time
     // rather than silently defaulting them and producing a green run against a state nobody
     // meant to set up.
+    //
+    // An event input's field is an Option (D39): Some(v) means exactly v is pending for the
+    // thread, None that nothing is.
+    //
+    // The setters of one connection's consumers form a batch (D39), so that the result does
+    // not depend on their order: the first Some injects once and gives every Some consumer the
+    // position before it, and a None consumer gets the position after it -- re-sent if a later
+    // setter injects.  A batch ends at every command, at each test's start, and at an explicit
+    // put_ on the connection.
+    var batchFns: ISZ[ST] = ISZ()
+    var endBatchCalls: ISZ[ST] = ISZ()
+    for (e <- batchConsumers.entries) {
+      val a = e._1
+      val consumers = e._2
+      val ty = batchTypes.get(a).get
+      externs = externs :+ st"fn test_sent_$a() -> u64;"
+      var noneStatics: ISZ[ST] = ISZ()
+      var resends: ISZ[ST] = ISZ()
+      var resets: ISZ[ST] = ISZ()
+      for (c <- consumers) {
+        val tp = s"${c._1}_${c._2}"
+        externs = externs :+ st"fn test_clear_$tp(cutoff: u64);"
+        noneStatics = noneStatics :+ st"static mut SETUP_NONE_$tp: bool = false;"
+        resends = resends :+ st"if SETUP_NONE_$tp { test_clear_$tp(sent); }"
+        resets = resets :+ st"SETUP_NONE_$tp = false;"
+        batchFns = batchFns :+
+          st"""/// Discard every event pending for `${c._1}` on its input `${c._2}`.  The thread applies
+              |/// it at the start of its next dispatch, before reading any port; the other consumers
+              |/// of the same connection keep what is pending for them (D39).
+              |pub fn clear_$tp() {
+              |  unsafe { test_clear_$tp(test_sent_$a()); }
+              |}
+              |
+              |/// `None` for `${c._1}`'s input `${c._2}` in a setup container: nothing pending for it,
+              |/// not even what a later setter in this batch injects.
+              |fn setup_none_$tp() {
+              |  unsafe {
+              |    SETUP_NONE_$tp = true;
+              |    test_clear_$tp(test_sent_$a());
+              |  }
+              |}
+              |
+              |/// `Some(value)` for `${c._1}`'s input `${c._2}`: exactly `value` pending for it.  The
+              |/// first `Some` on the connection in a batch injects it once; another consumer's
+              |/// `Some` with the same value shares that injection, and a different one fails the test.
+              |fn setup_some_$tp(value: $ty) {
+              |  unsafe {
+              |    SETUP_NONE_$tp = false;
+              |    match &SETUP_BATCH_$a {
+              |      Some((s0, v, by)) => {
+              |        if *v != value {
+              |          crate::system_tests::harness::fail_with(format_args!(
+              |            "setup conflict on {}: {} set {:?} and ${c._1}.${c._2} set {:?}; the consumers of one connection receive the same events",
+              |            "$a", by, v, value));
+              |          return;
+              |        }
+              |        test_clear_$tp(*s0);
+              |      }
+              |      None => {
+              |        let s0 = test_sent_$a();
+              |        inject_$a(value.clone());
+              |        SETUP_BATCH_$a = Some((s0, value, "${c._1}.${c._2}"));
+              |        test_clear_$tp(s0);
+              |        setup_resend_none_$a();
+              |      }
+              |    }
+              |  }
+              |}"""
+      }
+      batchFns = batchFns :+
+        st"""/// The setup batch on `$a` (D39): the position before its injection, the value injected,
+            |/// and which consumer's setup injected it.  None outside a batch.
+            |static mut SETUP_BATCH_$a: Option<(u64, $ty, &'static str)> = None;
+            |${(noneStatics, "\n")}
+            |
+            |/// After the batch injects, a consumer already set to `None` must not receive it either.
+            |fn setup_resend_none_$a() {
+            |  unsafe {
+            |    let sent = test_sent_$a();
+            |    ${(resends, "\n")}
+            |  }
+            |}
+            |
+            |fn end_setup_batch_$a() {
+            |  unsafe {
+            |    SETUP_BATCH_$a = None;
+            |    ${(resets, "\n")}
+            |  }
+            |}"""
+      endBatchCalls = endBatchCalls :+ st"end_setup_batch_$a();"
+    }
+    batchFns = batchFns :+
+      st"""/// End every connection's setup batch: at every scheduler command and at each test's
+          |/// start.  What was already requested of the consumers stays requested.
+          |pub(crate) fn end_setup_batches() {
+          |  ${(endBatchCalls, "\n")}
+          |}"""
+    wrappers = wrappers ++ batchFns
+
     var containers: ISZ[ST] = ISZ()
     for (ps <- preStates) {
       val decls: ISZ[ST] =
-        for (f <- ps.fields) yield st"pub ${f.fieldName}: ${f.rustTypeName},"
+        for (f <- ps.fields) yield
+          if (f.isEvent) st"pub ${f.fieldName}: Option<${f.rustTypeName}>,"
+          else st"pub ${f.fieldName}: ${f.rustTypeName},"
       val sets: ISZ[ST] =
-        for (f <- ps.fields) yield st"${f.setter}(s.${f.fieldName});"
+        for (f <- ps.fields) yield
+          if (f.isEvent)
+            st"""match s.${f.fieldName} {
+                |  Some(v) => setup_some_${ps.threadId}_${f.fieldName}(v),
+                |  None => setup_none_${ps.threadId}_${f.fieldName}(),
+                |}"""
+          else st"${f.setter}(s.${f.fieldName});"
       containers = containers :+
         st"""/// Complete pre-state for `${ps.threadId}`: every input port and GUMBO state
-            |/// variable it has.  There is deliberately no `Default` -- name every field.
+            |/// variable it has.  There is deliberately no `Default` -- name every field.  An
+            |/// event input is an `Option`: `Some(v)` for exactly `v` pending, `None` for nothing.
             |pub struct ${ps.threadId}_PreState {
             |  ${(decls, "\n")}
             |}

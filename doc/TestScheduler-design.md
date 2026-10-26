@@ -877,7 +877,23 @@ adds `list=1`.
   lost, which is also a failure.  So does a `DONE` line missing `matched=`, `passed=` or
   `failed=`, and one without `init=ok` (see "Contract observation in the controller (stage 7)").
 - **The `TEST | ` prefix** makes scraping a line-anchored regex rather than prose matching, and
-  keeps it distinct from the scheduler's existing `SCHEDULER | ...` output.
+  keeps it distinct from the scheduler's existing `SCHEDULER | ...` output.  Both uses are
+  anchored: the verdict reads only lines that *start* with `TEST | `, and the condition that
+  stops QEMU looks for `DONE` only at the start of a line (`^TEST | DONE`).  Unanchored, a
+  test's own `INFO` or `FAIL` text that mentions the marker would stop the run before the real
+  `DONE`.  That could not pass a run -- the verdict would then find no `DONE` line -- but it
+  would fail a good one.
+- **`list=` must match what was asked for.** A `list=1` verdict when `--list` was not given
+  fails, and so does a run without `list=1` when it was: otherwise a listing image reused for a
+  run would pass having run nothing.  `LIST_TESTS` is part of the build's rebuild hash, so that
+  should not happen, but the host checks rather than assumes it.  A listing must also be well
+  formed: `passed=0 failed=0` with no `PASS` or `FAIL` lines, as many selected `LIST` lines as
+  `matched`, and `init=ok`.
+
+`RUN_TESTS_TARGET_CMD` runs a shell command in place of building the image and booting it
+under QEMU; its output stands in for the serial console.  It exists so that
+`SystemTestingTests` can drive the stop condition and the verdict with crafted output (a
+message mentioning `DONE`, an unrequested listing, a malformed one) without an SDK or QEMU.
 
 This composes with the panic handler in `lib.rs`, which logs `PANIC` and then traps (`udf`), so
 the thread's `_MON` reports a fault.  A component thread that panics or faults once the schedule
@@ -1380,8 +1396,9 @@ runner already consults.
 - The controller prints the test table at init (`TEST | LIST` lines), and honors a list-only
   flag (`LIST_TESTS=1`, or `run-tests.cmd --list`): the table and a
   `DONE matched=<n> passed=0 failed=0 ... list=1` line, with `matched` the number the filter
-  selects, and nothing run. The host still requires `matched > 0`, then reports the listing and
-  succeeds. Without it the host cannot discover what is runnable.
+  selects, and nothing run. The host still requires `matched > 0`, and that the listing was
+  asked for and is well formed (D18), then reports the listing and succeeds. Without it the
+  host cannot discover what is runnable.
 
 **Dependency on D13.** Running an arbitrary subset is sound *only* because tests are
 order-independent with explicit setup. If D13 is ever weakened, subset selection breaks with
@@ -1462,6 +1479,202 @@ This is why the container must not gain `#[derive(Default)]` as a convenience: i
 re-enable `..Default::default()` and reopen the hazard. The existing component-level
 `PreStateContainer{,_wGSV}` derive nothing today, and the controller's analogue should stay
 that way.
+
+**An event input can be set to "none" (D39).** Until D39, an event or event data port's field
+was a plain `T`, and its setter enqueued it, so the container could add an event but never say
+that none was pending. An event the consumer has not taken survives the runner's normalization
+-- for example one injected, or sent, after the consumer's slot in the frame -- so the next
+test could inherit it, and its "complete" setup add a second on top. D39 closes this: event
+fields are `Option<T>`, and `None` clears what is pending for that consumer (on a broadcast
+connection, `Some` sets the connection rather than one consumer; see D39).
+
+#### Clearing a pending event (D39)
+
+*Status: built (2026-10-26), in four stages.  Raised in an external review of this design, and
+revised after four more.  Stages 1 and 2: the `Option` fields, the
+clear-request regions and the consumers applying them, and the setup batches -- the setters
+`setup_some_<thread>_<port>` / `setup_none_<thread>_<port>` behind each container's event
+fields, per-connection batch state in the controller, `put_` split into the public send that ends
+the batch and the internal `inject_` the setters use, and `end_setup_batches()` at every
+`api::issue` and before each test's `BEGIN`.  Stage 3 is built too: `test_clear_<thread>_<port>`
+moves the cleared reader's checks cursor with the consumer's, and the `sys` cursor for an
+unconnected input.  Stage 4, the on-target tests, is built: the `clearing` suite in
+`models/SystemTesting/qemu/tests.rs`, run under QEMU by `SystemTestingTests`.  Of the tests listed
+below, the two consecutive tests with no dispatch between them cannot be written -- the runner
+always issues commands between tests -- so the `end_setup_batches()` call before each `BEGIN` is
+checked in the generated code instead.*
+
+**What it is for.** D13 asks a test to set every input it depends on, and D14 lets rustc check
+that it did. For an event input "set" has to include "nothing pending", which the container
+cannot express today (see the limitation above).
+
+**The container.** An event or event data input's field becomes `Option<T>` (`Option<()>`, in
+effect a flag, for a pure event port):
+
+- `None`: nothing is pending for this consumer;
+- `Some(v)`: exactly `v` is pending for it.
+
+Data ports and GUMBO state variables are unchanged: a data port always holds a value, so
+"absent" means nothing for it. The container still derives no `Default` (D14), so every test
+must decide, for every event input, between an event and none.
+
+**Why clearing cannot be done from the controller alone.** The queues are broadcast with a
+private cursor per receiver ("Inspection does not disturb the system"): the shared region holds
+`numSent` and `elt[]`, but a consumer's `numRecv` is in its own `Recv_t`, in its own protection
+domain, which the controller cannot write. Advancing only the controller's cursors would hide
+the event from the checks while the consumer still dequeues it.
+
+**So the consumer moves its own cursor, on request, at its next dispatch.** The request travels
+as an injected state variable does (D16): through a region the controller writes and the thread
+maps read-only. It cannot be a queue of counters, as first proposed -- HAMR generates queue types
+only for model data types -- so it is a pair of counters per port, `{seq, cutoff}`, and the
+consumer remembers privately which `seq` it last applied. Nothing in the region is ever cleared:
+
+1. While paused (D4), the controller writes the event region's current `numSent` as the
+   port's *cutoff*, then, after a release fence, increments its `seq`, in the consumer's region
+   `inj_<thread>_clr` -- one region per thread with event inputs, one pair per event input port
+   (`test_clear_<thread>_<port>`, behind the Rust `inspect::clear_<thread>_<port>()`).
+2. At the start of its next dispatch, before reading any port, the consumer's generated bridge
+   (C, so the same code serves Rust and C threads) compares each port's `seq` with the one it
+   last applied. A new one is applied: after an acquire fence it reads the cutoff and moves its
+   `Recv_t.numRecv` up to it if it is behind. "Behind" is a wrap-safe comparison -- the
+   difference `cutoff - numRecv` taken as signed -- although with a 64-bit `numSent` a wrap is
+   not a practical concern. Only the newest request counts, each is applied once, and the
+   consumer never writes the region. The bridge code is the first of the thread's compute
+   contributions (the plugin puts its connection-store entry first), so it precedes every read,
+   a sporadic thread's emptiness check included.
+3. At the same time as step 1 the controller moves the contract checks' cursor for this reader
+   (`<accessor>__<reader>`, D25) to the same cutoff, so the checks do not record, for its next
+   dispatch, an event it will never see.
+
+Only that reader's cursors move, so the other consumers of a broadcast connection keep what is
+pending for them. An injection after the cutoff raises `numSent` past it, so the consumer still
+receives it: "clear, then inject" keeps its order.
+
+**What the test and the system assertions see.**
+
+- *A test's own reads* (`inspect::get_<port>`) go through one cursor per region, not per reader:
+  they are a view of what was sent on the connection, not of what one consumer has yet to
+  receive. Clearing does not move that cursor, and a test cannot ask "what is pending for this
+  consumer" through it. If tests need that, it is a separate addition: reader-specific getters
+  beside the existing per-region ones, which stay as they are -- with cursors of their own, not
+  the checks': a test reading through the checks' cursor would take events from them, the
+  interference D25 exists to prevent.
+- *The system assertions* keep the distinction D27 draws between what was sent and what was
+  received, and clearing touches only the second:
+  - A **producer's output** is what the frame carried, whoever then received it. Clearing does
+    not change it: an event cleared for every consumer was still sent, and the producer's frame
+    value still shows it.
+  - A **connected input's alias** (`d2_val = dst2.val`) is what the reader received, latched at
+    its dispatch through the reader's own view -- the checks' per-reader cursor that step 3
+    moves. A cleared reader's latch therefore shows nothing received, with no further change.
+  - An **unconnected input** is what its reader received, read through the region's `sys`
+    cursor at the reader's completion. Its only reader is the cleared consumer, so the
+    controller moves `sys` to the cutoff as well; the value is taken at completion, so a value
+    already recorded for a dispatch that completed earlier in the frame is history and stays.
+
+**Broadcast connections: `Some(v)` sets the connection, not one consumer.** An injection goes
+into the producer's queue, which every consumer of the connection reads; on a depth-1 queue it
+also replaces what was pending for them. That is not a defect to work around: a real producer
+cannot send different values to different consumers of one connection either, so a pre-state
+that has them pending different values does not describe any state the system can be in. The
+only per-consumer difference a broadcast connection really has is that one consumer has taken an
+event the other has not -- which is `None` for the first and `Some` for the second. So:
+
+- `None` is per consumer: nothing is pending for that consumer.
+- `Some(v)` is per connection: `v` is pending for that consumer, and every consumer of the
+  connection set to `Some` in the same batch receives the same `v`, once.
+
+The setters for the consumers of one connection are separate calls, one per thread's
+container, so the result must not depend on their order. Applied naively it would: with
+`numSent = 10`, `None` for A sends cutoff 10, then `Some(v)` for B injects event 11, which A
+then receives. So the setups of one connection between two scheduler commands are treated as
+a batch (defined below), applied as each setter runs:
+
+- The first `Some` on the connection in this batch records `s0`, the region's `numSent` before
+  it, and injects `v` once. A consumer set to `Some` gets cutoff `s0`: everything before `v` is
+  discarded, `v` is kept.
+- A consumer set to `None` gets the region's current `numSent` as its cutoff, which discards `v`
+  too. If a later setter in the batch then injects on the connection, the controller re-sends
+  every `None` consumer's cutoff, at the new `numSent` (the consumer applies only the newest).
+- A later `Some(v)` with the same `v` injects nothing; it only sends that consumer cutoff `s0`.
+  A later `Some(w)` with a different `w` fails the test, naming the connection and both values,
+  rather than letting the last setter win silently.
+
+So `None` for A and `Some(v)` for B leave A with nothing and B with `v` in either order.
+
+**What a batch is.** A connection's batch is the setter calls made on it between two scheduler
+commands, and nothing in between but other setters. It ends at the first of:
+
+- *any scheduler command* the test issues -- every one, including those that dispatch nothing
+  (`info_state()`, `sstep(0)`, a `run_to_thread` already at its target), so the rule does not
+  depend on what a command happened to do;
+- *the end of the test*, and the runner's normalization before the next one -- so an earlier
+  test's batch can never reject a later test's `Some(w)` as a conflict, even when no dispatch
+  separates them;
+- *an explicit `put_` on the connection.* That is a deliberate send, which every consumer then
+  receives like any later send. It also invalidates the batch's saved position: after
+  `set_A(Some(1)); put_<port>(2); set_B(Some(1))`, reusing cutoff `s0` and injecting nothing
+  would leave B, on a depth-1 queue, with 2. So the `put_` closes the batch, and `set_B` starts
+  a new one at the queue's current position -- recording a new `s0` and injecting 1 again, which
+  A then receives as well: what the test sent, in the order it sent it.
+
+Ending a batch resets only its bookkeeping -- `s0`, the value injected, the `None` consumers to
+re-send to. (For the implementation: a setter injects through the same queue write as `put_`,
+but must not close its own batch, so the controller has to tell the two apart -- an internal
+enqueue for setters, and the public `put_` that closes the batch.) Cutoff requests already queued for a consumer stay queued: they are the consumer's,
+applied at its next dispatch whatever the batch does.
+
+Order independence holds within one batch. A test that splits one connection's setup across a
+command -- `set_A(None); info_state(); set_B(Some(v))` -- has made two batches, and A, cleared
+before `v` was injected, receives it. Setting up every consumer of a connection between the same
+two commands, as a test's setup naturally does, is what the guarantee asks.
+
+**Interaction with the rest of the design.**
+
+- *Overruns and lost tracking:* `forget_ran` already drains event cursors for dispatches that ran
+  unobserved, and drops pending injections. A request the unobserved dispatch saw has been
+  applied, and one it did not is still waiting for the next, so the request region needs nothing
+  extra; the controller only has to move the checks' cursor the same way the consumer did.
+- *A rejected dispatch (D36):* a dispatch the controller skips leaves its events pending, which
+  is exactly when a test needs to clear them -- the request stays and applies at the next dispatch
+  that does run.
+- *The contract checks:* a cleared event never reaches the consumer, so the saved pre-state for
+  its next dispatch must not include it; moving the checks' cursor in step 3 does that.
+- *Code size:* one page-sized region per thread with event inputs, packed after the state
+  variable injection regions in both the controller's and the threads' injection blocks, and a
+  compare per event input at dispatch start. The bridge code is in every variant, but the
+  pointer is NULL wherever the region is not mapped -- everywhere but the test variant -- so it
+  does nothing there.
+
+**Migration.** Every existing test's container literal that sets an event input stops compiling
+until it wraps the value in `Some(...)`. That is the point of D14 -- rustc finds every test that
+has to decide -- and the change is mechanical.
+
+**Tests.**
+
+- Clearing after a rejected dispatch: inject an event that breaks an assumption, let the dispatch
+  be rejected, set the field to `None`, step, and check the consumer saw no event.
+- Clearing one consumer of a broadcast connection (`models/SystemTesting`'s `val`, read by `dst1`
+  and `dst2`): `None` for one, step both, and check only the other received the event -- and that
+  the system assertions still saw it sent.
+- Clearing every consumer of a connection: neither receives the event, both received-input
+  aliases show nothing, and the producer's output still shows it was sent.
+- Mixed setup in both orders: `None` for `dst1` then `Some(v)` for `dst2`, and the reverse, give
+  the same result -- `dst1` receives nothing and `dst2` receives `v`.
+- An explicit `put_` inside a batch: `set_dst1(Some(1)); put_<port>(2); set_dst2(Some(1))`
+  delivers 1 to `dst2` (the `put_` closed the batch, so `set_dst2` injected again).
+- Batch lifetime: a command that dispatches nothing (`info_state()`, `sstep(0)`) between two
+  setters ends the batch, so a different value after it starts a new batch rather than failing as
+  a conflict; and two consecutive tests with no dispatch between them, the first setting `Some(1)`
+  and the second `Some(2)` on the same connection, both pass.
+- `None` on an unconnected input: the event is gone from the consumer, the checks and the system
+  assertions alike.
+- `Some(v)` with an event already pending: the consumer receives exactly `v`, once.
+- Successive setup of two consumers of one connection: the same `Some(v)` for both delivers `v`
+  once to each, on a depth-1 queue and on a deeper one; different values fail the test, naming
+  the connection.
+- Clear, then a later `put_` in the same pause: the consumer receives the later value.
 
 ### Contract observation in the controller (stage 7)
 
@@ -2372,6 +2585,7 @@ The constant is `ExperimentalOptions.ENABLE_TEST_SCHEDULER`, beside `USE_CASE_CO
 ## Open Items
 
 ### Left open
+
 
 - Whether injection goes through generated setters only, or also exposes raw region writes for
   negative testing.
