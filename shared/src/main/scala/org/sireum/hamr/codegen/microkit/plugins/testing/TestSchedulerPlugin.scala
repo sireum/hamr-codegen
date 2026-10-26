@@ -360,6 +360,12 @@ object TestSchedulerPlugin {
   @strictpure def clearThreadVaddrKiB(vars: ISZ[InjectableStateVar], clears: ISZ[ClearableThread], k: Z): Z =
     MicrokitUtil.packedVaddrKiB(injectThreadBaseVaddrKiB, injectionSizes(vars, clears), vars.size + k)
 
+  /** Bytes per port in a clear-request region: a `{seq, cutoff}` pair of 64-bit counters. */
+  val clearRequestBytes: Z = 16
+
+  /** A clear-request region for `ports` event inputs, in whole 4 KiB pages. */
+  @strictpure def clearRegionKiBytes(ports: Z): Z = (ports * clearRequestBytes + 4095) / 4096 * 4
+
   /** The global the consumer's bridge reads its clear requests through, patched by microkit
     * via setvar_vaddr where the region is mapped and NULL everywhere else (D39). */
   val clearRequestsVar: String = "inj_clr_requests"
@@ -490,8 +496,8 @@ object TestSchedulerPlugin {
                                 val threadId: String,
                                 val ports: ISZ[ClearableEventInput]) {
   @strictpure def regionName: String = s"inj_${threadId}_clr"
-  /** Two 64-bit counters per port: far less than the smallest region, a page. */
-  @strictpure def sizeInKiBytes: Z = 4
+  /** Two 64-bit counters per port, in whole 4 KiB pages: one page holds 256 ports. */
+  @strictpure def sizeInKiBytes: Z = TestSchedulerPlugin.clearRegionKiBytes(ports.size)
 }
 
 /** One clearable input: the port, as the consumer names it, and the accessor of the region it
@@ -748,11 +754,21 @@ object TestSchedulerPlugin {
           val cursor = r.obsCursor(reader)
           val obsSig = st"bool test_obs_get_$cursor(${r.cTypeName} *value)"
           accessorSigs = accessorSigs :+ obsSig
+          // D39: a read is the dispatch that the clear requests made before it were for, so it
+          // closes their window -- see test_clear_
+          val closeWindow: ST = if (r.isEvent) st"tc_obs_${cursor}_clr_open = false;" else st""
+          val clearWindowVars: ST =
+            if (r.isEvent)
+              st"""sb_event_counter_t tc_obs_${cursor}_clr_base;
+                  |bool tc_obs_${cursor}_clr_open;"""
+            else st""
           accessorImpls = accessorImpls :+
             st"""$rt tc_obs_${cursor}_recv;
+                |$clearWindowVars
                 |
                 |$obsSig {
                 |  sb_event_counter_t numDropped;
+                |  $closeWindow
                 |  return ${qn}_dequeue(&tc_obs_${cursor}_recv, &numDropped, value);
                 |}"""
           if (r.isEvent) {
@@ -761,15 +777,23 @@ object TestSchedulerPlugin {
             val markSig = st"void test_obs_mark_$cursor(void)"
             val rewindSig = st"void test_obs_rewind_$cursor(void)"
             accessorSigs = accessorSigs :+ markSig :+ rewindSig
+            // the clear window goes back with the cursor: the rejected dispatch did not run, so the
+            // requests it would have applied are still to be applied
             accessorImpls = accessorImpls :+
               st"""$rt tc_obs_${cursor}_mark;
+                  |sb_event_counter_t tc_obs_${cursor}_mark_clr_base;
+                  |bool tc_obs_${cursor}_mark_clr_open;
                   |
                   |$markSig {
                   |  tc_obs_${cursor}_mark = tc_obs_${cursor}_recv;
+                  |  tc_obs_${cursor}_mark_clr_base = tc_obs_${cursor}_clr_base;
+                  |  tc_obs_${cursor}_mark_clr_open = tc_obs_${cursor}_clr_open;
                   |}
                   |
                   |$rewindSig {
                   |  tc_obs_${cursor}_recv = tc_obs_${cursor}_mark;
+                  |  tc_obs_${cursor}_clr_base = tc_obs_${cursor}_mark_clr_base;
+                  |  tc_obs_${cursor}_clr_open = tc_obs_${cursor}_mark_clr_open;
                   |}"""
           }
           accessorInits = accessorInits :+
@@ -842,7 +866,10 @@ object TestSchedulerPlugin {
         clrSigs = clrSigs :+ sig
         // D39 stage 3: the contract checks must not see what the consumer will not.  Its own
         // checks cursor -- which its saved pre-state and its received-input latch read through
-        // -- moves with it.  So does the system assertions' cursor, but only for an unconnected
+        // -- moves as the consumer will: the consumer applies only the newest cutoff, to where it
+        // stood at its last dispatch, so the cursor takes the newest cutoff against where it stood
+        // before this window's first request.  A later request may therefore move it back over
+        // what an earlier one discarded (Some, None, then Some again in one batch).  So does the system assertions' cursor, but only for an unconnected
         // input, whose system value is what its one reader received; a producer output's is what
         // the frame carried, which a clear does not change (D27).
         var cursorMoves: ISZ[ST] = ISZ()
@@ -852,9 +879,12 @@ object TestSchedulerPlugin {
           for (reader <- movedFor if ops.ISZOps(r.obsReaders).contains(reader)) {
             val cursor = r.obsCursor(reader)
             cursorMoves = cursorMoves :+
-              st"""if ((intmax_t) (cutoff - tc_obs_${cursor}_recv.numRecv) > 0) {
-                  |  tc_obs_${cursor}_recv.numRecv = cutoff;
-                  |}"""
+              st"""if (!tc_obs_${cursor}_clr_open) {
+                  |  tc_obs_${cursor}_clr_base = tc_obs_${cursor}_recv.numRecv;
+                  |  tc_obs_${cursor}_clr_open = true;
+                  |}
+                  |tc_obs_${cursor}_recv.numRecv =
+                  |  ((intmax_t) (cutoff - tc_obs_${cursor}_clr_base) > 0) ? cutoff : tc_obs_${cursor}_clr_base;"""
           }
         }
         fns = fns :+

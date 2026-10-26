@@ -1544,8 +1544,15 @@ consumer remembers privately which `seq` it last applied. Nothing in the region 
    contributions (the plugin puts its connection-store entry first), so it precedes every read,
    a sporadic thread's emptiness check included.
 3. At the same time as step 1 the controller moves the contract checks' cursor for this reader
-   (`<accessor>__<reader>`, D25) to the same cutoff, so the checks do not record, for its next
-   dispatch, an event it will never see.
+   (`<accessor>__<reader>`, D25) as the consumer will move, so the checks do not record, for its
+   next dispatch, an event it will never see -- nor miss one it will.  The consumer applies only
+   the newest cutoff, to where it stood at its last dispatch.  So the cursor keeps a *clear
+   window*: the first request after the cursor's last read records where it stood (its base),
+   and every request in the window sets it to the later of the base and the newest cutoff.  That
+   can move it back over a position an earlier request in the same window discarded -- `Some(v)`,
+   `None`, then `Some(v)` again for one consumer in one batch ends with `v` received, and seen.
+   A read closes the window, since it is the dispatch the requests were for, and a rejected
+   dispatch's rewind (D36) restores the window with the cursor, since the dispatch did not run.
 
 Only that reader's cursors move, so the other consumers of a broadcast connection keep what is
 pending for them. An injection after the cutoff raises `numSent` past it, so the consumer still
@@ -1641,7 +1648,8 @@ two commands, as a test's setup naturally does, is what the guarantee asks.
   that does run.
 - *The contract checks:* a cleared event never reaches the consumer, so the saved pre-state for
   its next dispatch must not include it; moving the checks' cursor in step 3 does that.
-- *Code size:* one page-sized region per thread with event inputs, packed after the state
+- *Code size:* one region per thread with event inputs -- 16 bytes per input, in whole pages,
+  so a page per 256 inputs -- packed after the state
   variable injection regions in both the controller's and the threads' injection blocks, and a
   compare per event input at dispatch start. The bridge code is in every variant, but the
   pointer is NULL wherever the region is not mapped -- everywhere but the test variant -- so it
