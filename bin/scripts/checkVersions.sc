@@ -1300,33 +1300,52 @@ var vestVerusMoved = F
       exclamations()
   }
 
-  vestVerusPin("main") match {
-    case Some((version, rust, _)) =>
-      if (version == "") {
-        // fetched but unreadable, so this check has gone blind in a way a retry will not fix
-        exclamations()
-        println(s"WARNING: verus.json on $vestRepo main declares no Verus version, so Vest's next Verus was not checked")
-        exclamations()
-        vestVerusMoved = T
-      } else if (version != verusRelease) {
-        exclamations()
-        println(
-          st"""WARNING: Vest has moved to a different Verus than verus-release pins:
-              |
-              |  verus-release = $verusRelease, but Vest main pins Verus $version${if (rust == "") "" else s" (Rust $rust)"}
-              |
-              |  Bumping verus-release goes with the vest_lib release that pins it, and with
-              |  the Verus crates, z3 and rust-channel recorded above, and provers-env's
-              |  VERUS_VER, Z3_VER and RUST_TOOLCHAIN_VER.
-              |
-              |  ${microkitVersionsP.toUri}
-              |  https://github.com/$vestRepo/blob/main/verus.json""".render)
-        exclamations()
-        vestVerusMoved = T
+  // Whether a newer Vest *release* builds against another Verus -- the one a bump would
+  // move to.  The newest published vest_lib is what counts, not Vest's main branch: main
+  // moves to a new Verus before any vest_lib built against it exists, and bumping then
+  // would leave generated crates requiring a vstd no published vest_lib accepts.
+  latestCrateVersion("vest_lib") match {
+    case Some(latest) if latest == "" =>
+      // fetched but unreadable, so this check has gone blind in a way a retry will not fix
+      exclamations()
+      println("WARNING: the crates.io index lists no vest_lib release, so Vest's next Verus was not checked")
+      exclamations()
+      vestVerusMoved = T
+    case Some(latest) if latest != vestLib =>
+      val latestTag = s"vest_lib-v$latest"
+      vestVerusPin(latestTag) match {
+        case Some((version, rust, _)) =>
+          if (version == "") {
+            exclamations()
+            println(s"WARNING: verus.json at $vestRepo $latestTag declares no Verus version, so Vest's next Verus was not checked")
+            exclamations()
+            vestVerusMoved = T
+          } else if (version != verusRelease) {
+            exclamations()
+            println(
+              st"""WARNING: a newer Vest release builds against a different Verus than verus-release pins:
+                  |
+                  |  verus-release = $verusRelease, but vest_lib $latest pins Verus $version${if (rust == "") "" else s" (Rust $rust)"}
+                  |
+                  |  Bumping verus-release goes with vest_lib $latest, and with the Verus crates,
+                  |  z3 and rust-channel recorded above, and provers-env's VERUS_VER, Z3_VER and
+                  |  RUST_TOOLCHAIN_VER.
+                  |
+                  |  ${microkitVersionsP.toUri}
+                  |  https://github.com/$vestRepo/blob/$latestTag/verus.json""".render)
+            exclamations()
+            vestVerusMoved = T
+          }
+        case _ =>
+          exclamations()
+          println(s"WARNING: could not fetch verus.json at $vestRepo $latestTag, so Vest's next Verus was not checked")
+          exclamations()
       }
+    case Some(_) =>
+      // the newest release is the pinned one, which the check above already compared
     case _ =>
       exclamations()
-      println(s"WARNING: could not fetch verus.json on $vestRepo main, so Vest's next Verus was not checked")
+      println("WARNING: could not fetch the crates.io index for vest_lib, so Vest's next Verus was not checked")
       exclamations()
   }
 }
@@ -1495,7 +1514,7 @@ if (ciMode) {
     (cratesOutdated, "pinned crates have newer crates.io releases"),
     (verusCratesDrifted, "the recorded Verus crates, Z3 or Rust toolchain are not the ones verus-release declares"),
     (vestMisaligned, "the pinned Verus or Verus crates are not the ones Vest is built against"),
-    (vestVerusMoved, "Vest has moved to a different Verus than verus-release"),
+    (vestVerusMoved, "a newer vest_lib release builds against a different Verus than verus-release"),
     (lionsosDrifted, "the LionsOS dependencies have moved"),
     (artBehind, "art.version is not the latest ART"),
     (sbtAssemblyUnchecked, "sbt-assembly could not be checked"),
