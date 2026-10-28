@@ -755,21 +755,27 @@ object TestSchedulerPlugin {
           val obsSig = st"bool test_obs_get_$cursor(${r.cTypeName} *value)"
           accessorSigs = accessorSigs :+ obsSig
           // D39: a read is the dispatch that the clear requests made before it were for, so it
-          // closes their window -- see test_clear_
-          val closeWindow: ST = if (r.isEvent) st"tc_obs_${cursor}_clr_open = false;" else st""
-          val clearWindowVars: ST =
+          // closes their window -- see test_clear_.  Only event ports have a clear window; the
+          // lines are built as lists so a data port gets no blank lines in their place.
+          val obsDecls: ISZ[ST] =
             if (r.isEvent)
-              st"""sb_event_counter_t tc_obs_${cursor}_clr_base;
-                  |bool tc_obs_${cursor}_clr_open;"""
-            else st""
+              ISZ(st"$rt tc_obs_${cursor}_recv;",
+                st"sb_event_counter_t tc_obs_${cursor}_clr_base;",
+                st"bool tc_obs_${cursor}_clr_open;")
+            else ISZ(st"$rt tc_obs_${cursor}_recv;")
+          val obsBody: ISZ[ST] =
+            if (r.isEvent)
+              ISZ(st"sb_event_counter_t numDropped;",
+                st"tc_obs_${cursor}_clr_open = false;",
+                st"return ${qn}_dequeue(&tc_obs_${cursor}_recv, &numDropped, value);")
+            else
+              ISZ(st"sb_event_counter_t numDropped;",
+                st"return ${qn}_dequeue(&tc_obs_${cursor}_recv, &numDropped, value);")
           accessorImpls = accessorImpls :+
-            st"""$rt tc_obs_${cursor}_recv;
-                |$clearWindowVars
+            st"""${(obsDecls, "\n")}
                 |
                 |$obsSig {
-                |  sb_event_counter_t numDropped;
-                |  $closeWindow
-                |  return ${qn}_dequeue(&tc_obs_${cursor}_recv, &numDropped, value);
+                |  ${(obsBody, "\n")}
                 |}"""
           if (r.isEvent) {
             // A rejected dispatch (D36) consumes nothing: the controller puts its reader
