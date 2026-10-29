@@ -47,6 +47,9 @@ object CRustComponentPlugin {
   @strictpure def componentDirectory(thread: AadlThread, options: HamrCli.CodegenOption, store: Store): String = s"${componentCrateDirectory(thread, options, store)}/src/component"
 
   @strictpure def appModuleName(component: AadlComponent): String = s"${MicrokitUtil.getComponentIdPath(component)}_app"
+
+  // emitted to <sel4OutputDir>/bin; the other coverage report files go to bin/coverage-report
+  val coverageReportScript: String = "coverage-report.cmd"
 }
 
 object ComponentContributions {}
@@ -126,6 +129,7 @@ object ComponentContributions {}
     var ret: Map[IdPath, ComponentContributions] = Map.empty
 
     var makefileTestEntries: ISZ[ST] = ISZ()
+    var coverageCrateDirs: ISZ[ST] = ISZ()
     var makefileCleanEntries: ISZ[ST] = ISZ()
     for (thread <- symbolTable.getThreads() if MicrokitUtil.isRusty(thread)) {
       val threadId = MicrokitUtil.getComponentIdPath(thread)
@@ -287,6 +291,11 @@ object ComponentContributions {}
 
       if (genProfile.emitTestHarness) {
         makefileTestEntries = makefileTestEntries :+ st"make -C $${CRATES_DIR}/${CRustComponentPlugin.componentCrateName(thread, localStore)} test"
+        // the top-level coverage report is over the model's own components: injected
+        // threads (monitors, the test controller) are left out
+        if (!StoreUtil.isSynthetic(thread.path, localStore)) {
+          coverageCrateDirs = coverageCrateDirs :+ st"$${CRATES_DIR}/${CRustComponentPlugin.componentCrateName(thread, localStore)}"
+        }
       }
 
       makefileCleanEntries = makefileCleanEntries :+ st"make -C $${CRATES_DIR}/${CRustComponentPlugin.componentCrateName(thread, localStore)} clean"
@@ -303,6 +312,32 @@ object ComponentContributions {}
         MakefileTarget(name = "test", allowMultiple = T, dependencies = ISZ(), body = makefileTestEntries),
         MakefileTarget(name = "clean", allowMultiple = T, dependencies = ISZ(), body = makefileCleanEntries)),
       localStore)
+
+    if (coverageCrateDirs.nonEmpty) {
+      // `make coverage` / `make coverage-report` at the top: one report merged over every
+      // model component crate's tests, in $(TOP_DIR)/target/coverage (each crate's own
+      // Makefile has the per-crate targets).  `coverage` opens the report the first time
+      // and passes `args=<filter>` on to the tests; `coverage-report` rebuilds the report
+      // from the last run's data.
+      val crates = st"${(coverageCrateDirs, " ")}"
+      localStore = MakefileUtil.addMakefileTargets(
+        ISZ("Makefile"),
+        ISZ(
+          MakefileTarget(name = "coverage", allowMultiple = F, dependencies = ISZ(st"$${TOP_BUILD_DIR}/Makefile"), body = ISZ(st"$${MAKE} -C $${TOP_BUILD_DIR} coverage")),
+          MakefileTarget(name = "coverage-report", allowMultiple = F, dependencies = ISZ(st"$${TOP_BUILD_DIR}/Makefile"), body = ISZ(st"$${MAKE} -C $${TOP_BUILD_DIR} coverage-report")),
+          // the merged report lives outside build/, which clobber otherwise removes
+          MakefileTarget(name = "clobber", allowMultiple = T, dependencies = ISZ(), body = ISZ(st"rm -rf $$(TOP_DIR)/target/coverage"))),
+        localStore)
+      localStore = MakefileUtil.addMakefileTargets(
+        ISZ("system.mk"),
+        ISZ(
+          MakefileTarget(name = "coverage", allowMultiple = F, dependencies = ISZ(), body = ISZ(
+            st"""@open=; if [ ! -f $$(TOP_DIR)/target/coverage/report/index.html ]; then open=open; fi; \""",
+            st"""$$(TOP_DIR)/bin/${CRustComponentPlugin.coverageReportScript} $crates out=$$(TOP_DIR)/target/coverage $$$$open $$(args)""")),
+          MakefileTarget(name = "coverage-report", allowMultiple = F, dependencies = ISZ(), body = ISZ(
+            st"""$$(TOP_DIR)/bin/${CRustComponentPlugin.coverageReportScript} $crates out=$$(TOP_DIR)/target/coverage no-run"""))),
+        localStore)
+    }
 
     localStore = CRustComponentPlugin.putComponentContributions(DefaultCRustComponentContributions(ret), localStore)
 
@@ -874,20 +909,28 @@ object ComponentContributions {}
               |${TAB}$$(ENV_VARS) cargo test $$(args)
               |
               |# Coverage Example:
-              |#   Generate a test coverage report combining the results of all unit tests
+              |#   Run the unit tests with coverage instrumentation and build the HTML report
               |#   Usage: make coverage
               |#
-              |#   Generate a test coverage report for unit tests whose name contains 'proptest'
+              |#   Only unit tests whose name contains 'proptest'
               |#   Usage: make coverage args=proptest
+              |#
+              |#   Rebuild the report from the last run's data, without re-running the tests
+              |#   Usage: make coverage-report
+              |#
+              |# The report is target/coverage/report/index.html (lines, regions, functions and
+              |# branches, measured by llvm-cov), with target/coverage/lcov.info beside it.  It is
+              |# written by bin/coverage-report.cmd, which needs SIREUM_HOME and the toolchain's
+              |# llvm-tools-preview component, and opens in the browser the first time.
+              |
+              |COVERAGE_REPORT = ../../bin/coverage-report.cmd
               |
               |coverage: $$(R2U2_BUILD_DEPS)
-              |${TAB}cargo install grcov
-              |${TAB}@exists=0; if [ -f target/coverage/report/index.html ]; then exists=1; fi; \
-              |${TAB}rm -rf target/coverage; \
-              |${TAB}$$(ENV_VARS) CARGO_INCREMENTAL=0 RUSTFLAGS='-Cinstrument-coverage' LLVM_PROFILE_FILE='target/coverage/cargo-test-%p-%m.profraw' \
-              |${TAB}cargo test $$(args); \
-              |${TAB}grcov . --binary-path ./target/debug/deps/ -s . -t html --branch --ignore-not-existing -o target/coverage/report; \
-              |${TAB}if [ $$$$exists -eq 0 ]; then open target/coverage/report/index.html; fi
+              |${TAB}@open=; if [ ! -f target/coverage/report/index.html ]; then open=open; fi; \
+              |${TAB}$$(COVERAGE_REPORT) . $$$$open $$(args)
+              |
+              |coverage-report:
+              |${TAB}$$(COVERAGE_REPORT) . no-run
               |
               |clean:
               |${TAB}cargo clean
@@ -906,6 +949,25 @@ object ComponentContributions {}
 
         val path = s"$componentCrateDir/rust-toolchain.toml"
         resources = resources :+ ResourceUtil.createResource(path, content, F)
+      }
+    }
+    if (CRustComponentPlugin.getCRustComponentContributions(store).componentContributions.nonEmpty) {
+      // the coverage report every component crate's `make coverage` runs:
+      // bin/coverage-report.cmd and the files it copies into each report
+      // (bin/coverage-report/), all bundled with codegen
+      val binDir = s"${options.sel4OutputDir.get}/bin"
+      val coverageFiles = MicrokitUtil.getCoverageReportFiles(store)
+      if (!coverageFiles.contains(CRustComponentPlugin.coverageReportScript)) {
+        // the Makefiles' coverage targets call it, so a codegen built without the
+        // bundled files (resources/coverage-report) must not pass silently
+        reporter.error(None(), name,
+          s"Codegen's coverage report files are missing (no ${CRustComponentPlugin.coverageReportScript}), so the generated `make coverage` targets cannot run")
+      }
+      for (e <- coverageFiles.entries) {
+        resources = resources :+ (
+          if (e._1 == CRustComponentPlugin.coverageReportScript)
+            ResourceUtil.createExeStringResource(path = s"$binDir/${e._1}", content = e._2, overwrite = T)
+          else ResourceUtil.createStringResource(path = s"$binDir/coverage-report/${e._1}", content = e._2, overwrite = T))
       }
     }
     return (localStore + s"FINALIZED_$name" ~> BoolValue(T), resources)

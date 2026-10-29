@@ -308,8 +308,22 @@ object CRustTestingPlugin {
     // multiple AADL base types can map to the same Rust primitive (e.g. Character and
     // Unsigned_8 both map to u8), so track which primitives have been emitted
     var emittedPrimitives: Set[String] = Set.empty
-    for (t <- touchedTypes.orderedDependencies) {
-      val o = types.typeMap.get(t).get
+    // An event port without data has no AADL type, so it is not among the touched types,
+    // but the test harness gives it a value of MicrokitTypeUtil.eventPortType (u8) and
+    // calls that type's default strategy -- emit it whenever the thread has such an
+    // incoming port that the harness takes (not a synthetic one, as for the harness's
+    // own parameters); emittedPrimitives keeps a u8 a data port already uses from being
+    // emitted twice.
+    val hasPureEventPort: B = ops.ISZOps(thread.getPorts()).exists(p =>
+      p.direction == Direction.In && !StoreUtil.isSynthetic(p.path, store) && (p match {
+        case _: AadlFeatureData => F
+        case _: AadlEventPort => T
+        case _ => F
+      }))
+    val genTypes: ISZ[AadlType] =
+      (for (t <- touchedTypes.orderedDependencies) yield types.typeMap.get(t).get) ++
+        (if (hasPureEventPort) ISZ[AadlType](MicrokitTypeUtil.eventPortType) else ISZ[AadlType]())
+    for (o <- genTypes) {
       val rep = cRustTypeProvider.getRepresentativeType(o)
       val np = cRustTypeProvider.getTypeNameProvider(rep)
 

@@ -210,6 +210,7 @@ object CodeGen {
     if (!reporter.hasError && runMicrokit) {
       reporter.info(None(), toolName, "Generating Microkit artifacts...")
       var microkitStore = MicrokitUtil.putMicrokitVersions(localStore, JvmMicrokitUtil.getMicrokitVersions)
+      microkitStore = MicrokitUtil.putCoverageReportFiles(microkitStore, JvmMicrokitUtil.getCoverageReportFiles)
       if (modOptions.sel4AuxCodeSymlink) {
         // symlink mode: each aux root directory is symlinked into aux_code by name, so the
         // aux file map's keys must include the root directory names (includeParentDir = T)

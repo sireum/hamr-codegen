@@ -21,4 +21,14 @@ object JvmMicrokitUtilExt_Ext {
     }
     r
   }
+
+  def getCoverageReportFiles: Map[String, String] = {
+    val map = RC.text(Vector(
+      "../../../../../../../resources")) { (p, f) => p.size == 2 && p.head == "coverage-report" }
+    var r = Map.empty[String, String]
+    for ((p, content) <- map) {
+      r = r + String(p.last) ~> String(content)
+    }
+    r
+  }
 }

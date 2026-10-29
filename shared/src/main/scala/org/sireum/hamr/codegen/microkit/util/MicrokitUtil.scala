@@ -151,6 +151,8 @@ object MicrokitUtil {
 
   val KEY_MICROKIT_AUX_CODE_LINKS: String = "KEY_MICROKIT_AUX_CODE_LINKS"
 
+  val KEY_MICROKIT_COVERAGE_REPORT: String = "KEY_MICROKIT_COVERAGE_REPORT"
+
   @pure def isDomainScheduling(options: HamrCli.CodegenOption, aadl: AadlSystem): B = {
     return !isMCS(options, aadl)
   }
@@ -186,6 +188,18 @@ object MicrokitUtil {
 
   @strictpure def putAuxCode(store: Store, auxCode: Map[String, String]): Store =
     store + KEY_MICROKIT_AUX_CODE ~> MapValue(auxCode)
+
+  // the coverage report's files (bin/coverage-report.cmd and what it copies into each
+  // report), by file name. Bundled with codegen, read on the JVM side and passed in via
+  // the store
+  @strictpure def getCoverageReportFiles(store: Store): Map[String, String] =
+    store.get(KEY_MICROKIT_COVERAGE_REPORT) match {
+      case Some(m) => m.asInstanceOf[MapValue[String, String]].map
+      case _ => Map.empty[String, String]
+    }
+
+  @strictpure def putCoverageReportFiles(store: Store, files: Map[String, String]): Store =
+    store + KEY_MICROKIT_COVERAGE_REPORT ~> MapValue(files)
 
   // aux code symlink mode (--sel4-aux-code-symlink): map from each aux root directory's
   // name to its absolute path. When non-empty, the aux directories are symlinked into
