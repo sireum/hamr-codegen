@@ -100,29 +100,74 @@ def exclamations(): Unit = { for (i <- 0 to 1) { println("!!!!!!!!!!!!!!!!!!!!!!
 
 // GitHub's releases atom feed rather than its API: the feed is not rate limited,
 // so CI runners sharing an IP address cannot exhaust it, and its first entry is
-// the most recent release.  None() means the feed could not be fetched, which
-// says nothing about the pin; Some("") means it was fetched but held no release,
-// i.e. its shape changed and this check has gone blind.
-def latestGitHubRelease(releasesUrl: String): Option[String] = {
+// the most recent release -- pre-releases included, which the feed does not mark
+// (see githubPrerelease).  The result is the release's (title, tag): the title is
+// what pins are compared against, e.g. 6.0.0, while the tag it was cut from may
+// differ, e.g. v6.0.0, and is what the API looks a release up by.  None() means
+// the feed could not be fetched, which says nothing about the pin; an empty title
+// means it was fetched but held no release, i.e. its shape changed and this check
+// has gone blind.
+def latestGitHubRelease(releasesUrl: String): Option[(String, String)] = {
   val temp = Os.tempFix("releases-", ".atom")
   temp.removeOnExit()
   if (!temp.downloadFrom(s"$releasesUrl.atom")) {
     return None()
   }
-  // Each release is an <entry> whose <title> is its tag, e.g. <title>2.3.0</title>.
-  // The feed's own <title> precedes the first entry, hence the guard.
+  // Each release is an <entry> holding <link ... href=".../releases/tag/v6.0.0"/>
+  // and then its <title>, e.g. <title>6.0.0</title>.  The feed's own <link>s and
+  // <title> precede the first entry, hence the guard.
+  val tagMarker: String = "/releases/tag/"
   var latest: String = ""
+  var tag: String = ""
   var inEntry = F
   for (l <- temp.readLines if latest == "") {
     val o = ops.StringOps(ops.StringOps(l).trim)
     if (o.contains("<entry>")) {
       inEntry = T
+    } else if (inEntry && o.startsWith("<link") && o.stringIndexOf(tagMarker) >= 0) {
+      val rest = ops.StringOps(o.substring(o.stringIndexOf(tagMarker) + tagMarker.size, o.size))
+      tag = rest.substring(0, rest.indexOf('"'))
     } else if (inEntry && o.startsWith("<title>") && o.endsWith("</title>")) {
       latest = o.substring(7, o.size - 8)
     }
   }
   temp.remove()
-  return Some(latest)
+  return Some((latest, if (tag == "") latest else tag))
+}
+
+// Whether the release of repo (e.g. "seL4/microkit") cut from tag is marked a
+// pre-release, which only the API says.  It is asked only once a release has turned
+// out to be newer than the pin, so it costs nothing on the common path.  None()
+// means it could not be told.
+def githubPrerelease(repo: String, tag: String): Option[B] = {
+  val temp = Os.tempFix("release-", ".json")
+  temp.removeOnExit()
+  if (!githubApiDownload(temp, s"https://api.github.com/repos/$repo/releases/tags/$tag")) {
+    return None()
+  }
+  var r: Option[B] = None()
+  for (l <- temp.readLines if r.isEmpty) {
+    val v = jsonField(l, "prerelease")
+    if (v == "true") {
+      r = Some(T)
+    } else if (v == "false") {
+      r = Some(F)
+    }
+  }
+  temp.remove()
+  return r
+}
+
+// What to append to a newer release's version in a warning and in the CI report:
+// nothing for a full release.  It is part of the CI report line on purpose -- the
+// workflow emails whenever that report changes, so a pre-release being promoted to
+// a release changes the line and sends a second email.
+def prereleaseNote(repo: String, tag: String): String = {
+  githubPrerelease(repo, tag) match {
+    case Some(T) => return " (a pre-release)"
+    case Some(_) => return ""
+    case _ => return " (could not tell whether it is a pre-release)"
+  }
 }
 
 // crates.io lays its sparse index out by name length: 1/a, 2/ab, 3/a/abc, and
@@ -954,13 +999,16 @@ var sireumOrgStale = F
 }
 
 var microkitOutdated = F
+// e.g. ": 2.4.0 (a pre-release)", for the CI report line; see prereleaseNote
+var microkitOutdatedNote: String = ""
 
 { // codegen generates Microkit systems against the SDK that microkit-sdk pins, so
   // a newer Microkit release is drift the same way the provers-env pins are: it is
   // reported rather than fixed, since bumping the SDK also means regenerating the
   // expected results and moving provers-env's MICROKIT_SDK_VER in step -- rewriting
   // the pin here on its own would just trade this warning for the mismatch above.
-  val microkitReleasesUrl = "https://github.com/seL4/microkit/releases"
+  val microkitRepo = "seL4/microkit"
+  val microkitReleasesUrl = s"https://github.com/$microkitRepo/releases"
   val microkitVers = microkitVersionsP.properties
 
   microkitKeysChecked = microkitKeysChecked :+ "microkit-sdk"
@@ -970,23 +1018,25 @@ var microkitOutdated = F
   val ours = microkitVers.get("microkit-sdk").get
 
   latestGitHubRelease(microkitReleasesUrl) match {
-    case Some(latest) =>
+    case Some((latest, tag)) =>
       if (latest == "") {
         exclamations()
         println(s"WARNING: could not find a release tag in $microkitReleasesUrl.atom, so microkit-sdk was not checked")
         exclamations()
         microkitOutdated = T
       } else if (dropV(ours) != dropV(latest)) {
+        val note = prereleaseNote(microkitRepo, tag)
         exclamations()
         println(
           st"""WARNING: microkit-sdk is not the latest Microkit release:
               |
-              |  microkit-sdk = $ours, but the latest release is $latest
+              |  microkit-sdk = $ours, but the latest release is $latest$note
               |
               |  ${microkitVersionsP.toUri}
               |  $microkitReleasesUrl""".render)
         exclamations()
         microkitOutdated = T
+        microkitOutdatedNote = s": $latest$note"
       }
     case _ =>
       // Not drift, so not a failure: an unreachable GitHub says nothing about
@@ -998,6 +1048,8 @@ var microkitOutdated = F
 }
 
 var cratesOutdated = F
+// e.g. "; rust-sel4 6.0.0 (a pre-release)", for the CI report line; see prereleaseNote
+var cratesOutdatedNote: String = ""
 
 { // the crate versions generated Rust components are built against.  Newer releases
   // are reported rather than picked up, for the same reason as microkit-sdk: moving
@@ -1020,7 +1072,8 @@ var cratesOutdated = F
   // git = "https://github.com/seL4/rust-sel4", tag = "<pin>" -- so the tags are
   // what they are checked against.
   val sel4Keys = ISZ[String]("sel4", "sel4-logging")
-  val sel4ReleasesUrl = "https://github.com/seL4/rust-sel4/releases"
+  val sel4Repo = "seL4/rust-sel4"
+  val sel4ReleasesUrl = s"https://github.com/$sel4Repo/releases"
 
   val microkitVers = microkitVersionsP.properties
   var stale = ISZ[ST]()
@@ -1028,20 +1081,24 @@ var cratesOutdated = F
   var blind = ISZ[String]()
 
   // releaseUrl maps the release that came back to the page describing it, so a
-  // warning points at what changed rather than just naming a number
+  // warning points at what changed rather than just naming a number.  note is
+  // appended to a newer release's version (see prereleaseNote).  Returns whether
+  // the pin is stale.
   def check(key: String, ours: String, latestOpt: Option[String], where: String,
-            releaseUrl: String => String @pure): Unit = {
+            releaseUrl: String => String @pure, note: String): B = {
     latestOpt match {
       case Some(latest) =>
         if (latest == "") {
           blind = blind :+ key
         } else if (dropV(ours) != dropV(latest)) {
           stale = stale :+
-            st"""$key = $ours, but the latest $where release is $latest
+            st"""$key = $ours, but the latest $where release is $latest$note
                 |  ${releaseUrl(latest)}"""
+          return T
         }
       case _ => unreachable = unreachable :+ key
     }
+    return F
   }
 
   microkitKeysChecked = microkitKeysChecked ++ cratesIoKeys ++ sel4Keys
@@ -1053,17 +1110,31 @@ var cratesOutdated = F
   val cratesLatest = ops.ISZOps(cratesIoKeys).parMap((key: String) => latestCrateVersion(key))
   for (i <- 0 until cratesIoKeys.size) {
     val key = cratesIoKeys(i)
+    // crates.io has pre-releases too, but latestCrateVersion already skips them
     check(key, microkitVers.get(key).get, cratesLatest(i), "crates.io",
-      (latest: String) => s"https://crates.io/crates/$key/$latest")
+      (latest: String) => s"https://crates.io/crates/$key/$latest", "")
   }
 
-  // both crates are tagged together in the one repository, so it is fetched once
-  val sel4LatestOpt = latestGitHubRelease(sel4ReleasesUrl)
+  // both crates are tagged together in the one repository, so it is fetched once,
+  // and so is whether its latest release is a pre-release -- asked only when some
+  // pin is behind it, so the common path costs no API request
+  var sel4LatestOpt: Option[String] = None()
+  var sel4Note: String = ""
+  latestGitHubRelease(sel4ReleasesUrl) match {
+    case Some((title, tag)) =>
+      sel4LatestOpt = Some(title)
+      if (title != "" && ops.ISZOps(sel4Keys).exists((key: String) => dropV(microkitVers.get(key).get) != dropV(title))) {
+        sel4Note = prereleaseNote(sel4Repo, tag)
+      }
+    case _ =>
+  }
   for (key <- sel4Keys) {
     // the release page rather than a tag URL: the tags carry a leading v that the
     // release titles do not, so a tag URL built from a title would not resolve
-    check(key, microkitVers.get(key).get, sel4LatestOpt, "rust-sel4",
-      (latest: String) => sel4ReleasesUrl)
+    if (check(key, microkitVers.get(key).get, sel4LatestOpt, "rust-sel4",
+          (latest: String) => sel4ReleasesUrl, sel4Note)) {
+      cratesOutdatedNote = s"; rust-sel4 ${sel4LatestOpt.get}$sel4Note"
+    }
   }
 
   if (stale.nonEmpty) {
@@ -1510,8 +1581,10 @@ if (changesDetected && !noUpdate) {
 // always newer than what was last committed.
 if (ciMode) {
   val upstream: ISZ[(B, String)] = ISZ(
-    (microkitOutdated, "microkit-sdk is not the latest Microkit release"),
-    (cratesOutdated, "pinned crates have newer crates.io releases"),
+    // the notes name the newer release and whether it is a pre-release, so the
+    // report changes -- and the workflow emails again -- when one is promoted
+    (microkitOutdated, s"microkit-sdk is not the latest Microkit release$microkitOutdatedNote"),
+    (cratesOutdated, s"pinned crates have newer releases$cratesOutdatedNote"),
     (verusCratesDrifted, "the recorded Verus crates, Z3 or Rust toolchain are not the ones verus-release declares"),
     (vestMisaligned, "the pinned Verus or Verus crates are not the ones Vest is built against"),
     (vestVerusMoved, "a newer vest_lib release builds against a different Verus than verus-release"),

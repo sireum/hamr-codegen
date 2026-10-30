@@ -14,6 +14,10 @@ name: Version alignment
 # nothing.  (The cache drops entries unused for a week; the daily run keeps it, and
 # if it is ever lost the only cost is one repeat email.)
 #
+# The Microkit and rust-sel4 lines name the newer release and mark a GitHub
+# pre-release "(a pre-release)", so a pre-release being promoted to a release
+# changes the list and sends another email, which says so in its subject.
+#
 # The email goes out over SMTP with curl, using these repository settings, which
 # keep the address and credentials out of this public file:
 #
@@ -109,7 +113,14 @@ jobs:
           echo "changed=true" >> "$GITHUB_OUTPUT"
 
           run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          if [ -s "$drift" ]; then
+          # lines last reported as a pre-release that now read the same without the
+          # mark: the pre-release has been promoted to a release
+          promoted="$RUNNER_TEMP/promoted.md"
+          grep -F ' (a pre-release)' "$last" | sed 's/ (a pre-release)//g' | grep -Fxf - "$drift" > "$promoted" || true
+          if [ -s "$promoted" ]; then
+            subject="[hamr-codegen] Pre-release now released: $(sed -n '1s/^- //p' "$promoted")"
+            [ "$(grep -c '^- ' "$promoted")" -gt 1 ] && subject="$subject, and more"
+          elif [ -s "$drift" ]; then
             subject="[hamr-codegen] Upstream version drift: $(sed -n '1s/^- //p' "$drift")"
             [ "$(grep -c '^- ' "$drift")" -gt 1 ] && subject="$subject, and more"
           else
@@ -126,6 +137,14 @@ jobs:
             if [ -s "$drift" ]; then
               echo "checkVersions.sc reports that upstream has moved on.  This does not fail CI."
               echo ""
+              if [ -s "$promoted" ]; then
+                echo "Previously a pre-release, now released:"
+                echo ""
+                cat "$promoted"
+                echo ""
+                echo "All drift:"
+                echo ""
+              fi
               cat "$drift"
               if [ -s "$last" ]; then
                 echo ""
