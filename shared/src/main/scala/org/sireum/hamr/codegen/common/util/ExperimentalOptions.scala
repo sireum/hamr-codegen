@@ -20,9 +20,9 @@ object ExperimentalOptions {
 
   val PROYEK_IVE_OPTIONS: String = "PROYEK_IVE_OPTIONS"
 
-  // Emits the Microkit test-scheduler variant bundle (test_scheduler.meta.py,
-  // test_scheduler.scheduler.c, its config headers, and test_scheduler.mk).
-  // See hamr/codegen/doc/TestScheduler-design.md, D5.
+  // Deprecated: superseded by the --system-testing option.  Still accepted, with a warning,
+  // so existing scripts keep working -- CodeGen.codeGen turns it into systemTesting, which is
+  // all the plugins consult.
   val ENABLE_TEST_SCHEDULER: String = "ENABLE_TEST_SCHEDULER"
 
   // Skips the Microkit system-level verification crate (crates/sys_nominal_proof) that is

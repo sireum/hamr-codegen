@@ -111,6 +111,9 @@ object CommonCli {
       Opt(name = "sel4AuxCodeSymlink", longKey = "sel4-aux-code-symlink", shortKey = None(),
         tpe = Type.Flag(F),
         description = "Symlink the aux code directories into the Microkit build rather than copying their C files"),
+      Opt(name = "systemTesting", longKey = "system-testing", shortKey = None(),
+        tpe = Type.Flag(F),
+        description = "Generate the Microkit system-testing variant (test scheduler and test controller; UserLand scheduling only)"),
       Opt(name = "workspaceRootDir", longKey = "workspace-root-dir", shortKey = Some('r'),
         tpe = Type.Path(multiple = F, default = None()),
         description = "Root directory containing the architectural model project")

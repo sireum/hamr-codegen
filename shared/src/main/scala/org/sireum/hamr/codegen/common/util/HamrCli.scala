@@ -31,8 +31,8 @@ object HamrCli {
   }
 
   @enum object CodegenNodesCodeLanguage {
-    "Python"
     "Cpp"
+    "Python"
   }
 
   @enum object CodegenLaunchCodeLanguage {
@@ -67,6 +67,7 @@ object HamrCli {
     val sel4OutputDir: Option[String],
     val sel4AuxCodeDirs: ISZ[String],
     val sel4AuxCodeSymlink: B,
+    val systemTesting: B,
     val workspaceRootDir: Option[String],
     val strictAadlMode: B,
     val ros2OutputWorkspaceDir: Option[String],
@@ -129,17 +130,17 @@ import HamrCli._
 
   def parseCodegenNodesCodeLanguageH(arg: String): Option[CodegenNodesCodeLanguage.Type] = {
     arg.native match {
-      case "Python" => return Some(CodegenNodesCodeLanguage.Python)
       case "Cpp" => return Some(CodegenNodesCodeLanguage.Cpp)
+      case "Python" => return Some(CodegenNodesCodeLanguage.Python)
       case s =>
-        eprintln(s"Expecting one of the following: { Python, Cpp }, but found '$s'.")
+        eprintln(s"Expecting one of the following: { Cpp, Python }, but found '$s'.")
         return None()
     }
   }
 
   def parseCodegenNodesCodeLanguage(args: ISZ[String], i: Z): Option[CodegenNodesCodeLanguage.Type] = {
     if (i >= args.size) {
-      eprintln("Expecting one of the following: { Python, Cpp }, but none found.")
+      eprintln("Expecting one of the following: { Cpp, Python }, but none found.")
       return None()
     }
     val r = parseCodegenNodesCodeLanguageH(args(i))
@@ -224,6 +225,9 @@ import HamrCli._
           |    --sel4-aux-code-symlink
           |                          Symlink the aux code directories into the Microkit
           |                           build rather than copying their C files
+          |    --system-testing     Generate the Microkit system-testing variant (test
+          |                           scheduler and test controller; UserLand scheduling
+          |                           only)
           |-r, --workspace-root-dir    
           |                          Root directory containing the architectural model
           |                           project (expects a path)
@@ -238,7 +242,7 @@ import HamrCli._
           |                           version (../ros/humble) (expects a path)
           |    --ros2-nodes-language
           |                          The programming language for the generated node files
-          |                           (expects one of { Python, Cpp }; default: Python)
+          |                           (expects one of { Cpp, Python }; default: Cpp)
           |    --ros2-launch-language
           |                          The programming language for the launch file (expects
           |                           one of { Python, Xml }; default: Python)
@@ -275,11 +279,12 @@ import HamrCli._
     var sel4OutputDir: Option[String] = None[String]()
     var sel4AuxCodeDirs: ISZ[String] = ISZ[String]()
     var sel4AuxCodeSymlink: B = false
+    var systemTesting: B = false
     var workspaceRootDir: Option[String] = None[String]()
     var strictAadlMode: B = false
     var ros2OutputWorkspaceDir: Option[String] = None[String]()
     var ros2Dir: Option[String] = None[String]()
-    var ros2NodesLanguage: CodegenNodesCodeLanguage.Type = CodegenNodesCodeLanguage.Python
+    var ros2NodesLanguage: CodegenNodesCodeLanguage.Type = CodegenNodesCodeLanguage.Cpp
     var ros2LaunchLanguage: CodegenLaunchCodeLanguage.Type = CodegenLaunchCodeLanguage.Python
     var invertTopicBinding: B = false
     var experimentalOptions: ISZ[String] = ISZ[String]()
@@ -435,6 +440,12 @@ import HamrCli._
              case Some(v) => sel4AuxCodeSymlink = v
              case _ => return None()
            }
+         } else if (arg == "--system-testing") {
+           val o: Option[B] = { j = j - 1; Some(!systemTesting) }
+           o match {
+             case Some(v) => systemTesting = v
+             case _ => return None()
+           }
          } else if (arg == "-r" || arg == "--workspace-root-dir") {
            val o: Option[Option[String]] = parsePath(args, j + 1)
            o match {
@@ -492,7 +503,7 @@ import HamrCli._
         isOption = F
       }
     }
-    return Some(CodegenOption(help, parseArguments(args, j), msgpack, verbose, runtimeMonitoring, platform, outputDir, parseableMessages, slangOutputDir, packageName, noProyekIve, noEmbedArt, devicesAsThreads, genSbtMill, slangAuxCodeDirs, slangOutputCDir, excludeComponentImpl, bitWidth, maxStringSize, maxArraySize, runTranspiler, scheduling, verusAttributeSyntax, sel4OutputDir, sel4AuxCodeDirs, sel4AuxCodeSymlink, workspaceRootDir, strictAadlMode, ros2OutputWorkspaceDir, ros2Dir, ros2NodesLanguage, ros2LaunchLanguage, invertTopicBinding, experimentalOptions))
+    return Some(CodegenOption(help, parseArguments(args, j), msgpack, verbose, runtimeMonitoring, platform, outputDir, parseableMessages, slangOutputDir, packageName, noProyekIve, noEmbedArt, devicesAsThreads, genSbtMill, slangAuxCodeDirs, slangOutputCDir, excludeComponentImpl, bitWidth, maxStringSize, maxArraySize, runTranspiler, scheduling, verusAttributeSyntax, sel4OutputDir, sel4AuxCodeDirs, sel4AuxCodeSymlink, systemTesting, workspaceRootDir, strictAadlMode, ros2OutputWorkspaceDir, ros2Dir, ros2NodesLanguage, ros2LaunchLanguage, invertTopicBinding, experimentalOptions))
   }
 
   def parseArguments(args: ISZ[String], i: Z): ISZ[String] = {

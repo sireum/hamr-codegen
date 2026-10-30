@@ -1704,7 +1704,7 @@ every dispatch", obtained without adding a monitor PD to the schedule under test
 
 #### What requesting system testing generates
 
-Requesting system testing (`ENABLE_TEST_SCHEDULER`) is enough; `--runtime-monitoring` is not
+Requesting system testing (`--system-testing`) is enough; `--runtime-monitoring` is not
 needed. The test variant gets everything stages 1-5 provide, plus whichever checks the model
 has contracts for:
 
@@ -1732,7 +1732,7 @@ were separated from the monitor PDs for this:
   each thread's `sv_` output ports while wiring that thread to a monitor, in the same loop that
   calls `injectMonitorPDNamed`. The port creation moved into a step of its own
   (`StateVarPortsPlugin`) that runs for
-  `--runtime-monitoring` **or** `ENABLE_TEST_SCHEDULER`; the monitor wiring stays behind
+  `--runtime-monitoring` **or** `--system-testing`; the monitor wiring stays behind
   `--runtime-monitoring`. With no monitor attached the `sv_` ports are unconnected outputs,
   and their regions come from `CConnectionProviderPlugin`'s unconnected-port loop, the route
   D15 already relies on. `handleCBackend` (`is_monitoring_enabled()` and the `put_sv_*`
@@ -2454,7 +2454,7 @@ path and the flush-under-stepped-scheduling problem is the first thing to solve.
 | D2 | Emit a `test_scheduler.*` variant bundle in the existing 5-file shape | C3; no new mechanism |
 | D3 | Controller is Rust | Inherits crate/API/test-harness generation and GUMBO contract reuse |
 | D4 | Controller is a passive child PD with no timeslice, at the **lowest priority in the system**, blocking by busy-wait; the scheduler kicks it at the all-ready point | It must run while the schedule is paused; lowest priority is what lets a busy-wait coexist with thread execution, and the kick is what avoids a boot deadlock |
-| D5 | Gate on the experimental option `ENABLE_TEST_SCHEDULER` (`-x`, `;`-separated). *Its requirement of `--runtime-monitoring` for models with state variables is superseded by D22* | No cligen regen, no public flag while the design is in flux |
+| D5 | Gate on the experimental option `ENABLE_TEST_SCHEDULER` (`-x`, `;`-separated). *Its requirement of `--runtime-monitoring` for models with state variables is superseded by D22; the experimental option itself by the opt-in `--system-testing` (see "Invoking codegen")* | No cligen regen, no public flag while the design is in flux |
 | D6 | Stage A (timer-gated) before Stage B (completion-driven) | Stage A needs no component changes at all |
 | D7 | Scripted controller before serial CLI | Fewest moving parts to a working step/inspect loop. As it turned out, the scripted controller covers CI on its own, and the serial CLI is deferred indefinitely (see "Interactive CLI (deferred)") |
 | D8 | Pilot on temp-control | Already carries 3 variant bundles and 3 threads, and has GUMBO state vars for inspect/mutate |
@@ -2521,23 +2521,30 @@ It is registered in `MicrokitPlugins.defaultMicrokitPlugins`.
 
 ## Invoking codegen
 
-`-x` / `--experimental-options` is semicolon-separated (`HamrCli.scala`,
-`parseStrings(args, j + 1, ';')`):
+System testing is requested with `--system-testing`, a flag in the CAmkES/Microkit option group
+(`CommonCli.scala`), off by default -- opt-in like `--runtime-monitoring`:
 
 ```
-sireum hamr sysml codegen ... --scheduling UserLand --experimental-options ENABLE_TEST_SCHEDULER
+sireum hamr sysml codegen ... --scheduling UserLand --system-testing
 ```
+
+It only affects Microkit models with UserLand (MCS) scheduling: on another platform codegen warns
+that it is ignored, and on a domain-scheduled system the Microkit linter warns that no
+system-testing variant is generated.  These, and the deprecation warning below, are reported
+under `CommonUtil.optionWarningKind`, which codegen prints even without `--verbose`.
 
 For the pilot, `sysml/bin/run-hamr.cmd` appends `Os.cliArgs` to its fixed arguments, so the
 option passes straight through, and `.ci/ci.cmd` already assembles the codegen option string
 (it carries `--platform Microkit --runtime-monitoring --scheduling UserLand ...`).
 `--runtime-monitoring` is not needed for system testing (D22), but does no harm: it adds the
 monitor variants beside the test variant. Enabling the test scheduler for a model is appending
-the option to that line; the golden tests (`MicrokitTests`, the `test_sched_*` cases) pass it
-in their options.
+the option to that line; the golden tests (`MicrokitTests`, the `test_sched_*` cases) set
+`systemTesting = T` in their options.
 
-The constant is `ExperimentalOptions.ENABLE_TEST_SCHEDULER`, beside `USE_CASE_CONNECTORS` and
-`DISABLE_SERGEN`, with the predicate `enableTestScheduler`.
+The plugins read only `options.systemTesting`.  The experimental option it replaced,
+`-x ENABLE_TEST_SCHEDULER` (`ExperimentalOptions.ENABLE_TEST_SCHEDULER`), is still accepted so
+existing scripts keep working: `CodeGen.codeGen` warns that it is deprecated and turns it into
+`systemTesting` before any plugin runs, model transforms included.
 
 ## Key Files
 
@@ -2547,7 +2554,7 @@ The constant is `ExperimentalOptions.ENABLE_TEST_SCHEDULER`, beside `USE_CASE_CO
 |------|------|
 | `microkit/plugins/testing/TestSchedulerPlugin.scala` | The whole plugin: model transform, handle (C bridge wrappers + lib.rs weaving), finalize (MSD variant, bundle, `system_tests/` modules, host driver), and every template |
 | `microkit/plugins/testing/TestControllerInjector.scala` | Injects the controller process/thread -- **no ports**, deliberately not `MonitorInjector` |
-| `common/util/ExperimentalOptions.scala` | `ENABLE_TEST_SCHEDULER` (D5) |
+| `common/util/CommonCli.scala` | `--system-testing` (the option; `HamrCli.scala` and the `CliKeys` are generated from it). `ExperimentalOptions.ENABLE_TEST_SCHEDULER` (D5) remains as a deprecated alias |
 | `microkit/plugins/MicrokitPlugins.scala` (jvm) | Registration, before the system description providers |
 | `microkit/plugins/gumbo/ContractObserverPlugin.scala` | Stage 7: generates `crates/observers`, the contract checks shared by the monitor PDs and the controller |
 | `microkit/plugins/gumbo/StateVarPortsPlugin.scala` | Stage 7 step 3: the `sv_` ports and `is_monitoring_enabled`, for `--runtime-monitoring` or system testing |
@@ -2566,7 +2573,7 @@ The constant is `ExperimentalOptions.ENABLE_TEST_SCHEDULER`, beside `USE_CASE_CO
 | `crates/observers/` | Generated when a monitor or the controller hosts the checks (stage 7): the contract checks |
 | `crates/test_controller/src/system_tests/tests.rs` | **User-editable**, written once and never overwritten -- the rest of the controller crate, its `Cargo.toml` and app module included, is fully generated (stage 7 step 4) |
 | `crates/test_controller/src/system_tests/tests/*_tests.rs` | **User-created**, optional: one file per test class, pulled in by `system_test_files!` in `tests.rs` |
-| `components/<thread>/src/<thread>.c` | For a Rust thread with state vars, gains `get_inj_sv_*` + `is_injection_enabled()` whenever `ENABLE_TEST_SCHEDULER` is given (D16); the `inj_sv_*_queue` pointers are `setvar_vaddr` targets, mapped only in the test variant and NULL elsewhere |
+| `components/<thread>/src/<thread>.c` | For a Rust thread with state vars, gains `get_inj_sv_*` + `is_injection_enabled()` whenever `--system-testing` is given (D16); the `inj_sv_*_queue` pointers are `setvar_vaddr` targets, mapped only in the test variant and NULL elsewhere |
 | `crates/<thread>/src/bridge/extern_c_api.rs`, `crates/<thread>/src/lib.rs` | Rust side of D16 for threads with state vars: extern declarations, `unsafe_` wrappers and `#[cfg(test)]` stubs in `extern_c_api.rs`; the `libComputePre` ingest in `lib.rs` |
 | `bin/run-tests.cmd` | Host driver (D18) |
 

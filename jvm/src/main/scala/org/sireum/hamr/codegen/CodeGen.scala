@@ -13,7 +13,7 @@ import org.sireum.hamr.codegen.common.types.AadlTypes
 import org.sireum.hamr.codegen.common.util.HamrCli.{CodegenHamrPlatform, CodegenOption}
 import org.sireum.hamr.codegen.common.util.ModelUtil.ModelElements
 import org.sireum.hamr.codegen.common.util.{CodeGenResults, ExperimentalOptions, ModelUtil}
-import org.sireum.hamr.codegen.common.{DirectoryUtil, StringUtil}
+import org.sireum.hamr.codegen.common.{CommonUtil, DirectoryUtil, StringUtil}
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen
 import org.sireum.hamr.codegen.microkit.util.{JvmMicrokitUtil, MicrokitUtil}
 import org.sireum.hamr.ir.Aadl
@@ -66,6 +66,17 @@ object CodeGen {
     }
 
     var modOptions = options
+
+    if (ExperimentalOptions.enableTestScheduler(modOptions.experimentalOptions)) {
+      // the experimental option that preceded --system-testing, still accepted so existing
+      // scripts keep working; the plugins only consult systemTesting
+      reporter.warn(None(), CommonUtil.optionWarningKind,
+        s"Experimental option ${ExperimentalOptions.ENABLE_TEST_SCHEDULER} is deprecated, use --system-testing instead")
+      modOptions = modOptions(systemTesting = T)
+    }
+    if (modOptions.systemTesting && modOptions.platform != CodegenHamrPlatform.Microkit) {
+      reporter.warn(None(), CommonUtil.optionWarningKind, "--system-testing applies only to the Microkit platform, so it is ignored")
+    }
 
     val systemRootDirectory: Os.Path = getSystemRoot(model, modOptions.workspaceRootDir)
 
@@ -163,8 +174,8 @@ object CodeGen {
     while (continue) {
       var somethingHandled = F
       for (plugin <- modelTransformerPlugins if continue) {
-        if (plugin.canHandleModelTransform(rmodel, options, aadlTypes, symbolTable, localStore, reporter)) {
-          plugin.handleModelTransform(rmodel, options, aadlTypes, symbolTable, localStore, reporter) match {
+        if (plugin.canHandleModelTransform(rmodel, modOptions, aadlTypes, symbolTable, localStore, reporter)) {
+          plugin.handleModelTransform(rmodel, modOptions, aadlTypes, symbolTable, localStore, reporter) match {
             case Some((ustore, uaadl, uaadlTypes, usymTable))=>
               localStore = ustore
               rmodel = uaadl
@@ -477,6 +488,12 @@ object CodeGen {
 
     if (verbose) {
       ReporterImpl(infoWarnings).printMessages()
+    } else {
+      // warnings about the options themselves are shown regardless, see CommonUtil.optionWarningKind
+      val optionWarnings = infoWarnings.filter(m => m.kind == CommonUtil.optionWarningKind)
+      if (optionWarnings.nonEmpty) {
+        ReporterImpl(optionWarnings).printMessages()
+      }
     }
 
     if (errors.nonEmpty) {

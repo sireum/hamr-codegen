@@ -36,6 +36,11 @@ object CommonUtil {
 
   val toolName: String = "HAMR Codegen"
 
+  // Message kind for warnings about how codegen was invoked: an option that is deprecated, or
+  // that is ignored for this model.  CodeGen.printMessages shows these without --verbose,
+  // since otherwise a run that silently did not do what was asked looks like a success.
+  val optionWarningKind: String = "HAMR Codegen option"
+
   def splitClassifier(c: ir.Classifier): ISZ[String] = {
     val san = StringUtil.replaceAll(c.name, "::", ":")
     return ops.StringOps(san).split((char: C) => char == ':')

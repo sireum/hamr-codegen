@@ -8,7 +8,7 @@ import org.sireum.hamr.codegen.common.containers.Resource
 import org.sireum.hamr.codegen.common.plugin.ModelTransformerPlugin
 import org.sireum.hamr.codegen.common.symbols.{AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.types.{AadlTypes, TypeUtil}
-import org.sireum.hamr.codegen.common.util.{ExperimentalOptions, HamrCli, ModelUtil}
+import org.sireum.hamr.codegen.common.util.{HamrCli, ModelUtil}
 import org.sireum.hamr.codegen.microkit.connections._
 import org.sireum.hamr.codegen.microkit.plugins.c.connections.CConnectionProviderPlugin
 import org.sireum.hamr.codegen.microkit.plugins.c.types.CTypePlugin
@@ -26,7 +26,7 @@ import org.sireum.message.Reporter
 // (thread, process and the delegation between them), is_monitoring_enabled(), the guarded
 // put_sv_* methods, and the Rust hooks that publish the state variables after initialize and
 // after each dispatch.  Its readers are the gumbo / sys-assert monitor PDs (--runtime-monitoring)
-// and the test controller (ENABLE_TEST_SCHEDULER), so it runs for either (TestScheduler-design.md
+// and the test controller (--system-testing), so it runs for either (TestScheduler-design.md
 // D22); the monitor plugins only wire their own PD to these ports.  With no monitor attached the
 // sv_ ports are unconnected outputs, and CConnectionProviderPlugin gives them their regions.
 // Both readers need the MCS user-land scheduler, so a domain-scheduled model gets none of this.
@@ -39,7 +39,7 @@ object StateVarPortsPlugin {
   @pure def isRequested(options: HamrCli.CodegenOption, symbolTable: SymbolTable): B = {
     return (
       options.platform == HamrCli.CodegenHamrPlatform.Microkit &&
-        (options.runtimeMonitoring || ExperimentalOptions.enableTestScheduler(options.experimentalOptions)) &&
+        (options.runtimeMonitoring || options.systemTesting) &&
         MicrokitUtil.isMCS(options, symbolTable.rootSystem) &&
         hasThreadsWithStateVars(symbolTable))
   }

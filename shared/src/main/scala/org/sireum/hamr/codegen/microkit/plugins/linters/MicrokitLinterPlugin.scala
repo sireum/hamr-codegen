@@ -46,6 +46,13 @@ object MicrokitLinterPlugin {
       reporter.error(modelPos, MicrokitCodegen.toolName, "Raw connections are not currently supported")
     }
 
+    if (options.systemTesting && !MicrokitUtil.isMCS(options, symbolTable.rootSystem)) {
+      // the test scheduler drives the user-land (MCS) scheduler, so a domain-scheduled
+      // system gets no system-testing variant; say so rather than generate nothing silently
+      reporter.warn(modelPos, CommonUtil.optionWarningKind,
+        "--system-testing requires UserLand (MCS) scheduling, so no system-testing variant is generated for this domain-scheduled system")
+    }
+
     val boundProcessors = symbolTable.getAllActualBoundProcessors()
     if (boundProcessors.size !=1) {
       reporter.error(modelPos, MicrokitCodegen.toolName, s"Model must contain exactly one actual bound processor, found ${boundProcessors.size}")

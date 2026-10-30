@@ -6,7 +6,7 @@ import org.sireum.hamr.codegen.common.CommonUtil.{BoolValue, Store, StoreValue}
 import org.sireum.hamr.codegen.common.containers.Resource
 import org.sireum.hamr.codegen.common.symbols.SymbolTable
 import org.sireum.hamr.codegen.common.templates.CommentTemplate
-import org.sireum.hamr.codegen.common.util.{ExperimentalOptions, HamrCli, HamrTimeUnit, ModelUtil, ResourceUtil}
+import org.sireum.hamr.codegen.common.util.{HamrCli, HamrTimeUnit, ModelUtil, ResourceUtil}
 import org.sireum.hamr.codegen.common.plugin.ModelTransformerPlugin
 import org.sireum.hamr.codegen.microkit.MicrokitCodegen.toolName
 import org.sireum.hamr.codegen.microkit.plugins.{ComponentGenProfile, MicrokitFinalizePlugin, MicrokitPlugin, StoreUtil}
@@ -581,7 +581,7 @@ object TestSchedulerPlugin {
       options.platform == HamrCli.CodegenHamrPlatform.Microkit &&
         !isDisabled(store) &&
         !reporter.hasError &&
-        ExperimentalOptions.enableTestScheduler(options.experimentalOptions) &&
+        options.systemTesting &&
         MicrokitUtil.isMCS(options, symbolTable.rootSystem))
   }
 
@@ -1249,7 +1249,7 @@ object TestSchedulerPlugin {
       !reporter.hasError &&
         options.platform == HamrCli.CodegenHamrPlatform.Microkit &&
         !isDisabled(store) &&
-        ExperimentalOptions.enableTestScheduler(options.experimentalOptions) &&
+        options.systemTesting &&
         MicrokitUtil.isMCS(options, symbolTable.rootSystem) &&
         SystemDescriptionProviderPlugin.getMSDOpt("normal", store).nonEmpty &&
         !TestSchedulerPlugin.hasHandled(store))

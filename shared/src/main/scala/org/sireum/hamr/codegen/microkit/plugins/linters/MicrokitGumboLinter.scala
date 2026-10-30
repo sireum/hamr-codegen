@@ -7,7 +7,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver
 import org.sireum.hamr.codegen.common.symbols.{AadlFeatureEvent, AadlThread, SymbolTable}
 import org.sireum.hamr.codegen.common.sysvc.VCGenerator
 import org.sireum.hamr.codegen.common.types.AadlTypes
-import org.sireum.hamr.codegen.common.util.{ExperimentalOptions, HamrCli}
+import org.sireum.hamr.codegen.common.util.HamrCli
 import org.sireum.hamr.codegen.microkit.plugins.MicrokitLintPlugin
 import org.sireum.hamr.codegen.microkit.plugins.gumbo.GumboRustUtil
 import org.sireum.hamr.codegen.microkit.util.MicrokitUtil
@@ -24,7 +24,7 @@ import org.sireum.message.{Position, Reporter}
   // testing, --runtime-monitoring); otherwise a warning, since a Verus proof of the thread does
   // not read the queue that way.
   @pure override def validModel(model: Aadl, options: HamrCli.CodegenOption, types: AadlTypes, symbolTable: SymbolTable, store: Store, reporter: Reporter): (Store, B) = {
-    val checked: B = options.runtimeMonitoring || ExperimentalOptions.enableTestScheduler(options.experimentalOptions)
+    val checked: B = options.runtimeMonitoring || options.systemTesting
     def report(posOpt: Option[Position], msg: String): Unit = {
       if (checked) {
         reporter.error(posOpt, name, msg)
