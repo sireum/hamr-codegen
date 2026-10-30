@@ -435,6 +435,55 @@ def rawLines(repo: String, ref: String, path: String): Option[ISZ[String]] = {
   return channel
 }
 
+val verusRepo: String = "verus-lang/verus"
+
+// The directory under source/ each Verus crate codegen pins is built from, and its
+// microkit_versions.properties key.  Generated crates depend on these exactly, so
+// they have to be the ones the Verus that builds the crates was released with.
+val verusCrates: ISZ[(String, String)] = ISZ(
+  ("vstd", "vstd"), ("builtin", "verus_builtin"), ("builtin_macros", "verus_builtin_macros"))
+
+// Compares the Verus crate versions in vers (a microkit_versions.properties) with
+// the ones Verus release declares in its Cargo.toml files at release/<release>:
+// (mismatches, keys that could not be read).
+def verusCrateMismatches(release: String, vers: Map[String, String]): (ISZ[ST], ISZ[String]) = {
+  val ref = s"release/$release"
+  var mismatches = ISZ[ST]()
+  var unchecked = ISZ[String]()
+  for (crate <- verusCrates) {
+    val dir = crate._1
+    val key = crate._2
+    val recorded = vers.get(key).get
+    rawLines(verusRepo, ref, s"source/$dir/Cargo.toml") match {
+      case Some(lines) =>
+        val (name, version) = cargoPackage(lines)
+        if (version == "") {
+          mismatches = mismatches :+ st"source/$dir/Cargo.toml declares no version at $ref"
+        } else if (name != key) {
+          // renamed or moved upstream, so this pin is no longer that crate's
+          mismatches = mismatches :+ st"source/$dir/Cargo.toml declares $name rather than $key at $ref"
+        } else if (version != recorded) {
+          mismatches = mismatches :+ st"$key = $recorded, but Verus $release declares $version"
+        }
+      case _ => unchecked = unchecked :+ key
+    }
+  }
+  return (mismatches, unchecked)
+}
+
+// key=value lines of a .properties file, without comments or blank lines
+@pure def parseProperties(lines: ISZ[String]): Map[String, String] = {
+  var r = Map.empty[String, String]
+  for (l <- lines) {
+    val o = ops.StringOps(ops.StringOps(l).trim)
+    val i = o.indexOf('=')
+    if (o.size > 0 && !o.startsWith("#") && i > 0) {
+      r = r + ops.StringOps(o.substring(0, i)).trim ~> ops.StringOps(o.substring(i + 1, o.size)).trim
+    }
+  }
+  return r
+}
+
 // The Verus release a Vest ref pins in its verus.json, with that release's Rust
 // toolchain and Z3: (version, rust, z3), "" for any it does not declare.  None()
 // when the file could not be fetched.
@@ -675,24 +724,29 @@ var microkitKeysChecked = ISZ[String]()
 
 var proversMisaligned = F
 
+val proversVersionsUrl = "https://raw.githubusercontent.com/loonwerks/INSPECTA-models/main/provers-env/bin/versions.sh"
+
+// codegen's key, and the variable versions.sh pins the same tool as
+// and the prefix versions.sh writes before the version (Z3_VER is the z3 repository
+// tag, z3-<version>)
+val proversPins: ISZ[(String, String, String)] = ISZ(
+  ("microkit-sdk", "MICROKIT_SDK_VER", ""),
+  ("rust-channel", "RUST_TOOLCHAIN_VER", ""),
+  ("sdfgen", "SDFGEN_VER", ""),
+  ("verus-release", "VERUS_VER", ""),
+  ("z3", "Z3_VER", "z3-"),
+  ("lionsos", "LIONSOS_VER", ""))
+
+// what versions.sh pins, NAME -> value; None() when it could not be fetched
+var proversVersOpt: Option[Map[String, String]] = None()
+
 { // provers-env pins the toolchain that generated Microkit systems are built
   // against, so what it installs has to be what codegen generates for: a system
   // emitted for one Verus, Microkit SDK or sDDF and built against another is a
   // failure at the user's `make`, not here.  The two files are in different
   // repositories, so a mismatch is reported rather than fixed -- whichever side
   // is behind has to be bumped deliberately.
-  val proversVersionsUrl = "https://raw.githubusercontent.com/loonwerks/INSPECTA-models/main/provers-env/bin/versions.sh"
-
-  // codegen's key, and the variable versions.sh pins the same tool as
-  // and the prefix versions.sh writes before the version (Z3_VER is the z3 repository
-  // tag, z3-<version>)
-  val pins: ISZ[(String, String, String)] = ISZ(
-    ("microkit-sdk", "MICROKIT_SDK_VER", ""),
-    ("rust-channel", "RUST_TOOLCHAIN_VER", ""),
-    ("sdfgen", "SDFGEN_VER", ""),
-    ("verus-release", "VERUS_VER", ""),
-    ("z3", "Z3_VER", "z3-"),
-    ("lionsos", "LIONSOS_VER", ""))
+  val pins = proversPins
   microkitKeysChecked = microkitKeysChecked ++ (for (pin <- pins) yield pin._1)
 
   // in the system temp dir, like the script's other downloads -- not next to the
@@ -719,6 +773,7 @@ var proversMisaligned = F
       }
     }
     temp.remove()
+    proversVersOpt = Some(proversVers)
 
     val microkitVers = microkitVersionsP.properties
     var mismatches = ISZ[ST]()
@@ -1173,10 +1228,7 @@ var verusCratesDrifted = F
   // 0.2026.08.15 ships the same 0.0.0-2026-08-09-0044 crates as 0.2026.08.09 -- so
   // the date they carry says nothing, and the Cargo.toml files at the release tag
   // are what actually ties the two together.
-  val verusRepo = "verus-lang/verus"
-  // the directory under source/ each recorded crate is built from
-  val crates: ISZ[(String, String)] = ISZ(
-    ("vstd", "vstd"), ("builtin", "verus_builtin"), ("builtin_macros", "verus_builtin_macros"))
+  val crates = verusCrates
 
   val microkitVers = microkitVersionsP.properties
   microkitKeysChecked = microkitKeysChecked ++ ISZ[String]("verus-release") ++ (for (crate <- crates) yield crate._2)
@@ -1186,27 +1238,9 @@ var verusCratesDrifted = F
   val release = microkitVers.get("verus-release").get
   val ref = s"release/$release"
 
-  var mismatches = ISZ[ST]()
-  var unchecked = ISZ[String]()
-
-  for (crate <- crates) {
-    val dir = crate._1
-    val key = crate._2
-    val recorded = microkitVers.get(key).get
-    rawLines(verusRepo, ref, s"source/$dir/Cargo.toml") match {
-      case Some(lines) =>
-        val (name, version) = cargoPackage(lines)
-        if (version == "") {
-          mismatches = mismatches :+ st"source/$dir/Cargo.toml declares no version at $ref"
-        } else if (name != key) {
-          // renamed or moved upstream, so this pin is no longer that crate's
-          mismatches = mismatches :+ st"source/$dir/Cargo.toml declares $name rather than $key at $ref"
-        } else if (version != recorded) {
-          mismatches = mismatches :+ st"$key = $recorded, but Verus $release declares $version"
-        }
-      case _ => unchecked = unchecked :+ key
-    }
-  }
+  val (crateMismatches, crateUnchecked) = verusCrateMismatches(release, microkitVers)
+  var mismatches: ISZ[ST] = crateMismatches
+  var unchecked: ISZ[String] = crateUnchecked
 
   // Verus refuses to run against any Z3 but the one it was released with, and not
   // every release asset bundles it (0.2026.09.06's did not), so the z3 pin -- which
@@ -1421,6 +1455,126 @@ var vestVerusMoved = F
   }
 }
 
+var proversSireumIncompatible = F
+
+{ // provers-env installs the Sireum that SIREUM_V pins, and it is that Sireum's
+  // codegen -- not this checkout's, which is usually ahead of it -- that generates
+  // code inside the environment.  So its microkit_versions.properties has to agree
+  // with the toolchain provers-env installs as well: generated crates pin vstd and
+  // the builtin crates exactly and select rust-channel through their
+  // rust-toolchain.toml, so a Sireum pinning another Verus emits crates the
+  // installed Verus cannot build.  The provers-env check above covers only this
+  // checkout's pins.
+  proversVersOpt match {
+    case Some(proversVers) =>
+      if (!proversVers.contains("SIREUM_V")) {
+        // renamed or dropped upstream, so this check has gone blind
+        exclamations()
+        println(s"WARNING: $proversVersionsUrl no longer pins SIREUM_V, so the Sireum provers-env installs was not checked")
+        exclamations()
+        proversSireumIncompatible = T
+      } else {
+        val sireumV = proversVers.get("SIREUM_V").get
+        val propsPath = "jvm/src/main/resources/microkit_versions.properties"
+        // a release tag, a commit and a branch alike name a tree the API resolves,
+        // and the hamr/codegen entry of that tree is the codegen commit it carries
+        val codegenShaOpt: Option[String] = submoduleTips("sireum/kekinian", s"$sireumV:hamr", ISZ("codegen")) match {
+          case Some(m) => m.get("codegen")
+          case _ => None()
+        }
+        val versOpt: Option[Map[String, String]] = codegenShaOpt match {
+          case Some(sha) =>
+            rawLines("sireum/hamr-codegen", sha, propsPath) match {
+              case Some(lines) => Some(parseProperties(lines))
+              case _ => None()
+            }
+          case _ => None()
+        }
+        (codegenShaOpt, versOpt) match {
+          case (Some(codegenSha), Some(vers)) =>
+            var mismatches = ISZ[ST]()
+            // pins an older codegen did not have yet
+            var missing = ISZ[String]()
+            var unchecked = ISZ[String]()
+
+            for (pin <- proversPins) {
+              val key = pin._1
+              val envVar = pin._2
+              if (!vers.contains(key)) {
+                missing = missing :+ key
+              } else if (proversVers.contains(envVar)) {
+                val ours = s"${pin._3}${vers.get(key).get}"
+                val theirs = proversVers.get(envVar).get
+                if (ours != theirs) {
+                  mismatches = mismatches :+ st"$key = ${vers.get(key).get}, but versions.sh pins $envVar = $theirs"
+                }
+              }
+            }
+
+            // the crates the generated Cargo.toml files pin exactly, against the
+            // Verus provers-env installs rather than the one this codegen records
+            val crateKeys: ISZ[String] = for (crate <- verusCrates) yield crate._2
+            for (key <- crateKeys if !vers.contains(key)) {
+              missing = missing :+ key
+            }
+            if (proversVers.contains("VERUS_VER") && ops.ISZOps(crateKeys).forall((key: String) => vers.contains(key))) {
+              val (m, u) = verusCrateMismatches(proversVers.get("VERUS_VER").get, vers)
+              mismatches = mismatches ++ m
+              unchecked = unchecked ++ u
+            }
+
+            // vest_lib pins those crates exactly too, so a developer crate generated
+            // from a .vest format only builds beside the generated ones when they agree
+            if (vers.contains("vest_lib")) {
+              val vestLib = vers.get("vest_lib").get
+              vestLibRequirements(vestLib) match {
+                case Some(reqs) =>
+                  for (key <- crateKeys if vers.contains(key)) {
+                    reqs.get(key) match {
+                      case Some(req) if dropEq(req) != vers.get(key).get =>
+                        mismatches = mismatches :+ st"$key = ${vers.get(key).get}, but vest_lib $vestLib requires $req"
+                      case _ =>
+                    }
+                  }
+                case _ => unchecked = unchecked :+ "vest_lib"
+              }
+            }
+
+            val propsUrl = s"https://github.com/sireum/hamr-codegen/blob/$codegenSha/$propsPath"
+            if (mismatches.nonEmpty || missing.nonEmpty) {
+              val missingOpt: Option[ST] =
+                if (missing.isEmpty) None()
+                else Some(st"""
+                              |  and it does not pin ${(missing, ", ")} at all""")
+              exclamations()
+              println(
+                st"""WARNING: the Sireum provers-env installs (SIREUM_V = $sireumV) generates code
+                    |for a different toolchain than provers-env installs:
+                    |
+                    |  ${(mismatches, "\n")}$missingOpt
+                    |
+                    |  $propsUrl
+                    |  $proversVersionsUrl""".render)
+              exclamations()
+              proversSireumIncompatible = T
+            }
+            if (unchecked.nonEmpty) {
+              // Not a mismatch, so not a failure, as above.
+              exclamations()
+              println(st"WARNING: could not read what ${(unchecked, ", ")} must be for SIREUM_V = $sireumV, so they were not checked".render)
+              exclamations()
+            }
+          case _ =>
+            // Not a mismatch, so not a failure, as above.
+            exclamations()
+            println(s"WARNING: could not read the microkit_versions.properties of the Sireum provers-env installs (SIREUM_V = $sireumV), so it was not checked")
+            exclamations()
+        }
+      }
+    case _ => // the provers-env check above has already warned that versions.sh could not be fetched
+  }
+}
+
 var lionsosDrifted = F
 
 { // lionsos carries sDDF and libvmm as submodules and declares the sdfgen release
@@ -1573,7 +1727,8 @@ if (changesDetected && !noUpdate) {
 }
 
 // In CI only what this project has to fix itself fails: the documentation sites or
-// provers-env disagreeing with what codegen pins.  Everything else is upstream
+// provers-env disagreeing with what codegen pins, or with the Sireum it installs.
+// Everything else is upstream
 // moving on -- a newer crate, Microkit, ART or LionsOS, Vest taking a newer Verus --
 // which is worth hearing about but not worth a red build, so it goes to the report
 // for the workflow to file as an issue.  changesDetected is left out altogether:
@@ -1608,7 +1763,7 @@ if (ciMode) {
                 |Upstream has moved on (reported, not failed, in CI):
                 |  ${(moved, "\n")}""".render)
   }
-  if (proversMisaligned || installationPageStale || sireumOrgStale) {
+  if (proversMisaligned || proversSireumIncompatible || installationPageStale || sireumOrgStale) {
     Os.exit(1) // provers-env or a documentation site disagrees with codegen's pins
   } else {
     Os.exit(0)
@@ -1619,7 +1774,7 @@ if (ciMode) {
 // the properties files are left as they are, but the drift that was found is just
 // as real -- and no-update is how VersionCheck runs this, so gating the exit on it
 // meant that test could never fail on the versions it exists to watch.
-if (changesDetected || proversMisaligned || microkitOutdated || cratesOutdated || verusCratesDrifted || vestMisaligned ||
+if (changesDetected || proversMisaligned || proversSireumIncompatible || microkitOutdated || cratesOutdated || verusCratesDrifted || vestMisaligned ||
     vestVerusMoved || lionsosDrifted || microkitKeysUnchecked || sbtAssemblyUnchecked || artBehind ||
     installationPageStale || sireumOrgStale) {
   Os.exit(1) // versions have changed, or drifted from provers-env, the documentation sites or the latest upstream releases

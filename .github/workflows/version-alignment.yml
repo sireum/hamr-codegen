@@ -4,8 +4,11 @@ name: Version alignment
 #
 # It fails only on what this project has to fix itself: provers-env's versions.sh, or
 # the HAMR installation page or sireum.org's getting-started page, disagreeing with
-# what codegen pins (the pages: until they are republished).  GitHub emails a failed
-# run to whoever pushed, or for the schedule to whoever last edited the cron line.
+# what codegen pins (the pages: until they are republished); or the Sireum that
+# provers-env installs (its SIREUM_V) generating code for a different toolchain --
+# Verus, its crates, Rust, Z3, Microkit, sdfgen, LionsOS -- than provers-env installs.
+# GitHub emails a failed run to whoever pushed, or for the schedule to whoever last
+# edited the cron line.
 #
 # Upstream moving on -- a newer crate, Microkit, ART or LionsOS, Vest taking a newer
 # Verus -- does not fail the run.  It is emailed instead, but only when it changes:
