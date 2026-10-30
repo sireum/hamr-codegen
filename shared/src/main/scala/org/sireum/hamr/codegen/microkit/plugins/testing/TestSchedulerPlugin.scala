@@ -82,9 +82,10 @@ object TestSchedulerPlugin {
     s"${tp(tp.lastIndex - 1)}_${tp(tp.lastIndex)}"
   }
 
-  // Wall-clock bound for a QEMU run.  Generous by design: DONE is the real terminator, and
-  // this only exists to bound the silent-failure case -- a hang, a panic, or a thread that
-  // spins forever and so starves the lowest-priority controller.
+  // Default wall-clock bound for a QEMU run, in seconds; run-tests.cmd's QEMU_TIMEOUT
+  // overrides it.  Generous by design: DONE is the real terminator, and this only exists to
+  // bound the silent-failure case -- a hang, a panic, or a thread that spins forever and so
+  // starves the lowest-priority controller.
   val qemuTimeoutSeconds: Z = 300
 
   // The controller must be the lowest-priority protection domain in the system so that its
@@ -2648,6 +2649,10 @@ object StaticContent {
           |//
           |// --list builds an image that prints the test table and runs nothing (LIST_TESTS=1).
           |//
+          |// QEMU_TIMEOUT=<seconds> sets the bound on the QEMU run (default $qemuTimeoutSeconds).  A suite that
+          |// needs longer than the bound -- about one hyperperiod per frame period -- can raise it,
+          |// or be run as several filtered runs.
+          |//
           |// RUN_TESTS_TARGET_CMD is for HAMR's own tests of this script: a shell command run in
           |// place of building the image and booting it under QEMU, whose output stands in for
           |// the serial console.  It lets those tests drive the stop condition and the verdict
@@ -2690,6 +2695,18 @@ object StaticContent {
           |  listArg,
           |  s"PROPTEST_SEED=$$seed")
           |
+          |val qemuTimeout: Z = Os.env("QEMU_TIMEOUT") match {
+          |  case Some(t) =>
+          |    Z(ops.StringOps(t).trim) match {
+          |      case Some(n) if n > 0 => n
+          |      case _ =>
+          |        eprintln(s"FAILED: QEMU_TIMEOUT must be a positive number of seconds (got '$$t')")
+          |        Os.exit(1)
+          |        halt("unreachable")
+          |    }
+          |  case _ => $qemuTimeoutSeconds
+          |}
+          |
           |val targetCmd: Option[String] = Os.env("RUN_TESTS_TARGET_CMD")
           |if (targetCmd.isEmpty) {
           |  println(s"Building $$microkitDir (TESTS='$$filter', $$listArg, PROPTEST_SEED=$$seed) ...")
@@ -2698,7 +2715,7 @@ object StaticContent {
           |    eprintln("Build failed")
           |    Os.exit(1)
           |  }
-          |  println("Running under QEMU ...")
+          |  println(s"Running under QEMU (bound $$qemuTimeout s) ...")
           |} else {
           |  println(s"Running RUN_TESTS_TARGET_CMD in place of the build and QEMU: $${targetCmd.get}")
           |}
@@ -2716,7 +2733,8 @@ object StaticContent {
           |// that faults or panics before the schedule starts (it never reports ready, so the
           |// test scheduler never hands over), and a panic in the test controller itself.  A
           |// thread that faults or panics once the schedule runs is not one of them: its dispatch
-          |// trips the watchdog, which fails the test, and the run goes on to DONE.
+          |// trips the watchdog, which fails the test, and the run goes on to DONE.  Reaching the
+          |// bound exits 124, so the verdict can say so.
           |val logFile: Os.Path = Os.temp()
           |
           |val driver: String =
@@ -2724,26 +2742,28 @@ object StaticContent {
           |      |"$$$$@" > "$$$$LOG" 2>&1 &
           |      |mpid=$$$$!
           |      |waited=0
+          |      |bound=0
           |      |while kill -0 $$$$mpid 2>/dev/null; do
           |      |  grep -q '^TEST | DONE' "$$$$LOG" && { sleep 1; break; }
           |      |  if ! grep -q 'All partitions ready' "$$$$LOG" && grep -q -e 'FAULT in user PD' -e 'PANIC' "$$$$LOG"; then sleep 1; break; fi
           |      |  grep -q '${TestSchedulerPlugin.controllerName}.*PANIC' "$$$$LOG" && { sleep 1; break; }
-          |      |  [ $$$$waited -ge $$$$TIMEOUT ] && break
+          |      |  [ $$$$waited -ge $$$$TIMEOUT ] && { bound=1; break; }
           |      |  sleep 1
           |      |  waited=$$$$((waited + 1))
           |      |done
           |      |pkill -P $$$$mpid 2>/dev/null
           |      |kill $$$$mpid 2>/dev/null
           |      |wait $$$$mpid 2>/dev/null
+          |      |[ $$$$bound -eq 1 ] && exit 124
           |      |exit 0$tq.render
           |
           |val target: ISZ[String] = targetCmd match {
           |  case Some(c) => ISZ[String]("sh", "-c", c)
           |  case _ => commonArgs :+ "qemu"
           |}
-          |Os.proc(ISZ[String]("sh", "-c", driver, "sh") ++ target)
-          |  .env(ISZ(("LOG", logFile.string), ("TIMEOUT", "$qemuTimeoutSeconds")))
-          |  .timeout(($qemuTimeoutSeconds + 30) * 1000).run()
+          |val reachedBound: B = Os.proc(ISZ[String]("sh", "-c", driver, "sh") ++ target)
+          |  .env(ISZ(("LOG", logFile.string), ("TIMEOUT", qemuTimeout.string)))
+          |  .timeout((qemuTimeout + 30) * 1000).run().exitCode == 124
           |
           |val out: String = if (logFile.exists) logFile.read else ""
           |logFile.removeAll()
@@ -2805,7 +2825,11 @@ object StaticContent {
           |      eprintln(s"  $$l")
           |    }
           |  }
-          |  eprintln("FAILED: the run produced no 'TEST | DONE' line (hang, panic, or the test controller never ran)")
+          |  if (reachedBound) {
+          |    eprintln(s"FAILED: the QEMU bound of $$qemuTimeout s was reached before 'TEST | DONE' (a hang, or a suite longer than the bound: raise QEMU_TIMEOUT or split the suite with a filter)")
+          |  } else {
+          |    eprintln("FAILED: the run produced no 'TEST | DONE' line (hang, panic, or the test controller never ran)")
+          |  }
           |  eprintln("---- captured output ----")
           |  eprintln(out)
           |  Os.exit(1)

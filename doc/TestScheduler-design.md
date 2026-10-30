@@ -941,8 +941,10 @@ line, and then kills it; a hard timeout is the other
 exit. Guest-side termination (ARM semihosting `SYS_EXIT`) would yield real exit codes but needs
 plumbing the image does not have — a later refinement, not a stage 3 prerequisite.
 
-The timeout is set generously -- a fixed 300 s -- because `DONE` is the real terminator and
-the timeout only bounds the silent-failure case. (Under stage 3's timer-gated dispatch a
+The timeout is set generously -- 300 s by default, overridden by `QEMU_TIMEOUT=<seconds>` --
+because `DONE` is the real terminator and the timeout only bounds the silent-failure case.
+Reaching it fails the run with a message naming the bound, so a suite that simply needs
+longer is not mistaken for a hang. (Under stage 3's timer-gated dispatch a
 hyperperiod took about a frame period, which a fixed value would not have suited; completion-
 driven dispatch removed that constraint.)
 

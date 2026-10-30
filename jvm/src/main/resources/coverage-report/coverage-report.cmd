@@ -48,7 +48,8 @@ exit /B %errorlevel%
 //              run whose tests failed still counts, and makes the outcome tests-failed
 //   reuse      test only the crates whose last run is missing, out of date, filtered
 //              differently or failing; report on the others' last runs
-//   open       open the report in the browser afterwards
+//   open       open the report in the browser afterwards (unless HAMR_NO_BROWSER is set,
+//              as for unattended runs)
 //   out=<dir>  where to write the report
 //
 // Outcome, in status.txt in the output directory (`sireum slang run` turns every
@@ -467,7 +468,7 @@ def run(args: ISZ[String]): Z = {
   print(summary.out)
   println()
   println(s"Report: ${(reportDir / "index.html").toUri}")
-  if (openReport) {
+  if (openReport && Os.env("HAMR_NO_BROWSER").isEmpty) {
     if (Os.isWin) {
       Os.proc(ISZ("cmd", "/c", "start", "", (reportDir / "index.html").string)).run()
     } else if (Os.isMac) {
