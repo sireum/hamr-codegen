@@ -2531,7 +2531,9 @@ sireum hamr sysml codegen ... --scheduling UserLand --system-testing
 It only affects Microkit models with UserLand (MCS) scheduling: on another platform codegen warns
 that it is ignored, and on a domain-scheduled system the Microkit linter warns that no
 system-testing variant is generated.  These, and the deprecation warning below, are reported
-under `CommonUtil.optionWarningKind`, which codegen prints even without `--verbose`.
+under `CommonUtil.optionWarningKind`, which codegen prints even without `--verbose`.  Whether the
+JVM/Slang path should take its system tests from this option rather than from
+`--runtime-monitoring` is an open entry in `TODO.md`.
 
 For the pilot, `sysml/bin/run-hamr.cmd` appends `Os.cliArgs` to its fixed arguments, so the
 option passes straight through, and `.ci/ci.cmd` already assembles the codegen option string

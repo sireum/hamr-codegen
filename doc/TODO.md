@@ -9,6 +9,8 @@ once it is done; the changelog records it. Add each new entry to the contents be
 
 - [Option to write out the AIR model (JSON or MsgPack)](#option-to-write-out-the-air-model-json-or-msgpack)
   (proposed 2026-10-21)
+- [Should `--system-testing` gate the JVM/Slang system tests too?](#should---system-testing-gate-the-jvmslang-system-tests-too)
+  (proposed 2026-10-30)
 
 ## Option to write out the AIR model (JSON or MsgPack)
 
@@ -97,3 +99,35 @@ no AIR file. This replaces the CLI's automatic post-success SysML dump.
 - An existing file at the path is overwritten.
 - A successful SysML run with a workspace root and no `--air-output` creates no automatic
   `.slang/<root system>.json` dump. With an explicit destination, only that export is written.
+
+## Should `--system-testing` gate the JVM/Slang system tests too?
+
+### What
+
+Decide whether the JVM/Slang (arsit) path should take its system-test scaffolding from the
+opt-in `--system-testing` option, as the Microkit path now does, rather than from
+`--runtime-monitoring`.
+
+### Why
+
+`--system-testing` (in the CAmkES/Microkit option group, off by default) replaced the
+`ENABLE_TEST_SCHEDULER` experimental option and currently affects only Microkit; codegen warns
+and ignores it on other platforms. On the JVM, the system-test scaffolding -- the
+`SystemTestSuite`, each component's `*_SystemTestAPI` and the user-editable `SystemTests.scala`
+(`GumboXRuntimeMonitoring.genSystemTestSuite` / `genSystemTest`, gated in `GumboXPlugin`) -- is
+generated only under `--runtime-monitoring`, so a user who wants system tests gets the runtime
+monitor as well, and vice versa. Microkit separated the two (TestScheduler-design.md, D22).
+
+### Design
+
+To investigate first:
+
+- What `--runtime-monitoring` adds to a JVM deployment beyond the system-test scaffolding (the
+  monitor GUI, the per-dispatch GUMBOX checks), and whether any of it is needed by the system
+  tests themselves.
+- Whether the scaffolding is cheap and harmless enough on the JVM to generate unconditionally,
+  which would make an option unnecessary there.
+- If an option is wanted: move `--system-testing` out of the CAmkES/Microkit group into the
+  common options, gate `genSystemTestSuite` / the `*_SystemTestAPI` on it, and keep
+  `--runtime-monitoring` for the monitor alone -- noting that existing JVM projects that rely on
+  `--runtime-monitoring` for their system tests would need the new option added.
