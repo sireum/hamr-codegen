@@ -17,19 +17,22 @@ once it is done; the changelog records it. Add each new entry to the contents be
 ### What
 
 A path option on codegen. When it is set, codegen serializes the AIR model it was given to that
-file, overwriting whatever is there. When it is not set, nothing changes.
+file, overwriting whatever is there. AIR export is explicit: without the option, codegen writes
+no AIR file. This replaces the CLI's automatic post-success SysML dump.
 
 ### Why
 
 - **SysML models have no AIR file.** The SysML front end builds AIR in memory, so there is
   nothing to hand to `hamr codegen`, attach to a bug report, diff between two versions of a model,
   or feed to other AIR consumers.
-- **Reproducing codegen failures.** One file reproduces a codegen run with no SysML parsing or
-  instantiation and no OSATE.
+- **Reproducing codegen failures.** The exported AIR can be passed directly to `hamr codegen`
+  without SysML parsing or instantiation and without OSATE. Reproducing the run still requires
+  the same effective codegen options and external inputs, such as auxiliary code files; those
+  are not captured in AIR. For SysML, this includes the options merged from `//@ HAMR:` directives.
 - **One explicit mechanism.** SysML codegen already writes AIR JSON as a side effect, but only to
   `<workspace-root-dir>/.slang/<root system>.json`, and only when the workspace root exists and
-  codegen succeeded (`cli/jvm/src/main/scala/org/sireum/cli/HAMR.scala`, in `codeGenS`). AADL
-  codegen has no equivalent.
+  codegen succeeded (`cli/jvm/src/main/scala/org/sireum/cli/HAMR.scala`, in `codeGenS`). Remove
+  that dump in favor of this explicit option. AADL codegen has no equivalent today.
 
 ### Design
 
@@ -44,14 +47,25 @@ file, overwriting whatever is there. When it is not set, nothing changes.
   decoding (`codeGen` in `HAMR.scala`). Writing `conversions.String.toBase64(MsgPack.fromAadl(model, T))`
   means the file round-trips through `hamr codegen --msgpack`. JSON is
   `JSON.fromAadl(model, F)` (not compact), the same call the existing `.slang` dump uses.
+- **MsgPack pooling.** Export with pooling enabled (`T`). The current MessagePack reader
+  detects pooling from the encoded header, so its setting need not match the writer's;
+  `MsgPack.toAadl` accepts both pooled and unpooled input.
 - **Which model.** The `Aadl` value handed to codegen: after JSON/MsgPack decoding for AADL
   input, and after SysML instantiation and system selection for SysML input. It is taken before
   any codegen-internal transformation, so the file is a valid input for re-running codegen.
-- **When it is written.** Before codegen runs, so the file exists even when codegen then fails;
-  failures are the main case for reproducing a run. If deserialization or SysML instantiation
-  fails, there is no model and nothing is written.
+- **When it is written.** At entry to `CodeGen.codeGen`
+  (`jvm/src/main/scala/org/sireum/hamr/codegen/CodeGen.scala`), before structural checks,
+  `ModelUtil.resolve`, plugin transformations, or platform dispatch. The file must exist even
+  when subsequent validation fails, including invalid GUMBO/Slang expressions. Every frontend
+  passes the export options through to this shared entry point rather than implementing its
+  own serialization. If deserialization or SysML instantiation fails before producing AIR,
+  there is no model to export and no file is created or overwritten.
 - **Writing.** Create the parent directories (`mkdirAll`), then `writeOver`, then print
-  `Wrote: <path>` like the existing dump. An I/O failure is reported as a codegen error.
+  `Wrote: <path>` only after the write succeeds. An I/O failure is reported as a codegen error
+  and stops generation; the command returns a nonzero exit status.
+- **Remove the legacy SysML dump.** Delete the automatic post-success AIR write in CLI
+  `HAMR.codeGenS`. Do not use its `.slang` path as an implicit default for the new option.
+  Callers that need an AIR file must request it with `--air-output`.
 - **SysML file options.** Add `airOutput` to `resolveFileOptionPaths` in `HAMR.scala`, so a
   relative path in a model file's `//@ HAMR:` options resolves against that file, like the other
   path options.
@@ -68,15 +82,18 @@ file, overwriting whatever is there. When it is not set, nothing changes.
   goes through `JSON.toAadl`; MsgPack goes through Base64 decoding and then `MsgPack.toAadl`. The
   result must equal the model codegen was given.
 - Run `hamr codegen` (with `--msgpack` for the MsgPack file) on each emitted file and check that
-  the output matches the run that produced it.
+  the output matches the run that produced it, reusing the same effective codegen options and
+  external inputs, including merged SysML file options.
+- Verify that both pooled and unpooled MsgPack inputs decode to the original model, and that
+  MsgPack exports use pooling.
+- For a decodable AIR model, verify that the export is written before each of these failures:
+  a structural check, model resolution, and invalid GUMBO/Slang expressions. Read the export
+  back and check that it equals the original input model, before any codegen transformation.
+- A deserialization or SysML-instantiation failure that produces no AIR creates no export;
+  an existing destination file is left unchanged.
+- An unwritable export destination reports an error, returns nonzero, and does not proceed
+  with generation or print a successful `Wrote:` message.
 - A relative `airOutput` in a SysML file's `//@ HAMR:` options resolves against that file.
 - An existing file at the path is overwritten.
-
-### Open questions
-
-1. **The existing `.slang` dump in SysML codegen.** Keep it as is, make it the default value of
-   the new option when a workspace root is set, or remove it now that the option exists.
-   Something may read those files (for example IVE or the AADL-side tooling), so check before
-   removing it.
-2. **MsgPack pooling.** `MsgPack.fromAadl` takes a `pooling` flag. `T` gives smaller files, but
-   it must match whatever OSATE writes and what other MsgPack consumers expect.
+- A successful SysML run with a workspace root and no `--air-output` creates no automatic
+  `.slang/<root system>.json` dump. With an explicit destination, only that export is written.
