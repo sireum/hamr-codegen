@@ -315,11 +315,7 @@ object CRustTestingPlugin {
     // own parameters); emittedPrimitives keeps a u8 a data port already uses from being
     // emitted twice.
     val hasPureEventPort: B = ops.ISZOps(thread.getPorts()).exists(p =>
-      p.direction == Direction.In && !StoreUtil.isSynthetic(p.path, store) && (p match {
-        case _: AadlFeatureData => F
-        case _: AadlEventPort => T
-        case _ => F
-      }))
+      p.direction == Direction.In && !StoreUtil.isSynthetic(p.path, store) && p.isInstanceOf[AadlEventPort])
     val genTypes: ISZ[AadlType] =
       (for (t <- touchedTypes.orderedDependencies) yield types.typeMap.get(t).get) ++
         (if (hasPureEventPort) ISZ[AadlType](MicrokitTypeUtil.eventPortType) else ISZ[AadlType]())
