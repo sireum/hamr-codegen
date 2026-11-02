@@ -443,7 +443,14 @@ object SlangExpUtil {
                                 halt(s"Diff: ${component.classifier} -- ${m.owner}")
                               }
                             case _ =>
-                              halt(exp.string)
+                              if (m.owner == owner) {
+                                // A system-level GUMBO function calling a sibling system-level function.
+                                // Both are emitted side by side (runtime observer functions, or the
+                                // system proof crate's spec fns), so the call is unqualified.
+                                return st"$id(${(cargs, ", ")})"
+                              } else {
+                                halt(exp.string)
+                              }
                           }
                       }
                     case _ =>
