@@ -2653,6 +2653,10 @@ object StaticContent {
           |// needs longer than the bound -- about one hyperperiod per frame period -- can raise it,
           |// or be run as several filtered runs.
           |//
+          |// The serial console's full output -- the TEST lines and everything the components log --
+          |// is kept in build/system-tests/serial.log (replaced by each run; SERIAL_LOG=<path> keeps
+          |// it elsewhere), and its path is printed at the end.
+          |//
           |// RUN_TESTS_TARGET_CMD is for HAMR's own tests of this script: a shell command run in
           |// place of building the image and booting it under QEMU, whose output stands in for
           |// the serial console.  It lets those tests drive the stop condition and the verdict
@@ -2735,7 +2739,12 @@ object StaticContent {
           |// thread that faults or panics once the schedule runs is not one of them: its dispatch
           |// trips the watchdog, which fails the test, and the run goes on to DONE.  Reaching the
           |// bound exits 124, so the verdict can say so.
-          |val logFile: Os.Path = Os.temp()
+          |val logFile: Os.Path = Os.env("SERIAL_LOG") match {
+          |  case Some(p) => Os.path(p)
+          |  case _ => microkitDir / "build" / "system-tests" / "serial.log"
+          |}
+          |logFile.up.mkdirAll()
+          |logFile.removeAll() // an earlier run's log must not be read as this one's
           |
           |val driver: String =
           |  st${tq}set -u
@@ -2766,7 +2775,7 @@ object StaticContent {
           |  .timeout((qemuTimeout + 30) * 1000).run().exitCode == 124
           |
           |val out: String = if (logFile.exists) logFile.read else ""
-          |logFile.removeAll()
+          |println(s"Serial log: $$logFile")
           |
           |var matched: Z = -1
           |var passed: Z = -1
