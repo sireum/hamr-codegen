@@ -735,7 +735,8 @@ val proversPins: ISZ[(String, String, String)] = ISZ(
   ("sdfgen", "SDFGEN_VER", ""),
   ("verus-release", "VERUS_VER", ""),
   ("z3", "Z3_VER", "z3-"),
-  ("lionsos", "LIONSOS_VER", ""))
+  ("lionsos", "LIONSOS_VER", ""),
+  ("sysml-aadl-libraries", "SYSML_AADL_LIBRARIES_VER", ""))
 
 // what versions.sh pins, NAME -> value; None() when it could not be fetched
 var proversVersOpt: Option[Map[String, String]] = None()
