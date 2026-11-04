@@ -72,6 +72,8 @@ if (Os.cliArgs.isEmpty) {
   Os.exit(0)
 }
 
+val cloneTimeoutInMs: Z = 5 * 60 * 1000
+
 def clone(repo: String, proj: String, location: Option[String]): B = {
   val loc: Os.Path = location match {
     case Some(l) => home / l
@@ -79,17 +81,24 @@ def clone(repo: String, proj: String, location: Option[String]): B = {
   }
   val ret: B = if (!loc.exists) {
     val args = ISZ[String]("git", "clone", "--recurse", s"${repo}/$proj") ++ (if (location.nonEmpty) ISZ(location.get) else ISZ[String]())
-    Os.proc(args).at(home).console.timeout(10000).run().ok
+    Os.proc(args).at(home).console.timeout(cloneTimeoutInMs).run().ok
   } else {
     Os.proc(ISZ("git", "pull")).at(loc).console.run().ok
   }
   return ret
 }
 
+// Stops the build if a project is left without a usable checkout.  A failed pull of an
+// existing checkout is not fatal: the build carries on with what is there.
 def cloneProjects(): Unit = {
-  ISZ[String]("air", "runtime", "slang", "parser").foreach((p: String) => {
-    clone("https://github.com/sireum", p, None()); println()
-  })
+  for (p <- ISZ[String]("air", "runtime", "slang", "parser")) {
+    val ok = clone("https://github.com/sireum", p, None())
+    println()
+    if (!ok && !(home / p / "bin" / "project.cmd").exists) {
+      eprintln(s"Failed to clone $p")
+      Os.exit(1)
+    }
+  }
 }
 
 def tipe(): Unit = {

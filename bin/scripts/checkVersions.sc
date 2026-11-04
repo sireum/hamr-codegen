@@ -728,15 +728,21 @@ val proversVersionsUrl = "https://raw.githubusercontent.com/loonwerks/INSPECTA-m
 
 // codegen's key, and the variable versions.sh pins the same tool as
 // and the prefix versions.sh writes before the version (Z3_VER is the z3 repository
-// tag, z3-<version>)
-val proversPins: ISZ[(String, String, String)] = ISZ(
+// tag, z3-<version>).  These are the pins the Sireum provers-env installs has to agree
+// with as well, since its codegen generates for them.
+val proversToolchainPins: ISZ[(String, String, String)] = ISZ(
   ("microkit-sdk", "MICROKIT_SDK_VER", ""),
   ("rust-channel", "RUST_TOOLCHAIN_VER", ""),
   ("sdfgen", "SDFGEN_VER", ""),
   ("verus-release", "VERUS_VER", ""),
   ("z3", "Z3_VER", "z3-"),
-  ("lionsos", "LIONSOS_VER", ""),
-  ("sysml-aadl-libraries", "SYSML_AADL_LIBRARIES_VER", ""))
+  ("lionsos", "LIONSOS_VER", ""))
+
+// Everything versions.sh has to match in this checkout.  sysml-aadl-libraries is only a
+// commit pin for now, not tied to a Sireum, so it is checked here and not against
+// SIREUM_V's codegen.
+val proversPins: ISZ[(String, String, String)] = proversToolchainPins :+
+  (("sysml-aadl-libraries", "SYSML_AADL_LIBRARIES_VER", ""))
 
 // what versions.sh pins, NAME -> value; None() when it could not be fetched
 var proversVersOpt: Option[Map[String, String]] = None()
@@ -1498,7 +1504,7 @@ var proversSireumIncompatible = F
             var missing = ISZ[String]()
             var unchecked = ISZ[String]()
 
-            for (pin <- proversPins) {
+            for (pin <- proversToolchainPins) {
               val key = pin._1
               val envVar = pin._2
               if (!vers.contains(key)) {
