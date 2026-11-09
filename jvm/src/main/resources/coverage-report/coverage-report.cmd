@@ -122,13 +122,19 @@ def llvmToolsDir(crate: Os.Path): Option[Os.Path] = {
 // The environment of an instrumented test build.  -Zcoverage-options=branch makes
 // rustc record which way each `if` condition went (without it there is no branch
 // data); RUSTC_BOOTSTRAP=1 lets the pinned stable toolchain accept it and the data
-// crate's feature gates.
+// crate's feature gates.  On Windows, std::process::exit calls ExitProcess, which skips
+// the atexit handler the profiler runtime writes its .profraw from, so a test binary
+// whose tests fail (libtest exits with process::exit(101)) would leave no profile;
+// there, continuous mode (%c, which needs runtime counter relocation) keeps the counters
+// in the mapped .profraw as the tests run.
 def coverageEnv(covDir: Os.Path): ISZ[(String, String)] = {
+  val relocation: String = if (Os.isWin) " -Cllvm-args=-runtime-counter-relocation" else ""
+  val continuous: String = if (Os.isWin) "%c" else ""
   return ISZ(
     ("RUSTC_BOOTSTRAP", "1"),
     ("CARGO_INCREMENTAL", "0"),
-    ("RUSTFLAGS", "-Cinstrument-coverage -Zcoverage-options=branch"),
-    ("LLVM_PROFILE_FILE", (covDir / "cargo-test-%p-%m.profraw").string))
+    ("RUSTFLAGS", s"-Cinstrument-coverage -Zcoverage-options=branch$relocation"),
+    ("LLVM_PROFILE_FILE", (covDir / s"cargo-test-%p-%m$continuous.profraw").string))
 }
 
 // The test executables of the instrumented build, as cargo reports them (built with
