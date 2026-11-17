@@ -26,6 +26,13 @@ object UserLandMonitorPlugin {
   val KEY_UserLandMonitorPlugin_handled: String = "KEY_RustScheduleAwareMonitorPlugin_handled"
   val MONITOR_ORIG_MSD_KEY: String = "MONITOR_ORIG_MSD"
 
+  // Shared-memory layout of the MCS scheduler broadcast regions. The generated
+  // meta.py, scheduler_config.h, and the monitor's memory regions all derive
+  // from these, so they cannot drift.
+  val schedStateVaddrHex: String = "0x4000000"
+  val schedScheduleVaddrHex: String = "0x4001000"
+  val schedRegionSizeKiB: Z = 4
+
   @strictpure def haveHandledModelTransform(store: Store): B = store.contains(KEY_UserLandMonitorPlugin_Model_Transformed)
 
   @strictpure def hasHandled(store: Store): B = store.contains(KEY_UserLandMonitorPlugin_handled)
@@ -456,8 +463,8 @@ object UserLandMonitorPlugin {
               |# protection domain last yielded and which will be dispatched next.
               |# Must match SCHED_STATE_VADDR / SCHED_STATE_SIZE in scheduler_config.h.
               |#######################################
-              |SCHED_STATE_VADDR = 0x4_000_000
-              |SCHED_STATE_SIZE  = 0x1000  # 4 KB
+              |SCHED_STATE_VADDR = ${UserLandMonitorPlugin.schedStateVaddrHex}
+              |SCHED_STATE_SIZE  = ${UserLandMonitorPlugin.schedRegionSizeKiB * 1024}  # 4 KB
               |sched_state = MemoryRegion(sdf, "sched_state", SCHED_STATE_SIZE)
               |sdf.add_mr(sched_state)
               |scheduler.add_map(Map(sched_state, SCHED_STATE_VADDR, perms="rw"))
@@ -469,16 +476,16 @@ object UserLandMonitorPlugin {
               |# current_timeslice indices with channel IDs and durations.
               |# Must match SCHED_SCHEDULE_VADDR / SCHED_SCHEDULE_SIZE in scheduler_config.h.
               |#######################################
-              |SCHED_SCHEDULE_VADDR = 0x4_001_000
-              |SCHED_SCHEDULE_SIZE  = 0x1000  # 4 KB
+              |SCHED_SCHEDULE_VADDR = ${UserLandMonitorPlugin.schedScheduleVaddrHex}
+              |SCHED_SCHEDULE_SIZE  = ${UserLandMonitorPlugin.schedRegionSizeKiB * 1024}  # 4 KB
               |sched_schedule = MemoryRegion(sdf, "sched_schedule", SCHED_SCHEDULE_SIZE)
               |sdf.add_mr(sched_schedule)
               |scheduler.add_map(Map(sched_schedule, SCHED_SCHEDULE_VADDR, perms="rw"))""")
 
         val monitorMemoryRegions: ISZ[MemoryRegion] = rawSd.memoryRegions.filter((mr: MemoryRegion) =>
           !excludedMrNames.contains(mr.name)) :+
-          GenericMemoryRegion(name = "sched_state", sizeInKiBytes = 4) :+
-          GenericMemoryRegion(name = "sched_schedule", sizeInKiBytes = 4)
+          GenericMemoryRegion(name = "sched_state", sizeInKiBytes = UserLandMonitorPlugin.schedRegionSizeKiB) :+
+          GenericMemoryRegion(name = "sched_schedule", sizeInKiBytes = UserLandMonitorPlugin.schedRegionSizeKiB)
 
         localStore = SystemDescriptionProviderPlugin.putMSD(monitorName, SystemDescription(
           name = monitorName,
@@ -776,13 +783,13 @@ object StaticContent {
         |
         |// Virtual address at which the schedule state shared memory region is mapped.
         |// Must match SCHED_STATE_VADDR in meta.py. Change both if there is a conflict.
-        |#define SCHED_STATE_VADDR 0x4000000UL
-        |#define SCHED_STATE_SIZE  0x1000UL  // 4 KB
+        |#define SCHED_STATE_VADDR ${UserLandMonitorPlugin.schedStateVaddrHex}UL
+        |#define SCHED_STATE_SIZE  (${UserLandMonitorPlugin.schedRegionSizeKiB}UL * 1024UL)  // 4 KB
         |
         |// Virtual address at which the schedule shared memory region is mapped.
         |// Must match SCHED_SCHEDULE_VADDR in meta.py. Change both if there is a conflict.
-        |#define SCHED_SCHEDULE_VADDR 0x4001000UL
-        |#define SCHED_SCHEDULE_SIZE  0x1000UL  // 4 KB
+        |#define SCHED_SCHEDULE_VADDR ${UserLandMonitorPlugin.schedScheduleVaddrHex}UL
+        |#define SCHED_SCHEDULE_SIZE  (${UserLandMonitorPlugin.schedRegionSizeKiB}UL * 1024UL)  // 4 KB
         |
         |// Schedule state broadcast: written by the scheduler before every dispatch.
         |// Monitors that map this region (read-only) can inspect it to determine
