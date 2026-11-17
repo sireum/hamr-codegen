@@ -551,6 +551,9 @@ object VerusVCSerializer {
 
   // Rewrites one GUMBO clause expression for the proof crate: GumboX param
   // collection (ports/state vars become typed parameters) + Verus rendering.
+  // `isCaseAssume` marks a compute case's assume: its call site binds (pre, post), so a
+  // state variable named there without In(..) must become the pre-state parameter, as it
+  // is in the component's own Verus contract (`old(self).x`).
   @pure def renderContractClause(exp: org.sireum.lang.ast.Exp,
                                  thread: AadlThread,
                                  stateVars: ISZ[ir.GclStateVar],
@@ -558,9 +561,11 @@ object VerusVCSerializer {
                                  aadlTypes: AadlTypes,
                                  crustTypeProvider: CRustTypeProvider,
                                  store: Store,
-                                 reporter: Reporter): (ISZ[GumboXRustUtil.GGParam], ST) = {
-    val gg = GumboXRustUtil.rewriteToExpX(exp, thread, aadlTypes, stateVars,
-      GclResolver.getSlangTypeToAadlType(store), crustTypeProvider)
+                                 reporter: Reporter,
+                                 isCaseAssume: B): (ISZ[GumboXRustUtil.GGParam], ST) = {
+    val gg = GumboXRustUtil.rewriteToExpX(exp = exp, thread = thread, types = aadlTypes, stateVars = stateVars,
+      slangTypesToAadlTypes = GclResolver.getSlangTypeToAadlType(store), crustTypeProvider = crustTypeProvider,
+      bareStateVarsArePreState = isCaseAssume)
     // identity substitutions so port/state-var references render as the spec fn's
     // parameter names rather than the component-method style `self.x`/`old(self).x`.
     // The rendered expression is "timeless": the pre/post distinction is encoded in
@@ -636,7 +641,7 @@ object VerusVCSerializer {
           info.annex.initializes match {
             case Some(init) =>
               for (g <- init.guarantees) {
-                val (params, body) = renderContractClause(g.exp, t, stateVars, SlangExpUtil.Context.initialize_clause, aadlTypes, crustTypeProvider, store, reporter)
+                val (params, body) = renderContractClause(exp = g.exp, thread = t, stateVars = stateVars, context = SlangExpUtil.Context.initialize_clause, aadlTypes = aadlTypes, crustTypeProvider = crustTypeProvider, store = store, reporter = reporter, isCaseAssume = F)
                 val fnName = GumboXRustUtil.getInitializeGuaranteeMethodName(g.id)
                 fns = fns :+ ContractFn(
                   fnName = fnName,
@@ -655,7 +660,7 @@ object VerusVCSerializer {
           info.annex.compute match {
             case Some(compute) =>
               for (g <- compute.assumes) {
-                val (params, body) = renderContractClause(g.exp, t, stateVars, SlangExpUtil.Context.compute_clause, aadlTypes, crustTypeProvider, store, reporter)
+                val (params, body) = renderContractClause(exp = g.exp, thread = t, stateVars = stateVars, context = SlangExpUtil.Context.compute_clause, aadlTypes = aadlTypes, crustTypeProvider = crustTypeProvider, store = store, reporter = reporter, isCaseAssume = F)
                 val fnName = s"compute_spec_${g.id}_assume"
                 fns = fns :+ ContractFn(
                   fnName = fnName,
@@ -669,7 +674,7 @@ object VerusVCSerializer {
                     fnName = fnName, params = params, body = body))
               }
               for (g <- compute.guarantees) {
-                val (params, body) = renderContractClause(g.exp, t, stateVars, SlangExpUtil.Context.compute_clause, aadlTypes, crustTypeProvider, store, reporter)
+                val (params, body) = renderContractClause(exp = g.exp, thread = t, stateVars = stateVars, context = SlangExpUtil.Context.compute_clause, aadlTypes = aadlTypes, crustTypeProvider = crustTypeProvider, store = store, reporter = reporter, isCaseAssume = F)
                 val fnName = s"compute_spec_${g.id}_guarantee"
                 fns = fns :+ ContractFn(
                   fnName = fnName,
@@ -683,11 +688,11 @@ object VerusVCSerializer {
                     fnName = fnName, params = params, body = body))
               }
               for (c <- compute.cases) {
-                val (guarParams, guarBody) = renderContractClause(c.guarantees, t, stateVars, SlangExpUtil.Context.compute_clause, aadlTypes, crustTypeProvider, store, reporter)
+                val (guarParams, guarBody) = renderContractClause(exp = c.guarantees, thread = t, stateVars = stateVars, context = SlangExpUtil.Context.compute_clause, aadlTypes = aadlTypes, crustTypeProvider = crustTypeProvider, store = store, reporter = reporter, isCaseAssume = F)
                 val fnName = s"compute_case_${c.id}"
                 val (params, body): (ISZ[GumboXRustUtil.GGParam], ST) = c.assumes match {
                   case Some(assm) =>
-                    val (assmParams, assmBody) = renderContractClause(assm, t, stateVars, SlangExpUtil.Context.compute_clause, aadlTypes, crustTypeProvider, store, reporter)
+                    val (assmParams, assmBody) = renderContractClause(exp = assm, thread = t, stateVars = stateVars, context = SlangExpUtil.Context.compute_clause, aadlTypes = aadlTypes, crustTypeProvider = crustTypeProvider, store = store, reporter = reporter, isCaseAssume = T)
                     val combined = GumboXRustUtil.sortParams(
                       (Set.empty[GumboXRustUtil.GGParam] ++ assmParams ++ guarParams).elements)
                     (combined, st"""($assmBody)

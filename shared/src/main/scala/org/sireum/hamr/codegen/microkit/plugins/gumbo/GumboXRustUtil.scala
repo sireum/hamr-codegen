@@ -35,11 +35,20 @@ object GumboXRustUtil {
   @datatype class GGExpParamHolder(val params: Set[GGParam],
                                    val exp: Exp)
 
+  /** Collects the harness parameters an expression refers to and renames the references to them.
+    *
+    * @param bareStateVarsArePreState read a state variable named without `In(..)` as its pre-state
+    *   (`In_<var>`), as GUMBO defines it in an assume.  Needed where the expression is evaluated
+    *   with both states in scope -- a compute case's assume -- since there a bare name would
+    *   otherwise bind to the post-state.  (The JVM translation does the same with
+    *   `GumboGen.StateVarInRewriter`.)
+    */
   @record class EE(context: AadlThread,
                    aadlTypes: AadlTypes,
                    stateVars: ISZ[GclStateVar],
                    slangTypesToAadlTypes: Map[SAST.Typed, TypeIdPath],
-                   crustTypeProvider: CRustTypeProvider) extends ir.MTransformer {
+                   crustTypeProvider: CRustTypeProvider,
+                   bareStateVarsArePreState: B) extends ir.MTransformer {
 
     var params: Set[GGParam] = Set.empty
 
@@ -146,6 +155,10 @@ object GumboXRustUtil {
             case Some(e: SAST.ResolvedInfo.LocalVar) =>
               // must be a quantifier variable so nothing to do
             case Some(e: SAST.ResolvedInfo.Var) =>
+
+              if (bareStateVarsArePreState && isStateVar(o.id.value, stateVars)) {
+                return pre_langastExpInput(Exp.Input(exp = o, attr = SAST.Attr(posOpt = o.attr.posOpt)))
+              }
 
               if (isStateVar(o.id.value, stateVars)) {
                 val (index, stateVar) = findStateVar(o.id.value, stateVars)
@@ -285,10 +298,20 @@ object GumboXRustUtil {
       ops.ISZOps(partition).sortWith((a,b) => a.name <= b.name)).flatMap(a => a)
   }
 
+  /** Rewrites a GUMBO clause expression so its port and state-variable references use the
+    * harness parameter names (`api_<port>`, `<var>` for the post-state, `In_<var>` for the
+    * pre-state), and returns the expression with the parameters it refers to.
+    *
+    * @param bareStateVarsArePreState T for a compute case's assume, whose bare state variables
+    *   denote the pre-state (see [[EE]]); F everywhere else
+    */
   @pure def rewriteToExpX(exp: Exp, thread: AadlThread, types: AadlTypes, stateVars: ISZ[GclStateVar],
                           slangTypesToAadlTypes: Map[SAST.Typed, TypeIdPath],
-                          crustTypeProvider: CRustTypeProvider): GGExpParamHolder = {
-    val e = EE(thread, types, stateVars, slangTypesToAadlTypes, crustTypeProvider)
+                          crustTypeProvider: CRustTypeProvider,
+                          bareStateVarsArePreState: B): GGExpParamHolder = {
+    val e = EE(context = thread, aadlTypes = types, stateVars = stateVars,
+      slangTypesToAadlTypes = slangTypesToAadlTypes, crustTypeProvider = crustTypeProvider,
+      bareStateVarsArePreState = bareStateVarsArePreState)
     e.transform_langastExp(exp) match {
       case MSome(x) => return GGExpParamHolder(e.params, x)
       case _ => return GGExpParamHolder(e.params, exp)
@@ -479,7 +502,8 @@ object GumboXRustUtil {
                 types = types,
                 stateVars = subclause.state,
                 slangTypesToAadlTypes = slangTypesToAadlTypes,
-                crustTypeProvider = crustTypeProvider)
+                crustTypeProvider = crustTypeProvider,
+                bareStateVarsArePreState = F) // bare names are re-keyed to In_<var> below
               ret = refineIntervalsFromExp(ret, gg.exp)
             }
           case _ =>

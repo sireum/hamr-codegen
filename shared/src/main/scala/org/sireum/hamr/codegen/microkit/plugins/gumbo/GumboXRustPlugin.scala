@@ -717,8 +717,9 @@ object GumboXComputeContributions {
 
         for (guarantee <- initializes.guarantees) {
 
-          val gg = GumboXRustUtil.rewriteToExpX(guarantee.exp, thread, types, stateVars,
-            GclResolver.getSlangTypeToAadlType(store), crustTypeProvider)
+          val gg = GumboXRustUtil.rewriteToExpX(exp = guarantee.exp, thread = thread, types = types, stateVars = stateVars,
+            slangTypesToAadlTypes = GclResolver.getSlangTypeToAadlType(store), crustTypeProvider = crustTypeProvider,
+            bareStateVarsArePreState = F)
           val rewrittenExp = SlangExpUtil.rewriteExp(
             rexp = gg.exp,
 
@@ -908,12 +909,13 @@ object GumboXComputeContributions {
 
         for (g <- compute.assumes) {
           val gg = GumboXRustUtil.rewriteToExpX(
-            g.exp,
-            thread,
-            types,
-            stateVars,
-            GclResolver.getSlangTypeToAadlType(store),
-            crustTypeProvider)
+            exp = g.exp,
+            thread = thread,
+            types = types,
+            stateVars = stateVars,
+            slangTypesToAadlTypes = GclResolver.getSlangTypeToAadlType(store),
+            crustTypeProvider = crustTypeProvider,
+            bareStateVarsArePreState = F) // CEP_Pre binds the bare names to the pre-state
 
           val rexp = SlangExpUtil.rewriteExp(
             rexp = gg.exp,
@@ -959,8 +961,9 @@ object GumboXComputeContributions {
         }
 
         for (g <- compute.guarantees) {
-          val gg = GumboXRustUtil.rewriteToExpX(g.exp, thread, types, stateVars,
-            GclResolver.getSlangTypeToAadlType(store), crustTypeProvider)
+          val gg = GumboXRustUtil.rewriteToExpX(exp = g.exp, thread = thread, types = types, stateVars = stateVars,
+            slangTypesToAadlTypes = GclResolver.getSlangTypeToAadlType(store), crustTypeProvider = crustTypeProvider,
+            bareStateVarsArePreState = F)
           val rexp = SlangExpUtil.rewriteExp(
             rexp = gg.exp,
 
@@ -1067,8 +1070,11 @@ object GumboXComputeContributions {
             val rAssm: Option[ST] =
               ccase.assumes match {
                 case Some(assumes) =>
-                  val ggAssm = GumboXRustUtil.rewriteToExpX(assumes, thread, types, stateVars,
-                    GclResolver.getSlangTypeToAadlType(store), crustTypeProvider)
+                  // the case is checked in CEP_Post, where a bare state variable would bind to
+                  // the post-state; in an assume it denotes the pre-state, as in the Verus contract
+                  val ggAssm = GumboXRustUtil.rewriteToExpX(exp = assumes, thread = thread, types = types, stateVars = stateVars,
+                    slangTypesToAadlTypes = GclResolver.getSlangTypeToAadlType(store), crustTypeProvider = crustTypeProvider,
+                    bareStateVarsArePreState = T)
                   combinedAssumGuarParams = combinedAssumGuarParams ++ ggAssm.params.elements
                   Some(SlangExpUtil.rewriteExp(
                     rexp = ggAssm.exp,
@@ -1087,8 +1093,9 @@ object GumboXComputeContributions {
                 case _ => None()
               }
 
-            val ggGuar = GumboXRustUtil.rewriteToExpX(ccase.guarantees, thread, types, stateVars,
-              GclResolver.getSlangTypeToAadlType(store), crustTypeProvider)
+            val ggGuar = GumboXRustUtil.rewriteToExpX(exp = ccase.guarantees, thread = thread, types = types, stateVars = stateVars,
+              slangTypesToAadlTypes = GclResolver.getSlangTypeToAadlType(store), crustTypeProvider = crustTypeProvider,
+              bareStateVarsArePreState = F)
             val rGuar = SlangExpUtil.rewriteExp(
               rexp = ggGuar.exp,
 
