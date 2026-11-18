@@ -18,7 +18,6 @@ once it is done; the changelog records it. Add each new entry to the contents be
 - [Investigate restoring `Structural` on generated Rust enums](#investigate-restoring-structural-on-generated-rust-enums)
   (proposed 2026-11-11)
 - Toolchain findings from the RASE experiments (proposed 2026-11-18):
-  - [GUMBO diagnostics that point away from the fix](#gumbo-diagnostics-that-point-away-from-the-fix)
   - [Notices on successful runs that look like problems](#notices-on-successful-runs-that-look-like-problems)
   - [System tests: injecting a data port for one consumer of a fan-out](#system-tests-injecting-a-data-port-for-one-consumer-of-a-fan-out)
   - [Host tests: a dispatch boundary between direct entry-point calls](#host-tests-a-dispatch-boundary-between-direct-entry-point-calls)
@@ -382,7 +381,7 @@ and changed HAMR Microkit systems under the HAMR agent workflows. A code such as
 `t3-sonnet:HC-04` is a finding from one run's own assessment: Task 2 (`t2-`) built a new
 three-component pipeline, and Task 3 (`t3-`) added a return-to-launch mode to an existing
 system. The number of runs that report a problem is what measures how often it occurs.
-Ten findings from those runs are already fixed: a bare state variable in a case assume
+Eleven findings from those runs are already fixed: a bare state variable in a case assume
 read as post-state (codegen `de2ec819`), `sysml tipe` exiting 0 when it reported errors
 (kekinian `9941d156`), `make verus` succeeding from cargo's cache without a results line
 (codegen `5ca39381`), `NoSend`/`MustSend` rejected on composition port aliases (codegen
@@ -394,32 +393,12 @@ functions that verified code could not call (each executable library function no
 arithmetic, where the machine-integer and mathematical versions can disagree; codegen
 `0e29c457`), regeneration rewriting `generators.rs` in crates a change does not touch
 (each crate now gets strategies only for its own port and state-variable types and what
-they contain; codegen `abd5de95`), and, on 2026-11-18, `sysml tipe` accepting a property
-that binds a schedule place twice (`GclResolver` now runs `ScheduleNextRel.decorate`).
-
-### GUMBO diagnostics that point away from the fix
-
-**What.** Make these messages name what the author wrote, and what to write instead:
-
-- `In(mode)`, where the expression is not allowed, gives "Currently only allowing the
-  simple name of state vars to be used in In expressions: In(In(mode))"
-  (`GclResolver.scala`). The message prints the already-rewritten expression, not the
-  source.
-- `modifies (mode, activations);` gives "comma separated sequencing expressions are not
-  currently supported". This is in `SysMLAstBuilder.scala` (hamr/sysml). The message
-  should say that `modifies` takes its list without parentheses.
-- A GUMBO keyword used as a parameter name (`out`, in t2-opus:HT-04) sends parse errors
-  through the rest of the block, far from the cause. This is in the hamr/sysml GUMBO
-  parser. It needs error recovery, or a specific message for a keyword in an identifier
-  position.
-- `MustSend(alias, v)` on a composition port alias backed by an event port (no payload)
-  gives "Could not unify (art.Empty, S32) with (TYPE_VAR__STATE_VAR, TYPE_VAR__STATE_VAR)"
-  and "Could not resolve expression's type". Type checking rejects it before
-  `GclResolver` can say that an event port carries no value to compare. The
-  hamr/sysml lint test `composition-mustsend-event-value` pins the current messages.
-
-Sources: t3-opus:TOOL-02 and t2-opus:HT-04. Each message should be covered by a resolver
-or parser test with the bad source and the expected message.
+they contain; codegen `abd5de95`), `sysml tipe` accepting a property that binds a
+schedule place twice (`GclResolver` now runs `ScheduleNextRel.decorate`; codegen
+`74bd9408`), and, on 2026-11-18, GUMBO diagnostics that pointed away from the fix:
+`In(x)` in an assume (no longer shown as `In(In(x))`), `modifies (a, b);`, `MustSend(p, v)`
+on an event port, and a reserved word used as a name. The parser errors that follow a
+reserved word still cascade; that would take error recovery in the grammar.
 
 ### Notices on successful runs that look like problems
 

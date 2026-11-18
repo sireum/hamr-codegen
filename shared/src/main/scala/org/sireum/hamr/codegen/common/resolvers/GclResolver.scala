@@ -81,6 +81,21 @@ object GclResolver {
   }
 
 
+  /** The port arguments (simple names) of the MustSend(p, v) calls in an expression. */
+  @record class MustSendValueScan() extends org.sireum.hamr.ir.MTransformer {
+    var ports: ISZ[String] = ISZ()
+
+    override def pre_langastExpInvoke(o: Exp.Invoke): org.sireum.hamr.ir.MTransformer.PreResult[Exp] = {
+      if (o.ident.id.value == uif__MustSendWithExpectedValue && o.args.nonEmpty) {
+        o.args(0) match {
+          case i: Exp.Ident => ports = ports :+ i.id.value
+          case _ =>
+        }
+      }
+      return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone[Exp]())
+    }
+  }
+
   @record class SymbolFinder(val mode: RewriteMode.Type,
                              val context: AadlComponent,
                              val isContextGeneralAssumeClause: B,
@@ -805,6 +820,15 @@ object GclResolver {
             case _ =>
               reportError(o.fullPosOpt, s"Only state vars can be used in In expressions", reporter)
           }
+        case inner: Exp.Input =>
+          // In a compute assume a bare state variable already denotes its pre-state, so
+          // post_langastExpIdent has wrapped the author's `x` in In; In(x) was written where
+          // x alone means the same. Name what was written, not the rewritten In(In(x)).
+          val name: String = inner.exp match {
+            case id: Exp.Ident => id.id.value
+            case e => e.prettyST.render
+          }
+          reportError(o.fullPosOpt, s"In($name) is not needed here: in an assume clause a state variable already denotes its pre-state value, so write '$name'", reporter)
         case _ =>
           reportError(o.fullPosOpt, s"Currently only allowing the simple name of state vars to be used in In expressions: $o", reporter)
       }
@@ -1023,7 +1047,17 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
     val typeChecked = typeChecker.checkExp(None(), scope, exp, reporter)
 
     if (typeChecked._2.isEmpty) {
-      reportError(exp.posOpt, s"Could not resolve expression's type: ${exp.prettyST.render}", reporter)
+      // show the GUMBO predicates, not the uif__ functions they are resolved to
+      var shown: String = ops.StringOps(exp.prettyST.render).replaceAllLiterally(s"$uif__MustSendWithExpectedValue(", "MustSend(")
+      shown = ops.StringOps(shown).replaceAllLiterally("uif__", "")
+      // MustSend(p, v) fails to type check, with a unification error that does not say why,
+      // when p is an event port (its payload is art.Empty) or v does not have p's payload type
+      val scan = GclResolver.MustSendValueScan()
+      scan.transform_langastExp(exp)
+      val hint: String =
+        if (scan.ports.isEmpty) ""
+        else s". MustSend(${scan.ports(0)}, v) compares the value sent on ${scan.ports(0)}: if ${scan.ports(0)} is an event port, which carries no value, write MustSend(${scan.ports(0)}); otherwise v must have ${scan.ports(0)}'s payload type"
+      reportError(exp.posOpt, s"Could not resolve expression's type: $shown$hint", reporter)
     }
 
     return Some(typeChecked)
