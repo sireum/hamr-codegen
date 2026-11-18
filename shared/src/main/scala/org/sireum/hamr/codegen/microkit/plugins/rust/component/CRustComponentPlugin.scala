@@ -72,7 +72,7 @@ object ComponentContributions {}
                                         // file's skeleton; anything another plugin needs woven into it arrives
                                         // here rather than by re-emitting the file at the same path and relying
                                         // on running later.  The entrypoint slots name positions inside the
-                                        // generated extern "C" bodies, which a contributor cannot otherwise
+                                        // generated extern "C-unwind" bodies, which a contributor cannot otherwise
                                         // reach.
                                         val libModDecls: ISZ[RAST.Item],
                                         val libUses: ISZ[RAST.Item],
@@ -423,7 +423,7 @@ object ComponentContributions {}
           if (thread.isPeriodic())
             ISZ(
               st"""#[no_mangle]
-                  |pub extern "C" fn ${threadId}_timeTriggered() {
+                  |pub extern "C-unwind" fn ${threadId}_timeTriggered() {
                   |  unsafe {
                   |    if let Some(_app) = app.as_mut() {
                   |      $computePre
@@ -467,8 +467,12 @@ object ComponentContributions {}
               |static mut compute_api: ${CRustApiPlugin.applicationApiType(thread)}<${CRustApiPlugin.computeApiType(thread)}> = api::compute_api();
               |$libModuleLevelEntries
               |
+              |// The entry points are "C-unwind" rather than "C" for the host tests, which call them
+              |// directly: a panic in the component then fails just that test (and proptest can shrink
+              |// its input) instead of aborting the whole test process. On the target nothing unwinds,
+              |// since the panic handler below faults the thread, so the C callers see no difference.
               |#[no_mangle]
-              |pub extern "C" fn ${threadId}_initialize() {
+              |pub extern "C-unwind" fn ${threadId}_initialize() {
               |  logging::init_logging();
               |
               |  unsafe {
@@ -486,7 +490,7 @@ object ComponentContributions {}
               |${(entrypoints, "\n\n")}
               |
               |#[no_mangle]
-              |pub extern "C" fn ${threadId}_notify(channel: microkit_channel) {
+              |pub extern "C-unwind" fn ${threadId}_notify(channel: microkit_channel) {
               |  unsafe {
               |    if let Some(_app) = app.as_mut() {
               |      _app.notify(channel);

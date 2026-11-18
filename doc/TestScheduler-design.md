@@ -752,7 +752,7 @@ codegen warning that a test cannot set them, and no injection plumbing.
 As built, for `tcp_tct`:
 
 ```rust
-pub extern "C" fn tcp_tct_timeTriggered() {
+pub extern "C-unwind" fn tcp_tct_timeTriggered() {
   unsafe {
     if let Some(_app) = app.as_mut() {
       // Injected GUMBO state variables, if the test controller set any.

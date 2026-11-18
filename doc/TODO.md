@@ -21,7 +21,6 @@ once it is done; the changelog records it. Add each new entry to the contents be
   - [Notices on successful runs that look like problems](#notices-on-successful-runs-that-look-like-problems)
   - [System tests: injecting a data port for one consumer of a fan-out](#system-tests-injecting-a-data-port-for-one-consumer-of-a-fan-out)
   - [Host tests: a dispatch boundary between direct entry-point calls](#host-tests-a-dispatch-boundary-between-direct-entry-point-calls)
-  - [Skeleton `test_compute` aborts when an input data port has no value](#skeleton-test_compute-aborts-when-an-input-data-port-has-no-value)
 
 ## Option to write out the AIR model (JSON or MsgPack)
 
@@ -381,7 +380,7 @@ and changed HAMR Microkit systems under the HAMR agent workflows. A code such as
 `t3-sonnet:HC-04` is a finding from one run's own assessment: Task 2 (`t2-`) built a new
 three-component pipeline, and Task 3 (`t3-`) added a return-to-launch mode to an existing
 system. The number of runs that report a problem is what measures how often it occurs.
-Eleven findings from those runs are already fixed: a bare state variable in a case assume
+Twelve findings from those runs are already fixed: a bare state variable in a case assume
 read as post-state (codegen `de2ec819`), `sysml tipe` exiting 0 when it reported errors
 (kekinian `9941d156`), `make verus` succeeding from cargo's cache without a results line
 (codegen `5ca39381`), `NoSend`/`MustSend` rejected on composition port aliases (codegen
@@ -398,7 +397,12 @@ schedule place twice (`GclResolver` now runs `ScheduleNextRel.decorate`; codegen
 `74bd9408`), and, on 2026-11-18, GUMBO diagnostics that pointed away from the fix:
 `In(x)` in an assume (no longer shown as `In(In(x))`), `modifies (a, b);`, `MustSend(p, v)`
 on an event port, and a reserved word used as a name. The parser errors that follow a
-reserved word still cascade; that would take error recovery in the grammar.
+reserved word still cascade; that would take error recovery in the grammar. Also fixed on
+2026-11-18: a panic in component code aborted the whole host-test process
+(t3-sonnet:HC-06, where a `test_compute` written before a new input data port did not set
+it). The entry points are now `extern "C-unwind"`, so the panic fails just that test and
+proptest can shrink its input, and the unset-port panic names the port and its
+`test_apis::put_<port>` setter.
 
 ### Notices on successful runs that look like problems
 
@@ -444,21 +448,3 @@ pending event and event-data outputs, and keeps component state and data ports.
 This is the host-test side of `MicrokitPortSemantics-design.md` D2/D5, which requires tests
 that call entry points directly to establish the same boundary. Once that design is
 implemented, the helper should call the same boundary code.
-
-### Skeleton `test_compute` aborts when an input data port has no value
-
-**What.** After a model change adds an input data port, the existing `test_compute` fails
-with a panic followed by "panic in a function that cannot unwind", and the test process
-aborts (t3-sonnet:HC-06). The skeleton sets every incoming data port when it is generated,
-but `tests.rs` is preserved across regeneration, so a port added later is not set. The
-component's test getter in `extern_c_api.rs` (`CRustApiUtil.scala`) then panics, and the
-panic cannot unwind out of the `extern "C"` entry point.
-
-**Done (2026-11-18).** The panic now names the port and, for component tests, its setter
-("incoming data port 'p' has no value: set it before calling the entry point (in a
-component test, with test_apis::put_p(..))"), where it used to say "Not expecting None".
-
-**Remaining.** Report the failure as an ordinary test failure instead of aborting the test
-process. One way is to make the entry points `extern "C-unwind"` in test builds, so the
-panic reaches cargo's test harness. That changes the entry points' ABI, so check every
-caller of the C entry points, the `cfg(test)` paths and GUMBOX first.
