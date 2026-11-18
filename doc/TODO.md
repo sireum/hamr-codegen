@@ -20,7 +20,6 @@ once it is done; the changelog records it. Add each new entry to the contents be
 - Toolchain findings from the RASE experiments (proposed 2026-11-18):
   - [Regeneration rewrites `generators.rs` in crates a change does not touch](#regeneration-rewrites-generatorsrs-in-crates-a-change-does-not-touch)
   - [`sysml tipe` should reject a property that binds a schedule place twice](#sysml-tipe-should-reject-a-property-that-binds-a-schedule-place-twice)
-  - [`NoSend` and `MustSend` on composition port aliases](#nosend-and-mustsend-on-composition-port-aliases)
   - [GUMBO diagnostics that point away from the fix](#gumbo-diagnostics-that-point-away-from-the-fix)
   - [Notices on successful runs that look like problems](#notices-on-successful-runs-that-look-like-problems)
   - [System tests: expecting the same violation more than once](#system-tests-expecting-the-same-violation-more-than-once)
@@ -389,9 +388,10 @@ and changed HAMR Microkit systems under the HAMR agent workflows. A code such as
 `t3-sonnet:HC-04` is a finding from one run's own assessment: Task 2 (`t2-`) built a new
 three-component pipeline, and Task 3 (`t3-`) added a return-to-launch mode to an existing
 system. The number of runs that report a problem is what measures how often it occurs.
-Three findings from those runs are already fixed: a bare state variable in a case assume
+Four findings from those runs are already fixed: a bare state variable in a case assume
 read as post-state (codegen `de2ec819`), `sysml tipe` exiting 0 when it reported errors
-(kekinian `9941d156`), and `make verus` succeeding from cargo's cache without a results line
+(kekinian `9941d156`), `make verus` succeeding from cargo's cache without a results line
+(codegen `5ca39381`), and `NoSend`/`MustSend` rejected on composition port aliases
 (2026-11-18).
 
 ### Regeneration rewrites `generators.rs` in crates a change does not touch
@@ -425,31 +425,6 @@ the full net. The schedule may come from codegen options, such as a domain sched
 Decide what tipe should do when that input is missing: skip the check, and say that it was
 skipped.
 
-### `NoSend` and `MustSend` on composition port aliases
-
-**What.** In system assertions, accept `NoSend(alias)`, `MustSend(alias)` and
-`MustSend(alias, v)` where `alias` is a composition port alias backed by an outgoing
-event or event-data port.
-
-**Why.** `HasEvent(alias)` is rewritten to `alias.nonEmpty` in `GclResolver`'s
-`pre_langastExpInvoke` (`optionalCompositionAliases`). `NoSend` and the others go
-through the component-API path instead. There, `processIdent` on an alias does not
-resolve to an `AadlFeatureEvent`, so the result is "Invalid NoSend expression. Can only be
-applied to outgoing event ports", even though the alias is backed by an outgoing port.
-Five runs met this and rewrote the assertions as `not HasEvent(alias)`: t3-sonnet:HC-02,
-t3-opus:TOOL-02, t3-sol:HAMR-01 and DOC-01, t3-astra:HT-01. The approved Task 3 plan was
-itself written with `NoSend` on aliases.
-
-**Design.**
-
-- Add these alongside the `HasEvent` alias case. On a channel, `NoSend(a)` is
-  `a.isEmpty`, `MustSend(a)` is `a.nonEmpty`, and `MustSend(a, v)` is `a == Some(v)`.
-- Allow only aliases backed by outgoing ports. On any other alias, report an error that
-  says so.
-- Check that the runtime observers (`ContractObserverPlugin`) and the system proof crate
-  (`VerusVCSerializer`) both render the rewritten forms.
-- Document the supported predicates in the agent guidance (`gumbo-system-properties.md`).
-
 ### GUMBO diagnostics that point away from the fix
 
 **What.** Make these messages name what the author wrote, and what to write instead:
@@ -465,6 +440,11 @@ itself written with `NoSend` on aliases.
   through the rest of the block, far from the cause. This is in the hamr/sysml GUMBO
   parser. It needs error recovery, or a specific message for a keyword in an identifier
   position.
+- `MustSend(alias, v)` on a composition port alias backed by an event port (no payload)
+  gives "Could not unify (art.Empty, S32) with (TYPE_VAR__STATE_VAR, TYPE_VAR__STATE_VAR)"
+  and "Could not resolve expression's type". Type checking rejects it before
+  `GclResolver` can say that an event port carries no value to compare. The
+  hamr/sysml lint test `composition-mustsend-event-value` pins the current messages.
 
 Sources: t3-opus:TOOL-02 and t2-opus:HT-04. Each message should be covered by a resolver
 or parser test with the bad source and the expected message.

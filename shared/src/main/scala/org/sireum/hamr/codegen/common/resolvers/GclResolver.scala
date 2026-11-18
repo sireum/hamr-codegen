@@ -94,7 +94,12 @@ object GclResolver {
                              // port; such aliases resolve to a payload-typed var, so a
                              // value reference `alias(.field)` is rewritten to
                              // `alias.get(.field)` and `HasEvent(alias)` to `alias.nonEmpty`.
-                             val optionalCompositionAliases: Set[String]) extends org.sireum.hamr.ir.MTransformer {
+                             val optionalCompositionAliases: Set[String],
+                             // the optional aliases whose backing port is outgoing, with
+                             // that port: NoSend(alias) -> `alias.isEmpty`, MustSend(alias)
+                             // -> `alias.nonEmpty`, MustSend(alias, v) -> `alias.nonEmpty &&
+                             // alias.get == v`
+                             val outgoingCompositionAliasPorts: Map[String, AadlPort]) extends org.sireum.hamr.ir.MTransformer {
     var symbols: Set[SymbolHolder] = Set.empty
     var reporter: Reporter = ReporterImpl(ISZ())
     var apiReferences: Set[AadlPort] = Set.empty
@@ -225,6 +230,21 @@ object GclResolver {
       return None()
     }
 
+    // `alias.<name>` on a composition port alias (an Option of its payload): <name> is
+    // Option's isEmpty or nonEmpty (`ret` is B) or get (`ret` is the alias's payload type)
+    def aliasOptionSelect(alias: Exp.Ident, name: String, ret: AST.Typed, posOpt: Option[Position]): Exp = {
+      val ri = AST.ResolvedInfo.Method(
+        isInObject = F, mode = AST.MethodMode.Method, typeParams = ISZ(),
+        owner = ISZ("org", "sireum", "Option"), id = name,
+        paramNames = ISZ(), reads = IS(), writes = ISZ(),
+        tpeOpt = Some(AST.Typed.Fun(purity = AST.Purity.StrictPure, isByName = T, args = ISZ(), ret = ret)),
+        defPosOpt = None())
+      val typed = AST.Typed.Method(isInObject = ri.isInObject, mode = ri.mode, typeParams = ri.typeParams,
+        owner = ri.owner, name = ri.id, paramNames = ri.paramNames, tpe = ri.tpeOpt.get)
+      val ra = AST.ResolvedAttr(posOpt = posOpt, resOpt = Some(ri), typedOpt = Some(typed))
+      return Exp.Select(receiverOpt = Some(alias), id = AST.Id(name, AST.Attr(posOpt = alias.fullPosOpt)), targs = ISZ(), attr = ra)
+    }
+
     override def pre_langastExpInvoke(o: Exp.Invoke): org.sireum.hamr.ir.MTransformer.PreResult[Exp] = {
 
       val emptyAttr = AST.Attr(posOpt = o.fullPosOpt)
@@ -246,6 +266,60 @@ object GclResolver {
               owner = nonEmptyRI.owner, name = nonEmptyRI.id, paramNames = nonEmptyRI.paramNames, tpe = nonEmptyRI.tpeOpt.get)
             val nonEmptyRa = AST.ResolvedAttr(posOpt = o.posOpt, resOpt = Some(nonEmptyRI), typedOpt = Some(nonEmptyTyped))
             return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(Exp.Select(receiverOpt = Some(i), id = AST.Id("nonEmpty", emptyAttr), targs = ISZ(), attr = nonEmptyRa)))
+          case _ =>
+        }
+      }
+
+      // NoSend / MustSend on a composition port alias backed by an OUTGOING event or
+      // event-data port read the channel that port sends on, as HasEvent(alias) does:
+      // NoSend(a) -> a.isEmpty, MustSend(a) -> a.nonEmpty, MustSend(a, v) ->
+      // a.nonEmpty && a.get == v. Handled here, before the component api path, which
+      // knows only a component's own ports. An alias backed by an incoming port is
+      // rejected: its component receives on that channel rather than sending on it.
+      val invokeId: String = o.ident.id.value
+      if ((invokeId == uif__NoSend || invokeId == uif__MustSend || invokeId == uif__MustSendWithExpectedValue) && o.args.nonEmpty) {
+        o.args(0) match {
+          case i: Exp.Ident if i.typedOpt.nonEmpty && optionalCompositionAliases.contains(i.id.value) =>
+            val aliasName = i.id.value
+            val predName: String = if (invokeId == uif__NoSend) "NoSend" else "MustSend"
+            outgoingCompositionAliasPorts.get(aliasName) match {
+              case Some(port) =>
+                if (invokeId == uif__NoSend) {
+                  if (o.args.size != 1) {
+                    reportError(o.fullPosOpt, s"Invalid NoSend expression. NoSend takes one argument, the port alias '$aliasName'", reporter)
+                    return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
+                  }
+                  return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(aliasOptionSelect(i, "isEmpty", AST.Typed.bOpt.get, o.posOpt)))
+                }
+                if (o.args.size == 1) {
+                  return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(aliasOptionSelect(i, "nonEmpty", AST.Typed.bOpt.get, o.posOpt)))
+                }
+                if (o.args.size != 2) {
+                  reportError(o.fullPosOpt, "Invalid MustSend expression. Too many arguments", reporter)
+                  return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
+                }
+                if (!port.isInstanceOf[AadlEventDataPort]) {
+                  reportError(o.fullPosOpt, s"Invalid MustSend expression. Port alias '$aliasName' is backed by an event port, which carries no value to compare", reporter)
+                  return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
+                }
+                val expectedValue: Exp = o.args(1) match {
+                  case s@Exp.Select(Some(t: Exp.This), id, _) => Exp.Ident(id, s.attr) // strip off 'this'
+                  case x => x
+                }
+                // the expected value is an ordinary expression: rewrite it as any other
+                // (another optional alias becomes `alias.get`), since PreResult(F, ..)
+                // below stops the transformer from descending into it
+                val rewrittenExpectedValue: Exp = transform_langastExp(expectedValue) match {
+                  case MSome(e) => e
+                  case _ => expectedValue
+                }
+                val valueEq = Exp.Binary(aliasOptionSelect(i, "get", i.typedOpt.get, o.posOpt), "==", rewrittenExpectedValue, o.attr, o.attr.posOpt)
+                val sent = aliasOptionSelect(i, "nonEmpty", AST.Typed.bOpt.get, o.posOpt)
+                return org.sireum.hamr.ir.MTransformer.PreResult(F, MSome(Exp.Binary(sent, "&&", valueEq, o.attr, o.attr.posOpt)))
+              case _ =>
+                reportError(o.fullPosOpt, s"Invalid $predName expression. Port alias '$aliasName' is backed by an incoming port; $predName applies to aliases of outgoing event or event-data ports (HasEvent($aliasName) tests for an event on its channel)", reporter)
+                return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone())
+            }
           case _ =>
         }
       }
@@ -743,8 +817,8 @@ object GclResolver {
       // A composition port alias for an event/event-data port resolves to a
       // payload-typed var, hiding the Option; a value reference unwraps it:
       // `alias` -> `alias.get` (and `alias.field` becomes `alias.get.field`). The
-      // alias inside HasEvent(alias) is handled in pre (no descent), so it is not
-      // wrapped here.
+      // alias inside HasEvent/NoSend/MustSend(alias) is handled in pre (no descent),
+      // so it is not wrapped here.
       if (o.typedOpt.nonEmpty && optionalCompositionAliases.contains(o.id.value)) {
         val emptyAttr = AST.Attr(posOpt = o.fullPosOpt)
         val getRI = AST.ResolvedInfo.Method(
@@ -827,7 +901,7 @@ object GclResolver {
                      symbolTable: SymbolTable,
                      reporter: Reporter): (MOption[Exp], ISZ[SymbolHolder], ISZ[AadlPort]) = {
     return collectSymbolsH(exp, mode, context, isContextGeneralAssumeClause, F, indexingTypeFingerprints,
-      stateVars, methods, symbolTable, Set.empty, reporter)
+      stateVars, methods, symbolTable, Set.empty, Map.empty, reporter)
   }
 
   def collectSymbolsH(exp: Exp,
@@ -840,13 +914,15 @@ object GclResolver {
                       methods: Map[ISZ[String], GclMethod],
                       symbolTable: SymbolTable,
                       optionalCompositionAliases: Set[String],
+                      outgoingCompositionAliasPorts: Map[String, AadlPort],
                       reporter: Reporter): (MOption[Exp], ISZ[SymbolHolder], ISZ[AadlPort]) = {
     if (reporter.hasError) {
       // already in an inconsistent state
       return (MNone(), ISZ(), ISZ())
     } else {
       val sf = SymbolFinder(mode, context, isContextGeneralAssumeClause, isIntegrationContext,
-        indexingTypeFingerprints, stateVars, methods, symbolTable, optionalCompositionAliases)
+        indexingTypeFingerprints, stateVars, methods, symbolTable, optionalCompositionAliases,
+        outgoingCompositionAliasPorts)
       val rexp = sf.transform_langastExp(exp)
       reporter.reports(sf.reporter.messages)
       return (rexp, sf.symbols.elements, sf.apiReferences.elements)
@@ -896,6 +972,11 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
   // bare payload reference `alias.field` is rewritten to `alias.get.field`.
   var optionalCompositionAliases: Set[String] = Set.empty
 
+  // the subset of optionalCompositionAliases whose backing port is OUTGOING, with that
+  // port: NoSend/MustSend(alias) in a composition property read the channel the port
+  // sends on (see SymbolFinder.pre_langastExpInvoke)
+  var outgoingCompositionAliasPorts: Map[String, AadlPort] = Map.empty
+
   def reset: B = {
     apiReferences = Set.empty
     computeHandlerPortMap = Map.empty
@@ -910,6 +991,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
     slangTypeToAadlType = Map.empty
     resolvedComponentAliasMap = Map.empty
     optionalCompositionAliases = Set.empty
+    outgoingCompositionAliasPorts = Map.empty
 
     return T
   }
@@ -1312,7 +1394,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
           if (!reporter.hasError) {
             val (expTrans, symbols, apiRefs) =
               GclResolver.collectSymbolsH(expTipe, RewriteMode.Normal, component, F, T, indexingTypeFingerprints,
-            ISZ(), gclMethods, symbolTable, Set.empty, reporter)
+            ISZ(), gclMethods, symbolTable, Set.empty, Map.empty, reporter)
 
             val resolvedExpr: AST.Exp = expTrans match {
               case MSome(et2) => et2
@@ -2043,7 +2125,7 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
               // explicit (passing the optional-alias set): HasEvent(alias) ->
               // alias.nonEmpty, and payload refs alias(.field) -> alias.get(.field).
               val (rexp2, _, _) = GclResolver.collectSymbolsH(rexp, RewriteMode.Normal, component, F, F, indexingTypeFingerprints,
-                ISZ(), libMethods, symbolTable, optionalCompositionAliases, reporter)
+                ISZ(), libMethods, symbolTable, optionalCompositionAliases, outgoingCompositionAliasPorts, reporter)
               val resolvedExp: AST.Exp =
                 if (rexp2.isEmpty) rexp
                 else rexp2.get
@@ -3605,6 +3687,9 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
                     // alias so property bindings unwrap bare payload references (.get)
                     if (port.isInstanceOf[AadlEventPort] || port.isInstanceOf[AadlEventDataPort]) {
                       optionalCompositionAliases = optionalCompositionAliases + pa.name
+                      if (port.direction == Direction.Out) {
+                        outgoingCompositionAliasPorts = outgoingCompositionAliasPorts + pa.name ~> port
+                      }
                     }
                     val fieldAadlType: AadlType = port match {
                       case afd: AadlFeatureData => afd.aadlType
