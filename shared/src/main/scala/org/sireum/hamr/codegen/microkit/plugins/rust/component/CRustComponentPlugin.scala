@@ -889,10 +889,14 @@ object ComponentContributions {}
               |build: $$(R2U2_BUILD_DEPS)
               |${TAB}$$(BUILD_ENV_VARS) cargo build --features sel4 $$(CARGO_FLAGS)
               |
+              |${RustUtil.verusFreshMakeVar(crateName)}
+              |
               |verus: $$(R2U2_BUILD_DEPS)
+              |${TAB}$$(VERUS_FRESH)
               |${TAB}$$(ENV_VARS) cargo-verus verify $$(CARGO_VERUS_OPTS) $$(CARGO_FLAGS) -- $$(SMT_OPTS)
               |
               |verus-json: $$(R2U2_BUILD_DEPS)
+              |${TAB}$$(VERUS_FRESH)
               |${TAB}$$(ENV_VARS) cargo-verus verify $$(CARGO_VERUS_OPTS) $$(CARGO_FLAGS) -- $$(SMT_OPTS) --output-json --time > verus_results.json
               |
               |# Test Example:

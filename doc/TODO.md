@@ -18,7 +18,6 @@ once it is done; the changelog records it. Add each new entry to the contents be
 - [Investigate restoring `Structural` on generated Rust enums](#investigate-restoring-structural-on-generated-rust-enums)
   (proposed 2026-11-11)
 - Toolchain findings from the RASE experiments (proposed 2026-11-18):
-  - [`make verus` succeeds with no results line when the check is cached](#make-verus-succeeds-with-no-results-line-when-the-check-is-cached)
   - [Regeneration rewrites `generators.rs` in crates a change does not touch](#regeneration-rewrites-generatorsrs-in-crates-a-change-does-not-touch)
   - [`sysml tipe` should reject a property that binds a schedule place twice](#sysml-tipe-should-reject-a-property-that-binds-a-schedule-place-twice)
   - [`NoSend` and `MustSend` on composition port aliases](#nosend-and-mustsend-on-composition-port-aliases)
@@ -390,36 +389,10 @@ and changed HAMR Microkit systems under the HAMR agent workflows. A code such as
 `t3-sonnet:HC-04` is a finding from one run's own assessment: Task 2 (`t2-`) built a new
 three-component pipeline, and Task 3 (`t3-`) added a return-to-launch mode to an existing
 system. The number of runs that report a problem is what measures how often it occurs.
-Two findings from those runs are already fixed: a bare state variable in a case assume
-read as post-state (codegen `de2ec819`), and `sysml tipe` exiting 0 when it reported errors
-(kekinian `9941d156`).
-
-### `make verus` succeeds with no results line when the check is cached
-
-**What.** When the crate's verification is already cached, a crate's `verus` target exits 0
-having printed only cargo's `Finished` line. This happens, for example, after
-`cargo-verus build` for the test image has checked the same sources. There is no
-`verification results:: N verified, 0 errors` line. The target should always either verify
-the crate or report the cached result.
-
-**Why.** Seven runs hit it: t2-opus:HT-02, t2-sol:HCT-003, t2-fable:H2-VERUS-CACHE,
-t2-astra-a2:HT002, t3-sonnet:HC-04, t3-opus:TOOL-03, t3-fable:HC-02. An exit status of 0
-cannot be told apart from a crate that has no verified code, so every evidence gate that
-needs a count had to force a rebuild. Every run used the same recovery,
-`cargo clean -p <crate> --target aarch64-unknown-none` followed by `make verus`. A
-whole-target clean also works but throws away the coverage data (t2-sol).
-
-**Design.** The target is emitted by `GumboRustPlugin` (the per-crate `verus:` rule in each
-crate's `Makefile`, and the `system.mk` aggregate).
-
-- The simplest fix is to clean only this crate's artifacts before `cargo-verus verify`.
-  Dependencies, notably `vstd`, stay cached, so the cost is re-verifying this one crate.
-- First check whether `cargo-verus` has a way to force re-verification of the root crate,
-  or to replay a cached result. If it does, use that instead of the clean.
-- `verus-json` has the same problem: a cache hit writes no results JSON.
-
-**Tests.** Build the test image, then run `make verus`. The output must contain the
-crate's results line.
+Three findings from those runs are already fixed: a bare state variable in a case assume
+read as post-state (codegen `de2ec819`), `sysml tipe` exiting 0 when it reported errors
+(kekinian `9941d156`), and `make verus` succeeding from cargo's cache without a results line
+(2026-11-18).
 
 ### Regeneration rewrites `generators.rs` in crates a change does not touch
 

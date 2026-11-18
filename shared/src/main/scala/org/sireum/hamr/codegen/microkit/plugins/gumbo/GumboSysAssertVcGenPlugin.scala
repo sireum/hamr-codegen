@@ -120,6 +120,8 @@ import org.sireum.message.Reporter
 
       var totalVCs: Z = commutativityVCs.size + integrationVCs.size
       var propertyModIds: ISZ[String] = ISZ()
+      // each property's module id with its vc_* modules that hold any VC (Makefile targets)
+      var propertyVcModules: ISZ[(String, ISZ[String])] = ISZ()
 
       // per-property VC sets over the shared net (D9: abstract bases are not
       // instantiated -- no VC set is generated for them; their bindings have
@@ -131,6 +133,7 @@ import org.sireum.message.Reporter
         val decoration = ScheduleNextRel.decorate(nextRel, property, reporter)
         val vcs = VCGenerator.generateForProperty(decoration, nextRel, mhipPairs, resolvedAliasMap, symbolTable)
         totalVCs = totalVCs + vcs.size
+        propertyVcModules = propertyVcModules :+ ((propModId, VerusVCSerializer.vcModulesWithVCs(vcs)))
 
         val assertionFns = VerusVCSerializer.buildPropertyAssertions(
           propModId, decoration, ssm, symbolTable, types, tp, store, reporter)
@@ -171,7 +174,7 @@ import org.sireum.message.Reporter
       add(rootDir, "src/vc_integration.rs", integrationVCsRs)
 
       // per-property `make <property>` targets that verify only that property's VCs
-      add(rootDir, "Makefile", VerusVCSerializer.genSysProofMakefile(propertyModIds, trusted))
+      add(rootDir, "Makefile", VerusVCSerializer.genSysProofMakefile(crateName, propertyVcModules, trusted))
 
       reporter.info(None(), name,
         s"Generated $totalVCs system VCs (${propertyModIds.size} properties) in $rootDir")

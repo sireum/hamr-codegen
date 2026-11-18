@@ -2036,36 +2036,81 @@ object VerusVCSerializer {
           |""")
   }
 
+  // The per-property vc_* submodules (declared by genPropertyModRs) that hold at least
+  // one proof fn, in VC order. genSequentialVCs and genPropertyIndependenceVCs render
+  // each VC as exactly one proof fn, in the module for its kind, so a module is empty
+  // exactly when the property has no VC of its kinds. Verus reports a module with no
+  // items as missing ("could not find module ... specified by --verify-module"), so
+  // only these modules may be named in a per-property target.
+  @pure def vcModulesWithVCs(vcs: ISZ[VC]): ISZ[String] = {
+    var hasInit: B = F
+    var hasSequential: B = F
+    var hasPostPre: B = F
+    var hasNonDisabling: B = F
+    for (vc <- vcs) {
+      vc.kind match {
+        case VCKind.InitState => hasInit = T
+        case VCKind.PreAssert => hasSequential = T
+        case VCKind.NextAssertTask => hasSequential = T
+        case VCKind.NextAssertSkip => hasSequential = T
+        case VCKind.PostPre => hasPostPre = T
+        case VCKind.NonBlocking => hasNonDisabling = T
+        case VCKind.Preservation => hasNonDisabling = T
+        case VCKind.Commutativity => // crate-level vc_commutativity, not per property
+      }
+    }
+    var ret: ISZ[String] = ISZ()
+    if (hasInit) {
+      ret = ret :+ "vc_init"
+    }
+    if (hasSequential) {
+      ret = ret :+ "vc_sequential"
+    }
+    if (hasPostPre) {
+      ret = ret :+ "vc_post_pre"
+    }
+    if (hasNonDisabling) {
+      ret = ret :+ "vc_non_disabling"
+    }
+    return ret
+  }
+
   // Renders crates/sys_proof_<composition>/Makefile. `all` verifies the whole crate
   // (every property plus the shared, property-independent Commutativity VCs) in one
   // `cargo-verus verify`. In addition, one phony target per property (named by its
-  // lowercased module id) runs `cargo-verus verify` over just that property's
-  // generated VCs. A property's proof obligations live entirely in its four vc_*
-  // submodules (its `assertions` submodule holds only spec fns -- no proof
-  // obligations -- so it is not listed), so the per-property target verifies exactly
-  // those four.
+  // lowercased module id) verifies just that property's generated VCs. A property's
+  // proof obligations live entirely in its vc_* submodules (its `assertions` submodule
+  // holds only spec fns -- no proof obligations -- so it is not listed).
+  // `properties` pairs each property's module id with its non-empty vc_* modules
+  // (vcModulesWithVCs); a property with none gets a target that says so.
   //
-  // Each property target depends on the `warm-deps` target, which compiles the whole
-  // crate (and thus its dependency crates: vstd, data, the GUMBO library crates)
-  // with `--no-verify`, caching them as Verus import libraries. This is required
-  // because Verus applies the `--verify-module <prop>::...` flags to EVERY crate it
-  // compiles: on a clean build the flag would reach a dependency crate that has no
-  // such module and fail ("could not find module ... specified by --verify-module").
-  // Once the dependencies are cached they are not recompiled, so the per-property
-  // flag only ever reaches this crate.
+  // A per-property target uses `cargo-verus focus`, which cargo-verus requires for
+  // partial verification (`verify` rejects `--verify-module`). `focus` passes the
+  // `--verify-module` flags to this crate only, compiling the dependency crates (vstd,
+  // data, the GUMBO library crates) without verifying them, so no dependency warm-up is
+  // needed. It builds under `target/verus-partial`, apart from `verify`'s builds.
+  //
+  // Each verifying target first removes only this crate's (`crateName`'s) dev-profile
+  // artifacts from the build directory it uses: VERUS_FRESH (RustUtil.verusFreshMakeVar)
+  // for `all`, VERUS_FRESH_FOCUS for the property targets. Otherwise a repeated run
+  // finishes from cargo's cache without verifying or printing a results line.
   //
   // ENV_VARS/CARGO_FLAGS mirror the component crates' Makefile (the proof crate is
   // also no_std and built for aarch64 with build-std).
-  @pure def genSysProofMakefile(propertyModIds: ISZ[String], trusted: ISZ[TrustedComponent]): ST = {
-    // the per-property vc_* submodules declared by genPropertyModRs, in VC order
-    val vcModules: ISZ[String] = ISZ("vc_init", "vc_sequential", "vc_post_pre", "vc_non_disabling")
-
+  @pure def genSysProofMakefile(crateName: String, properties: ISZ[(String, ISZ[String])], trusted: ISZ[TrustedComponent]): ST = {
     val propTargets: ISZ[ST] =
-      for (p <- propertyModIds) yield
-        st"""# verify only property '$p'
-            |.PHONY: $p
-            |$p: warm-deps
-            |${TAB}$$(ENV_VARS) cargo-verus verify $$(CARGO_VERUS_OPTS) $$(CARGO_FLAGS) -- $$(SMT_OPTS) ${(for (m <- vcModules) yield st"--verify-module $p::$m", " ")}"""
+      for (p <- properties) yield
+        if (p._2.isEmpty)
+          st"""# property '${p._1}' has no VCs of its own
+              |.PHONY: ${p._1}
+              |${p._1}:
+              |${TAB}@echo 'property ${p._1} has no VCs of its own; `make all` verifies the whole crate'"""
+        else
+          st"""# verify only property '${p._1}'
+              |.PHONY: ${p._1}
+              |${p._1}:
+              |${TAB}$$(VERUS_FRESH_FOCUS)
+              |${TAB}$$(ENV_VARS) cargo-verus focus $$(CARGO_VERUS_OPTS) $$(CARGO_FLAGS) -- $$(SMT_OPTS) ${(for (m <- p._2) yield st"--verify-module ${p._1}::$m", " ")}"""
 
     // re-surface the trusted (non-Rust) component contracts on every `make`/`make all`
     // so the assumption is not overlooked (single quotes: no shell/Make expansion needed)
@@ -2098,9 +2143,9 @@ object VerusVCSerializer {
           |
           |# `make all` (or `make`) verifies the whole crate -- every property plus the
           |# shared, property-independent Commutativity VCs -- in one `cargo-verus
-          |# verify`. `make <property>` runs `cargo-verus verify` on just that
-          |# property's generated VCs (its vc_init / vc_sequential / vc_post_pre /
-          |# vc_non_disabling modules).
+          |# verify`. `make <property>` runs `cargo-verus focus` on just that
+          |# property's generated VCs (those of its vc_init / vc_sequential /
+          |# vc_post_pre / vc_non_disabling modules that have any).
           |
           |ENV_VARS = RUSTC_BOOTSTRAP=1
           |
@@ -2112,18 +2157,17 @@ object VerusVCSerializer {
           |
           |${RustUtil.smtOptsMakeVar}
           |
+          |${RustUtil.verusFreshMakeVar(crateName)}
+          |
+          |# The same for the per-property targets: `cargo-verus focus` builds under
+          |# target/verus-partial, apart from `cargo-verus verify`.
+          |VERUS_FRESH_FOCUS = $$(ENV_VARS) cargo clean --quiet -p $crateName --profile dev --target-dir target/verus-partial $$(CARGO_FLAGS)
+          |
           |# verify the entire crate (every property plus the shared Commutativity VCs)
           |.PHONY: all
           |all:$allDeps
+          |${TAB}$$(VERUS_FRESH)
           |${TAB}$$(ENV_VARS) cargo-verus verify $$(CARGO_VERUS_OPTS) $$(CARGO_FLAGS) -- $$(SMT_OPTS)
-          |
-          |# Compile every crate WITHOUT verification so the dependency crates (vstd,
-          |# data, the GUMBO library crates) are cached as Verus import libraries before
-          |# any per-property `--verify-module` run -- that flag is otherwise forwarded
-          |# to the dependency crates too and fails on a clean build (see header note).
-          |.PHONY: warm-deps
-          |warm-deps:
-          |${TAB}$$(ENV_VARS) cargo-verus verify $$(CARGO_VERUS_OPTS) $$(CARGO_FLAGS) -- $$(SMT_OPTS) --no-verify
           |
           |${(allTargets, "\n\n")}
           |

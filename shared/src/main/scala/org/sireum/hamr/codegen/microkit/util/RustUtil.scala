@@ -64,6 +64,23 @@ object RustUtil {
         |# verified with Verus' defaults rather than with options meant for this crate.
         |CARGO_VERUS_OPTS ?="""
 
+  // Command run before each `cargo-verus verify` target in a generated Makefile.
+  // cargo-verus caches verification like any build: when nothing a crate depends on has
+  // changed, `cargo-verus verify` finishes without re-verifying and prints no
+  // `verification results::` line, so its exit status alone cannot tell a verified
+  // crate from one with no verified code. Removing only `crateName`'s dev-profile
+  // artifacts for the build target first makes every such target re-verify that crate
+  // and print its results line; dependency crates (notably vstd) stay cached, and the
+  // release build and the host-target test/coverage artifacts are left alone.
+  @strictpure def verusFreshMakeVar(crateName: String): ST =
+    st"""# Run before every cargo-verus verify target below. cargo-verus caches
+        |# verification like any build: with nothing changed, `cargo-verus verify`
+        |# finishes without re-verifying and prints no `verification results::`
+        |# line. Removing only this crate's dev-profile artifacts makes each run
+        |# re-verify this crate and print its results; its dependencies (notably
+        |# vstd), the release build and the test/coverage artifacts are kept.
+        |VERUS_FRESH = $$(ENV_VARS) cargo clean --quiet -p $crateName --profile dev $$(CARGO_FLAGS)"""
+
   @pure def defaultRustToolChainToml(store: Store): ST = {
     val versions = MicrokitUtil.getMicrokitVersions(store)
     val channel = versions.get("rust-channel").get
