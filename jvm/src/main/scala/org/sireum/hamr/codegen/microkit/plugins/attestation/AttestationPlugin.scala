@@ -160,7 +160,11 @@ import org.sireum.{B, strictpure}
           println("Provisioning successful!")
         }
       case _ =>
-        println(s"Please set ${env_AM_REPOS_ROOT} environment variable if you want HAMR to provision the project")
+        // Provisioning is opt-in and most runs do not want it, so say how only in verbose
+        // mode: printed on every run, the notice read as a problem to fix.
+        if (options.verbose) {
+          println(s"Attestation provisioning skipped (optional): set ${env_AM_REPOS_ROOT} to have HAMR provision the project")
+        }
     }
 
     return localStore

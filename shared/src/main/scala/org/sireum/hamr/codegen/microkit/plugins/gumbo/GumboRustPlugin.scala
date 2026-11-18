@@ -20,6 +20,7 @@ import org.sireum.hamr.codegen.microkit.plugins.{MicrokitFinalizePlugin, Microki
 import org.sireum.hamr.codegen.microkit.util.{MakefileTarget, MakefileUtil, MicrokitUtil, RustUtil}
 import org.sireum.hamr.codegen.microkit.{MicrokitCodegen, rust => RAST}
 import org.sireum.hamr.ir._
+import org.sireum.lang.{ast => SAST}
 import org.sireum.message.{Level, Message, Reporter}
 
 object GumboRustPlugin {
@@ -49,6 +50,162 @@ object GumboRustPlugin {
 
                                val verusItems: ISZ[RAST.Item],
                                val verusDeveloperItems: ISZ[RAST.Item])
+
+  /** Lets verified code call a GUMBO library function's executable version.
+    *
+    * A library crate's executable functions (`rustItems`, from GUMBOX) are plain Rust
+    * outside `verus!`, so Verus rejects a call to one from verified component code ("is
+    * not supported"). For each executable function whose spec twin `<name>_spec` is among
+    * `verusItems`, this emits, for the crate's `verus!` block,
+    *
+    * {{{
+    * pub assume_specification[ name ](a: A, ..) -> (res: R)
+    *   ensures res == name_spec(a, ..);
+    * }}}
+    *
+    * so Verus reasons about a call through the spec. Only the functions in `withSpecs`
+    * (`libraryFnsWithExecSpecs`) get one; the others are listed in a comment.
+    *
+    * For a GUMBO function with a body this is trusted, not proved: the executable body is
+    * GUMBOX's rendering of the GUMBO expression (non-short-circuit `&`/`|`, quantifiers as
+    * loops), which Verus could not verify against the spec in general. The trust is that
+    * the two renderings of the same expression agree, which GUMBOX's run-time checks already
+    * rely on. Arithmetic is where they could not be relied on to agree (machine integers
+    * against mathematical ones, e.g. on overflow), so a function using it gets no
+    * specification. For a GUMBO spec
+    * function the executable wrapper only delegates to the developer's
+    * `<name>__developer_gumbox`, which is itself verified to equal
+    * `<name>__developer_verus`, the spec twin's definition. The executable functions stay
+    * outside `verus!`, where the crate's existing marker layout puts them, so a project
+    * regenerated in place keeps a valid layout.
+    */
+  @pure def libraryExecSpecs(rustItems: ISZ[RAST.Item], verusItems: ISZ[RAST.Item], withSpecs: Set[String]): ISZ[RAST.Item] = {
+    var specNames: Set[String] = Set.empty
+    for (i <- verusItems) {
+      i match {
+        case f: RAST.Fn => specNames = specNames + f.ident.string
+        case _ =>
+      }
+    }
+    var ret: ISZ[RAST.Item] = ISZ()
+    var without: ISZ[String] = ISZ()
+    for (i <- rustItems) {
+      i match {
+        case f: RAST.FnImpl if specNames.contains(s"${f.ident.string}_spec") && !withSpecs.contains(f.ident.string) =>
+          without = without :+ f.ident.string
+        case f: RAST.FnImpl if specNames.contains(s"${f.ident.string}_spec") =>
+          f.sig.fnDecl.outputs match {
+            case RAST.FnRetTyImpl(retTy) =>
+              val paramNames: ISZ[String] = for (p <- f.sig.fnDecl.inputs) yield p.ident.string
+              // the result's name must not shadow a parameter
+              val resName: String = if (ops.ISZOps(paramNames).contains("res")) "res_" else "res"
+              ret = ret :+ RAST.ItemST(
+                st"""pub assume_specification[ ${f.ident.string} ](${(for (p <- f.sig.fnDecl.inputs) yield p.prettyST, ", ")}) -> ($resName: ${retTy.prettyST})
+                    |  ensures $resName == ${f.ident.string}_spec(${(paramNames, ", ")});""")
+            case _ =>
+          }
+        case _ =>
+      }
+    }
+    if (without.nonEmpty) {
+      ret = ret :+ RAST.ItemST(
+        st"""// No assume_specification, so not callable from verified code: ${(without, ", ")}.
+            |// Each uses arithmetic or a non-library call, directly or through a library function
+            |// it calls, where the executable version (machine integers) and the spec version
+            |// (mathematical integers) can disagree.""")
+    }
+    return ret
+  }
+
+  val libraryArithmeticOps: ISZ[String] = ISZ("+", "-", "*", "/", "%", "<<", ">>", ">>>")
+
+  /** What in a GUMBO library function's body could make its executable and spec versions
+    * disagree: arithmetic (`libraryArithmeticOps`, or negating anything but a literal),
+    * which GUMBOX computes in machine integers and Verus in mathematical ones, and calls to
+    * anything other than the library's own functions (`libraryFns`), such as conversions.
+    * The library functions it calls are collected in `calls`. */
+  @record class LibraryBodyScan(val libraryFns: Set[String]) extends org.sireum.hamr.ir.MTransformer {
+    var hasArithmetic: B = F
+    var hasOtherCall: B = F
+    var calls: Set[String] = Set.empty
+
+    override def pre_langastExpBinary(o: SAST.Exp.Binary): org.sireum.hamr.ir.MTransformer.PreResult[SAST.Exp] = {
+      if (ops.ISZOps(libraryArithmeticOps).contains(o.op)) {
+        hasArithmetic = T
+      }
+      return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone[SAST.Exp]())
+    }
+
+    override def pre_langastExpUnary(o: SAST.Exp.Unary): org.sireum.hamr.ir.MTransformer.PreResult[SAST.Exp] = {
+      if (o.op == SAST.Exp.UnaryOp.Minus) {
+        o.exp match {
+          case _: SAST.Exp.LitZ => // a negative constant
+          case _: SAST.Exp.StringInterpolate => // a negative typed constant, e.g. s32"5"
+          case _ => hasArithmetic = T
+        }
+      }
+      return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone[SAST.Exp]())
+    }
+
+    override def pre_langastExpInvoke(o: SAST.Exp.Invoke): org.sireum.hamr.ir.MTransformer.PreResult[SAST.Exp] = {
+      if (libraryFns.contains(o.ident.id.value)) {
+        calls = calls + o.ident.id.value
+      } else {
+        hasOtherCall = T
+      }
+      return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone[SAST.Exp]())
+    }
+  }
+
+  /** The functions of GUMBO library `lib` whose executable versions get an
+    * `assume_specification` (`libraryExecSpecs`). A spec function always does: its
+    * executable wrapper delegates to the developer's verified `__developer_gumbox`. A
+    * function with a body does when `LibraryBodyScan` finds neither arithmetic nor a
+    * non-library call in it, and every library function it calls also qualifies, so that
+    * its executable and spec versions compute the same value. */
+  @pure def libraryFnsWithExecSpecs(lib: GclLib): Set[String] = {
+    var libraryFns: Set[String] = Set.empty
+    for (m <- lib.methods) {
+      libraryFns = libraryFns + m.id
+    }
+    var ok: Set[String] = Set.empty
+    var candidates: ISZ[(String, ISZ[String])] = ISZ() // body functions that pass the scan, with their library calls
+    for (m <- lib.methods) {
+      m match {
+        case s: GclSpecMethod => ok = ok + s.id
+        case b: GclBodyMethod =>
+          val scan = LibraryBodyScan(libraryFns)
+          b.method.bodyOpt match {
+            case Some(body) =>
+              for (stmt <- body.stmts) {
+                scan.transform_langastStmt(stmt)
+              }
+            case _ =>
+          }
+          if (!scan.hasArithmetic && !scan.hasOtherCall) {
+            candidates = candidates :+ ((b.id, scan.calls.elements))
+          }
+        case _ =>
+      }
+    }
+    // a candidate qualifies once every library function it calls has (a fixpoint, since
+    // library functions may call each other in any order)
+    var changed: B = T
+    while (changed) {
+      changed = F
+      for (c <- candidates if !ok.contains(c._1)) {
+        var allOk: B = T
+        for (callee <- c._2 if !ok.contains(callee)) {
+          allOk = F
+        }
+        if (allOk) {
+          ok = ok + c._1
+          changed = T
+        }
+      }
+    }
+    return ok
+  }
 }
 
 @sig trait GumboRustContributions extends StoreValue {
@@ -1161,10 +1318,15 @@ object GumboRustPlugin {
             val verusMarker = Marker.createSlashMarker(GumboRustUtil.GumboMarkers.gumboLibVerus)
             markers = markers :+ verusMarker
 
+            var withExecSpecs: Set[String] = Set.empty
+            for (lib <- GumboRustPlugin.getGclLibraryAnnexes(symbolTable) if lib.name(0) == e._1) {
+              withExecSpecs = withExecSpecs ++ GumboRustPlugin.libraryFnsWithExecSpecs(lib.annex).elements
+            }
+
             val verusSection: ISZ[RAST.Item] = ISZ[RAST.Item] (
               RAST.MarkerWrap(
                 marker = verusMarker,
-                items = e._2.verusItems,
+                items = e._2.verusItems ++ GumboRustPlugin.libraryExecSpecs(e._2.rustItems, e._2.verusItems, withExecSpecs),
                 sep = "\n\n",
                 optLastItemSep = None())) ++ e._2.verusDeveloperItems
 

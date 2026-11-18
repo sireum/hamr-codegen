@@ -25,7 +25,6 @@ once it is done; the changelog records it. Add each new entry to the contents be
   - [System tests: injecting a data port for one consumer of a fan-out](#system-tests-injecting-a-data-port-for-one-consumer-of-a-fan-out)
   - [Host tests: a dispatch boundary between direct entry-point calls](#host-tests-a-dispatch-boundary-between-direct-entry-point-calls)
   - [Skeleton `test_compute` aborts when an input data port has no value](#skeleton-test_compute-aborts-when-an-input-data-port-has-no-value)
-  - [GUMBO library functions cannot be called from verified code](#gumbo-library-functions-cannot-be-called-from-verified-code)
 
 ## Option to write out the AIR model (JSON or MsgPack)
 
@@ -385,13 +384,16 @@ and changed HAMR Microkit systems under the HAMR agent workflows. A code such as
 `t3-sonnet:HC-04` is a finding from one run's own assessment: Task 2 (`t2-`) built a new
 three-component pipeline, and Task 3 (`t3-`) added a return-to-launch mode to an existing
 system. The number of runs that report a problem is what measures how often it occurs.
-Seven findings from those runs are already fixed: a bare state variable in a case assume
+Eight findings from those runs are already fixed: a bare state variable in a case assume
 read as post-state (codegen `de2ec819`), `sysml tipe` exiting 0 when it reported errors
 (kekinian `9941d156`), `make verus` succeeding from cargo's cache without a results line
 (codegen `5ca39381`), `NoSend`/`MustSend` rejected on composition port aliases (codegen
-`b0e03bb9`), and, on 2026-11-18, `sys_assert!` being unusable in helpers that return a
-value (now `sys_check!`/`sys_check_eq!`), repeated identical expected violations never all
-being met, and trailing whitespace in generated Makefile rules.
+`b0e03bb9`), `sys_assert!` being unusable in helpers that return a value (now
+`sys_check!`/`sys_check_eq!`), repeated identical expected violations never all being met,
+trailing whitespace in generated Makefile rules (codegen `dad81bbb`), and, on 2026-11-18,
+GUMBO library functions that verified code could not call (each executable library
+function now gets an `assume_specification` tying it to its `<name>_spec` twin, unless its
+body uses arithmetic, where the machine-integer and mathematical versions can disagree).
 
 ### Regeneration rewrites `generators.rs` in crates a change does not touch
 
@@ -451,21 +453,21 @@ or parser test with the bad source and the expected message.
 ### Notices on successful runs that look like problems
 
 **What.** Successful runs print messages that agents treated as possible failures and had
-to investigate:
+to investigate. Five runs reported this (t2-sonnet:HCT-03, t2-opus:HT-03,
+t2-fable:H2-TOOLCHAIN-NOISE, t2-luna:HAMR-003, t2-sol:AHE-002).
 
-- **`AM_REPOS_ROOT`.** Every Microkit codegen run prints "Please set AM_REPOS_ROOT
-  environment variable if you want HAMR to provision the project"
-  (`AttestationPlugin.scala`), even when attestation is not in use. Print it only when
-  attestation is requested, or say plainly that it is optional.
-- **sDDF drivers and the GIC.** A successful QEMU boot prints that the optional sDDF
-  driver directory `drivers/gpio` could not be opened, plus a QEMU GIC fallback warning.
-  Find where the GPIO driver directory is requested (the generated sdfgen/`meta.py`
-  input, or the sDDF tooling itself), and stop requesting it on boards that have none.
-  If it cannot be avoided, list both messages as expected in the build-and-test
-  documentation.
+**Done (2026-11-18).** The `AM_REPOS_ROOT` provisioning notice (`AttestationPlugin.scala`)
+printed on every Microkit codegen run. It is now printed only with `--verbose`, and worded
+as optional.
 
-Five runs reported this (t2-sonnet:HCT-03, t2-opus:HT-03, t2-fable:H2-TOOLCHAIN-NOISE,
-t2-luna:HAMR-003, t2-sol:AHE-002).
+**Remaining: sDDF drivers and the GIC.** A successful build prints "info: failed to open
+sDDF driver directory 'drivers/gpio'", and a QEMU boot prints a GIC fallback warning.
+Neither comes from codegen. The sDDF message is sdfgen's: `Sddf(path)` in the generated
+`meta.py` scans every driver class sdfgen 0.35.0 knows, including GPIO, and the sDDF that
+LionsOS `7554a0f` vendors has no `drivers/gpio`. The fix is upstream: an sdfgen release
+that matches the vendored sDDF, or sdfgen not reporting a missing optional class.
+Meanwhile, list both messages as expected in the build-and-test documentation and the agent
+guidance.
 
 ### System tests: injecting a data port for one consumer of a fan-out
 
@@ -510,22 +512,3 @@ component test, with test_apis::put_p(..))"), where it used to say "Not expectin
 process. One way is to make the entry points `extern "C-unwind"` in test builds, so the
 panic reaches cargo's test harness. That changes the entry points' ABI, so check every
 caller of the C entry points, the `cfg(test)` paths and GUMBOX first.
-
-### GUMBO library functions cannot be called from verified code
-
-**What.** The library-annex crate (`crates/<package>/src/lib.rs`, written in
-`GumboRustPlugin.finalizeMicrokit`) emits each GUMBO library function twice: as a plain
-Rust `pub fn` outside `verus!`, and as an `open spec fn <name>_spec` inside it. Verified
-component code cannot call the executable version, so Verus reports
-"`GumboLib::initActivations` is not supported" (t3-astra:HT-02, moderate). The run fell
-back to repeating the literal in the component.
-
-**Design.**
-
-- Emit the executable function inside `verus!` with `ensures r == <name>_spec(...)`. Its
-  body is the same expression, so the proof should be immediate for constants and for
-  simple expressions.
-- If some library functions cannot be verified as executable code, give those
-  `#[verifier::external_body]` with the same `ensures`, and say in a comment why they are
-  trusted.
-- Do not suggest `assume_specification` as the user-side fix.
