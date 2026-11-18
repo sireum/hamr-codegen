@@ -17,6 +17,20 @@ once it is done; the changelog records it. Add each new entry to the contents be
   (proposed 2026-11-10)
 - [Investigate restoring `Structural` on generated Rust enums](#investigate-restoring-structural-on-generated-rust-enums)
   (proposed 2026-11-11)
+- Toolchain findings from the RASE experiments (proposed 2026-11-18):
+  - [`make verus` succeeds with no results line when the check is cached](#make-verus-succeeds-with-no-results-line-when-the-check-is-cached)
+  - [Regeneration rewrites `generators.rs` in crates a change does not touch](#regeneration-rewrites-generatorsrs-in-crates-a-change-does-not-touch)
+  - [`sysml tipe` should reject a property that binds a schedule place twice](#sysml-tipe-should-reject-a-property-that-binds-a-schedule-place-twice)
+  - [`NoSend` and `MustSend` on composition port aliases](#nosend-and-mustsend-on-composition-port-aliases)
+  - [GUMBO diagnostics that point away from the fix](#gumbo-diagnostics-that-point-away-from-the-fix)
+  - [Notices on successful runs that look like problems](#notices-on-successful-runs-that-look-like-problems)
+  - [System tests: expecting the same violation more than once](#system-tests-expecting-the-same-violation-more-than-once)
+  - [System tests: `sys_assert!` in helpers that return a value](#system-tests-sys_assert-in-helpers-that-return-a-value)
+  - [System tests: injecting a data port for one consumer of a fan-out](#system-tests-injecting-a-data-port-for-one-consumer-of-a-fan-out)
+  - [Host tests: a dispatch boundary between direct entry-point calls](#host-tests-a-dispatch-boundary-between-direct-entry-point-calls)
+  - [Skeleton `test_compute` aborts when an input data port has no value](#skeleton-test_compute-aborts-when-an-input-data-port-has-no-value)
+  - [GUMBO library functions cannot be called from verified code](#gumbo-library-functions-cannot-be-called-from-verified-code)
+  - [Trailing whitespace in generated Makefile rules](#trailing-whitespace-in-generated-makefile-rules)
 
 ## Option to write out the AIR model (JSON or MsgPack)
 
@@ -366,3 +380,241 @@ commented out after `derive(Copy, Clone, Debug, PartialEq, Eq)`.
 - If supported, update generation and the agent guidance recommending pattern matching,
   with regression coverage for both ordinary compilation and verification. Document any
   remaining limitations. Update golden/expected outputs only with explicit user approval.
+
+## Toolchain findings from the RASE experiments
+
+**Status:** proposed (2026-11-18).
+
+These entries come from the RASE experiments (November 2026), in which coding agents developed
+and changed HAMR Microkit systems under the HAMR agent workflows. A code such as
+`t3-sonnet:HC-04` is a finding from one run's own assessment: Task 2 (`t2-`) built a new
+three-component pipeline, and Task 3 (`t3-`) added a return-to-launch mode to an existing
+system. The number of runs that report a problem is what measures how often it occurs.
+Two findings from those runs are already fixed: a bare state variable in a case assume
+read as post-state (codegen `de2ec819`), and `sysml tipe` exiting 0 when it reported errors
+(kekinian `9941d156`).
+
+### `make verus` succeeds with no results line when the check is cached
+
+**What.** When the crate's verification is already cached, a crate's `verus` target exits 0
+having printed only cargo's `Finished` line. This happens, for example, after
+`cargo-verus build` for the test image has checked the same sources. There is no
+`verification results:: N verified, 0 errors` line. The target should always either verify
+the crate or report the cached result.
+
+**Why.** Seven runs hit it: t2-opus:HT-02, t2-sol:HCT-003, t2-fable:H2-VERUS-CACHE,
+t2-astra-a2:HT002, t3-sonnet:HC-04, t3-opus:TOOL-03, t3-fable:HC-02. An exit status of 0
+cannot be told apart from a crate that has no verified code, so every evidence gate that
+needs a count had to force a rebuild. Every run used the same recovery,
+`cargo clean -p <crate> --target aarch64-unknown-none` followed by `make verus`. A
+whole-target clean also works but throws away the coverage data (t2-sol).
+
+**Design.** The target is emitted by `GumboRustPlugin` (the per-crate `verus:` rule in each
+crate's `Makefile`, and the `system.mk` aggregate).
+
+- The simplest fix is to clean only this crate's artifacts before `cargo-verus verify`.
+  Dependencies, notably `vstd`, stay cached, so the cost is re-verifying this one crate.
+- First check whether `cargo-verus` has a way to force re-verification of the root crate,
+  or to replay a cached result. If it does, use that instead of the clean.
+- `verus-json` has the same problem: a cache hit writes no results JSON.
+
+**Tests.** Build the test image, then run `make verus`. The output must contain the
+crate's results line.
+
+### Regeneration rewrites `generators.rs` in crates a change does not touch
+
+**What.** Each component's `src/test/util/generators.rs` should define proptest strategies
+only for the types that component uses.
+
+**Why.** In Task 3, adding data types used by three components added 44 lines to
+`generators.rs` in two components whose ports and state did not change. That broke the
+approved plan's prediction that those crates' diffs would be empty (t3-sonnet:HC-05,
+t3-opus:TOOL-05, t3-fable:HC-03). The cause is that
+`CRustTestingPlugin.genProptestGenerators` takes `MicrokitLinterPlugin.getTouchedTypes`,
+which is the set of types touched across the whole system, not this thread's.
+
+**Design.** Compute the closure, under `orderedDependencies`, of the types of this thread's
+ports and GUMBO state variables, plus the event-port `u8` case it already handles.
+Alternatively, move the default strategies into the shared `data` crate behind a test
+feature, and keep only the `_cust` hooks per component. This changes expected output for
+every multi-component model; regenerate it only after review.
+
+### `sysml tipe` should reject a property that binds a schedule place twice
+
+**What.** The check is in `ScheduleNextRel.decorate`. It rejects a system property that binds
+the same schedule place under two names, for example `after producer` and `before inc`
+when the two are consecutive. Only codegen runs it, so `sysml tipe` reports `Well-formed!`
+for a model that codegen then rejects (t2-sonnet:HCT-02).
+
+**Design.** Run the schedule-net construction and `decorate` from the SysML type checker
+whenever the model has a schedule, or move the synonym check to a step that does not need
+the full net. The schedule may come from codegen options, such as a domain schedule file.
+Decide what tipe should do when that input is missing: skip the check, and say that it was
+skipped.
+
+### `NoSend` and `MustSend` on composition port aliases
+
+**What.** In system assertions, accept `NoSend(alias)`, `MustSend(alias)` and
+`MustSend(alias, v)` where `alias` is a composition port alias backed by an outgoing
+event or event-data port.
+
+**Why.** `HasEvent(alias)` is rewritten to `alias.nonEmpty` in `GclResolver`'s
+`pre_langastExpInvoke` (`optionalCompositionAliases`). `NoSend` and the others go
+through the component-API path instead. There, `processIdent` on an alias does not
+resolve to an `AadlFeatureEvent`, so the result is "Invalid NoSend expression. Can only be
+applied to outgoing event ports", even though the alias is backed by an outgoing port.
+Five runs met this and rewrote the assertions as `not HasEvent(alias)`: t3-sonnet:HC-02,
+t3-opus:TOOL-02, t3-sol:HAMR-01 and DOC-01, t3-astra:HT-01. The approved Task 3 plan was
+itself written with `NoSend` on aliases.
+
+**Design.**
+
+- Add these alongside the `HasEvent` alias case. On a channel, `NoSend(a)` is
+  `a.isEmpty`, `MustSend(a)` is `a.nonEmpty`, and `MustSend(a, v)` is `a == Some(v)`.
+- Allow only aliases backed by outgoing ports. On any other alias, report an error that
+  says so.
+- Check that the runtime observers (`ContractObserverPlugin`) and the system proof crate
+  (`VerusVCSerializer`) both render the rewritten forms.
+- Document the supported predicates in the agent guidance (`gumbo-system-properties.md`).
+
+### GUMBO diagnostics that point away from the fix
+
+**What.** Make these messages name what the author wrote, and what to write instead:
+
+- `In(mode)`, where the expression is not allowed, gives "Currently only allowing the
+  simple name of state vars to be used in In expressions: In(In(mode))"
+  (`GclResolver.scala`). The message prints the already-rewritten expression, not the
+  source.
+- `modifies (mode, activations);` gives "comma separated sequencing expressions are not
+  currently supported". This is in `SysMLAstBuilder.scala` (hamr/sysml). The message
+  should say that `modifies` takes its list without parentheses.
+- A GUMBO keyword used as a parameter name (`out`, in t2-opus:HT-04) sends parse errors
+  through the rest of the block, far from the cause. This is in the hamr/sysml GUMBO
+  parser. It needs error recovery, or a specific message for a keyword in an identifier
+  position.
+
+Sources: t3-opus:TOOL-02 and t2-opus:HT-04. Each message should be covered by a resolver
+or parser test with the bad source and the expected message.
+
+### Notices on successful runs that look like problems
+
+**What.** Successful runs print messages that agents treated as possible failures and had
+to investigate:
+
+- **`AM_REPOS_ROOT`.** Every Microkit codegen run prints "Please set AM_REPOS_ROOT
+  environment variable if you want HAMR to provision the project"
+  (`AttestationPlugin.scala`), even when attestation is not in use. Print it only when
+  attestation is requested, or say plainly that it is optional.
+- **sDDF drivers and the GIC.** A successful QEMU boot prints that the optional sDDF
+  driver directory `drivers/gpio` could not be opened, plus a QEMU GIC fallback warning.
+  Find where the GPIO driver directory is requested (the generated sdfgen/`meta.py`
+  input, or the sDDF tooling itself), and stop requesting it on boards that have none.
+  If it cannot be avoided, list both messages as expected in the build-and-test
+  documentation.
+
+Five runs reported this (t2-sonnet:HCT-03, t2-opus:HT-03, t2-fable:H2-TOOLCHAIN-NOISE,
+t2-luna:HAMR-003, t2-sol:AHE-002).
+
+### System tests: expecting the same violation more than once
+
+**What.** A system test that registers the same expected violation twice fails with
+"expected violation did not occur". In the generated `observe.rs` (`TestSchedulerPlugin`),
+`violation()` marks the first matching registration as met, whether or not it is already
+met. The second registration is therefore never satisfied. Two runs split their cases into
+separate tests to work around it (t3-astra:HT-03; t2-astra-host2:TOOL-01, moderate).
+
+**Design.** First decide what a registration means:
+
+- **One occurrence.** Match the first registration that is not yet met. What an extra
+  occurrence does then also needs a decision: it is either unhandled, or allowed by an
+  earlier registration that is already met.
+- **An allowance for the whole test.** Duplicates are redundant: reject them with a
+  diagnostic, or merge them.
+
+Document the choice in `TestScheduler-design.md` and in the System Testing chapter. Add a
+generated-harness regression with two identical registrations and two with overlapping
+patterns.
+
+### System tests: `sys_assert!` in helpers that return a value
+
+**What.** `sys_assert!` and `sys_assert_eq!` (harness macros in `TestSchedulerPlugin`)
+expand to `fail(...); return;`, so they cannot be used in a helper that returns a value.
+t3-sonnet:HC-03 replaced them with explicit `if ... { harness::fail(...) }`.
+
+**Design.** Choose one:
+
+- Add a non-returning variant (`sys_check!`, which records the failure and evaluates to
+  the condition).
+- Let the macros take an explicit return value.
+- Document the bare `return` and show the `harness::fail` form for helpers.
+
+### System tests: injecting a data port for one consumer of a fan-out
+
+**What.** A data-port injection writes the shared channel, so every consumer of a fan-out
+sees the injected value, not only the one under test. t3-opus:TOOL-04 found this when
+injecting the Mode Manager's output: FirewallTx's input changed as well. The system-test
+documentation says injected values are per output, which is accurate, but this
+consequence is not spelled out.
+
+**Design.** First determine whether a per-receiver injection can be supported for data
+ports. A data port has one buffer per output, unlike the per-receiver cursors of event
+queues. If it can, add a receiver-scoped setter. If not, document the limitation next to
+the injection API, and show how to get the effect by injecting the consumer's own state
+instead.
+
+### Host tests: a dispatch boundary between direct entry-point calls
+
+**What.** Host tests that call a component's entry point several times in sequence must
+clear event outputs between the calls themselves, because the runtime's dispatch-boundary
+reset does not run there (t3-astra:DG-02). Generate a test-API helper that performs exactly
+the boundary operations, so that test code does not reimplement them. The helper clears
+pending event and event-data outputs, and keeps component state and data ports.
+
+This is the host-test side of `MicrokitPortSemantics-design.md` D2/D5, which requires tests
+that call entry points directly to establish the same boundary. Once that design is
+implemented, the helper should call the same boundary code.
+
+### Skeleton `test_compute` aborts when an input data port has no value
+
+**What.** After a model change adds an input data port, the generated skeleton
+`test_compute` fails with "Not expecting None", followed by "panic in a function that
+cannot unwind" (t3-sonnet:HC-06). The test getter for a data port in the generated
+`extern_c_api.rs` (`CRustApiUtil.scala`, `guard.expect("Not expecting None")`) panics
+inside an `extern "C"` function when the test never set the port. The process then aborts
+without naming the port.
+
+**Design.**
+
+- Have the skeleton `test_compute` set every incoming data port: from the type's default
+  strategy, or from a value the test author fills in.
+- Make the getter's failure name the port and the setter to call.
+- Report the failure without panicking across the `extern "C"` boundary, so that the test
+  framework sees an ordinary test failure.
+
+### GUMBO library functions cannot be called from verified code
+
+**What.** The library-annex crate (`crates/<package>/src/lib.rs`, written in
+`GumboRustPlugin.finalizeMicrokit`) emits each GUMBO library function twice: as a plain
+Rust `pub fn` outside `verus!`, and as an `open spec fn <name>_spec` inside it. Verified
+component code cannot call the executable version, so Verus reports
+"`GumboLib::initActivations` is not supported" (t3-astra:HT-02, moderate). The run fell
+back to repeating the literal in the component.
+
+**Design.**
+
+- Emit the executable function inside `verus!` with `ensures r == <name>_spec(...)`. Its
+  body is the same expression, so the proof should be immediate for constants and for
+  simple expressions.
+- If some library functions cannot be verified as executable code, give those
+  `#[verifier::external_body]` with the same `ensures`, and say in a comment why they are
+  trusted.
+- Do not suggest `assume_specification` as the user-side fix.
+
+### Trailing whitespace in generated Makefile rules
+
+**What.** `MakefileTarget.prettyST` (`microkit/util/Makefile.scala`) renders
+`name: ${dependencies}` with a space after the colon. A target with no dependencies
+therefore gets a trailing space (`verus: `, `test:: `, `clean:: `, `coverage: `), which
+`git diff --check` flags in generated output (t3-sol:HAMR-03). Emit the space only when
+there are dependencies. This touches every expected `system.mk`; regenerate only after
+review.
