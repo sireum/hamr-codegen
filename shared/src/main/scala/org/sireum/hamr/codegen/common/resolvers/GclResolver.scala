@@ -1989,6 +1989,17 @@ import org.sireum.hamr.codegen.common.resolvers.GclResolver._
         // D9: validate the specialization graph + desugar each property to its
         // effective (flattened) bindings before emitting the resolved composition.
         val flattenedProperties = flattenPropertyInheritance(comp(properties = resolvedProperties))
+        // A property may bind a schedule place only once, and a place has several names
+        // (consecutive elements share one: `after a` and `before b` when b follows a).
+        // Flattening merges only identical spellings, so run the check the VC generator
+        // relies on (ScheduleNextRel.decorate) here, so that tipe reports it too and not
+        // only codegen. Only on a schema already found well formed: the net is built from it.
+        if (!reporter.hasError) {
+          val nextRel = org.sireum.hamr.codegen.common.sysvc.ScheduleNextRel.build(comp)
+          for (p <- flattenedProperties if !p.isAbstract) {
+            org.sireum.hamr.codegen.common.sysvc.ScheduleNextRel.decorate(nextRel, p, reporter)
+          }
+        }
         resolvedCompositions = resolvedCompositions :+ comp(properties = flattenedProperties)
       }
 

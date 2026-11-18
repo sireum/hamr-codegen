@@ -18,7 +18,6 @@ once it is done; the changelog records it. Add each new entry to the contents be
 - [Investigate restoring `Structural` on generated Rust enums](#investigate-restoring-structural-on-generated-rust-enums)
   (proposed 2026-11-11)
 - Toolchain findings from the RASE experiments (proposed 2026-11-18):
-  - [`sysml tipe` should reject a property that binds a schedule place twice](#sysml-tipe-should-reject-a-property-that-binds-a-schedule-place-twice)
   - [GUMBO diagnostics that point away from the fix](#gumbo-diagnostics-that-point-away-from-the-fix)
   - [Notices on successful runs that look like problems](#notices-on-successful-runs-that-look-like-problems)
   - [System tests: injecting a data port for one consumer of a fan-out](#system-tests-injecting-a-data-port-for-one-consumer-of-a-fan-out)
@@ -383,7 +382,7 @@ and changed HAMR Microkit systems under the HAMR agent workflows. A code such as
 `t3-sonnet:HC-04` is a finding from one run's own assessment: Task 2 (`t2-`) built a new
 three-component pipeline, and Task 3 (`t3-`) added a return-to-launch mode to an existing
 system. The number of runs that report a problem is what measures how often it occurs.
-Nine findings from those runs are already fixed: a bare state variable in a case assume
+Ten findings from those runs are already fixed: a bare state variable in a case assume
 read as post-state (codegen `de2ec819`), `sysml tipe` exiting 0 when it reported errors
 (kekinian `9941d156`), `make verus` succeeding from cargo's cache without a results line
 (codegen `5ca39381`), `NoSend`/`MustSend` rejected on composition port aliases (codegen
@@ -393,22 +392,10 @@ trailing whitespace in generated Makefile rules (codegen `dad81bbb`), GUMBO libr
 functions that verified code could not call (each executable library function now gets an
 `assume_specification` tying it to its `<name>_spec` twin, unless its body uses
 arithmetic, where the machine-integer and mathematical versions can disagree; codegen
-`0e29c457`), and, on 2026-11-18, regeneration rewriting `generators.rs` in crates a change
-does not touch (each crate now gets strategies only for its own port and state-variable
-types and what they contain).
-
-### `sysml tipe` should reject a property that binds a schedule place twice
-
-**What.** The check is in `ScheduleNextRel.decorate`. It rejects a system property that binds
-the same schedule place under two names, for example `after producer` and `before inc`
-when the two are consecutive. Only codegen runs it, so `sysml tipe` reports `Well-formed!`
-for a model that codegen then rejects (t2-sonnet:HCT-02).
-
-**Design.** Run the schedule-net construction and `decorate` from the SysML type checker
-whenever the model has a schedule, or move the synonym check to a step that does not need
-the full net. The schedule may come from codegen options, such as a domain schedule file.
-Decide what tipe should do when that input is missing: skip the check, and say that it was
-skipped.
+`0e29c457`), regeneration rewriting `generators.rs` in crates a change does not touch
+(each crate now gets strategies only for its own port and state-variable types and what
+they contain; codegen `abd5de95`), and, on 2026-11-18, `sysml tipe` accepting a property
+that binds a schedule place twice (`GclResolver` now runs `ScheduleNextRel.decorate`).
 
 ### GUMBO diagnostics that point away from the fix
 
