@@ -18,7 +18,6 @@ once it is done; the changelog records it. Add each new entry to the contents be
 - [Investigate restoring `Structural` on generated Rust enums](#investigate-restoring-structural-on-generated-rust-enums)
   (proposed 2026-11-11)
 - Toolchain findings from the RASE experiments (proposed 2026-11-18):
-  - [Regeneration rewrites `generators.rs` in crates a change does not touch](#regeneration-rewrites-generatorsrs-in-crates-a-change-does-not-touch)
   - [`sysml tipe` should reject a property that binds a schedule place twice](#sysml-tipe-should-reject-a-property-that-binds-a-schedule-place-twice)
   - [GUMBO diagnostics that point away from the fix](#gumbo-diagnostics-that-point-away-from-the-fix)
   - [Notices on successful runs that look like problems](#notices-on-successful-runs-that-look-like-problems)
@@ -384,34 +383,19 @@ and changed HAMR Microkit systems under the HAMR agent workflows. A code such as
 `t3-sonnet:HC-04` is a finding from one run's own assessment: Task 2 (`t2-`) built a new
 three-component pipeline, and Task 3 (`t3-`) added a return-to-launch mode to an existing
 system. The number of runs that report a problem is what measures how often it occurs.
-Eight findings from those runs are already fixed: a bare state variable in a case assume
+Nine findings from those runs are already fixed: a bare state variable in a case assume
 read as post-state (codegen `de2ec819`), `sysml tipe` exiting 0 when it reported errors
 (kekinian `9941d156`), `make verus` succeeding from cargo's cache without a results line
 (codegen `5ca39381`), `NoSend`/`MustSend` rejected on composition port aliases (codegen
 `b0e03bb9`), `sys_assert!` being unusable in helpers that return a value (now
 `sys_check!`/`sys_check_eq!`), repeated identical expected violations never all being met,
-trailing whitespace in generated Makefile rules (codegen `dad81bbb`), and, on 2026-11-18,
-GUMBO library functions that verified code could not call (each executable library
-function now gets an `assume_specification` tying it to its `<name>_spec` twin, unless its
-body uses arithmetic, where the machine-integer and mathematical versions can disagree).
-
-### Regeneration rewrites `generators.rs` in crates a change does not touch
-
-**What.** Each component's `src/test/util/generators.rs` should define proptest strategies
-only for the types that component uses.
-
-**Why.** In Task 3, adding data types used by three components added 44 lines to
-`generators.rs` in two components whose ports and state did not change. That broke the
-approved plan's prediction that those crates' diffs would be empty (t3-sonnet:HC-05,
-t3-opus:TOOL-05, t3-fable:HC-03). The cause is that
-`CRustTestingPlugin.genProptestGenerators` takes `MicrokitLinterPlugin.getTouchedTypes`,
-which is the set of types touched across the whole system, not this thread's.
-
-**Design.** Compute the closure, under `orderedDependencies`, of the types of this thread's
-ports and GUMBO state variables, plus the event-port `u8` case it already handles.
-Alternatively, move the default strategies into the shared `data` crate behind a test
-feature, and keep only the `_cust` hooks per component. This changes expected output for
-every multi-component model; regenerate it only after review.
+trailing whitespace in generated Makefile rules (codegen `dad81bbb`), GUMBO library
+functions that verified code could not call (each executable library function now gets an
+`assume_specification` tying it to its `<name>_spec` twin, unless its body uses
+arithmetic, where the machine-integer and mathematical versions can disagree; codegen
+`0e29c457`), and, on 2026-11-18, regeneration rewriting `generators.rs` in crates a change
+does not touch (each crate now gets strategies only for its own port and state-variable
+types and what they contain).
 
 ### `sysml tipe` should reject a property that binds a schedule place twice
 

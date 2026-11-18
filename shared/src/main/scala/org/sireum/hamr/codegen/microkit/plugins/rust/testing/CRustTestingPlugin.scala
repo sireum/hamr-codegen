@@ -300,6 +300,52 @@ object CRustTestingPlugin {
     return ISZ(defaultStrategy, custStrategy)
   }
 
+  /** The names of the types `thread`'s test strategies need: the types of its data ports
+    * and GUMBO state variables, closed over record fields and array elements (a strategy
+    * for a struct or array calls those of its parts). */
+  @pure def threadTypeNames(thread: AadlThread, types: AadlTypes, symbolTable: SymbolTable): Set[String] = {
+    var names: Set[String] = Set.empty
+    var pending: ISZ[AadlType] = ISZ()
+    for (p <- thread.getPorts()) {
+      p match {
+        case d: AadlFeatureData => pending = pending :+ d.aadlType
+        case _ =>
+      }
+    }
+    symbolTable.annexClauseInfos.get(thread.path) match {
+      case Some(clauses) =>
+        for (c <- clauses) {
+          c match {
+            case g: GclAnnexClauseInfo =>
+              for (s <- g.annex.state) {
+                types.typeMap.get(s.classifier) match {
+                  case Some(t) => pending = pending :+ t
+                  case _ =>
+                }
+              }
+            case _ =>
+          }
+        }
+      case _ =>
+    }
+    while (pending.nonEmpty) {
+      val t = pending(pending.size - 1)
+      pending = ops.ISZOps(pending).dropRight(1)
+      if (!names.contains(t.name)) {
+        names = names + t.name
+        t match {
+          case a: ArrayType => pending = pending :+ a.baseType
+          case r: RecordType =>
+            for (f <- r.fields.values) {
+              pending = pending :+ f
+            }
+          case _ =>
+        }
+      }
+    }
+    return names
+  }
+
   @pure def genProptestGenerators(touchedTypes: TouchedTypes,
                                   thread: AadlThread, cRustTypeProvider: CRustTypeProvider,
                                   model: Aadl, options: HamrCli.CodegenOption,
@@ -316,8 +362,12 @@ object CRustTestingPlugin {
     // emitted twice.
     val hasPureEventPort: B = ops.ISZOps(thread.getPorts()).exists(p =>
       p.direction == Direction.In && !StoreUtil.isSynthetic(p.path, store) && p.isInstanceOf[AadlEventPort])
+    // Only this thread's types, in the system-wide dependency order (so a struct's or array's
+    // strategy follows those of its fields and elements): a crate's generators.rs then
+    // changes only when its own interface does, not whenever a type is added anywhere.
+    val threadTypes: Set[String] = threadTypeNames(thread, types, symbolTable)
     val genTypes: ISZ[AadlType] =
-      (for (t <- touchedTypes.orderedDependencies) yield types.typeMap.get(t).get) ++
+      (for (t <- touchedTypes.orderedDependencies if threadTypes.contains(t)) yield types.typeMap.get(t).get) ++
         (if (hasPureEventPort) ISZ[AadlType](MicrokitTypeUtil.eventPortType) else ISZ[AadlType]())
     for (o <- genTypes) {
       val rep = cRustTypeProvider.getRepresentativeType(o)
