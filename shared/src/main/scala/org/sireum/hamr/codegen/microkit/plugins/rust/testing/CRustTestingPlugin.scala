@@ -154,7 +154,7 @@ object CRustTestingPlugin {
           if (p.isEvent) {
             (st"return extern_api::$varName.lock().unwrap_or_else(|e| e.into_inner()).clone()", RAST.TyPath(items = ISZ(ISZ("Option"), portTypeNameProvider.qualifiedRustNameS), aadlType = Some(portType.classifier)))
           } else {
-            (st"""return extern_api::$varName.lock().unwrap_or_else(|e| e.into_inner()).expect("Not expecting None")""", RAST.TyPath(items = ISZ(portTypeNameProvider.qualifiedRustNameS), aadlType = Some(portType.classifier)))
+            (st"""return extern_api::$varName.lock().unwrap_or_else(|e| e.into_inner()).expect("outgoing data port '${p.identifier}' has no value: the component did not put one")""", RAST.TyPath(items = ISZ(portTypeNameProvider.qualifiedRustNameS), aadlType = Some(portType.classifier)))
           }
         }
 

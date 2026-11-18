@@ -1203,7 +1203,10 @@ not a good bet under Microkit's own `microkit.ld`; a per-test macro plus a hand-
 a failing `assert!` would kill the PD and end the run. Tests use recording assertions
 (`sys_assert!`, `sys_assert_eq!`) that note the failure with `file!()`/`line!()` and return
 from the test body, letting the runner proceed to the next test. This is a visible
-difference from component tests, where cargo's harness catches the panic.
+difference from component tests, where cargo's harness catches the panic. The `return` is
+bare, so these work only in a function returning `()`; `sys_check!` and `sys_check_eq!`
+record the same failure without returning and evaluate to whether the check held, for
+helpers that return a value.
 
 Reporting does not depend on the heap. The controller has one (the property-test allocator,
 below), but it is set up only by the first property test; a `TEST | ` line is formatted with
@@ -2006,7 +2009,9 @@ Negative tests that trip a guarantee or a system assertion on purpose declare it
   failing it; any other violation still fails it.
 - **An expectation never met fails the test**, like `#[should_panic]`, with a `TEST | FAIL`
   naming it. Otherwise a negative test keeps passing after the fault it targets stops
-  happening.  An expectation for a layer that is switched off fails at once: its violations
+  happening.  Declaring the same expectation k times requires at least k matching
+  violations: each one meets the first matching expectation not yet met, and once all are
+  met, further matches are still reported as INFO.  An expectation for a layer that is switched off fails at once: its violations
   cannot be reported, so it could never be met.
 
 `observe::take()` returns the violations recorded so far in the test and clears them, for a

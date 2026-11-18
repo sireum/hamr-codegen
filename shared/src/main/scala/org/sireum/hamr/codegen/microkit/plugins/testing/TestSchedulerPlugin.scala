@@ -2346,6 +2346,8 @@ object StaticContent {
           |}
           |
           |/// Assert a condition, recording a failure and returning instead of panicking.
+          |/// The bare `return` leaves the enclosing function, so it must return `()`; in a
+          |/// helper that returns a value, use `sys_check!`.
           |#[macro_export]
           |macro_rules! sys_assert {
           |  ($$cond:expr) => {
@@ -2357,6 +2359,8 @@ object StaticContent {
           |}
           |
           |/// Assert equality, recording a failure and returning instead of panicking.
+          |/// Like `sys_assert!`, it returns from a function returning `()`; elsewhere use
+          |/// `sys_check_eq!`.
           |#[macro_export]
           |macro_rules! sys_assert_eq {
           |  ($$l:expr, $$r:expr) => {
@@ -2366,6 +2370,34 @@ object StaticContent {
           |      return;
           |    }
           |  };
+          |}
+          |
+          |/// Check a condition, recording a failure as `sys_assert!` does, but without
+          |/// returning: evaluates to whether the condition held, so it can be used in a
+          |/// helper that returns a value (`if !sys_check!(c) { return fallback; }`).
+          |#[macro_export]
+          |macro_rules! sys_check {
+          |  ($$cond:expr) => {{
+          |    let ok: bool = $$cond;
+          |    if !ok {
+          |      $$crate::system_tests::harness::fail(file!(), line!(), stringify!($$cond));
+          |    }
+          |    ok
+          |  }};
+          |}
+          |
+          |/// Check equality, recording a failure as `sys_assert_eq!` does, but without
+          |/// returning: evaluates to whether the two were equal.
+          |#[macro_export]
+          |macro_rules! sys_check_eq {
+          |  ($$l:expr, $$r:expr) => {{
+          |    let ok: bool = $$l == $$r;
+          |    if !ok {
+          |      $$crate::system_tests::harness::fail(
+          |        file!(), line!(), concat!(stringify!($$l), " == ", stringify!($$r)));
+          |    }
+          |    ok
+          |  }};
           |}
           |
           |// ---------------------------------------------------------------------------------
@@ -2466,7 +2498,9 @@ object StaticContent {
         |//! whatever the previous test left behind.  Set every input you depend on.
         |//!
         |//! Assertions are `sys_assert!` / `sys_assert_eq!`, not `assert!`: a panic would
-        |//! take the protection domain down and end the run.
+        |//! take the protection domain down and end the run.  Both return from the
+        |//! enclosing function; in a helper that returns a value, use `sys_check!` /
+        |//! `sys_check_eq!`, which record the same failure and evaluate to a `bool`.
         |//!
         |//! Select a subset at image build time with `make CONFIG=$v.mk TESTS=<filter>`;
         |//! the filter is a substring match against the qualified `suite::test` name.
@@ -4086,20 +4120,36 @@ object StaticContent {
           |
           |/// Decides what becomes of a violation, prints its line, and returns whether its
           |/// details (the pre/post values) should follow.
+          |///
+          |/// A matching violation meets the first matching expectation not yet met, so k
+          |/// identical expectations need k occurrences.  Once all are met, a further match is
+          |/// still expected (an expectation covers the rest of the test) and is reported as INFO.
           |fn violation(v: Violation, what: core::fmt::Arguments) -> bool {
           |  unsafe {
           |    match REC.phase {
           |      Phase::Between => return false,
           |      Phase::Init => REC.init_failed = true,
           |      Phase::InTest => {
-          |        for e in REC.expected.iter_mut() {
-          |          if let Some((x, met)) = e {
+          |        let mut hit: Option<usize> = None;
+          |        for k in 0..MAX_EXPECTED {
+          |          if let Some((x, met)) = REC.expected[k] {
           |            if x.matches(&v) {
-          |              *met = true;
-          |              harness::line(format_args!("TEST | INFO  expected violation: {}", what));
-          |              return false;
+          |              if !met {
+          |                hit = Some(k);
+          |                break;
+          |              }
+          |              if hit.is_none() {
+          |                hit = Some(k);
+          |              }
           |            }
           |          }
+          |        }
+          |        if let Some(k) = hit {
+          |          if let Some((x, _)) = REC.expected[k] {
+          |            REC.expected[k] = Some((x, true));
+          |          }
+          |          harness::line(format_args!("TEST | INFO  expected violation: {}", what));
+          |          return false;
           |        }
           |        if REC.n_recorded < MAX_RECORDED {
           |          REC.recorded[REC.n_recorded] = Some(v);
@@ -4546,6 +4596,7 @@ object StaticContent {
           |
           |/// Declares a violation the rest of this test causes on purpose: a matching violation
           |/// is reported as INFO instead of failing the test, and the test fails if none occurs.
+          |/// Declaring the same violation k times requires at least k occurrences.
           |/// Its layer must be on while the violation happens: a switched-off layer reports
           |/// nothing, and the test fails saying so.
           |pub fn expect(e: Expect) {

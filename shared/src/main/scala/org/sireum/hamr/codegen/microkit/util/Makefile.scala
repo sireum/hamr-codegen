@@ -56,9 +56,14 @@ object MakefileUtil {
                                val allowMultiple: B,
                                val dependencies: ISZ[ST],
                                val body: ISZ[ST]) extends MakefileItem {
+  // the separating space is emitted only before dependencies, so a rule without any
+  // has no trailing whitespace (`git diff --check` flags it in generated Makefiles)
   @pure def prettyST: ST = {
+    val deps: Option[ST] =
+      if (dependencies.isEmpty) None()
+      else Some(st" ${(dependencies, " ")}")
     return (
-    st"""$name:${if (allowMultiple) ":" else ""} ${(dependencies, " ")}
+    st"""$name:${if (allowMultiple) ":" else ""}$deps
         |${(for(b <- body) yield st"${TAB}$b", "\n")}""")
   }
 }

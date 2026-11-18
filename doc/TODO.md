@@ -22,13 +22,10 @@ once it is done; the changelog records it. Add each new entry to the contents be
   - [`sysml tipe` should reject a property that binds a schedule place twice](#sysml-tipe-should-reject-a-property-that-binds-a-schedule-place-twice)
   - [GUMBO diagnostics that point away from the fix](#gumbo-diagnostics-that-point-away-from-the-fix)
   - [Notices on successful runs that look like problems](#notices-on-successful-runs-that-look-like-problems)
-  - [System tests: expecting the same violation more than once](#system-tests-expecting-the-same-violation-more-than-once)
-  - [System tests: `sys_assert!` in helpers that return a value](#system-tests-sys_assert-in-helpers-that-return-a-value)
   - [System tests: injecting a data port for one consumer of a fan-out](#system-tests-injecting-a-data-port-for-one-consumer-of-a-fan-out)
   - [Host tests: a dispatch boundary between direct entry-point calls](#host-tests-a-dispatch-boundary-between-direct-entry-point-calls)
   - [Skeleton `test_compute` aborts when an input data port has no value](#skeleton-test_compute-aborts-when-an-input-data-port-has-no-value)
   - [GUMBO library functions cannot be called from verified code](#gumbo-library-functions-cannot-be-called-from-verified-code)
-  - [Trailing whitespace in generated Makefile rules](#trailing-whitespace-in-generated-makefile-rules)
 
 ## Option to write out the AIR model (JSON or MsgPack)
 
@@ -388,11 +385,13 @@ and changed HAMR Microkit systems under the HAMR agent workflows. A code such as
 `t3-sonnet:HC-04` is a finding from one run's own assessment: Task 2 (`t2-`) built a new
 three-component pipeline, and Task 3 (`t3-`) added a return-to-launch mode to an existing
 system. The number of runs that report a problem is what measures how often it occurs.
-Four findings from those runs are already fixed: a bare state variable in a case assume
+Seven findings from those runs are already fixed: a bare state variable in a case assume
 read as post-state (codegen `de2ec819`), `sysml tipe` exiting 0 when it reported errors
 (kekinian `9941d156`), `make verus` succeeding from cargo's cache without a results line
-(codegen `5ca39381`), and `NoSend`/`MustSend` rejected on composition port aliases
-(2026-11-18).
+(codegen `5ca39381`), `NoSend`/`MustSend` rejected on composition port aliases (codegen
+`b0e03bb9`), and, on 2026-11-18, `sys_assert!` being unusable in helpers that return a
+value (now `sys_check!`/`sys_check_eq!`), repeated identical expected violations never all
+being met, and trailing whitespace in generated Makefile rules.
 
 ### Regeneration rewrites `generators.rs` in crates a change does not touch
 
@@ -468,39 +467,6 @@ to investigate:
 Five runs reported this (t2-sonnet:HCT-03, t2-opus:HT-03, t2-fable:H2-TOOLCHAIN-NOISE,
 t2-luna:HAMR-003, t2-sol:AHE-002).
 
-### System tests: expecting the same violation more than once
-
-**What.** A system test that registers the same expected violation twice fails with
-"expected violation did not occur". In the generated `observe.rs` (`TestSchedulerPlugin`),
-`violation()` marks the first matching registration as met, whether or not it is already
-met. The second registration is therefore never satisfied. Two runs split their cases into
-separate tests to work around it (t3-astra:HT-03; t2-astra-host2:TOOL-01, moderate).
-
-**Design.** First decide what a registration means:
-
-- **One occurrence.** Match the first registration that is not yet met. What an extra
-  occurrence does then also needs a decision: it is either unhandled, or allowed by an
-  earlier registration that is already met.
-- **An allowance for the whole test.** Duplicates are redundant: reject them with a
-  diagnostic, or merge them.
-
-Document the choice in `TestScheduler-design.md` and in the System Testing chapter. Add a
-generated-harness regression with two identical registrations and two with overlapping
-patterns.
-
-### System tests: `sys_assert!` in helpers that return a value
-
-**What.** `sys_assert!` and `sys_assert_eq!` (harness macros in `TestSchedulerPlugin`)
-expand to `fail(...); return;`, so they cannot be used in a helper that returns a value.
-t3-sonnet:HC-03 replaced them with explicit `if ... { harness::fail(...) }`.
-
-**Design.** Choose one:
-
-- Add a non-returning variant (`sys_check!`, which records the failure and evaluates to
-  the condition).
-- Let the macros take an explicit return value.
-- Document the bare `return` and show the `harness::fail` form for helpers.
-
 ### System tests: injecting a data port for one consumer of a fan-out
 
 **What.** A data-port injection writes the shared channel, so every consumer of a fan-out
@@ -529,20 +495,21 @@ implemented, the helper should call the same boundary code.
 
 ### Skeleton `test_compute` aborts when an input data port has no value
 
-**What.** After a model change adds an input data port, the generated skeleton
-`test_compute` fails with "Not expecting None", followed by "panic in a function that
-cannot unwind" (t3-sonnet:HC-06). The test getter for a data port in the generated
-`extern_c_api.rs` (`CRustApiUtil.scala`, `guard.expect("Not expecting None")`) panics
-inside an `extern "C"` function when the test never set the port. The process then aborts
-without naming the port.
+**What.** After a model change adds an input data port, the existing `test_compute` fails
+with a panic followed by "panic in a function that cannot unwind", and the test process
+aborts (t3-sonnet:HC-06). The skeleton sets every incoming data port when it is generated,
+but `tests.rs` is preserved across regeneration, so a port added later is not set. The
+component's test getter in `extern_c_api.rs` (`CRustApiUtil.scala`) then panics, and the
+panic cannot unwind out of the `extern "C"` entry point.
 
-**Design.**
+**Done (2026-11-18).** The panic now names the port and, for component tests, its setter
+("incoming data port 'p' has no value: set it before calling the entry point (in a
+component test, with test_apis::put_p(..))"), where it used to say "Not expecting None".
 
-- Have the skeleton `test_compute` set every incoming data port: from the type's default
-  strategy, or from a value the test author fills in.
-- Make the getter's failure name the port and the setter to call.
-- Report the failure without panicking across the `extern "C"` boundary, so that the test
-  framework sees an ordinary test failure.
+**Remaining.** Report the failure as an ordinary test failure instead of aborting the test
+process. One way is to make the entry points `extern "C-unwind"` in test builds, so the
+panic reaches cargo's test harness. That changes the entry points' ABI, so check every
+caller of the C entry points, the `cfg(test)` paths and GUMBOX first.
 
 ### GUMBO library functions cannot be called from verified code
 
@@ -562,12 +529,3 @@ back to repeating the literal in the component.
   `#[verifier::external_body]` with the same `ensures`, and say in a comment why they are
   trusted.
 - Do not suggest `assume_specification` as the user-side fix.
-
-### Trailing whitespace in generated Makefile rules
-
-**What.** `MakefileTarget.prettyST` (`microkit/util/Makefile.scala`) renders
-`name: ${dependencies}` with a space after the colon. A target with no dependencies
-therefore gets a trailing space (`verus: `, `test:: `, `clean:: `, `coverage: `), which
-`git diff --check` flags in generated output (t3-sol:HAMR-03). Emit the space only when
-there are dependencies. This touches every expected `system.mk`; regenerate only after
-review.

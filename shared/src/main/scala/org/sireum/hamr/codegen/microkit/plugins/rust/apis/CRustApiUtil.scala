@@ -645,9 +645,15 @@ object CRustApiUtil {
               |  }
               |}"""
         } else {
+          // A data port always has a value at run time, so a test that never set one is a
+          // test bug. The message names the port and, for component tests, its setter: a
+          // test written before the port was added (tests.rs is preserved across
+          // regeneration) does not set it, and the panic aborts the process (it cannot
+          // unwind out of the extern "C" entry point), so this message is all the test
+          // author sees. Monitor crates use this getter too but have no test_apis setters.
           st"""unsafe {
               |  let guard = $varName.lock().unwrap_or_else(|e| e.into_inner());
-              |  *value = guard.expect("Not expecting None");
+              |  *value = guard.expect("incoming data port '${p.identifier}' has no value: set it before calling the entry point (in a component test, with test_apis::put_${p.identifier}(..))");
               |  true
               |}"""
         }
