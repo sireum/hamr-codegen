@@ -419,16 +419,28 @@ t2-fable:H2-TOOLCHAIN-NOISE, t2-luna:HAMR-003, t2-sol:AHE-002).
 printed on every Microkit codegen run. It is now printed only with `--verbose`, and worded
 as optional.
 
-**Remaining: sDDF drivers and the GIC.** A successful build prints "info: failed to open
-sDDF driver directory 'drivers/gpio'", and a QEMU boot prints a GIC fallback warning.
-Neither comes from codegen. The sDDF message is sdfgen's: `Sddf(path)` in the generated
-`meta.py` scans every driver class sdfgen 0.35.0 knows, including GPIO, and the sDDF that
-LionsOS `7554a0f` vendors has no `drivers/gpio`. The fix is upstream: an sdfgen release
-that matches the vendored sDDF, or sdfgen not reporting a missing optional class. The GIC
-warning is the seL4 kernel's (`infer_cpu_gic_id` in `src/arch/arm/machine/gic_v2.c`): QEMU's
-GICv2 reports no target core, so the kernel assumes core 0, the only one these images use.
-Done (2026-11-19): HAMR-agent-context's `doc/system-build-and-test.md` §2.1 lists both as
-messages that are not failures (branch `system-build-and-test`, 30b1afe).
+**Not from codegen, documented instead (2026-11-19).** The other messages the runs cite:
+
+- "info: failed to open sDDF driver directory 'drivers/gpio'" (MCS build): sdfgen's.
+  `Sddf(path)` in the generated `meta.py` scans every driver class sdfgen 0.35.0 knows,
+  including GPIO, and the sDDF that LionsOS `7554a0f` vendors has no `drivers/gpio`.
+- "Warning: Could not infer GIC interrupt target ID, assuming 0." (QEMU boot): the seL4
+  kernel's (`infer_cpu_gic_id` in `src/arch/arm/machine/gic_v2.c`). QEMU's GICv2 reports
+  no target core, so the kernel assumes core 0, the only one these images use.
+- "warning: unused function 'generic_timer_disable'" (MCS build): in sDDF's
+  `drivers/timer/arm/timer.c`, which sDDF's `timer_driver.mk` compiles with the build's
+  `-Wall`. Silencing it here would take a global `-Wno-unused-function`, hiding the same
+  warning in user code.
+- "Wrote: <workspace>/.slang/<System>_Instance.json" (SysML codegen): the automatic AIR
+  dump in CLI `HAMR.codeGenS`, which [the AIR-output option](#option-to-write-out-the-air-model-json-or-msgpack)
+  removes.
+
+HAMR-agent-context's `doc/system-build-and-test.md` §2.1 lists all five, the
+`AM_REPOS_ROOT` notice included (pinned codegen still prints it), as messages that are not
+failures (branch `system-build-and-test`, 30b1afe and 477a00f).
+
+**Remaining (upstream).** An sdfgen release that matches the vendored sDDF, or sdfgen not
+reporting a missing optional driver class; an sDDF timer driver without the unused function.
 
 ### System tests: injecting a data port for one consumer of a fan-out
 
