@@ -1597,6 +1597,21 @@ event the other has not -- which is `None` for the first and `Some` for the seco
 - `Some(v)` is per connection: `v` is pending for that consumer, and every consumer of the
   connection set to `Some` in the same batch receives the same `v`, once.
 
+**A data input is per connection outright.**  A data port's value is retained, so it has no
+`None` and nothing to clear: the container's field, though named after one consumer's input,
+sets the producer's output, and every consumer of the connection reads it at its next
+dispatch, as do the system assertions on the producer's output, until the producer sends
+again.  The consumers' copies of the value (`last_<port>_payload`, and their cursors) are in
+their own protection domains, which the controller cannot write.  The generated container
+names the connection's other consumers on such a field.  For a test of a reachable state this is
+no limitation, by the argument above.  It is one for a *fault-injection* test, which feeds one
+consumer a value its producer did not send to show the system properties catch it
+(t3-opus:TOOL-04: FirewallRx fed `Normal` while ModeManager is in RTL also fed FirewallTx and
+ArduPilot `Normal`, so their places reported too).  Such a test must expect the other
+consumers' reports.  A receiver-scoped override is deferred to the port-semantics work
+(MicrokitPortSemantics-design.md D1/D2), whose per-consumer input slot, filled after test
+injections are applied, is where it would be written.
+
 The setters for the consumers of one connection are separate calls, one per thread's
 container, so the result must not depend on their order. Applied naively it would: with
 `numSent = 10`, `None` for A sends cutoff 10, then `Some(v)` for B injects event 11, which A

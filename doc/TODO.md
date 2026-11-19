@@ -406,7 +406,7 @@ Fixed on 2026-11-19: host tests that call an entry point several times had to cl
 previous dispatch's event outputs themselves (t3-astra:DG-02). Each component's
 `test_apis.rs` now has `dispatch_boundary()`, which clears the outgoing event and
 event-data mocks and keeps component state, data ports and incoming ports; it is a
-no-op for a thread without such outputs. Once `MicrokitPortSemantics-design.md` D2/D5 is
+no-op for a thread without such outputs (codegen `a5a264a2`). Once `MicrokitPortSemantics-design.md` D2/D5 is
 implemented, it should call the runtime's own boundary code.
 
 ### Notices on successful runs that look like problems
@@ -436,8 +436,19 @@ injecting the Mode Manager's output: FirewallTx's input changed as well. The sys
 documentation says injected values are per output, which is accurate, but this
 consequence is not spelled out.
 
-**Design.** First determine whether a per-receiver injection can be supported for data
-ports. A data port has one buffer per output, unlike the per-receiver cursors of event
-queues. If it can, add a receiver-scoped setter. If not, document the limitation next to
-the injection API, and show how to get the effect by injecting the consumer's own state
-instead.
+**Investigated (2026-11-19): documented, receiver-scoped injection deferred.** The
+consumers of a connection share the producer's region; each one's cursor and retained copy
+of a data value (`last_<port>_payload`) are in its own protection domain, which the
+controller cannot write. D39 (TestScheduler-design.md) holds that different values for the
+consumers of one connection describe no reachable state, so for most tests this is no
+limitation. It is one for fault-injection tests, which feed one consumer a value its producer
+did not send. Done: the generated PreState container names a field's other consumers, and
+TestScheduler-design.md ("A data input is per connection outright") explains the behavior
+and that such a test must expect the other consumers' reports. Injecting the consumer's own
+state does not substitute when, as here, the consumer has no state variable for that input.
+
+**Remaining.** A receiver-scoped data-input override, for fault injection, built with
+`MicrokitPortSemantics-design.md` D1/D2: the override would write the consumer's private
+input slot after test injections are applied and before it is frozen. Building it before
+then needs a per-reader injection region, a test-variant change to every consumer's C
+getter, and the checks' and latch cursors following it -- plumbing D1 replaces.

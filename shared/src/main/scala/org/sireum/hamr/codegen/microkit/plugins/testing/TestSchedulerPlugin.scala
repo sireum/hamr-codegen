@@ -3152,12 +3152,44 @@ object StaticContent {
           |}"""
     wrappers = wrappers ++ batchFns
 
+    // The consumers of each connection, by its region's accessor (D39): a field whose
+    // connection has other consumers says so, since setting it sets their input too.
+    var consumersByAccessor = Map.empty[String, ISZ[String]]
+    for (ps <- preStates; f <- ps.fields if f.accessor != "") {
+      val existing: ISZ[String] = consumersByAccessor.get(f.accessor) match {
+        case Some(cs) => cs
+        case _ => ISZ()
+      }
+      consumersByAccessor = consumersByAccessor + f.accessor ~> (existing :+ s"${ps.threadId}.${f.fieldName}")
+    }
+    val consumers = consumersByAccessor
+    def sharedNote(ps: ThreadPreState, f: PreStateField): Option[ST] = {
+      val self = s"${ps.threadId}.${f.fieldName}"
+      val others: ISZ[String] =
+        if (f.accessor == "") ISZ()
+        else for (c <- consumers.get(f.accessor).get if c != self) yield c
+      val names: ST = st"${(for (o <- others) yield st"`$o`", ", ")}"
+      if (others.isEmpty) {
+        return None()
+      } else if (f.isEvent) {
+        return Some(
+          st"""/// One connection with $names: `Some(v)` is pending for
+              |/// them too unless set to `None` in the same batch; different `Some` values fail (D39).
+              |""")
+      } else {
+        return Some(
+          st"""/// One connection with $names: this sets the producer's
+              |/// output, so they read the value too; there is no value for this consumer alone (D39).
+              |""")
+      }
+    }
+
     var containers: ISZ[ST] = ISZ()
     for (ps <- preStates) {
       val decls: ISZ[ST] =
         for (f <- ps.fields) yield
-          if (f.isEvent) st"pub ${f.fieldName}: Option<${f.rustTypeName}>,"
-          else st"pub ${f.fieldName}: ${f.rustTypeName},"
+          if (f.isEvent) st"${sharedNote(ps, f)}pub ${f.fieldName}: Option<${f.rustTypeName}>,"
+          else st"${sharedNote(ps, f)}pub ${f.fieldName}: ${f.rustTypeName},"
       val sets: ISZ[ST] =
         for (f <- ps.fields) yield
           if (f.isEvent)
