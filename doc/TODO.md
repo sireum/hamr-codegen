@@ -15,8 +15,6 @@ once it is done; the changelog records it. Add each new entry to the contents be
   (proposed 2026-10-30)
 - [Tag generated Verus contract clauses with their GUMBO ids (`proof_note`)](#tag-generated-verus-contract-clauses-with-their-gumbo-ids-proof_note)
   (proposed 2026-11-10)
-- [Investigate restoring `Structural` on generated Rust enums](#investigate-restoring-structural-on-generated-rust-enums)
-  (proposed 2026-11-11)
 - Toolchain findings from the RASE experiments (proposed 2026-11-18):
   - [Notices on successful runs that look like problems](#notices-on-successful-runs-that-look-like-problems)
   - [System tests: injecting a data port for one consumer of a fan-out](#system-tests-injecting-a-data-port-for-one-consumer-of-a-fan-out)
@@ -324,51 +322,6 @@ in its `--output-json` output.
 - Two components that use the same GUMBO id produce distinct notes.
 - The rewritten `AADL_Requirement` / `Monitor_Requirement` clauses still verify, and each port
   clause carries its own note.
-
-## Investigate restoring `Structural` on generated Rust enums
-
-**Status:** proposed investigation (2026-11-11).
-
-### What
-
-Determine whether generated Microkit Rust enums can safely derive Verus's `Structural` again,
-allowing executable `==` comparisons to be verified against logical equality in contracts.
-The generation site is `plugins/rust/types/CRustTypePlugin.scala`, where `Structural` remains
-commented out after `derive(Copy, Clone, Debug, PartialEq, Eq)`.
-
-### Why and historical context
-
-- HAMR originally generated `Structural`. Commit
-  [`604eb1eb`](https://github.com/sireum/hamr-codegen/commit/604eb1ebe499126a59848a0e8fdcf9336eb51b97),
-  which switched to `cargo-verus`, removed it from enum derives. The remembered reason was
-  compatibility with ordinary Rust compilation or the older Verus/Cargo integration; the
-  commit does not record the original diagnostic.
-- Verus later fixed `Structural` macro output under ordinary Cargo in
-  [`2788156e9` / PR #2007](https://github.com/verus-lang/verus/commit/2788156e9ed0b0311e74de257bb93fd5bab3d4e8)
-  (2025-11-23). The fix suppresses verification-only expansion during ordinary compilation
-  and adds an unverified Cargo regression test. It is included in the paper's pinned Verus
-  `0.2026.10.26.d17fbd0`. This supports revisiting the workaround, but does not establish
-  which failure originally prompted HAMR's change.
-- In the RASE Task 3 Luna run, executable equality on generated enums produced failed
-  postconditions; rewriting eight source lines as pattern matches made all three affected
-  component proofs pass. A standalone example with the pinned verifier also verifies enum
-  `==` when `Structural` is derived. That check alone does not establish compatibility with
-  the generated project's complete build and test paths.
-
-### Investigation and acceptance checks
-
-- Try the derive on scratch-generated enum definitions, preserving their `repr(C)`, explicit
-  discriminants, and existing derives. Check executable equality across the shared `data`
-  crate boundary as well as within a crate, including its connection to equality in contracts.
-- Check ordinary `cargo build` and `cargo test`, component/GUMBOX tests, `cargo-verus verify`
-  and build paths, system proof crates, and the supported Microkit deployment targets.
-  A direct `verus` invocation alone is insufficient to retire the historical workaround.
-- Confirm the minimum supported Verus and macro-crate versions, including ordinary Cargo's
-  ghost-erasure path. Decide whether compatibility requires conditional generation or a
-  version requirement before enabling the derive by default.
-- If supported, update generation and the agent guidance recommending pattern matching,
-  with regression coverage for both ordinary compilation and verification. Document any
-  remaining limitations. Update golden/expected outputs only with explicit user approval.
 
 ## Toolchain findings from the RASE experiments
 

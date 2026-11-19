@@ -351,7 +351,7 @@ object CRustTypePlugin {
           RAST.EnumDef(
             attributes = ISZ(
               RAST.AttributeST(F, st"repr(C)"),
-              RAST.AttributeST(F, st"derive(Copy, Clone, Debug, PartialEq, Eq)")), //, Structural)")),
+              RAST.AttributeST(F, st"derive(Copy, Clone, Debug, PartialEq, Eq, Structural)")),
             visibility = Visibility.Public,
             ident = RAST.IdentString(getTypeSimpleName(et)),
             items = enumValues)
