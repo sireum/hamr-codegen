@@ -20,7 +20,6 @@ once it is done; the changelog records it. Add each new entry to the contents be
 - Toolchain findings from the RASE experiments (proposed 2026-11-18):
   - [Notices on successful runs that look like problems](#notices-on-successful-runs-that-look-like-problems)
   - [System tests: injecting a data port for one consumer of a fan-out](#system-tests-injecting-a-data-port-for-one-consumer-of-a-fan-out)
-  - [Host tests: a dispatch boundary between direct entry-point calls](#host-tests-a-dispatch-boundary-between-direct-entry-point-calls)
 
 ## Option to write out the AIR model (JSON or MsgPack)
 
@@ -380,7 +379,7 @@ and changed HAMR Microkit systems under the HAMR agent workflows. A code such as
 `t3-sonnet:HC-04` is a finding from one run's own assessment: Task 2 (`t2-`) built a new
 three-component pipeline, and Task 3 (`t3-`) added a return-to-launch mode to an existing
 system. The number of runs that report a problem is what measures how often it occurs.
-Twelve findings from those runs are already fixed: a bare state variable in a case assume
+Thirteen findings from those runs are already fixed: a bare state variable in a case assume
 read as post-state (codegen `de2ec819`), `sysml tipe` exiting 0 when it reported errors
 (kekinian `9941d156`), `make verus` succeeding from cargo's cache without a results line
 (codegen `5ca39381`), `NoSend`/`MustSend` rejected on composition port aliases (codegen
@@ -403,6 +402,12 @@ reserved word still cascade; that would take error recovery in the grammar. Also
 it). The entry points are now `extern "C-unwind"`, so the panic fails just that test and
 proptest can shrink its input, and the unset-port panic names the port and its
 `test_apis::put_<port>` setter.
+Fixed on 2026-11-19: host tests that call an entry point several times had to clear the
+previous dispatch's event outputs themselves (t3-astra:DG-02). Each component's
+`test_apis.rs` now has `dispatch_boundary()`, which clears the outgoing event and
+event-data mocks and keeps component state, data ports and incoming ports; it is a
+no-op for a thread without such outputs. Once `MicrokitPortSemantics-design.md` D2/D5 is
+implemented, it should call the runtime's own boundary code.
 
 ### Notices on successful runs that look like problems
 
@@ -436,15 +441,3 @@ ports. A data port has one buffer per output, unlike the per-receiver cursors of
 queues. If it can, add a receiver-scoped setter. If not, document the limitation next to
 the injection API, and show how to get the effect by injecting the consumer's own state
 instead.
-
-### Host tests: a dispatch boundary between direct entry-point calls
-
-**What.** Host tests that call a component's entry point several times in sequence must
-clear event outputs between the calls themselves, because the runtime's dispatch-boundary
-reset does not run there (t3-astra:DG-02). Generate a test-API helper that performs exactly
-the boundary operations, so that test code does not reimplement them. The helper clears
-pending event and event-data outputs, and keeps component state and data ports.
-
-This is the host-test side of `MicrokitPortSemantics-design.md` D2/D5, which requires tests
-that call entry points directly to establish the same boundary. Once that design is
-implemented, the helper should call the same boundary code.

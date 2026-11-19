@@ -80,7 +80,8 @@ object CRustTestingPlugin {
 
       val testApiEntries =
         genTestApiConcreteInputsEntries(thread, options, crustTypeProvider) ++
-          genTestApiGetterSettersEntries(thread, options, crustTypeProvider, localStore)
+          genTestApiGetterSettersEntries(thread, options, crustTypeProvider, localStore) :+
+          genTestApiDispatchBoundary(thread, options, localStore)
 
       val touchedTypes = MicrokitLinterPlugin.getTouchedTypes(localStore)
       val proptestGenerators = genProptestGenerators(touchedTypes, thread, crustTypeProvider, model, options, types, symbolTable, store, reporter)
@@ -174,6 +175,39 @@ object CRustTestingPlugin {
     }
 
     return ret
+  }
+
+  /** The host-test `dispatch_boundary()` helper: what a test calls between two direct calls
+    * of the component's entry points, so the second call starts at a dispatch boundary as
+    * it would on the target. On the target an event or event-data output is sent when it is
+    * put, so every dispatch starts with none pending; the host-test mocks instead keep the
+    * last value put until `initialize`. The helper clears the outgoing event and event-data
+    * mocks of the model's (not synthetic) ports, and nothing else: component state, data
+    * ports and incoming ports are kept. It is generated for every thread, as a no-op when
+    * the thread has no such port, so test code can call it uniformly
+    * (MicrokitPortSemantics-design.md D2/D5). */
+  @pure def genTestApiDispatchBoundary(thread: AadlThread, options: HamrCli.CodegenOption, store: Store): RAST.Item = {
+    val clears: ISZ[ST] =
+      for (p <- thread.getPorts() if p.direction == Direction.Out && p.isEvent && !StoreUtil.isSynthetic(p.path, store)) yield
+        st"*extern_api::OUT_${p.identifier}.lock().unwrap_or_else(|e| e.into_inner()) = None;"
+    val body: ST =
+      if (clears.isEmpty) st"// no outgoing event or event-data ports, so nothing is pending between dispatches"
+      else st"${(clears, "\n")}"
+    return RAST.FnImpl(
+      attributes = ISZ(),
+      visibility = RAST.Visibility.Public,
+      sig = RAST.FnSig(
+        ident = RAST.IdentString("dispatch_boundary"),
+        fnDecl = RAST.FnDecl(inputs = ISZ(), outputs = RAST.FnRetTyDefault()),
+        verusHeader = None(), fnHeader = RAST.FnHeader(F), generics = None()),
+      comments = ISZ(RAST.CommentRustDoc(ISZ(
+        st"Call between two direct entry-point calls in one test, so the next call starts at a",
+        st"dispatch boundary as on the target: clears the outgoing event and event-data ports, so",
+        st"a dispatch that puts nothing on one leaves its getter returning None rather than the",
+        st"previous dispatch's value. Component state, data ports and incoming ports are kept;",
+        st"put each incoming event port for the next dispatch (None for no event)."))),
+      verusAttributeSyntax = options.verusAttributeSyntax, contract = None(), meta = ISZ(),
+      body = Some(RAST.MethodBody(ISZ(RAST.BodyItemST(body)))))
   }
 
   @pure def genTestApiConcreteInputsEntries(thread: AadlThread, options: HamrCli.CodegenOption, crustTypeProvider: CRustTypeProvider): ISZ[RAST.Item] = {
