@@ -49,7 +49,67 @@ object GumboRustPlugin {
   @datatype class LibraryAnnex(val rustItems: ISZ[RAST.Item],
 
                                val verusItems: ISZ[RAST.Item],
-                               val verusDeveloperItems: ISZ[RAST.Item])
+                               val verusDeveloperItems: ISZ[RAST.Item],
+
+                               // the other GUMBO library crates this library's functions call
+                               // (libraryDependencies), each a path dependency in its Cargo.toml
+                               val crateDeps: ISZ[String])
+
+  /** Collects the other GUMBO libraries that the code it scans references: every resolved
+    * method of an object `<package>::GUMBO__Library` other than `selfOwner`, by package. A
+    * call is rendered as `<package>::<fn>(..)` in the calling library's crate
+    * (`SlangExpUtil`), so each such package is a crate it depends on. */
+  @record class LibraryDepScan(val selfOwner: ISZ[String]) extends org.sireum.hamr.ir.MTransformer {
+    var deps: Set[String] = Set.empty
+
+    override def pre_langastResolvedInfoMethod(o: SAST.ResolvedInfo.Method): org.sireum.hamr.ir.MTransformer.PreResult[SAST.ResolvedInfo] = {
+      o.owner match {
+        case ISZ(pkg, obj) if obj == GclResolver.GUMBO__Library && o.owner != selfOwner =>
+          deps = deps + pkg
+        case _ =>
+      }
+      return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone[SAST.ResolvedInfo]())
+    }
+  }
+
+  /** The packages of the other GUMBO libraries whose functions `lib`'s functions (bodies and
+    * contracts) reference: the crates `lib`'s crate depends on. */
+  @pure def libraryDependencies(lib: GclLib): Set[String] = {
+    val scan = LibraryDepScan(lib.containingPackage.name :+ GclResolver.GUMBO__Library)
+    for (m <- lib.methods) {
+      m match {
+        case s: GclSpecMethod => scan.transform_langastStmt(s.method)
+        case b: GclBodyMethod => scan.transform_langastStmt(b.method)
+        case _ =>
+      }
+    }
+    return scan.deps
+  }
+
+  /** A cycle in `deps` (library -> libraries it depends on), as the libraries along it with
+    * the first repeated at the end, or None. Cargo rejects cyclic crate dependencies. */
+  @pure def libraryDependencyCycle(libs: ISZ[String], deps: Map[String, Set[String]]): Option[ISZ[String]] = {
+    var done: Set[String] = Set.empty
+    var found: Option[ISZ[String]] = None()
+    def visit(lib: String, path: ISZ[String]): Unit = {
+      if (found.nonEmpty || done.contains(lib)) {
+        return
+      }
+      val i = ops.ISZOps(path).indexOf(lib)
+      if (i < path.size) {
+        found = Some(ops.ISZOps(path).slice(i, path.size) :+ lib)
+        return
+      }
+      for (d <- deps.get(lib).getOrElse(Set.empty[String]).elements) {
+        visit(d, path :+ lib)
+      }
+      done = done + lib
+    }
+    for (l <- libs) {
+      visit(l, ISZ())
+    }
+    return found
+  }
 
   /** Lets verified code call a GUMBO library function's executable version.
     *
@@ -63,7 +123,8 @@ object GumboRustPlugin {
     *   ensures res == name_spec(a, ..);
     * }}}
     *
-    * so Verus reasons about a call through the spec. Only the functions in `withSpecs`
+    * (the result is `res`, with underscores appended while a parameter has that name), so
+    * Verus reasons about a call through the spec. Only the functions in `withSpecs`
     * (`libraryFnsWithExecSpecs`) get one; the others are listed in a comment.
     *
     * For a GUMBO function with a body this is trusted, not proved: the executable body is
@@ -97,8 +158,12 @@ object GumboRustPlugin {
           f.sig.fnDecl.outputs match {
             case RAST.FnRetTyImpl(retTy) =>
               val paramNames: ISZ[String] = for (p <- f.sig.fnDecl.inputs) yield p.ident.string
-              // the result's name must not shadow a parameter
-              val resName: String = if (ops.ISZOps(paramNames).contains("res")) "res_" else "res"
+              // the result's name must differ from every parameter's (Verus rejects a
+              // collision), so append underscores to `res` until it does
+              var resName: String = "res"
+              while (ops.ISZOps(paramNames).contains(resName)) {
+                resName = s"${resName}_"
+              }
               ret = ret :+ RAST.ItemST(
                 st"""pub assume_specification[ ${f.ident.string} ](${(for (p <- f.sig.fnDecl.inputs) yield p.prettyST, ", ")}) -> ($resName: ${retTy.prettyST})
                     |  ensures $resName == ${f.ident.string}_spec(${(paramNames, ", ")});""")
@@ -110,8 +175,9 @@ object GumboRustPlugin {
     if (without.nonEmpty) {
       ret = ret :+ RAST.ItemST(
         st"""// No assume_specification, so not callable from verified code: ${(without, ", ")}.
-            |// Each uses arithmetic or a non-library call, directly or through a library function
-            |// it calls, where the executable version (machine integers) and the spec version
+            |// Each uses arithmetic or calls something outside this library (such as a conversion
+            |// or another library's function), directly or through a function of this library it
+            |// calls, where the executable version (machine integers) and the spec version
             |// (mathematical integers) can disagree.""")
     }
     return ret
@@ -122,9 +188,15 @@ object GumboRustPlugin {
   /** What in a GUMBO library function's body could make its executable and spec versions
     * disagree: arithmetic (`libraryArithmeticOps`, or negating anything but a literal),
     * which GUMBOX computes in machine integers and Verus in mathematical ones, and calls to
-    * anything other than the library's own functions (`libraryFns`), such as conversions.
-    * The library functions it calls are collected in `calls`. */
-  @record class LibraryBodyScan(val libraryFns: Set[String]) extends org.sireum.hamr.ir.MTransformer {
+    * anything other than the library's own functions, such as conversions or another
+    * library's functions. A callee is identified by its resolved method, owner and name:
+    * a function of this library resolves to a method of `libOwner`
+    * (`<package>::GUMBO__Library`) named in `libraryFns`, so a same-named function of
+    * another library does not pass for it. Calls are found wherever a method is referenced:
+    * a positional or named invocation, or a parameterless reference (`Ident` / `Select`).
+    * An invocation whose callee did not resolve to a method counts as another call. The
+    * library functions it calls are collected in `calls`. */
+  @record class LibraryBodyScan(val libOwner: ISZ[String], val libraryFns: Set[String]) extends org.sireum.hamr.ir.MTransformer {
     var hasArithmetic: B = F
     var hasOtherCall: B = F
     var calls: Set[String] = Set.empty
@@ -147,11 +219,45 @@ object GumboRustPlugin {
       return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone[SAST.Exp]())
     }
 
+    /** Records a call of the method `res` resolved to: one of this library's functions, or
+      * anything else (including an unresolved callee, `None`). */
+    def noteCallee(res: Option[SAST.ResolvedInfo]): Unit = {
+      res match {
+        case Some(m: SAST.ResolvedInfo.Method) if m.owner == libOwner && libraryFns.contains(m.id) =>
+          calls = calls + m.id
+        case _ =>
+          hasOtherCall = T
+      }
+    }
+
+    /** The resolved callee of an invocation: the invocation's own, else its name's. */
+    @strictpure def calleeOf(attr: SAST.ResolvedAttr, ident: SAST.Exp.Ident): Option[SAST.ResolvedInfo] =
+      if (attr.resOpt.nonEmpty) attr.resOpt else ident.attr.resOpt
+
     override def pre_langastExpInvoke(o: SAST.Exp.Invoke): org.sireum.hamr.ir.MTransformer.PreResult[SAST.Exp] = {
-      if (libraryFns.contains(o.ident.id.value)) {
-        calls = calls + o.ident.id.value
-      } else {
-        hasOtherCall = T
+      noteCallee(calleeOf(o.attr, o.ident))
+      return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone[SAST.Exp]())
+    }
+
+    override def pre_langastExpInvokeNamed(o: SAST.Exp.InvokeNamed): org.sireum.hamr.ir.MTransformer.PreResult[SAST.Exp] = {
+      noteCallee(calleeOf(o.attr, o.ident))
+      return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone[SAST.Exp]())
+    }
+
+    // a method referenced without an argument list, and the name of an invocation (which
+    // resolves to the same method as the invocation, so it adds nothing new there)
+    override def pre_langastExpIdent(o: SAST.Exp.Ident): org.sireum.hamr.ir.MTransformer.PreResult[SAST.Exp] = {
+      o.attr.resOpt match {
+        case Some(_: SAST.ResolvedInfo.Method) => noteCallee(o.attr.resOpt)
+        case _ =>
+      }
+      return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone[SAST.Exp]())
+    }
+
+    override def pre_langastExpSelect(o: SAST.Exp.Select): org.sireum.hamr.ir.MTransformer.PreResult[SAST.Exp] = {
+      o.attr.resOpt match {
+        case Some(_: SAST.ResolvedInfo.Method) => noteCallee(o.attr.resOpt)
+        case _ =>
       }
       return org.sireum.hamr.ir.MTransformer.PreResult(T, MNone[SAST.Exp]())
     }
@@ -160,21 +266,25 @@ object GumboRustPlugin {
   /** The functions of GUMBO library `lib` whose executable versions get an
     * `assume_specification` (`libraryExecSpecs`). A spec function always does: its
     * executable wrapper delegates to the developer's verified `__developer_gumbox`. A
-    * function with a body does when `LibraryBodyScan` finds neither arithmetic nor a
-    * non-library call in it, and every library function it calls also qualifies, so that
-    * its executable and spec versions compute the same value. */
+    * function with a body does when `LibraryBodyScan` finds neither arithmetic nor a call
+    * of anything outside `lib` in it (callees are matched by resolved owner and name, so a
+    * same-named function of another library does not count as `lib`'s), and every function
+    * of `lib` it calls also qualifies, so that its executable and spec versions compute the
+    * same value. */
   @pure def libraryFnsWithExecSpecs(lib: GclLib): Set[String] = {
     var libraryFns: Set[String] = Set.empty
     for (m <- lib.methods) {
       libraryFns = libraryFns + m.id
     }
+    // the object a call of one of this library's own functions resolves to
+    val libOwner: ISZ[String] = lib.containingPackage.name :+ GclResolver.GUMBO__Library
     var ok: Set[String] = Set.empty
     var candidates: ISZ[(String, ISZ[String])] = ISZ() // body functions that pass the scan, with their library calls
     for (m <- lib.methods) {
       m match {
         case s: GclSpecMethod => ok = ok + s.id
         case b: GclBodyMethod =>
-          val scan = LibraryBodyScan(libraryFns)
+          val scan = LibraryBodyScan(libOwner, libraryFns)
           b.method.bodyOpt match {
             case Some(body) =>
               for (stmt <- body.stmts) {
@@ -347,7 +457,28 @@ object GumboRustPlugin {
         rustItems = ISZ(),
 
         verusItems = verusLibFuns,
-        verusDeveloperItems = developerVerusUifs)
+        verusDeveloperItems = developerVerusUifs,
+        crateDeps = ISZ())
+    }
+
+    // A library whose functions call another library's needs that library's crate as a
+    // dependency; listed in the order the libraries' crates are, so the output is stable.
+    var libraryDeps: Map[String, Set[String]] = Map.empty
+    var libraryPos: Map[String, Option[org.sireum.message.Position]] = Map.empty
+    for (gclLib <- GumboRustPlugin.getGclLibraryAnnexes(symbolTable)) {
+      libraryDeps = libraryDeps + gclLib.name(0) ~> GumboRustPlugin.libraryDependencies(gclLib.annex)
+      libraryPos = libraryPos + gclLib.name(0) ~> gclLib.annex.posOpt
+    }
+    GumboRustPlugin.libraryDependencyCycle(libraryAnnexes.keys, libraryDeps) match {
+      case Some(cycle) =>
+        reporter.error(libraryPos.get(cycle(0)).get, MicrokitCodegen.toolName,
+          st"GUMBO libraries call each other in a cycle: ${(cycle, " -> ")}. Each library is a Rust crate, and Cargo does not allow crates that depend on each other; move the functions they share into one library".render)
+      case _ =>
+    }
+    for (k <- libraryAnnexes.keys) {
+      val deps: Set[String] = libraryDeps.get(k).getOrElse(Set.empty[String])
+      libraryAnnexes = libraryAnnexes + k ~> libraryAnnexes.get(k).get(
+        crateDeps = for (d <- libraryAnnexes.keys if deps.contains(d)) yield d)
     }
 
     val crateDeps: ISZ[ST] = for (k <- libraryAnnexes.keys) yield st"""$k = { path = "../$k" }"""
@@ -1356,6 +1487,9 @@ object GumboRustPlugin {
           }
 
           { // crates/<aadl-package-name>/Cargo.toml
+            // data, then the other library crates this library's functions call
+            val dependencies: ISZ[ST] = st"""data = { path="../data" }""" +:
+              (for (d <- e._2.crateDeps) yield st"""$d = { path = "../$d" }""")
             val content = st"""${CommentTemplate.safeToEditComment_hash}
                               |
                               |[package]
@@ -1364,7 +1498,7 @@ object GumboRustPlugin {
                               |edition = "2021"
                               |
                               |[dependencies]
-                              |data = { path="../data" }
+                              |${(dependencies, "\n")}
                               |
                               |${RustUtil.verusCargoDependencies(store)}
                               |

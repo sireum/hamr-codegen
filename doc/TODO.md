@@ -389,7 +389,11 @@ trailing whitespace in generated Makefile rules (codegen `dad81bbb`), GUMBO libr
 functions that verified code could not call (each executable library function now gets an
 `assume_specification` tying it to its `<name>_spec` twin, unless its body uses
 arithmetic, where the machine-integer and mathematical versions can disagree; codegen
-`0e29c457`), regeneration rewriting `generators.rs` in crates a change does not touch
+`0e29c457`; after review on 2026-11-19, callees are matched by resolved owner, so a
+same-named function of another library no longer passes for the library's own, and the
+result is named apart from every parameter; a library crate that calls another library
+also gets that library's crate as a dependency, and libraries that call each other in a
+cycle are an error), regeneration rewriting `generators.rs` in crates a change does not touch
 (each crate now gets strategies only for its own port and state-variable types and what
 they contain; codegen `abd5de95`), `sysml tipe` accepting a property that binds a
 schedule place twice (`GclResolver` now runs `ScheduleNextRel.decorate`; codegen
