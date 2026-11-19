@@ -424,9 +424,11 @@ sDDF driver directory 'drivers/gpio'", and a QEMU boot prints a GIC fallback war
 Neither comes from codegen. The sDDF message is sdfgen's: `Sddf(path)` in the generated
 `meta.py` scans every driver class sdfgen 0.35.0 knows, including GPIO, and the sDDF that
 LionsOS `7554a0f` vendors has no `drivers/gpio`. The fix is upstream: an sdfgen release
-that matches the vendored sDDF, or sdfgen not reporting a missing optional class.
-Meanwhile, list both messages as expected in the build-and-test documentation and the agent
-guidance.
+that matches the vendored sDDF, or sdfgen not reporting a missing optional class. The GIC
+warning is the seL4 kernel's (`infer_cpu_gic_id` in `src/arch/arm/machine/gic_v2.c`): QEMU's
+GICv2 reports no target core, so the kernel assumes core 0, the only one these images use.
+Done (2026-11-19): HAMR-agent-context's `doc/system-build-and-test.md` §2.1 lists both as
+messages that are not failures (branch `system-build-and-test`, 30b1afe).
 
 ### System tests: injecting a data port for one consumer of a fan-out
 
