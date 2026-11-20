@@ -295,10 +295,21 @@ def regenClis(): Unit = {
                   |  ret = ret :+ ("$longKey", Some($extract))
                   |}"""
           case c: Type.Choice =>
-            val default = c.elements(0)
+            // cligen names each enum element after its command-line spelling, capitalized (e.g.,
+            // "seL4" -> SeL4), so map the enum's name back to the spelling its parser accepts
+            if (c.sep.nonEmpty) {
+              halt(s"todo: handle multi-valued choice ${o.name}")
+            }
+            val cliGen = org.sireum.tools.CliGen(firstColumnLimit = 0, secondColumnLimit = 0, reporter = F)
+            val default = cliGen.choiceElementId(c.elements(0))
+            val cases: ISZ[ST] = for (e <- c.elements) yield st"""case "${cliGen.choiceElementId(e)}" => "$e""""
             toStrings = toStrings :+
               st"""if (includeDefaults || o.${o.name}.name != "$default") {
-                  |  ret = ret :+ ("$longKey", Some(o.${o.name}.name))
+                  |  val v: String = o.${o.name}.name match {
+                  |    ${(cases, "\n")}
+                  |    case n => halt(s"Unexpected ${o.longKey} value $$n")
+                  |  }
+                  |  ret = ret :+ ("$longKey", Some(v))
                   |}"""
           case p: Type.Path =>
             if(p.default.nonEmpty) {

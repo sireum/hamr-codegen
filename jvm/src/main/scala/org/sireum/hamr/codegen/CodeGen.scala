@@ -60,8 +60,18 @@ object CodeGen {
               slangCheckCallback: (SireumToolsSlangcheckGeneratorOption, Reporter) => Z): (CodeGenResults, Store) = {
 
     var localStore = store
+
+    // Before any check, so the requested AIR file exists even when the checks below reject the
+    // model -- reproducing such a failure is what the export is for
+    // (these early exits print their own messages: no later printMessages call is reached)
+    if (!AirOutput.write(model, options, toolName, reporter)) {
+      printMessages(reporter.messages, options.verbose, 0, ISZ())
+      return (CodeGenResults.empty, localStore)
+    }
+
     if (model.components.size != 1) {
       reporter.error(None(), toolName, s"Expecting exactly one root component but found ${model.components.size}")
+      printMessages(reporter.messages, options.verbose, 0, ISZ())
       return (CodeGenResults.empty, localStore)
     }
 

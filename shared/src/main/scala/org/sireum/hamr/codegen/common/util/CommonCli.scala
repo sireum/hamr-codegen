@@ -45,6 +45,12 @@ object CommonCli {
     Opt(name = "outputDir", longKey = "output-dir", shortKey = Some('o'),
         tpe = Type.Path(multiple = F, default = None()),
         description = "Default output directory"),
+    Opt(name = "airOutput", longKey = "air-output", shortKey = None(),
+      tpe = Type.Path(multiple = F, default = None()),
+      description = "Write the AIR model codegen receives to this file, overwriting it, before any checks run"),
+    Opt(name = "airOutputFormat", longKey = "air-output-format", shortKey = None(),
+      tpe = Type.Choice(name = "AirOutputFormat", sep = None(), elements = ISZ("json", "msgpack")),
+      description = "Format of the air-output file (msgpack is written as Base64 text, as hamr codegen --msgpack reads it)"),
     Opt(name = "parseableMessages", longKey = "parseable-messages", shortKey = None(),
       tpe = Type.Flag(F),
       description = "Print parseable file messages")

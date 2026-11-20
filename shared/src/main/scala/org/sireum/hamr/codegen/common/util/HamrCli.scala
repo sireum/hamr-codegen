@@ -25,6 +25,11 @@ object HamrCli {
     "Ros2"
   }
 
+  @enum object CodegenAirOutputFormat {
+    "Json"
+    "Msgpack"
+  }
+
   @enum object CodegenScheduling {
     "Domain"
     "UserLand"
@@ -48,6 +53,8 @@ object HamrCli {
     val runtimeMonitoring: B,
     val platform: CodegenHamrPlatform.Type,
     val outputDir: Option[String],
+    val airOutput: Option[String],
+    val airOutputFormat: CodegenAirOutputFormat.Type,
     val parseableMessages: B,
     val slangOutputDir: Option[String],
     val packageName: Option[String],
@@ -106,6 +113,25 @@ import HamrCli._
       return None()
     }
     val r = parseCodegenHamrPlatformH(args(i))
+    return r
+  }
+
+  def parseCodegenAirOutputFormatH(arg: String): Option[CodegenAirOutputFormat.Type] = {
+    arg.native match {
+      case "json" => return Some(CodegenAirOutputFormat.Json)
+      case "msgpack" => return Some(CodegenAirOutputFormat.Msgpack)
+      case s =>
+        eprintln(s"Expecting one of the following: { json, msgpack }, but found '$s'.")
+        return None()
+    }
+  }
+
+  def parseCodegenAirOutputFormat(args: ISZ[String], i: Z): Option[CodegenAirOutputFormat.Type] = {
+    if (i >= args.size) {
+      eprintln("Expecting one of the following: { json, msgpack }, but none found.")
+      return None()
+    }
+    val r = parseCodegenAirOutputFormatH(args(i))
     return r
   }
 
@@ -182,6 +208,12 @@ import HamrCli._
           |                           MacOS, seL4, seL4_Only, seL4_TB, Microkit, ros2 };
           |                           default: JVM)
           |-o, --output-dir         Default output directory (expects a path)
+          |    --air-output         Write the AIR model codegen receives to this file,
+          |                           overwriting it, before any checks run (expects a
+          |                           path)
+          |    --air-output-format  Format of the air-output file (msgpack is written as
+          |                           Base64 text, as hamr codegen --msgpack reads it)
+          |                           (expects one of { json, msgpack }; default: json)
           |    --parseable-messages Print parseable file messages
           |-h, --help               Display this information
           |
@@ -260,6 +292,8 @@ import HamrCli._
     var runtimeMonitoring: B = false
     var platform: CodegenHamrPlatform.Type = CodegenHamrPlatform.JVM
     var outputDir: Option[String] = None[String]()
+    var airOutput: Option[String] = None[String]()
+    var airOutputFormat: CodegenAirOutputFormat.Type = CodegenAirOutputFormat.Json
     var parseableMessages: B = false
     var slangOutputDir: Option[String] = None[String]()
     var packageName: Option[String] = Some("base")
@@ -324,6 +358,18 @@ import HamrCli._
            val o: Option[Option[String]] = parsePath(args, j + 1)
            o match {
              case Some(v) => outputDir = v
+             case _ => return None()
+           }
+         } else if (arg == "--air-output") {
+           val o: Option[Option[String]] = parsePath(args, j + 1)
+           o match {
+             case Some(v) => airOutput = v
+             case _ => return None()
+           }
+         } else if (arg == "--air-output-format") {
+           val o: Option[CodegenAirOutputFormat.Type] = parseCodegenAirOutputFormat(args, j + 1)
+           o match {
+             case Some(v) => airOutputFormat = v
              case _ => return None()
            }
          } else if (arg == "--parseable-messages") {
@@ -503,7 +549,7 @@ import HamrCli._
         isOption = F
       }
     }
-    return Some(CodegenOption(help, parseArguments(args, j), msgpack, verbose, runtimeMonitoring, platform, outputDir, parseableMessages, slangOutputDir, packageName, noProyekIve, noEmbedArt, devicesAsThreads, genSbtMill, slangAuxCodeDirs, slangOutputCDir, excludeComponentImpl, bitWidth, maxStringSize, maxArraySize, runTranspiler, scheduling, verusAttributeSyntax, sel4OutputDir, sel4AuxCodeDirs, sel4AuxCodeSymlink, systemTesting, workspaceRootDir, strictAadlMode, ros2OutputWorkspaceDir, ros2Dir, ros2NodesLanguage, ros2LaunchLanguage, invertTopicBinding, experimentalOptions))
+    return Some(CodegenOption(help, parseArguments(args, j), msgpack, verbose, runtimeMonitoring, platform, outputDir, airOutput, airOutputFormat, parseableMessages, slangOutputDir, packageName, noProyekIve, noEmbedArt, devicesAsThreads, genSbtMill, slangAuxCodeDirs, slangOutputCDir, excludeComponentImpl, bitWidth, maxStringSize, maxArraySize, runTranspiler, scheduling, verusAttributeSyntax, sel4OutputDir, sel4AuxCodeDirs, sel4AuxCodeSymlink, systemTesting, workspaceRootDir, strictAadlMode, ros2OutputWorkspaceDir, ros2Dir, ros2NodesLanguage, ros2LaunchLanguage, invertTopicBinding, experimentalOptions))
   }
 
   def parseArguments(args: ISZ[String], i: Z): ISZ[String] = {
