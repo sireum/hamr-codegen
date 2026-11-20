@@ -55,12 +55,18 @@ jobs:
         with:
           path: bin/scala
           key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-scala
-      - name: Cache Coursier
+      # Restored here, saved by the "Save Coursier" step below. The sbt launcher and the generated
+      # projects' sbt builds resolve through COURSIER_CACHE, so a cache that holds their artifacts
+      # keeps the tests off Maven Central, whose HTTP 429 rate limiting failed sbt compilation.
+      # The fallback key picks up a cache saved under the earlier key scheme.
+      - name: Restore Coursier
         id: cache-coursier
-        uses: actions/cache@v5
+        uses: actions/cache/restore@v5
         with:
           path: cache/coursier
-          key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-coursier
+          key: ${{ runner.os }}-${{ hashFiles('versions.properties') }}-coursier-sbt
+          restore-keys: |
+            ${{ runner.os }}-${{ hashFiles('versions.properties') }}-coursier
       - name: Cache OSATE
         id: cache-osate
         uses: actions/cache@v5
@@ -87,3 +93,17 @@ jobs:
           echo "ALSO_TRANSPILE_VIA_CALLBACKS=${ALSO_TRANSPILE_VIA_CALLBACKS}"
           
           bin/build.cmd test --suffixes ${{ matrix.testSuffix }}
+      # A saved cache key is never overwritten, and with actions/cache every matrix row raced to save
+      # it: the row that finished first won, before any row had run sbt, so the cache never held sbt's
+      # artifacts and every run downloaded them again. Only the CodegenTest_CASE row saves, after its
+      # tests -- pass or fail -- have run sbt, and only once sbt itself is in the cache, so that a run
+      # whose sbt downloads were themselves rate limited leaves the key free for the next run.
+      - name: Save Coursier
+        if: >-
+          !cancelled() && matrix.testSuffix == 'CodegenTest_CASE,BaseBehaviorTestDynamic'
+          && steps.cache-coursier.outputs.cache-hit != 'true'
+          && hashFiles('cache/coursier/https/repo1.maven.org/maven2/org/scala-sbt/sbt/*/sbt-*.jar') != ''
+        uses: actions/cache/save@v5
+        with:
+          path: cache/coursier
+          key: ${{ steps.cache-coursier.outputs.cache-primary-key }}
